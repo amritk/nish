@@ -63,9 +63,9 @@ len.ok:
   ret %struct.nish_array* %2
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @fromNarrow(i32 noundef %n) #1 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @fromNarrow(i16 noundef %n) #1 {
 entry:
-  %0 = sext i32 %n to i64
+  %0 = zext i16 %n to i64
   %1 = call i8* @nish_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.nish_array*
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
@@ -90,7 +90,7 @@ entry:
   %4 = trunc i64 %3 to i32
   %5 = call i8* @nish_str_from_i32(i32 %4)
   call void @nish_print(i8* %5)
-  %6 = call %struct.nish_array* @fromNarrow(i32 2)
+  %6 = call %struct.nish_array* @fromNarrow(i16 2)
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 0
   %8 = load i64, i64* %7, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %9 = trunc i64 %8 to i32

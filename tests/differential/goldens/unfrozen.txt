@@ -236,6 +236,7 @@ cases/panics_divide added after R6: no rewriter to freeze it with
 cases/panics_expect added after R6: no rewriter to freeze it with
 cases/panics_generic added after R6: no rewriter to freeze it with
 cases/panics_index added after R6: no rewriter to freeze it with
+cases/panics_index_recheck added after R6: no rewriter to freeze it with
 cases/panics_io_exit added after R6: no rewriter to freeze it with
 cases/panics_oom added after R6: no rewriter to freeze it with
 cases/panics_panic added after R6: no rewriter to freeze it with

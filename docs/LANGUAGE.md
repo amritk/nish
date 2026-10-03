@@ -6214,12 +6214,12 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 
 | kind | what fails | what proves it away |
 | --- | --- | --- |
-| `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)` | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`) |
+| `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
 | `pop` | `a.pop()` on an empty array | nothing yet: every `pop` is checked (`tests/cases/panics_pop`) |
 | `slice` | `s.slice(a, b)`, `dst.set(src, at)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | nothing yet: every integer division is checked, a constant divisor included, and a float division is not a site (`tests/cases/panics_divide`) |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
-| `array-length` | `new Array<T>(n)` whose length type could make a bad header (an `i64`, a float, a `u32` under `--number-mode i32`) | an `i32` length or a literal, which is not checked and not a site (`tests/cases/panics_array_length`) |
+| `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
 | `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
 | `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
 | `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |

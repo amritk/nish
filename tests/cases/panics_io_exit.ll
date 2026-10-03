@@ -5,17 +5,17 @@
 @.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [30 x i8] } { i64 29, [30 x i8] c"build/test/panics_io_exit.txt\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #1
+declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #0
 
 define internal void @save(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
 entry:
@@ -47,13 +47,13 @@ if.end:
   ret i8* %3
 }
 
-define internal void @fill(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes) #1 {
+define internal void @fill(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes) #0 {
 entry:
   call void @nish_random_fill(%struct.nish_array* %bytes)
   ret void
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %path.addr = alloca i8*, align 8
   %bytes.addr = alloca %struct.nish_array*, align 8
@@ -110,15 +110,15 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
