@@ -620,9 +620,27 @@ const inNativeLane = (job) => {
  */
 const NATIVE_RUN_LIMIT = { timeout: 120_000, killSignal: "SIGKILL" }
 
-/** The name a native run that hit {@link NATIVE_RUN_LIMIT} fails under. */
-const nativeTimeout = (name) =>
-  `${name}: the native run was killed after ${NATIVE_RUN_LIMIT.timeout / 1000} s without exiting (NATIVE_RUN_LIMIT)`
+/**
+ * Run a case's native program under `limit`: spawn's `{ status, signal,
+ * stdout, stderr }`, and `death`, which is null when the program exited and
+ * otherwise the FAIL a caller reports instead of comparing output. A program
+ * that ran into the bound and one killed by a signal before it (the OOM killer,
+ * an abort) each fail under their own name, so neither reads as a wrong `.out`.
+ * `limit` is a parameter for the "native run limit" self-check, which holds
+ * this to its promise in under a second rather than in two minutes.
+ */
+const runNative = async (name, exe, argv, opts = {}, limit = NATIVE_RUN_LIMIT) => {
+  const started = Date.now()
+  const run = await spawnAsync(exe, argv, { ...opts, ...limit })
+  const ms = Date.now() - started
+  let death = null
+  if (run.signal === limit.killSignal && ms >= limit.timeout) {
+    death = `${name}: the native run was killed after ${limit.timeout / 1000} s without exiting (NATIVE_RUN_LIMIT)`
+  } else if (run.signal !== null) {
+    death = `${name}: the native run died on ${run.signal} after ${ms} ms`
+  }
+  return { ...run, death }
+}
 
 /**
  * One golden case from its compile to its native run, with what it found kept
@@ -849,13 +867,9 @@ const runCase = async (name) => {
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : []
     // Timed inside the lane, so the wait for a turn is not counted as the run.
-    const run = await inNativeLane(async () => {
-      const started = Date.now()
-      const ran = await spawnAsync(exe, argv, { env: caseEnv(side("env")), ...NATIVE_RUN_LIMIT })
-      return { ...ran, ms: Date.now() - started }
-    })
-    if (run.signal === NATIVE_RUN_LIMIT.killSignal && run.ms >= NATIVE_RUN_LIMIT.timeout) {
-      expect(nativeTimeout(name), false, `stdout so far:\n${run.stdout}${run.stderr}`)
+    const run = await inNativeLane(() => runNative(name, exe, argv, { env: caseEnv(side("env")) }))
+    if (run.death !== null) {
+      expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
       return done
     }
     const want = fs.readFileSync(side("out"), "utf8").trim()
@@ -898,6 +912,34 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     reported++
   }
 })
+// The bound on native runs, held to what it promises with a bound of half a
+// second, because the real one takes two minutes to prove. `runNative` is the
+// helper both case loops run their programs through, so a change that drops
+// the limit, or turns a program that outlives it into a skip or a `.out`
+// mismatch, fails here in about a second rather than hanging the next run that
+// meets a loop. `sh -c 'kill -9 $$'` is a death before the bound: it must be
+// named by its signal, not reported as the timeout.
+if (!only || "native run limit".includes(only)) {
+  const limit = { ...NATIVE_RUN_LIMIT, timeout: 500 }
+  const started = Date.now()
+  const slept = await runNative("native run limit", "sleep", ["3"], {}, limit)
+  const ms = Date.now() - started
+  check(
+    "native run limit: a program that outlives the bound is killed at it and fails by name",
+    slept.death ===
+      "native run limit: the native run was killed after 0.5 s without exiting (NATIVE_RUN_LIMIT)" &&
+      ms < 2500,
+    `death: ${slept.death}\nreturned after ${ms} ms, status ${slept.status}, signal ${slept.signal}`
+  )
+  const killed = await runNative("native run limit", "sh", ["-c", "kill -9 $$"], {}, limit)
+  check(
+    "native run limit: a program killed by a signal before the bound fails naming the signal",
+    killed.death !== null &&
+      killed.death.startsWith("native run limit: the native run died on SIGKILL after "),
+    `death: ${killed.death}\nstatus ${killed.status}, signal ${killed.signal}`
+  )
+}
+
 /** Each selected case's own compile, in corpus order, for the checks below that read it again. */
 const caseResults = caseRuns.map((run) => run.compiled)
 
@@ -4000,9 +4042,9 @@ for (const name of linkTests) {
     )
   }
 
-  const run = spawnSync(exe, NATIVE_RUN_LIMIT)
-  if (run.error?.code === "ETIMEDOUT") {
-    check(nativeTimeout(`link/${name}`), false, `stdout so far:\n${run.stdout}${run.stderr}`)
+  const run = await runNative(`link/${name}`, exe, [])
+  if (run.death !== null) {
+    check(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
     continue
   }
   const wantCode = Number(read("expected.code").trim())
