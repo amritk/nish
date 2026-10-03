@@ -1,10 +1,11 @@
-# Security record: the TLS 1.3 server handshake
+# Security record: TLS 1.3 — the server handshake, its records and its TCP carrier
 
-The record of `nish/net/tls`, WP34's lane T1: what the handshake refuses, what
-it keeps secret and how, which secrets it leaves in memory, and the test that
+The record of `nish/net/tls`, WP34's lane T1, and of the record layer and the
+TCP carrier lane T2 put around it (`nish/net/tls/record`,
+`nish/net/tls/record-server`, `nish/net/tls-tcp`): what each refuses, what it
+keeps secret and how, which secrets it leaves in memory, and the test that
 pins each property. It is written with the code rather than after an audit,
-so that the audit of the protocol stack (and T2's record layer, which adds to
-this file) starts from evidence.
+so that the audit of the protocol stack starts from evidence.
 
 **Result.** Every refusal is an alert and none is a panic; the client's
 Finished and the ECDHE secret are compared in constant time; RFC 8448 §3 is
@@ -15,6 +16,18 @@ open, as CLAUDE.md §Security requires: the secrets the handshake keeps in
 that will wipe them, `secureZero` (#417), is on `main`; `std/` may call it once
 a release ships it.
 
+**T2's result.** Every record the trace prints is reproduced byte for byte,
+and every refusal of the record layer is an alert, never a panic. Records are
+authenticated before a byte of them is used, the inner content type is found
+without branching on the padding, and the record counter cannot wrap. A
+connection past its handshake allocates nothing that outlives a record, and
+what each KeyUpdate leaves is bounded by a per-connection cap. On the carrier's path `TlsServer`'s traffic secrets, its handshake
+secret and the caller's ephemeral key are wiped once the record layer has
+what it needs from them, which narrows TLS-1 for TLS over TCP. Three findings
+are open: TLS-2 (Low), the AES key schedule and the derivation's copies; TLS-3
+(Medium), the memory each handshake and KeyUpdate leaves behind; and TLS-4 (Low), no
+timeout in the carrier.
+
 ## Scope
 
 | File | Functions |
@@ -22,9 +35,12 @@ a release ships it.
 | `std/net/tls.ts` | `TlsServer` (`receive`, `handleMessage`, `handleClientHello`, `chooseSuite`, `chooseAlpn`, `signatureInput`, `sign`, `handleFinished`, `takeOutput`, `readSecret`, `writeSecret`), `tlsSignEcdsaP256`, `tlsEcdsaDerSignature` |
 | `std/net/tls/codec.ts` | `tlsParseClientHello` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadExtension`), the six `tlsEncode*` writers and `tlsCertificateVerifyContent` |
 | `std/net/tls/schedule.ts` | the key schedule (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`) and `TlsTranscript` |
+| `std/net/tls/record.ts` (T2) | `tlsRecordLength`, `TlsRecordReader`, `TlsRecordProtection` (`install`, `reserve`, `derive`, `clear`, `nonceInto`, `seal`, `open`), `tlsNextTrafficSecret` |
+| `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `close`, `sign`, `end`, `abort`, `wipeKeys` |
+| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `keyUpdate`, `close` |
 
 Out of scope: the primitives underneath (`nish/crypto/*`, each with its own
-record in this directory), the record layer and the TCP carrier (T2), and
+record in this directory), `nish:net` itself (the C runtime's record), and
 QUIC (Q2). The signature over CertificateVerify is the caller's: the server
 hands the input out and writes back what it is given.
 
@@ -39,11 +55,22 @@ outside its configuration), or a secret learned from timing. The caller — the
 configuration, the randomness and the signature — is trusted, but its
 mistakes still answer an alert rather than a panic.
 
+Under T2 the attacker also holds the network: every record, before and after
+the keys exist, is theirs to forge, cut, replay, reorder, pad or truncate, and
+the TCP stream may end or reset at any byte. A win adds plaintext accepted
+without authentication, a record read under the wrong key or sequence number,
+memory or time a peer can make the server spend without bound, and a key or
+plaintext left readable after the connection is done with it. The program
+driving the carrier is trusted, as the caller of `TlsServer` is.
+
 ## Findings
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| TLS-1 | Low | `std/net/tls.ts` (`TlsServer`: the constructor's `ephemeralPrivate`, `handleClientHello`, `sign`, `handleFinished`), `std/net/tls/schedule.ts` (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`) | Secret material is not wiped once the handshake is done with it. `TlsServer` holds the caller's ephemeral x25519 key as plain bytes, because a `Secret` may not be a field (NL2430); it keeps the handshake secret, both handshake traffic secrets, both application traffic secrets, the exporter secret and the expected client `verify_data`, which its carrier reads; and the schedule's functions answer the early and master secrets, the "derived" salts, both `finished_key`s and every traffic key and IV as plain `u8[]`. All of them stay in arena memory until that memory is reused, and a later memory disclosure could read them. `handleFinished` drops the server's reference to the handshake secret, which shortens how long it is reachable and wipes nothing. **What is wiped:** the copy of the ephemeral key the exchange runs on, and the ECDHE secret, are `Secret<u8[]>`s (`nish:secret`, #418) that `handleClientHello` wipes on every path, and the all-zero check and the handshake secret's extract run on the ECDHE secret only inside `expose`. The P-256 key `tlsSignEcdsaP256` signs with is the caller's `Secret`, borrowed, and `p256` wipes what it derives from it (ECC-2). | **Open.** The primitive exists on `main`: `secureZero` (#417), a store no optimiser removes, for bytes that are not a `Secret`. Under the rolling freeze `std/` may call it once a release ships it; then `TlsServer` wipes its fields when the handshake ends or fails, the schedule's callers wipe what they are handed, and a test pins that the wipes survive `-O2`. |
+| TLS-1 | Low | `std/net/tls.ts` (`TlsServer`: the constructor's `ephemeralPrivate`, `handleClientHello`, `sign`, `handleFinished`), `std/net/tls/schedule.ts` (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`) | Secret material is not wiped once the handshake is done with it. `TlsServer` holds the caller's ephemeral x25519 key as plain bytes, because a `Secret` may not be a field (NL2430); it keeps the handshake secret, both handshake traffic secrets, both application traffic secrets, the exporter secret and the expected client `verify_data`, which its carrier reads; and the schedule's functions answer the early and master secrets, the "derived" salts, both `finished_key`s and every traffic key and IV as plain `u8[]`. All of them stay in arena memory until that memory is reused, and a later memory disclosure could read them. `handleFinished` drops the server's reference to the handshake secret, which shortens how long it is reachable and wipes nothing. **What is wiped:** the copy of the ephemeral key the exchange runs on, and the ECDHE secret, are `Secret<u8[]>`s (`nish:secret`, #418) that `handleClientHello` wipes on every path, and the all-zero check and the handshake secret's extract run on the ECDHE secret only inside `expose`. The P-256 key `tlsSignEcdsaP256` signs with is the caller's `Secret`, borrowed, and `p256` wipes what it derives from it (ECC-2). | **Open.** The primitive exists on `main`: `secureZero` (#417), a store no optimiser removes, for bytes that are not a `Secret`. Under the rolling freeze `std/` may call it once a release ships it; then `TlsServer` wipes its fields when the handshake ends or fails, the schedule's callers wipe what they are handed, and a test pins that the wipes survive `-O2`. **Narrowed by T2 for TLS over TCP:** `TlsRecordServer` calls `secureZero` on `TlsServer`'s caller-supplied ephemeral key once the ServerHello is written, or when the handshake fails or the slot is closed, on the handshake secret and the client's handshake secret once the flight is signed, on the server's handshake and application secrets once its write keys are installed, and on the client's application secret once its read keys are; when the connection fails or its slot is closed it wipes everything `TlsServer` still holds, the exporter secret and the expected client `verify_data` included. It keeps its own copies of the two application secrets for KeyUpdate, overwritten in place by each update and wiped when the slot is closed or reused. What stays is the exporter secret while the connection is open, for the caller, and the schedule's intermediate answers (`net_tls_record_rfc8448` and `net_tls_record_refusals` check the wipes). Follow-up: #430, which moves the TLS and QUIC key-holding structs onto `nish:secret`. |
+| TLS-2 | Low | `std/net/tls/record.ts` (`TlsRecordProtection`: `clear`, `derive`) | A direction's key, IV and AES key schedule live in its fields, since a `Secret` may not be one (NL2430). The key and IV are wiped with `secureZero` when the direction is installed again, cleared, or its slot closed (`TlsRecordServer.wipeKeys`); the schedule is `u64` words, which `secureZero` does not take, and is zeroed with ordinary stores, which stand because the schedule stays reachable for the next key. What `derive` makes on the way — the expanded key and IV, which it wipes, and the schedule `aesKey` answers, which it zeroes with stores the optimiser may drop since nothing reads them again — and HKDF's own HMAC state stay in the arena, unwiped, until the program resets it (TLS-3). They are derived from the traffic secret, so a later memory disclosure could read key material from them. That was already so while `derive` released them with an arena mark, since `Arena.release` frees without zeroing; it is now so for longer. `seal` and `open` copy the record's plaintext into arrays their scope releases, also unwiped: application data, not keys. The per-record nonce — the IV XOR a public sequence number, so as good as the IV — is wiped with `secureZero` in both, on every path after it is built. | **Open.** Follow-up: #430, which moves the TLS and QUIC key-holding structs (these keys, held in a struct across calls, among them) onto `nish:secret`. `secureZero` for a `u64[]`, or an AES key held as bytes, would close the schedule; the derivation's temporaries need the HKDF and HMAC modules to wipe their own state (K1's record), which #430 takes with them. |
+| TLS-3 | Medium | `std/net/tls.ts` (`TlsServer`), `std/net/tls/record.ts` (`TlsRecordProtection.derive`), `std/net/tls/record-server.ts` (`advance`, `handlePostHandshake`), `std/net/tls-tcp.ts` (`accept`) | Each handshake leaves arena memory behind until the program resets the arena: `TlsServer` keeps its messages, transcript and secrets in objects of its own, and its functions get no automatic arena scope, so what they allocate along the way stays too. Measured over the RFC 8448 handshake through `TlsRecordServer`, peak RSS grows by about 52 KB per handshake (53 MB after a thousand, 105 MB after two thousand, 210 MB after four thousand). A long-running server therefore grows with every connection it completes, and a client that opens connections in a loop drives it — denial of service on attacker input. A record and a slot's reuse allocate nothing (`net_tls_record_tcp`'s two hundred echoes measure 0 bytes). A key install does: `TlsRecordProtection.derive` leaves the HKDF and HMAC state and the AES schedule `aesKey` answers in the arena, 5,248 bytes per install, so a KeyUpdate the server only reads costs one install and one it answers costs two, 10,496 bytes (`net_tls_record_refusals` measures each). An earlier revision released them with `Arena.mark`/`Arena.release`; #428 deprecated `Arena.release`, `std/` may call nothing deprecated, and the replacement, a `using a = arena()` block, is refused (NL2424) because `tlsTrafficKey` and the HKDF HMAC objects store allocations of their own. So a connection takes at most `TLS_RECORD_MAX_KEY_UPDATES` (64) KeyUpdates from its client and refuses the next with `unexpected_message` (`net_tls_record_refusals` pins the 64th answered and the 65th refused), which bounds what a client can make the server derive at 64 × 10,496 = 671,744 bytes a connection. The server's own scheduled KeyUpdates, one install each, come once per 2^24 records sent. **The cap is a deliberate interoperability trade-off:** RFC 8446 §4.6.3 puts no limit on how many KeyUpdates a peer sends, so a conforming long-lived client that updates on a schedule of its own — by time, say, rather than once per 2^24 records — is disconnected with `unexpected_message` at its 65th. A client that updates only when §5.5 requires it reaches the cap after 2^30 records. | **Open.** The KeyUpdate share is bounded by the cap; it goes away when HKDF and HMAC can run without storing allocations, so `derive` can take an arena scope again. The way out for the handshake is one that keeps its state in the slot, as the record layer does, or an arena per connection; until then a program serving untrusted clients restarts, or resets the arena while no connection is open, on a schedule of its own. |
+| TLS-4 | Low | `std/net/tls-tcp.ts` (`TlsTcpServer`) | The carrier has no clock: a client may hold a slot for as long as it keeps the TCP connection open, mid-handshake or idle, and once every slot is held new connections are accepted and closed at once (`TLS_TCP_POOL_FULL`). Memory stays bounded, since the pool never grows; availability does not. | **Open, the program's to decide.** The program owns the loop and `pollWait`'s timeout, so it closes slots that have gone quiet; a carrier-level idle timeout needs a clock argument the API does not take yet. |
 
 ## Properties verified
 
@@ -129,6 +156,121 @@ past that is refused before its bytes are copied, a message announcing more is
 refused from its header, and a byte past the end of a message is refused
 rather than kept.
 
+## Properties verified: the record layer and the carrier (T2)
+
+**RFC 8448 §3's records, byte for byte** (`tests/link/net_tls_record_rfc8448`,
+and under `f64` in `net_tls_record_f64`): all nine records of the trace —
+ServerHello in the clear, the server's flight as one 679-byte record, the
+client's Finished, the NewSessionTicket, both sides' application data and
+both `close_notify`s — sealed by `TlsRecordProtection` under the trace's keys
+at the trace's sequence numbers, and each opened back by its reader; the
+ClientHello record is read whatever its legacy version says (§5.1). Replayed
+through `TlsRecordServer`, the trace's ClientHello record brings back the
+trace's ServerHello record and, once signed, its flight record, and the
+client's Finished, data and `close_notify` records open the connection, read
+as the fifty bytes and end the stream. Over a socket
+(`net_tls_record_tcp`, `_f64`), a Nish client sends the same records to the
+carrier and gets the same ServerHello and flight records back.
+
+**Where the stream is cut changes nothing.** The client's stream through
+`TlsRecordReader` cut in two at each of its 354 inner points, fed a byte at a
+time and under 64 seeded random cuttings, and the whole replay through
+`TlsRecordServer` at each of those cuts, a byte at a time and under 16 random
+cuttings: the same records, the same bytes sent, the same state.
+
+**Other suites and padding, against an independent model.** ChaCha20-Poly1305
+and AES-256-GCM-SHA384 records, records with 3, 7 and 13 bytes of padding and
+KeyUpdate's next secret over both hashes match Python's `cryptography` and
+`hmac`, and one protection carries each suite in turn
+(`net_tls_record_refusals`).
+
+**Every refusal is an alert** (`net_tls_record_refusals`, `_f64`):
+
+- *`record_overflow`:* a header announcing a body over 2^14 + 256 bytes,
+  refused from the header before the body is waited for; a cleartext record
+  over 2^14 bytes; a decrypted record over 2^14 + 1.
+- *`bad_record_mac`:* one flipped bit of a tag or of a ciphertext; a record
+  read at the wrong sequence number; a body shorter than a tag and a type; a
+  record under keys a KeyUpdate replaced; a cleartext record once the read
+  keys exist. A refused record spends no sequence number, and nothing of it
+  is used.
+- *`unexpected_message`:* a content type nobody defined, outside or inside;
+  a protected record that is nothing but padding (§5.4); application data in
+  the clear, or before the client's Finished; an empty handshake record; a
+  `change_cipher_spec` before the first ClientHello, after the client's
+  Finished, inside a protected record, of any value but 1 or any length but
+  1; a `change_cipher_spec` or an alert between the records of one handshake
+  message, and application data between those of a KeyUpdate (§5.1); a
+  KeyUpdate not at the end of its record; and any post-handshake message but
+  KeyUpdate.
+- *`decode_error`:* an alert that is not two bytes; a KeyUpdate whose length
+  is not 1. *`illegal_parameter`:* a `request_update` other than 0 or 1.
+- *The peer's alerts:* `close_notify` ends its stream, after which records
+  are dropped (§6.1); `user_canceled` is passed over; any other description,
+  one nobody defined included, ends the connection with nothing sent back.
+- *Too many KeyUpdates:* the sixty-fifth KeyUpdate a connection takes from
+  its client is `unexpected_message` (`TLS_RECORD_MAX_KEY_UPDATES`, TLS-3).
+- *Records that carry nothing:* seventeen in a row of `change_cipher_spec`,
+  empty application data, `user_canceled` or KeyUpdate (each of which costs
+  two key derivations) are `unexpected_message`, Go's `maxUselessRecords`;
+  application data or a handshake message starts the count again.
+- *Ends:* a stream that ends without `close_notify`, or inside a record, is
+  truncation and fails the connection; one whose `close_notify` is still
+  waiting behind unread data is not, and the alert counts once it is read.
+  After the server's own `close_notify` nothing more is sent — no KeyUpdate
+  answer, no alert — and a `close_notify` that finds the output full waits
+  for room rather than being dropped.
+- *The caller's mistakes are `internal_error`, or a negative count:* a window
+  outside an array, an output too small, content over 2^14 bytes, a padding no
+  record can carry, an unknown suite or a secret of the wrong length, a
+  sequence number at 2^53 − 1, an AES or ChaCha20 key that is not one, a
+  signature when none is due, a P-256 key that is not one, and a `TlsServer`
+  that already refused its configuration or randomness. A handshake that
+  fails before its ServerHello wipes the ephemeral key it never used.
+
+**The handshake goes on records the way RFC 8446 puts it there.** The flight
+waits for the signature and goes out as one record; everything after the
+ServerHello is under the handshake keys, an alert sent before the flight
+included (`net_tls_record_tcp`'s signing key that is not one); keys change
+only at a record boundary; a client's session id brings one compatibility
+`change_cipher_spec` after the server's first handshake message, a
+HelloRetryRequest included, and no second; a flight larger than the output
+buffer is held back and sealed in records of at most 2^14 bytes as it drains.
+
+**KeyUpdate, both ways and on a schedule.** The client's KeyUpdate moves the
+read keys; asked for one, the server answers under its old keys and moves its
+own; `keyUpdate(true)` asks the client back; and once a key has protected
+`recordLimit` records the writer sends its own KeyUpdate first (tested with
+the limit brought forward from 2^24 to 2).
+
+**Bounded memory after the handshake.** The reader, the output and the
+application-data buffer are allocated once per slot; a caller that reads
+slowly makes the connection stop asking to be read rather than buffer more;
+two hundred echoes over a socket move the arena by 0 bytes. A KeyUpdate
+leaves its key derivation behind, at most 16 KB each and 64 of them a
+connection; the handshake leaves more (TLS-3).
+
+**No key reaches another connection.** `accept` copies the caller's ephemeral
+key and server random into the slot and wipes the caller's key array, so a
+program that refills one buffer of each for every connection (the loopback
+test does) never has a slot's wipe reach the next connection's key, which as
+an array of zeros would be a publicly known x25519 key, nor has a pending
+handshake send the next connection's random. A random or key that is not 32
+bytes is refused with -22 before any connection is taken, and its array left
+as it was. A failed or closed connection wipes
+everything `TlsServer` still held, the exporter secret included
+(`net_tls_record_refusals`); a key that does not install fails the connection
+rather than leave a direction in the clear, and `seal` refuses application
+data in the clear.
+
+**The carrier against the world** (the `net_tls_tcp` block of `tests/run.js`):
+openssl s_client completes a handshake under each of the three suites,
+including a KeyUpdate it asks to be answered, and curl GETs a page over
+ALPN `http/1.1`, each with the server's own report of the suite, ALPN and
+SNI it negotiated. Over loopback the pool sheds a third client for two slots,
+closes clients that hang up or reset mid-handshake as a cut stream and as a
+socket failure, and frees every slot.
+
 ## What is not checked here
 
 - The caller's signature. A wrong one is the caller's bug, and the client's
@@ -137,4 +279,12 @@ rather than kept.
 - The certificate chain. It is sent as configured; nothing here parses it.
 - Constant-time properties of the primitives, which their own records cover.
   The handshake branches only on public values: lengths, types, the offered
-  lists and the state.
+  lists and the state. The record layer branches on record lengths, header
+  types and the result of authentication, all public; the one secret-dependent
+  value it computes, the length of a record's padding, is found by reading
+  every byte and keeping each non-zero one by mask, with no branch or address
+  depending on it; the copy of the content that follows takes as long as the
+  content, whose length the caller learns anyway. No `tests/ct-asm.js`
+  fixture reads that loop: it rests on review.
+- The peer's `record_size_limit` (RFC 8449): the server writes records of up
+  to 2^14 bytes whatever the client asks for.

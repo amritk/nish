@@ -1,0 +1,83 @@
+PASS  A.2: the client's parameters parse
+PASS  A.2: initial_max_data is 2^62 - 1
+PASS  A.2: each stream's credit is 65535
+PASS  A.2: 16 streams each way
+PASS  A.2: a 30 s idle timeout
+PASS  A.2: initial_source_connection_id is its SCID
+PASS  A.2: what it did not send keeps its default
+PASS  parameters at their defaults encode to nothing
+PASS  a server's full set encodes in ID order, each as ID, length and value
+PASS  and parses back as a server's, every field as it was
+PASS  unknown and reserved parameters are skipped
+PASS  an ID cut inside its varint is refused
+PASS  a length cut inside its varint is refused
+PASS  a value running past the bytes is refused
+PASS  a parameter sent twice is refused
+PASS  original_destination_connection_id from a client is refused
+PASS  a stateless reset token that is not 16 bytes is refused
+PASS  a connection ID of 21 bytes is refused
+PASS  disable_active_migration with a value is refused
+PASS  a varint-valued parameter with a byte after its varint is refused
+PASS  an empty varint-valued parameter is refused
+PASS  max_udp_payload_size below 1200 is refused
+PASS  ack_delay_exponent above 20 is refused
+PASS  max_ack_delay of 2^14 is refused
+PASS  active_connection_id_limit below 2 is refused
+PASS  a stream count past 2^60 is refused
+PASS  the boundary values are accepted
+PASS  nothing received writes no ACK
+PASS  0, 1 and 2 are new
+PASS  and make one range
+PASS  2 again is a duplicate
+PASS  as is a packet number that is not one
+PASS  an ack-eliciting packet makes an ACK due
+PASS  5 starts a second range above
+PASS  4 joins it from below
+PASS  3 closes the hole and merges them
+PASS  7 and 9 make two more
+PASS  8 merges those two
+PASS  6 merges everything
+PASS  contains says what was received
+PASS  pushAck writes the ranges
+PASS  as largest 12, delay 3, one more range: [12, 12] then [0, 9]
+PASS  and the ACK is no longer due
+PASS  an index outside the ranges answers -1
+PASS  and set outside them changes nothing
+PASS  forty disjoint packets keep QUIC_ACK_MAX_RANGES ranges
+PASS  and raise the floor over the ones dropped
+PASS  a packet number at or below the floor reads as received
+PASS  one above it is still new
+PASS  a new lowest range, with every slot taken, is itself dropped
+PASS  the first local ID is sequence 0
+PASS  the next sequence 1
+PASS  both are active and owned
+PASS  sequence 1 still has to be announced; sequence 0 never does
+PASS  and once it is, none is left
+PASS  retiring a sequence number never issued is PROTOCOL_VIOLATION
+PASS  so is a negative one
+PASS  so is retiring the ID the packet was sent to (RFC 9000 §19.16)
+PASS  retiring another is fine
+PASS  and it is no longer owned
+PASS  retiring it twice is fine too
+PASS  before the peer gave an ID there is none to send to
+PASS  the peer's first SCID is sequence 0
+PASS  a NEW_CONNECTION_ID adds sequence 1
+PASS  the same frame again is fine
+PASS  sequence 1 with another ID is PROTOCOL_VIOLATION
+PASS  sequence 1 with another token is too
+PASS  an ID under a second sequence number is too
+PASS  two are active, and the oldest is the one sent to
+PASS  a third active ID passes the limit of 2: CONNECTION_ID_LIMIT_ERROR
+PASS  and the refused ID is not added: two are still active, with nothing more owed
+PASS  and the ID sent to is unchanged
+PASS  Retire Prior To 2 retires both older IDs
+PASS  so only the new one is active and sent to
+PASS  and 0 then 1 are queued to retire
+PASS  an ID that arrives already below Retire Prior To is retired at once
+PASS  and queued
+PASS  four queued retirements, twice the limit, are allowed
+PASS  a fifth is CONNECTION_ID_LIMIT_ERROR (RFC 9000 §5.1.2)
+PASS  and the refused frame leaves the table within its bounds
+PASS  with the ID sent to unchanged
+PASS  prune leaves it as it was
+quic connection parts: 82 passed, 0 failed, 0 skipped

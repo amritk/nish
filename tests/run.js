@@ -1711,6 +1711,193 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
+// ---- `nish/net/tls-tcp`, against openssl s_client and curl (WP34 T2) -------------
+//
+// What the Nish client in `tests/link/net_tls_record_tcp` cannot say: that a
+// TLS 1.3 stack somebody else wrote completes a handshake with the carrier and
+// moves data both ways. The same program run as `serve 4` listens, prints its
+// port and serves four connections, one at a time: openssl s_client under each
+// of the three suites — the first sending `K`, a KeyUpdate asking for one
+// back, before its line — each echoed, and curl's GET, answered over the ALPN
+// protocol it negotiates. Every client must exit 0 with what it sent back, and
+// the server must print one line per connection with the suite, ALPN and SNI
+// it negotiated. Both tools are on CI's runners, so a missing one is a failure
+// here rather than a skip.
+if (!only || "net_tls_tcp".includes(only)) {
+  const tlsDir = path.join(buildDir, "net-tls")
+  fs.rmSync(tlsDir, { recursive: true, force: true })
+  fs.mkdirSync(tlsDir, { recursive: true })
+  const exe = path.join(tlsDir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
+      "-o",
+      tlsDir + path.sep,
+      "--link",
+      exe,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  // The two third-party clients, by name; `has` asks the PATH for each.
+  const [openssl, curl] = ["openssl", "curl"]
+  const tools = [openssl, curl].filter((tool) => !has(tool))
+  if (
+    check("net_tls_tcp: the server links", built.status === 0, String(built.stderr)) &&
+    check(
+      "net_tls_tcp: openssl and curl are on PATH (CI's runners have both)",
+      tools.length === 0,
+      `missing: ${tools.join(", ")}`
+    )
+  ) {
+    const server = spawn(exe, ["serve", "4"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+
+    // One s_client: each step waits for `text` on a stream, then writes
+    // `send` to its stdin, or ends it when `send` is null. The answer says
+    // whether every step was reached and how the client exited.
+    const sClient = (args, steps) =>
+      new Promise((resolve) => {
+        const child = spawn(
+          openssl,
+          ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-servername", "localhost", ...args],
+          { stdio: ["pipe", "pipe", "pipe"] }
+        )
+        const unread = { stdout: "", stderr: "" }
+        let at = 0
+        let all = ""
+        const timer = setTimeout(() => child.kill("SIGKILL"), 15000)
+        const advance = () => {
+          while (at < steps.length) {
+            const [stream, text, send] = steps[at]
+            const i = unread[stream].indexOf(text)
+            if (i < 0) {
+              return
+            }
+            unread[stream] = unread[stream].slice(i + text.length)
+            at++
+            if (send === null) {
+              child.stdin.end()
+            } else {
+              child.stdin.write(send)
+            }
+          }
+        }
+        child.stdout.on("data", (chunk) => {
+          all += chunk
+          unread.stdout += chunk
+          advance()
+        })
+        child.stderr.on("data", (chunk) => {
+          all += chunk
+          unread.stderr += chunk
+          advance()
+        })
+        child.on("close", (code, signal) => {
+          clearTimeout(timer)
+          resolve({ code, signal, reached: at === steps.length, all })
+        })
+      })
+    // The handshake summary s_client prints ends with this line; it reads
+    // stdin only after it.
+    const summary = "Verify return code"
+    const sessions = [
+      [
+        "TLS_AES_128_GCM_SHA256, with a KeyUpdate asking for one back first",
+        ["-ciphersuites", "TLS_AES_128_GCM_SHA256"],
+        [
+          ["stdout", summary, "K\n"],
+          ["stderr", "KEYUPDATE", "hello 128\n"],
+          ["stdout", "hello 128\n", null],
+        ],
+      ],
+      [
+        "TLS_CHACHA20_POLY1305_SHA256",
+        ["-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"],
+        [
+          ["stdout", summary, "hello chacha\n"],
+          ["stdout", "hello chacha\n", null],
+        ],
+      ],
+      [
+        "TLS_AES_256_GCM_SHA384",
+        ["-ciphersuites", "TLS_AES_256_GCM_SHA384"],
+        [
+          ["stdout", summary, "hello 256\n"],
+          ["stdout", "hello 256\n", null],
+        ],
+      ],
+    ]
+    for (const [what, args, steps] of sessions) {
+      const r = port > 0 ? await sClient(args, steps) : { code: null, signal: null, reached: false, all: "" }
+      check(
+        `net_tls_tcp: openssl s_client -tls1_3 under ${what}: the handshake completes, the line comes back, and it exits 0`,
+        r.reached && r.code === 0,
+        `exit ${r.code} signal ${r.signal}, every step reached: ${r.reached}\n${r.all.slice(-1500)}`
+      )
+    }
+    const curled =
+      port > 0
+        ? spawnSync(
+            curl,
+            [
+              "-sk",
+              "--tlsv1.3",
+              "--tls13-ciphers",
+              "TLS_AES_256_GCM_SHA384",
+              "--max-time",
+              "15",
+              "--resolve",
+              `localhost:${port}:127.0.0.1`,
+              `https://localhost:${port}/`,
+            ],
+            { encoding: "utf8" }
+          )
+        : { status: null, stdout: "", stderr: "no port" }
+    check(
+      "net_tls_tcp: curl --tlsv1.3 GETs the page over the server, and exits 0",
+      curled.status === 0 && curled.stdout === "hello from nish/net/tls-tcp\n",
+      `exit ${curled.status}\nstdout: ${JSON.stringify(curled.stdout)}\nstderr: ${curled.stderr}`
+    )
+    const ended = await serverDone
+    // 4865, 4867 and 4866 are TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256
+    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and curl,
+    // which reads to the end of the answer, closed after the server did.
+    const want =
+      "closed: suite 4865 alpn - sni localhost sent 0 received -1 client-closed true\n" +
+      "closed: suite 4867 alpn - sni localhost sent 0 received -1 client-closed true\n" +
+      "closed: suite 4866 alpn - sni localhost sent 0 received -1 client-closed true\n" +
+      "closed: suite 4866 alpn http/1.1 sni localhost sent 0 received -1 client-closed false\n"
+    const body = served.replace(/^port \d+\n/, "")
+    check(
+      "net_tls_tcp: the server reports each connection's suite, ALPN and SNI, sends no alert, and exits 0",
+      ended.code === 0 && body === want,
+      `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(body)}\nwant:   ${JSON.stringify(want)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
 // ---- A `nish:` import is the same builtin, not another one -----------------------
 // The whole claim a builtin module makes: importing a name *renames* a builtin
 // rather than introducing one, so the program that imports and the program that

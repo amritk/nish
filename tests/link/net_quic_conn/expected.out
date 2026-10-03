@@ -1,0 +1,202 @@
+PASS  the handshake completes against the test client
+PASS  the server's first flight is one datagram
+PASS  padded to 1200 bytes, since it carries an ack-eliciting Initial
+PASS  its long headers come from the server's first connection ID
+PASS  the Initial acknowledges the client's packet 0, then carries the ServerHello
+PASS  the Handshake packet carries the rest of the flight, then the padding
+PASS  the client's view checks the server's CertificateVerify under the leaf key
+PASS  and its Finished
+PASS  the server's transport parameters parse as a server's
+PASS  original_destination_connection_id is the DCID of the client's first Initial
+PASS  initial_source_connection_id is the server's SCID
+PASS  the limits are the configuration's
+PASS  and the server asks the client not to migrate
+PASS  after the client's Finished the connection is connected
+PASS  the handshake chose the echo's ALPN
+PASS  the Handshake packet validated the client's address
+PASS  and the Initial keys are discarded (RFC 9001 §4.9.1)
+PASS  as are the Handshake keys once the handshake is confirmed (§4.9.2)
+PASS  one 1-RTT packet followed
+PASS  carrying HANDSHAKE_DONE and three NEW_CONNECTION_IDs, up to the client's limit of 4
+PASS  the first new ID is sequence 1, eight bytes, with a 16-byte reset token
+PASS  the server owns its new IDs
+PASS  but no longer the original DCID
+PASS  the table holds four active local IDs
+PASS  nothing more is due
+PASS  ChaCha20-Poly1305: a new connection waits for an Initial
+PASS  ChaCha20-Poly1305: the handshake completes
+PASS  ChaCha20-Poly1305: the connection is connected
+PASS  ChaCha20-Poly1305: the client verified the server's signature and Finished
+PASS  ChaCha20-Poly1305: TLS negotiated the suite
+PASS  AES-256-GCM: a new connection waits for an Initial
+PASS  AES-256-GCM: the handshake completes
+PASS  AES-256-GCM: the connection is connected
+PASS  AES-256-GCM: the client verified the server's signature and Finished
+PASS  AES-256-GCM: TLS negotiated the suite
+PASS  before any data the server's application reads nothing
+PASS  the client's stream data reaches the application
+PASS  once
+PASS  the server acknowledges the packet
+PASS  writeStream echoes it back with the FIN
+PASS  as one STREAM frame on stream 0, offset 0, with FIN
+PASS  carrying the bytes
+PASS  a second write after the FIN is refused
+PASS  a write to a stream the client never opened is refused
+PASS  data that arrives ahead of its stream waits
+PASS  and goes out with what fills the gap before it
+PASS  overlapping data adds only what is new, then the FIN
+PASS  a stream that has ended delivers nothing more
+PASS  an empty frame with FIN ends a stream with no data
+PASS  a duplicated packet delivers its data once
+PASS  and is counted as dropped
+PASS  writeStream before the handshake is refused
+PASS  a write past the credit the client gave the stream is refused
+PASS  one within it is queued
+PASS  and the next byte is past it
+PASS  MAX_STREAM_DATA raises it
+PASS  and the queued bytes went out at offset 0 with the next ACK
+PASS  the rest follows at offset 4 with the FIN
+PASS  MAX_DATA raises the connection's credit
+PASS  and a smaller one does not lower it
+PASS  PING and the blocked and stream-count frames leave the connection as it was
+PASS  and are acknowledged
+PASS  STOP_SENDING ends the server's side of a stream
+PASS  after RESET_STREAM the stream's data is dropped
+PASS  and the connection carries on
+PASS  RETIRE_CONNECTION_ID retires the server's ID
+PASS  and the server issues a replacement, sequence 4
+PASS  so the client still holds four
+PASS  a packet sent to the new ID is the connection's (retiring 1 twice is fine)
+PASS  NEW_CONNECTION_ID with Retire Prior To 1 makes the server retire the client's first ID
+PASS  sequence 0
+PASS  and send to the new one
+PASS  PATH_CHALLENGE is answered with PATH_RESPONSE
+PASS  carrying the same eight bytes
+PASS  a burst of challenges is answered without growing a queue
+PASS  an ACK from the client moves the space's largest acknowledged
+PASS  and, eliciting nothing, is not acknowledged
+PASS  an older ACK does not move it back
+PASS  close() puts the connection in the closing state
+PASS  the next datagram is the close
+PASS  an application CONNECTION_CLOSE (0x1d) with code 7, in a 1-RTT packet
+PASS  then nothing
+PASS  and every datagram is ignored, answering the code
+PASS  closing twice changes nothing
+PASS  a connection mid-handshake
+PASS  closed by the application sends one datagram
+PASS  an Initial cannot carry 0x1d, so it carries the transport close APPLICATION_ERROR
+PASS  a CONNECTION_CLOSE from the client
+PASS  puts the connection in the draining state, sending nothing
+PASS  with the client's code
+PASS  an application close from the client drains too, keeping its code
+PASS  and the application cannot close it again
+PASS  release() discards the 1-RTT keys
+PASS  wiping the key bytes
+PASS  and the connection sends nothing more
+PASS  a first Initial in a datagram under 1200 bytes
+PASS  is dropped, and the connection still waits
+PASS  so is a datagram that does not parse
+PASS  so is a first Initial that does not authenticate, leaving nothing behind
+PASS  so is one to a DCID under 8 bytes (RFC 9000 §7.2)
+PASS  a connection that has read nothing has nothing to send
+PASS  a 1-RTT packet cannot start a connection
+PASS  nor can a Retry
+PASS  a connection closed before it started sends nothing
+PASS  a good first Initial still starts the connection
+PASS  a 0-RTT packet is dropped: there is no 0-RTT here
+PASS  an Initial from another SCID is dropped
+PASS  1-RTT data is not processed before the handshake completes
+PASS  (dropped, RFC 9001 §5.7)
+PASS  a 1-RTT packet coalesced after the Finished is read once the handshake completes
+PASS  a 1-RTT packet to an ID the server never issued is dropped
+PASS  an Initial after the Initial keys are discarded is dropped
+PASS  a ClientHello without an x25519 share gets a HelloRetryRequest in an Initial
+PASS  and no Handshake keys yet
+PASS  the second ClientHello, continuing the CRYPTO stream, gets the flight
+PASS  and the handshake completes
+PASS  the second half of a ClientHello, first, waits for the first
+PASS  a Handshake packet before the server has Handshake keys is dropped
+PASS  with nothing sent but an acknowledgement
+PASS  then the first half completes it, and the flight follows
+PASS  and the handshake completes
+PASS  an unvalidated client's 1200 bytes buy three datagrams (RFC 9000 §8.1)
+PASS  3600 bytes, three times what was received
+PASS  another 1200 bytes from the client release the rest
+PASS  which the client accepts
+PASS  and the handshake completes, validating the address
+PASS  then HANDSHAKE_DONE and the client's three new IDs
+PASS  entropy of the wrong length leaves the connection closed with INTERNAL_ERROR
+PASS  sending nothing
+PASS  and ignoring every datagram
+PASS  nor does it sign anything
+PASS  the caller's entropy is wiped once it is copied
+PASS  limits outside what QuicServerConfig allows are refused the same way
+PASS  so is a negative idle timeout
+PASS  a 1-RTT packet with no frames is PROTOCOL_VIOLATION (§12.4): the connection closes
+PASS  a 1-RTT packet with no frames is PROTOCOL_VIOLATION (§12.4): and says so
+PASS  an unknown frame type is FRAME_ENCODING_ERROR: the connection closes
+PASS  an unknown frame type is FRAME_ENCODING_ERROR: and says so
+PASS  a truncated frame is FRAME_ENCODING_ERROR: the connection closes
+PASS  a truncated frame is FRAME_ENCODING_ERROR: and says so
+PASS  NEW_TOKEN to a server is PROTOCOL_VIOLATION (§19.7): the connection closes
+PASS  NEW_TOKEN to a server is PROTOCOL_VIOLATION (§19.7): and says so
+PASS  HANDSHAKE_DONE to a server is PROTOCOL_VIOLATION (§19.20): the connection closes
+PASS  HANDSHAKE_DONE to a server is PROTOCOL_VIOLATION (§19.20): and says so
+PASS  a PATH_RESPONSE no challenge asked for is PROTOCOL_VIOLATION (§19.18): the connection closes
+PASS  a PATH_RESPONSE no challenge asked for is PROTOCOL_VIOLATION (§19.18): and says so
+PASS  acknowledging a packet never sent is PROTOCOL_VIOLATION (§13.1): the connection closes
+PASS  acknowledging a packet never sent is PROTOCOL_VIOLATION (§13.1): and says so
+PASS  CRYPTO at 1-RTT is the TLS alert unexpected_message, as CRYPTO_ERROR: the connection closes
+PASS  CRYPTO at 1-RTT is the TLS alert unexpected_message, as CRYPTO_ERROR: and says so
+PASS  STREAM on a stream the server would open is STREAM_STATE_ERROR: the connection closes
+PASS  STREAM on a stream the server would open is STREAM_STATE_ERROR: and says so
+PASS  STREAM on a unidirectional stream is STREAM_LIMIT_ERROR: the connection closes
+PASS  STREAM on a unidirectional stream is STREAM_LIMIT_ERROR: and says so
+PASS  STREAM on a fifth bidirectional stream is STREAM_LIMIT_ERROR: the connection closes
+PASS  STREAM on a fifth bidirectional stream is STREAM_LIMIT_ERROR: and says so
+PASS  MAX_STREAM_DATA on a server stream is STREAM_STATE_ERROR: the connection closes
+PASS  MAX_STREAM_DATA on a server stream is STREAM_STATE_ERROR: and says so
+PASS  data past a stream's credit is FLOW_CONTROL_ERROR (§4.1): the connection closes
+PASS  data past a stream's credit is FLOW_CONTROL_ERROR (§4.1): and says so
+PASS  data past the connection's credit is FLOW_CONTROL_ERROR: the connection closes
+PASS  data past the connection's credit is FLOW_CONTROL_ERROR: and says so
+PASS  data past a stream's final size is FINAL_SIZE_ERROR (§4.5): the connection closes
+PASS  data past a stream's final size is FINAL_SIZE_ERROR (§4.5): and says so
+PASS  a second FIN at another size is FINAL_SIZE_ERROR: the connection closes
+PASS  a second FIN at another size is FINAL_SIZE_ERROR: and says so
+PASS  a FIN below data already received is FINAL_SIZE_ERROR: the connection closes
+PASS  a FIN below data already received is FINAL_SIZE_ERROR: and says so
+PASS  a RESET_STREAM final size below data received is FINAL_SIZE_ERROR: the connection closes
+PASS  a RESET_STREAM final size below data received is FINAL_SIZE_ERROR: and says so
+PASS  a RESET_STREAM final size past the credit is FLOW_CONTROL_ERROR: the connection closes
+PASS  a RESET_STREAM final size past the credit is FLOW_CONTROL_ERROR: and says so
+PASS  retiring an ID never issued is PROTOCOL_VIOLATION (§19.16): the connection closes
+PASS  retiring an ID never issued is PROTOCOL_VIOLATION (§19.16): and says so
+PASS  retiring the ID the packet was sent to is PROTOCOL_VIOLATION: the connection closes
+PASS  retiring the ID the packet was sent to is PROTOCOL_VIOLATION: and says so
+PASS  a sequence number reused with another ID is PROTOCOL_VIOLATION (§19.15): the connection closes
+PASS  a sequence number reused with another ID is PROTOCOL_VIOLATION (§19.15): and says so
+PASS  more IDs than the server's limit of 4 is CONNECTION_ID_LIMIT_ERROR (§5.1.1): the connection closes
+PASS  more IDs than the server's limit of 4 is CONNECTION_ID_LIMIT_ERROR (§5.1.1): and says so
+PASS  a reserved bit set under a valid tag is PROTOCOL_VIOLATION (§17.3.1)
+PASS  a client with a zero-length connection ID completes a handshake
+PASS  but its NEW_CONNECTION_ID is PROTOCOL_VIOLATION (§19.15)
+PASS  signing when no signature is due fails TLS with internal_error
+PASS  and closes the connection
+PASS  which then refuses to sign again
+PASS  a ClientHello without ALPN is no_application_protocol, as CRYPTO_ERROR (RFC 9001 §8.1)
+PASS  closed in an Initial, naming CRYPTO
+PASS  parameters without initial_source_connection_id are TRANSPORT_PARAMETER_ERROR (§7.3)
+PASS  closed in an Initial
+PASS  an initial_source_connection_id that is not the packet's SCID is PROTOCOL_VIOLATION (§7.3)
+PASS  malformed parameters are TRANSPORT_PARAMETER_ERROR
+PASS  STREAM in an Initial is PROTOCOL_VIOLATION (§12.4)
+PASS  closed in an Initial, naming STREAM
+PASS  CRYPTO data 16 KiB ahead is CRYPTO_BUFFER_EXCEEDED (§7.5)
+PASS  a CRYPTO frame running past its packet is FRAME_ENCODING_ERROR
+PASS  HANDSHAKE_DONE in a Handshake packet is PROTOCOL_VIOLATION
+PASS  closed in an Initial and a Handshake packet
+PASS  each naming the frame
+PASS  while TLS waits for the signature nothing is sent
+PASS  an empty signature fails TLS with internal_error
+quic connection: 201 passed, 0 failed, 0 skipped
