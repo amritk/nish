@@ -1,0 +1,1 @@
+main.ts:7:11: error: `pop` is not a method of `Float64Array`

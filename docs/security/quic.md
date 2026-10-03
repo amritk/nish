@@ -2,9 +2,8 @@
 
 The record for `nish/net/quic-packet` (WP34 Q1), which the QUIC connection
 stage (Q2) extends when `nish/net/quic` lands. It says which functions hold
-secrets that are not wiped, as CLAUDE.md §Security asks of every module in the
-stack until the runtime has a wipe the optimiser cannot drop (#385), and it
-names the tests that pin the module's refusals.
+secrets and which of them are wiped, as CLAUDE.md §Security asks, and it names
+the tests that pin the module's refusals.
 
 ## Scope
 
@@ -31,7 +30,7 @@ answer `null` rather than panic when those are out of range.
 
 | Id | Severity | Where | Finding | Status |
 | --- | --- | --- | --- | --- |
-| QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`, and the `QuicKeys` they answer) | Traffic secrets and the keys derived from them are not wiped. `quicKeys` and `quicKeysUpdate` take a Handshake or 1-RTT traffic secret and answer a `QuicKeys` that holds the packet key, the IV and the header-protection key, both AES keys expanded, for as long as the caller keeps it. `quicKeyUpdateSecret` takes the current secret and answers the next generation's. The HKDF-Expand-Label intermediates of all three, and the nonces `quicSealPacket` and `quicDecryptPacket` build from the IV, stay in arena memory after the call returns, until that memory is reused. A later memory disclosure could read them. The Initial secrets and keys (`quicInitialSecrets`, and `quicKeys` of their answer) are not secret: anyone who reads the client's first Destination Connection ID derives them (RFC 9001 §5.2). The Retry key and nonce are published constants (§5.8). | **Open**, as ECC-2 and X509-7 are, for the same reason. The language has no store the optimiser is barred from removing, so a wipe written in Nish could be deleted as a dead store and give false assurance. Once a release ships the primitive (#385), each of these functions wipes before it returns, and a test pins that the wipe survives `-O2`. |
+| QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`, and the `QuicKeys` they answer) | **What is not wiped: everything secret in this module.** `quicKeys` and `quicKeysUpdate` take a Handshake or 1-RTT traffic secret. They answer a `QuicKeys` that holds the packet key, the IV and the header-protection key, with both AES keys expanded, for as long as the caller keeps it. `quicKeyUpdateSecret` takes the current secret and answers the next generation's. The HKDF-Expand-Label intermediates of all three stay in arena memory after the call returns, until that memory is reused, as do the nonces `quicSealPacket` and `quicDecryptPacket` build from the IV. A later memory disclosure could read them. **What needs no wipe:** the Initial secrets and keys (`quicInitialSecrets`, and `quicKeys` of its answer) are not secret, because anyone who reads the client's first Destination Connection ID derives them (RFC 9001 §5.2). The Retry key and nonce are published constants (§5.8). | **Open.** The primitives are on `main`. `secureZero` (#417) is a store no optimiser removes. `nish:secret`'s `Secret<T>` (#418) is what `nish/crypto`'s signers and X25519 now take a key as (ECC-2, X509-7). This module does not use them yet. The traffic secret has to arrive as a `Secret<u8[]>`, and `QuicKeys` has to hold its keys the same way, wiping each key, IV and HKDF intermediate before it is dropped; that changes the key API Q2 consumes. Until then, nothing here is wiped. |
 
 ## Properties verified
 

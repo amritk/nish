@@ -7,7 +7,8 @@
 // case of Wycheproof's x25519_test.json, and the low-order points by name
 // (docs/security/crypto-ecc.md is the audit these checks pin).
 import { Suite } from "nish/testing";
-import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519";
+import { X25519_SIZE } from "nish/crypto/x25519";
+import { x25519Plain as x25519, x25519BasePlain as x25519Base } from "./plain";
 import { fromHex, toHex } from "./hex";
 import { wycheproofX25519 } from "./wycheproof";
 

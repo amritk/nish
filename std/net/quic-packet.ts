@@ -42,10 +42,11 @@
  * **Secrets are not wiped.** `QuicKeys` holds a packet key, an IV and a
  * header-protection key, and `quicKeys`, `quicKeyUpdateSecret` and the seal
  * and open functions hold traffic secrets and keys in arena memory until that
- * memory is reused, as every `nish/crypto` module does (ECC-2, X509-7). The
+ * memory is reused. `nish/crypto`'s signers and X25519 now hold their keys as
+ * a `Secret` from `nish:secret` and wipe them (ECC-2, X509-7); this module
+ * does not yet, and `docs/security/quic.md` records that as QUIC-1. The
  * Initial keys are not secret, because anyone who reads the client's first
- * DCID can derive them (RFC 9001 §5.2); the Handshake and 1-RTT keys are,
- * and `docs/security/quic.md` records them as QUIC-1.
+ * DCID can derive them (RFC 9001 §5.2); the Handshake and 1-RTT keys are.
  *
  * **Constant time.** The AEADs and the header-protection masks are
  * `nish/crypto/aes` and `nish/crypto/chacha20poly1305`, with their guarantees.

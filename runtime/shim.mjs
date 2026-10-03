@@ -123,6 +123,52 @@ export function ctEq(a, b) {
   return (a ^ b) === 0 ? 0xffffffff : 0;
 }
 
+/**
+ * `nish:secret` (docs/LANGUAGE.md, "Secrets"). Natively the compiler holds a
+ * `Secret` to its rules and `wipe` is a volatile store of zeros; here the rules
+ * have already been checked by the compiler or by nobody, so a `Secret` is a
+ * plain wrapper and `wipe` zero-fills what it holds. `runtime/nish.mjs`
+ * resolves the `nish:secret` specifier to this module, so these are its
+ * exports by name. A zero-fill under Node promises nothing about copies the
+ * engine made, which is the native wipe's whole point and is not claimed here.
+ */
+export class Secret {
+  constructor(value) {
+    this.value = value;
+  }
+}
+
+export function secret(value) {
+  return new Secret(value);
+}
+
+export function expose(s, f) {
+  return f(s.value);
+}
+
+export function exposeWith(s, arg, f) {
+  return f(s.value, arg);
+}
+
+/** Zero an array of integers, or every integer field of a record: `0` for a number, `0n` for an `i64` or `u64`. */
+function zeroFill(target) {
+  if (Array.isArray(target) || ArrayBuffer.isView(target)) {
+    for (let i = 0; i < target.length; i++) {
+      target[i] = typeof target[i] === "bigint" ? 0n : 0;
+    }
+    return;
+  }
+  for (const key of Object.keys(target)) {
+    const field = target[key];
+    if (typeof field === "bigint") target[key] = 0n;
+    else if (typeof field === "number") target[key] = 0;
+  }
+}
+
+export function wipe(target) {
+  zeroFill(target instanceof Secret ? target.value : target);
+}
+
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
 export function wrapI64(x) {
   return BigInt.asIntN(64, x);
@@ -497,9 +543,22 @@ export function readFileBytesSync(path) {
   }
 }
 
+/**
+ * The flags `runtime-os.c` opens a file it writes with, `O_NOFOLLOW` included
+ * (docs/security/runtime.md, RT-4): a symbolic link as the last component of
+ * the path is refused rather than followed, so `writeFileSync`,
+ * `appendFileSync` and `spawnSyncTo` fail here where they fail natively. Node's
+ * `"w"` and `"a"` follow the link. A link among the directories on the way is
+ * still followed, as it is natively. Windows has no `O_NOFOLLOW`, and there the
+ * flag is 0.
+ */
+const { O_WRONLY, O_CREAT, O_TRUNC, O_APPEND, O_NOFOLLOW = 0 } = fs.constants;
+const WRITE_FLAGS = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
+const APPEND_FLAGS = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
+
 export function writeFileSync(path, data) {
   try {
-    fs.writeFileSync(path, data, "utf8");
+    fs.writeFileSync(path, data, { encoding: "utf8", flag: WRITE_FLAGS });
   } catch {
     ioFail("write", path);
   }
@@ -507,7 +566,7 @@ export function writeFileSync(path, data) {
 
 export function appendFileSync(path, data) {
   try {
-    fs.appendFileSync(path, data, "utf8");
+    fs.appendFileSync(path, data, { encoding: "utf8", flag: APPEND_FLAGS });
   } catch {
     ioFail("write", path);
   }
@@ -623,8 +682,9 @@ export function getenv(name) {
  *
  * `out` and `err` are paths for the child's stdout and stderr, and an **empty**
  * string leaves that stream inherited. Each file is created or truncated at
- * 0644, which is what `"w"` asks `open(2)` for (`O_WRONLY | O_CREAT | O_TRUNC`)
- * and what the runtime's file actions ask for. The descriptors opened here are
+ * 0644 with `WRITE_FLAGS`, which is what the runtime's file actions ask for:
+ * `O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW`, so a symbolic link at the path
+ * is refused and the answer is -1, on both sides. The descriptors opened here are
  * closed again whichever way the child went; natively the child opens them and
  * its exit drops them.
  */
@@ -633,7 +693,7 @@ function spawnImpl(argv, out, err) {
   const opened = [];
   const stream = (target) => {
     if (target.length === 0) return "inherit";
-    const fd = fs.openSync(target, "w", 0o644);
+    const fd = fs.openSync(target, WRITE_FLAGS, 0o644);
     opened.push(fd);
     return fd;
   };
@@ -694,6 +754,19 @@ export function statMtimeSync(path) {
     return Number.NaN;
   }
   return st.mtimeMs;
+}
+
+/**
+ * `secureZero(bytes)` (#385): every element set to zero, which is what the
+ * native `nish_wipe` leaves. Nothing here can drop a store to an array the
+ * caller still holds, so a loop is the whole of it. What it cannot promise is
+ * what the native build does: a collector that moved the array may have left a
+ * copy of the old bytes behind, and JavaScript has no way to reach it.
+ */
+export function secureZero(bytes) {
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = 0;
+  }
 }
 
 /**
@@ -807,3 +880,7 @@ export function arenaUsed() { return 0; }
 export function arenaMark() { return 0; }
 export function arenaRelease() {}
 export function arenaReset() {}
+/** `using a = arena()`: a disposable whose disposal does nothing, because there is no arena to release. */
+export function arena() {
+  return { [Symbol.dispose]() {} };
+}

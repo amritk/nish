@@ -49,13 +49,13 @@
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
-import { arenaLoopFindings } from "./escape"
+import { arenaBlockFindings, arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
 import { emitProgram } from "./emit"
 import { StringMap, StringSet } from "./map"
-import { isNishSpecifier } from "./nish-modules"
+import { isBuiltinSpecifier, isNishSourceModule, SECRET_SPECIFIER } from "./nish-modules"
 import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
@@ -103,6 +103,7 @@ import {
 import {
   COLLECTIONS_SPECIFIER,
   isStdModuleName,
+  SECRET_STD_SPECIFIER,
   stdModuleName,
   stdModuleNames,
   stdModulePath,
@@ -122,6 +123,7 @@ import {
   threadsModuleName,
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
+import { exposeMessages } from "./secret"
 import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
@@ -456,7 +458,7 @@ export class Compilation {
         // for a builtin and for a specifier that did not reach a loaded module.
         const targets: (CheckedProgram | null)[] = []
         for (const imp of unit.checker.program.imports) {
-          const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+          const index = isBuiltinSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
           targets.push(index < 0 ? null : this.modules[index].checker.program)
         }
         unit.checker.bindTypeImports(targets)
@@ -684,7 +686,7 @@ export class Compilation {
     let ok = true
     for (const imp of checker.program.imports) {
       // A builtin module has no file behind it; pass 1b binds it instead.
-      if (isNishSpecifier(imp.specifier)) {
+      if (isBuiltinSpecifier(imp.specifier)) {
         continue
       }
       if (unit.resolved.has(imp.specifier)) {
@@ -736,6 +738,30 @@ export class Compilation {
    * and is a package (WP21 S2).
    */
   resolveSpecifier(dir: string, specifier: string): ResolvedModule {
+    if (isNishSourceModule(specifier)) {
+      // `nish:secret` is a builtin module with source behind it
+      // (`src/nish-modules.ts`): the library's `std/secret.ts`, in package
+      // `nish`, which is what the rules of `src/secret.ts` recognise it by.
+      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
+      const secretModule: ResolvedModule = {
+        path: stdModulePath(root, SECRET_STD_SPECIFIER),
+        name: stdModuleName(SECRET_STD_SPECIFIER),
+        packageName: CLI,
+        error: "",
+      }
+      return secretModule
+    }
+    if (specifier === SECRET_STD_SPECIFIER) {
+      // One spelling for one module: the rules are the builtin module's, so it
+      // is imported by the builtin module's name.
+      const spelled: ResolvedModule = {
+        path: "",
+        name: "",
+        packageName: "",
+        error: `\`${SECRET_STD_SPECIFIER}\` is the builtin module \`${SECRET_SPECIFIER}\`: import \`Secret\`, \`secret\`, \`expose\`, \`exposeWith\` and \`wipe\` from \`${SECRET_SPECIFIER}\``,
+      }
+      return spelled
+    }
     if (specifier.startsWith(STD_PREFIX)) {
       const name = specifier.substring(STD_PREFIX.length)
       if (name.length > 0 && !isStdModuleName(name)) {
@@ -762,9 +788,8 @@ export class Compilation {
       // dumped at all. `compile.ts` always hands over a root, so the command
       // never reaches this: a `std/` in whatever directory it was started in
       // is not the library (docs/security/cli.md, CLI-2).
-      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
       const std: ResolvedModule = {
-        path: stdModulePath(root, specifier),
+        path: stdModulePath(this.libraryRoot(), specifier),
         name: stdModuleName(specifier),
         packageName: CLI,
         error: "",
@@ -990,7 +1015,7 @@ export class Compilation {
         // A builtin module has no file behind it, so there is nothing to look
         // up; the entry keeps the array the same length as `imports` and
         // `bindImport` routes on the specifier before it reads one.
-        const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+        const index = isBuiltinSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
         targets.push(index < 0 ? unit.checker.program : this.modules[index].checker.program)
       }
       unit.checker.bindImports(targets)
@@ -1153,6 +1178,7 @@ export class Compilation {
   checkParallel(): void {
     const facts = this.analyze()
     this.checkScopes(facts)
+    this.checkSecrets(facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.parallelCalls) {
@@ -1194,12 +1220,37 @@ export class Compilation {
   }
 
   /**
+   * `nish:secret`: the function every `expose` and `exposeWith` runs reaches
+   * no I/O and no C, keeps nothing of the value, writes nothing it is handed,
+   * and declares a result that holds no `Secret` (`exposeMessages`). Those are
+   * questions about the function's whole closure, so they are asked of the
+   * same facts the parallel rules read, at the call that ran it.
+   */
+  checkSecrets(facts: FactsTable): void {
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const call of program.exposeCalls) {
+        for (const message of exposeMessages(this.table, facts, this.runtime, call.sig)) {
+          this.sink.report(program.source, call.node.start, call.node.end, message)
+        }
+      }
+    }
+  }
+
+  /**
    * WP29 P2: every scope is joined, because none can leave the block that
    * declares it (`scopeFindings`), and every task is one that may run beside
    * the others: the rules a data-parallel body is held to, less the ones about
-   * an element's arena, which a task does not share (`src/parallel.ts`).
+   * an element's arena, which a task does not share (`src/parallel.ts`). And
+   * nothing a `using a = arena()` block allocates outlives the block
+   * (`arenaBlockFindings`, escape.ts), which needs the same facts.
    */
   checkScopes(facts: FactsTable): void {
+    for (const unit of this.analysisUnits) {
+      for (const finding of arenaBlockFindings(unit, this.table, facts)) {
+        this.sink.report(unit.program.source, finding.node.start, finding.node.end, finding.message)
+      }
+    }
     const programs: CheckedProgram[] = []
     for (const unit of this.modules) {
       programs.push(unit.checker.program)
@@ -1608,23 +1659,32 @@ export class Compilation {
     return facts
   }
 
+  /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
+  libraryRoot(): string {
+    return this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
+  }
+
   /**
-   * WP32: the index of `std/collections.ts` in `modules`, or -1 when no module
-   * named `Map` or `Set`. It is checked like any module and writes no `.ll`:
-   * what a module uses of it is emitted into that module (docs/wp32-map.md §4.1).
+   * WP32: the modules that write no `.ll` and are copied into each module that
+   * uses them instead: `std/collections.ts`, once a module names `Map` or
+   * `Set`, and `std/secret.ts`, once one imports `nish:secret`. Each is
+   * checked like any module; what a module uses of it is emitted into that
+   * module (docs/wp32-map.md §4.1).
    */
-  libraryIndex(): i32 {
+  libraryUnits(units: AnalysisUnit[]): AnalysisUnit[] {
+    const out: AnalysisUnit[] = []
     let i = 0
-    while (i < this.modules.length) {
-      if (this.modules[i].checker.program.isCollections()) {
-        return i
+    while (i < this.modules.length && i < units.length) {
+      const program = this.modules[i].checker.program
+      if (program.isCollections() || program.isSecretLibrary()) {
+        out.push(units[i])
       }
       i = i + 1
     }
-    return -1
+    return out
   }
 
-  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts` and `std/map.ts`. */
+  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`, `std/map.ts` and `std/secret.ts`. */
   writesOutput(unit: ModuleUnit): boolean {
     return !unit.checker.program.writesNoOutput()
   }
@@ -1634,11 +1694,7 @@ export class Compilation {
     const facts = this.analyze()
     const units = this.analysisUnits
     const stems = this.outputStems()
-    const library = this.libraryIndex()
-    let copies: AnalysisUnit | null = null
-    if (library >= 0 && library < units.length) {
-      copies = units[library]
-    }
+    const copies: AnalysisUnit[] = this.libraryUnits(units)
     const out: EmittedModule[] = []
     let i = 0
     while (i < this.modules.length && i < units.length && i < stems.length) {

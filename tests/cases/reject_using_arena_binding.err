@@ -1,0 +1,1 @@
+`a` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release may see or move the mark

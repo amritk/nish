@@ -466,9 +466,11 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // and an element of a `T[]` came from `T` (WP18 G6).
   const origin = elementOrigin(ctx, stmt.children[1], scope)
   declareLocal(ctx, outer, decl, name, element, (stmt.children[0].flags & FLAG_CONST) === 0, origin)
-  // WP33 R2: an element of a `Float64Array[]` is a `Float64Array` to TypeScript.
+  // WP33 R2: an element of a `Float64Array[]` is a `Float64Array` to
+  // TypeScript, and so is a value of a `Map<K, Float64Array>` walked by
+  // `values()`, which `mapReadSpelling` answers as an array of them.
   const local = ctx.program.nodeLocals[decl.id]
-  if (local !== null && walked === null) {
+  if (local !== null) {
     local.typedArray = elementSpelling(typedArraySpelling(ctx, stmt.children[1], scope))
   }
   ctx.pushLoop(LOOP_ITERATION)

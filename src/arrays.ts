@@ -2,12 +2,18 @@
 // S3, pass 2): literals, indexing, `length`, the six methods, `new Array<T>`
 // and element assignment.
 
+import {
+  containerMessage as secretContainerMessage,
+  indexMessage as secretIndexMessage,
+  namesSecret,
+} from "./secret"
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
-import { checkIndexArgument } from "./members"
+import { genericCallSpelling, indexOfName } from "./generics"
+import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
 import {
   N_ARRAY,
   N_ARROW,
@@ -16,11 +22,9 @@ import {
   N_CALL,
   N_CASE,
   N_CONDITIONAL,
-  N_CONSTRUCTOR,
   N_DEFAULT,
   N_DO,
   N_EMPTY,
-  N_FIELD,
   N_FOR,
   N_FOR_OF,
   N_IDENT,
@@ -66,6 +70,10 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
   }
   const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : -1
   let elem = -1
+  // `nish:secret`: the first element that holds a `Secret`, refused after the
+  // loop so the message is built once (an element outlives its function).
+  let secretAt: Node | null = null
+  let secretType = -1
   for (const element of expr.children) {
     const type = unproven(ctx, checkExpression(ctx, element, scope, hint))
     if (type === T_ERROR) {
@@ -74,6 +82,11 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     if (type === T_VOID) {
       ctx.error(element, "Array elements cannot be void")
       continue
+    }
+    if (ctx.table.holdsSecret(type)) {
+      secretAt = element
+      secretType = type
+      break
     }
     if (elem < 0) {
       elem = type
@@ -85,6 +98,9 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
       )
     }
   }
+  if (secretAt !== null) {
+    return ctx.errorType(secretAt, secretContainerMessage(`${ctx.table.typeName(secretType)}[]`))
+  }
   return elem < 0 ? T_ERROR : ctx.table.arrayOf(elem)
 }
 
@@ -93,6 +109,10 @@ export const checkIndex = (ctx: CheckContext, expr: Node, scope: Scope): i32 => 
   const base = checkExpression(ctx, expr.children[0], scope, -1)
   if (base === T_ERROR) {
     return T_ERROR
+  }
+  // `nish:secret`: neither `key[0]` nor `table[key]` (the second asked by name, unchecked).
+  if (ctx.table.isSecret(base) || namesSecret(ctx, expr.children[1], scope)) {
+    return ctx.errorType(ctx.table.isSecret(base) ? expr.children[0] : expr.children[1], secretIndexMessage())
   }
   if (ctx.table.isNullable(base)) {
     return ctx.errorType(
@@ -185,19 +205,27 @@ export const checkArrayProperty = (ctx: CheckContext, expr: Node, receiver: i32)
  * names are the same type as `T[]` (`typedArrayElement`), so the answer is
  * read from the program text rather than the type: `new Float64Array(n)`
  * itself, a binding whose `Local.typedArray` says so, a field declared with
- * the name, a call whose callee declares it as the return type, either
- * branch of a ternary, or an element of an array spelled
- * `Float64Array[]`. A spelling ends in one `[]` per array level around the
- * name, so `Float64Array[]` is an array whose elements carry it and the
- * array itself does not. TypeScript gives each of those the typed array's
- * type, or a union with it, and so no `push` or `pop`; these are the
- * receivers docs/LANGUAGE.md lists.
+ * the name, a call whose callee declares it as the return type or binds a
+ * generic's `T` to it (`genericCallSpelling`), a value read out of a `Map`
+ * of them (`mapReadSpelling`), either branch of a ternary or of `??`, or an
+ * element of an array spelled `Float64Array[]`. A spelling ends in one
+ * `[]` per array level around the name and one `<>` per `Map` whose values
+ * carry it, innermost first, so `Float64Array[]` is an array whose elements
+ * carry it and the array itself does not. TypeScript gives each of those
+ * the typed array's type, or a union with it, and so no `push` or `pop`;
+ * these are the receivers docs/LANGUAGE.md lists.
  */
 export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope): string => {
   const e = unwrapParens(expr)
   if (e.kind === N_NEW) {
     const callee = e.children[0]
-    return callee.kind === N_IDENT && typedArrayElement(callee.text) >= 0 ? callee.text : ""
+    if (callee.kind !== N_IDENT) {
+      return ""
+    }
+    if (typedArrayElement(callee.text) >= 0) {
+      return callee.text
+    }
+    return newMapSpelling(ctx, e)
   }
   if (e.kind === N_IDENT) {
     const local = scope.lookup(e.text)
@@ -214,27 +242,31 @@ export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope):
       return ""
     }
     const field = owner.field(e.text)
-    if (field === null || field.decl.kind !== N_FIELD) {
-      return ""
-    }
-    return annotationSpelling(ctx, owner.origin === ctx.source, field.decl.children[1])
+    return field === null ? "" : field.spelling
   }
   if (e.kind === N_CALL) {
+    const read = mapReadSpelling(ctx, e, scope)
+    if (read.length > 0) {
+      return read
+    }
     const callee = ctx.program.nodeCallees[e.id]
-    if (callee === null || callee.decl.kind === N_CONSTRUCTOR || callee.decl.children.length < 3) {
+    if (callee === null) {
       return ""
     }
-    return annotationSpelling(ctx, callee.definedIn(ctx.source), callee.decl.children[2])
+    return callee.returnSpelling.length > 0
+      ? callee.returnSpelling
+      : genericCallSpelling(ctx, e, callee, scope)
   }
   if (e.kind === N_INDEX) {
     return elementSpelling(typedArraySpelling(ctx, e.children[0], scope))
   }
   // `c ? t : xs` is `Float64Array | number[]` to TypeScript, which has no
-  // `push` either, so one spelled branch is enough.
-  if (e.kind === N_CONDITIONAL) {
+  // `push` either, so one spelled branch is enough; `v ?? xs` is the same union.
+  if (e.kind === N_CONDITIONAL || (e.kind === N_BINARY && e.text === "??")) {
+    const first = e.kind === N_CONDITIONAL ? 1 : 0
     return eitherSpelling(
-      typedArraySpelling(ctx, e.children[1], scope),
-      typedArraySpelling(ctx, e.children[2], scope)
+      typedArraySpelling(ctx, e.children[first], scope),
+      typedArraySpelling(ctx, e.children[first + 1], scope)
     )
   }
   // `[new Float64Array(n)]` is a `Float64Array[]` to TypeScript.
@@ -249,62 +281,142 @@ export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope):
   return ""
 }
 
+/** The suffix one array level adds to a spelling, and the one a `Map` whose values carry it adds. */
+export const ARRAY_LEVEL: string = "[]"
+export const MAP_LEVEL: string = "<>"
+
 /** The spelling of an element of an array spelled `spelling`: one `[]` fewer, or `""`. */
-export const elementSpelling = (spelling: string): string =>
-  spelling.endsWith("[]") ? spelling.slice(0, spelling.length - 2) : ""
+export const elementSpelling = (spelling: string): string => peelSpelling(spelling, ARRAY_LEVEL)
+
+/** `spelling` without its outermost level when that level is `level`, or `""`. */
+export const peelSpelling = (spelling: string, level: string): string =>
+  spelling.endsWith(level) ? spelling.slice(0, spelling.length - level.length) : ""
 
 const eitherSpelling = (a: string, b: string): string => (a.length > 0 ? a : b)
 
 /**
+ * `new Map<string, Float64Array>()`: a `Map` whose values carry the name, as
+ * the annotation `Map<string, Float64Array>` is (`spellAnnotation`).
+ */
+const newMapSpelling = (ctx: CheckContext, e: Node): string => {
+  const typeArgs = e.children[1]
+  if (typeArgs.children.length !== 2 || !isGlobalMapType(ctx, ctx.program.nodeTypes[e.id])) {
+    return ""
+  }
+  const value = annotationSpelling(ctx, true, typeArgs.children[1])
+  return value.length > 0 ? `${value}${MAP_LEVEL}` : ""
+}
+
+/**
  * WP33 R2: the typed-array name a type annotation spells, or `""`: the name
  * itself, in parentheses, as the one member of `| null`, or behind a `type`
- * alias, with a `[]` for each array level around it, `T[]` or `Array<T>`
- * (`typedArraySpelling`). `local` says the annotation is written in the
- * module being checked, whose names `ctx` resolves; one read from another
- * module's declaration is matched only by the four names, since its aliases
- * are that module's.
+ * alias, with a `[]` for each array level around it, `T[]` or `Array<T>`,
+ * and a `<>` for each `Map<K, T>` (`typedArraySpelling`). `local` says the
+ * annotation is written in the module being checked, whose names `ctx`
+ * resolves; one read from another module's declaration is matched only by
+ * the four names, since its aliases are that module's, which is why a
+ * signature and a field keep the spelling their own module read
+ * (`FunctionSig.returnSpelling`, `FieldInfo.spelling`).
  */
-export const annotationSpelling = (ctx: CheckContext, local: boolean, node: Node): string => {
-  let program: CheckedProgram | null = local ? ctx.program : null
+export const annotationSpelling = (ctx: CheckContext, local: boolean, node: Node): string =>
+  spellAnnotation(ctx, local ? ctx.program : null, node, [], [])
+
+/**
+ * `annotationSpelling` with a generic's type parameters bound: `names[i]` is
+ * spelled `spellings[i]`, which is `""` for a parameter bound to anything
+ * else (`genericCallSpelling` in `src/generics.ts`).
+ */
+export const spellAnnotation = (
+  ctx: CheckContext,
+  home: CheckedProgram | null,
+  node: Node,
+  names: string[],
+  spellings: string[]
+): string => {
+  let program = home
   let at = node
   // An alias names another type, which may be an alias too; a cycle is
   // refused where aliases are resolved, and the bound stops this walk on one.
   let hops = 0
   const levels: string[] = []
   while (hops < 16) {
-    if (at.kind === N_TYPE_PAREN || at.kind === N_TYPE_READONLY) {
-      at = at.children[0]
-    } else if (at.kind === N_TYPE_ARRAY) {
-      levels.push("[]")
-      at = at.children[0]
-    } else if (at.kind === N_TYPE_REF && at.text === "Array" && at.children[0].children.length === 1) {
-      levels.push("[]")
-      at = at.children[0].children[0]
-    } else if (at.kind === N_TYPE_UNION) {
-      const members = at.children
-      if (members.length !== 2 || (members[0].kind === N_TYPE_NULL) === (members[1].kind === N_TYPE_NULL)) {
-        return ""
-      }
-      at = members[0].kind === N_TYPE_NULL ? members[1] : members[0]
-    } else if (at.kind === N_TYPE_REF && at.children[0].children.length === 0) {
-      if (typedArrayElement(at.text) >= 0) {
-        return `${at.text}${levels.join("")}`
-      }
-      if (program === null || (program === ctx.program && ctx.typeBindings.has(at.text))) {
-        return ""
-      }
-      const alias = program.alias(at.text)
-      if (alias === null) {
-        return ""
-      }
-      program = alias.home.program
-      at = alias.decl.children[1]
-    } else {
+    const name = annotationName(at, levels)
+    if (name === null) {
       return ""
     }
+    const bound = indexOfName(names, name.text)
+    if (bound >= 0 && bound < spellings.length) {
+      return levelled(spellings[bound], levels)
+    }
+    if (typedArrayElement(name.text) >= 0) {
+      return levelled(name.text, levels)
+    }
+    if (program === null || (program === ctx.program && ctx.typeBindings.has(name.text))) {
+      return ""
+    }
+    const alias = program.alias(name.text)
+    if (alias === null) {
+      return ""
+    }
+    program = alias.home.program
+    at = alias.decl.children[1]
     hops = hops + 1
   }
   return ""
+}
+
+/**
+ * The bare name an annotation wraps — through parentheses, `readonly`, `| null`,
+ * `T[]`, `Array<T>` and the value of `Map<K, T>` — or `null` for any other
+ * shape. Each array or `Map` level passed is pushed onto `levels`, outermost
+ * first. An alias is a bare name here; following it is the caller's.
+ */
+export const annotationName = (node: Node, levels: string[]): Node | null => {
+  let at = node
+  while (true) {
+    if (at.kind === N_TYPE_PAREN || at.kind === N_TYPE_READONLY) {
+      at = at.children[0]
+    } else if (at.kind === N_TYPE_ARRAY) {
+      levels.push(ARRAY_LEVEL)
+      at = at.children[0]
+    } else if (at.kind === N_TYPE_UNION) {
+      const members = at.children
+      if (members.length !== 2 || (members[0].kind === N_TYPE_NULL) === (members[1].kind === N_TYPE_NULL)) {
+        return null
+      }
+      at = members[0].kind === N_TYPE_NULL ? members[1] : members[0]
+    } else if (at.kind !== N_TYPE_REF) {
+      return null
+    } else {
+      const args = at.children[0].children
+      if (args.length === 0) {
+        return at
+      }
+      if (at.text === "Array" && args.length === 1) {
+        levels.push(ARRAY_LEVEL)
+        at = args[0]
+      } else if (at.text === "Map" && args.length === 2) {
+        levels.push(MAP_LEVEL)
+        at = args[1]
+      } else {
+        return null
+      }
+    }
+  }
+}
+
+/** `name` inside `levels`, which run outermost first, so the spelling ends with the outermost; `""` stays `""`. */
+const levelled = (name: string, levels: string[]): string => {
+  if (name.length === 0) {
+    return ""
+  }
+  const parts: string[] = [name]
+  let i = levels.length - 1
+  while (i >= 0 && i < levels.length) {
+    parts.push(levels[i])
+    i = i - 1
+  }
+  return parts.join("")
 }
 
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`, `a.set(b, at)`, `a.fill(v, from, to)`. */
@@ -325,7 +437,7 @@ export const checkArrayMethod = (
   }
   if (name === "push" || name === "pop") {
     const alias = typedArraySpelling(ctx, access.children[0], scope)
-    if (alias.length > 0 && !alias.endsWith("]")) {
+    if (typedArrayElement(alias) >= 0) {
       ctx.errorAtProperty(
         access,
         `\`${name}\` is not a method of \`${alias}\`, whose length is fixed: declare it \`${ctx.table.typeName(receiver)}\` to push and pop`
@@ -542,6 +654,9 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
     elem = resolveType(typeArgs.children[0], ctx)
     if (rejectForeignPointer(ctx, elem, "an array element", typeArgs.children[0])) {
       return T_ERROR
+    }
+    if (ctx.table.holdsSecret(elem)) {
+      return ctx.errorType(typeArgs.children[0], secretContainerMessage(`${ctx.table.typeName(elem)}[]`))
     }
   } else {
     const alias = typedArrayElement(name)

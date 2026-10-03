@@ -230,6 +230,9 @@ export class RuntimeTable {
     )
     // A fresh arena string, written before anyone holds it: an allocation. The
     // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
+    // `nish_str_concat` can also exit, on a result past 2^31 - 1 bytes or out of
+    // memory, so its `willreturn` is the approximation docs/security/codegen.md
+    // records as CG-8: it holds on every path that returns. The fix is #382's.
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -332,6 +335,12 @@ export class RuntimeTable {
     )
     exit.noreturn = true
     this.add(exit)
+    // `nish_read_file`, `nish_write_file` and `nish_append_file` `_exit(1)` on a
+    // path they cannot read or write, and all four `open`s wait on a FIFO with
+    // no writer, so `willreturn` here is the approximation
+    // docs/security/codegen.md records as CG-8: it holds on every path that
+    // returns. No miscompile follows, because each call writes memory and LLVM
+    // cannot delete it; dropping the attribute is #382's.
     this.add(
       plain(
         "nish_read_file",
@@ -488,6 +497,21 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // #385, runtime.c. `nish_random_fill`'s shape: writes every byte of the
+    // array and keeps nothing of it, so `nocapture` without `readonly`; and
+    // `willreturn`, unlike it, because the loop is bounded by `len` and makes
+    // no system call. Its stores are `volatile`, and nothing here may let LLVM
+    // treat the call as one it can drop: no `memory(argmem: write)`, which
+    // would make it a dead store wherever the array is not read again, and
+    // that is every call. A call that may write memory is never deleted,
+    // `willreturn` or not.
+    this.add(
+      plain(
+        "nish_wipe",
+        "declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture)",
+        EFFECT_WRITE
+      )
+    )
     // One `stat`, `nish_is_dir`'s shape and for its reasons: the file system is
     // not memory LLVM tracks, so two reads either side of a `writeFileSync`
     // must not fold, and a failed `stat` stores `errno`.
@@ -569,6 +593,16 @@ export class RuntimeTable {
         attrs1("nounwind"),
         EFFECT_WRITE
       )
+    )
+    // The client half. `tcpConnect` makes a non-blocking socket and starts a
+    // `connect`, which on such a socket never waits, and `connectResult` is
+    // one `getsockopt`: both are `willreturn` as `tcpListen` is. The address
+    // is only read, so it keeps `readonly`.
+    this.add(
+      plain("nish_tcp_connect", `declare noundef i32 @nish_tcp_connect(${NET_BUFFER} readonly)`, EFFECT_WRITE)
+    )
+    this.add(
+      plain("nish_connect_result", "declare noundef i32 @nish_connect_result(i32 noundef)", EFFECT_WRITE)
     )
     // UDP. `udpBind` makes a socket, sets options and binds, none of which
     // waits, so it is `willreturn` as `tcpListen` is. `sendmsg` and `recvmsg`
@@ -672,7 +706,8 @@ export class RuntimeTable {
     )
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
-    // C hosts do, so it is part of the declared ABI and of nish.h.
+    // C hosts do, so it is part of the declared ABI and of nish.h. It exits on a
+    // length past 2^31 - 1, so its `willreturn` is CG-8's approximation too.
     this.addWrites(
       WRITES_ALLOC,
       plain(

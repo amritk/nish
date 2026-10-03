@@ -605,6 +605,7 @@ int32_t nish_spawn(const nish_array *);
 int32_t nish_spawn_to(const nish_array *, const nish_str *, const nish_str *);
 double nish_stat_mtime(const nish_str *);
 void nish_random_fill(nish_array *);
+void nish_wipe(nish_array *);
 int64_t nish_lstat_owner_mode(const nish_str *);
 int64_t nish_euid(void);
 _Bool nish_is_executable(const nish_str *);
@@ -699,6 +700,73 @@ static void sec_dirty_stack(void) {
   for (size_t i = 0; i < sizeof junk; i++) junk[i] = 0xA5;
 }
 
+/* RT-10 to RT-13 each need a system call to misbehave on cue: a write that
+   takes only part of what it was given, a call that a signal interrupts
+   before it moves a byte, a second thread that makes the signal pipe first.
+   None of those can be made to happen on time from outside the process, so,
+   as with `strcmp` above, the definitions below are the ones the link
+   resolves the runtime's calls to. Until a check arms them they do the real
+   work through a neighbouring call (`writev`, `lseek` and `read`, `pipe` and
+   `fcntl`), so the rest of this file sees the system calls it always did. */
+#include <errno.h>
+#include <sys/uio.h>
+
+void nish_write(const nish_str *, int32_t, _Bool);
+
+static size_t sec_write_max;   /* nonzero: no write takes more bytes than this */
+static int sec_write_eintr;    /* writes left to fail with EINTR */
+static int sec_pread_eintr;    /* preads left to fail with EINTR */
+static int sec_watch;          /* record the descriptor flags of each call */
+static int sec_cloexec = -1;   /* FD_CLOEXEC of the last descriptor recorded */
+
+ssize_t write(int fd, const void *buf, size_t n) {
+  if (sec_watch) sec_cloexec = fcntl(fd, F_GETFD) & FD_CLOEXEC;
+  if (sec_write_eintr > 0) {
+    sec_write_eintr--;
+    errno = EINTR;
+    return -1;
+  }
+  struct iovec v = {(void *)buf, sec_write_max && n > sec_write_max ? sec_write_max : n};
+  return writev(fd, &v, 1);
+}
+
+ssize_t pread(int fd, void *buf, size_t n, off_t at) {
+  if (sec_watch) sec_cloexec = fcntl(fd, F_GETFD) & FD_CLOEXEC;
+  if (sec_pread_eintr > 0) {
+    sec_pread_eintr--;
+    errno = EINTR;
+    return -1;
+  }
+  return lseek(fd, at, SEEK_SET) < 0 ? -1 : read(fd, buf, n);
+}
+
+/* RT-10: armed, the next `pipe2` lets a whole other first `signalFd()` run
+   to completion before it returns, which is the interleaving two threads
+   reach only by luck. Linux only, because that is where the runtime makes the
+   pipe with `pipe2`. */
+#ifdef __linux__
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 02000000 /* <fcntl.h> spells it only above strict C11 */
+#endif
+static int sec_race;          /* armed for the next pipe2 */
+static int sec_race_pipe[2];  /* the ends the interrupted call made */
+static int32_t sec_race_first; /* what the call that ran in between answered */
+int pipe2(int p[2], int flags) {
+  if (pipe(p) != 0) return -1;
+  for (int i = 0; i < 2; i++) {
+    if (flags & O_CLOEXEC) fcntl(p[i], F_SETFD, FD_CLOEXEC);
+    if (flags & O_NONBLOCK) fcntl(p[i], F_SETFL, O_NONBLOCK);
+  }
+  if (sec_race) {
+    sec_race = 0;
+    sec_race_pipe[0] = p[0];
+    sec_race_pipe[1] = p[1];
+    sec_race_first = nish_signal_fd();
+  }
+  return 0;
+}
+#endif
+
 static int32_t sec_recv_from(int fd, nish_array *from) {
   static char into[16];
   nish_array buf = {16, 16, into};
@@ -718,6 +786,135 @@ static void sec_par_body(int64_t lo, int64_t hi, void *ctx) {
   PAR_UNLOCK();
 }
 #endif
+
+/* `secureZero(bytes)` (#385). The stores `nish_wipe` makes are only worth
+   anything where a plain `memset` would be dropped: the buffer's life ends
+   straight after the wipe, and the optimiser can see both. That needs the
+   runtime's body in view, which is what `-flto` -- the way every program is
+   linked -- gives it, and this file is linked without it. So a probe is built
+   here the way `--link` builds, `-O2 -flto` over the runtime's sources, and
+   run three ways. A key is written to a fresh block, used, wiped, and freed,
+   and the block's bytes past the 16 the allocator writes its own list into
+   are read back through a pointer the optimiser cannot follow:
+
+     - with no wipe, the key is still there: the path can see a secret;
+     - with a `memset` wipe in another translation unit, the key is still
+       there: LTO inlined the wipe and dropped it as a store before `free`;
+     - with `nish_wipe`, nothing is left.
+
+   The first two are what give the third its meaning; if either reads zeros,
+   the probe has stopped being able to see a dropped wipe (an allocator that
+   clears what it frees, as Darwin's does, is one way), and that is said
+   rather than passed. Built once, in the default configuration: the probe
+   does not depend on `-DNISH_THREADS`. */
+#ifndef NISH_THREADS
+static const char wipe_probe[] =
+    "#include <stdlib.h>\n"
+    "#include <string.h>\n"
+    "#include \"nish.h\"\n"
+    "void naive_wipe(nish_array *bytes);\n"
+    "static unsigned char *volatile seen;\n"
+    "__attribute__((noinline)) static void seal(char how) {\n"
+    "  unsigned char *key = malloc(64);\n"
+    "  if (!key) exit(99);\n"
+    "  for (int i = 0; i < 64; i++) key[i] = (unsigned char)(0xA5 ^ i);\n"
+    "  __asm__ __volatile__(\"\" : : \"r\"(key) : \"memory\"); /* the key is used */\n"
+    "  seen = key;\n"
+    "  nish_array a = {64, 64, (char *)key};\n"
+    "  if (how == 'm') naive_wipe(&a);\n"
+    "  if (how == 'w') nish_wipe(&a);\n"
+    "  free(key);\n"
+    "}\n"
+    "int main(int argc, char **argv) {\n"
+    "  seal(argc > 1 ? argv[1][0] : 'n');\n"
+    "  volatile unsigned char *p = seen;\n"
+    "  int left = 0;\n"
+    "  for (int i = 16; i < 64; i++) left += p[i] != 0;\n"
+    "  return left;\n"
+    "}\n";
+static const char wipe_naive[] =
+    "#include <string.h>\n"
+    "#include \"nish.h\"\n"
+    "void naive_wipe(nish_array *bytes) { memset(bytes->data, 0, bytes->len); }\n";
+
+static int wipe_write(const char *path, const char *text) {
+  FILE *f = fopen(path, "w");
+  int ok = f != NULL && fputs(text, f) >= 0;
+  return f != NULL && fclose(f) == 0 && ok;
+}
+
+/* The probe's answer for one way of running it: how many of its 48 bytes
+   still hold the key. */
+static int32_t wipe_run(const char *how) {
+  nish_str *argv[2] = {lit("build/test/rt_wipe/probe"), lit(how)};
+  nish_array args = {2, 2, (char *)argv};
+  return nish_spawn(&args);
+}
+#endif
+
+static int wipe_failed;
+
+static void wipe_check(int ok, const char *what) {
+  if (!ok) {
+    fprintf(stderr, "runtime_test: secureZero: %s\n", what);
+    wipe_failed++;
+  }
+}
+
+static void test_wipe(void) {
+  /* The call itself: every byte of `len`, and not one past it. */
+  unsigned char key[40];
+  memset(key, 0xA5, sizeof key);
+  nish_array a = {37, 37, (char *)key};
+  nish_wipe(&a);
+  int cleared = 1;
+  for (int i = 0; i < 37; i++) cleared &= key[i] == 0;
+  wipe_check(cleared, "a byte inside the array was left");
+  wipe_check(key[37] == 0xA5 && key[38] == 0xA5 && key[39] == 0xA5, "a byte past the array was written");
+  nish_array empty = {0, 0, NULL};
+  nish_wipe(&empty); /* touches nothing, so a null `data` is fine */
+
+#ifndef NISH_THREADS
+  mkdir("build", 0777);
+  mkdir("build/test", 0777);
+  mkdir("build/test/rt_wipe", 0777);
+  wipe_check(wipe_write("build/test/rt_wipe/probe.c", wipe_probe) &&
+                 wipe_write("build/test/rt_wipe/naive.c", wipe_naive),
+             "could not write the probe");
+  nish_str *cc[] = {
+      lit("clang"), lit("-O2"), lit("-flto"),
+#ifdef __linux__
+      lit("-fuse-ld=lld"),
+#endif
+      lit("-Iruntime"), lit("build/test/rt_wipe/probe.c"), lit("build/test/rt_wipe/naive.c"),
+      lit("runtime/runtime.c"), lit("runtime/runtime-os.c"), lit("runtime/runtime-parallel.c"),
+      lit("runtime/runtime-host.c"), lit("runtime/runtime-net.c"), lit("-lm"), lit("-o"),
+      lit("build/test/rt_wipe/probe"),
+  };
+  nish_array cc_args = {sizeof cc / sizeof cc[0], sizeof cc / sizeof cc[0], (char *)cc};
+  int32_t built = nish_spawn(&cc_args);
+  wipe_check(built == 0, "the probe did not build with clang -O2 -flto");
+  if (built == 0) {
+    int32_t none = wipe_run("none");
+    int32_t naive = wipe_run("memset");
+    int32_t wiped = wipe_run("wipe");
+    if (none != 48 || naive != 48) {
+      fprintf(stderr,
+              "runtime_test: secureZero: the probe cannot see a dropped wipe here "
+              "(%d and %d of 48 bytes left with no wipe and with a memset one)\n",
+              none, naive);
+#ifdef __linux__
+      wipe_failed++;
+#endif
+    }
+    wipe_check(wiped == 0, "nish_wipe's stores did not survive -O2 -flto: the key is still in the freed block");
+  }
+#endif
+  if (wipe_failed) {
+    fprintf(stderr, "runtime_test: %d secureZero check(s) failed\n", wipe_failed);
+  }
+  assert(wipe_failed == 0);
+}
 
 static void test_security(void) {
   const char *dir = "build/test/rt_sec";
@@ -1027,6 +1224,74 @@ static void test_security(void) {
   expect_f64(-123456789012345680000.0, "-123456789012345680000");
   expect_f64(-1.2345678901234567e21, "-1.2345678901234568e+21");
 
+  /* RT-11: a write that takes three bytes at a time still delivers the
+     whole line. One `write` that ignored the count sent "hel" and the
+     newline. */
+  int out[2];
+  sec_check(pipe(out) == 0, "RT-11", "the pipe could not be made");
+  sec_write_max = 3;
+  nish_write(lit("hello, world"), out[1], 1);
+  sec_write_max = 0;
+  close(out[1]);
+  char line[64];
+  ssize_t have = 0, n_read;
+  while ((n_read = read(out[0], line + have, sizeof line - (size_t)have)) > 0) have += n_read;
+  close(out[0]);
+  sec_check(have == 13 && memcmp(line, "hello, world\n", 13) == 0, "RT-11", "console.log lost the rest of a short write");
+
+  /* RT-12: the descriptors the file reads and writes open are close-on-exec,
+     so a child another thread spawns meanwhile does not inherit them. */
+  snprintf(path, sizeof path, "%s/cloexec.txt", dir);
+  sec_watch = 1;
+  sec_cloexec = -1;
+  nish_write_file(lit(path), lit("x"));
+  sec_check(sec_cloexec == FD_CLOEXEC, "RT-12", "writeFileSync's descriptor is not close-on-exec");
+  sec_cloexec = -1;
+  nish_read_file_or_null(lit(path));
+  sec_check(sec_cloexec == FD_CLOEXEC, "RT-12", "readFileSyncOrNull's descriptor is not close-on-exec");
+  sec_watch = 0;
+
+  /* RT-13: a `pread` or a `write` that a signal interrupts before it moves a
+     byte is retried. The read stopped there and answered "" for the whole
+     file; the write said `cannot write` and exited, so it runs in a child. */
+  snprintf(path, sizeof path, "%s/eintr.txt", dir);
+  nish_write_file(lit(path), lit("hello"));
+  sec_pread_eintr = 1;
+  nish_str *whole = nish_read_file_or_null(lit(path));
+  sec_check(sec_pread_eintr == 0 && whole && whole->len == 5 && memcmp(whole->data, "hello", 5) == 0, "RT-13",
+            "readFileSyncOrNull took an interrupted pread for the end of the file");
+  sec_pread_eintr = 0;
+  child = fork();
+  if (child == 0) {
+    close(2);
+    sec_write_eintr = 1;
+    sec_write_max = 2;
+    nish_write_file(lit(path), lit("again"));
+    sec_write_max = 0;
+    _exit(sec_file_is(path, "again") ? 0 : 3);
+  }
+  sec_check(sec_status(child) == 0, "RT-13", "writeFileSync failed on an interrupted write");
+
+#if defined(__linux__) && !defined(NISH_THREADS)
+  /* RT-10: two first `signalFd()` calls that overlap answer one descriptor,
+     the one the handler writes to, and the pipe that lost is closed. Before
+     the compare-and-swap the call that finished last answered its own pipe,
+     and the other caller's read end never heard a signal. Not in the threads
+     build, whose `test_host_signal_threads` needs the first call to happen
+     after its thread has started. */
+  sec_race = 1;
+  int32_t sig_fd = nish_signal_fd();
+  sec_check(sec_race == 0 && sig_fd >= 0 && sig_fd == sec_race_first, "RT-10",
+            "two overlapping first signalFd() calls answered different descriptors");
+  sec_check(fcntl(sec_race_pipe[0], F_GETFD) < 0 && fcntl(sec_race_pipe[1], F_GETFD) < 0, "RT-10",
+            "the pipe that lost the race was left open");
+  sec_check(nish_signal_fd() == sig_fd, "RT-10", "a later signalFd() answered another descriptor");
+  if (sig_fd >= 0 && sig_fd == sec_race_first) {
+    raise(SIGINT);
+    sec_check(nish_read_signal(sig_fd) == SIGINT, "RT-10", "the descriptor did not hear SIGINT");
+  }
+#endif
+
 #ifdef NISH_THREADS
   /* RT-8: a range within `grain` of 2^63 is still divided, rather than
      overflowing the chunk count into a negative and running on one thread. */
@@ -1334,6 +1599,8 @@ int main(void) {
   test_poll();
   nish_free_arena();
   test_security();
+  nish_free_arena();
+  test_wipe();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();

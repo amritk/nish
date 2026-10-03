@@ -14,6 +14,8 @@
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *       <name>.portability  the `--warn-portability --json` portability objects, one
  *                    per line (WP33: the case is compiled a second time with the flag)
+ *       <name>.caps.json  the `--emit-capabilities` report, byte for byte (WP35: the
+ *                    case is compiled a second time with the flag)
  *     Every successfully compiled case is also assembled with llvm-as.
  *     Every case is compiled by stage1 -- `src/` built by the seed into
  *     `build/nish-test` once per run -- then compared, assembled, linked and
@@ -674,6 +676,33 @@ const runCase = async (name) => {
       "the two .ll files differ"
     )
   }
+  if (fs.existsSync(side("caps.json"))) {
+    // WP35: the capability report, compiled a second time for the same reason
+    // the portability warnings are -- the flag is not in `.args`, because the
+    // tools that compile `tests/cases/` with the last release would refuse it.
+    // The report's paths are relative to the entry's directory, so the file is
+    // compared as it is, byte for byte: that it reads the same from any
+    // checkout is part of what it promises (docs/wp35-capabilities.md §5).
+    const capsLl = path.join(buildDir, `${name}.caps.ll`)
+    const capsJson = path.join(buildDir, `${name}.caps.json`)
+    const reported = await spawnAsync(NISH, [src, "-o", capsLl, ...args, "--emit-capabilities", capsJson], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const want = fs.readFileSync(side("caps.json"), "utf8")
+    const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+    expect(
+      `${name}: --emit-capabilities matches .caps.json byte for byte`,
+      reported.status === 0 && got === want,
+      `--- expected\n${want}\n--- actual (exit ${reported.status})\n${got}\n${reported.stderr}`
+    )
+    // The report is read off the fixpoint and never written back into it.
+    expect(
+      `${name}: --emit-capabilities changes no byte of the IR`,
+      fs.existsSync(capsLl) && fs.readFileSync(capsLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+      "the two .ll files differ"
+    )
+  }
   if (fs.existsSync(side("stdout"))) {
     // A dump flag (`--emit-ast`, `--emit-checked`): the compiler's stdout is the golden, no IR is written.
     // stage1 prints a module path the way it was handed one, and this suite
@@ -1159,7 +1188,7 @@ if (!only || "net_tcp".includes(only)) {
               { cwd: root, encoding: "utf8" }
             )
           : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll)_\w+)/g)].map(
+      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll|connect)_\w+)/g)].map(
         (m) => m[1]
       )
       return { ok: cc.status === 0, removed, why: String(cc.stderr) }
@@ -1186,6 +1215,8 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_write",
       "nish_net_shutdown",
       "nish_net_close",
+      "nish_tcp_connect",
+      "nish_connect_result",
       "nish_udp_bind",
       "nish_udp_send_to",
       "nish_udp_recv_from",
@@ -1213,6 +1244,43 @@ if (!only || "net_tcp".includes(only)) {
         `${none.why}${echo.why}`
     )
   }
+}
+
+// ---- `nish:net`'s client half, against its own server (WP34 N5, #357) -----------
+//
+// `tests/cases/net_tcp_connect` is a Nish client and a Nish server in one loop:
+// the client's `tcpConnect` completes when the loop reports it writable, two
+// exchanges of 1 and 200 messages come back byte for byte with the arena flat,
+// and a port nobody listens on is refused, -111, read once. No peer is needed,
+// so it could be an `.out`; it runs here instead because every step waits on
+// the loop, and a lost wake must be a timeout and a SIGKILL, never a hung suite.
+if (!only || "net_tcp_connect".includes(only)) {
+  const netDir = path.join(buildDir, "net-connect")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  const connectExe = buildCaseIn(netDir, "net_tcp_connect")
+  if (connectExe !== null) {
+    const want =
+      "short -22\nnot a descriptor -9\n" +
+      "peer 127.0.0.1, end of stream 0\n".repeat(2) +
+      "one: 1 intact, many: 200 intact\nflat\nrefused -111\nread once 0\n"
+    // Nothing to answer as the output arrives: the program is its own peer.
+    const r = await runWatched(connectExe, [], () => undefined)
+    check(
+      "net_tcp_connect: a Nish client connects through the loop to a Nish server, both exchanges come back intact, the arena stays flat, a closed port is refused once, and the program exits 0",
+      !r.timedOut && r.code === 0 && r.out === want,
+      `${r.timedOut ? "timed out after 10 s: a wake was lost\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `stdout: ${JSON.stringify(r.out)}\nwant:   ${JSON.stringify(want)}\nstderr: ${r.err}`
+    )
+  }
+
+  const loud = runCaseUnderPrelude("net_tcp_connect", [])
+  check(
+    "net_tcp_connect: under the prelude tcpConnect fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`tcpConnect` has no synchronous reading under Node"),
+    shown(loud)
+  )
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
@@ -1357,6 +1425,129 @@ if (!only || "net_udp".includes(only)) {
         `exit ${r.code} signal ${r.signal}\nstdout: ${JSON.stringify(r.out)}\nwant the end: ${JSON.stringify(ecn)}\nstderr: ${r.err}`
       )
     }
+  }
+}
+
+// ---- `nish:net` over both families, against Node (#355) ---------------------------
+//
+// Every other `net_` program binds 127.0.0.1, and a container without IPv6
+// turns `"::"` into `0.0.0.0`, so this is the one that reaches the dual-stack
+// code: `tests/cases/net_dual_stack` listens on `"::"` and Node connects over
+// 127.0.0.1 and then ::1, and the program must name each peer in its address
+// form, with Node's own port, and echo both. Then its `"::"` UDP socket marks a
+// datagram to itself with each ECN value over each family, `IP_TOS` and then
+// `IPV6_TCLASS`, and reads the mark back from `meta[1]`. A host whose `::1`
+// cannot be listened on cannot run any of that, so the check prints why and
+// passes, the way `net_udp_offload` does off Linux, rather than counting a skip:
+// the dual-stack path is not missing there, it is the documented fallback.
+if (!only || "net_dual_stack".includes(only)) {
+  const netDir = path.join(buildDir, "net-dual")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  // What a failed listen on ::1 means. Only two codes say the host has no IPv6
+  // loopback: EAFNOSUPPORT, a kernel without IPv6, and EADDRNOTAVAIL, IPv6
+  // without ::1 on lo (`disable_ipv6`). Any other code (EMFILE, EACCES,
+  // ENOBUFS, ...) is a fault on a host that may well have IPv6, so it fails
+  // the check rather than passing it as not applicable.
+  const ipv6Verdict = (code) => {
+    if (code === null) {
+      return "run"
+    }
+    return code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL" ? "absent" : "fault"
+  }
+  const verdicts = {
+    EAFNOSUPPORT: "absent",
+    EADDRNOTAVAIL: "absent",
+    EMFILE: "fault",
+    EACCES: "fault",
+    ENOBUFS: "fault",
+  }
+  const wrong = Object.keys(verdicts).filter((code) => ipv6Verdict(code) !== verdicts[code])
+  check(
+    "net_dual_stack: the IPv6 probe passes only EAFNOSUPPORT and EADDRNOTAVAIL as a host without IPv6, and fails EMFILE, EACCES and ENOBUFS",
+    wrong.length === 0 && ipv6Verdict(null) === "run",
+    `misjudged: ${wrong.map((code) => `${code} as ${ipv6Verdict(code)}`).join(", ")}`
+  )
+
+  // The code a listen on ::1 fails with here, or null when it succeeds.
+  const probeCode = await new Promise((resolve) => {
+    const probe = net.createServer()
+    probe.once("error", (e) => resolve(String(e.code)))
+    probe.listen(0, "::1", () => probe.close(() => resolve(null)))
+  })
+  const ipv6 = ipv6Verdict(probeCode)
+
+  // One connection to `host` that sends a line and waits for it back, then ends
+  // its side; its local port, which the program must report, and whether the
+  // line came back unchanged.
+  const talkOver = (port, host) =>
+    new Promise((resolve) => {
+      const line = `over ${host}\n`
+      const socket = net.connect(port, host)
+      let got = ""
+      let localPort = -1
+      socket.on("connect", () => {
+        localPort = socket.localPort
+        socket.write(line)
+      })
+      socket.on("data", (chunk) => {
+        got += chunk
+        if (got.length === line.length) {
+          socket.end()
+        }
+      })
+      socket.on("error", (e) => {
+        got += `<${e.code}>`
+      })
+      socket.on("close", () => resolve({ host, localPort, echoed: got === line, bytes: line.length }))
+    })
+
+  const dualExe = buildCaseIn(netDir, "net_dual_stack")
+  if (ipv6 === "fault") {
+    check(
+      `net_dual_stack: listening on ::1 answers ${probeCode}, which is a fault rather than a host without IPv6`,
+      false,
+      "only EAFNOSUPPORT and EADDRNOTAVAIL mean there is no IPv6 loopback to test"
+    )
+  } else if (ipv6 === "absent") {
+    console.log(
+      `      net_dual_stack does not run here: listening on ::1 answers ${probeCode}, so "::" is IPv4's 0.0.0.0 on this host (docs/LANGUAGE.md); CI's ubuntu-latest has IPv6 and runs it`
+    )
+    check(
+      `net_dual_stack: not applicable on a host without IPv6 (listening on ::1 answers ${probeCode})`,
+      true,
+      ""
+    )
+  } else if (dualExe !== null) {
+    const r = await runWithPort(dualExe, [], async (port) => [
+      await talkOver(port, "127.0.0.1"),
+      await talkOver(port, "::1"),
+    ])
+    // Off Linux a send with a mark answers -95 and the mark is never read back.
+    const udp = ["127.0.0.1", "::1"]
+      .flatMap((host) =>
+        [1, 2, 3, 0].map((ecn) =>
+          process.platform !== "linux" && ecn > 0
+            ? `udp to ${host}, ecn ${ecn}: sent -95\n`
+            : `udp to ${host}, ecn ${ecn}: 8 bytes from ${host}, ecn ${ecn}\n`
+        )
+      )
+      .join("")
+    const want =
+      r.results.map((t) => `peer ${t.host} port ${t.localPort}\nechoed ${t.bytes} bytes\n`).join("") + udp
+    const body = r.out.replace(/^port \d+\n/, "")
+    check(
+      "net_dual_stack: a listener on :: accepts Node over 127.0.0.1 as the mapped form and over ::1 as ::1, with each peer's port, echoes both, and its :: UDP socket reads back every ECN mark over IPv4 and IPv6",
+      !r.timedOut &&
+        r.code === 0 &&
+        r.results.length === 2 &&
+        r.results.every((t) => t.echoed) &&
+        body === want,
+      `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `connections: ${JSON.stringify(r.results)}\nstdout: ${JSON.stringify(r.out)}\n` +
+        `want:   ${JSON.stringify(`port <n>\n${want}`)}\nstderr: ${r.err}`
+    )
   }
 }
 
@@ -2398,6 +2589,14 @@ if (!only || "performance".includes(only)) {
     arenaControl.status === 0 && summaries(arenaControl.stderr).length === 0,
     arenaControl.stderr
   )
+  // A call inside a `using a = arena()` block leaves nothing behind once the
+  // block releases, whatever refused the pass and the function their scopes.
+  const arenaUsing = compile("perf_arena_using", "perf_arena_using_report.ll")
+  check(
+    "mem_loop_scope: no NL9011 for a call inside a `using a = arena()` block",
+    arenaUsing.status === 0 && summaries(arenaUsing.stderr).length === 0,
+    arenaUsing.stderr
+  )
 
   // #216's acceptance, as a peak resident set rather than as `Arena.used()`:
   // `mem_loop_scope_chunk`'s pointer-returning loop allocates more than an
@@ -2663,6 +2862,58 @@ if (!only || "performance".includes(only)) {
   )
 }
 
+// #207's criteria 1 and 2, measured by hand there and pinned here (#325). The
+// AWFY harness is built as bench/run.mjs builds it, and no port calls `Arena`:
+// what each inner iteration allocates is handed back by the automatic arena
+// scope of the scalar-returning function that called the allocating one (#210,
+// `settleScope` in src/attributes.ts). #207 measured 1.002x and 1.00x; with
+// that scope switched off, Storage 1 1000 peaks at 390 MB and List 1 100000 at
+// 49 MB, against under 2 MB for each. Like `mem_loop_scope_chunk`, the bound is
+// a ratio between two runs of one binary, so the runtime's footprint can move.
+if (!only || "mem_awfy".includes(only)) {
+  if (has("clang")) {
+    const dir = path.join(buildDir, "mem_awfy")
+    const exe = path.join(dir, "harness")
+    const rssExe = path.join(dir, "rss")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const built = spawnSync(
+      NISH,
+      [
+        path.join("bench", "awfy", "main.ts"),
+        "-o",
+        `${path.relative(root, path.join(dir, "awfy"))}${path.sep}`,
+        "--link",
+        path.relative(root, exe),
+        "--profile",
+        "speed",
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const rc = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], {
+      encoding: "utf8",
+    })
+    const ready = built.status === 0 && rc.status === 0
+    const peak = (args) => {
+      const r = spawnSync(rssExe, [exe, ...args], { encoding: "utf8" })
+      return r.status === 0 ? Number(r.stdout.trim()) : -1
+    }
+    for (const [name, small, large] of [
+      ["Storage", "1", "1000"],
+      ["List", "10", "100000"],
+    ]) {
+      const few = ready ? peak([name, "1", small]) : -1
+      const many = ready ? peak([name, "1", large]) : -1
+      check(
+        `mem_awfy: AWFY ${name} at ${large} inner iterations peaks within 1.25x of ${name} at ${small}`,
+        few > 0 && many > 0 && many <= few * 1.25,
+        `peak of \`harness ${name} 1 ${small}\`: ${few} KB, of \`harness ${name} 1 ${large}\`: ${many} KB\n${built.status === 0 ? "" : built.stderr}${rc.stderr}`
+      )
+    }
+  } else {
+    skip("mem_awfy: the peak resident set runs need clang")
+  }
+}
+
 // ---- WP33: the `portability` diagnostic class --------------------------------------
 // Warnings about the program's TypeScript reading rather than about this build:
 // where the same source, run under Node, runs to the end and answers
@@ -2786,6 +3037,168 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
   )
 }
 
+// ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
+// A diagnostic may carry `fix`, a list of edits that `nish --fix` applies
+// (`src/fix.ts`, AGENTS.md "Machine-readable surfaces"). Each case runs on a copy
+// in a directory of its own, because `--fix` rewrites the file it is given:
+// `<name>.ts` must come out as `<name>.fixed.ts` byte for byte and that must
+// compile clean, and `<name>.nofix.ts` must be reported with no `fix` key and
+// come out untouched. A directory is a case with more than one file, for what
+// the command line decides: which files are named, and which may be rewritten.
+// `tests/fix/README.md` is the table.
+{
+  const fixDir = path.join(root, "tests", "fix")
+  // Every file of a directory case, as paths relative to it, depth first.
+  const filesUnder = (dir, prefix = "") =>
+    fs
+      .readdirSync(path.join(dir, prefix), { withFileTypes: true })
+      .flatMap((e) =>
+        e.isDirectory() ? filesUnder(dir, path.join(prefix, e.name)) : [path.join(prefix, e.name)]
+      )
+      .sort()
+  // A case's `node-modules/` is its `node_modules/`, renamed so git keeps it.
+  const workPath = (rel) => rel.replace(/^node-modules(?=\/)/, "node_modules")
+  const CONTROL = new Set(["argv", "exit", "rewrites", "same-as-plain"])
+  for (const name of fs.readdirSync(fixDir).sort()) {
+    const caseDir = path.join(fixDir, name)
+    if (!fs.statSync(caseDir).isDirectory() || (only && !name.includes(only) && !"fix".includes(only))) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const sources = filesUnder(caseDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    for (const rel of filesUnder(caseDir).filter((f) => !CONTROL.has(f) && !f.endsWith(".fixed.ts"))) {
+      fs.mkdirSync(path.dirname(path.join(work, workPath(rel))), { recursive: true })
+      fs.copyFileSync(path.join(caseDir, rel), path.join(work, workPath(rel)))
+    }
+    const argv = fs.readFileSync(path.join(caseDir, "argv"), "utf8").trim().split(/\s+/)
+    const exitFile = path.join(caseDir, "exit")
+    const wantExit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : 0
+    // `same-as-plain`: what --fix finally reports is what a plain run reports
+    // about the files it leaves, byte for byte, which a plain run that stops at
+    // its first refused root may say before it reaches any fix.
+    const samePlain = fs.existsSync(path.join(caseDir, "same-as-plain"))
+    if (!samePlain) {
+      const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 &&
+          diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+    }
+    const fixed = spawnSync(NISH, ["--fix", "--json", ...argv], { cwd: work, encoding: "utf8" })
+    // Each source comes out as its `.fixed.ts`, or byte-identical when it has none.
+    const wrong = sources.filter((rel) => {
+      const expectedFile = path.join(caseDir, rel.replace(/\.ts$/, ".fixed.ts"))
+      const expected = fs.readFileSync(fs.existsSync(expectedFile) ? expectedFile : path.join(caseDir, rel))
+      return !fs.readFileSync(path.join(work, workPath(rel))).equals(expected)
+    })
+    check(
+      `fix ${name}: --fix exits ${wantExit}, rewrites each file with a .fixed.ts to it and leaves every other byte-identical`,
+      fixed.status === wantExit && wrong.length === 0,
+      `${shown(fixed)}\nnot as expected: ${wrong.join(", ")}`
+    )
+    const rewritesFile = path.join(caseDir, "rewrites")
+    if (fs.existsSync(rewritesFile)) {
+      const want = Number(fs.readFileSync(rewritesFile, "utf8").trim())
+      const rewrites = fixed.stderr.split("\n").filter((l) => l.startsWith("fixed ")).length
+      check(`fix ${name}: --fix rewrites a file ${want} times`, rewrites === want, shown(fixed))
+    }
+    if (samePlain) {
+      const plainJson = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix --json reports what a plain --json run reports about the result, byte for byte`,
+        fixed.status === plainJson.status && fixed.stdout === plainJson.stdout,
+        `--fix:\n${shown(fixed)}\nplain:\n${shown(plainJson)}`
+      )
+      // The human report too, from a second --fix with nothing left to apply.
+      const again = spawnSync(NISH, ["--fix", ...argv], { cwd: work, encoding: "utf8" })
+      const plainHuman = spawnSync(NISH, [...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix reports what a plain run reports about the result, byte for byte`,
+        again.status === plainHuman.status &&
+          again.stdout === plainHuman.stdout &&
+          again.stderr === plainHuman.stderr,
+        `--fix:\n${shown(again)}\nplain:\n${shown(plainHuman)}`
+      )
+    } else if (wantExit === 0) {
+      const clean = spawnSync(NISH, ["--json", ...argv, "-o", "clean/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: the fixed program compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    } else {
+      // What --fix may not apply is still reported, fix and all.
+      check(
+        `fix ${name}: the fix --fix may not apply is still reported with it`,
+        diagnosticsOf(fixed.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(fixed)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+  const inputs = fs
+    .readdirSync(fixDir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .sort()
+  for (const file of inputs) {
+    const noFix = file.endsWith(".nofix.ts")
+    const name = file.slice(0, -(noFix ? ".nofix.ts" : ".ts").length)
+    if (only && !name.includes(only) && !"fix".includes(only)) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const input = fs.readFileSync(path.join(fixDir, file))
+    fs.writeFileSync(path.join(work, file), input)
+    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plainObjects = diagnosticsOf(plain.stdout)
+    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const after = fs.readFileSync(path.join(work, file))
+    if (noFix) {
+      check(
+        `fix ${name}: reported with no \`fix\` key`,
+        plain.status === 1 && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix leaves the file byte-identical and exits as the plain compile does`,
+        fixed.status === plain.status && after.equals(input) && fixed.stdout === plain.stdout,
+        shown(fixed)
+      )
+    } else {
+      const expected = fs.readFileSync(path.join(fixDir, `${name}.fixed.ts`))
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 && plainObjects.some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix exits 0 and writes ${name}.fixed.ts byte for byte`,
+        fixed.status === 0 && after.equals(expected),
+        `${shown(fixed)}\nwrote:\n${after}`
+      )
+      const roundsFile = path.join(fixDir, `${name}.rounds`)
+      if (fs.existsSync(roundsFile)) {
+        const want = Number(fs.readFileSync(roundsFile, "utf8").trim())
+        const rounds = fixed.stderr.split("\n").filter((l) => l.startsWith(`fixed ${file} `)).length
+        check(`fix ${name}: --fix takes ${want} rounds`, rounds === want, shown(fixed))
+      }
+      fs.writeFileSync(path.join(work, `${name}.fixed.ts`), expected)
+      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed.ll"], {
+        cwd: work,
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.fixed.ts compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+}
+
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
 // compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed
@@ -2795,6 +3208,7 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
 // (empty for now). Other optional files:
 //   expected.err   compile must fail and stderr must contain this text
 //   expected.ir    lines (substring match) that must appear in some emitted module
+//   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
 //   args           extra CLI flags (e.g. --strict-exports)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases)
 // Every positive test is also assembled (llvm-as), verified (opt -passes=verify),
@@ -2843,7 +3257,13 @@ for (const name of linkTests) {
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
   fs.rmSync(outDir, { recursive: true, force: true })
-  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args], { cwd: root })
+  // WP35: the report is written beside the modules by the same compile, since
+  // nothing here compares the IR of a second one.
+  const capsJson = path.join(outDir, "capabilities.json")
+  const capsArgs = fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
+  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
+    cwd: root,
+  })
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("expected.err"))) {
@@ -2927,6 +3347,16 @@ for (const name of linkTests) {
       `link/${name}: emitted IR contains every expected.ir line`,
       missing.length === 0,
       missing.map((l) => `missing: ${l}`).join("\n")
+    )
+  }
+
+  if (capsArgs.length > 0) {
+    const want = read("expected.caps.json")
+    const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+    check(
+      `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
+      got === want,
+      `--- expected\n${want}\n--- actual\n${got}`
     )
   }
 
@@ -3015,7 +3445,13 @@ if (!only || "par_alloc".includes(only)) {
 // before the scope's block ends, so every scope program prints the same both
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
+//
+// `arena_using_exit_paths` is the `using a = arena()` program: its block's
+// disposal does nothing under Node and `Arena.*` answers zero there, so the
+// lines it prints, each of which ends with how far the arena moved, are the
+// native ones exactly when every exit released.
 for (const name of [
+  "arena_using_exit_paths",
   "par_map",
   "par_reduce",
   "thread_scope_basic",
@@ -3297,6 +3733,62 @@ if (has("opt") && fs.existsSync(fillZeroLl)) {
     "opt -O2 turns bytes_fill_zero's zero fill loop over i32[] into llvm.memset",
     o.status === 0 && clear !== null && /call void @llvm\.memset/.test(clear[0]),
     o.status === 0 ? out : String(o.stderr)
+  )
+}
+
+// `nish:secret`: the wipe survives `-O2`, as CLAUDE.md requires of every wipe in
+// `std/crypto`. `secret_wipe_o2` wipes a stack array nothing reads again, which is
+// the store an optimiser deletes, and `secret_wipe_o2_plain` zeroes the same array
+// with `fill(0)`: after `opt -O2` the twin's `main` must hold no store at all, which
+// is what shows the deletion happens, and the wiped one must still hold a volatile
+// store of zero for every byte of the array (SROA splits the volatile `llvm.memset`
+// into one per byte; a volatile memset left whole counts as all eight). Both are
+// compiled here, fresh, so a filtered run cannot read a `.ll` another section wrote
+// (.claude/testing.md, the `existsSync` trap).
+if (!only || "secret wipe survives -O2".includes(only)) {
+  if (!has("opt")) {
+    skip("nish:secret: no opt to show the wipe survives -O2")
+  } else {
+    const o2Dir = path.join(buildDir, "secret-o2")
+    fs.rmSync(o2Dir, { recursive: true, force: true })
+    fs.mkdirSync(o2Dir, { recursive: true })
+    /** `main` of `name` after `opt -O2`, or the failure to get it. */
+    const optimisedMain = (name) => {
+      const ll = path.join(o2Dir, `${name}.ll`)
+      const c = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", ll], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      if (c.status !== 0) {
+        return { ok: false, text: c.stderr }
+      }
+      const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+      const body = o.status === 0 ? o.stdout.match(/define[^\n]*@nish_main\([\s\S]*?\n\}/) : null
+      return body === null ? { ok: false, text: o.stderr || o.stdout } : { ok: true, text: body[0] }
+    }
+    const wiped = optimisedMain("secret_wipe_o2")
+    const plain = optimisedMain("secret_wipe_o2_plain")
+    const volatileZeros = wiped.ok ? (wiped.text.match(/store volatile i8 0,/g) || []).length : 0
+    const volatileMemset = wiped.ok && /call void @llvm\.memset[^\n]*i64 8, i1 true\)/.test(wiped.text)
+    const plainStores = plain.ok ? (plain.text.match(/\bstore\b|@llvm\.memset/g) || []).length : -1
+    check(
+      "nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted",
+      wiped.ok && plain.ok && (volatileZeros === 8 || volatileMemset) && plainStores === 0,
+      `wiped: ${volatileZeros} volatile zero stores, volatile memset ${volatileMemset}\n${wiped.text}\n--- plain: ${plainStores} stores\n${plain.text}`
+    )
+  }
+}
+
+// `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
+// `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
+// the native binary prints.
+if (!only || "secret_wipe under the prelude".includes(only)) {
+  const r = runCaseUnderPrelude("secret_wipe", [])
+  const want = fs.readFileSync(path.join(casesDir, "secret_wipe.out"), "utf8")
+  check(
+    "nish:secret: secret_wipe under runtime/nish.mjs prints secret_wipe.out",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
   )
 }
 
@@ -5869,8 +6361,13 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  * raising this number -- unlike raising the one below it -- should be rare enough to be
  * argued for. Either way it comes with its own measurement and a row in
  * docs/wp7-runtime.md ("Runtime additions and budget"); it is not a way to get green.
+ *
+ * Raised by 21 bytes, from 3,584 to 3,605, for `nish_wipe` (#385, `secureZero`): measured
+ * 3,583 before it and 3,604 with it on 2026-10-03 with clang 18.1.3 on linux-x64. Every
+ * other unit was as close to its own ceiling, and the wipe is no system call, so it is here,
+ * and the raise is the measured size of what was added and nothing more.
  */
-const RUNTIME_TEXT_BUDGET = 3584
+const RUNTIME_TEXT_BUDGET = 3605
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -10295,6 +10792,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--target",
     "--profile",
     "--warn-portability",
+    "--fix",
+    "--emit-capabilities",
+    "[--capabilities]",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
@@ -10440,6 +10940,321 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
       fs.existsSync(path.join(wp12Dir, "badbuild.modules", "main.ll")),
     badBuild.stderr
   )
+}
+
+// ---- WP35: the capability report ---------------------------------------------------
+// The golden reports are the `caps_*` cases' `.caps.json` and the `tests/link/caps_*`
+// programs' `expected.caps.json`; what is checked here is everything around them:
+// that the audit is total, that the walk refuses an unlabelled builtin with the
+// exit-70 report, the usage of both flags, and the one line `--capabilities` prints
+// (docs/wp35-capabilities.md).
+if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
+  const audit = spawnSync("node", [path.join(root, "tests", "capabilities.js")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    `capabilities: every builtin the checker accepts has exactly one label (${audit.stdout.trim()})`,
+    audit.status === 0,
+    audit.stdout + audit.stderr
+  )
+
+  // ...and the check refuses each way the table can stop being total. The four
+  // sources it reads are copied with one line changed, and the copy has to be
+  // refused with the problem named: a builtin added with no row, a row whose
+  // builtin was renamed away, and a builtin with two rows.
+  const auditFiles = ["builtins.ts", "nish-modules.ts", "result.ts", "capabilities.ts"]
+  const auditMutations = [
+    [
+      "a builtin with no row",
+      "builtins.ts",
+      (t) =>
+        t.replace('    name === "getenv" ||\n', '    name === "getenv" ||\n    name === "chmodSync" ||\n'),
+      "the builtin `chmodSync` has no row",
+    ],
+    [
+      "a row for a builtin that is gone",
+      "builtins.ts",
+      (t) => t.replace('    name === "getenv" ||\n', '    name === "getEnvironment" ||\n'),
+      "the row `getenv` names no builtin the checker accepts",
+    ],
+    [
+      "a builtin with two rows",
+      "capabilities.ts",
+      (t) => t.replace('  if (name === "getenv") {', '  if (name === "getenv" || name === "panic") {'),
+      "the builtin `panic` has 2 rows",
+    ],
+  ]
+  for (const [i, [what, file, mutate, words]] of auditMutations.entries()) {
+    const dir = path.join(buildDir, `caps-mutation-${i}`)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const f of auditFiles) {
+      fs.copyFileSync(path.join(root, "src", f), path.join(dir, f))
+    }
+    const live = fs.readFileSync(path.join(dir, file), "utf8")
+    const mutated = mutate(live)
+    fs.writeFileSync(path.join(dir, file), mutated)
+    const r = spawnSync("node", [path.join(root, "tests", "capabilities.js"), "--src", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `capabilities: the audit check refuses ${what}`,
+      mutated !== live && r.status === 1 && r.stderr.includes(words),
+      mutated === live ? "the mutation did not apply" : r.stdout + r.stderr
+    )
+  }
+
+  // The walk's half: a builtin with no row is a broken invariant, reported as
+  // one. `NISH_SIMULATE_ICE=unlabelled:<name>` makes the audit forget `<name>`,
+  // so the report is the one the walk itself makes, under --json too; a program
+  // that never calls the builtin compiles as usual, which is what shows it is
+  // the walk that refuses and not the driver.
+  const capsDir = path.join(buildDir, "caps")
+  fs.rmSync(capsDir, { recursive: true, force: true })
+  fs.mkdirSync(capsDir, { recursive: true })
+  const unlabelled = { ...process.env, NISH_SIMULATE_ICE: "unlabelled:readFileSync" }
+  const ice = spawnSync(NISH, [path.join(casesDir, "caps_fs_read.ts"), "-o", path.join(capsDir, "ice.ll")], {
+    cwd: root,
+    encoding: "utf8",
+    env: unlabelled,
+  })
+  check(
+    "capabilities: an unlabelled builtin is an internal compiler error, exit 70, naming the builtin",
+    ice.status === 70 &&
+      ice.stderr.includes("internal compiler error") &&
+      ice.stderr.includes("a builtin call has no capability label in src/capabilities.ts: `readFileSync`") &&
+      !fs.existsSync(path.join(capsDir, "ice.ll")),
+    shown(ice)
+  )
+  const iceJson = spawnSync(
+    NISH,
+    [path.join(casesDir, "caps_fs_read.ts"), "-o", path.join(capsDir, "ice.ll"), "--json"],
+    { cwd: root, encoding: "utf8", env: unlabelled }
+  )
+  const iceObjects = diagnosticsOf(iceJson.stdout)
+  check(
+    "capabilities: under --json the unlabelled builtin is one NL0003 object, and it names the builtin",
+    iceJson.status === 70 &&
+      iceObjects.length === 1 &&
+      iceObjects[0].code === "NL0003" &&
+      iceObjects[0].message ===
+        "internal compiler error: a builtin call has no capability label in src/capabilities.ts: `readFileSync`",
+    shown(iceJson)
+  )
+  const unaffected = spawnSync(
+    NISH,
+    [path.join(casesDir, "caps_pure.ts"), "-o", path.join(capsDir, "unaffected.ll")],
+    { cwd: root, encoding: "utf8", env: unlabelled }
+  )
+  check(
+    "capabilities: the hook is the walk's -- a program that calls no `readFileSync` compiles as usual",
+    unaffected.status === 0,
+    shown(unaffected)
+  )
+
+  // The flags. `--emit-capabilities` takes a file, as every sidecar does, and is
+  // a product `nish run` keeps to itself; `--capabilities` prints one line on
+  // stderr and leaves stdout alone.
+  const noFile = spawnSync(NISH, [path.join(casesDir, "caps_pure.ts"), "--emit-capabilities"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "capabilities: --emit-capabilities with no file is a usage error, exit 2",
+    noFile.status === 2 && noFile.stderr.includes("compile: --emit-capabilities needs a file"),
+    shown(noFile)
+  )
+  const inRun = spawnSync(
+    NISH,
+    ["run", "--emit-capabilities", path.join(capsDir, "run.json"), path.join(casesDir, "caps_pure.ts")],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: `nish run` refuses --emit-capabilities, exit 2, and writes nothing",
+    inRun.status === 2 &&
+      inRun.stderr.includes("`--emit-capabilities` cannot be used with `nish run`") &&
+      !fs.existsSync(path.join(capsDir, "run.json")),
+    shown(inRun)
+  )
+  // `--emit-ast` stops before the checker, so it has no capabilities to report.
+  for (const flag of [["--capabilities"], ["--emit-capabilities", path.join(capsDir, "ast.json")]]) {
+    const withAst = spawnSync(NISH, [path.join(casesDir, "caps_pure.ts"), "--emit-ast", ...flag], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `capabilities: ${flag[0]} with --emit-ast is a usage error, exit 2, and prints no tree`,
+      withAst.status === 2 &&
+        withAst.stdout === "" &&
+        withAst.stderr.includes(
+          `\`${flag[0]}\` reports on a checked program, and --emit-ast stops before the check`
+        ),
+      shown(withAst)
+    )
+  }
+  // Under `run`, `--emit-ast` is refused as a product `run` keeps to itself,
+  // and that refusal is the one a reader gets, whatever capability flag is beside it.
+  const runAst = spawnSync(
+    NISH,
+    ["run", "--emit-ast", "--capabilities", path.join(casesDir, "caps_pure.ts")],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "capabilities: `nish run --emit-ast --capabilities` is refused by `run`'s rule, exit 2",
+    runAst.status === 2 &&
+      runAst.stdout === "" &&
+      runAst.stderr.includes("`--emit-ast` cannot be used with `nish run`") &&
+      !runAst.stderr.includes("reports on a checked program"),
+    shown(runAst)
+  )
+  // `--fix` rewrites sources and answers before the program is analysed, so
+  // it takes neither capability flag rather than dropping one in silence.
+  for (const flag of [["--capabilities"], ["--emit-capabilities", path.join(capsDir, "fix.json")]]) {
+    const withFix = spawnSync(NISH, [path.join(casesDir, "caps_pure.ts"), "--fix", ...flag], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `capabilities: ${flag[0]} with --fix is a usage error, exit 2, and writes nothing`,
+      withFix.status === 2 &&
+        withFix.stderr.includes(`\`${flag[0]}\` cannot be used with --fix`) &&
+        !fs.existsSync(path.join(capsDir, "fix.json")),
+      shown(withFix)
+    )
+  }
+  // `--emit-checked` does stop after it, and both are answered before the dump.
+  const withChecked = spawnSync(
+    NISH,
+    [
+      path.join(casesDir, "caps_env.ts"),
+      "--emit-checked",
+      "--capabilities",
+      "--emit-capabilities",
+      path.join(capsDir, "checked.json"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: with --emit-checked the line and the report still come, beside the dump",
+    withChecked.status === 0 &&
+      withChecked.stdout.includes("caps_env.ts") &&
+      withChecked.stderr.startsWith("capabilities: env (not deterministic)\n") &&
+      fs.existsSync(path.join(capsDir, "checked.json")),
+    shown(withChecked)
+  )
+  const summaryOf = (name) =>
+    spawnSync(
+      NISH,
+      [path.join(casesDir, `${name}.ts`), "-o", path.join(capsDir, `${name}.ll`), "--capabilities"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+  const quiet = summaryOf("caps_pure")
+  const loud = summaryOf("caps_fs_write")
+  const exits = summaryOf("caps_exit")
+  check(
+    "capabilities: --capabilities prints the program's set on stderr in the fixed order, and nothing on stdout",
+    quiet.status === 0 &&
+      loud.status === 0 &&
+      exits.status === 0 &&
+      quiet.stdout === "" &&
+      loud.stdout === "" &&
+      quiet.stderr.split("\n")[0] === "capabilities: none (deterministic)" &&
+      loud.stderr.split("\n")[0] === "capabilities: fs.read, fs.write (not deterministic)" &&
+      exits.stderr.split("\n")[0] === "capabilities: exit (deterministic)",
+    [quiet, loud, exits].map(shown).join("\n")
+  )
+  const withReport = spawnSync(
+    NISH,
+    [
+      path.join(casesDir, "caps_env.ts"),
+      "-o",
+      path.join(capsDir, "nested", "caps_env.ll"),
+      "--emit-capabilities",
+      path.join(capsDir, "nested", "deeper", "caps_env.json"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: --emit-capabilities makes the directories in its way and says `wrote` on stderr",
+    withReport.status === 0 &&
+      withReport.stdout === "" &&
+      withReport.stderr.includes(`wrote ${path.join(capsDir, "nested", "deeper", "caps_env.json")}`) &&
+      fs.existsSync(path.join(capsDir, "nested", "deeper", "caps_env.json")),
+    shown(withReport)
+  )
+
+  // The report the cookbook shows is the one the compiler writes, so the page
+  // cannot go stale while the IR beside it is regenerated.
+  const cookbookText = fs.readFileSync(path.join(root, "docs", "IR_COOKBOOK.md"), "utf8")
+  const shownReport = /<!-- capabilities-report builtin-capabilities -->\n```json\n([\s\S]*?)```\n/.exec(
+    cookbookText
+  )
+  const cookbookJson = path.join(capsDir, "cookbook.json")
+  const cookbookRun = spawnSync(
+    NISH,
+    [
+      path.join(root, "docs", "cookbook", "builtin-capabilities.ts"),
+      "-o",
+      path.join(capsDir, "cookbook") + path.sep,
+      "--emit-capabilities",
+      cookbookJson,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: the report docs/IR_COOKBOOK.md shows is the one --emit-capabilities writes for its snippet",
+    shownReport !== null &&
+      cookbookRun.status === 0 &&
+      fs.existsSync(cookbookJson) &&
+      fs.readFileSync(cookbookJson, "utf8") === shownReport[1],
+    shownReport === null ? "no capabilities-report block in docs/IR_COOKBOOK.md" : shown(cookbookRun)
+  )
+
+  // A program that will not run gets the refusal alone: the line is promised
+  // for a program about to start, so it never precedes the missing-`main`
+  // refusal, under `run` or beside `--link`. `std/json.ts` has no `main`.
+  for (const head of [
+    ["run", "--capabilities"],
+    ["--capabilities", "--link", path.join(capsDir, "no-main")],
+  ]) {
+    const noMain = spawnSync(NISH, [...head, path.join(root, "std", "json.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: path.join(capsDir, "cache") },
+    })
+    check(
+      `capabilities: \`${head.join(" ")}\` on a module with no main prints the refusal and no capability line, exit 1`,
+      noMain.status === 1 &&
+        noMain.stderr.includes("must declare `export const main") &&
+        !noMain.stderr.includes("capabilities: "),
+      shown(noMain)
+    )
+  }
+
+  // Under `run` the line comes before the program starts, and stdout is the
+  // program's alone.
+  if (!HAS_CLANG) {
+    skip("capabilities: clang not on PATH, so `nish run --capabilities` cannot link")
+  } else {
+    const ran = spawnSync(NISH, ["run", "--capabilities", path.join(casesDir, "caps_env.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: path.join(capsDir, "cache"), NISH_CAPS_SETTING: "on" },
+    })
+    check(
+      "capabilities: `nish run --capabilities` prints the one line on stderr and leaves the program's stdout alone",
+      ran.status === 0 && ran.stdout === "on\n" && ran.stderr === "capabilities: env (not deterministic)\n",
+      shown(ran)
+    )
+  }
 }
 
 // ---- `nish run`: a script built into a cache and started ----------------------------
