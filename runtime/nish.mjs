@@ -185,6 +185,41 @@ provide("lstatOwnerModeSync", shim.lstatOwnerModeSync);
 provide("geteuid", shim.geteuid);
 provide("isExecutableSync", shim.isExecutableSync);
 
+// `nish:unsafe`. The element access is JavaScript's own, which never checks
+// anything; the wraps are the two's-complement ones the native instructions
+// perform: `| 0` and `Math.imul` at `i32`, and `BigInt.asIntN(64, ...)` on
+// the BigInt an `i64` is here. Pure functions of their operands, so a program
+// that stays in range agrees with a native run.
+const wrapAt = (a, b, wide, narrow) => (typeof a === "bigint" ? BigInt.asIntN(64, wide(a, b)) : narrow(a, b));
+provide("uncheckedGet", (xs, i) => xs[i]);
+provide("uncheckedSet", (xs, i, v) => {
+  xs[i] = v;
+});
+provide("wrappingAdd", (a, b) =>
+  wrapAt(
+    a,
+    b,
+    (x, y) => x + y,
+    (x, y) => (x + y) | 0
+  )
+);
+provide("wrappingSub", (a, b) =>
+  wrapAt(
+    a,
+    b,
+    (x, y) => x - y,
+    (x, y) => (x - y) | 0
+  )
+);
+provide("wrappingMul", (a, b) =>
+  wrapAt(
+    a,
+    b,
+    (x, y) => x * y,
+    (x, y) => Math.imul(x, y)
+  )
+);
+
 // `Result`. Everything works but `orReturn`, which needs the caller's control
 // flow and therefore the rewriter; see the header.
 provide("Ok", shim.Ok);
@@ -220,14 +255,21 @@ provide("arena", shim.arena);
 // specifier works from any directory. Only the `nish/` package is answered
 // here, and every other specifier goes to Node as it was written.
 //
-// `nish:secret` is the one builtin module answered here as well, because the
-// standard library imports it (`std/crypto/p256.ts` and its neighbours): its
-// names are `runtime/shim.mjs`'s, where a `Secret` is a plain wrapper and
-// `wipe` zero-fills it.
+// `nish:secret` is answered here as well, because the standard library imports
+// it (`std/crypto/p256.ts` and its neighbours): its names are
+// `runtime/shim.mjs`'s, where a `Secret` is a plain wrapper and `wipe`
+// zero-fills it. `nish:unsafe` is answered by a module that hands back the
+// globals installed above: its functions are globals of this module either
+// way, and the import is what the compiler requires a program to write.
+const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
+const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 registerHooks({
   resolve: (specifier, context, next) => {
     if (specifier === "nish:secret") {
       return next(new URL("./shim.mjs", import.meta.url).href, context);
+    }
+    if (specifier === "nish:unsafe") {
+      return { url: `data:text/javascript,${encodeURIComponent(unsafeSource)}`, shortCircuit: true };
     }
     return specifier.startsWith("nish/")
       ? next(new URL(`../std/${specifier.slice("nish/".length)}.ts`, import.meta.url).href, context)

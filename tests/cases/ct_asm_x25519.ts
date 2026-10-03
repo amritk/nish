@@ -14,10 +14,12 @@
 // **These are copies, not imports.** `std/crypto/x25519.ts` exports only
 // `x25519` and `x25519Base`, whose 255-step loop the check refuses by
 // design, so its cores are copied here, each under the name of the function
-// it mirrors. Two things differ, and neither changes a value:
+// it mirrors. Three things differ, and none changes a value:
 //
 // - The early `return` on a short array is gone. It guards a public length,
 //   but it is a branch, and the check refuses every branch.
+// - Every index is an `uncheckedGet` or `uncheckedSet` from `nish:unsafe`
+//   where the module writes `a[i]`: a bounds check is a branch too.
 // - `fieldMul` writes the ten rows of `f25519Mul`'s outer loop out by hand,
 //   calling `fieldMulRow` once per row. `clang -O2` unrolls the inner loop
 //   and leaves the outer one rolled, and a rolled loop is a back-edge.
@@ -27,6 +29,8 @@
 // tests/link/crypto_x25519 holds the module to the same vectors, so the two
 // agree through the RFC. (A case here compiles to one `.ll`, so it cannot
 // import a `std/` module and compare with it directly.)
+
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
 // ---- The copies ---------------------------------------------------------------
 
@@ -42,41 +46,41 @@ const fieldLimbMask = (i: i32): i64 => (toI64(1) << fieldWidth(i)) - toI64(1)
 /** `f25519Copy`. */
 const fieldCopy = (out: i64[], f: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i]
+    uncheckedSet(out, i, uncheckedGet(f, i));
   }
 }
 
 /** `f25519CarryChain`. */
 const fieldCarryChain = (h: i64[]): void => {
   for (let i: i32 = 0; i < 9; i++) {
-    const c: i64 = h[i] >> fieldWidth(i)
-    h[i] = h[i] & fieldLimbMask(i)
-    h[i + 1] = h[i + 1] + c
+    const c: i64 = uncheckedGet(h, i) >> fieldWidth(i)
+    uncheckedSet(h, i, uncheckedGet(h, i) & fieldLimbMask(i));
+    uncheckedSet(h, i + 1, uncheckedGet(h, i + 1) + c);
   }
 }
 
 /** `f25519Carry`. */
 const fieldCarry = (h: i64[]): void => {
   fieldCarryChain(h)
-  const top: i64 = h[9] >> toI64(25)
-  h[9] = h[9] & fieldLimbMask(9)
-  h[0] = h[0] + top * toI64(19)
-  const c0: i64 = h[0] >> toI64(26)
-  h[0] = h[0] & fieldLimbMask(0)
-  h[1] = h[1] + c0
+  const top: i64 = uncheckedGet(h, 9) >> toI64(25)
+  uncheckedSet(h, 9, uncheckedGet(h, 9) & fieldLimbMask(9));
+  uncheckedSet(h, 0, uncheckedGet(h, 0) + top * toI64(19));
+  const c0: i64 = uncheckedGet(h, 0) >> toI64(26)
+  uncheckedSet(h, 0, uncheckedGet(h, 0) & fieldLimbMask(0));
+  uncheckedSet(h, 1, uncheckedGet(h, 1) + c0);
 }
 
 /** `f25519Add`. */
 export const fieldAdd = (out: i64[], f: i64[], g: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i] + g[i]
+    uncheckedSet(out, i, uncheckedGet(f, i) + uncheckedGet(g, i));
   }
 }
 
 /** `f25519Sub`. */
 export const fieldSub = (out: i64[], f: i64[], g: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i] - g[i]
+    uncheckedSet(out, i, uncheckedGet(f, i) - uncheckedGet(g, i));
   }
 }
 
@@ -84,9 +88,9 @@ export const fieldSub = (out: i64[], f: i64[], g: i64[]): void => {
 const fieldMulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): void => {
   for (let j: i32 = 0; j < 10; j++) {
     const k: i32 = i + j
-    const fi: i64 = (i & j & 1) === 1 ? doubled[i] : f[i]
+    const fi: i64 = (i & j & 1) === 1 ? uncheckedGet(doubled, i) : uncheckedGet(f, i)
     if (k >= 0 && k < 19) {
-      wide[k] = wide[k] + fi * g[j]
+      uncheckedSet(wide, k, uncheckedGet(wide, k) + fi * uncheckedGet(g, j));
     }
   }
 }
@@ -95,7 +99,7 @@ const fieldMulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): v
 export const fieldMul = (out: i64[], f: i64[], g: i64[]): void => {
   const doubled: i64[] = new Array<i64>(10)
   for (let i: i32 = 0; i < 10; i++) {
-    doubled[i] = f[i] * toI64((i & 1) + 1)
+    uncheckedSet(doubled, i, uncheckedGet(f, i) * toI64((i & 1) + 1));
   }
   const wide: i64[] = new Array<i64>(19)
   fieldMulRow(wide, f, doubled, g, 0)
@@ -110,9 +114,9 @@ export const fieldMul = (out: i64[], f: i64[], g: i64[]): void => {
   fieldMulRow(wide, f, doubled, g, 9)
   const h: i64[] = new Array<i64>(10)
   for (let k: i32 = 0; k < 9; k++) {
-    h[k] = wide[k] + wide[k + 10] * toI64(19)
+    uncheckedSet(h, k, uncheckedGet(wide, k) + uncheckedGet(wide, k + 10) * toI64(19));
   }
-  h[9] = wide[9]
+  uncheckedSet(h, 9, uncheckedGet(wide, 9));
   fieldCarry(h)
   fieldCopy(out, h)
 }
@@ -125,7 +129,7 @@ export const fieldSquare = (out: i64[], f: i64[]): void => {
 /** `f25519MulA24`, with a24 = 121665. */
 export const fieldMulA24 = (out: i64[], f: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i] * toI64(121665)
+    uncheckedSet(out, i, uncheckedGet(f, i) * toI64(121665));
   }
   fieldCarry(out)
 }
@@ -134,9 +138,9 @@ export const fieldMulA24 = (out: i64[], f: i64[]): void => {
 export const condSwap = (f: i64[], g: i64[], bit: i64): void => {
   const mask: i64 = toI64(0) - bit
   for (let i: i32 = 0; i < 10; i++) {
-    const t: i64 = mask & (f[i] ^ g[i])
-    f[i] = f[i] ^ t
-    g[i] = g[i] ^ t
+    const t: i64 = mask & (uncheckedGet(f, i) ^ uncheckedGet(g, i))
+    uncheckedSet(f, i, uncheckedGet(f, i) ^ t);
+    uncheckedSet(g, i, uncheckedGet(g, i) ^ t);
   }
 }
 
@@ -186,7 +190,7 @@ export const ladderStep = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[],
 export const indexAfterMul = (f: i64[], g: i64[], table: i64[]): i64 => {
   const h: i64[] = new Array<i64>(10)
   fieldMul(h, f, g)
-  return table[toI32(h[0] & toI64(7))]
+  return uncheckedGet(table, toI32(uncheckedGet(h, 0) & toI64(7)))
 }
 
 // ---- X25519 on the copies, for main ---------------------------------------------
@@ -198,7 +202,7 @@ const fieldDecode = (bytes: u8[]): i64[] => {
   let bits: i64 = 0
   let limb: i32 = 0
   for (let i: i32 = 0; i < 32; i++) {
-    let v: i64 = toI64(bytes[i])
+    let v: i64 = toI64(uncheckedGet(bytes, i))
     if (i === 31) {
       v = v & toI64(0x7f)
     }
@@ -207,7 +211,7 @@ const fieldDecode = (bytes: u8[]): i64[] => {
     if (limb >= 0 && limb < 10) {
       const width: i64 = fieldWidth(limb)
       if (bits >= width) {
-        f[limb] = acc & fieldLimbMask(limb)
+        uncheckedSet(f, limb, acc & fieldLimbMask(limb));
         acc = acc >> width
         bits = bits - width
         limb = limb + 1
@@ -223,29 +227,29 @@ const fieldEncode = (f: i64[]): u8[] => {
   fieldCopy(h, f)
   fieldCarry(h)
   fieldCarry(h)
-  let q: i64 = (h[0] + toI64(19)) >> toI64(26)
+  let q: i64 = (uncheckedGet(h, 0) + toI64(19)) >> toI64(26)
   for (let i: i32 = 1; i < 10; i++) {
-    q = (h[i] + q) >> fieldWidth(i)
+    q = (uncheckedGet(h, i) + q) >> fieldWidth(i)
   }
-  h[0] = h[0] + q * toI64(19)
+  uncheckedSet(h, 0, uncheckedGet(h, 0) + q * toI64(19));
   fieldCarryChain(h)
-  h[9] = h[9] & fieldLimbMask(9)
+  uncheckedSet(h, 9, uncheckedGet(h, 9) & fieldLimbMask(9));
   const out: u8[] = new Array<u8>(32)
   let acc: i64 = 0
   let bits: i64 = 0
   let at: i32 = 0
   for (let i: i32 = 0; i < 10; i++) {
-    acc = acc | (h[i] << bits)
+    acc = acc | (uncheckedGet(h, i) << bits)
     bits = bits + fieldWidth(i)
     while (bits >= toI64(8) && at >= 0 && at < 32) {
-      out[at] = toU8(acc & toI64(0xff))
+      uncheckedSet(out, at, toU8(acc & toI64(0xff)));
       acc = acc >> toI64(8)
       bits = bits - toI64(8)
       at = at + 1
     }
   }
   if (at >= 0 && at < 32) {
-    out[at] = toU8(acc & toI64(0xff))
+    uncheckedSet(out, at, toU8(acc & toI64(0xff)));
   }
   return out
 }
@@ -298,25 +302,25 @@ const fieldInvert = (out: i64[], z: i64[]): void => {
 const ladder = (scalar: u8[], uBytes: u8[]): u8[] => {
   const k: u8[] = new Array<u8>(32)
   for (let i: i32 = 0; i < 32; i++) {
-    k[i] = scalar[i]
+    uncheckedSet(k, i, uncheckedGet(scalar, i));
   }
-  k[0] = k[0] & toU8(248)
-  k[31] = (k[31] & toU8(127)) | toU8(64)
+  uncheckedSet(k, 0, uncheckedGet(k, 0) & toU8(248));
+  uncheckedSet(k, 31, (uncheckedGet(k, 31) & toU8(127)) | toU8(64));
   const u: i64[] = fieldDecode(uBytes)
   const x2: i64[] = new Array<i64>(10)
-  x2[0] = toI64(1)
+  uncheckedSet(x2, 0, toI64(1));
   const z2: i64[] = new Array<i64>(10)
   const x3: i64[] = new Array<i64>(10)
   fieldCopy(x3, u)
   const z3: i64[] = new Array<i64>(10)
-  z3[0] = toI64(1)
+  uncheckedSet(z3, 0, toI64(1));
   let swap: i64 = 0
   for (let byte: i32 = 31; byte >= 0; byte--) {
     for (let shift: i32 = 7; shift >= 0; shift--) {
       if (byte === 31 && shift === 7) {
         continue
       }
-      const bit: i64 = toI64(k[byte] >> toU8(shift)) & toI64(1)
+      const bit: i64 = toI64(uncheckedGet(k, byte) >> toU8(shift)) & toI64(1)
       swap = swap ^ bit
       ladderStep(x2, z2, x3, z3, u, swap)
       swap = bit
@@ -339,7 +343,7 @@ const fromHex = (text: string): u8[] => {
   for (let i: i32 = 0; i < 32; i++) {
     const high: i32 = hexNibble(toI32(text.charCodeAt(2 * i)))
     const low: i32 = hexNibble(toI32(text.charCodeAt(2 * i + 1)))
-    out[i] = toU8(high * 16 + low)
+    uncheckedSet(out, i, toU8(high * 16 + low));
   }
   return out
 }
@@ -350,7 +354,7 @@ const toHex = (bytes: u8[] | null): string => {
   }
   const digits: string[] = []
   for (let i: i32 = 0; i < 32; i++) {
-    const v: i32 = toI32(bytes[i])
+    const v: i32 = toI32(uncheckedGet(bytes, i))
     digits.push(HEX_DIGITS.substring(v >> 4, (v >> 4) + 1))
     digits.push(HEX_DIGITS.substring(v & 15, (v & 15) + 1))
   }
@@ -370,9 +374,9 @@ const check = (label: string, got: string, want: string): i32 => {
 /** RFC 7748 §5.2's iterated vector on the copies: k = u = 9, then (k, u) = (X25519(k, u), k). */
 const iterate = (times: i32): string => {
   let k: u8[] = new Array<u8>(32)
-  k[0] = toU8(9)
+  uncheckedSet(k, 0, toU8(9));
   let u: u8[] = new Array<u8>(32)
-  u[0] = toU8(9)
+  uncheckedSet(u, 0, toU8(9));
   for (let i: i32 = 0; i < times; i++) {
     const next: u8[] = ladder(k, u)
     u = k

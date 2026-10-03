@@ -3,18 +3,21 @@
 // circuit, ShiftRows, MixColumns and AddRoundKey on four blocks at once), one
 // GHASH multiply in GF(2^128), and the GCM tag compare. The state, the round
 // keys, the GHASH accumulator, H and both tags are secret; the round-key
-// offset `at` is a round number and public. Indexing is unchecked
-// (ct_asm_aes.args), since a bounds check is a branch.
+// offset `at` is a round number and public. Every index is an `uncheckedGet`
+// or `uncheckedSet` from `nish:unsafe`, since a bounds check is a branch.
 //
 // A golden case compiles to one module and so cannot import the library, so
-// every function below is a verbatim copy of the one of the same name in
-// std/crypto/aes.ts, its comment aside; clang inlines the helpers into the
+// every function below is a copy of the one of the same name in
+// std/crypto/aes.ts, its comment aside and each `a[i]` written through
+// `nish:unsafe`; clang inlines the helpers into the
 // three exported functions, which are what the check reads.
 // tests/link/crypto_aes holds each exported copy to the module's own function
 // on generated inputs, so an edit to one and not the other fails there.
 // ct-check: aesBitslicedRound secret=contents
 // ct-check: ghashMultiply secret=contents,hHi,hLo
 // ct-check: aesGcmTagMask secret=tagHi,tagLo,gotHi,gotLo
+
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
 // Mirrors `aesLanes` in std/crypto/aes.ts.
 const aesLanes = (pattern: u64): u64 => {
@@ -24,14 +27,14 @@ const aesLanes = (pattern: u64): u64 => {
 
 // Mirrors `aesSbox` in std/crypto/aes.ts.
 const aesSbox = (q: u64[]): void => {
-  const x0: u64 = q[7]
-  const x1: u64 = q[6]
-  const x2: u64 = q[5]
-  const x3: u64 = q[4]
-  const x4: u64 = q[3]
-  const x5: u64 = q[2]
-  const x6: u64 = q[1]
-  const x7: u64 = q[0]
+  const x0: u64 = uncheckedGet(q, 7)
+  const x1: u64 = uncheckedGet(q, 6)
+  const x2: u64 = uncheckedGet(q, 5)
+  const x3: u64 = uncheckedGet(q, 4)
+  const x4: u64 = uncheckedGet(q, 3)
+  const x5: u64 = uncheckedGet(q, 2)
+  const x6: u64 = uncheckedGet(q, 1)
+  const x7: u64 = uncheckedGet(q, 0)
 
   // The top linear layer.
   const y14: u64 = x3 ^ x5
@@ -156,14 +159,14 @@ const aesSbox = (q: u64[]): void => {
   const s1: u64 = t64 ^ ~s3
   const s2: u64 = t55 ^ ~t67
 
-  q[7] = s0
-  q[6] = s1
-  q[5] = s2
-  q[4] = s3
-  q[3] = s4
-  q[2] = s5
-  q[1] = s6
-  q[0] = s7
+  uncheckedSet(q, 7, s0);
+  uncheckedSet(q, 6, s1);
+  uncheckedSet(q, 5, s2);
+  uncheckedSet(q, 4, s3);
+  uncheckedSet(q, 3, s4);
+  uncheckedSet(q, 2, s5);
+  uncheckedSet(q, 1, s6);
+  uncheckedSet(q, 0, s7);
 }
 
 // Mirrors `aesShiftPlane` in std/crypto/aes.ts.
@@ -178,14 +181,14 @@ const aesShiftPlane = (x: u64): u64 =>
 
 // Mirrors `aesShiftRows` in std/crypto/aes.ts.
 const aesShiftRows = (q: u64[]): void => {
-  q[0] = aesShiftPlane(q[0])
-  q[1] = aesShiftPlane(q[1])
-  q[2] = aesShiftPlane(q[2])
-  q[3] = aesShiftPlane(q[3])
-  q[4] = aesShiftPlane(q[4])
-  q[5] = aesShiftPlane(q[5])
-  q[6] = aesShiftPlane(q[6])
-  q[7] = aesShiftPlane(q[7])
+  uncheckedSet(q, 0, aesShiftPlane(uncheckedGet(q, 0)));
+  uncheckedSet(q, 1, aesShiftPlane(uncheckedGet(q, 1)));
+  uncheckedSet(q, 2, aesShiftPlane(uncheckedGet(q, 2)));
+  uncheckedSet(q, 3, aesShiftPlane(uncheckedGet(q, 3)));
+  uncheckedSet(q, 4, aesShiftPlane(uncheckedGet(q, 4)));
+  uncheckedSet(q, 5, aesShiftPlane(uncheckedGet(q, 5)));
+  uncheckedSet(q, 6, aesShiftPlane(uncheckedGet(q, 6)));
+  uncheckedSet(q, 7, aesShiftPlane(uncheckedGet(q, 7)));
 }
 
 // Mirrors `aesNextRow` in std/crypto/aes.ts.
@@ -198,42 +201,42 @@ const aesRowAfterNext = (x: u64): u64 =>
 
 // Mirrors `aesMixColumns` in std/crypto/aes.ts.
 const aesMixColumns = (q: u64[]): void => {
-  const n0: u64 = aesNextRow(q[0])
-  const n1: u64 = aesNextRow(q[1])
-  const n2: u64 = aesNextRow(q[2])
-  const n3: u64 = aesNextRow(q[3])
-  const n4: u64 = aesNextRow(q[4])
-  const n5: u64 = aesNextRow(q[5])
-  const n6: u64 = aesNextRow(q[6])
-  const n7: u64 = aesNextRow(q[7])
-  const t0: u64 = q[0] ^ n0
-  const t1: u64 = q[1] ^ n1
-  const t2: u64 = q[2] ^ n2
-  const t3: u64 = q[3] ^ n3
-  const t4: u64 = q[4] ^ n4
-  const t5: u64 = q[5] ^ n5
-  const t6: u64 = q[6] ^ n6
-  const t7: u64 = q[7] ^ n7
-  q[0] = t7 ^ n0 ^ aesRowAfterNext(t0)
-  q[1] = t0 ^ t7 ^ n1 ^ aesRowAfterNext(t1)
-  q[2] = t1 ^ n2 ^ aesRowAfterNext(t2)
-  q[3] = t2 ^ t7 ^ n3 ^ aesRowAfterNext(t3)
-  q[4] = t3 ^ t7 ^ n4 ^ aesRowAfterNext(t4)
-  q[5] = t4 ^ n5 ^ aesRowAfterNext(t5)
-  q[6] = t5 ^ n6 ^ aesRowAfterNext(t6)
-  q[7] = t6 ^ n7 ^ aesRowAfterNext(t7)
+  const n0: u64 = aesNextRow(uncheckedGet(q, 0))
+  const n1: u64 = aesNextRow(uncheckedGet(q, 1))
+  const n2: u64 = aesNextRow(uncheckedGet(q, 2))
+  const n3: u64 = aesNextRow(uncheckedGet(q, 3))
+  const n4: u64 = aesNextRow(uncheckedGet(q, 4))
+  const n5: u64 = aesNextRow(uncheckedGet(q, 5))
+  const n6: u64 = aesNextRow(uncheckedGet(q, 6))
+  const n7: u64 = aesNextRow(uncheckedGet(q, 7))
+  const t0: u64 = uncheckedGet(q, 0) ^ n0
+  const t1: u64 = uncheckedGet(q, 1) ^ n1
+  const t2: u64 = uncheckedGet(q, 2) ^ n2
+  const t3: u64 = uncheckedGet(q, 3) ^ n3
+  const t4: u64 = uncheckedGet(q, 4) ^ n4
+  const t5: u64 = uncheckedGet(q, 5) ^ n5
+  const t6: u64 = uncheckedGet(q, 6) ^ n6
+  const t7: u64 = uncheckedGet(q, 7) ^ n7
+  uncheckedSet(q, 0, t7 ^ n0 ^ aesRowAfterNext(t0));
+  uncheckedSet(q, 1, t0 ^ t7 ^ n1 ^ aesRowAfterNext(t1));
+  uncheckedSet(q, 2, t1 ^ n2 ^ aesRowAfterNext(t2));
+  uncheckedSet(q, 3, t2 ^ t7 ^ n3 ^ aesRowAfterNext(t3));
+  uncheckedSet(q, 4, t3 ^ t7 ^ n4 ^ aesRowAfterNext(t4));
+  uncheckedSet(q, 5, t4 ^ n5 ^ aesRowAfterNext(t5));
+  uncheckedSet(q, 6, t5 ^ n6 ^ aesRowAfterNext(t6));
+  uncheckedSet(q, 7, t6 ^ n7 ^ aesRowAfterNext(t7));
 }
 
 // Mirrors `aesAddRoundKey` in std/crypto/aes.ts.
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
-  q[0] = q[0] ^ rk[at]
-  q[1] = q[1] ^ rk[at + 1]
-  q[2] = q[2] ^ rk[at + 2]
-  q[3] = q[3] ^ rk[at + 3]
-  q[4] = q[4] ^ rk[at + 4]
-  q[5] = q[5] ^ rk[at + 5]
-  q[6] = q[6] ^ rk[at + 6]
-  q[7] = q[7] ^ rk[at + 7]
+  uncheckedSet(q, 0, uncheckedGet(q, 0) ^ uncheckedGet(rk, at));
+  uncheckedSet(q, 1, uncheckedGet(q, 1) ^ uncheckedGet(rk, at + 1));
+  uncheckedSet(q, 2, uncheckedGet(q, 2) ^ uncheckedGet(rk, at + 2));
+  uncheckedSet(q, 3, uncheckedGet(q, 3) ^ uncheckedGet(rk, at + 3));
+  uncheckedSet(q, 4, uncheckedGet(q, 4) ^ uncheckedGet(rk, at + 4));
+  uncheckedSet(q, 5, uncheckedGet(q, 5) ^ uncheckedGet(rk, at + 5));
+  uncheckedSet(q, 6, uncheckedGet(q, 6) ^ uncheckedGet(rk, at + 6));
+  uncheckedSet(q, 7, uncheckedGet(q, 7) ^ uncheckedGet(rk, at + 7));
 }
 
 // Mirrors `aesBitslicedRound` in std/crypto/aes.ts.
@@ -273,8 +276,8 @@ const ghashMul32 = (x: u64, y: u64): u64 => {
 export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
   const low32: u64 = (toU64(1) << toU64(32)) - toU64(1)
   const thirtyTwo: u64 = toU64(32)
-  const a1: u64 = y[0]
-  const a0: u64 = y[1]
+  const a1: u64 = uncheckedGet(y, 0)
+  const a0: u64 = uncheckedGet(y, 1)
   const a2: u64 = a1 ^ a0
   const b2: u64 = hHi ^ hLo
 
@@ -313,16 +316,15 @@ export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
 
   // Reduce: fold the lowest bits of p1:p0 into p1 first, then all of it up.
   const d1: u64 = p1 ^ (p0 << toU64(63)) ^ (p0 << toU64(62)) ^ (p0 << toU64(57))
-  y[0] = p3 ^ d1 ^ (d1 >> one) ^ (d1 >> toU64(2)) ^ (d1 >> toU64(7))
-  y[1] =
-    p2 ^
+  uncheckedSet(y, 0, p3 ^ d1 ^ (d1 >> one) ^ (d1 >> toU64(2)) ^ (d1 >> toU64(7)));
+  uncheckedSet(y, 1, p2 ^
     p0 ^
     (p0 >> one) ^
     (d1 << top) ^
     (p0 >> toU64(2)) ^
     (d1 << toU64(62)) ^
     (p0 >> toU64(7)) ^
-    (d1 << toU64(57))
+    (d1 << toU64(57)));
 }
 
 // Mirrors `aesGcmTagMask` in std/crypto/aes.ts.

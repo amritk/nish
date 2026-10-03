@@ -24,6 +24,7 @@ import { CheckContext } from "./context"
 import { withoutSeparators } from "./lexer"
 import {
   N_BINARY,
+  N_CALL,
   N_FALSE,
   N_IDENT,
   N_MEMBER,
@@ -305,6 +306,8 @@ const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): Co
       return foldUnary(ctx, info, expr, expected)
     case N_BINARY:
       return foldBinary(ctx, info, expr, expected)
+    case N_CALL:
+      return foldWrapping(ctx, info, expr, expected)
     default:
       return reject(
         ctx,
@@ -313,6 +316,65 @@ const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): Co
         "A module constant's initialiser must be a literal, another constant, or arithmetic over them"
       )
   }
+}
+
+/**
+ * `wrappingAdd(a, b)`, `wrappingSub(a, b)` and `wrappingMul(a, b)` over
+ * constants, under a `nish:unsafe` import of the module that declares the
+ * constant: the one call a constant's initialiser may make, because its
+ * answer is defined for every pair of operands. It folds wrapping, as the
+ * instruction it replaces wraps, and never reports an overflow. Any other call
+ * is refused as it always was.
+ */
+const foldWrapping = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
+  const scope = info.scope
+  const callee = expr.children[0]
+  const args = expr.children[1].children
+  let name = ""
+  if (scope !== null && callee.kind === N_IDENT) {
+    const imported = scope.builtinImport(callee.text)
+    name = imported === null ? "" : imported.canonical
+  }
+  if (scope === null || (name !== "wrappingAdd" && name !== "wrappingSub" && name !== "wrappingMul")) {
+    return reject(
+      ctx,
+      info,
+      expr,
+      "A module constant's initialiser must be a literal, another constant, or arithmetic over them"
+    )
+  }
+  scope.noteUnsafeCall(expr, name)
+  if (args.length !== 2) {
+    return reject(ctx, info, expr, `\`${name}\` expects exactly 2 arguments, got ${args.length}`)
+  }
+  const a = fold(ctx, info, args[0], expected)
+  const b = fold(ctx, info, args[1], expected)
+  if (a.type === T_ERROR || b.type === T_ERROR) {
+    return new ConstValue(T_ERROR)
+  }
+  if (a.type !== T_I32 && a.type !== T_I64) {
+    return reject(
+      ctx,
+      info,
+      args[0],
+      `\`${name}\` takes i32 or i64 operands (convert with toI32 or toI64), got ${valueTypeName(ctx, a)}`
+    )
+  }
+  if (b.type !== a.type) {
+    return reject(
+      ctx,
+      info,
+      expr,
+      `\`${name}\` needs every operand of one type, got ${valueTypeName(ctx, a)} and ${valueTypeName(ctx, b)}`
+    )
+  }
+  let wide = wrapMul(a.intValue, b.intValue)
+  if (name === "wrappingAdd") {
+    wide = wrapAdd(a.intValue, b.intValue)
+  } else if (name === "wrappingSub") {
+    wide = wrapSub(a.intValue, b.intValue)
+  }
+  return intValue(a.type, wide)
 }
 
 const foldNumber = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {

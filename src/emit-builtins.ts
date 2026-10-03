@@ -26,12 +26,14 @@ import {
   emitSliceCheck,
   stringifyCallee,
 } from "./emit-strings"
-import { emitIndex } from "./emit-arrays"
+import { emitIndex, emitUncheckedElement } from "./emit-arrays"
+import { emitWrapping } from "./emit-ops"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
 import {
   isNetExport,
+  isUnsafeExport,
   NET_INT,
   NET_RANGE,
   NET_STRING,
@@ -657,6 +659,20 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "ctEq") {
     return emitCtEq(emitter, expr)
   }
+  // `nish:unsafe`: an element access with no bounds check, and `+ - *` with no
+  // `nsw`. Neither calls anything.
+  if (name === "uncheckedGet" || name === "uncheckedSet") {
+    return emitUncheckedElement(emitter, expr, name === "uncheckedSet")
+  }
+  if (name === "wrappingAdd") {
+    return emitWrapping(emitter, expr, "add")
+  }
+  if (name === "wrappingSub") {
+    return emitWrapping(emitter, expr, "sub")
+  }
+  if (name === "wrappingMul") {
+    return emitWrapping(emitter, expr, "mul")
+  }
   if (name === "parseInt") {
     const value = emitParseCall(emitter, emitter.emitExpression(firstArgument(expr)), 2)
     return callIntrinsic(emitter, SAT_I32, "i32", `double ${value}`)
@@ -996,9 +1012,14 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   // Declared here rather than left to fall through, so the table says it:
-  // `f64ToBits` / `bitsToF64` are one bitcast, and `ctSelect` / `ctEq` are
-  // bitwise instructions and an empty asm (WP34 N6). None calls anything.
+  // `f64ToBits` / `bitsToF64` are one bitcast, `ctSelect` / `ctEq` are
+  // bitwise instructions and an empty asm (WP34 N6), and the `nish:unsafe`
+  // functions are a load, a store or one instruction, with no panic behind
+  // any of them. None calls anything.
   if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
+    return out
+  }
+  if (isUnsafeExport(name)) {
     return out
   }
   return out
@@ -1054,7 +1075,7 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     emitter.declareType(ARRAY_TYPE)
   }
   const at = netRangeBuffer(name)
-  if (at >= 0 && !emitter.opts.uncheckedIndexing && values.length === params.length) {
+  if (at >= 0 && !emitter.program.uncheckedIndexing && values.length === params.length) {
     const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
     const field = fn.emitValue(
       `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`

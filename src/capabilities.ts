@@ -20,7 +20,7 @@
 // error. `tests/capabilities.js` enumerates every name the checker accepts and
 // fails the suite when one has no row here, before any program calls it.
 
-import { isNetExport } from "./nish-modules"
+import { isNetExport, isUnsafeExport } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
 export const CAP_NONE: i32 = -1
@@ -178,6 +178,13 @@ export const builtinCapability = (name: string): i32 => {
     name === "process.platform" ||
     name === "process.arch"
   ) {
+    return CAP_NONE
+  }
+  // `nish:unsafe` reaches none of the world's capabilities: an unchecked
+  // element access and a wrapping operation are memory and arithmetic. The
+  // reserved `unsafe` bit is what they will answer once it is wired; until
+  // then they are a deliberate none rather than an unlabelled builtin.
+  if (isUnsafeExport(name)) {
     return CAP_NONE
   }
   if (

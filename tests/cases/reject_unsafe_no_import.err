@@ -1,0 +1,2 @@
+`uncheckedGet` is a `nish:unsafe` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { uncheckedGet } from "nish:unsafe"`
+`wrappingAdd` is a `nish:unsafe` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { wrappingAdd } from "nish:unsafe"`
