@@ -29,8 +29,8 @@ so calling one *is* the `ffi` capability.
 
 ## 1. The set
 
-Eleven capabilities, each one bit of an `i32` (`src/capabilities.ts`). The
-bits are in alphabetical order, and every report prints a set in that order,
+Eleven capabilities, each an index whose bit (`1 << index`) is its place in an
+`i32` mask (`src/capabilities.ts`). The indices are in alphabetical order, and every report prints a set in that order,
 so a reader finds a name where they expect it:
 
 | capability | what it means | why it is dangerous |
@@ -97,7 +97,7 @@ labelled apart.
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
 | `unsafe` | nothing yet |
-| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
+| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
 
 Three rows deserve their reason:
 
@@ -111,7 +111,8 @@ Three rows deserve their reason:
   already says more than `fs.write` would.
 
 **Unlabelled is a bug, and it is executable.** `builtinCapability` answers a
-bit, `CAP_NONE` (0, the deliberate none) or `CAP_UNLABELLED` (-1). The walk in
+capability's index, `CAP_NONE` (-1, the deliberate none) or `CAP_UNLABELLED`
+(-2). The walk in
 `src/attributes.ts` that meets a builtin call answering `CAP_UNLABELLED` is an
 internal compiler error (exit 70, `src/ice.ts`'s
 `unlabelledBuiltinError`, which names the builtin under `--json` too), and `tests/capabilities.js`

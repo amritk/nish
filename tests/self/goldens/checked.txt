@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 848 programs, 59322 dump lines.
+# 850 programs, 59355 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -47645,6 +47645,33 @@ function test(): i32 -> @test [exported]
   local 4:9 big: u32 (const)
   local 5:9 seven: u32 (const)
   local 7:7 acc: u32 (let)
+program tests/cases/wipe_bytes.ts
+module tests/cases/wipe_bytes.ts (entry)
+function sum(b: u8[]): i32 -> @sum
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 7:7 s: i32 (let)
+  local 8:14 x: u8 (const)
+function forget(key: u8[]): void -> @forget
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 17:3
+  calls: nish_wipe
+  pointer key: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: forget nish_arena_mark nish_arena_release nish_print nish_str_from_i32 nish_wipe sum
+  stackSites=3 stackLocals=3
+  local 21:9 key: u8[] (const)
+  callee 22:15 sum -> @sum
+  callee 23:3 forget -> @forget
+  callee 24:15 sum -> @sum
+  local 25:9 scalar: u8[] (const)
+  callee 27:15 sum -> @sum
+  callee 29:15 sum -> @sum
+  local 31:9 empty: u8[] (const)
 program examples/add.ts
 module examples/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -49326,6 +49353,14 @@ function load(path: string): i32 -> @load
   calls: nish_arena_mark nish_arena_release nish_exit nish_read_file_or_null nish_str_concat nish_write
   stackSites=0 stackLocals=0
   local 8:9 text: string | null (const)
+program docs/cookbook/builtin-wipe.ts
+module docs/cookbook/builtin-wipe.ts (entry)
+function forget(key: u8[]): void -> @forget [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 5:3
+  calls: nish_wipe
+  pointer key: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 program docs/cookbook/cls-initializers.ts
 module docs/cookbook/cls-initializers.ts (entry)
 struct Defaults (class) size=16 align=8

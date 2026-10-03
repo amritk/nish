@@ -23,26 +23,28 @@
 import { isNetExport } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
-export const CAP_NONE: i32 = 0
+export const CAP_NONE: i32 = -1
 /** No row at all. Never a label; what the walk refuses with exit 70. */
-export const CAP_UNLABELLED: i32 = -1
+export const CAP_UNLABELLED: i32 = -2
 
-// The bits are in the order every report prints them, which is alphabetical
-// so that a reader finds a name where they expect it.
-const CAP_CLOCK: i32 = 1
-const CAP_ENTROPY: i32 = 2
-const CAP_ENV: i32 = 4
-const CAP_EXIT: i32 = 8
+// A capability is named by its index, which is also its bit (`1 << index`) in
+// a mask and its place in every per-capability array. The indices are in the
+// order every report prints them, which is alphabetical so that a reader finds
+// a name where they expect it.
+const CAP_CLOCK: i32 = 0
+const CAP_ENTROPY: i32 = 1
+const CAP_ENV: i32 = 2
+const CAP_EXIT: i32 = 3
 /** A call to a `declare function`. Not a table row: it is the kind of callee, read off its signature. */
-export const CAP_FFI: i32 = 16
-const CAP_FS_READ: i32 = 32
-const CAP_FS_WRITE: i32 = 64
-const CAP_NET: i32 = 128
-const CAP_PROCESS_SPAWN: i32 = 256
-const CAP_SIGNAL: i32 = 512
-// `CAP_UNSAFE`, 1024, is reserved for `nish:unsafe`, which has not landed:
-// nothing answers it yet, so it is the last name in `capabilityName` and no
-// constant until something does.
+export const CAP_FFI: i32 = 4
+const CAP_FS_READ: i32 = 5
+const CAP_FS_WRITE: i32 = 6
+const CAP_NET: i32 = 7
+const CAP_PROCESS_SPAWN: i32 = 8
+const CAP_SIGNAL: i32 = 9
+// 10, `unsafe`, is reserved for `nish:unsafe`, which has not landed: nothing
+// answers it yet, so it is the last name in `capabilityName` and no constant
+// until something does.
 
 /** How many capabilities there are, and so how long a per-capability array is. */
 export const CAPABILITY_COUNT: i32 = 11
@@ -54,9 +56,16 @@ export const CAPABILITY_COUNT: i32 = 11
  * rather than a constant because a module constant is a literal.
  */
 const nondeterministic = (): i32 =>
-  CAP_CLOCK | CAP_ENTROPY | CAP_ENV | CAP_FS_READ | CAP_FS_WRITE | CAP_NET | CAP_PROCESS_SPAWN | CAP_FFI
+  (1 << CAP_CLOCK) |
+  (1 << CAP_ENTROPY) |
+  (1 << CAP_ENV) |
+  (1 << CAP_FS_READ) |
+  (1 << CAP_FS_WRITE) |
+  (1 << CAP_NET) |
+  (1 << CAP_PROCESS_SPAWN) |
+  (1 << CAP_FFI)
 
-/** The name of the capability whose bit is `1 << index`, as every report spells it. */
+/** The name of the capability with index `index`, as every report spells it. */
 export const capabilityName = (index: i32): string => {
   if (index === 0) {
     return "clock"
@@ -108,8 +117,9 @@ export const capabilityNames = (mask: i32): string[] => {
 }
 
 /**
- * The one label of a builtin, by the name the checker knows it by: a bit,
- * `CAP_NONE`, or `CAP_UNLABELLED` when the table has no row for it.
+ * The one label of a builtin, by the name the checker knows it by: a
+ * capability's index, `CAP_NONE`, or `CAP_UNLABELLED` when the table has no
+ * row for it.
  *
  * Every row is a builtin of `src/builtins.ts` (a plain callee, a dotted
  * callee or a namespace property), a `Result` constructor, or a `nish:`
@@ -132,6 +142,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "bitsToF64" ||
     name === "ctSelect" ||
     name === "ctEq" ||
+    name === "secureZero" ||
     name === "parseInt" ||
     name === "parseFloat" ||
     name === "Number" ||

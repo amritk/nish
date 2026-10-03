@@ -497,6 +497,21 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // #385, runtime.c. `nish_random_fill`'s shape: writes every byte of the
+    // array and keeps nothing of it, so `nocapture` without `readonly`; and
+    // `willreturn`, unlike it, because the loop is bounded by `len` and makes
+    // no system call. Its stores are `volatile`, and nothing here may let LLVM
+    // treat the call as one it can drop: no `memory(argmem: write)`, which
+    // would make it a dead store wherever the array is not read again, and
+    // that is every call. A call that may write memory is never deleted,
+    // `willreturn` or not.
+    this.add(
+      plain(
+        "nish_wipe",
+        "declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture)",
+        EFFECT_WRITE
+      )
+    )
     // One `stat`, `nish_is_dir`'s shape and for its reasons: the file system is
     // not memory LLVM tracks, so two reads either side of a `writeFileSync`
     // must not fold, and a failed `stat` stores `errno`.

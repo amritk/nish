@@ -116,19 +116,6 @@ const pushNames = (out: string[], mask: i32): void => {
   }
 }
 
-/** How many capabilities a set holds, counted without building their names. */
-const capabilityCount = (mask: i32): i32 => {
-  let count = 0
-  let c = 0
-  while (c < CAPABILITY_COUNT) {
-    if ((mask & (1 << c)) !== 0) {
-      count = count + 1
-    }
-    c = c + 1
-  }
-  return count
-}
-
 /**
  * Write the whole report for a compilation that has checked to `file`. It runs
  * the attribute fixpoint if nothing has yet (`analyze` is memoised, so the emit
@@ -284,13 +271,13 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
           out.push('              "witnesses": {}\n')
         } else {
           out.push('              "witnesses": {\n')
-          const count = capabilityCount(mask)
-          let written = 0
+          let first = true
           let c = 0
           while (c < CAPABILITY_COUNT) {
             if ((mask & (1 << c)) !== 0) {
-              written = written + 1
-              out.push(`                "${capabilityName(c)}": [\n`)
+              out.push(first ? "                " : ",\n                ")
+              out.push(`"${capabilityName(c)}": [\n`)
+              first = false
               // The chain, one call per line: each hop is one call nearer the
               // builtin, so it ends within `dist` hops, and the bound only
               // guards that promise. The last hop calls the builtin, or the
@@ -326,11 +313,11 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
                 hopSig = nextSig
                 hops = hops + 1
               }
-              out.push(written < count ? "                ],\n" : "                ]\n")
+              out.push("                ]")
             }
             c = c + 1
           }
-          out.push("              }\n")
+          out.push("\n              }\n")
         }
         out.push(s < sorted.length - 1 ? "            },\n" : "            }\n")
         s = s + 1

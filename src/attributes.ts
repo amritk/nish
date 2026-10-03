@@ -36,7 +36,6 @@
 //     tree has none. The walks are otherwise the same walks.
 
 import {
-  builtinCallees,
   builtinCalleesNamed,
   checksRangesInPrologue,
   identifierBuiltinCallees,
@@ -62,6 +61,7 @@ import {
 } from "./escape"
 import {
   arrayMethodName,
+  builtinNameOf,
   isArrayWriteMethod,
   dottedName,
   intrinsicType,
@@ -1385,7 +1385,7 @@ class FactCollector {
     }
     this.facts.callees.add(callee.name)
     if (this.known !== null) {
-      this.facts.offerCapability(capabilityIndex(CAP_FFI), callee.sourceName, call, 0)
+      this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
     }
   }
 
@@ -1397,13 +1397,19 @@ class FactCollector {
    * that -- so it ends the compile with the exit-70 report. `Options.unlabelledBuiltin` is the suite's way of
    * provoking that path (`NISH_SIMULATE_ICE=unlabelled:<name>`).
    */
-  noteBuiltin(name: string, call: Node): void {
+  noteBuiltin(name: string, call: Node, resolved: boolean): void {
     const label = name === this.opts.unlabelledBuiltin ? CAP_UNLABELLED : builtinCapability(name)
     if (label === CAP_UNLABELLED) {
+      // `resolved` says the checker recorded the call as a builtin. A plain
+      // name with no row is one only if the checker accepts it as one; any
+      // other call with no recorded callee is none this table speaks for.
+      if (!resolved && !isBuiltinFunction(name) && !isResultConstructor(name)) {
+        return
+      }
       process.exit(unlabelledBuiltinError(name, this.opts.json))
     }
     if (label !== CAP_NONE) {
-      this.facts.offerCapability(capabilityIndex(label), name, call, 0)
+      this.facts.offerCapability(label, name, call, 0)
     }
   }
 
@@ -1426,10 +1432,10 @@ class FactCollector {
       node.children[0].kind === N_MEMBER &&
       !receiverIsValue(program, node.children[0].children[0])
     ) {
-      this.addCallees(builtinCallees(program, table, node))
+      const name = dottedName(node.children[0])
+      this.addCallees(builtinCalleesNamed(program, table, node, name))
       if (this.known !== null) {
-        // The name `builtinCallees` dispatches on, spelled the same way.
-        this.noteBuiltin(`${node.children[0].children[0].text}.${node.children[0].text}`, node)
+        this.noteBuiltin(name, node, true)
       }
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
@@ -1805,14 +1811,8 @@ class FactCollector {
     // it has not earned.
     const unchecked = this.opts.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
-    // Only a name the checker accepts as a builtin is audited: anything else
-    // with no recorded callee is no call this table speaks for.
-    const name = imported.length > 0 ? imported : node.children[0].text
-    if (
-      this.known !== null &&
-      (imported.length > 0 || isBuiltinFunction(name) || isResultConstructor(name))
-    ) {
-      this.noteBuiltin(name, node)
+    if (this.known !== null) {
+      this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
     }
     if (imported.length > 0) {
       this.addCallees(
@@ -2445,15 +2445,6 @@ const propagateCallee = (
 }
 
 const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0
-
-/** The index of a capability's bit: the place it takes in every per-capability array. */
-const capabilityIndex = (bit: i32): i32 => {
-  let i = 0
-  while (i < CAPABILITY_COUNT && bit !== 1 << i) {
-    i = i + 1
-  }
-  return i
-}
 
 /**
  * WP35: carry every function's capabilities to its callers, over the edges

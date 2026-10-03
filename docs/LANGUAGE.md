@@ -3771,6 +3771,63 @@ under Node, as all 64-bit arithmetic is ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md))
 a bare `u64` literal is a `number` there, and mixing one with a BigInt throws a
 `TypeError` rather than comparing the two and answering zero.
 
+### Wiping a secret: `secureZero`
+
+A key, a secret scalar or another secret intermediate has to be cleared once it
+is used, and a store the program never reads again is exactly what the optimiser
+removes: `key.fill(0)` just before a key goes out of scope is a dead store at
+`-O2`, and a `memset` in the runtime is one too once `-flto` inlines it into
+that caller. This builtin is the store that stays (#385).
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `secureZero(bytes: u8[]): void` | every byte of `bytes` set to zero, in stores no optimisation removes; an empty array is a call that clears nothing; a statement | write | `wipe_bytes`; `reject_wipe_i32`, `reject_wipe_string`, `reject_wipe_readonly`, `reject_wipe_value`, `reject_wipe_arity`, `reject_wipe_region` |
+
+- **A `u8[]` only**, as `crypto.getRandomValues` takes, because the byte is the
+  unit a secret is written in: anything else is
+  `` `secureZero` fills a `u8[]`, got i32[] `` (NL2402), a string included,
+  which is immutable and has nothing to clear (`reject_wipe_i32`,
+  `reject_wipe_string`). The call writes its argument, so a `readonly u8[]` is
+  `` Cannot `secureZero` through readonly u8[] (declare it u8[] to write through it) ``
+  (NL2264, `reject_wipe_readonly`), and a function that wipes a parameter does
+  not get `readonly` on it (`wipe_bytes`). In a scope's region it is refused
+  where `fill` is (NL2394, `reject_wipe_region`).
+- **A statement**: there is nothing to answer, so
+  `` `secureZero` returns void and can only be used as a statement `` (NL2105,
+  `reject_wipe_value`), and it takes exactly one argument (NL2061,
+  `reject_wipe_arity`).
+- **The lowering is one call**, `call void @nish_wipe(%struct.nish_array* %key)`,
+  declared `nounwind willreturn` and `nocapture` without `readonly` and with no
+  memory attribute, so LLVM may not treat it as a store it can drop.
+  `nish_wipe` in `runtime/runtime.c` writes each byte through a `volatile`
+  pointer, which the C standard makes behaviour no optimisation may remove
+  even once LTO has inlined the body, and is `noinline` besides, so the call
+  stays visible in a disassembly. [IR_COOKBOOK.md](IR_COOKBOOK.md#securezero)
+  shows the IR.
+- **It is pinned under `-O2 -flto`, where it matters.** The runtime unit test
+  builds a probe the way `--link` builds, `-O2 -flto` over the runtime's
+  sources: a key written to a block, used, wiped and freed, then read back
+  through a pointer the optimiser cannot follow. With no wipe the key is still
+  there, and with a `memset` wipe in another translation unit it is still there
+  too, dropped as a store before `free`; with `nish_wipe` nothing is left. The
+  same test fails when `nish_wipe` is written as a `memset`.
+- **What it does not promise: the copies the program made.** It clears the
+  bytes of the array it is handed. A copy taken before (`slice`, a `push` into
+  another array, an element read into a local, a register spilled to the stack)
+  is the program's to clear, and nothing clears what the operating system
+  swapped out.
+- **It is a global, and not in a `nish:` module.** It is backed by the C
+  runtime, so by the rule [Builtin modules](#builtin-modules-nish) sets it may
+  be imported, but no module exports it yet. It works under the wasi profile,
+  which links `runtime.c`; a freestanding wasm module linked with
+  `runtime-wasm.c` has no `nish_wipe`, as it has no strings.
+
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
+**class A**: `runtime/nish.mjs` supplies it as a loop that sets every element
+to zero, and `wipe_bytes` prints the same lines under the prelude as natively.
+What Node cannot promise is the native build's stronger claim, because a
+collector that moved the array may have left the old bytes behind.
+
 ### `process`
 
 | Signature | Semantics | Effect | Test |
@@ -4962,7 +5019,7 @@ one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*`,
-`Math.*` other than `random`, the conversions, the constant-time builtins, the
+`Math.*` other than `random`, the conversions, the constant-time builtins, `secureZero`, the
 string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 `nish:` import carries the label of the builtin it renames.
 

@@ -6090,8 +6090,13 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  * raising this number -- unlike raising the one below it -- should be rare enough to be
  * argued for. Either way it comes with its own measurement and a row in
  * docs/wp7-runtime.md ("Runtime additions and budget"); it is not a way to get green.
+ *
+ * Raised by 21 bytes, from 3,584 to 3,605, for `nish_wipe` (#385, `secureZero`): measured
+ * 3,583 before it and 3,604 with it on 2026-10-03 with clang 18.1.3 on linux-x64. Every
+ * other unit was as close to its own ceiling, and the wipe is no system call, so it is here,
+ * and the raise is the measured size of what was added and nothing more.
  */
-const RUNTIME_TEXT_BUDGET = 3584
+const RUNTIME_TEXT_BUDGET = 3605
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *

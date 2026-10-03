@@ -12933,6 +12933,43 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end builtin-ct -->
 
+### `secureZero`
+
+A secret cleared once it is used (#385). One call into `runtime/runtime.c`,
+declared as `nish_random_fill` is but `willreturn`: the array is written
+through, so the parameter is `nocapture` without `readonly`, and the
+declaration has no memory attribute that would let LLVM call it a dead store
+when nothing reads the array again, which is every time. Inside, `nish_wipe`
+stores each byte through a `volatile` pointer and is `noinline`, so neither
+`-O2` nor `-flto`, which can see its body, may drop the stores; the LTO probe in
+`tests/runtime-test.c` shows a `memset` wipe in the same place dropped
+([LANGUAGE.md](LANGUAGE.md#wiping-a-secret-securezero)).
+
+<!-- cookbook:begin builtin-wipe -->
+```ts
+// #385: a key cleared once it is used. `secureZero` is one call into runtime.c,
+// whose stores are `volatile`, so no pass drops them although nothing reads
+// `key` again. The array is written through, so `nocapture` without `readonly`.
+export const forget = (key: u8[]): void => {
+  secureZero(key)
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #0
+
+define void @forget(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %key) #0 {
+entry:
+  call void @nish_wipe(%struct.nish_array* %key)
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end builtin-wipe -->
+
 ### `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and `readSignal`
 
 The host (WP34 N3). Each is one call into `runtime/runtime-host.c`, declared
@@ -14588,6 +14625,7 @@ declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly 
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #2
 declare double @nish_date_now() #2
 declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #5
+declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare double @nish_stat_mtime(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_signal_fd() #2
 declare noundef i32 @nish_read_signal(i32 noundef) #5

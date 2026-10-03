@@ -94,6 +94,19 @@ export const simulatedUnlabelledBuiltin = (): string => {
     : ""
 }
 
+/**
+ * The lines every internal-error report ends with, and the status it answers.
+ * They name no message, so sharing them costs no report its frame.
+ */
+const reportFooter = (): i32 => {
+  console.error(
+    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
+  )
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
+  console.error("the command line at https://github.com/amritk/nish/issues")
+  return EXIT_INTERNAL
+}
+
 /** The sixteen digits a `\u00XX` escape spells a control character with. */
 const HEX_DIGITS: string = "0123456789abcdef"
 
@@ -159,12 +172,7 @@ export const internalErrorFor = (message: string, json: boolean): i32 => {
   }
   console.error(`${CLI} ${VERSION}: internal compiler error`)
   console.error(`  ${message}`)
-  console.error(
-    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
-  )
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
-  console.error("the command line at https://github.com/amritk/nish/issues")
-  return EXIT_INTERNAL
+  return reportFooter()
 }
 
 /**
@@ -189,12 +197,7 @@ export const unlabelledBuiltinError = (name: string, json: boolean): i32 => {
   }
   console.error(`${CLI} ${VERSION}: internal compiler error`)
   console.error(`  a builtin call has no capability label in src/capabilities.ts: \`${name}\``)
-  console.error(
-    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
-  )
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
-  console.error("the command line at https://github.com/amritk/nish/issues")
-  return EXIT_INTERNAL
+  return reportFooter()
 }
 
 /**
@@ -207,10 +210,5 @@ export const unlabelledBuiltinError = (name: string, json: boolean): i32 => {
 export const internalError = (message: string): i32 => {
   console.error(`${CLI} ${VERSION}: internal compiler error`)
   console.error(`  ${message}`)
-  console.error(
-    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
-  )
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
-  console.error("the command line at https://github.com/amritk/nish/issues")
-  return EXIT_INTERNAL
+  return reportFooter()
 }
