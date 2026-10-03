@@ -672,6 +672,7 @@ export const main = (): number => {
       report(outcome.compilation, json)
       return 1
     }
+    reportDeprecations(outcome.compilation, json)
     reportPerformance(outcome.compilation, warnPerformance, json)
     reportPortability(outcome.compilation, json)
     return 0

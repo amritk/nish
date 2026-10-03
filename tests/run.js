@@ -3223,6 +3223,30 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     many.stderr
   )
 
+  // `--fix` answers what is left as a plain run would, warnings included: no
+  // fix applies to a deprecated call, so the file stays as it is and each call
+  // still warns, in either form.
+  const fixDir = path.join(buildDir, "deprecation-fix")
+  fs.rmSync(fixDir, { recursive: true, force: true })
+  fs.mkdirSync(fixDir, { recursive: true })
+  const fixSrc = path.join(fixDir, "mem_arena_builtins.ts")
+  fs.copyFileSync(builtins, fixSrc)
+  const fixed = spawnSync(NISH, ["--fix", fixSrc], { cwd: root, encoding: "utf8" })
+  const fixedJson = spawnSync(NISH, ["--fix", "--json", fixSrc], { cwd: root, encoding: "utf8" })
+  check(
+    "deprecation: --fix leaves Arena.release and Arena.reset as written and still warns for each, in either form, and exits 0",
+    fixed.status === 0 &&
+      summaries(fixed.stderr).length === 2 &&
+      fixed.stderr.includes(`${fixSrc}:27:3: deprecation: \`Arena.release\` is deprecated: `) &&
+      fixed.stderr.includes(`${fixSrc}:31:3: deprecation: \`Arena.reset\` is deprecated: `) &&
+      fixedJson.status === 0 &&
+      diagnosticsOf(fixedJson.stdout)
+        .map((d) => `${d.severity} ${d.code} ${d.line}:${d.column}`)
+        .join(",") === "deprecation NL7001 27:3,deprecation NL7001 31:3" &&
+      fs.readFileSync(fixSrc, "utf8") === fs.readFileSync(builtins, "utf8"),
+    fixed.stderr + fixedJson.stdout + fixedJson.stderr
+  )
+
   // `nish run` prints it too, ahead of the program's own output: the author
   // of a script is the reader who has to hear it.
   if (HAS_CLANG) {
