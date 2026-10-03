@@ -30,6 +30,8 @@
 //     parameters at `emitFunction`, the `!dbg` location around every statement
 //     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
+import { emitWipeBody } from "./emit-secret"
+import { SECRET_WIPE, secretRoleOf } from "./secret"
 import {
   functionAttributes,
   paramAttributes,
@@ -255,11 +257,13 @@ export class Emitter {
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
   /**
-   * WP32: `std/collections.ts`, whose functions this module's code reaches are
-   * emitted into this module as `internal` copies (`src/emit-map.ts`), or
-   * `null` when the program never named `Map` or `Set`.
+   * WP32: the libraries whose functions this module's code reaches are emitted
+   * into this module as `internal` copies (`src/emit-map.ts`):
+   * `std/collections.ts` when the program named `Map` or `Set`, and
+   * `std/secret.ts` when it imported `nish:secret`. Either writes no `.ll` of
+   * its own.
    */
-  library: CheckedProgram | null
+  libraries: CheckedProgram[]
 
   constructor(
     unit: AnalysisUnit,
@@ -267,7 +271,7 @@ export class Emitter {
     opts: Options,
     runtime: RuntimeTable,
     facts: FactsTable,
-    library: AnalysisUnit | null
+    libraries: AnalysisUnit[]
   ) {
     this.program = unit.program
     this.table = table
@@ -296,7 +300,10 @@ export class Emitter {
     this.strings = new StringMap()
     this.stringRefs = []
     this.debug = null
-    this.library = library === null ? null : library.program
+    this.libraries = []
+    for (const library of libraries) {
+      this.libraries.push(library.program)
+    }
     if (opts.debugInfo) {
       this.debug = new DebugInfo(this.module, this.program, table)
     }
@@ -343,9 +350,8 @@ export class Emitter {
     if (entry !== null) {
       this.module.addFunction(this.emitEntryWrapper(entry))
     }
-    // WP32: what this module's code reaches of `std/collections.ts`.
-    const library = this.library
-    if (library !== null) {
+    // WP32: what this module's code reaches of `std/collections.ts`, and of `std/secret.ts`.
+    for (const library of this.libraries) {
       emitLibraryCopies(this, library, libraryReach(this, library))
     }
     this.emitImportDeclarations()
@@ -482,8 +488,11 @@ export class Emitter {
       emitConstructorPrologue(this, sig)
     }
     const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
-    // A concise arrow body is the one `return` it means.
-    if (body.kind === N_BLOCK) {
+    // A concise arrow body is the one `return` it means; `nish:secret`'s
+    // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
+    if (secretRoleOf(sig) === SECRET_WIPE) {
+      emitWipeBody(this, sig)
+    } else if (body.kind === N_BLOCK) {
       this.emitBlock(body)
     } else {
       this.emitReturnValue(body)
@@ -702,10 +711,14 @@ export class Emitter {
     }
   }
 
-  /** WP32: whether `sig` is a function of `std/collections.ts`, which this module copies rather than links against. */
+  /** WP32: whether `sig` is a function of a library this module copies rather than links against. */
   isLibraryCopy(sig: FunctionSig): boolean {
-    const library = this.library
-    return library !== null && sig.definedIn(library.source)
+    for (const library of this.libraries) {
+      if (sig.definedIn(library.source)) {
+        return true
+      }
+    }
+    return false
   }
 
   declareAll(sigs: FunctionSig[], seen: StringSet): void {
@@ -1425,8 +1438,8 @@ export const emitProgram = (
   opts: Options,
   runtime: RuntimeTable,
   facts: FactsTable,
-  library: AnalysisUnit | null
+  libraries: AnalysisUnit[]
 ): string => {
-  const emitter = new Emitter(unit, table, opts, runtime, facts, library)
+  const emitter = new Emitter(unit, table, opts, runtime, facts, libraries)
   return emitter.emitModule()
 }

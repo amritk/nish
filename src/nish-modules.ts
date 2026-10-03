@@ -62,11 +62,34 @@ export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
   specifier === `${BUILTIN_SCHEME}process` ||
   specifier === `${BUILTIN_SCHEME}io` ||
-  specifier === `${BUILTIN_SCHEME}net`
+  specifier === `${BUILTIN_SCHEME}net` ||
+  isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}secret`
+
+/**
+ * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
+ * "Secrets"). It is a builtin module that, unlike the other four, has source
+ * behind it: `Secret<T>` is a generic class and `expose` a template taking a
+ * function parameter, and both are ordinary Nish once the checker knows which
+ * module declared them. So the specifier resolves to `std/secret.ts`, loaded
+ * like a standard-library module, and the rules are keyed on that module
+ * (`src/secret.ts`). Its one primitive, `wipe`, is lowered by the emitter.
+ */
+export const SECRET_SPECIFIER: string = "nish:secret"
+
+/** Whether a `nish:` specifier is the one with source behind it, resolved and bound as a module rather than renamed. */
+export const isNishSourceModule = (specifier: string): boolean => specifier === SECRET_SPECIFIER
+
+/**
+ * Whether an import names a builtin the checker renames, with no file behind
+ * it: every `nish:` specifier but `nish:secret`, an unknown one included, so
+ * that it is still reported as a bad module rather than as a missing file.
+ */
+export const isBuiltinSpecifier = (specifier: string): boolean =>
+  isNishSpecifier(specifier) && !isNishSourceModule(specifier)
 
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {

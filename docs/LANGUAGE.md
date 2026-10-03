@@ -3551,8 +3551,9 @@ enclosing function
 ### Builtin modules (`nish:`)
 
 The builtins backed by the C runtime can be imported instead of reached for as
-globals. `nish:` is the only bare specifier the language accepts; it resolves
-to no file, and the import *renames a builtin rather than introducing one* —
+globals. `nish:` is the only bare specifier the language accepts; but for
+`nish:secret`, which has source behind it ([Secrets](#secrets-nishsecret)), it
+resolves to no file, and the import *renames a builtin rather than introducing one* —
 the call checks through the same rule and emits the same IR as the global
 spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
 and `io_nish_import_global` and comparing the two bodies.
@@ -3562,6 +3563,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
+| `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 
 ```ts
@@ -3769,6 +3771,139 @@ BigInts, and the `ct_prelude` check in `tests/run.js` holds its answers to
 under Node, as all 64-bit arithmetic is ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)):
 a bare `u64` literal is a `number` there, and mixing one with a BigInt throws a
 `TypeError` rather than comparing the two and answering zero.
+
+### Secrets: `nish:secret`
+
+Key material is a `Secret<T>`: an opaque value that the checker keeps from
+leaving the program by any road but one, and that is zeroed, with a store no
+optimiser may remove, before the function that made it lets go of it.
+
+```ts
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret";
+import { hmacSha256 } from "nish/crypto/hmac";
+
+const tag = (key: u8[], message: u8[]): u8[] => hmacSha256(key, message);
+
+export const main = (): i32 => {
+  const key: Secret<u8[]> = secret(readKey());          // moved in; `readKey()` is fresh
+  const mac: u8[] = exposeWith(key, message(), tag);    // the one way in, and what leaves
+  wipe(key);                                            // a volatile llvm.memset
+  console.log(mac.length);
+  return 0;
+};
+```
+
+| Export | Meaning | Test |
+| --- | --- | --- |
+| `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
+| `secret(v)` | `v` wrapped; a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable` |
+| `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
+| `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
+| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
+
+`nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
+loaded like a standard-library module, imported only by the builtin name
+(`` `nish/secret` is the builtin module `nish:secret` ``, NL2441,
+`reject_secret_std_spelling`) and copied, as `std/collections.ts` is, into each
+module that uses it, so it writes no `.ll` of its own. `runtime/nish.d.ts`
+declares it for `tsc`, with a private constructor and field so that `tsc`
+refuses `new Secret` and `s.value` too. Under Node (`runtime/nish.mjs`) a
+`Secret` is a plain wrapper and `wipe` zero-fills it.
+
+**What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
+byte with one store: `` `Secret<string>` is not key material `` (NL2416,
+`reject_secret_shape`). `wipe` takes a `Secret`, never a nullable one (narrow it
+first), or an array or record of integers, and anything else is
+`` `wipe` zeroes a `Secret`, or an array or record of integers, and `string` is neither ``
+(NL2426, `reject_secret_wipe_shape`, `reject_secret_wipe_nullable`).
+
+**Where a `Secret` may not go.** Each place is refused at the point it is
+written, before the general rule it would also break, so the one diagnostic
+names the secret:
+
+- a template literal hole (NL2419, `reject_secret_template`);
+- an argument of any builtin — `console.log`, a file write, `nish:net`, a
+  process, an environment read, `crypto.getRandomValues` — named or imported
+  (`` `console.log` cannot be handed a `Secret` ``, NL2420,
+  `reject_secret_console`, `reject_secret_file_write`, `reject_secret_net_write`);
+- `===` and `!==` against anything but another `Secret` or `null` (NL2421,
+  `reject_secret_equality`): `k === null` is how a nullable one narrows;
+- the condition of an `if`, a loop or a ternary (NL2422, `reject_secret_condition`);
+- an index, as the receiver or as the index (NL2423, `reject_secret_index`,
+  `reject_secret_as_index`);
+- a member read, written or called anywhere but `std/secret.ts` (NL2424,
+  `reject_secret_member`), and `new Secret` (NL2425, `reject_secret_new`);
+- a field of a class or interface (NL2418, `reject_secret_field`), an array
+  element, a `Result` payload, or a type argument of any class, `Map` and `Set`
+  included (NL2417, `reject_secret_array`, `reject_secret_result`,
+  `reject_secret_generic_class`). A `Secret` lives in a local or a parameter,
+  and `Secret<T> | null` is how a function hands back one it may not have.
+
+**A `Secret` leaves the function that made it returned or wiped, on every
+path.** This is Result rule 1's analysis in its two places — the statement that
+drops a value, and the body that never handles one — with the second walked
+path by path rather than counted, because "wiped on one arm of an `if`" is not
+"wiped" (`reject_secret_one_branch`):
+
+- A `Secret` a call makes has an owner: a `const` or `let`, a `return`, or
+  `wipe`. Anywhere else — a statement, a call's argument — it is
+  `` `Secret<u8[]>` is made here and nobody owns it `` (NL2427,
+  `reject_secret_discarded`, `reject_secret_temporary`).
+- Every `return`, `break`, `continue` and `orReturn()` that leaves a `Secret`
+  the function made neither wiped nor returned is
+  `` `k` holds a `Secret<u8[]>` that this exit leaves neither wiped nor returned `` (NL2428,
+  `reject_secret_unwiped_return`, `reject_secret_break`, `reject_secret_or_return`),
+  and a block that can reach its end with one is NL2429 (`reject_secret_scope_end`).
+  A branch that proves the local `null` (`if (k === null)`) holds none, a
+  `panic` or `process.exit` ends the process and the key with it, and a loop is
+  walked to its fixpoint, so a `wipe` inside a loop that may run no pass does not
+  count (`secret_flow`).
+- A `Secret` local may not be assigned while it still holds one (NL2430,
+  `reject_secret_overwrite`), read once any path has wiped it (NL2431,
+  `reject_secret_after_wipe`), or copied: `const j = k` moves `k` when the
+  function made it, and `k` is not read again (NL2434, `reject_secret_moved_out`),
+  but a parameter, an element of an array literal or an arm of a ternary is a
+  second name for one key (NL2432, `reject_secret_copy_param`).
+- `secret(v)` moves `v`: a local handed in is not read again (NL2433,
+  `reject_secret_moved`), and a parameter, a field or an element, whose owner
+  keeps the plain bytes, is refused (NL2435, `reject_secret_unmovable`).
+- A `Secret` parameter is borrowed. The callee may read it through `expose`,
+  hand it on, wipe it or return it, and owes nothing: the caller wipes what it
+  made.
+
+**`expose` and `exposeWith`.** The function either runs is a
+[function parameter](#function-parameters): a top-level function named at the
+call, or an arrow written there. It is judged once the whole-program facts are
+in, at the call, and what it returns is the only thing that leaves:
+
+- It reaches no I/O — no builtin that touches a file, a directory, a process,
+  the environment, a socket, a stream, the clock or entropy — and no C, through
+  any depth of calls (`` `leak` reaches `writeFileSync` through `store` ``,
+  NL2436, `reject_secret_expose_io`, `reject_secret_expose_io_deep`,
+  `reject_secret_expose_c`). A `panic` or exit is allowed only with a literal,
+  since a computed message or status is output (`reject_secret_expose_panic`).
+  A failed runtime check — an index, a slice, a division — still stops the
+  program with its message, which carries the operand it failed on; an index
+  that depends on a key is already a cache-timing defect, and is for the
+  constant-time checks of WP34 N6 to find.
+- It keeps nothing of the value: returning it, storing it or passing it where
+  it is kept is NL2437 (`reject_secret_expose_keeps`). `exposeWith`'s function
+  writes nothing through the argument it is handed either (NL2438,
+  `reject_secret_expose_writes_arg`), which would be a road out its result type
+  does not name.
+- Its result is a declared type that holds no `Secret` (NL2439,
+  `reject_secret_expose_secret_result`), and an arrow writes that type down
+  (NL2440, `reject_secret_expose_undeclared`).
+
+**The wipe.** Each `wipe` instance is one `llvm.memset` with its volatile flag
+set, over an array's whole capacity — a `pop` leaves the old element in the
+buffer — or a record's `sizeof`. LLVM never removes, merges or narrows a
+volatile memory intrinsic, so the store survives every optimisation, inlining
+included: `tests/run.js` compiles `secret_wipe_o2`, whose wiped bytes nothing
+reads again, beside a twin that zeroes them with `fill(0)`, and after
+`opt -O2` the twin holds no store and the wipe holds one volatile zero per byte.
+Two things it does not reach, and says so: a buffer a `push` outgrew, which is
+no longer the array's, and a string, which is immutable and is not key material.
 
 ### `process`
 
@@ -5822,6 +5957,7 @@ messages are exact for the cases cited; other rows quote the checker
 | an arrow argument whose types cannot be inferred | `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` / `` The arrow passed to `map` needs a return type annotation: ... `` | `reject_fnarg_infer`, `reject_fnarg_block_return` |
 | a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
 | type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
+| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2416 to NL2441, worded in [Secrets](#secrets-nishsecret) | `reject_secret_*` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
 | importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |
