@@ -466,6 +466,20 @@ const CG2_MOVED = [
   "tests/link/crypto_sha512_window_wrap/main.ts",
 ]
 
+/** CG-3: `join` refuses a result past 2^31 - 1 bytes before it allocates. */
+const CG3_MOVED = [
+  "docs/cookbook/arr-join.ts",
+  "tests/cases/arr_join.ts",
+  "tests/cases/arr_readonly_param.ts",
+  "tests/cases/bytes_offset_u64.ts",
+  "tests/cases/bytes_set_disjoint.ts",
+  "tests/cases/bytes_set_self.ts",
+  "tests/cases/cg_sec_join_limit.ts",
+  "tests/cases/net_tcp_calls.ts",
+  "tests/cases/os_random.ts",
+  "tests/link/cg_sec_join_limit/main.ts",
+]
+
 /**
  * Output differences that are decided rather than broken, each with the words
  * `CHANGELOG.md` must carry before this run can go green. Shape:
@@ -2295,6 +2309,11 @@ const DECLARED = [
     CG2_MOVED,
     "CG-2",
     "its `new Array(n)` takes an `i32` `n`, which is now compared against the length limit, so a negative one panics with `array length out of range`"
+  ),
+  ...declareMoved(
+    CG3_MOVED,
+    "CG-3",
+    "it calls `join`, whose allocation size is now selected against 2^31 - 1 bytes so that a longer result fails as an allocation does"
   ),
 ]
 

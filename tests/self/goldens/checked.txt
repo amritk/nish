@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 837 programs, 59449 dump lines.
+# 838 programs, 59460 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3966,6 +3966,18 @@ function test(): i32 -> @test [exported]
   callee 21:3 extend -> @extend
   local 22:9 text: string (const)
   callee 22:16 load -> @load
+program tests/cases/cg_sec_join_limit.ts
+module tests/cases/cg_sec_join_limit.ts (entry)
+function joined(parts: string[], sep: string): string -> @joined
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct
+  pointer parts: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: joined nish_arena_mark nish_arena_release
+  stackSites=1 stackLocals=0
+  callee 9:35 joined -> @joined
 program tests/cases/cg_sec_new_array_guard.ts
 module tests/cases/cg_sec_new_array_guard.ts (entry)
 function test(): i32 -> @test [exported]

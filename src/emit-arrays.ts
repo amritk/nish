@@ -1317,6 +1317,14 @@ const emitArrayIndexOf = (emitter: Emitter, expr: Node, arr: string, elem: i32):
 }
 
 /**
+ * What `join` asks the allocator for when its result would be too long: 2^62
+ * bytes, a block no `malloc` can return, and small enough that the inline
+ * allocator's rounding and offset sum cannot wrap on it (`newArrayLimit` keeps
+ * `new Array` under the same figure for the same reason).
+ */
+const JOIN_REFUSED_BYTES: string = "4611686018427387904"
+
+/**
  * `parts.join(sep)` on a `string[]`: one pass over the lengths, one
  * allocation, one `memcpy` per part. Building the same text with `+` in a loop
  * copies everything again per part and never reclaims, which measured 180 MB
@@ -1373,9 +1381,17 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   fn.emit(`br label %${sumBlock.label}`)
 
   // One string of exactly that length: the 8-byte header, the bytes, the NUL.
+  // A total past 2^31 - 1 asks for 2^62 bytes instead, which the allocator's
+  // slow path cannot get and fails as every allocation does (`nish: out of
+  // memory`, exit 1), so a joined string is held to the length a concatenation
+  // is (RT-2) and its `length` never reads back negative under
+  // `--number-mode i32` (docs/security/codegen.md, CG-3). A `select` rather
+  // than a branch keeps the copy loop's blocks as they were.
   fn.placeBlock(copyBlock)
   const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`)
-  const bytes = fn.emitValue(`add i64 ${size}, 9`)
+  const tooLong = fn.emitValue(`icmp ugt i64 ${size}, ${I32_MAX}`)
+  const exact = fn.emitValue(`add i64 ${size}, 9`)
+  const bytes = fn.emitValue(`select i1 ${tooLong}, i64 ${JOIN_REFUSED_BYTES}, i64 ${exact}`)
   const out = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`)
   const outHeader = fn.emitValue(`bitcast i8* ${out} to i64*`)
   fn.emit(`store i64 ${size}, i64* ${outHeader}${emitter.align8()}`)
