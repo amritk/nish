@@ -51,8 +51,10 @@
  * one `rm -f` takes a file away so that "no IR was written" is a claim that can
  * fail rather than one an earlier run has already satisfied.
  */
+import { sha256 } from "../../std/crypto/sha256";
 import { jsonField } from "../../std/json";
 import { VERSION } from "../../src/branding";
+import { hexDigitLower } from "../../src/strings";
 import { Suite } from "../../std/testing";
 import { contains, splitLines, trim } from "../../std/text";
 
@@ -478,6 +480,45 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
   }
   t.eqStr("whose severity is not `error`", cliField(objects[0], "severity"), "performance");
   t.eqBool("and whose code is a code", isDiagnosticCode(cliField(objects[0], "code")), true);
+};
+
+/**
+ * The two deprecated flags: each is one performance object under `--json`, on a
+ * program that is otherwise quiet, and its code names the flag, so a wrapper can
+ * tell which one a build still passes. `--no-warn-performance` silences both.
+ */
+const checkDeprecatedFlagObjects = (t: Suite, cli: Cli): void => {
+  const source = `${WORK}/${FIXTURE_OK}`;
+  const unchecked = cli.plain("unchecked_json", [source, "--unchecked-indexing", "--json", "-o", `${WORK}/unchecked.ll`]);
+  const wrapping = cli.plain("wrapping_json", [source, "--wrapping", "--json", "-o", `${WORK}/wrapping.ll`]);
+  const quiet = cli.plain("deprecated_quiet", [
+    source,
+    "--unchecked-indexing",
+    "--wrapping",
+    "--no-warn-performance",
+    "--json",
+    "-o",
+    `${WORK}/deprecated-quiet.ll`,
+  ]);
+  const uncheckedObjects = cliObjectLines(unchecked.stdout);
+  const wrappingObjects = cliObjectLines(wrapping.stdout);
+  if (
+    !t.eqI32("--unchecked-indexing compiles", unchecked.status, 0) ||
+    !t.eqI32("and is one object on stdout", toI32(uncheckedObjects.length), 1)
+  ) {
+    return;
+  }
+  t.eqStr("a performance one", cliField(uncheckedObjects[0], "severity"), "performance");
+  t.eqStr("whose code is the --unchecked-indexing deprecation", cliField(uncheckedObjects[0], "code"), "NL9014");
+  if (
+    !t.eqI32("--wrapping compiles", wrapping.status, 0) ||
+    !t.eqI32("and is one object on stdout", toI32(wrappingObjects.length), 1)
+  ) {
+    return;
+  }
+  t.eqStr("a performance one", cliField(wrappingObjects[0], "severity"), "performance");
+  t.eqStr("whose code is the --wrapping deprecation", cliField(wrappingObjects[0], "code"), "NL9015");
+  t.eqI32("--no-warn-performance silences both", toI32(cliObjectLines(quiet.stdout).length), 0);
 };
 
 /**
@@ -1044,12 +1085,65 @@ const modeLine = (path: string): string => {
   return readOrEmpty(`${WORK}/ls.out`);
 };
 
+/** `bytes` as lowercase hex, two digits a byte. */
+const hexOf = (bytes: u8[]): string => {
+  const out: string[] = [];
+  for (const b of bytes) {
+    const v = toI32(b);
+    out.push(hexDigitLower(v >> 4));
+    out.push(hexDigitLower(v));
+  }
+  return out.join("");
+};
+
 /** A program that says it ran and answers 7, so a run of the wrong binary cannot pass for it. */
 const writeRunFixture = (path: string): void => {
   writeFileSync(
     path,
     ["export const main = (): number => {", '  console.log("cli-sec ran");', "  return 7;", "};", ""].join("\n")
   );
+};
+
+/**
+ * `nish run` keeps its performance advice to itself, since a script prints on
+ * every run, but a deprecated flag it is handed still says so (NL9014,
+ * NL9015), on stderr or as a `--json` object, and `--no-warn-performance`
+ * silences that too. The script allocates in a loop, so the advice it does not
+ * print is really there.
+ */
+const checkRunDeprecations = (t: Suite, cli: Cli, cache: string): void => {
+  const script = `${WORK}/run-deprecated.ts`;
+  writeFileSync(
+    script,
+    [
+      "export const main = (): number => {",
+      "  let total = 0;",
+      "  for (let i = 0; i < 4; i++) {",
+      "    const row = new Array<i32>(3 + i);",
+      "    total = total + row.length;",
+      "  }",
+      "  return total - 11;",
+      "};",
+      "",
+    ].join("\n")
+  );
+  const env = [`XDG_CACHE_HOME=${cache}`];
+  const json = cli.run("run_unchecked_json", env, ["run", "--unchecked-indexing", "--json", script]);
+  const objects = cliObjectLines(json.stdout);
+  t.eqI32("nish run --unchecked-indexing runs the script", json.status, 7);
+  if (t.eqI32("and --json carries one object, the deprecation and not the advice", toI32(objects.length), 1)) {
+    t.eqStr("whose code is NL9014", cliField(objects[0], "code"), "NL9014");
+  }
+  const human = cli.run("run_wrapping", env, ["run", "--wrapping", script]);
+  t.eqI32("nish run --wrapping runs the script", human.status, 7);
+  t.contains("and says on stderr that --wrapping is deprecated", human.stderr, "--wrapping is deprecated");
+  t.eqBool(
+    "and still prints none of the performance advice",
+    contains(human.stderr, "allocates a dynamically sized array"),
+    false
+  );
+  const quiet = cli.run("run_wrapping_quiet", env, ["run", "--wrapping", "--no-warn-performance", script]);
+  t.eqBool("--no-warn-performance silences it under nish run", contains(quiet.stderr, "deprecated"), false);
 };
 
 /**
@@ -1088,6 +1182,7 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
   t.contains("CLI-1: and its own output", first.stdout, "cli-sec ran");
   const hit = cli.run("sec_key_hit", [`XDG_CACHE_HOME=${cache}`], ["run", script]);
   t.eqI32("CLI-1: and runs again from the cache", hit.status, 7);
+  checkRunDeprecations(t, cli, cache);
 
   t.eqStr(
     "CLI-4: the cache root is private to its owner",
@@ -1119,6 +1214,15 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
   const path = getenv("PATH");
   if (entries !== null && t.eqI32("there is one entry to tamper with", toI32(entries.length), 1)) {
     const entry = `${tamperCache}/nish/run/${entries[0]}`;
+    // CLI-8: the entry is named by the SHA-256 of the key it holds, checked
+    // against `std/crypto`'s, which is a second implementation of the hash:
+    // sixty-four hex digits, where a 64-bit FNV-1a gave sixteen.
+    const keyBytes = readFileBytesSync(`${entry}/key`);
+    t.eqStr(
+      "CLI-8: the entry is named by the SHA-256 of its key",
+      entries[0],
+      keyBytes === null ? "(no key)" : hexOf(sha256(keyBytes))
+    );
     writeFileSync(`${entry}/key`, "nish 0.0.0\nrun sec-tamper\nnot this run's key\n");
     writeExecutable(`${entry}/sec-tamper`, "#!/bin/sh\necho PLANTED\nexit 0\n");
     const relinked = cli.run("sec_relink", [`XDG_CACHE_HOME=${tamperCache}`], ["run", tamper]);
@@ -1262,6 +1366,7 @@ export const main = (): number => {
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);
   checkWarningObjects(t, cli);
+  checkDeprecatedFlagObjects(t, cli);
   checkPortabilityObjects(t, cli);
   checkFixField(t, cli);
   checkDumps(t, cli);

@@ -1,0 +1,1 @@
+`wrappingAdd` takes i32 or i64 operands (convert with toI32 or toI64), got u32

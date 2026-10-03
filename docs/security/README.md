@@ -25,19 +25,22 @@ the record that found it. The notes below the table name each such finding.
 | Area | Record | Scope | Fixed (C / H / M / L) | Open (C / H / M / L) |
 | --- | --- | --- | ---: | ---: |
 | AEADs | [crypto-aead.md](crypto-aead.md) | `std/crypto/chacha20poly1305.ts`, `std/crypto/aes.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
-| P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 |
+| P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 3 ¹ | 0 / 0 / 0 / 0 |
-| DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 2 |
+| DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 1 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 14 | 0 / 1 ² / 0 / 1 |
-| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 3 / 1 / 1 ³ | 0 / 1 / 2 / 2 |
+| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 3 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 4 ⁴ | 0 / 0 / 0 / 4 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 4 ⁵ | 0 / 0 / 0 / 3 |
+| TLS 1.3 server handshake | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
+| QUIC packets | [quic.md](quic.md) | `std/net/quic-packet.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
-| **Total** | | | **3 / 9 / 8 / 56** | **0 / 2 / 2 / 14** |
+| **Total** | | | **3 / 10 / 10 / 60** | **0 / 1 / 0 / 12** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
-   by the runtime stage. The one source left, `join`, is counted under CG-3.
+   by the runtime stage. The one source left, `join`, was closed with CG-3
+   (#382) and is counted under it.
 2. CT-13 is High *if real* and is unconfirmed.
 3. CG-9 (Low) was fixed by the runtime stage as RT-7. K1-6, which the codegen
    record also lists, is counted once, under K1.
@@ -57,15 +60,12 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
-| CG-3 | High | `src/emit-arrays.ts` (`join`); `src/bounds.ts` | Under `--number-mode i32` a string `join` builds can pass 2^31 − 1 bytes, its `length` reads back negative, and the bounds prover trusts it. Every other source of such a length is closed | #382 |
 | CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts` (`ladderStep`), `std/crypto/x25519.ts` | `ladderStep` measured \|t\| = 35–42 in one link layout of the timing driver and 1.4–2.9 in others. Not established as a leak or as an artefact | #378 |
-| CG-2 | Medium | `src/runtime.ts` (`inlineAllocator`) | A negative `i32` `n` in `new Array<T>(n)` wraps the inline allocator's rounding, and the `memset` writes until the process faults | #382 |
-| CG-4 | Medium | `src/attributes.ts` (`propagateCallee`) | `willreturn` is inferred through recursion, so `opt -O2` can delete a call that should never return | #382 |
-| CG-8 | Low | `src/runtime.ts` | `nish_read_file`, `nish_write_file`, `nish_append_file`, and since the runtime stage `nish_str_concat` and `nish_alloc_array`, are declared `willreturn` but can exit. The declarations' comments need the same correction | #382 (the comment correction: a follow-up issue to be filed) |
-| CG-10 | Low | `src/emit-arrays.ts` (`emitElementAssignment`) | `xs[0] += grow(xs)` takes the slot's address before the right side runs, so the store lands in the old block | #382 |
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-8 | Low | `src/run-cache.ts` (`fnv1a64Hex`) | The cache entry is named by a 64-bit FNV-1a, not a cryptographic hash | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
+| TLS-1 | Low | `std/net/tls.ts`, `std/net/tls/schedule.ts` | What `TlsServer` keeps in its fields (the caller's ephemeral key bytes, the handshake, traffic and exporter secrets) and the schedule's plain-bytes answers are not wiped. The ECDHE secret and the exchange's key copy are `Secret`s, wiped on every path | `secureZero` (#417) is on `main`; the wipes come once a release ships it |
+| QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`) | Handshake and 1-RTT traffic secrets and the keys derived from them are not wiped yet. The primitives are on `main` (`secureZero`, #417; `nish:secret`, #418) but this module does not use them yet; the Initial keys are public by construction | #430 |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | RT-10 | Low | `runtime/runtime-host.c` (`nish_signal_fd`) | Two threads whose first `signalFd()` calls overlap each make a pipe, and one never hears a signal | — |
@@ -88,6 +88,6 @@ and are still open:
 
 | Where | What | From |
 | --- | --- | --- |
-| `src/runtime.ts` | The CG-8 comment correction: `nish_str_concat` and `nish_alloc_array` can now exit, so their `willreturn` is the same approximation CG-8 records. A follow-up issue is to be filed | [runtime.md](runtime.md) |
+| `std/README.md` | The "Lengths stop at 2^31 − 1" paragraph still says a string built by `join` can pass that length (CG-3, open). It cannot since #382, so the exception and the warning after it can go | [codegen.md](codegen.md) |
 | `runtime/shim.mjs`, `runtime/nish.d.ts` | The Node twin should open `writeFileSync`, `appendFileSync` and `spawnImpl`'s streams with `O_NOFOLLOW`, so the two runtimes agree on RT-4, and the declarations' comments should say so | [runtime.md](runtime.md) |
 | `scripts/bootstrap.sh` | Its intermediate stage at `build/selfhost/stage` still finds the checkout only through the narrowed `.` fallback. Building it one level below the checkout's root, or passing the root explicitly, would let that fallback go | [cli.md](cli.md) |

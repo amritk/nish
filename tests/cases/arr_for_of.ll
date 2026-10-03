@@ -5,10 +5,10 @@
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"<\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c">\00" }, align 8
 
-declare void @nish_free_arena() #1
+declare void @nish_free_arena() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 
 define internal noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
@@ -142,7 +142,7 @@ forof.end:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -150,8 +150,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

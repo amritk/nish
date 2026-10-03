@@ -1,0 +1,27 @@
+PASS  RFC 8448 §5: message_hash(CH1), HRR, CH2, SH hash to the trace's value
+PASS  RFC 8448 §5: extract secret "handshake"
+PASS  RFC 8448 §5: derive secret "tls13 c hs traffic" over that transcript
+PASS  RFC 8448 §5: derive secret "tls13 s hs traffic" over that transcript
+PASS  a SHA-384 transcript restarts as message_hash with a length of 48
+PASS  a ClientHello with no x25519 share is answered, not refused
+PASS  the server waits for a second ClientHello
+PASS  and remembers that it retried
+PASS  the HelloRetryRequest: the fixed random, the suite, key_share naming x25519, TLS 1.3 (checked against Python)
+PASS  tlsEncodeHelloRetryRequest writes the same bytes
+PASS  nothing at the Handshake level yet
+PASS  and no secrets
+PASS  the second ClientHello, with the share, is accepted
+PASS  and signed
+PASS  the ServerHello (checked against Python)
+PASS  client_handshake_traffic_secret over message_hash, HRR, CH2, SH (checked against Python)
+PASS  server_handshake_traffic_secret likewise (checked against Python)
+PASS  the client verifies the signature over the retried transcript
+PASS  and the server's Finished
+PASS  the server takes the client's Finished
+PASS  connected after one retry
+PASS  a second ClientHello still without the x25519 share is illegal_parameter
+PASS  and the server has failed
+PASS  without writing a second HelloRetryRequest
+PASS  a second ClientHello whose suites no longer allow the chosen one is illegal_parameter
+PASS  the HelloRetryRequest's random is SHA-256 of "HelloRetryRequest"
+tls hello retry: 26 passed, 0 failed, 0 skipped

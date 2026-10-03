@@ -61,7 +61,7 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
-import { Compilation, EmittedModule } from "./compilation"
+import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
 import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
@@ -77,7 +77,7 @@ import { Diagnostic, formatList } from "./diagnostics"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
-import { fnv1a64Hex, runBinaryName, runCacheKey, runCacheRoot } from "./run-cache"
+import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
   `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
@@ -209,9 +209,26 @@ const report = (compilation: Compilation, json: boolean): void => {
  * an accident of placement: advice about code that does not compile is noise,
  * and the caller returns before this on an error.
  */
-const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
+const reportPerformance = (
+  compilation: Compilation,
+  enabled: boolean,
+  deprecationsOnly: boolean,
+  json: boolean
+): void => {
   if (enabled) {
     reportWarnings(compilation.sink.warnings, "performance", json)
+    return
+  }
+  // `nish run` keeps the IR advice to itself but still says that a flag it was
+  // handed is deprecated: that is about the command line, not the program.
+  if (deprecationsOnly) {
+    const kept: Diagnostic[] = []
+    for (const warning of compilation.sink.warnings) {
+      if (isDeprecationWarning(warning)) {
+        kept.push(warning)
+      }
+    }
+    reportWarnings(kept, "performance", json)
   }
 }
 
@@ -381,6 +398,7 @@ export const main = (): number => {
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
+  let deprecationsOnly = false
   let arg = runMode ? 2 : 1
   while (arg < process.argv.length) {
     const value = process.argv[arg]
@@ -576,7 +594,10 @@ export const main = (): number => {
     }
     // Advice about the IR is for the compile a reader asked for; a script
     // prints it on every run, into the stream the script's own errors use.
+    // A deprecated flag's warning (NL9014, NL9015) is not advice about the IR,
+    // so it still prints unless `--no-warn-performance` asked for silence.
     // `--warn-portability` is left alone: it is off unless the line asks.
+    deprecationsOnly = warnPerformance
     warnPerformance = false
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
@@ -662,7 +683,7 @@ export const main = (): number => {
       report(outcome.compilation, json)
       return 1
     }
-    reportPerformance(outcome.compilation, warnPerformance, json)
+    reportPerformance(outcome.compilation, warnPerformance, false, json)
     reportPortability(outcome.compilation, json)
     return 0
   }
@@ -697,7 +718,7 @@ export const main = (): number => {
     report(compilation, json)
     return 1
   }
-  reportPerformance(compilation, warnPerformance, json)
+  reportPerformance(compilation, warnPerformance, deprecationsOnly, json)
   reportPortability(compilation, json)
   // `--link` needs an entry point, and stage0 says so before it emits
   // anything rather than letting the linker answer `undefined reference to
@@ -974,7 +995,7 @@ const runProgram = (
   }
   const file = runBinaryName(name)
   const key = runCacheKey(emitted, file, packageRoot(), profile, debugInfo, threads, cCompiler())
-  const cacheEntry = `${cacheRoot}/${fnv1a64Hex(key)}`
+  const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
   const stored = readFileSyncOrNull(keyFile)
@@ -1029,10 +1050,12 @@ const runProgram = (
  * stay a read and a spawn, and every entry is made on a miss.
  *
  * Whatever key the entry holds is emptied before the new binary is moved in.
- * The entry's name is a 64-bit hash, so another key can name it, and a run
- * that stopped between the `mv` and the caller's write of the new key would
- * otherwise leave the old key beside a binary that is not its program. An empty
- * key never equals one, because every key starts with the compiler's name.
+ * The entry's name is a SHA-256 of the key (CLI-8), so no other key is
+ * expected to name it; but an entry left by a compiler that named entries
+ * otherwise, or edited by hand, can hold one, and a run that stopped between
+ * the `mv` and the caller's write of the new key would then leave the old key
+ * beside a binary that is not its program (CLI-5). An empty key never equals
+ * one, because every key starts with the compiler's name.
  */
 const buildIntoCache = (
   emitted: EmittedModule[],

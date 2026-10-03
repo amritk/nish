@@ -1,6 +1,6 @@
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 
 define internal noundef nonnull align 8 i8* @pkg_caps.read(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
@@ -22,4 +22,5 @@ entry:
   ret i32 %5
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }

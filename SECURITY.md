@@ -73,11 +73,16 @@ The full model for each area is in its record. In summary:
   and running it runs its code. The compiler must not run a checkout's code
   just because you compiled it, but the program you then run is yours to
   trust.
-- **The holes the language asks for by name**:
-  [`--unchecked-indexing`](README.md#where-it-is-not-safe), `Arena.reset()` and
-  `Arena.release(m)` with a live reference, signed overflow (undefined unless
-  you pass `--wrapping`), and what an interop host does with a pointer it is
-  given.
+- **The holes the language asks for by name**: an out-of-range
+  [`uncheckedGet` or `uncheckedSet`](README.md#where-it-is-not-safe), each a
+  call a module reaches only by importing it from `nish:unsafe` (and every index
+  of your own package under the deprecated `--unchecked-indexing`, which never
+  reaches a dependency or `nish/`), `Arena.reset()` and `Arena.release(m)` with
+  a live reference, signed overflow (undefined except through the `nish:unsafe`
+  `wrapping*` calls, or in your own package under the deprecated `--wrapping`),
+  and what an interop host does with a pointer it is given. A dependency that
+  imports `nish:unsafe` has taken that hole on its own account, and its import
+  says so; `--emit-checked` lists every such import and call.
 - **Timing outside the constant-time check's reach**: functions no fixture
   names, profiles and `-march` targets other than the baseline `clang -O2` the
   check reads, and `wasm32`, where the engine recompiles the module
