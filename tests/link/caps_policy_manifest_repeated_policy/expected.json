@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_repeated_policy/package.json","line":6,"column":5,"endLine":6,"endColumn":19,"severity":"error","code":"NL3032","message":"`capabilities` is written twice: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names"}

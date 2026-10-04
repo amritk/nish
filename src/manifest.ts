@@ -303,6 +303,48 @@ export class CapabilityManifest {
   }
 }
 
+/**
+ * Where the second key called `name` of the object that opens at `text[at]`
+ * starts (its opening quote), or -1 when it is written at most once or the
+ * object cannot be read. `manifestFieldAt` answers the first and stops, so a
+ * second is what it would silently pass over. Every position is tested
+ * against the length before it is stepped past, so no step carries an
+ * overflow check.
+ */
+const manifestRepeatedKeyAt = (text: string, at: i32, name: string): i32 => {
+  if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
+    return -1
+  }
+  let seen = false
+  let i = manifestSkipBlank(text, at + 1)
+  while (i >= 0 && i < text.length && text.charCodeAt(i) === QUOTE) {
+    const keyEnd = manifestEndOfString(text, i)
+    if (keyEnd <= i || keyEnd <= 0) {
+      return -1
+    }
+    const colon = manifestSkipBlank(text, keyEnd)
+    if (colon < 0 || colon >= text.length || text.charCodeAt(colon) !== COLON) {
+      return -1
+    }
+    const valueEnd = manifestEndOfValue(text, manifestSkipBlank(text, colon + 1))
+    if (valueEnd < 0) {
+      return -1
+    }
+    if (text.substring(i + 1, keyEnd - 1) === name) {
+      if (seen) {
+        return i
+      }
+      seen = true
+    }
+    i = manifestSkipBlank(text, valueEnd)
+    if (i < 0 || i >= text.length || text.charCodeAt(i) !== COMMA) {
+      return -1
+    }
+    i = manifestSkipBlank(text, i + 1)
+  }
+  return -1
+}
+
 /** A policy refused for its shape, read no further: NL3032's opening and the span of what broke it. */
 const manifestPolicyProblem = (problem: string, start: i32, end: i32): CapabilityManifest => {
   const out = new CapabilityManifest()
@@ -314,6 +356,26 @@ const manifestPolicyProblem = (problem: string, start: i32, end: i32): Capabilit
 
 export const manifestCapabilities = (manifest: string, condition: string): CapabilityManifest => {
   const out = new CapabilityManifest()
+  // A policy written twice is refused at the second: the reader below takes
+  // the first and would ignore the other, whichever of the two was meant.
+  if (manifest.indexOf('"capabilities"') >= 0) {
+    const secondNish = manifestRepeatedKeyAt(manifest, manifestSkipBlank(manifest, 0), condition)
+    if (secondNish >= 0) {
+      return manifestPolicyProblem(
+        `\`${condition}\` is written twice`,
+        secondNish,
+        manifestEndOfString(manifest, secondNish)
+      )
+    }
+    const secondPolicy = manifestRepeatedKeyAt(manifest, manifestFieldAt(manifest, condition), "capabilities")
+    if (secondPolicy >= 0) {
+      return manifestPolicyProblem(
+        "`capabilities` is written twice",
+        secondPolicy,
+        manifestEndOfString(manifest, secondPolicy)
+      )
+    }
+  }
   const at = manifestNishFieldAt(manifest, condition, "capabilities")
   if (at < 0) {
     // The reader stops at the first break, so a policy below one would be

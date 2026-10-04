@@ -581,6 +581,8 @@ const CAPABILITY_POLICY_NEW = [
   "tests/link/caps_policy_manifest_both/main.ts",
   "tests/link/caps_policy_manifest_non_string/main.ts",
   "tests/link/caps_policy_manifest_repeated/main.ts",
+  "tests/link/caps_policy_manifest_repeated_nish/main.ts",
+  "tests/link/caps_policy_manifest_repeated_policy/main.ts",
   "tests/link/caps_policy_manifest_shape/main.ts",
   "tests/link/caps_policy_manifest_unknown/main.ts",
   "tests/link/caps_policy_manifest_unsafe/main.ts",
