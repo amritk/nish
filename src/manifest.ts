@@ -78,6 +78,7 @@ const DIGIT_ZERO: i32 = 48
 const COLON: i32 = 58
 const UPPER_E: i32 = 69
 const LOWER_A: i32 = 97
+const LOWER_U: i32 = 117
 const LOWER_Z: i32 = 122
 const BACKSLASH: i32 = 92
 const OPEN_BRACE: i32 = 123
@@ -304,14 +305,52 @@ export class CapabilityManifest {
 }
 
 /**
- * Where the second key called `name` of the object that opens at `text[at]`
- * starts (its opening quote), or -1 when it is written at most once or the
- * object cannot be read. `manifestFieldAt` answers the first and stops, so a
- * second is what it would silently pass over. Every position is tested
- * against the length before it is stepped past, so no step carries an
- * overflow check.
+ * Whether the key whose text lies between `start` (just past its opening
+ * quote) and `end` (its closing quote) is written with an escape and could
+ * decode to `name`. This reader does not decode escapes, so each one stands
+ * for one character that may be anything, and every byte outside an escape
+ * must be `name`'s at its place. A key with no escape answers false: it is
+ * compared as written. Each step is bounded before it is taken, so none
+ * carries an overflow check.
  */
-const manifestRepeatedKeyAt = (text: string, at: i32, name: string): i32 => {
+const manifestEscapedKeyMayBe = (text: string, start: i32, end: i32, name: string): boolean => {
+  let escaped = false
+  let skip = 0
+  let p = 0
+  let i = start
+  while (i >= 0 && i < end && i < text.length) {
+    const code = text.charCodeAt(i)
+    if (skip > 0) {
+      skip = skip - 1
+    } else if (code === BACKSLASH) {
+      // `\uXXXX` is the backslash and five more bytes, any other escape one more.
+      if (p >= name.length) {
+        return false
+      }
+      escaped = true
+      skip = i + 1 < end && i + 1 < text.length && text.charCodeAt(i + 1) === LOWER_U ? 5 : 1
+      p = p + 1
+    } else {
+      if (p >= name.length || code !== name.charCodeAt(p)) {
+        return false
+      }
+      p = p + 1
+    }
+    i = i + 1
+  }
+  return escaped && p === name.length
+}
+
+/**
+ * Where the key of the object that opens at `text[at]` starts (its opening
+ * quote) that hides a key called `name` from `manifestFieldAt`, which answers
+ * the first exact match and stops; -1 when there is none or the object cannot
+ * be read. A key hides `name` when it is written with an escape that could
+ * decode to it (`manifestEscapedKeyMayBe`), or, when `repeats`, when it is a
+ * second exact `name`. Every position is tested against the length before it
+ * is stepped past, so no step carries an overflow check.
+ */
+const manifestHiddenKeyAt = (text: string, at: i32, name: string, repeats: boolean): i32 => {
   if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
     return -1
   }
@@ -330,8 +369,11 @@ const manifestRepeatedKeyAt = (text: string, at: i32, name: string): i32 => {
     if (valueEnd < 0) {
       return -1
     }
+    if (manifestEscapedKeyMayBe(text, i + 1, keyEnd - 1, name)) {
+      return i
+    }
     if (text.substring(i + 1, keyEnd - 1) === name) {
-      if (seen) {
+      if (seen && repeats) {
         return i
       }
       seen = true
@@ -343,6 +385,17 @@ const manifestRepeatedKeyAt = (text: string, at: i32, name: string): i32 => {
     i = manifestSkipBlank(text, i + 1)
   }
   return -1
+}
+
+/** The NL3032 refusal of the key that opens at `manifest[at]`: written with an escape, or written twice. */
+const manifestKeyProblem = (manifest: string, at: i32): CapabilityManifest => {
+  const end = manifestEndOfString(manifest, at)
+  const key = manifestUnquoted(manifest.substring(at, end))
+  const why =
+    key.indexOf("\\") >= 0
+      ? "is written with an escape, which this reader does not decode"
+      : "is written twice"
+  return manifestPolicyProblem(`\`${key}\` ${why}`, at, end)
 }
 
 /** A policy refused for its shape, read no further: NL3032's opening and the span of what broke it. */
@@ -357,24 +410,23 @@ const manifestPolicyProblem = (problem: string, start: i32, end: i32): Capabilit
 export const manifestCapabilities = (manifest: string, condition: string): CapabilityManifest => {
   const out = new CapabilityManifest()
   // A policy written twice is refused at the second: the reader below takes
-  // the first and would ignore the other, whichever of the two was meant.
-  if (manifest.indexOf('"capabilities"') >= 0) {
-    const secondNish = manifestRepeatedKeyAt(manifest, manifestSkipBlank(manifest, 0), condition)
-    if (secondNish >= 0) {
-      return manifestPolicyProblem(
-        `\`${condition}\` is written twice`,
-        secondNish,
-        manifestEndOfString(manifest, secondNish)
-      )
-    }
-    const secondPolicy = manifestRepeatedKeyAt(manifest, manifestFieldAt(manifest, condition), "capabilities")
-    if (secondPolicy >= 0) {
-      return manifestPolicyProblem(
-        "`capabilities` is written twice",
-        secondPolicy,
-        manifestEndOfString(manifest, secondPolicy)
-      )
-    }
+  // the first and would ignore the other, whichever of the two was meant. A
+  // key written with an escape this reader does not decode is refused the
+  // same way when it could be `"nish"` or `"capabilities"`, whatever the rest
+  // of the manifest says, because the policy it hides is invisible otherwise.
+  const repeats = manifest.indexOf('"capabilities"') >= 0
+  const hiddenNish = manifestHiddenKeyAt(manifest, manifestSkipBlank(manifest, 0), condition, repeats)
+  if (hiddenNish >= 0) {
+    return manifestKeyProblem(manifest, hiddenNish)
+  }
+  const hiddenPolicy = manifestHiddenKeyAt(
+    manifest,
+    manifestFieldAt(manifest, condition),
+    "capabilities",
+    true
+  )
+  if (hiddenPolicy >= 0) {
+    return manifestKeyProblem(manifest, hiddenPolicy)
   }
   const at = manifestNishFieldAt(manifest, condition, "capabilities")
   if (at < 0) {

@@ -5508,7 +5508,9 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   manifest writes them: the wrong shape, a key written twice included — `allow`, `deny`,
   `capabilities` or `"nish"` itself (NL3032, `tests/link/caps_policy_manifest_shape`,
   `caps_policy_manifest_repeated`, `caps_policy_manifest_repeated_policy`,
-  `caps_policy_manifest_repeated_nish`), a name that is no capability
+  `caps_policy_manifest_repeated_nish`), and a `"nish"` or `capabilities` key written
+  with an escape the reader does not decode (`caps_policy_manifest_escaped_nish`,
+  `caps_policy_manifest_escaped_policy`, `caps_policy_manifest_escaped_second_nish`), a name that is no capability
   (NL3033, `caps_policy_manifest_unknown`), `unsafe` under `allow` (NL3034,
   `caps_policy_manifest_unsafe`) and a capability under both (NL3035,
   `caps_policy_manifest_both`).
