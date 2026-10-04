@@ -121,6 +121,11 @@ const applyFixes = (outcome: FixOutcome, roots: string[], warnPerformance: boole
     for (const warning of compilation.sink.portability) {
       diagnostics.push(warning)
     }
+    // A deprecation is printed whatever the flags say, so its fix is always
+    // one a run without `--fix` would show.
+    for (const warning of compilation.sink.deprecations) {
+      diagnostics.push(warning)
+    }
   }
   // The files to rewrite, collected first: each root by identity, so a file
   // named twice, or under two spellings, is rewritten once, and not the
