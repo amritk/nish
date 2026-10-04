@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"get","symbol":"get","module":"tests/cases/deny_panics_unsafe.ts","line":10,"panics":[{"kind":"unchecked","line":10,"column":41,"allowed":true}]},
+{"name":"mark","symbol":"mark","module":"tests/cases/deny_panics_unsafe.ts","line":12,"panics":[{"kind":"unchecked","line":13,"column":3,"allowed":true}]},
+{"name":"first","symbol":"first","module":"tests/cases/deny_panics_unsafe.ts","line":16,"panics":[]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/deny_panics_unsafe.ts","line":18,"panics":[{"kind":"oom","line":20,"column":3,"allowed":true},{"kind":"oom","line":21,"column":3,"allowed":true},{"kind":"oom","line":24,"column":3,"allowed":true},{"kind":"unchecked","line":24,"column":15,"allowed":true}]}
+]}

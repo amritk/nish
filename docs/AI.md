@@ -1631,9 +1631,24 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
-that cannot panic, or make the call from a module outside the scope. Neither
-`--unchecked-indexing` nor `uncheckedGet` is a proof — both are undefined
-behaviour out of range — so a module that uses them stays out of `noPanic`.
+that cannot panic, or make the call from a module outside the scope.
+`--unchecked-indexing` is not a proof, and an index it leaves unchecked is
+still refused. `uncheckedGet` and `uncheckedSet` are not proofs either, but
+they cannot panic, and their `nish:unsafe` import is the module's visible
+opt-in to an index out of range being undefined behaviour, so the scope allows
+them (as `"allowed": true` sites) and a call into them is never refused:
+
+```ts nish:ok --deny-panics
+import { uncheckedGet } from "nish:unsafe";
+
+export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
+```
+
+Without the import the call is refused (NL2456), scope or not:
+
+```ts nish:err NL2456 --deny-panics
+export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
+```
 
 ## Before you say it compiles
 
@@ -1658,7 +1673,8 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 10. Must it never panic? Compile with `--deny-panics` (or list the module in
    `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
    `pop`, range entry, `expect` and exiting call it cannot prove is an error
-   naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)).
+   naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
+   `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
 11. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a

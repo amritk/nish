@@ -22,7 +22,10 @@
 //     (`FunctionFacts.callees`) rather than a second one.
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
-// places) but never counts: no source-level guard removes it. Stack overflow
+// places) but never counts: no source-level guard removes it. Nor does an
+// `unchecked` site, a `nish:unsafe` `uncheckedGet` or `uncheckedSet`: it
+// cannot panic, and the import its module must write is the visible opt-in to
+// the undefined behaviour an index out of range would be. Stack overflow
 // is not a site at all: it has no runtime handler and no check in the IR.
 // Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
 // step, proven where the bounds walk proved the result fits and the emitter
@@ -57,7 +60,10 @@ const PANIC_OOM: i32 = 11
 /**
  * `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check, so nothing
  * panics, but nothing is proven either, and an index out of range is
- * undefined behaviour. Listed so that the no-panic scope can refuse it.
+ * undefined behaviour. Listed so that a reader can find every one, and
+ * allowed, as `oom` is: a call is accepted only through a `nish:unsafe`
+ * import (`unsafeImportMessage` in `src/builtins.ts`), and that import at the
+ * top of its module is the opt-in the no-panic scope asks for.
  */
 const PANIC_UNCHECKED: i32 = 12
 export const PANIC_OVERFLOW: i32 = 13
@@ -143,8 +149,15 @@ export class PanicSite {
 const isCallSite = (site: PanicSite): boolean =>
   site.kind === PANIC_CALL || site.kind === PANIC_PARALLEL_LENGTH
 
-/** Whether `site`, by itself, can stop the program: unproven, and not out of memory. */
-const panicsHere = (site: PanicSite): boolean => !site.proven && site.kind !== PANIC_OOM && !isCallSite(site)
+/**
+ * Whether `site` is listed but never counts: out of memory, which no guard
+ * removes, and an `unchecked` access, which its module's `nish:unsafe` import
+ * opted into.
+ */
+const isAllowed = (site: PanicSite): boolean => site.kind === PANIC_OOM || site.kind === PANIC_UNCHECKED
+
+/** Whether `site`, by itself, can stop the program: unproven, and not allowed. */
+const panicsHere = (site: PanicSite): boolean => !site.proven && !isAllowed(site) && !isCallSite(site)
 
 /**
  * The kind a builtin called by `name` panics with, or -1 when it cannot: the
@@ -448,7 +461,7 @@ const keepSites = (
  * and per site `{"kind","line","column"}` followed by `"proven"` for a check,
  * `"proven","callee"` for a `parallel-length`, `"callee","via"` for a `call`
  * (`via` is the kind of the site the callee reaches) and `"allowed":true` for
- * an `oom`. `symbol` is the function's LLVM name, which is how a reader finds
+ * an `oom` and an `unchecked`. `symbol` is the function's LLVM name, which is how a reader finds
  * it in the IR; `callee` is the callee's name as a diagnostic spells it.
  */
 export const panicsJson = (units: AnalysisUnit[], facts: FactsTable): string => {
@@ -490,7 +503,7 @@ const siteJson = (out: StringBuilder, program: CheckedProgram, facts: FactsTable
   const source = program.source
   out.add(`{"kind":"${panicKindName(site.kind)}","line":${source.lineOf(site.node.start)}`)
   out.add(`,"column":${source.columnOf(site.node.start)}`)
-  if (site.kind === PANIC_OOM) {
+  if (isAllowed(site)) {
     out.add(',"allowed":true}')
     return
   }
@@ -531,7 +544,7 @@ export const siteReportEntry = (site: PanicSite, path: string, facts: FactsTable
   const source = site.source
   out.add(`{ "kind": "${panicKindName(site.kind)}", "at": `)
   addJsonQuoted(out, `${path}:${source.lineOf(site.node.start)}:${source.columnOf(site.node.start)}`)
-  if (site.kind === PANIC_OOM) {
+  if (isAllowed(site)) {
     out.add(', "allowed": true }')
     return out.toText()
   }
@@ -560,8 +573,9 @@ export const siteReportEntry = (site: PanicSite, path: string, facts: FactsTable
  * it, the guard that gives the proof. A call is refused only when its callee
  * is outside the scope (NL2458), because a callee inside it has its own sites
  * refused where they are written, and a second error at every call into it
- * would say the same thing again. Out of memory is never refused: no guard
- * in the source removes it.
+ * would say the same thing again. Out of memory and `unchecked` are never
+ * refused (`isAllowed`): no guard in the source removes the one, and the
+ * other's `nish:unsafe` import is the opt-in.
  *
  * Answers the sites it refused, so that the driver can take back a
  * performance warning about the same check: the error already says it.
@@ -610,7 +624,7 @@ const refuseSite = (
   site: PanicSite,
   sink: DiagnosticSink
 ): boolean => {
-  if (site.proven || site.kind === PANIC_OOM) {
+  if (site.proven || isAllowed(site)) {
     return false
   }
   const node = site.node
@@ -714,11 +728,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_OVERFLOW:
       return overflowAdvice(program, table, node)
     default:
-      return (
-        `\`${calledName(program, node)}\` leaves out the bounds check without proving it, so an index out of range is ` +
-        "undefined behaviour rather than a panic the scope can rule out: index with a guard instead, or leave " +
-        "this module out of the scope"
-      )
+      // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.
+      return ""
   }
 }
 

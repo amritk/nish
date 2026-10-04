@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-unsafe-callee",
+  "private": true,
+  "nish": {
+    "noPanic": ["main.ts"]
+  }
+}
