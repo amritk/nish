@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 82 programs, 1859813 dump lines live, 82 distinct modules.
+# 82 programs, 1860212 dump lines live, 82 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/expressions.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/symbols.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -9533,10 +9533,10 @@ function sliceAdvice(program: CheckedProgram, node: Node): string -> @sliceAdvic
   callee 761:16 calledName -> @calledName
 function overflowAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @overflowAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
+  calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq wrappingForm
   pointer program: size=608 writesThrough=false captured=false
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.baseOf#0
-  pointer node: size=40 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=wrappingForm#0
   stackSites=0 stackLocals=0
   local 774:9 op: string (const)
   local 775:9 type: i32 (const)
@@ -9544,7 +9544,14 @@ function overflowAdvice(program: CheckedProgram, table: TypeTable, node: Node): 
   callee 776:30 TypeTable.typeName -> @TypeTable.typeName
   callee 776:45 TypeTable.baseOf -> @TypeTable.baseOf
   local 777:9 unsigned: string (const)
-  local 778:7 wrapping: string (let)
+  callee 781:80 wrappingForm -> @wrappingForm
+function wrappingForm(node: Node): string -> @wrappingForm
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 787:9 op: string (const)
+  local 794:7 fn: string (let)
 function divideAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @divideAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf isUnsigned nish_panic_index nish_str_concat siteLocalName
@@ -9552,15 +9559,15 @@ function divideAdvice(program: CheckedProgram, table: TypeTable, node: Node): st
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 793:9 name: string (const)
-  callee 793:16 siteLocalName -> @siteLocalName
-  local 794:9 d: string (const)
-  local 795:9 left: i32 (const)
-  local 796:9 unsigned: boolean (const)
-  callee 796:33 isUnsigned -> @isUnsigned
-  callee 796:44 TypeTable.baseOf -> @TypeTable.baseOf
-  local 797:9 what: string (const)
-  local 798:9 bind: string (const)
+  local 805:9 name: string (const)
+  callee 805:16 siteLocalName -> @siteLocalName
+  local 806:9 d: string (const)
+  local 807:9 left: i32 (const)
+  local 808:9 unsigned: boolean (const)
+  callee 808:33 isUnsigned -> @isUnsigned
+  callee 808:44 TypeTable.baseOf -> @TypeTable.baseOf
+  local 809:9 what: string (const)
+  local 810:9 bind: string (const)
 function rangeAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite): string -> @rangeAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName isPrologueSite nish_panic_index nish_str_concat nish_str_from_i32 siteLocalName
@@ -9568,38 +9575,38 @@ function rangeAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite)
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isPrologueSite#1
   stackSites=0 stackLocals=0
-  local 810:9 node: Node (const)
-  callee 811:7 isPrologueSite -> @isPrologueSite
-  local 817:9 stored: boolean (const)
-  local 818:9 at: Node (const)
-  local 819:9 range: i32 (const)
-  local 820:9 spelled: string (const)
-  callee 820:19 TypeTable.typeName -> @TypeTable.typeName
-  local 822:11 target: string (const)
-  callee 822:20 siteLocalName -> @siteLocalName
-  local 823:11 what: string (const)
-  local 829:9 lo: i32 (const)
-  callee 829:14 TypeTable.rangeLo -> @TypeTable.rangeLo
-  local 830:9 hi: i32 (const)
-  callee 830:14 TypeTable.rangeHi -> @TypeTable.rangeHi
-  local 831:9 name: string (const)
-  callee 831:16 siteLocalName -> @siteLocalName
-  local 838:7 guard: string (let)
+  local 822:9 node: Node (const)
+  callee 823:7 isPrologueSite -> @isPrologueSite
+  local 829:9 stored: boolean (const)
+  local 830:9 at: Node (const)
+  local 831:9 range: i32 (const)
+  local 832:9 spelled: string (const)
+  callee 832:19 TypeTable.typeName -> @TypeTable.typeName
+  local 834:11 target: string (const)
+  callee 834:20 siteLocalName -> @siteLocalName
+  local 835:11 what: string (const)
+  local 841:9 lo: i32 (const)
+  callee 841:14 TypeTable.rangeLo -> @TypeTable.rangeLo
+  local 842:9 hi: i32 (const)
+  callee 842:14 TypeTable.rangeHi -> @TypeTable.rangeHi
+  local 843:9 name: string (const)
+  callee 843:16 siteLocalName -> @siteLocalName
+  local 850:7 guard: string (let)
 function isPrologueSite(program: CheckedProgram, site: PanicSite): boolean -> @isPrologueSite
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   pointer program: size=608 writesThrough=false captured=false
   pointer site: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 849:14 sig: FunctionSig (const)
+  local 861:14 sig: FunctionSig (const)
 function ioExitAdvice(program: CheckedProgram, node: Node): string -> @ioExitAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName nish_str_concat nish_str_eq
   pointer program: size=608 writesThrough=false captured=false passedTo=calledName#0
   pointer node: size=40 writesThrough=false captured=false passedTo=calledName#1
   stackSites=0 stackLocals=0
-  local 859:9 name: string (const)
-  callee 859:16 calledName -> @calledName
+  local 871:9 name: string (const)
+  callee 871:16 calledName -> @calledName
 module src/bounds.ts
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import CheckContext from "./context" -> struct CheckContext

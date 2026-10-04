@@ -6408,11 +6408,14 @@ performance warning about the same check is not printed beside the error.
 - **Signed overflow is refused where it is not proven.** Every signed `+`, `-`,
   `*`, unary `-`, `++`, `--` and `op=` the bounds walk has not proven to fit is
   an `overflow` site, refused like an index or a divisor, with a hint to bound
-  its operands, compute in `u32`/`u64`, or write `wrappingAdd`, `wrappingSub`
-  or `wrappingMul` from `nish:unsafe`. A proven one is accepted, and so is
+  its operands, compute in `u32`/`u64` (the width's unsigned type), or write
+  the operator's drop-in `nish:unsafe` form: `wrappingAdd(x, y)`,
+  `wrappingSub(x, y)`, `wrappingMul(x, y)`, `x = wrappingAdd(x, y)` for an
+  `op=`, `wrappingSub(0, x)` for a negation and `x = wrappingAdd(x, 1)` or
+  `x = wrappingSub(x, 1)` for `++` and `--`. A proven one is accepted, and so is
   every operation under the deprecated `--wrapping` and every `wrapping*`
   call, which are defined to wrap and are not sites
-  (`tests/cases/reject_deny_panics_overflow`, `tests/cases/deny_panics_overflow_proven`,
+  (`tests/cases/reject_deny_panics_overflow`, `tests/cases/reject_deny_panics_overflow_ops`, `tests/cases/deny_panics_overflow_proven`,
   `tests/cases/deny_panics_overflow_wrapping`, `tests/cases/deny_panics_overflow_wrapping_add`,
   `tests/link/no_panic_overflow`).
 - **What the scope does not cover.** Out of memory is listed but never

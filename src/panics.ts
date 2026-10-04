@@ -767,25 +767,37 @@ const sliceAdvice = (program: CheckedProgram, node: Node): string => {
 
 /**
  * A signed operation not proven to fit: bound it so the bounds walk proves it,
- * or, where it is meant to wrap, say so with an unsigned type or the
- * `nish:unsafe` function for its operator, which is never checked.
+ * or, where it is meant to wrap, say so with an unsigned type of its width or
+ * the drop-in `nish:unsafe` form of its operator, which is never checked.
  */
 const overflowAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
   const op = node.text
   const type = program.nodeTypes[node.children[0].id]
   const signed = type >= 0 ? table.typeName(table.baseOf(type)) : "i32"
   const unsigned = signed === "i64" ? "u64" : "u32"
-  let wrapping = "wrappingAdd"
-  if (op === "*" || op === "*=") {
-    wrapping = "wrappingMul"
-  } else if (op === "-" || op === "-=" || op === "--") {
-    wrapping = "wrappingSub"
-  }
   return (
     `this \`${op}\` is not proven to fit \`${signed}\` here, and a signed overflow panics: bound its operands with a ` +
     "test the checker reads — a loop below a length or a limit, or a guard on the value — so the result is proven to fit, " +
-    `or, if it is meant to wrap, compute in \`${unsigned}\` or write it as \`${wrapping}\` from \`nish:unsafe\``
+    `or, if it is meant to wrap, compute in \`${unsigned}\` or write it as \`${wrappingForm(node)}\` from \`nish:unsafe\``
   )
+}
+
+/** The `nish:unsafe` call that computes what the operator at `node` computes, wrapping, spelled for `x` and `y`. */
+const wrappingForm = (node: Node): string => {
+  const op = node.text
+  if (node.kind !== N_BINARY) {
+    if (op === "++") {
+      return "x = wrappingAdd(x, 1)"
+    }
+    return op === "--" ? "x = wrappingSub(x, 1)" : "wrappingSub(0, x)"
+  }
+  let fn = "wrappingAdd"
+  if (op === "*" || op === "*=") {
+    fn = "wrappingMul"
+  } else if (op === "-" || op === "-=") {
+    fn = "wrappingSub"
+  }
+  return op.length === 2 ? `x = ${fn}(x, y)` : `${fn}(x, y)`
 }
 
 /** The guard a divisor needs: not zero, and for a signed division not `-1` either. */
