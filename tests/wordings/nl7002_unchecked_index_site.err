@@ -1,0 +1,1 @@
+this index is unchecked only because of --unchecked-indexing, which is deprecated: write it as `uncheckedGet(xs, i)` from `nish:unsafe` to keep it unchecked once the flag is gone (`nish --fix` does), or leave it to be checked

@@ -3776,7 +3776,55 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   `` --wrapping is deprecated and reaches only the modules of the entry package `` (NL9015)
   — which `--no-warn-performance` silences with the rest. `nish run`, which
   prints no other performance warning, prints these two (`tests/nish/cli.ts`).
-  The flags are removed in a later release.
+  NL9014 ends `` `nish --fix` rewrites each site; then drop the flag ``. The
+  flags are removed in a later release.
+- **`nish --unchecked-indexing --fix` migrates a program off the flag.** Under
+  the flag, every check it leaves out of the entry package is a deprecation
+  warning of its own at the site (NL7002):
+  `` this index is unchecked only because of --unchecked-indexing, which is deprecated ``,
+  then either the rewrite or why there is none
+  (`tests/wordings/nl7002_unchecked_index_site`, and one `nl7002_*` pin per
+  shape that gets no fix, each with its reason). A site is a check the
+  emitter writes without the flag: an element access the checker did not
+  prove in range, the second check of a compound store whose right side calls
+  something, an unproven `charCodeAt` or `pop`, and every `slice`, array `set`
+  and `nish:net` buffer range. A site the checker proved is not reported: the
+  flag records nothing for a check it drops, so what it proves is a subset of
+  what is proven without it, and an access left as `xs[i]` stays proven once
+  the flag is gone. Like NL7001 it is printed by default, `nish run` included,
+  and `--no-warn-performance` does not silence it. Where a rewrite says the
+  same thing, the warning carries it as a `fix`:
+
+  | Shape | Rewrite | Case (`tests/fix/`) |
+  | --- | --- | --- |
+  | `xs[i]` read, a number element and an `i32` or `i32`-based ranged index | `uncheckedGet(xs, i)` | `unsafe-index-get`, `unsafe-index-ranged`, `unsafe-index-readonly` |
+  | `xs[i] = v` as a statement | `uncheckedSet(xs, i, v)` | `unsafe-index-set` |
+  | the same, written in parentheses, `(xs[i] = v)` | the whole parenthesised statement becomes the call | `unsafe-index-paren-store` |
+  | `xs[i] op= v` as a statement, `xs`, `i` and `v` plain reads | `uncheckedSet(xs, i, uncheckedGet(xs, i) op v)`, `v` parenthesised unless it is one operand | `unsafe-index-update` |
+  | `xs[i][j]` with number elements in the inner array | the access to the inner array; `xs[i]` keeps its warning | `unsafe-index-nested` |
+
+  Every other site keeps its warning and gets no fix, and dropping the flag
+  puts its check back, which is the safe direction: an element that is not a
+  number (`unsafe-index-nofix-string`, `-class`), an index that is not an `i32`
+  (`-index-type`), a store whose value is used (`-value-used`), a compound
+  store whose operands call, construct or assign (`-update-call`), since the
+  rewrite evaluates the array and the index twice, the second check of a
+  compound store (`-second-check`), an access in a generic body, whose types
+  are decided per instantiation (`-generic`), a module that already uses the
+  name the import would bind (`-clash`), and `charCodeAt`, `pop`, `slice`,
+  `set` and the socket calls (`-char-code-at`, `-pop`, `-slice`, `-set`,
+  `-net`), which have no `nish:unsafe` form. While the module lacks a name it
+  needs, every fix also carries the one edit that imports every name the
+  module's fixes call: the names after its existing `nish:unsafe` import
+  (`unsafe-index-extend`), else a new import after its last import, else
+  before its first statement. An import that renames is called by its alias
+  (`unsafe-index-alias`). The edits are the same, so the first round applies
+  one site's fix and the second applies the rest (`unsafe-index-rounds`). The
+  program then compiles without the flag and prints what it printed with it:
+  `tests/link/unsafe-migrate-index-flag` runs `unsafe-index-equivalence`'s
+  sources under the flag and `unsafe-migrate-index-fixed` runs their
+  `.fixed.ts` without it, against one `expected.out`; between them its four
+  modules hold every rewritten shape above.
 
 ### Constant time: `ctSelect` and `ctEq`
 

@@ -14,7 +14,8 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 
 A case is named in kebab-case for the family of rule it fixes — `eq-` for
 loose equality, `expr-` for the expression checker's fixes, `decl-` for the
-declaration and module passes — and a refused shape has `nofix` in its name.
+declaration and module passes, `unsafe-index-` for the `--unchecked-indexing`
+migration (NL7002) — and a refused shape has `nofix` in its name.
 Every fix and every shape that is refused one has a case here: there is no
 line coverage for Nish, so this directory is the coverage gate.
 
@@ -36,13 +37,33 @@ own edits overlap — `export { f, f }` asks for `export ` before `f` twice — 
 it is dropped whole every round and the file is left as it was. Each fails when
 its half of `acceptedEdits`'s overlap test is taken out.
 
-A performance warning's fix cannot have a case here yet: both forms above need
-a plain run that exits 1, which a program whose only diagnostics are warnings
-never does, and `same-as-plain` compares the human report, where a plain run
-that compiles prints `wrote <file>` and `--fix` does not. No warning carries a
-fix today — NL9007's would need the bounds analysis to credit a `panic` guard,
-which it does not — so nothing is uncovered, but the stage that adds one
-extends the runner first.
+A warning's fix cannot have a case of the plain forms yet: both need a plain
+run that exits 1, which a program whose only diagnostics are warnings never
+does, and `same-as-plain` compares the human report, where a plain run that
+compiles prints `wrote <file>` and `--fix` does not. Until the runner grows a
+warning-only form, a warning's case is a directory with a second root,
+`seed.ts`, whose loose equality is an error with a fix of its own. The plain
+run exits 1 on it; `--fix` fixes it in the first round, and a warning's fix is
+applied only once the program checks, so the rounds after that apply the
+warnings' fixes to `main.ts`, and the result must compile clean. A refused
+shape is a `main.ts` with no `main.fixed.ts`, which `--fix` must leave
+byte-identical. The runner cannot tell that it was reported at all — the
+seed's fix satisfies its first check alone — so each refused shape's warning
+is pinned, reason and all, by a `tests/wordings` case of its own: a build
+that stops reporting the warning fails every one of those pins.
+
+The `unsafe-index-` cases are that kind: every `argv` passes
+`--unchecked-indexing`, and each fixed shape and each refused one in the
+table in `docs/LANGUAGE.md` ("`nish:unsafe`") has its case.
+`unsafe-index-rounds` pins the convergence its `rewrites` counts: every site's
+fix carries the same import edit, so the first round over `main.ts` applies
+one fix and the second the rest, after the round that fixes `seed.ts`.
+`unsafe-index-equivalence`'s sources and their `.fixed.ts` are the two link
+cases `tests/link/unsafe-migrate-index-flag` (under the flag) and
+`unsafe-migrate-index-fixed` (without it), which print one `expected.out`.
+Its four modules hold every fixed shape, so each rewrite is compiled and run
+without the flag; the fix runner itself compiles the result with the case's
+`argv`, flag included.
 
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.
