@@ -9865,6 +9865,14 @@ attributes #1 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end arr-index -->
 
+The check is left out wherever the checker has proved the index in range
+([Element access](LANGUAGE.md#element-access)), a guard ending in `panic(…)`
+or `process.exit(…)` included: after
+`if (i < 0 || i >= a.length) { panic("…") }`, `a[i]` is the `getelementptr`
+and the load alone, with no `bounds.fail` block
+(`tests/cases/bounds_panic_guard`, `bounds_exit_guard`; `bounds_guard_not_exit`
+keeps it).
+
 ### A byte element: the same lowering at width 1
 
 `u8[]` is the array lowering with `sizeof(T)` equal to 1, and that is the whole

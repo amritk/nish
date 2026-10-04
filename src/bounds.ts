@@ -136,6 +136,7 @@
 // put on the §8 warning list, because the rewrite such a warning names is the
 // `const xs = h.xs` hoist, and that is advice about a local.
 
+import { terminatesControlFlow } from "./builtins"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import { DiagnosticSink } from "./diagnostics"
@@ -3430,8 +3431,12 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_EXPR_STMT) {
+    // `panic(…)` and `process.exit(…)` end the path as a `return` does, so a
+    // guard ending in one proves the access after it. The answer is the
+    // checker's own `terminatesControlFlow`, the test `checkStatement` uses
+    // for unreachable code, so the two passes cannot disagree.
     walkExpression(walk, state, stmt.children[0])
-    return false
+    return terminatesControlFlow(walk.ctx, stmt.children[0])
   }
 
   if (stmt.kind === N_IF) {

@@ -3189,6 +3189,14 @@ and both come from the program as written:
     `i < n`. A constant index `w[3]` needs `w.length >= 4` instead, which a
     length guard (`if (w.length >= 4)`) or an array literal of known size
     gives.
+  - **a guard that ends the path.** After `if (i < 0 || i >= w.length) { … }`
+    the negation of the test holds for the rest of the block when the guarded
+    branch ends in `return`, `break`, `continue`, `throw`, `panic(…)` or
+    `process.exit(…)` (`exit` from `nish:process` too). A branch that ends in
+    any other call falls through, so its access keeps the check and the NL9007
+    warning (`tests/cases/bounds_panic_guard`, `bounds_exit_guard`,
+    `bounds_guard_not_exit`). `Map.keyAt`, `Map.valueAt` and `Set.keyAt` in
+    `std/collections.ts` guard their reads this way.
   - **both at once from a check that has already passed.** A checked `w[i]`,
     read, store or compound assignment, and a checked `s.charCodeAt(i)`
     either panic or leave `0 <= i < w.length` behind, because the panic does
