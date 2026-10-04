@@ -228,10 +228,13 @@ const manifestFieldAt = (object: string, name: string): i32 => {
 export class ManifestList {
   entries: string[]
   offsets: i32[]
+  /** Just past each entry as written, its quotes included, so a report spans exactly what is there. */
+  ends: i32[]
 
   constructor() {
     this.entries = []
     this.offsets = []
+    this.ends = []
   }
 }
 
@@ -245,6 +248,7 @@ const manifestReadList = (manifest: string, at: i32, out: ManifestList): void =>
     }
     out.entries.push(manifestUnquoted(manifest.substring(i, end)))
     out.offsets.push(i)
+    out.ends.push(end)
     i = manifestSkipBlank(manifest, end)
     if (i >= 0 && i < manifest.length && manifest.charCodeAt(i) === COMMA) {
       i = manifestSkipBlank(manifest, i + 1)

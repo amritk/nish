@@ -5483,11 +5483,18 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   `allow` list makes the policy an allowlist: a reached capability it does not
   list is refused, `exit` and `signal` included. The command line can only
   narrow the manifest: denials union and allowlists intersect.
-- Only the entry is judged: `main`'s closure, or each exported function of an
-  entry with no `main`. The error (NL2459) is spanned at the first call of the
-  witness chain and names every hop of it as `--emit-capabilities` writes them
-  (`tests/wordings/nl2459_policy_deny`, `nl2459_policy_allowlist`;
-  `tests/link/caps_policy_manifest`).
+- What is judged is every function outside code can call: `main` alone in a
+  closed `--link` build or under `nish run`, and in an open one (`-o` alone, a
+  sidecar, a `declare function`, wasm) `main` and every exported function of
+  every module, or every function at all under `--no-strict-exports`
+  (`tests/wordings/nl2459_policy_library`, `nl2459_policy_unexported`). Each
+  refused capability is one error (NL2459), reported in source order, spanned
+  at the first call of the witness chain and naming every hop of it as
+  `--emit-capabilities` writes them (`tests/wordings/nl2459_policy_deny`,
+  `nl2459_policy_allowlist`; `tests/link/caps_policy_manifest`,
+  `caps_policy_two_denied`). The command line can only narrow
+  (`caps_policy_cli_cannot_widen`, `caps_policy_allow_intersect`,
+  `caps_policy_allow_narrowed`, `caps_policy_manifest_allow_cli_deny`).
 - `unsafe` can be denied — `--deny unsafe` refuses a program that reaches a
   `nish:unsafe` export anywhere in its closure
   (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is

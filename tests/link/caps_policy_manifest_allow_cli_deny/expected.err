@@ -1,0 +1,1 @@
+main.ts:5:36: error: `main` reaches `env`, which the capability policy does not grant (`--deny env`); the chain that reaches it: main.ts:5:36 calls isSet, settings.ts:1:49 calls getenv

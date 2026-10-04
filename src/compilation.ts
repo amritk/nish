@@ -158,7 +158,7 @@ import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { buildModeOf, isWasmBuild } from "./visibility"
+import { buildModeOf, hostVisible, isWasmBuild } from "./visibility"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47
@@ -1285,10 +1285,11 @@ export class Compilation {
       const name = capabilityNames(both)[0]
       const k = policy.deny.entries.indexOf(name)
       const at = k >= 0 && k < policy.deny.offsets.length ? policy.deny.offsets[k] : 0
+      const end = k >= 0 && k < policy.deny.ends.length ? policy.deny.ends[k] : at + 1
       this.sink.report(
         source,
         at,
-        at + name.length + 2,
+        end,
         `\`${name}\` is both allowed and denied in the root package's capability policy; a policy says one or the other`
       )
       return
@@ -1306,7 +1307,7 @@ export class Compilation {
     while (k < list.entries.length && k < list.offsets.length) {
       const entry = list.entries[k]
       const at = list.offsets[k]
-      const end = at + entry.length + 2 // the entry and its quotes
+      const end = k < list.ends.length ? list.ends[k] : at + 1
       const index = capabilityIndex(entry)
       if (index < 0) {
         this.sink.report(
@@ -1331,13 +1332,14 @@ export class Compilation {
   }
 
   /**
-   * WP36: refuse what the entry's closure reaches beyond the capability
-   * policy (docs/wp36-capability-policy.md §1): `--deny` and the root
-   * package's `deny` refuse a capability outright, and `--allow` and its
-   * `allow`, each an allowlist when given, refuse every capability they do
-   * not list but `unsafe`, whose opt-in is the import. Only the entry is
-   * judged: `main`'s closure, or each exported function of a library entry.
-   * One error per refused capability, in the fixed order, spanned at the
+   * WP36: refuse what the program reaches beyond the capability policy
+   * (docs/wp36-capability-policy.md §1): `--deny` and the root package's
+   * `deny` refuse a capability outright, and `--allow` and its `allow`, each
+   * an allowlist when given, refuse every capability they do not list but
+   * `unsafe`, whose opt-in is the import. What is judged is every function
+   * outside code can call (`hostVisible`), so no build mode lets a denied
+   * capability through: `main` in a closed `--link` build, and every
+   * host-visible function of every module in an open one. One error per refused capability, in the fixed order, spanned at the
    * first call of its witness chain and naming the whole chain, so the reader
    * sees how the program got there. Nothing here moves a byte of the IR: a
    * program it accepts is the one the build compiles anyway.
@@ -1351,14 +1353,30 @@ export class Compilation {
     }
     const facts = this.analyze()
     const index = functionIndex(this, facts)
-    const program = this.entry().checker.program
+    // Every function code this compiler did not see may call, in every module:
+    // `main` alone in a closed `--link` build, and each host-visible export
+    // (every function, under `--no-strict-exports`) in an open one -- a
+    // library, a sidecar, a wasm module or IR for someone else to link.
+    const programs: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      programs.push(unit.checker.program)
+    }
+    const mode = buildModeOf(this.opts, programs)
+    // `main` first, so a program's refusal names it wherever it is declared.
+    const main = this.entry().checker.program.entryMain
     const judged: FunctionSig[] = []
-    const main = program.entryMain
+    let mainName = ""
     if (main !== null) {
       judged.push(main)
-    } else {
+      mainName = main.name
+    }
+    for (const program of programs) {
       for (const sig of program.functions) {
-        if (sig.exported && sig.definedIn(program.source)) {
+        if (
+          sig.name !== mainName &&
+          sig.definedIn(program.source) &&
+          hostVisible(mode, sig.exported, false)
+        ) {
           judged.push(sig)
         }
       }

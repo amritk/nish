@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-allow-cli-deny",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["env"] }
+  }
+}

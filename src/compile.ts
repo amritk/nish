@@ -385,7 +385,7 @@ const capabilityListMask = (flag: string, list: string): i32 => {
   let mask = 0
   for (const name of splitByte(list, COMMA)) {
     const scope = name.indexOf("=")
-    const whole = scope >= 0 && scope <= name.length ? name.substring(0, scope) : name
+    const whole = scope >= 0 ? name.slice(0, scope) : name
     const index = capabilityIndex(whole)
     if (index < 0) {
       console.error(

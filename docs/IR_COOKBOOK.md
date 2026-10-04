@@ -14935,7 +14935,8 @@ the capabilities above and change no byte of the IR (`docs/LANGUAGE.md` ->
 Capabilities -> The capability policy). Compiled with `--allow fs.read` the
 snippet above is the listing above, byte for byte; compiled with
 `--deny fs.read` there is no listing at all, only this, spanned at `main`'s
-first call of the witness chain and naming the rest of it the way the report
+first call of the witness chain (`main` is judged first, before the export
+`lineCount`, which reaches `fs.read` too) and naming the rest of it the way the report
 does:
 
 <!-- capabilities-refusal builtin-capabilities -->

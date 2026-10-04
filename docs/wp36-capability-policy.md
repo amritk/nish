@@ -32,11 +32,23 @@ what it **denies**.
   intersect. A capability the package refuses cannot be granted back by a
   flag, so a build script cannot quietly widen what the package says about
   itself.
-- **Only the entry's closure is judged**: `main`'s set, or, for an entry with
-  no `main`, the set of each function the entry module exports — the
-  program's set as WP35 §4 defines it. A dependency that has a capability its
-  caller never reaches is not refused. Per-dependency policy is out of scope
-  (§6).
+- **What is judged is every function code outside the program can call**,
+  in every module — exactly what `hostVisible` (`src/visibility.ts`) calls
+  host-visible for the build, so that no build mode lets a denied capability
+  through:
+  - a closed build (`--link` or `nish run`, with no sidecar, no
+    `declare function` and no wasm target): `main` alone, since nothing but
+    the runtime calls in, and a dependency's capability that `main` never
+    reaches is not refused;
+  - an open build (`-o` without `--link`, any of `--emit-header`,
+    `--emit-dts`, `--emit-napi`, `--emit-napi-async`, a program that declares
+    a C function, wasm and WASI): `main` and every exported function of every
+    module, a second root and every imported module included, because a host
+    may call any of them;
+  - under `--no-strict-exports` every function has external linkage, so in an
+    open build every function of every module is judged, exported or not.
+
+  Per-dependency policy is out of scope (§6).
 - **`exit` and `signal` are capabilities like the others.** Under an
   allowlist, a program that calls `process.exit` needs `--allow exit`. What
   WP35 §1 calls ambient — printing, argv, `panic`, arena control — has no
@@ -125,16 +137,17 @@ reads with it carries the bit to the instance that runs it.
 
 `Compilation.refuseCapabilities` runs at the tail of `check()`, after the
 no-panic scope, so the diagnostic goes through the sink like every other and
-`--json` carries it. One error per refused capability, in the fixed order of
-WP35 §1, NL2459:
+`--json` carries it. NL2459, one error per refused capability, reported in
+source order like every diagnostic:
 
 ```
 main.ts:4:16: error: `main` reaches `fs.read`, which the capability policy does not grant (`--deny fs.read`); the chain that reaches it: main.ts:4:16 calls load, lib.ts:1:47 calls readFileSync
 ```
 
-- The span is the first call of the witness chain: the call in `main` (or in
-  the first exported function of a library entry that reaches the capability)
-  through which it is reached, `capSite[c]` on its facts.
+- The span is the first call of the witness chain of the first judged
+  function that reaches the capability — `main` first, then each module's
+  host-visible functions in load and declaration order — `capSite[c]` on its
+  facts.
 - The message names the whole chain, one `path:line:col calls <callee>` per
   hop, exactly as `--emit-capabilities` writes `"at"` and `"calls"`
   (`witnessChain` in `src/capability-report.ts`, which both read): relative to

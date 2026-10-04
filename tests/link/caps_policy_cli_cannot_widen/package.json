@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-cli-cannot-widen",
+  "private": true,
+  "nish": {
+    "capabilities": { "deny": ["net"] }
+  }
+}

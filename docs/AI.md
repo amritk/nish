@@ -1615,8 +1615,9 @@ behaviour out of range — so a module that uses them stays out of `noPanic`.
 A package that must not touch the network says so in `package.json`,
 `"nish": { "capabilities": { "deny": ["net"] } }`, and `--deny net` or an
 allowlist such as `--allow fs.read,exit` says the same on the command line. A
-program whose `main` reaches more is refused (NL2459), spanned at the call in
-`main` and naming the whole chain to the builtin; nothing changes in a program
+program whose `main` — or, in a library or a header build, any export —
+reaches more is refused (NL2459), spanned at the first call and naming the
+whole chain to the builtin; nothing changes in a program
 that keeps to it ([LANGUAGE.md](LANGUAGE.md#the-capability-policy)). Under an
 allowlist `exit` is a capability like the others, and `unsafe` can be denied
 but never allowed: importing `nish:unsafe` is the opt-in.

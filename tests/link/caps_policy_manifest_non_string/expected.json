@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_non_string/package.json","line":5,"column":39,"endLine":5,"endColumn":42,"severity":"error","code":"NL3033","message":"`123` is no capability: a policy names capabilities as `--emit-capabilities` reports them, one of clock, entropy, env, exit, ffi, fs.read, fs.write, net, process.spawn, signal, unsafe"}

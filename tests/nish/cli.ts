@@ -757,6 +757,48 @@ const checkCapabilityPolicy = (t: Suite, cli: Cli, env: boolean): void => {
     }
   }
 
+  // An open build is judged on every function a host can call, in every
+  // module: here a second root's export, behind a header, with no `main`.
+  writeFileSync(`${WORK}/policy_entry.ts`, "export const answer = (): i32 => 42;\n");
+  writeFileSync(`${WORK}/policy_lib.ts`, "export const stamp = (): f64 => Date.now();\n");
+  const library = cli.plain("policy_library", [
+    `${WORK}/policy_entry.ts`,
+    `${WORK}/policy_lib.ts`,
+    "--emit-header",
+    `${WORK}/policy.h`,
+    "-o",
+    `${WORK}/policy_library/`,
+    "--deny",
+    "clock",
+    "--json",
+  ]);
+  if (t.eqI32("a header build is refused for a second module's export, exit 1", library.status, 1)) {
+    const objects = cliObjectLines(library.stdout);
+    if (t.eqI32("with one object under --json", toI32(objects.length), 1)) {
+      t.contains("naming the export", cliField(objects[0], "message"), "`stamp` reaches `clock`");
+    }
+  }
+  // One object per refused capability, in source order like every diagnostic.
+  writeFileSync(
+    `${WORK}/policy_two.ts`,
+    [
+      "export const main = (): number => {",
+      '  const home = getenv("HOME");',
+      "  return Date.now() > 0 && home !== null ? 0 : 1;",
+      "};",
+      "",
+    ].join("\n")
+  );
+  const two = cli.plain("policy_two", [`${WORK}/policy_two.ts`, "--deny", "clock,env", "--json", "-o", `${WORK}/policy_two/`]);
+  if (t.eqI32("a program reaching two denied capabilities exits 1", two.status, 1)) {
+    const objects = cliObjectLines(two.stdout);
+    if (t.eqI32("with one object per capability under --json", toI32(objects.length), 2)) {
+      t.contains("the first is the earlier call, `env`", cliField(objects[0], "message"), "reaches `env`");
+      t.contains("the second the later, `clock`", cliField(objects[1], "message"), "reaches `clock`");
+      t.eqStr("both with the policy's code", `${cliField(objects[0], "code")} ${cliField(objects[1], "code")}`, "NL2459 NL2459");
+    }
+  }
+
   if (!env) {
     t.skip("nish run --deny", "needs env(1) to set XDG_CACHE_HOME, and the probe did not find one");
     return;

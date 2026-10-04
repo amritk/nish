@@ -1,0 +1,1 @@
+main.ts:6:36: error: `main` reaches `env`, which the capability policy does not grant (`--allow fs.read` does not list it); the chain that reaches it: main.ts:6:36 calls isSet, settings.ts:1:49 calls getenv
