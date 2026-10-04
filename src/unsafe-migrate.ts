@@ -13,7 +13,10 @@
 // range. They are read after `proveCallSiteRanges`, when `nodeProvenIndex` is
 // final. The flag records no fact for a check it drops, so its proofs are a
 // subset of the proofs without it: an access left as `xs[i]` because it was
-// proven stays proven once the flag is gone.
+// proven stays proven once the flag is gone. The converse does not hold, so a
+// site can be one the checker would have proven without the flag, and its
+// rewrite then gives up a check that would have cost nothing: the meaning is
+// the same, and dropping the flag first is the way to keep such a site.
 //
 // **A fix is offered only where the rewrite compiles and means the same.** The
 // two calls take an array of numbers and an `i32` index, `uncheckedSet` is a
@@ -34,8 +37,8 @@
 
 import { CLI } from "./branding"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
-import { arrayMethodName, isAssignmentOperator, isStringMethodCall } from "./emit-util"
-import { isNetExport, netRangeBuffer, unsafeModule } from "./nish-modules"
+import { arrayMethodName, builtinNameOf, isAssignmentOperator, isStringMethodCall } from "./emit-util"
+import { unsafeModule } from "./nish-modules"
 import {
   FLAG_OPTIONAL,
   N_BINARY,
@@ -46,7 +49,6 @@ import {
   N_IMPORT,
   N_IMPORT_SPEC,
   N_INDEX,
-  N_LIST,
   N_MEMBER,
   N_NEW,
   N_NUMBER,
@@ -55,9 +57,13 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
+import { builtinPanicKind, PANIC_SLICE } from "./panics"
 import { CheckedProgram, Instantiation } from "./program"
 import { StringBuilder } from "./strings"
 import { T_I32, TypeTable, isNumeric } from "./types"
+
+/** `;`, which a module that ends its statements with one gets after a new import. */
+const CH_SEMICOLON: i32 = 59
 
 /** No rewrite: the warning alone. */
 const SHAPE_NONE: i32 = 0
@@ -84,7 +90,7 @@ const NO_FORM_REASON: string = "`nish:unsafe` has no unchecked form of it"
  * call, or the compound store whose second check it is. A store is reported
  * at its access, so that the access and the store over it are one site, and
  * `store` is the assignment its rewrite replaces; it is `node` otherwise.
- * `reason` says why there is no fix when `shape` is `SHAPE_NONE`.
+ * `reason` says why there is no fix, and a site with one has `SHAPE_NONE`.
  */
 class UncheckedSite {
   node: Node
@@ -97,12 +103,21 @@ class UncheckedSite {
     this.node = node
     this.store = store
     this.what = what
-    this.shape = shape
+    this.shape = reason.length > 0 ? SHAPE_NONE : shape
     this.reason = reason
   }
 }
 
-/** The sites of one module, once each however many bodies reach a node. */
+/** Whether a rewrite of `shape` calls `uncheckedGet`: every one but a plain store. */
+const callsGet = (shape: i32): boolean => shape === SHAPE_GET || shape === SHAPE_UPDATE
+
+/** Whether a rewrite of `shape` calls `uncheckedSet`: every store. */
+const callsSet = (shape: i32): boolean => shape === SHAPE_SET || shape === SHAPE_UPDATE
+
+/**
+ * The sites of one module, once each however many bodies reach a node. Only
+ * a module the flag reaches is walked, so only its table is allocated.
+ */
 class ModuleSites {
   program: CheckedProgram
   sites: UncheckedSite[]
@@ -112,11 +127,14 @@ class ModuleSites {
   constructor(program: CheckedProgram) {
     this.program = program
     this.sites = []
-    this.at = new Array<i32>(program.nodeTypes.length)
-    let i = 0
-    while (i < this.at.length) {
-      this.at[i] = -1
-      i = i + 1
+    this.at = []
+    if (program.uncheckedIndexing) {
+      this.at = new Array<i32>(program.nodeTypes.length)
+      let i = 0
+      while (i < this.at.length) {
+        this.at[i] = -1
+        i = i + 1
+      }
     }
   }
 }
@@ -146,8 +164,8 @@ export const reportUncheckedIndexSites = (
   // over. Each instantiation is walked with its tables installed, and its
   // sites go to the module the body is written in. A generic function's
   // instantiations are listed on the module that asked for them, and a
-  // generic class's members are functions whose signature carries one, as
-  // `proveCallSiteRanges` finds them; a body reached twice is recorded once.
+  // generic class's members, which that list does not hold, are functions
+  // whose signature carries one, as `proveCallSiteRanges` finds them.
   for (const holder of programs) {
     if (!holder.uncheckedIndexing) {
       continue
@@ -157,7 +175,7 @@ export const reportUncheckedIndexSites = (
     }
     for (const sig of holder.functions) {
       const info = sig.instance
-      if (info !== null) {
+      if (info !== null && info.template === null) {
         walkInstance(holder, info, modules, table)
       }
     }
@@ -217,9 +235,7 @@ class SiteWalk {
       } else if (node.text !== "=" && callsOrConstructs(node.children[1])) {
         // The first check was proven, and the emitter checks again after a
         // right side that may resize the array (CG-10); the flag drops that one.
-        this.record(
-          new UncheckedSite(node, node, "the second check of this compound store", SHAPE_NONE, NO_FORM_REASON)
-        )
+        this.noForm(node, "the second check of this compound store")
       }
       this.walk(target.children[0], false)
       this.walk(target.children[1], false)
@@ -246,20 +262,23 @@ class SiteWalk {
   }
 
   noteRead(node: Node): void {
-    const reason = this.accessRefusal(node)
-    this.record(
-      new UncheckedSite(node, node, "this index", reason.length > 0 ? SHAPE_NONE : SHAPE_GET, reason)
-    )
+    const reason = this.generic ? GENERIC_REASON : this.accessRefusal(node)
+    this.record(new UncheckedSite(node, node, "this index", SHAPE_GET, reason))
   }
 
   noteStore(assign: Node, target: Node, statement: boolean): void {
-    const shape = assign.text === "=" ? SHAPE_SET : SHAPE_UPDATE
-    let reason = this.accessRefusal(target)
+    let reason = this.generic ? GENERIC_REASON : this.accessRefusal(target)
     if (reason.length === 0) {
-      reason = this.storeRefusal(assign, target, statement)
+      reason = storeRefusal(assign, target, statement)
     }
+    const shape = assign.text === "=" ? SHAPE_SET : SHAPE_UPDATE
+    this.record(new UncheckedSite(target, assign, "this index", shape, reason))
+  }
+
+  /** A check `nish:unsafe` has no form of, so its site never has a fix. */
+  noForm(node: Node, what: string): void {
     this.record(
-      new UncheckedSite(target, assign, "this index", reason.length > 0 ? SHAPE_NONE : shape, reason)
+      new UncheckedSite(node, node, what, SHAPE_NONE, this.generic ? GENERIC_REASON : NO_FORM_REASON)
     )
   }
 
@@ -283,51 +302,31 @@ class SiteWalk {
     return ""
   }
 
-  /**
-   * Why a store to `target` has no rewrite into `uncheckedSet`, or `""`. The
-   * value needs no test of its own: a store to an array of numbers compiles
-   * only with a value of exactly the element type, which is what
-   * `uncheckedSet` takes, and a compound store's operator is one of the
-   * binary operators, the only ones the checker accepts in front of `=`.
-   */
-  storeRefusal(assign: Node, target: Node, statement: boolean): string {
-    if (!statement) {
-      return "`uncheckedSet` is a statement, and the value of this store is used"
-    }
-    // The rewrite evaluates the array and the index twice, and the right side
-    // after the read rather than before the store's second check, so each has
-    // to be a plain read for the two to compute the same thing.
-    const plain =
-      isPlainRead(target.children[0]) && isPlainRead(target.children[1]) && isPlainRead(assign.children[1])
-    if (assign.text !== "=" && !plain) {
-      return "a compound store becomes a read and a write that evaluate the array and the index twice, and here the array, the index or the right side calls, constructs or assigns"
-    }
-    return ""
-  }
-
-  /** The method calls whose check the flag drops: none of them has a `nish:unsafe` form. */
+  /** The method and builtin calls whose check the flag drops: none of them has a `nish:unsafe` form. */
   noteCall(call: Node): void {
     const program = this.program
     const proven = program.nodeProvenIndex[call.id]
     if (isStringMethodCall(program, call)) {
       const name = call.children[0].text
       if ((name === "charCodeAt" && !proven) || name === "slice") {
-        this.record(new UncheckedSite(call, call, `this \`${name}\``, SHAPE_NONE, NO_FORM_REASON))
+        this.noForm(call, `this \`${name}\``)
       }
       return
     }
     const method = arrayMethodName(program, this.table, call)
     if ((method === "pop" && !proven) || method === "set") {
-      this.record(new UncheckedSite(call, call, `this \`${method}\``, SHAPE_NONE, NO_FORM_REASON))
+      this.noForm(call, `this \`${method}\``)
       return
     }
+    // A socket call checks its buffer range: the builtin sites the attribute
+    // pass records as `slice` panics (`noteBuiltinSite`).
     const callee = call.children[0]
-    if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
-      return
-    }
-    const builtin = program.nodeBuiltins[call.id]
-    if (builtin.length > 0 && isNetExport(builtin) && netRangeBuffer(builtin) >= 0) {
-      this.record(new UncheckedSite(call, call, `this \`${callee.text}\``, SHAPE_NONE, NO_FORM_REASON))
+    if (
+      callee.kind === N_IDENT &&
+      program.nodeCallees[call.id] === null &&
+      builtinPanicKind(builtinNameOf(program, call)) === PANIC_SLICE
+    ) {
+      this.noForm(call, `this \`${callee.text}\``)
     }
   }
 
@@ -338,18 +337,39 @@ class SiteWalk {
     if (id < 0 || id >= into.at.length) {
       return
     }
-    let at = into.at[id]
+    const at = into.at[id]
     if (at < 0) {
-      at = into.sites.length
-      into.at[id] = at
+      into.at[id] = into.sites.length
       into.sites.push(site)
-    }
-    if (this.generic && at < into.sites.length) {
+    } else if (this.generic && at < into.sites.length) {
       const kept = into.sites[at]
       kept.shape = SHAPE_NONE
       kept.reason = GENERIC_REASON
     }
   }
+}
+
+/**
+ * Why a store to `target` has no rewrite into `uncheckedSet`, or `""`. The
+ * value needs no test of its own: a store to an array of numbers compiles
+ * only with a value of exactly the element type, which is what
+ * `uncheckedSet` takes, and a compound store's operator is one of the binary
+ * operators, the only ones the checker accepts in front of `=`.
+ */
+const storeRefusal = (assign: Node, target: Node, statement: boolean): string => {
+  if (!statement) {
+    return "`uncheckedSet` is a statement, and the value of this store is used"
+  }
+  // The rewrite evaluates the array and the index twice, and the right side
+  // after the read rather than before the store's second check, so each has
+  // to be a plain read for the two to compute the same thing.
+  if (
+    assign.text !== "=" &&
+    !(isPlainRead(target.children[0]) && isPlainRead(target.children[1]) && isPlainRead(assign.children[1]))
+  ) {
+    return "a compound store becomes a read and a write that evaluate the array and the index twice, and here the array, the index or the right side calls, constructs or assigns"
+  }
+  return ""
 }
 
 /**
@@ -410,24 +430,26 @@ const callsOrConstructs = (node: Node): boolean => {
 /** Report one module's sites, each with its rewrite and, while a name is missing, the import. */
 const reportModule = (into: ModuleSites, sink: DiagnosticSink): void => {
   const program = into.program
-  const names: string[] = ["uncheckedGet", "uncheckedSet"]
-  const plan = planUnsafeImport(program.source, program.file, names)
+  const plan = planUnsafeImport(program, ["uncheckedGet", "uncheckedSet"])
+  const get = plan.names[GET]
+  const set = plan.names[SET]
   // A site whose name the module cannot bind loses its fix, so the import
   // names only what the remaining fixes call.
-  const needed: boolean[] = [false, false]
   for (const site of into.sites) {
-    if (site.shape !== SHAPE_NONE) {
-      const refusal = bindingRefusal(plan, site.shape)
-      if (refusal.length > 0) {
-        site.shape = SHAPE_NONE
-        site.reason = refusal
-      } else {
-        needed[GET] = needed[GET] || site.shape !== SHAPE_SET
-        needed[SET] = needed[SET] || site.shape !== SHAPE_GET
-      }
+    let refusal = ""
+    if (callsGet(site.shape) && get.refusal.length > 0) {
+      refusal = get.refusal
+    } else if (callsSet(site.shape) && set.refusal.length > 0) {
+      refusal = set.refusal
     }
+    if (refusal.length > 0) {
+      site.shape = SHAPE_NONE
+      site.reason = refusal
+    }
+    get.needed = get.needed || callsGet(site.shape)
+    set.needed = set.needed || callsSet(site.shape)
   }
-  const importEdit = unsafeImportEdit(plan, needed)
+  const importEdit = unsafeImportEdit(plan)
   const unsafe = unsafeModule()
   for (const site of into.sites) {
     const edits: Edit[] = []
@@ -439,23 +461,13 @@ const reportModule = (into: ModuleSites, sink: DiagnosticSink): void => {
       if (importEdit !== null) {
         edits.push(importEdit)
       }
-      edits.push(siteEdit(program.source, plan, site))
+      edits.push(siteEdit(program.source, get.local, set.local, site))
     }
+    // Built here rather than through `reportDeprecation`, which takes no edits.
     const warning = new Diagnostic(program.source, site.node.start, site.node.end, "deprecation", text)
     warning.edits = edits
     sink.insertWarning(sink.deprecations, warning)
   }
-}
-
-/** Why the module cannot call what `shape` calls, or `""`. */
-const bindingRefusal = (plan: UnsafeImport, shape: i32): string => {
-  if (shape !== SHAPE_SET && plan.refusals[GET].length > 0) {
-    return plan.refusals[GET]
-  }
-  if (shape !== SHAPE_GET && plan.refusals[SET].length > 0) {
-    return plan.refusals[SET]
-  }
-  return ""
 }
 
 /** The rewrite as the message spells it, in the letters `runtime/nish.d.ts` uses. */
@@ -467,9 +479,7 @@ const spelledRewrite = (shape: i32): string => {
 }
 
 /** The edit that rewrites one site into the calls, by the names the module binds them to. */
-const siteEdit = (source: SourceFile, plan: UnsafeImport, site: UncheckedSite): Edit => {
-  const get = plan.locals[GET]
-  const set = plan.locals[SET]
+const siteEdit = (source: SourceFile, get: string, set: string, site: UncheckedSite): Edit => {
   if (site.shape === SHAPE_GET) {
     const access = site.node
     return new Edit(
@@ -506,34 +516,41 @@ const isAtom = (node: Node): boolean =>
 const textOf = (source: SourceFile, node: Node): string => source.text.substring(node.start, node.end)
 
 /**
- * What a module needs to call some of `nish:unsafe`'s functions: for each of
- * `names`, the local name a call spells (the alias of an import that already
- * binds it, or the name itself), whether that import already exists, and why
- * the module cannot bind it, if it cannot. `list` is the braces of the last
- * `nish:unsafe` import, which an edit extends; `after` the last import of
- * any module, after which a new one goes.
+ * One of `nish:unsafe`'s functions as a module calls it: by `local`, the alias
+ * of an import that already binds it (`bound`) or the name itself; `refusal`
+ * says why the module cannot bind it, and `needed` whether a fix calls it.
+ */
+class UnsafeName {
+  name: string
+  local: string
+  refusal: string
+  bound: boolean
+  needed: boolean
+
+  constructor(name: string) {
+    this.name = name
+    this.local = name
+    this.refusal = ""
+    this.bound = false
+    this.needed = false
+  }
+}
+
+/**
+ * What a module needs to call some of `nish:unsafe`'s functions. `list` is
+ * the braces of its last `nish:unsafe` import, which an edit extends; `after`
+ * its last import of any module, after which a new one goes; `first` its
+ * first statement, before which a new one goes when there is no other.
  */
 class UnsafeImport {
-  names: string[]
-  locals: string[]
-  bound: boolean[]
-  refusals: string[]
+  names: UnsafeName[]
   list: Node | null
   after: Node | null
-  /** The first top-level statement, before which a new import goes when there is no other. */
   first: Node | null
   semicolon: boolean
 
-  constructor(names: string[]) {
-    this.names = names
-    this.locals = []
-    this.bound = []
-    this.refusals = []
-    for (const name of names) {
-      this.locals.push(name)
-      this.bound.push(false)
-      this.refusals.push("")
-    }
+  constructor() {
+    this.names = []
     this.list = null
     this.after = null
     this.first = null
@@ -542,49 +559,46 @@ class UnsafeImport {
 }
 
 /**
- * Read a module's imports for `names`. A name an existing `nish:unsafe` import
- * binds is called by its local name, so `uncheckedGet as get` is kept. A name
- * it does not is refused when the module already uses that identifier for
- * anything, because the new binding would collide with it. The module has
- * checked, so each `nish:unsafe` import is a non-empty list of plain names:
- * the checker refuses every other form of import of a builtin module.
+ * Read a module's imports for `names`, from the bindings the checker kept
+ * (`CheckedProgram.unsafeImports`): a name an import binds is called by its
+ * local name, so `uncheckedGet as get` is kept. A name none binds is refused
+ * when the module already uses that identifier for anything, because the new
+ * binding would collide with it.
  */
-const planUnsafeImport = (source: SourceFile, file: Node, names: string[]): UnsafeImport => {
-  const plan = new UnsafeImport(names)
-  const unsafe = unsafeModule()
+const planUnsafeImport = (program: CheckedProgram, names: string[]): UnsafeImport => {
+  const plan = new UnsafeImport()
+  for (const name of names) {
+    plan.names.push(new UnsafeName(name))
+  }
+  let last: Node | null = null
+  for (const imp of program.unsafeImports) {
+    if (last === null || imp.decl.start > last.start) {
+      last = imp.decl
+    }
+    for (const entry of plan.names) {
+      if (imp.importedName === entry.name) {
+        entry.local = imp.localName
+        entry.bound = true
+      }
+    }
+  }
+  plan.list = last === null ? null : last.children[0]
+  const file = program.file
+  const text = program.source.text
   for (const stmt of file.children) {
     if (plan.first === null) {
       plan.first = stmt
     }
-    plan.semicolon = plan.semicolon || source.text.substring(stmt.end - 1, stmt.end) === ";"
-    if (stmt.kind !== N_IMPORT) {
-      continue
-    }
-    plan.after = stmt
-    const list = stmt.children[0]
-    if (stmt.text !== unsafe || list.kind !== N_LIST || list.children.length === 0) {
-      continue
-    }
-    plan.list = list
-    for (const spec of list.children) {
-      const imported = spec.children.length > 0 ? spec.children[0].text : ""
-      let i = 0
-      while (i < names.length && i < plan.locals.length && i < plan.bound.length) {
-        if (imported === names[i]) {
-          plan.locals[i] = spec.text
-          plan.bound[i] = true
-        }
-        i = i + 1
-      }
+    plan.semicolon = plan.semicolon || (stmt.end > 0 && text.charCodeAt(stmt.end - 1) === CH_SEMICOLON)
+    if (stmt.kind === N_IMPORT) {
+      plan.after = stmt
     }
   }
-  let i = 0
-  while (i < names.length && i < plan.bound.length && i < plan.refusals.length) {
-    if (!plan.bound[i] && usesName(file, names[i], unsafe)) {
-      plan.refusals[i] =
-        `the module already uses the name \`${names[i]}\`, which the \`${unsafe}\` import would bind`
+  const unsafe = unsafeModule()
+  for (const entry of plan.names) {
+    if (!entry.bound && usesName(file, entry.name, unsafe)) {
+      entry.refusal = `the module already uses the name \`${entry.name}\`, which the \`${unsafe}\` import would bind`
     }
-    i = i + 1
   }
   return plan
 }
@@ -606,30 +620,26 @@ const usesName = (node: Node, name: string, unsafe: string): boolean => {
 }
 
 /**
- * The one edit that binds every name `needed` marks and the module does not
+ * The one edit that binds every name a fix needs and the module does not
  * bind yet, or `null` when there is none to bind: the names after the last
  * one of the module's `nish:unsafe` import, or a new import after its last
  * import, or before its first statement, written with a semicolon when the
  * module ends its statements with one. Every site's fix carries this same
  * edit, which is what makes `--fix` apply it once.
  */
-const unsafeImportEdit = (plan: UnsafeImport, needed: boolean[]): Edit | null => {
+const unsafeImportEdit = (plan: UnsafeImport): Edit | null => {
   const missing = new StringBuilder()
-  let count = 0
-  let i = 0
-  while (i < plan.names.length && i < needed.length && i < plan.bound.length && i < plan.refusals.length) {
-    if (needed[i] && !plan.bound[i] && plan.refusals[i].length === 0) {
-      missing.add(count === 0 ? plan.names[i] : `, ${plan.names[i]}`)
-      count = count + 1
+  for (const entry of plan.names) {
+    if (entry.needed && !entry.bound) {
+      missing.add(missing.isEmpty() ? entry.name : `, ${entry.name}`)
     }
-    i = i + 1
   }
-  if (count === 0) {
+  if (missing.isEmpty()) {
     return null
   }
   const names = missing.toText()
   const list = plan.list
-  if (list !== null) {
+  if (list !== null && list.children.length > 0) {
     const last = list.children[list.children.length - 1]
     return new Edit(last.end, last.end, `, ${names}`)
   }

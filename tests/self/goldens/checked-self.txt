@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 83 programs, 1904435 dump lines live, 83 distinct modules.
+# 83 programs, 1904566 dump lines live, 83 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/expressions.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/symbols.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -31926,74 +31926,73 @@ function Compilation.reportDeprecatedFlags(this: Compilation): void -> @Compilat
   callee 1670:87 unsafeModule -> @unsafeModule
   callee 1674:7 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
   callee 1678:92 unsafeModule -> @unsafeModule
-function Compilation.reportUncheckedIndexSites(this: Compilation): void -> @Compilation.reportUncheckedIndexSites [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function Compilation.reportUncheckedIndexSites(this: Compilation, programs: CheckedProgram[]): void -> @Compilation.reportUncheckedIndexSites [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUncheckedIndexSites
-  calls: nish_array_grow reportUncheckedIndexSites
+  calls: reportUncheckedIndexSites
   pointer this: size=128 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  local 1695:11 programs: CheckedProgram[] (const)
-  local 1696:16 unit: ModuleUnit (const)
-  callee 1699:5 reportUncheckedIndexSites -> @reportUncheckedIndexSites
+  pointer programs: size=0 writesThrough=false captured=false passedTo=reportUncheckedIndexSites#0
+  stackSites=0 stackLocals=0
+  callee 1693:7 reportUncheckedIndexSites -> @reportUncheckedIndexSites
 function Compilation.reportArenaLoops(this: Compilation): void -> @Compilation.reportArenaLoops [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
   calls: Compilation.analyze DiagnosticSink.reportPerformance arenaLoopFindings
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.analyze#0
   stackSites=0 stackLocals=0
-  local 1711:11 facts: FactsTable (const)
-  callee 1711:19 Compilation.analyze -> @Compilation.analyze
-  local 1712:16 unit: AnalysisUnit (const)
-  local 1713:18 finding: ArenaFinding (const)
-  callee 1713:29 arenaLoopFindings -> @arenaLoopFindings
-  callee 1714:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  local 1706:11 facts: FactsTable (const)
+  callee 1706:19 Compilation.analyze -> @Compilation.analyze
+  local 1707:16 unit: AnalysisUnit (const)
+  local 1708:18 finding: ArenaFinding (const)
+  callee 1708:29 arenaLoopFindings -> @arenaLoopFindings
+  callee 1709:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
 function Compilation.reportPortability(this: Compilation): void -> @Compilation.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via portabilityFindings
   calls: DiagnosticSink.reportPortability portabilityFindings
   pointer this: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1732:16 unit: AnalysisUnit (const)
-  local 1733:18 finding: PortabilityFinding (const)
-  callee 1733:29 portabilityFindings -> @portabilityFindings
-  callee 1734:9 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
+  local 1727:16 unit: AnalysisUnit (const)
+  local 1728:18 finding: PortabilityFinding (const)
+  callee 1728:29 portabilityFindings -> @portabilityFindings
+  callee 1729:9 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
 function Compilation.rejectInstantiatedStructClashes(this: Compilation): void -> @Compilation.rejectInstantiatedStructClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.constructor
   calls: Compilation.reportTemplateClash DiagnosticSink.report StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor TypeTable.typeName describePackage nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=128 writesThrough=false captured=false passedTo=Compilation.reportTemplateClash#0
   stackSites=5 stackLocals=5
-  local 1777:11 owners: StringMap (const)
-  callee 1777:20 new StringMap -> @StringMap.constructor
-  local 1778:11 ownerPackages: string[] (const)
-  local 1781:11 packageOwners: StringMap (const)
-  callee 1781:27 new StringMap -> @StringMap.constructor
-  local 1782:11 packageOwnerPaths: string[] (const)
-  local 1783:11 reported: StringSet (const)
-  callee 1783:22 new StringSet -> @StringSet.constructor
-  local 1784:16 unit: ModuleUnit (const)
-  local 1785:18 instance: StructInstantiation (const)
-  local 1791:15 name: string (const)
-  local 1795:15 templateKey: string (const)
-  local 1796:15 key: string (const)
-  local 1797:15 inPackage: i32 (const)
-  callee 1797:27 StringMap.get -> @StringMap.get
-  callee 1799:11 StringMap.set -> @StringMap.set
-  local 1805:17 first: string (const)
-  callee 1806:15 StringSet.add -> @StringSet.add
-  callee 1807:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
-  local 1811:15 seen: i32 (const)
-  callee 1811:22 StringMap.get -> @StringMap.get
-  callee 1813:11 StringMap.set -> @StringMap.set
-  callee 1818:14 StringSet.add -> @StringSet.add
-  local 1821:15 at: Node (const)
-  local 1822:15 what: string (const)
-  local 1823:15 here: string (const)
-  callee 1823:22 describePackage -> @describePackage
-  local 1824:15 there: string (const)
-  callee 1824:23 describePackage -> @describePackage
-  callee 1825:9 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 1829:24 TypeTable.typeName -> @TypeTable.typeName
+  local 1772:11 owners: StringMap (const)
+  callee 1772:20 new StringMap -> @StringMap.constructor
+  local 1773:11 ownerPackages: string[] (const)
+  local 1776:11 packageOwners: StringMap (const)
+  callee 1776:27 new StringMap -> @StringMap.constructor
+  local 1777:11 packageOwnerPaths: string[] (const)
+  local 1778:11 reported: StringSet (const)
+  callee 1778:22 new StringSet -> @StringSet.constructor
+  local 1779:16 unit: ModuleUnit (const)
+  local 1780:18 instance: StructInstantiation (const)
+  local 1786:15 name: string (const)
+  local 1790:15 templateKey: string (const)
+  local 1791:15 key: string (const)
+  local 1792:15 inPackage: i32 (const)
+  callee 1792:27 StringMap.get -> @StringMap.get
+  callee 1794:11 StringMap.set -> @StringMap.set
+  local 1800:17 first: string (const)
+  callee 1801:15 StringSet.add -> @StringSet.add
+  callee 1802:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
+  local 1806:15 seen: i32 (const)
+  callee 1806:22 StringMap.get -> @StringMap.get
+  callee 1808:11 StringMap.set -> @StringMap.set
+  callee 1813:14 StringSet.add -> @StringSet.add
+  local 1816:15 at: Node (const)
+  local 1817:15 what: string (const)
+  local 1818:15 here: string (const)
+  callee 1818:22 describePackage -> @describePackage
+  local 1819:15 there: string (const)
+  callee 1819:23 describePackage -> @describePackage
+  callee 1820:9 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 1824:24 TypeTable.typeName -> @TypeTable.typeName
 function Compilation.declaredStructs(this: Compilation, clashed: StringSet): StructRegistry -> @Compilation.declaredStructs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via StructRegistry.constructor
@@ -32001,43 +32000,43 @@ function Compilation.declaredStructs(this: Compilation, clashed: StringSet): Str
   pointer this: size=128 writesThrough=false captured=false passedTo=Compilation.reportTemplateClash#0
   pointer clashed: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   stackSites=6 stackLocals=6
-  local 1865:11 declared: StructRegistry (const)
-  callee 1865:22 new StructRegistry -> @StructRegistry.constructor
-  local 1866:11 owners: StringMap (const)
-  callee 1866:20 new StringMap -> @StringMap.constructor
-  local 1867:11 ownerPackages: string[] (const)
-  local 1868:11 ownerPaths: string[] (const)
-  local 1871:11 packageOwners: StringMap (const)
-  callee 1871:27 new StringMap -> @StringMap.constructor
-  local 1872:11 packageOwnerPaths: string[] (const)
-  local 1873:11 reportedTemplates: StringSet (const)
-  callee 1873:31 new StringSet -> @StringSet.constructor
-  local 1874:16 unit: ModuleUnit (const)
-  local 1875:18 info: StructInfo (const)
-  callee 1879:9 StructRegistry.add -> @StructRegistry.add
-  callee 1883:39 isInstantiationName -> @isInstantiationName
-  local 1886:15 what: string (const)
-  local 1887:15 at: Node (const)
-  local 1888:15 key: string (const)
-  local 1889:15 inPackage: i32 (const)
-  callee 1889:27 StringMap.get -> @StringMap.get
-  callee 1891:11 StringMap.set -> @StringMap.set
-  local 1896:17 first: string (const)
-  local 1897:17 instance: StructInstantiation | null (const)
-  callee 1899:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 1903:28 TypeTable.typeName -> @TypeTable.typeName
-  callee 1905:22 StringSet.add -> @StringSet.add
-  callee 1906:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
-  callee 1908:11 StringSet.add -> @StringSet.add
-  local 1911:15 seen: i32 (const)
-  callee 1911:22 StringMap.get -> @StringMap.get
-  callee 1913:11 StringMap.set -> @StringMap.set
-  local 1917:17 here: string (const)
-  callee 1917:24 describePackage -> @describePackage
-  local 1918:17 there: string (const)
-  callee 1918:25 describePackage -> @describePackage
-  callee 1919:11 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 1923:26 TypeTable.typeName -> @TypeTable.typeName
+  local 1860:11 declared: StructRegistry (const)
+  callee 1860:22 new StructRegistry -> @StructRegistry.constructor
+  local 1861:11 owners: StringMap (const)
+  callee 1861:20 new StringMap -> @StringMap.constructor
+  local 1862:11 ownerPackages: string[] (const)
+  local 1863:11 ownerPaths: string[] (const)
+  local 1866:11 packageOwners: StringMap (const)
+  callee 1866:27 new StringMap -> @StringMap.constructor
+  local 1867:11 packageOwnerPaths: string[] (const)
+  local 1868:11 reportedTemplates: StringSet (const)
+  callee 1868:31 new StringSet -> @StringSet.constructor
+  local 1869:16 unit: ModuleUnit (const)
+  local 1870:18 info: StructInfo (const)
+  callee 1874:9 StructRegistry.add -> @StructRegistry.add
+  callee 1878:39 isInstantiationName -> @isInstantiationName
+  local 1881:15 what: string (const)
+  local 1882:15 at: Node (const)
+  local 1883:15 key: string (const)
+  local 1884:15 inPackage: i32 (const)
+  callee 1884:27 StringMap.get -> @StringMap.get
+  callee 1886:11 StringMap.set -> @StringMap.set
+  local 1891:17 first: string (const)
+  local 1892:17 instance: StructInstantiation | null (const)
+  callee 1894:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 1898:28 TypeTable.typeName -> @TypeTable.typeName
+  callee 1900:22 StringSet.add -> @StringSet.add
+  callee 1901:13 Compilation.reportTemplateClash -> @Compilation.reportTemplateClash
+  callee 1903:11 StringSet.add -> @StringSet.add
+  local 1906:15 seen: i32 (const)
+  callee 1906:22 StringMap.get -> @StringMap.get
+  callee 1908:11 StringMap.set -> @StringMap.set
+  local 1912:17 here: string (const)
+  callee 1912:24 describePackage -> @describePackage
+  local 1913:17 there: string (const)
+  callee 1913:25 describePackage -> @describePackage
+  callee 1914:11 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 1918:26 TypeTable.typeName -> @TypeTable.typeName
 function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, template: StructTemplateInfo, first: string): void -> @Compilation.reportTemplateClash [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
@@ -32046,9 +32045,9 @@ function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, te
   pointer unit: size=88 writesThrough=false captured=false
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1938:11 at: Node (const)
-  local 1939:11 kindWord: string (const)
-  callee 1940:5 DiagnosticSink.report -> @DiagnosticSink.report
+  local 1933:11 at: Node (const)
+  local 1934:11 kindWord: string (const)
+  callee 1935:5 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet): void -> @Compilation.rejectSymbolClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.constructor
@@ -32056,179 +32055,179 @@ function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet):
   pointer this: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0
   pointer clashed: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=3 stackLocals=3
-  local 1971:11 owners: StringMap (const)
-  callee 1971:20 new StringMap -> @StringMap.constructor
-  local 1972:11 ownerSigs: FunctionSig | null[] (const)
-  local 1973:11 ownerModules: ModuleUnit[] (const)
-  local 1974:11 entry: ModuleUnit (const)
-  callee 1974:19 Compilation.entry -> @Compilation.entry
-  callee 1976:7 StringMap.set -> @StringMap.set
-  local 1980:16 unit: ModuleUnit (const)
-  local 1991:18 template: TemplateInfo (const)
-  local 1998:15 symbol: string (const)
-  local 1999:15 at: i32 (const)
-  callee 1999:20 StringMap.get -> @StringMap.get
-  callee 2001:11 StringMap.set -> @StringMap.set
-  callee 2010:9 DiagnosticSink.report -> @DiagnosticSink.report
-  local 2017:18 sig: FunctionSig (const)
-  callee 2018:14 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 2021:15 owner: StructInfo | null (const)
-  callee 2022:31 StringSet.has -> @StringSet.has
-  local 2025:15 at: i32 (const)
-  callee 2025:20 StringMap.get -> @StringMap.get
-  callee 2027:11 StringMap.set -> @StringMap.set
-  local 2032:15 previousSig: FunctionSig | null (const)
-  local 2033:15 previousModule: ModuleUnit (const)
-  local 2034:13 message: string (let)
-  callee 2038:21 clashMessage -> @clashMessage
-  local 2048:15 at2: Node (const)
-  callee 2048:21 nameNode -> @nameNode
-  callee 2049:9 DiagnosticSink.report -> @DiagnosticSink.report
+  local 1966:11 owners: StringMap (const)
+  callee 1966:20 new StringMap -> @StringMap.constructor
+  local 1967:11 ownerSigs: FunctionSig | null[] (const)
+  local 1968:11 ownerModules: ModuleUnit[] (const)
+  local 1969:11 entry: ModuleUnit (const)
+  callee 1969:19 Compilation.entry -> @Compilation.entry
+  callee 1971:7 StringMap.set -> @StringMap.set
+  local 1975:16 unit: ModuleUnit (const)
+  local 1986:18 template: TemplateInfo (const)
+  local 1993:15 symbol: string (const)
+  local 1994:15 at: i32 (const)
+  callee 1994:20 StringMap.get -> @StringMap.get
+  callee 1996:11 StringMap.set -> @StringMap.set
+  callee 2005:9 DiagnosticSink.report -> @DiagnosticSink.report
+  local 2012:18 sig: FunctionSig (const)
+  callee 2013:14 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 2016:15 owner: StructInfo | null (const)
+  callee 2017:31 StringSet.has -> @StringSet.has
+  local 2020:15 at: i32 (const)
+  callee 2020:20 StringMap.get -> @StringMap.get
+  callee 2022:11 StringMap.set -> @StringMap.set
+  local 2027:15 previousSig: FunctionSig | null (const)
+  local 2028:15 previousModule: ModuleUnit (const)
+  local 2029:13 message: string (let)
+  callee 2033:21 clashMessage -> @clashMessage
+  local 2043:15 at2: Node (const)
+  callee 2043:21 nameNode -> @nameNode
+  callee 2044:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: 2067:7
+  sharedWrite: 2062:7
   calls: AnalysisUnit.constructor Compilation.entry analyzeFunctions nish_alloc_struct nish_array_grow
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.entry#0
   stackSites=0 stackLocals=0
-  local 2061:11 done: FactsTable | null (const)
-  local 2065:11 units: AnalysisUnit[] (const)
-  local 2066:16 unit: ModuleUnit (const)
-  callee 2067:18 new AnalysisUnit -> @AnalysisUnit.constructor
-  local 2070:16 unit: ModuleUnit (const)
-  callee 2072:9 Compilation.entry -> @Compilation.entry
-  local 2075:11 facts: FactsTable (const)
-  callee 2075:19 analyzeFunctions -> @analyzeFunctions
+  local 2056:11 done: FactsTable | null (const)
+  local 2060:11 units: AnalysisUnit[] (const)
+  local 2061:16 unit: ModuleUnit (const)
+  callee 2062:18 new AnalysisUnit -> @AnalysisUnit.constructor
+  local 2065:16 unit: ModuleUnit (const)
+  callee 2067:9 Compilation.entry -> @Compilation.entry
+  local 2070:11 facts: FactsTable (const)
+  callee 2070:19 analyzeFunctions -> @analyzeFunctions
 function Compilation.panicsText(this: Compilation): string -> @Compilation.panicsText [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
   calls: Compilation.analyze panicsJson
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.analyze#0
   stackSites=0 stackLocals=0
-  local 2083:11 facts: FactsTable (const)
-  callee 2083:19 Compilation.analyze -> @Compilation.analyze
-  callee 2084:12 panicsJson -> @panicsJson
+  local 2078:11 facts: FactsTable (const)
+  callee 2078:19 Compilation.analyze -> @Compilation.analyze
+  callee 2079:12 panicsJson -> @panicsJson
 function Compilation.libraryRoot(this: Compilation): string -> @Compilation.libraryRoot [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Compilation.libraryUnits(this: Compilation, units: AnalysisUnit[]): AnalysisUnit[] -> @Compilation.libraryUnits [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2105:9
+  sharedWrite: 2100:9
   calls: CheckedProgram.isCollections CheckedProgram.isSecretLibrary nish_array_grow
   pointer this: size=128 writesThrough=false captured=false
   pointer units: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2100:11 out: AnalysisUnit[] (const)
-  local 2101:9 i: i32 (let)
-  local 2103:13 program: CheckedProgram (const)
-  callee 2104:11 CheckedProgram.isCollections -> @CheckedProgram.isCollections
-  callee 2104:38 CheckedProgram.isSecretLibrary -> @CheckedProgram.isSecretLibrary
+  local 2095:11 out: AnalysisUnit[] (const)
+  local 2096:9 i: i32 (let)
+  local 2098:13 program: CheckedProgram (const)
+  callee 2099:11 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  callee 2099:38 CheckedProgram.isSecretLibrary -> @CheckedProgram.isSecretLibrary
 function Compilation.writesOutput(this: Compilation, unit: ModuleUnit): boolean -> @Compilation.writesOutput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.writesNoOutput
   pointer this: size=128 writesThrough=false captured=false
   pointer unit: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 2114:13 CheckedProgram.writesNoOutput -> @CheckedProgram.writesNoOutput
+  callee 2109:13 CheckedProgram.writesNoOutput -> @CheckedProgram.writesNoOutput
 function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.emit [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2131:9
+  sharedWrite: 2126:9
   calls: Compilation.analyze Compilation.libraryUnits Compilation.outputStems Compilation.writesOutput EmittedModule.constructor emitProgram nish_alloc_struct nish_array_grow
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.outputStems#0 Compilation.libraryUnits#0 Compilation.writesOutput#0
   stackSites=0 stackLocals=0
-  local 2119:11 facts: FactsTable (const)
-  callee 2119:19 Compilation.analyze -> @Compilation.analyze
-  local 2120:11 units: AnalysisUnit[] (const)
-  local 2121:11 stems: string[] (const)
-  callee 2121:19 Compilation.outputStems -> @Compilation.outputStems
-  local 2122:11 copies: AnalysisUnit[] (const)
-  callee 2122:36 Compilation.libraryUnits -> @Compilation.libraryUnits
-  local 2123:11 out: EmittedModule[] (const)
-  local 2124:9 i: i32 (let)
-  local 2127:13 unit: ModuleUnit (const)
-  local 2128:13 analysed: AnalysisUnit (const)
-  local 2129:13 stem: string (const)
-  callee 2130:11 Compilation.writesOutput -> @Compilation.writesOutput
-  callee 2132:11 new EmittedModule -> @EmittedModule.constructor
-  callee 2134:13 emitProgram -> @emitProgram
+  local 2114:11 facts: FactsTable (const)
+  callee 2114:19 Compilation.analyze -> @Compilation.analyze
+  local 2115:11 units: AnalysisUnit[] (const)
+  local 2116:11 stems: string[] (const)
+  callee 2116:19 Compilation.outputStems -> @Compilation.outputStems
+  local 2117:11 copies: AnalysisUnit[] (const)
+  callee 2117:36 Compilation.libraryUnits -> @Compilation.libraryUnits
+  local 2118:11 out: EmittedModule[] (const)
+  local 2119:9 i: i32 (let)
+  local 2122:13 unit: ModuleUnit (const)
+  local 2123:13 analysed: AnalysisUnit (const)
+  local 2124:13 stem: string (const)
+  callee 2125:11 Compilation.writesOutput -> @Compilation.writesOutput
+  callee 2127:11 new EmittedModule -> @EmittedModule.constructor
+  callee 2129:13 emitProgram -> @emitProgram
 function Compilation.outputStems(this: Compilation): string[] -> @Compilation.outputStems [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2177:9
+  sharedWrite: 2172:9
   calls: Compilation.entry Compilation.writesOutput StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor StringSet.has basenameWithout dirname nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 pathStem
   pointer this: size=128 writesThrough=false captured=false passedTo=Compilation.writesOutput#0 Compilation.entry#0 Compilation.writesOutput#0
   stackSites=2 stackLocals=2
-  local 2163:11 counts: StringMap (const)
-  callee 2163:20 new StringMap -> @StringMap.constructor
-  local 2164:16 unit: ModuleUnit (const)
-  callee 2165:12 Compilation.writesOutput -> @Compilation.writesOutput
-  local 2168:13 base: string (const)
-  callee 2168:20 basenameWithout -> @basenameWithout
-  callee 2169:7 StringMap.set -> @StringMap.set
-  callee 2169:24 StringMap.get -> @StringMap.get
-  local 2171:11 root: string (const)
-  callee 2171:18 dirname -> @dirname
-  callee 2171:26 Compilation.entry -> @Compilation.entry
-  local 2172:11 taken: StringSet (const)
-  callee 2172:19 new StringSet -> @StringSet.constructor
-  local 2173:11 stems: string[] (const)
-  local 2174:16 unit: ModuleUnit (const)
-  callee 2176:12 Compilation.writesOutput -> @Compilation.writesOutput
-  local 2180:13 base: string (const)
-  callee 2180:20 basenameWithout -> @basenameWithout
-  local 2181:13 stem: string (const)
-  callee 2181:20 StringMap.get -> @StringMap.get
-  callee 2181:55 pathStem -> @pathStem
-  local 2182:11 free: string (let)
-  local 2183:11 n: i32 (let)
-  callee 2184:14 StringSet.has -> @StringSet.has
-  callee 2188:7 StringSet.add -> @StringSet.add
+  local 2158:11 counts: StringMap (const)
+  callee 2158:20 new StringMap -> @StringMap.constructor
+  local 2159:16 unit: ModuleUnit (const)
+  callee 2160:12 Compilation.writesOutput -> @Compilation.writesOutput
+  local 2163:13 base: string (const)
+  callee 2163:20 basenameWithout -> @basenameWithout
+  callee 2164:7 StringMap.set -> @StringMap.set
+  callee 2164:24 StringMap.get -> @StringMap.get
+  local 2166:11 root: string (const)
+  callee 2166:18 dirname -> @dirname
+  callee 2166:26 Compilation.entry -> @Compilation.entry
+  local 2167:11 taken: StringSet (const)
+  callee 2167:19 new StringSet -> @StringSet.constructor
+  local 2168:11 stems: string[] (const)
+  local 2169:16 unit: ModuleUnit (const)
+  callee 2171:12 Compilation.writesOutput -> @Compilation.writesOutput
+  local 2175:13 base: string (const)
+  callee 2175:20 basenameWithout -> @basenameWithout
+  local 2176:13 stem: string (const)
+  callee 2176:20 StringMap.get -> @StringMap.get
+  callee 2176:55 pathStem -> @pathStem
+  local 2177:11 free: string (let)
+  local 2178:11 n: i32 (let)
+  callee 2179:14 StringSet.has -> @StringSet.has
+  callee 2183:7 StringSet.add -> @StringSet.add
 function importsCollection(program: CheckedProgram, name: string): boolean -> @importsCollection
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   pointer program: size=608 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2197:14 imp: ImportBinding (const)
+  local 2192:14 imp: ImportBinding (const)
 function declarationNameOf(program: CheckedProgram, name: string): Node | null -> @declarationNameOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownAlias CheckedProgram.ownEnum CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
   pointer program: size=608 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
   stackSites=0 stackLocals=0
-  local 2207:9 struct: StructInfo | null (const)
-  callee 2207:18 CheckedProgram.struct -> @CheckedProgram.struct
-  local 2211:9 template: StructTemplateInfo | null (const)
-  callee 2211:20 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local 2215:9 alias: AliasInfo | null (const)
-  callee 2215:17 CheckedProgram.ownAlias -> @CheckedProgram.ownAlias
-  local 2219:9 declared: EnumInfo | null (const)
-  callee 2219:20 CheckedProgram.ownEnum -> @CheckedProgram.ownEnum
+  local 2202:9 struct: StructInfo | null (const)
+  callee 2202:18 CheckedProgram.struct -> @CheckedProgram.struct
+  local 2206:9 template: StructTemplateInfo | null (const)
+  callee 2206:20 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local 2210:9 alias: AliasInfo | null (const)
+  callee 2210:17 CheckedProgram.ownAlias -> @CheckedProgram.ownAlias
+  local 2214:9 declared: EnumInfo | null (const)
+  callee 2214:20 CheckedProgram.ownEnum -> @CheckedProgram.ownEnum
 function pathStem(root: string, path: string): string -> @pathStem
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via splitByte
   escaping: path root
   calls: nish_alloc_struct nish_array_grow nish_str_at nish_str_eq nish_str_new relativePath splitByte
   stackSites=1 stackLocals=1
-  local 2229:9 parts: string[] (const)
-  local 2230:14 segment: string (const)
-  callee 2230:25 splitByte -> @splitByte
-  callee 2230:35 relativePath -> @relativePath
-  local 2235:9 joined: string (const)
+  local 2224:9 parts: string[] (const)
+  local 2225:14 segment: string (const)
+  callee 2225:25 splitByte -> @splitByte
+  callee 2225:35 relativePath -> @relativePath
+  local 2230:9 joined: string (const)
 function parentDirectory(dir: string): string -> @parentDirectory
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: dir
   calls: dirname nish_str_at nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
-  local 2261:11 parent: string (const)
-  callee 2261:20 dirname -> @dirname
-  callee 2272:10 dirname -> @dirname
+  local 2256:11 parent: string (const)
+  callee 2256:20 dirname -> @dirname
+  callee 2267:10 dirname -> @dirname
 function restatedBy(warning: Diagnostic, refused: PanicSite[]): boolean -> @restatedBy
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at
   pointer warning: size=48 writesThrough=false captured=false
   pointer refused: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2277:9 text: string (const)
-  local 2284:14 site: PanicSite (const)
+  local 2272:9 text: string (const)
+  local 2279:14 site: PanicSite (const)
 function nameNode(sig: FunctionSig): Node -> @nameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
@@ -32253,27 +32252,27 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
   pointer sig: size=112 writesThrough=false captured=false
   pointer previous: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2335:9 owner: StructInfo | null (const)
-  local 2337:11 member: string (const)
-  local 2341:11 both: string (const)
-  callee 2341:29 TypeTable.typeName -> @TypeTable.typeName
-  local 2347:9 where: string (const)
+  local 2330:9 owner: StructInfo | null (const)
+  local 2332:11 member: string (const)
+  local 2336:11 both: string (const)
+  callee 2336:29 TypeTable.typeName -> @TypeTable.typeName
+  local 2342:9 where: string (const)
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2389:3
+  sharedWrite: 2384:3
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
   pointer ctx: size=192 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2370:9 edits: Edit[] (const)
-  local 2374:9 builtin: string (const)
-  callee 2375:8 exportsAllOf -> @exportsAllOf
-  local 2380:9 text: string (const)
-  local 2381:7 close: i32 (let)
-  callee 2382:74 isQuote -> @isQuote
-  local 2385:9 quote: string (const)
-  callee 2389:14 CheckContext.edit -> @CheckContext.edit
+  local 2365:9 edits: Edit[] (const)
+  local 2369:9 builtin: string (const)
+  callee 2370:8 exportsAllOf -> @exportsAllOf
+  local 2375:9 text: string (const)
+  local 2376:7 close: i32 (let)
+  callee 2377:74 isQuote -> @isQuote
+  local 2380:9 quote: string (const)
+  callee 2384:14 CheckContext.edit -> @CheckContext.edit
 function exportsAllOf(specifier: string, imports: ImportBinding[], decl: Node): boolean -> @exportsAllOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: specifier
@@ -32281,9 +32280,9 @@ function exportsAllOf(specifier: string, imports: ImportBinding[], decl: Node): 
   pointer imports: size=0 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2400:9 listed: string (const)
-  callee 2400:23 nishModuleExports -> @nishModuleExports
-  local 2401:14 other: ImportBinding (const)
+  local 2395:9 listed: string (const)
+  callee 2395:23 nishModuleExports -> @nishModuleExports
+  local 2396:14 other: ImportBinding (const)
 function isQuote(byte: i32): boolean -> @isQuote
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -34575,10 +34574,9 @@ import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink
 import Edit from "./diagnostics" -> struct Edit
 import SourceFile from "./diagnostics" -> struct SourceFile
 import arrayMethodName from "./emit-util" -> function @arrayMethodName
+import builtinNameOf from "./emit-util" -> function @builtinNameOf
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import isStringMethodCall from "./emit-util" -> function @isStringMethodCall
-import isNetExport from "./nish-modules" -> function @isNetExport
-import netRangeBuffer from "./nish-modules" -> function @netRangeBuffer
 import unsafeModule from "./nish-modules" -> function @unsafeModule
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -34589,7 +34587,6 @@ import N_IDENT from "./nodes" -> const N_IDENT
 import N_IMPORT from "./nodes" -> const N_IMPORT
 import N_IMPORT_SPEC from "./nodes" -> const N_IMPORT_SPEC
 import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_NEW from "./nodes" -> const N_NEW
 import N_NUMBER from "./nodes" -> const N_NUMBER
@@ -34597,12 +34594,15 @@ import N_PAREN from "./nodes" -> const N_PAREN
 import N_THIS from "./nodes" -> const N_THIS
 import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
+import builtinPanicKind from "./panics" -> function @builtinPanicKind
+import PANIC_SLICE from "./panics" -> const PANIC_SLICE
 import CheckedProgram from "./program" -> struct CheckedProgram
 import Instantiation from "./program" -> struct Instantiation
 import StringBuilder from "./strings" -> struct StringBuilder
 import T_I32 from "./types" -> const T_I32
 import TypeTable from "./types" -> struct TypeTable
 import isNumeric from "./types" -> function @isNumeric
+const CH_SEMICOLON: i32 = 59
 const SHAPE_NONE: i32 = 0
 const SHAPE_GET: i32 = 1
 const SHAPE_SET: i32 = 2
@@ -34633,36 +34633,46 @@ struct SiteWalk (class) size=32 align=8
   method isArrayIndex -> @SiteWalk.isArrayIndex
   method noteRead -> @SiteWalk.noteRead
   method noteStore -> @SiteWalk.noteStore
+  method noForm -> @SiteWalk.noForm
   method accessRefusal -> @SiteWalk.accessRefusal
-  method storeRefusal -> @SiteWalk.storeRefusal
   method noteCall -> @SiteWalk.noteCall
   method record -> @SiteWalk.record
-struct UnsafeImport (class) size=64 align=8
-  field names: string[] index=0 offset=0
-  field locals: string[] index=1 offset=8
-  field bound: boolean[] index=2 offset=16
-  field refusals: string[] index=3 offset=24
-  field list: Node | null index=4 offset=32
-  field after: Node | null index=5 offset=40
-  field first: Node | null index=6 offset=48
-  field semicolon: boolean index=7 offset=56
+struct UnsafeName (class) size=32 align=8
+  field name: string index=0 offset=0
+  field local: string index=1 offset=8
+  field refusal: string index=2 offset=16
+  field bound: boolean index=3 offset=24
+  field needed: boolean index=4 offset=25
+  constructor -> @UnsafeName.constructor
+struct UnsafeImport (class) size=40 align=8
+  field names: UnsafeName[] index=0 offset=0
+  field list: Node | null index=1 offset=8
+  field after: Node | null index=2 offset=16
+  field first: Node | null index=3 offset=24
+  field semicolon: boolean index=4 offset=32
   constructor -> @UnsafeImport.constructor
 function UncheckedSite.constructor(this: UncheckedSite, node: Node, store: Node, what: string, shape: i32, reason: string): void -> @UncheckedSite.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: node reason shape store what
   pointer this: size=40 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
   pointer store: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+function callsGet(shape: i32): boolean -> @callsGet
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function callsSet(shape: i32): boolean -> @callsSet
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function ModuleSites.constructor(this: ModuleSites, program: CheckedProgram): void -> @ModuleSites.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 118:7
+  sharedWrite: 135:9
   escaping: program
   calls: nish_exit nish_write
   pointer this: size=24 writesThrough=true captured=false
   pointer program: size=608 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 116:9 i: i32 (let)
+  local 133:11 i: i32 (let)
 function reportUncheckedIndexSites(programs: CheckedProgram[], table: TypeTable, sink: DiagnosticSink): void -> @reportUncheckedIndexSites [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ModuleSites.constructor
@@ -34671,20 +34681,20 @@ function reportUncheckedIndexSites(programs: CheckedProgram[], table: TypeTable,
   pointer table: size=80 writesThrough=true captured=true passedTo=SiteWalk.constructor#2 walkInstance#3 walkInstance#3
   pointer sink: size=48 writesThrough=false captured=false passedTo=reportModule#1
   stackSites=2 stackLocals=1
-  local 135:9 modules: ModuleSites[] (const)
-  local 136:14 program: CheckedProgram (const)
-  callee 137:18 new ModuleSites -> @ModuleSites.constructor
-  local 139:14 into: ModuleSites (const)
-  callee 141:7 SiteWalk.walk -> @SiteWalk.walk
-  callee 141:7 new SiteWalk -> @SiteWalk.constructor
-  local 151:14 holder: CheckedProgram (const)
-  local 155:16 info: Instantiation (const)
-  callee 156:7 walkInstance -> @walkInstance
-  local 158:16 sig: FunctionSig (const)
-  local 159:13 info: Instantiation | null (const)
-  callee 161:9 walkInstance -> @walkInstance
-  local 165:14 into: ModuleSites (const)
-  callee 167:7 reportModule -> @reportModule
+  local 153:9 modules: ModuleSites[] (const)
+  local 154:14 program: CheckedProgram (const)
+  callee 155:18 new ModuleSites -> @ModuleSites.constructor
+  local 157:14 into: ModuleSites (const)
+  callee 159:7 SiteWalk.walk -> @SiteWalk.walk
+  callee 159:7 new SiteWalk -> @SiteWalk.constructor
+  local 169:14 holder: CheckedProgram (const)
+  local 173:16 info: Instantiation (const)
+  callee 174:7 walkInstance -> @walkInstance
+  local 176:16 sig: FunctionSig (const)
+  local 177:13 info: Instantiation | null (const)
+  callee 179:9 walkInstance -> @walkInstance
+  local 183:14 into: ModuleSites (const)
+  callee 185:7 reportModule -> @reportModule
 function walkInstance(holder: CheckedProgram, info: Instantiation, modules: ModuleSites[], table: TypeTable): void -> @walkInstance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckedProgram.enterInstance
@@ -34694,14 +34704,14 @@ function walkInstance(holder: CheckedProgram, info: Instantiation, modules: Modu
   pointer modules: size=0 writesThrough=false captured=false
   pointer table: size=80 writesThrough=true captured=true passedTo=SiteWalk.constructor#2
   stackSites=1 stackLocals=0
-  local 179:9 body: Node | null (const)
-  callee 179:16 FunctionSig.body -> @FunctionSig.body
-  local 180:9 origin: SourceFile | null (const)
-  local 184:14 into: ModuleSites (const)
-  callee 186:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee 187:7 SiteWalk.walk -> @SiteWalk.walk
-  callee 187:7 new SiteWalk -> @SiteWalk.constructor
-  callee 188:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 197:9 body: Node | null (const)
+  callee 197:16 FunctionSig.body -> @FunctionSig.body
+  local 198:9 origin: SourceFile | null (const)
+  local 202:14 into: ModuleSites (const)
+  callee 204:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee 205:7 SiteWalk.walk -> @SiteWalk.walk
+  callee 205:7 new SiteWalk -> @SiteWalk.constructor
+  callee 206:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function SiteWalk.constructor(this: SiteWalk, program: CheckedProgram, table: TypeTable, into: ModuleSites, generic: boolean): void -> @SiteWalk.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: generic into program table
@@ -34714,33 +34724,32 @@ function SiteWalk.walk(this: SiteWalk, node: Node, statement: boolean): void -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SiteWalk.noteStore
   escaping: statement
-  calls: SiteWalk.isArrayIndex SiteWalk.noteCall SiteWalk.noteRead SiteWalk.noteStore SiteWalk.record SiteWalk.walk UncheckedSite.constructor callsOrConstructs isAssignmentOperator nish_alloc_struct nish_panic_index nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.isArrayIndex#0 SiteWalk.noteStore#0 SiteWalk.record#0 SiteWalk.walk#0 SiteWalk.walk#0 SiteWalk.walk#0 SiteWalk.isArrayIndex#0 SiteWalk.noteRead#0 SiteWalk.noteCall#0 SiteWalk.walk#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=SiteWalk.noteStore#1 UncheckedSite.constructor#1 UncheckedSite.constructor#2 SiteWalk.isArrayIndex#1 SiteWalk.noteRead#1 SiteWalk.noteCall#1
+  calls: SiteWalk.isArrayIndex SiteWalk.noForm SiteWalk.noteCall SiteWalk.noteRead SiteWalk.noteStore SiteWalk.walk callsOrConstructs isAssignmentOperator nish_panic_index nish_str_eq
+  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.isArrayIndex#0 SiteWalk.noteStore#0 SiteWalk.noForm#0 SiteWalk.walk#0 SiteWalk.walk#0 SiteWalk.walk#0 SiteWalk.isArrayIndex#0 SiteWalk.noteRead#0 SiteWalk.noteCall#0 SiteWalk.walk#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=SiteWalk.noteStore#1 SiteWalk.noForm#1 SiteWalk.isArrayIndex#1 SiteWalk.noteRead#1 SiteWalk.noteCall#1
   stackSites=0 stackLocals=0
-  callee 213:35 isAssignmentOperator -> @isAssignmentOperator
-  callee 213:70 SiteWalk.isArrayIndex -> @SiteWalk.isArrayIndex
-  local 214:13 target: Node (const)
-  callee 216:9 SiteWalk.noteStore -> @SiteWalk.noteStore
-  callee 217:39 callsOrConstructs -> @callsOrConstructs
-  callee 220:9 SiteWalk.record -> @SiteWalk.record
-  callee 221:11 new UncheckedSite -> @UncheckedSite.constructor
-  callee 224:7 SiteWalk.walk -> @SiteWalk.walk
-  callee 225:7 SiteWalk.walk -> @SiteWalk.walk
-  callee 226:7 SiteWalk.walk -> @SiteWalk.walk
-  callee 229:34 SiteWalk.isArrayIndex -> @SiteWalk.isArrayIndex
-  callee 230:7 SiteWalk.noteRead -> @SiteWalk.noteRead
-  callee 232:7 SiteWalk.noteCall -> @SiteWalk.noteCall
-  local 234:16 child: Node (const)
-  callee 235:7 SiteWalk.walk -> @SiteWalk.walk
+  callee 231:35 isAssignmentOperator -> @isAssignmentOperator
+  callee 231:70 SiteWalk.isArrayIndex -> @SiteWalk.isArrayIndex
+  local 232:13 target: Node (const)
+  callee 234:9 SiteWalk.noteStore -> @SiteWalk.noteStore
+  callee 235:39 callsOrConstructs -> @callsOrConstructs
+  callee 238:9 SiteWalk.noForm -> @SiteWalk.noForm
+  callee 240:7 SiteWalk.walk -> @SiteWalk.walk
+  callee 241:7 SiteWalk.walk -> @SiteWalk.walk
+  callee 242:7 SiteWalk.walk -> @SiteWalk.walk
+  callee 245:34 SiteWalk.isArrayIndex -> @SiteWalk.isArrayIndex
+  callee 246:7 SiteWalk.noteRead -> @SiteWalk.noteRead
+  callee 248:7 SiteWalk.noteCall -> @SiteWalk.noteCall
+  local 250:16 child: Node (const)
+  callee 251:7 SiteWalk.walk -> @SiteWalk.walk
 function SiteWalk.isArrayIndex(this: SiteWalk, node: Node): boolean -> @SiteWalk.isArrayIndex [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index
   pointer this: size=32 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 244:11 type: i32 (const)
-  callee 245:25 TypeTable.isArray -> @TypeTable.isArray
+  local 260:11 type: i32 (const)
+  callee 261:25 TypeTable.isArray -> @TypeTable.isArray
 function SiteWalk.noteRead(this: SiteWalk, node: Node): void -> @SiteWalk.noteRead [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SiteWalk.record
@@ -34748,168 +34757,167 @@ function SiteWalk.noteRead(this: SiteWalk, node: Node): void -> @SiteWalk.noteRe
   pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.accessRefusal#0 SiteWalk.record#0
   pointer node: size=40 writesThrough=true captured=true passedTo=SiteWalk.accessRefusal#1 UncheckedSite.constructor#1 UncheckedSite.constructor#2
   stackSites=0 stackLocals=0
-  local 249:11 reason: string (const)
-  callee 249:20 SiteWalk.accessRefusal -> @SiteWalk.accessRefusal
-  callee 250:5 SiteWalk.record -> @SiteWalk.record
-  callee 251:7 new UncheckedSite -> @UncheckedSite.constructor
+  local 265:11 reason: string (const)
+  callee 265:52 SiteWalk.accessRefusal -> @SiteWalk.accessRefusal
+  callee 266:5 SiteWalk.record -> @SiteWalk.record
+  callee 266:17 new UncheckedSite -> @UncheckedSite.constructor
 function SiteWalk.noteStore(this: SiteWalk, assign: Node, target: Node, statement: boolean): void -> @SiteWalk.noteStore [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SiteWalk.record
   escaping: statement
-  calls: SiteWalk.accessRefusal SiteWalk.record SiteWalk.storeRefusal UncheckedSite.constructor nish_alloc_struct nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.accessRefusal#0 SiteWalk.storeRefusal#0 SiteWalk.record#0
-  pointer assign: size=40 writesThrough=true captured=true passedTo=SiteWalk.storeRefusal#1 UncheckedSite.constructor#2
-  pointer target: size=40 writesThrough=true captured=true passedTo=SiteWalk.accessRefusal#1 SiteWalk.storeRefusal#2 UncheckedSite.constructor#1
+  calls: SiteWalk.accessRefusal SiteWalk.record UncheckedSite.constructor nish_alloc_struct nish_str_eq storeRefusal
+  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.accessRefusal#0 SiteWalk.record#0
+  pointer assign: size=40 writesThrough=true captured=true passedTo=storeRefusal#0 UncheckedSite.constructor#2
+  pointer target: size=40 writesThrough=true captured=true passedTo=SiteWalk.accessRefusal#1 storeRefusal#1 UncheckedSite.constructor#1
   stackSites=0 stackLocals=0
-  local 256:11 shape: i32 (const)
-  local 257:9 reason: string (let)
-  callee 257:18 SiteWalk.accessRefusal -> @SiteWalk.accessRefusal
-  callee 259:16 SiteWalk.storeRefusal -> @SiteWalk.storeRefusal
-  callee 261:5 SiteWalk.record -> @SiteWalk.record
-  callee 262:7 new UncheckedSite -> @UncheckedSite.constructor
+  local 270:9 reason: string (let)
+  callee 270:50 SiteWalk.accessRefusal -> @SiteWalk.accessRefusal
+  callee 272:16 storeRefusal -> @storeRefusal
+  local 274:11 shape: i32 (const)
+  callee 275:5 SiteWalk.record -> @SiteWalk.record
+  callee 275:17 new UncheckedSite -> @UncheckedSite.constructor
+function SiteWalk.noForm(this: SiteWalk, node: Node, what: string): void -> @SiteWalk.noForm [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via SiteWalk.record
+  escaping: what
+  calls: SiteWalk.record UncheckedSite.constructor nish_alloc_struct
+  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.record#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=UncheckedSite.constructor#1 UncheckedSite.constructor#2
+  stackSites=0 stackLocals=0
+  callee 280:5 SiteWalk.record -> @SiteWalk.record
+  callee 281:7 new UncheckedSite -> @UncheckedSite.constructor
 function SiteWalk.accessRefusal(this: SiteWalk, access: Node): string -> @SiteWalk.accessRefusal [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.isRanged TypeTable.refOf TypeTable.typeName isNumeric nish_panic_index nish_str_concat unsafeModule
   pointer this: size=32 writesThrough=false captured=false
   pointer access: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 272:11 program: CheckedProgram (const)
-  local 273:11 table: TypeTable (const)
-  local 274:11 array: i32 (const)
-  local 275:11 elem: i32 (const)
-  callee 275:18 TypeTable.refOf -> @TypeTable.refOf
-  callee 276:10 isNumeric -> @isNumeric
-  callee 277:19 unsafeModule -> @unsafeModule
-  callee 277:99 TypeTable.typeName -> @TypeTable.typeName
-  local 279:11 index: i32 (const)
-  callee 280:30 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 280:55 TypeTable.baseOf -> @TypeTable.baseOf
-  callee 281:90 TypeTable.typeName -> @TypeTable.typeName
-function SiteWalk.storeRefusal(this: SiteWalk, assign: Node, target: Node, statement: boolean): string -> @SiteWalk.storeRefusal [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: isPlainRead nish_panic_index nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false
-  pointer assign: size=40 writesThrough=false captured=false
-  pointer target: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 300:11 plain: boolean (const)
-  callee 301:7 isPlainRead -> @isPlainRead
-  callee 301:42 isPlainRead -> @isPlainRead
-  callee 301:77 isPlainRead -> @isPlainRead
+  local 291:11 program: CheckedProgram (const)
+  local 292:11 table: TypeTable (const)
+  local 293:11 array: i32 (const)
+  local 294:11 elem: i32 (const)
+  callee 294:18 TypeTable.refOf -> @TypeTable.refOf
+  callee 295:10 isNumeric -> @isNumeric
+  callee 296:19 unsafeModule -> @unsafeModule
+  callee 296:99 TypeTable.typeName -> @TypeTable.typeName
+  local 298:11 index: i32 (const)
+  callee 299:30 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 299:55 TypeTable.baseOf -> @TypeTable.baseOf
+  callee 300:90 TypeTable.typeName -> @TypeTable.typeName
 function SiteWalk.noteCall(this: SiteWalk, call: Node): void -> @SiteWalk.noteCall [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via SiteWalk.record
-  calls: SiteWalk.record UncheckedSite.constructor arrayMethodName isNetExport isStringMethodCall netRangeBuffer nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.record#0 SiteWalk.record#0 SiteWalk.record#0
-  pointer call: size=40 writesThrough=true captured=true passedTo=isStringMethodCall#1 UncheckedSite.constructor#1 UncheckedSite.constructor#2 arrayMethodName#2 UncheckedSite.constructor#1 UncheckedSite.constructor#2 UncheckedSite.constructor#1 UncheckedSite.constructor#2
+  sharedWrite: via SiteWalk.noForm
+  calls: SiteWalk.noForm arrayMethodName builtinNameOf builtinPanicKind isStringMethodCall nish_panic_index nish_str_concat nish_str_eq
+  pointer this: size=32 writesThrough=false captured=false passedTo=SiteWalk.noForm#0 SiteWalk.noForm#0 SiteWalk.noForm#0
+  pointer call: size=40 writesThrough=true captured=true passedTo=isStringMethodCall#1 SiteWalk.noForm#1 arrayMethodName#2 SiteWalk.noForm#1 builtinNameOf#1 SiteWalk.noForm#1
   stackSites=0 stackLocals=0
-  local 310:11 program: CheckedProgram (const)
-  local 311:11 proven: boolean (const)
-  callee 312:9 isStringMethodCall -> @isStringMethodCall
-  local 313:13 name: string (const)
-  callee 315:9 SiteWalk.record -> @SiteWalk.record
-  callee 315:21 new UncheckedSite -> @UncheckedSite.constructor
-  local 319:11 method: string (const)
-  callee 319:20 arrayMethodName -> @arrayMethodName
-  callee 321:7 SiteWalk.record -> @SiteWalk.record
-  callee 321:19 new UncheckedSite -> @UncheckedSite.constructor
-  local 324:11 callee: Node (const)
-  local 328:11 builtin: string (const)
-  callee 329:31 isNetExport -> @isNetExport
-  callee 329:55 netRangeBuffer -> @netRangeBuffer
-  callee 330:7 SiteWalk.record -> @SiteWalk.record
-  callee 330:19 new UncheckedSite -> @UncheckedSite.constructor
+  local 307:11 program: CheckedProgram (const)
+  local 308:11 proven: boolean (const)
+  callee 309:9 isStringMethodCall -> @isStringMethodCall
+  local 310:13 name: string (const)
+  callee 312:9 SiteWalk.noForm -> @SiteWalk.noForm
+  local 316:11 method: string (const)
+  callee 316:20 arrayMethodName -> @arrayMethodName
+  callee 318:7 SiteWalk.noForm -> @SiteWalk.noForm
+  local 323:11 callee: Node (const)
+  callee 327:7 builtinPanicKind -> @builtinPanicKind
+  callee 327:24 builtinNameOf -> @builtinNameOf
+  callee 329:7 SiteWalk.noForm -> @SiteWalk.noForm
 function SiteWalk.record(this: SiteWalk, site: UncheckedSite): void -> @SiteWalk.record [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 344:7
+  sharedWrite: 342:7
   escaping: site
   calls: nish_array_grow
   pointer this: size=32 writesThrough=false captured=false
   pointer site: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 336:11 into: ModuleSites (const)
-  local 337:11 id: i32 (const)
-  local 341:9 at: i32 (let)
-  local 348:13 kept: UncheckedSite (const)
+  local 335:11 into: ModuleSites (const)
+  local 336:11 id: i32 (const)
+  local 340:11 at: i32 (const)
+  local 345:13 kept: UncheckedSite (const)
+function storeRefusal(assign: Node, target: Node, statement: boolean): string -> @storeRefusal
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isPlainRead nish_panic_index nish_str_eq
+  pointer assign: size=40 writesThrough=false captured=false
+  pointer target: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 368:7 isPlainRead -> @isPlainRead
+  callee 368:42 isPlainRead -> @isPlainRead
+  callee 368:77 isPlainRead -> @isPlainRead
 function isPlainRead(node: Node): boolean -> @isPlainRead
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAssignmentOperator isPlainRead nish_str_eq
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 362:9 kind: i32 (const)
-  callee 366:28 isAssignmentOperator -> @isAssignmentOperator
-  local 385:14 child: Node (const)
-  callee 386:10 isPlainRead -> @isPlainRead
+  local 382:9 kind: i32 (const)
+  callee 386:28 isAssignmentOperator -> @isAssignmentOperator
+  local 405:14 child: Node (const)
+  callee 406:10 isPlainRead -> @isPlainRead
 function callsOrConstructs(node: Node): boolean -> @callsOrConstructs
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: callsOrConstructs
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 402:14 child: Node (const)
-  callee 403:9 callsOrConstructs -> @callsOrConstructs
+  local 422:14 child: Node (const)
+  callee 423:9 callsOrConstructs -> @callsOrConstructs
 function reportModule(into: ModuleSites, sink: DiagnosticSink): void -> @reportModule
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 422:9
-  calls: Diagnostic.constructor DiagnosticSink.insertWarning bindingRefusal nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat planUnsafeImport siteEdit spelledRewrite unsafeImportEdit unsafeModule
+  sharedWrite: 446:7
+  calls: Diagnostic.constructor DiagnosticSink.insertWarning callsGet callsSet nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat planUnsafeImport siteEdit spelledRewrite unsafeImportEdit unsafeModule
   pointer into: size=24 writesThrough=false captured=false
   pointer sink: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
-  stackSites=1 stackLocals=1
-  local 412:9 program: CheckedProgram (const)
-  local 413:9 names: string[] (const)
-  local 414:9 plan: UnsafeImport (const)
-  callee 414:16 planUnsafeImport -> @planUnsafeImport
-  local 417:9 needed: boolean[] (const)
-  local 418:14 site: UncheckedSite (const)
-  local 420:13 refusal: string (const)
-  callee 420:23 bindingRefusal -> @bindingRefusal
-  local 430:9 importEdit: Edit | null (const)
-  callee 430:22 unsafeImportEdit -> @unsafeImportEdit
-  local 431:9 unsafe: string (const)
-  callee 431:18 unsafeModule -> @unsafeModule
-  local 432:14 site: UncheckedSite (const)
-  local 433:11 edits: Edit[] (const)
-  local 434:9 text: string (let)
-  callee 438:114 spelledRewrite -> @spelledRewrite
-  callee 442:18 siteEdit -> @siteEdit
-  local 444:11 warning: Diagnostic (const)
-  callee 444:21 new Diagnostic -> @Diagnostic.constructor
-  callee 446:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-function bindingRefusal(plan: UnsafeImport, shape: i32): string -> @bindingRefusal
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer plan: size=64 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
+  stackSites=1 stackLocals=0
+  local 432:9 program: CheckedProgram (const)
+  local 433:9 plan: UnsafeImport (const)
+  callee 433:16 planUnsafeImport -> @planUnsafeImport
+  local 434:9 get: UnsafeName (const)
+  local 435:9 set: UnsafeName (const)
+  local 438:14 site: UncheckedSite (const)
+  local 439:9 refusal: string (let)
+  callee 440:9 callsGet -> @callsGet
+  callee 442:16 callsSet -> @callsSet
+  callee 449:32 callsGet -> @callsGet
+  callee 450:32 callsSet -> @callsSet
+  local 452:9 importEdit: Edit | null (const)
+  callee 452:22 unsafeImportEdit -> @unsafeImportEdit
+  local 453:9 unsafe: string (const)
+  callee 453:18 unsafeModule -> @unsafeModule
+  local 454:14 site: UncheckedSite (const)
+  local 455:11 edits: Edit[] (const)
+  local 456:9 text: string (let)
+  callee 460:114 spelledRewrite -> @spelledRewrite
+  callee 464:18 siteEdit -> @siteEdit
+  local 467:11 warning: Diagnostic (const)
+  callee 467:21 new Diagnostic -> @Diagnostic.constructor
+  callee 469:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
 function spelledRewrite(shape: i32): string -> @spelledRewrite
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function siteEdit(source: SourceFile, plan: UnsafeImport, site: UncheckedSite): Edit -> @siteEdit
+function siteEdit(source: SourceFile, get: string, set: string, site: UncheckedSite): Edit -> @siteEdit
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: Edit.constructor isAtom nish_alloc_struct nish_panic_index nish_str_concat nish_str_new textOf
   pointer source: size=24 writesThrough=false captured=false passedTo=textOf#0 textOf#0 textOf#0 textOf#0 textOf#0 textOf#0 textOf#0
-  pointer plan: size=64 writesThrough=false captured=false
   pointer site: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 471:9 get: string (const)
-  local 472:9 set: string (const)
-  local 474:11 access: Node (const)
-  callee 475:12 new Edit -> @Edit.constructor
-  callee 478:17 textOf -> @textOf
-  callee 478:56 textOf -> @textOf
-  local 483:9 target: Node (const)
-  local 484:9 assign: Node (const)
-  local 485:9 xs: string (const)
-  callee 485:14 textOf -> @textOf
-  local 486:9 i: string (const)
-  callee 486:13 textOf -> @textOf
-  callee 488:12 new Edit -> @Edit.constructor
-  callee 488:70 textOf -> @textOf
-  local 490:9 value: Node (const)
-  local 491:9 op: string (const)
-  local 492:9 right: string (const)
-  callee 492:17 isAtom -> @isAtom
-  callee 492:33 textOf -> @textOf
-  callee 492:61 textOf -> @textOf
-  callee 493:10 new Edit -> @Edit.constructor
+  local 484:11 access: Node (const)
+  callee 485:12 new Edit -> @Edit.constructor
+  callee 488:17 textOf -> @textOf
+  callee 488:56 textOf -> @textOf
+  local 493:9 target: Node (const)
+  local 494:9 assign: Node (const)
+  local 495:9 xs: string (const)
+  callee 495:14 textOf -> @textOf
+  local 496:9 i: string (const)
+  callee 496:13 textOf -> @textOf
+  callee 498:12 new Edit -> @Edit.constructor
+  callee 498:70 textOf -> @textOf
+  local 500:9 value: Node (const)
+  local 501:9 op: string (const)
+  local 502:9 right: string (const)
+  callee 502:17 isAtom -> @isAtom
+  callee 502:33 textOf -> @textOf
+  callee 502:61 textOf -> @textOf
+  callee 503:10 new Edit -> @Edit.constructor
 function isAtom(node: Node): boolean -> @isAtom
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
@@ -34920,66 +34928,68 @@ function textOf(source: SourceFile, node: Node): string -> @textOf
   pointer source: size=24 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function UnsafeImport.constructor(this: UnsafeImport, names: string[]): void -> @UnsafeImport.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 533:7
-  escaping: names
-  calls: nish_array_grow
-  pointer this: size=64 writesThrough=true captured=false
-  pointer names: size=0 writesThrough=true captured=true
+function UnsafeName.constructor(this: UnsafeName, name: string): void -> @UnsafeName.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: name
+  pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 532:16 name: string (const)
-function planUnsafeImport(source: SourceFile, file: Node, names: string[]): UnsafeImport -> @planUnsafeImport
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=64
-  sharedWrite: 557:7
-  calls: UnsafeImport.constructor nish_alloc_struct nish_arena_release nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new unsafeModule usesName
-  pointer source: size=24 writesThrough=false captured=false
-  pointer file: size=40 writesThrough=false captured=false passedTo=usesName#0
-  pointer names: size=0 writesThrough=true captured=true passedTo=UnsafeImport.constructor#1
+function UnsafeImport.constructor(this: UnsafeImport): void -> @UnsafeImport.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 553:9 plan: UnsafeImport (const)
-  callee 553:16 new UnsafeImport -> @UnsafeImport.constructor
-  local 554:9 unsafe: string (const)
-  callee 554:18 unsafeModule -> @unsafeModule
-  local 555:14 stmt: Node (const)
-  local 564:11 list: Node (const)
-  local 569:16 spec: Node (const)
-  local 570:13 imported: string (const)
-  local 571:11 i: i32 (let)
-  local 581:7 i: i32 (let)
-  callee 583:27 usesName -> @usesName
+function planUnsafeImport(program: CheckedProgram, names: string[]): UnsafeImport -> @planUnsafeImport
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: 571:5
+  calls: UnsafeImport.constructor UnsafeName.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq unsafeModule usesName
+  pointer program: size=608 writesThrough=false captured=false
+  pointer names: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 569:9 plan: UnsafeImport (const)
+  callee 569:16 new UnsafeImport -> @UnsafeImport.constructor
+  local 570:14 name: string (const)
+  callee 571:21 new UnsafeName -> @UnsafeName.constructor
+  local 573:7 last: Node | null (let)
+  local 574:14 imp: ImportBinding (const)
+  local 578:16 entry: UnsafeName (const)
+  local 586:9 file: Node (const)
+  local 587:9 text: string (const)
+  local 588:14 stmt: Node (const)
+  local 597:9 unsafe: string (const)
+  callee 597:18 unsafeModule -> @unsafeModule
+  local 598:14 entry: UnsafeName (const)
+  callee 599:25 usesName -> @usesName
 function usesName(node: Node, name: string, unsafe: string): boolean -> @usesName
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name unsafe
   calls: nish_str_eq usesName
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 599:14 child: Node (const)
-  callee 600:9 usesName -> @usesName
-function unsafeImportEdit(plan: UnsafeImport, needed: boolean[]): Edit | null -> @unsafeImportEdit
+  local 614:14 child: Node (const)
+  callee 615:9 usesName -> @usesName
+function unsafeImportEdit(plan: UnsafeImport): Edit | null -> @unsafeImportEdit
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  calls: Edit.constructor StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat unsafeModule
-  pointer plan: size=64 writesThrough=false captured=false
-  pointer needed: size=0 writesThrough=false captured=false
+  calls: Edit.constructor StringBuilder.add StringBuilder.constructor StringBuilder.isEmpty StringBuilder.toText nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat unsafeModule
+  pointer plan: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 616:9 missing: StringBuilder (const)
-  callee 616:19 new StringBuilder -> @StringBuilder.constructor
-  local 617:7 count: i32 (let)
-  local 618:7 i: i32 (let)
-  callee 621:7 StringBuilder.add -> @StringBuilder.add
-  local 629:9 names: string (const)
-  callee 629:17 StringBuilder.toText -> @StringBuilder.toText
-  local 630:9 list: Node | null (const)
-  local 632:11 last: Node (const)
-  callee 633:12 new Edit -> @Edit.constructor
-  local 635:9 statement: string (const)
-  callee 635:50 unsafeModule -> @unsafeModule
-  local 636:9 after: Node | null (const)
-  callee 638:12 new Edit -> @Edit.constructor
-  local 640:9 first: Node | null (const)
-  local 641:9 at: i32 (const)
-  callee 642:10 new Edit -> @Edit.constructor
+  local 631:9 missing: StringBuilder (const)
+  callee 631:19 new StringBuilder -> @StringBuilder.constructor
+  local 632:14 entry: UnsafeName (const)
+  callee 634:7 StringBuilder.add -> @StringBuilder.add
+  callee 634:19 StringBuilder.isEmpty -> @StringBuilder.isEmpty
+  callee 637:7 StringBuilder.isEmpty -> @StringBuilder.isEmpty
+  local 640:9 names: string (const)
+  callee 640:17 StringBuilder.toText -> @StringBuilder.toText
+  local 641:9 list: Node | null (const)
+  local 643:11 last: Node (const)
+  callee 644:12 new Edit -> @Edit.constructor
+  local 646:9 statement: string (const)
+  callee 646:50 unsafeModule -> @unsafeModule
+  local 647:9 after: Node | null (const)
+  callee 649:12 new Edit -> @Edit.constructor
+  local 651:9 first: Node | null (const)
+  local 652:9 at: i32 (const)
+  callee 653:10 new Edit -> @Edit.constructor
 module src/parser.ts
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import SourceFile from "./diagnostics" -> struct SourceFile

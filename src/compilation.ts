@@ -1174,7 +1174,7 @@ export class Compilation {
     proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     this.reportArenaLoops()
     this.reportDeprecatedFlags()
-    this.reportUncheckedIndexSites()
+    this.reportUncheckedIndexSites(programs)
     this.checkParallel()
     this.keyEnumsBySymbol()
     if (this.sink.hasErrors()) {
@@ -1688,15 +1688,10 @@ export class Compilation {
    * a fix can edit. Read here, beside it, because the per-site proofs are
    * final once `proveCallSiteRanges` has run.
    */
-  reportUncheckedIndexSites(): void {
-    if (!this.opts.uncheckedIndexing) {
-      return
+  reportUncheckedIndexSites(programs: CheckedProgram[]): void {
+    if (this.opts.uncheckedIndexing) {
+      reportUncheckedIndexSites(programs, this.table, this.sink)
     }
-    const programs: CheckedProgram[] = []
-    for (const unit of this.modules) {
-      programs.push(unit.checker.program)
-    }
-    reportUncheckedIndexSites(programs, this.table, this.sink)
   }
 
   /**
