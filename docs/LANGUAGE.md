@@ -3747,6 +3747,13 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
   rather than the source (`tests/self/goldens/checked.txt`).
+- **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
+  or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
+  as `unchecked` sites with `"allowed": true`, because they cannot panic and
+  the import has already said, at the top of the module, that an index out of
+  range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
+  `deny_panics_unsafe`). The `wrapping*` three are not sites at all: they are
+  defined for every pair.
 - **`--unchecked-indexing` and `--wrapping` are deprecated**, and reach only
   the **entry package**: the modules in the entry's own package, never a
   `node_modules` dependency and never a `nish/` standard-library module. A
@@ -6373,7 +6380,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
-| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing: the call is the author's word that the index is in range, not a proof, so it is listed as a site that is never proven (`tests/cases/reject_deny_panics_unchecked`) |
+| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing, and nothing needs to: the call is the author's word that the index is in range, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
 
 - **`--unchecked-indexing` is not a proof.** It removes a check and makes the
@@ -6408,7 +6415,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
   `{"name","symbol","module","line","panics"}`, where `symbol` is the
   function's LLVM name; per site `{"kind","line","column"}` and then
   `"proven"` for a check, `"proven","callee"` for `parallel-length`,
-  `"callee","via"` for `call` and `"allowed": true` for `oom`. Lines and
+  `"callee","via"` for `call` and `"allowed": true` for `oom` and `unchecked`. Lines and
   columns are 1-based, in the units a diagnostic uses. The `wrote <file>` line
   is on stderr, like the IR's. It is written once the program is checked: a
   program that does not compile writes none, and `--emit-checked` writes it
@@ -6450,13 +6457,20 @@ performance warning about the same check is not printed beside the error.
   reported in `package.json` where the entry is written: a typo would
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
-- **Neither `--unchecked-indexing` nor `nish:unsafe` is a proof.** Both remove
-  a check and make an access out of range undefined behaviour, which is not
-  what the scope promises, so an index the flag left unchecked is still
-  refused (`reject_deny_panics_unchecked_indexing`), and so is every
-  `uncheckedGet` and `uncheckedSet`, as the `unchecked` kind
-  (`reject_deny_panics_unchecked`). A module that wants them is left out of
-  `noPanic`.
+- **`--unchecked-indexing` is not a proof, and not an opt-in the scope
+  takes.** It removes a check and makes an access out of range undefined
+  behaviour with nothing in the source to show for it, so an index the flag
+  left unchecked is still refused (`reject_deny_panics_unchecked_indexing`).
+- **A `nish:unsafe` import is the opt-in.** `uncheckedGet` and `uncheckedSet`
+  are reached only through `import { … } from "nish:unsafe"` at the top of the
+  module that calls them, which is the module's word, visible where a reader
+  looks first, that its indexes are in range. So the scope allows them, as
+  `unchecked` sites with `"allowed": true`, and a call into a function whose
+  only unproven sites are `unchecked` is not a `call` site at all, from inside
+  the scope or out of it (`tests/cases/deny_panics_unsafe`,
+  `tests/link/no_panic_unsafe_callee`). The global spelling `tsc` accepts has
+  no import to show and is refused, scope or not (NL2456,
+  `reject_deny_panics_unsafe_no_import`).
 - **Signed overflow is refused where it is not proven.** Every signed `+`, `-`,
   `*`, unary `-`, `++`, `--` and `op=` the bounds walk has not proven to fit is
   an `overflow` site, refused like an index or a divisor, with a hint to bound
@@ -6474,7 +6488,8 @@ performance warning about the same check is not printed beside the error.
   refused: every allocation can fail and no guard prevents it. Stack overflow
   is a fault the operating system raises, with no check in the IR to refuse.
   So a module in the scope cannot *panic* except by running out of memory,
-  and that is the whole claim.
+  and that is the whole claim. Nor can it reach undefined behaviour through a
+  check the compiler left out, except where a `nish:unsafe` import says so.
 - `--deny-panics` changes no byte of the IR: a program it accepts is the one the
   build compiles without it. With `--emit-ast`, which stops before the checker,
   it is a usage error (exit 2).

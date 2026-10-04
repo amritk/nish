@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 82 programs, 1867899 dump lines live, 82 distinct modules.
+# 82 programs, 1868298 dump lines live, 82 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/expressions.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/symbols.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -9154,81 +9154,86 @@ function isCallSite(site: PanicSite): boolean -> @isCallSite
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer site: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function isAllowed(site: PanicSite): boolean -> @isAllowed
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer site: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function panicsHere(site: PanicSite): boolean -> @panicsHere
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: isCallSite
-  pointer site: size=56 writesThrough=false captured=false passedTo=isCallSite#0
+  calls: isAllowed isCallSite
+  pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 isCallSite#0
   stackSites=0 stackLocals=0
-  callee 147:94 isCallSite -> @isCallSite
+  callee 160:67 isAllowed -> @isAllowed
+  callee 160:87 isCallSite -> @isCallSite
 function builtinPanicKind(name: string): i32 -> @builtinPanicKind [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: isNetExport netRangeBuffer nish_str_eq
   stackSites=0 stackLocals=0
-  callee 173:7 isNetExport -> @isNetExport
-  callee 173:28 netRangeBuffer -> @netRangeBuffer
+  callee 186:7 isNetExport -> @isNetExport
+  callee 186:28 netRangeBuffer -> @netRangeBuffer
 function sortByPosition(sites: PanicSite[]): void -> @sortByPosition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 186:7
+  sharedWrite: 199:7
   calls: nish_panic_index
   pointer sites: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 181:7 i: i32 (let)
-  local 183:11 site: PanicSite (const)
-  local 184:9 j: i32 (let)
+  local 194:7 i: i32 (let)
+  local 196:11 site: PanicSite (const)
+  local 197:9 j: i32 (let)
 function inEvaluationOrder(sites: PanicSite[]): PanicSite[] -> @inEvaluationOrder
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 198:5
+  sharedWrite: 211:5
   calls: nish_array_grow nish_panic_index
   pointer sites: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 196:9 out: PanicSite[] (const)
-  local 197:14 site: PanicSite (const)
-  local 200:7 i: i32 (let)
-  local 202:11 site: PanicSite (const)
-  local 203:9 j: i32 (let)
+  local 209:9 out: PanicSite[] (const)
+  local 210:14 site: PanicSite (const)
+  local 213:7 i: i32 (let)
+  local 215:11 site: PanicSite (const)
+  local 216:9 j: i32 (let)
 function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable): void -> @resolvePanicSites [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 272:5
+  sharedWrite: 285:5
   calls: firstPanic inEvaluationOrder keepSites listedFacts mayPanicSet nish_array_grow sortByPosition
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicSet#0 firstPanic#0 firstPanic#0 listedFacts#1 keepSites#1
   stackSites=2 stackLocals=2
-  local 226:9 ordered: PanicSite[][] (const)
-  local 227:9 reach: PanicSite | null[] (const)
-  local 228:14 f: FunctionFacts (const)
-  callee 229:5 sortByPosition -> @sortByPosition
-  callee 230:18 inEvaluationOrder -> @inEvaluationOrder
-  local 233:9 may: boolean[] (const)
-  callee 233:15 mayPanicSet -> @mayPanicSet
-  local 243:7 settling: boolean (let)
-  local 245:9 settled: boolean (let)
-  local 246:9 i: i32 (let)
-  local 249:15 found: PanicSite | null (const)
-  callee 249:23 firstPanic -> @firstPanic
-  local 260:15 found: PanicSite | null (const)
-  callee 260:23 firstPanic -> @firstPanic
-  local 270:14 unit: AnalysisUnit (const)
-  local 271:11 program: CheckedProgram (const)
-  local 273:16 sig: FunctionSig (const)
-  local 274:13 f: FunctionFacts | null (const)
-  callee 274:17 listedFacts -> @listedFacts
-  callee 276:9 keepSites -> @keepSites
+  local 239:9 ordered: PanicSite[][] (const)
+  local 240:9 reach: PanicSite | null[] (const)
+  local 241:14 f: FunctionFacts (const)
+  callee 242:5 sortByPosition -> @sortByPosition
+  callee 243:18 inEvaluationOrder -> @inEvaluationOrder
+  local 246:9 may: boolean[] (const)
+  callee 246:15 mayPanicSet -> @mayPanicSet
+  local 256:7 settling: boolean (let)
+  local 258:9 settled: boolean (let)
+  local 259:9 i: i32 (let)
+  local 262:15 found: PanicSite | null (const)
+  callee 262:23 firstPanic -> @firstPanic
+  local 273:15 found: PanicSite | null (const)
+  callee 273:23 firstPanic -> @firstPanic
+  local 283:14 unit: AnalysisUnit (const)
+  local 284:11 program: CheckedProgram (const)
+  local 286:16 sig: FunctionSig (const)
+  local 287:13 f: FunctionFacts | null (const)
+  callee 287:17 listedFacts -> @listedFacts
+  callee 289:9 keepSites -> @keepSites
 function mayPanicSet(facts: FactsTable, ordered: PanicSite[][]): boolean[] -> @mayPanicSet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 296:5
+  sharedWrite: 309:5
   calls: callsMayPanic nish_array_grow panicsHere
   pointer facts: size=16 writesThrough=false captured=false passedTo=callsMayPanic#0
   pointer ordered: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 288:9 may: boolean[] (const)
-  local 289:14 sites: PanicSite[] (const)
-  local 290:9 here: boolean (let)
-  local 291:16 site: PanicSite (const)
-  callee 292:11 panicsHere -> @panicsHere
-  local 298:7 changed: boolean (let)
-  local 301:9 i: i32 (let)
-  callee 303:22 callsMayPanic -> @callsMayPanic
+  local 301:9 may: boolean[] (const)
+  local 302:14 sites: PanicSite[] (const)
+  local 303:9 here: boolean (let)
+  local 304:16 site: PanicSite (const)
+  callee 305:11 panicsHere -> @panicsHere
+  local 311:7 changed: boolean (let)
+  local 314:9 i: i32 (let)
+  callee 316:22 callsMayPanic -> @callsMayPanic
 function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f: FunctionFacts): boolean -> @callsMayPanic
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.at StringSet.size isCallSite mayPanicAt
@@ -9237,13 +9242,13 @@ function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   pointer sites: size=0 writesThrough=false captured=false
   pointer f: size=280 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 315:14 site: PanicSite (const)
-  callee 316:9 isCallSite -> @isCallSite
-  callee 316:29 mayPanicAt -> @mayPanicAt
-  local 320:7 c: i32 (let)
-  callee 321:14 StringSet.size -> @StringSet.size
-  callee 322:9 mayPanicAt -> @mayPanicAt
-  callee 322:32 StringSet.at -> @StringSet.at
+  local 328:14 site: PanicSite (const)
+  callee 329:9 isCallSite -> @isCallSite
+  callee 329:29 mayPanicAt -> @mayPanicAt
+  local 333:7 c: i32 (let)
+  callee 334:14 StringSet.size -> @StringSet.size
+  callee 335:9 mayPanicAt -> @mayPanicAt
+  callee 335:32 StringSet.at -> @StringSet.at
 function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean -> @mayPanicAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -9251,8 +9256,8 @@ function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean ->
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer may: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 332:9 at: i32 (const)
-  callee 332:14 FactsTable.indexOf -> @FactsTable.indexOf
+  local 345:9 at: i32 (const)
+  callee 345:14 FactsTable.indexOf -> @FactsTable.indexOf
 function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[], sites: PanicSite[], f: FunctionFacts, passOver: boolean): PanicSite | null -> @firstPanic
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.at StringSet.size isCallSite mayPanicAt panicsHere reachOf
@@ -9262,19 +9267,19 @@ function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[]
   pointer sites: size=0 writesThrough=false captured=false
   pointer f: size=280 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 352:14 site: PanicSite (const)
-  callee 353:9 panicsHere -> @panicsHere
-  callee 356:9 isCallSite -> @isCallSite
-  callee 356:29 mayPanicAt -> @mayPanicAt
-  local 357:13 found: PanicSite | null (const)
-  callee 357:21 reachOf -> @reachOf
-  local 366:7 c: i32 (let)
-  callee 367:14 StringSet.size -> @StringSet.size
-  local 368:11 callee: string (const)
-  callee 368:20 StringSet.at -> @StringSet.at
-  callee 369:9 mayPanicAt -> @mayPanicAt
+  local 365:14 site: PanicSite (const)
+  callee 366:9 panicsHere -> @panicsHere
+  callee 369:9 isCallSite -> @isCallSite
+  callee 369:29 mayPanicAt -> @mayPanicAt
   local 370:13 found: PanicSite | null (const)
   callee 370:21 reachOf -> @reachOf
+  local 379:7 c: i32 (let)
+  callee 380:14 StringSet.size -> @StringSet.size
+  local 381:11 callee: string (const)
+  callee 381:20 StringSet.at -> @StringSet.at
+  callee 382:9 mayPanicAt -> @mayPanicAt
+  local 383:13 found: PanicSite | null (const)
+  callee 383:21 reachOf -> @reachOf
 function reachOf(facts: FactsTable, reach: PanicSite | null[], name: string): PanicSite | null -> @reachOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -9282,8 +9287,8 @@ function reachOf(facts: FactsTable, reach: PanicSite | null[], name: string): Pa
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer reach: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 385:9 at: i32 (const)
-  callee 385:14 FactsTable.indexOf -> @FactsTable.indexOf
+  local 398:9 at: i32 (const)
+  callee 398:14 FactsTable.indexOf -> @FactsTable.indexOf
 function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSig): FunctionFacts | null -> @listedFacts
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionSig.definedIn FunctionSig.foreign
@@ -9291,12 +9296,12 @@ function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSi
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer sig: size=112 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
-  callee 391:3 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 391:37 FunctionSig.foreign -> @FunctionSig.foreign
-  callee 391:53 FactsTable.get -> @FactsTable.get
+  callee 404:3 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 404:37 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 404:53 FactsTable.get -> @FactsTable.get
 function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite | null[], sig: FunctionSig, f: FunctionFacts): void -> @keepSites
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 415:7
+  sharedWrite: 428:7
   calls: PanicSite.constructor StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size isCallSite nish_alloc_struct nish_array_grow reachOf sortByPosition
   pointer program: size=608 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
@@ -9304,28 +9309,28 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   pointer sig: size=112 writesThrough=false captured=false
   pointer f: size=280 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 406:9 sites: PanicSite[] (const)
-  local 407:9 named: StringSet (const)
-  callee 407:17 new StringSet -> @StringSet.constructor
-  local 408:14 site: PanicSite (const)
-  callee 409:10 isCallSite -> @isCallSite
-  local 413:11 found: PanicSite | null (const)
-  callee 413:19 reachOf -> @reachOf
-  callee 417:7 StringSet.add -> @StringSet.add
-  local 420:7 c: i32 (let)
-  callee 421:14 StringSet.size -> @StringSet.size
-  local 422:11 callee: string (const)
-  callee 422:20 StringSet.at -> @StringSet.at
-  local 423:11 found: PanicSite | null (const)
-  callee 423:19 reachOf -> @reachOf
-  callee 424:28 StringSet.has -> @StringSet.has
-  local 425:13 site: PanicSite (const)
-  callee 425:20 new PanicSite -> @PanicSite.constructor
-  callee 428:7 StringSet.add -> @StringSet.add
-  local 432:14 node: Node (const)
-  callee 433:16 new PanicSite -> @PanicSite.constructor
-  callee 435:3 sortByPosition -> @sortByPosition
-  local 436:14 site: PanicSite (const)
+  local 419:9 sites: PanicSite[] (const)
+  local 420:9 named: StringSet (const)
+  callee 420:17 new StringSet -> @StringSet.constructor
+  local 421:14 site: PanicSite (const)
+  callee 422:10 isCallSite -> @isCallSite
+  local 426:11 found: PanicSite | null (const)
+  callee 426:19 reachOf -> @reachOf
+  callee 430:7 StringSet.add -> @StringSet.add
+  local 433:7 c: i32 (let)
+  callee 434:14 StringSet.size -> @StringSet.size
+  local 435:11 callee: string (const)
+  callee 435:20 StringSet.at -> @StringSet.at
+  local 436:11 found: PanicSite | null (const)
+  callee 436:19 reachOf -> @reachOf
+  callee 437:28 StringSet.has -> @StringSet.has
+  local 438:13 site: PanicSite (const)
+  callee 438:20 new PanicSite -> @PanicSite.constructor
+  callee 441:7 StringSet.add -> @StringSet.add
+  local 445:14 node: Node (const)
+  callee 446:16 new PanicSite -> @PanicSite.constructor
+  callee 448:3 sortByPosition -> @sortByPosition
+  local 449:14 site: PanicSite (const)
 function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panicsJson [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
@@ -9333,95 +9338,97 @@ function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panics
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=listedFacts#1 siteJson#2
   stackSites=1 stackLocals=1
-  local 455:9 out: StringBuilder (const)
-  callee 455:15 new StringBuilder -> @StringBuilder.constructor
-  callee 456:3 StringBuilder.add -> @StringBuilder.add
-  local 457:7 first: boolean (let)
-  local 458:14 unit: AnalysisUnit (const)
-  local 459:11 program: CheckedProgram (const)
-  local 460:9 at: i32 (let)
-  local 461:16 sig: FunctionSig (const)
-  callee 462:11 listedFacts -> @listedFacts
-  callee 465:7 StringBuilder.add -> @StringBuilder.add
-  callee 467:7 StringBuilder.add -> @StringBuilder.add
-  callee 468:7 addJsonQuoted -> @addJsonQuoted
-  callee 469:7 StringBuilder.add -> @StringBuilder.add
-  callee 470:7 addJsonQuoted -> @addJsonQuoted
-  callee 471:7 StringBuilder.add -> @StringBuilder.add
-  callee 472:7 addJsonQuoted -> @addJsonQuoted
-  callee 473:7 StringBuilder.add -> @StringBuilder.add
-  callee 473:26 SourceFile.lineOf -> @SourceFile.lineOf
-  local 474:11 comma: boolean (let)
-  callee 476:9 StringBuilder.add -> @StringBuilder.add
-  callee 478:9 siteJson -> @siteJson
-  callee 481:7 StringBuilder.add -> @StringBuilder.add
-  callee 484:3 StringBuilder.add -> @StringBuilder.add
-  callee 485:10 StringBuilder.toText -> @StringBuilder.toText
+  local 468:9 out: StringBuilder (const)
+  callee 468:15 new StringBuilder -> @StringBuilder.constructor
+  callee 469:3 StringBuilder.add -> @StringBuilder.add
+  local 470:7 first: boolean (let)
+  local 471:14 unit: AnalysisUnit (const)
+  local 472:11 program: CheckedProgram (const)
+  local 473:9 at: i32 (let)
+  local 474:16 sig: FunctionSig (const)
+  callee 475:11 listedFacts -> @listedFacts
+  callee 478:7 StringBuilder.add -> @StringBuilder.add
+  callee 480:7 StringBuilder.add -> @StringBuilder.add
+  callee 481:7 addJsonQuoted -> @addJsonQuoted
+  callee 482:7 StringBuilder.add -> @StringBuilder.add
+  callee 483:7 addJsonQuoted -> @addJsonQuoted
+  callee 484:7 StringBuilder.add -> @StringBuilder.add
+  callee 485:7 addJsonQuoted -> @addJsonQuoted
+  callee 486:7 StringBuilder.add -> @StringBuilder.add
+  callee 486:26 SourceFile.lineOf -> @SourceFile.lineOf
+  local 487:11 comma: boolean (let)
+  callee 489:9 StringBuilder.add -> @StringBuilder.add
+  callee 491:9 siteJson -> @siteJson
+  callee 494:7 StringBuilder.add -> @StringBuilder.add
+  callee 497:3 StringBuilder.add -> @StringBuilder.add
+  callee 498:10 StringBuilder.toText -> @StringBuilder.toText
 function siteJson(out: StringBuilder, program: CheckedProgram, facts: FactsTable, site: PanicSite): void -> @siteJson
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  calls: FactsTable.get SourceFile.columnOf SourceFile.lineOf StringBuilder.add addJsonQuoted isCallSite nish_str_concat nish_str_from_i32 panicKindName
+  calls: FactsTable.get SourceFile.columnOf SourceFile.lineOf StringBuilder.add addJsonQuoted isAllowed isCallSite nish_str_concat nish_str_from_i32 panicKindName
   pointer out: size=8 writesThrough=false captured=false passedTo=StringBuilder.add#0 StringBuilder.add#0 StringBuilder.add#0 StringBuilder.add#0 StringBuilder.add#0 addJsonQuoted#0 StringBuilder.add#0 StringBuilder.add#0
   pointer program: size=608 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
-  pointer site: size=56 writesThrough=false captured=false passedTo=isCallSite#0
+  pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 isCallSite#0
   stackSites=0 stackLocals=0
-  local 490:9 source: SourceFile (const)
-  callee 491:3 StringBuilder.add -> @StringBuilder.add
-  callee 491:23 panicKindName -> @panicKindName
-  callee 491:59 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 492:3 StringBuilder.add -> @StringBuilder.add
-  callee 492:24 SourceFile.columnOf -> @SourceFile.columnOf
-  callee 494:5 StringBuilder.add -> @StringBuilder.add
-  callee 498:5 StringBuilder.add -> @StringBuilder.add
-  callee 500:7 isCallSite -> @isCallSite
-  local 501:11 callee: FunctionFacts | null (const)
-  callee 501:20 FactsTable.get -> @FactsTable.get
-  callee 502:5 StringBuilder.add -> @StringBuilder.add
-  callee 503:5 addJsonQuoted -> @addJsonQuoted
-  local 505:9 reaches: PanicSite | null (const)
+  local 503:9 source: SourceFile (const)
+  callee 504:3 StringBuilder.add -> @StringBuilder.add
+  callee 504:23 panicKindName -> @panicKindName
+  callee 504:59 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 505:3 StringBuilder.add -> @StringBuilder.add
+  callee 505:24 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 506:7 isAllowed -> @isAllowed
   callee 507:5 StringBuilder.add -> @StringBuilder.add
-  callee 507:24 panicKindName -> @panicKindName
-  callee 509:3 StringBuilder.add -> @StringBuilder.add
+  callee 511:5 StringBuilder.add -> @StringBuilder.add
+  callee 513:7 isCallSite -> @isCallSite
+  local 514:11 callee: FunctionFacts | null (const)
+  callee 514:20 FactsTable.get -> @FactsTable.get
+  callee 515:5 StringBuilder.add -> @StringBuilder.add
+  callee 516:5 addJsonQuoted -> @addJsonQuoted
+  local 518:9 reaches: PanicSite | null (const)
+  callee 520:5 StringBuilder.add -> @StringBuilder.add
+  callee 520:24 panicKindName -> @panicKindName
+  callee 522:3 StringBuilder.add -> @StringBuilder.add
 function sitesOf(program: CheckedProgram, fn: string): PanicSite[] -> @sitesOf [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 517:7
+  sharedWrite: 530:7
   calls: nish_array_grow nish_str_eq
   pointer program: size=608 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 514:9 out: PanicSite[] (const)
-  local 515:14 site: PanicSite (const)
+  local 527:9 out: PanicSite[] (const)
+  local 528:14 site: PanicSite (const)
 function siteReportEntry(site: PanicSite, path: string, facts: FactsTable): string -> @siteReportEntry [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  calls: FactsTable.get SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted isCallSite nish_str_concat nish_str_from_i32 panicKindName
-  pointer site: size=56 writesThrough=false captured=false passedTo=isCallSite#0
+  calls: FactsTable.get SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted isAllowed isCallSite nish_str_concat nish_str_from_i32 panicKindName
+  pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 isCallSite#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=1 stackLocals=1
-  local 530:9 out: StringBuilder (const)
-  callee 530:15 new StringBuilder -> @StringBuilder.constructor
-  local 531:9 source: SourceFile (const)
-  callee 532:3 StringBuilder.add -> @StringBuilder.add
-  callee 532:25 panicKindName -> @panicKindName
-  callee 533:3 addJsonQuoted -> @addJsonQuoted
-  callee 533:33 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 533:67 SourceFile.columnOf -> @SourceFile.columnOf
-  callee 535:5 StringBuilder.add -> @StringBuilder.add
-  callee 536:12 StringBuilder.toText -> @StringBuilder.toText
-  callee 539:5 StringBuilder.add -> @StringBuilder.add
-  callee 541:7 isCallSite -> @isCallSite
-  local 542:11 callee: FunctionFacts | null (const)
-  callee 542:20 FactsTable.get -> @FactsTable.get
-  callee 543:5 StringBuilder.add -> @StringBuilder.add
-  callee 544:5 addJsonQuoted -> @addJsonQuoted
-  local 546:9 reaches: PanicSite | null (const)
+  local 543:9 out: StringBuilder (const)
+  callee 543:15 new StringBuilder -> @StringBuilder.constructor
+  local 544:9 source: SourceFile (const)
+  callee 545:3 StringBuilder.add -> @StringBuilder.add
+  callee 545:25 panicKindName -> @panicKindName
+  callee 546:3 addJsonQuoted -> @addJsonQuoted
+  callee 546:33 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 546:67 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 547:7 isAllowed -> @isAllowed
   callee 548:5 StringBuilder.add -> @StringBuilder.add
-  callee 548:26 panicKindName -> @panicKindName
-  callee 550:3 StringBuilder.add -> @StringBuilder.add
-  callee 551:10 StringBuilder.toText -> @StringBuilder.toText
+  callee 549:12 StringBuilder.toText -> @StringBuilder.toText
+  callee 552:5 StringBuilder.add -> @StringBuilder.add
+  callee 554:7 isCallSite -> @isCallSite
+  local 555:11 callee: FunctionFacts | null (const)
+  callee 555:20 FactsTable.get -> @FactsTable.get
+  callee 556:5 StringBuilder.add -> @StringBuilder.add
+  callee 557:5 addJsonQuoted -> @addJsonQuoted
+  local 559:9 reaches: PanicSite | null (const)
+  callee 561:5 StringBuilder.add -> @StringBuilder.add
+  callee 561:26 panicKindName -> @panicKindName
+  callee 563:3 StringBuilder.add -> @StringBuilder.add
+  callee 564:10 StringBuilder.toText -> @StringBuilder.toText
 function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], facts: FactsTable, table: TypeTable, sink: DiagnosticSink): PanicSite[] -> @reportDeniedPanics [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 597:9
+  sharedWrite: 611:9
   calls: StringSet.add StringSet.constructor listedFacts nish_array_grow nish_panic_overflow refuseSite
   pointer units: size=0 writesThrough=false captured=false
   pointer inScope: size=0 writesThrough=false captured=false
@@ -9429,82 +9436,82 @@ function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], facts: Fa
   pointer table: size=80 writesThrough=false captured=false passedTo=refuseSite#2
   pointer sink: size=48 writesThrough=false captured=false passedTo=refuseSite#5
   stackSites=2 stackLocals=2
-  local 576:9 refused: PanicSite[] (const)
-  local 577:9 scoped: StringSet (const)
-  callee 577:18 new StringSet -> @StringSet.constructor
-  local 579:9 programs: CheckedProgram[] (const)
-  local 580:7 k: i32 (let)
-  local 581:14 unit: AnalysisUnit (const)
-  local 587:14 program: CheckedProgram (const)
-  local 588:16 sig: FunctionSig (const)
-  callee 589:11 listedFacts -> @listedFacts
-  callee 590:9 StringSet.add -> @StringSet.add
-  local 594:14 program: CheckedProgram (const)
-  local 595:16 site: PanicSite (const)
-  callee 596:11 refuseSite -> @refuseSite
+  local 590:9 refused: PanicSite[] (const)
+  local 591:9 scoped: StringSet (const)
+  callee 591:18 new StringSet -> @StringSet.constructor
+  local 593:9 programs: CheckedProgram[] (const)
+  local 594:7 k: i32 (let)
+  local 595:14 unit: AnalysisUnit (const)
+  local 601:14 program: CheckedProgram (const)
+  local 602:16 sig: FunctionSig (const)
+  callee 603:11 listedFacts -> @listedFacts
+  callee 604:9 StringSet.add -> @StringSet.add
+  local 608:14 program: CheckedProgram (const)
+  local 609:16 site: PanicSite (const)
+  callee 610:11 refuseSite -> @refuseSite
 function refuseSite(program: CheckedProgram, facts: FactsTable, table: TypeTable, scoped: StringSet, site: PanicSite, sink: DiagnosticSink): boolean -> @refuseSite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
-  calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has nish_str_concat nish_str_from_i32 panicKindName siteAdvice
+  calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has isAllowed nish_str_concat nish_str_from_i32 panicKindName siteAdvice
   pointer program: size=608 writesThrough=false captured=false passedTo=siteAdvice#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer table: size=80 writesThrough=false captured=false passedTo=siteAdvice#1
   pointer scoped: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
-  pointer site: size=56 writesThrough=false captured=false passedTo=siteAdvice#2
+  pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 siteAdvice#2
   pointer sink: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.report#0 DiagnosticSink.report#0
   stackSites=0 stackLocals=0
-  local 616:9 node: Node (const)
-  local 617:9 reaches: PanicSite | null (const)
-  callee 619:29 StringSet.has -> @StringSet.has
-  local 622:11 callee: FunctionFacts | null (const)
-  callee 622:20 FactsTable.get -> @FactsTable.get
-  local 623:11 name: string (const)
-  local 624:11 at: string (const)
-  callee 624:42 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 624:87 SourceFile.columnOf -> @SourceFile.columnOf
-  callee 625:5 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 629:63 panicKindName -> @panicKindName
-  callee 639:3 DiagnosticSink.report -> @DiagnosticSink.report
-  callee 643:10 panicKindName -> @panicKindName
-  callee 644:65 siteAdvice -> @siteAdvice
+  callee 627:22 isAllowed -> @isAllowed
+  local 630:9 node: Node (const)
+  local 631:9 reaches: PanicSite | null (const)
+  callee 633:29 StringSet.has -> @StringSet.has
+  local 636:11 callee: FunctionFacts | null (const)
+  callee 636:20 FactsTable.get -> @FactsTable.get
+  local 637:11 name: string (const)
+  local 638:11 at: string (const)
+  callee 638:42 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 638:87 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 639:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 643:63 panicKindName -> @panicKindName
+  callee 653:3 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 657:10 panicKindName -> @panicKindName
+  callee 658:65 siteAdvice -> @siteAdvice
 function siteLocalName(program: CheckedProgram, expr: Node): string -> @siteLocalName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapBoundsParens
   pointer program: size=608 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
-  local 651:9 e: Node (const)
-  callee 651:13 unwrapBoundsParens -> @unwrapBoundsParens
-  local 655:9 local: Local | null (const)
+  local 665:9 e: Node (const)
+  callee 665:13 unwrapBoundsParens -> @unwrapBoundsParens
+  local 669:9 local: Local | null (const)
 function calledName(program: CheckedProgram, call: Node): string -> @calledName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapBoundsParens
   pointer program: size=608 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 664:9 builtin: string (const)
-  local 668:9 callee: Node (const)
-  callee 668:18 unwrapBoundsParens -> @unwrapBoundsParens
+  local 678:9 builtin: string (const)
+  local 682:9 callee: Node (const)
+  callee 682:18 unwrapBoundsParens -> @unwrapBoundsParens
 function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite): string -> @siteAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: calledName divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat overflowAdvice rangeAdvice siteLocalName sliceAdvice unwrapBoundsParens
-  pointer program: size=608 writesThrough=false captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0 calledName#0
+  calls: divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat overflowAdvice rangeAdvice siteLocalName sliceAdvice unwrapBoundsParens
+  pointer program: size=608 writesThrough=false captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0
   pointer table: size=80 writesThrough=false captured=false passedTo=divideAdvice#1 rangeAdvice#1 overflowAdvice#1
   pointer site: size=56 writesThrough=false captured=false passedTo=rangeAdvice#2
   stackSites=0 stackLocals=0
-  local 679:9 node: Node (const)
-  callee 682:14 indexAdvice -> @indexAdvice
-  local 684:13 holder: string (const)
-  callee 684:22 siteLocalName -> @siteLocalName
-  callee 684:45 unwrapBoundsParens -> @unwrapBoundsParens
-  local 685:13 xs: string (const)
-  local 686:13 what: string (const)
-  callee 693:14 sliceAdvice -> @sliceAdvice
-  callee 695:14 divideAdvice -> @divideAdvice
-  callee 697:14 rangeAdvice -> @rangeAdvice
-  callee 708:14 ioExitAdvice -> @ioExitAdvice
-  callee 715:14 overflowAdvice -> @overflowAdvice
-  callee 718:14 calledName -> @calledName
+  local 693:9 node: Node (const)
+  callee 696:14 indexAdvice -> @indexAdvice
+  local 698:13 holder: string (const)
+  callee 698:22 siteLocalName -> @siteLocalName
+  callee 698:45 unwrapBoundsParens -> @unwrapBoundsParens
+  local 699:13 xs: string (const)
+  local 700:13 what: string (const)
+  callee 707:14 sliceAdvice -> @sliceAdvice
+  callee 709:14 divideAdvice -> @divideAdvice
+  callee 711:14 rangeAdvice -> @rangeAdvice
+  callee 722:14 ioExitAdvice -> @ioExitAdvice
+  callee 729:14 overflowAdvice -> @overflowAdvice
 function indexAdvice(program: CheckedProgram, node: Node): string -> @indexAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -9512,25 +9519,25 @@ function indexAdvice(program: CheckedProgram, node: Node): string -> @indexAdvic
   pointer program: size=608 writesThrough=false captured=false passedTo=siteLocalName#0 siteLocalName#0
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 733:7 receiver: Node (let)
-  local 734:7 index: Node (let)
-  callee 739:16 unwrapBoundsParens -> @unwrapBoundsParens
-  local 742:9 holder: string (const)
-  callee 742:18 siteLocalName -> @siteLocalName
-  local 743:9 name: string (const)
-  callee 743:16 siteLocalName -> @siteLocalName
-  local 744:9 xs: string (const)
-  local 745:9 i: string (const)
-  local 746:9 what: string (const)
-  local 750:9 unchecked: string (const)
+  local 744:7 receiver: Node (let)
+  local 745:7 index: Node (let)
+  callee 750:16 unwrapBoundsParens -> @unwrapBoundsParens
+  local 753:9 holder: string (const)
+  callee 753:18 siteLocalName -> @siteLocalName
+  local 754:9 name: string (const)
+  callee 754:16 siteLocalName -> @siteLocalName
+  local 755:9 xs: string (const)
+  local 756:9 i: string (const)
+  local 757:9 what: string (const)
+  local 761:9 unchecked: string (const)
 function sliceAdvice(program: CheckedProgram, node: Node): string -> @sliceAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName nish_str_concat nish_str_eq
   pointer program: size=608 writesThrough=false captured=false passedTo=calledName#0
   pointer node: size=40 writesThrough=false captured=false passedTo=calledName#1
   stackSites=0 stackLocals=0
-  local 761:9 name: string (const)
-  callee 761:16 calledName -> @calledName
+  local 772:9 name: string (const)
+  callee 772:16 calledName -> @calledName
 function overflowAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @overflowAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq wrappingForm
@@ -9538,20 +9545,20 @@ function overflowAdvice(program: CheckedProgram, table: TypeTable, node: Node): 
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.baseOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=wrappingForm#0
   stackSites=0 stackLocals=0
-  local 774:9 op: string (const)
-  local 775:9 type: i32 (const)
-  local 776:9 signed: string (const)
-  callee 776:30 TypeTable.typeName -> @TypeTable.typeName
-  callee 776:45 TypeTable.baseOf -> @TypeTable.baseOf
-  local 777:9 unsigned: string (const)
-  callee 781:80 wrappingForm -> @wrappingForm
+  local 785:9 op: string (const)
+  local 786:9 type: i32 (const)
+  local 787:9 signed: string (const)
+  callee 787:30 TypeTable.typeName -> @TypeTable.typeName
+  callee 787:45 TypeTable.baseOf -> @TypeTable.baseOf
+  local 788:9 unsigned: string (const)
+  callee 792:80 wrappingForm -> @wrappingForm
 function wrappingForm(node: Node): string -> @wrappingForm
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_eq
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 787:9 op: string (const)
-  local 794:7 fn: string (let)
+  local 798:9 op: string (const)
+  local 805:7 fn: string (let)
 function divideAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @divideAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf isUnsigned nish_panic_index nish_str_concat siteLocalName
@@ -9559,15 +9566,15 @@ function divideAdvice(program: CheckedProgram, table: TypeTable, node: Node): st
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 805:9 name: string (const)
-  callee 805:16 siteLocalName -> @siteLocalName
-  local 806:9 d: string (const)
-  local 807:9 left: i32 (const)
-  local 808:9 unsigned: boolean (const)
-  callee 808:33 isUnsigned -> @isUnsigned
-  callee 808:44 TypeTable.baseOf -> @TypeTable.baseOf
-  local 809:9 what: string (const)
-  local 810:9 bind: string (const)
+  local 816:9 name: string (const)
+  callee 816:16 siteLocalName -> @siteLocalName
+  local 817:9 d: string (const)
+  local 818:9 left: i32 (const)
+  local 819:9 unsigned: boolean (const)
+  callee 819:33 isUnsigned -> @isUnsigned
+  callee 819:44 TypeTable.baseOf -> @TypeTable.baseOf
+  local 820:9 what: string (const)
+  local 821:9 bind: string (const)
 function rangeAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite): string -> @rangeAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName isPrologueSite nish_panic_index nish_str_concat nish_str_from_i32 siteLocalName
@@ -9575,38 +9582,38 @@ function rangeAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite)
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isPrologueSite#1
   stackSites=0 stackLocals=0
-  local 822:9 node: Node (const)
-  callee 823:7 isPrologueSite -> @isPrologueSite
-  local 829:9 stored: boolean (const)
-  local 830:9 at: Node (const)
-  local 831:9 range: i32 (const)
-  local 832:9 spelled: string (const)
-  callee 832:19 TypeTable.typeName -> @TypeTable.typeName
-  local 834:11 target: string (const)
-  callee 834:20 siteLocalName -> @siteLocalName
-  local 835:11 what: string (const)
-  local 841:9 lo: i32 (const)
-  callee 841:14 TypeTable.rangeLo -> @TypeTable.rangeLo
-  local 842:9 hi: i32 (const)
-  callee 842:14 TypeTable.rangeHi -> @TypeTable.rangeHi
-  local 843:9 name: string (const)
-  callee 843:16 siteLocalName -> @siteLocalName
-  local 850:7 guard: string (let)
+  local 833:9 node: Node (const)
+  callee 834:7 isPrologueSite -> @isPrologueSite
+  local 840:9 stored: boolean (const)
+  local 841:9 at: Node (const)
+  local 842:9 range: i32 (const)
+  local 843:9 spelled: string (const)
+  callee 843:19 TypeTable.typeName -> @TypeTable.typeName
+  local 845:11 target: string (const)
+  callee 845:20 siteLocalName -> @siteLocalName
+  local 846:11 what: string (const)
+  local 852:9 lo: i32 (const)
+  callee 852:14 TypeTable.rangeLo -> @TypeTable.rangeLo
+  local 853:9 hi: i32 (const)
+  callee 853:14 TypeTable.rangeHi -> @TypeTable.rangeHi
+  local 854:9 name: string (const)
+  callee 854:16 siteLocalName -> @siteLocalName
+  local 861:7 guard: string (let)
 function isPrologueSite(program: CheckedProgram, site: PanicSite): boolean -> @isPrologueSite
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   pointer program: size=608 writesThrough=false captured=false
   pointer site: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 861:14 sig: FunctionSig (const)
+  local 872:14 sig: FunctionSig (const)
 function ioExitAdvice(program: CheckedProgram, node: Node): string -> @ioExitAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName nish_str_concat nish_str_eq
   pointer program: size=608 writesThrough=false captured=false passedTo=calledName#0
   pointer node: size=40 writesThrough=false captured=false passedTo=calledName#1
   stackSites=0 stackLocals=0
-  local 871:9 name: string (const)
-  callee 871:16 calledName -> @calledName
+  local 882:9 name: string (const)
+  callee 882:16 calledName -> @calledName
 module src/bounds.ts
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import CheckContext from "./context" -> struct CheckContext

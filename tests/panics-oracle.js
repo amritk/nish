@@ -2,12 +2,12 @@
 //
 // The site list and the IR are two readings of one program, and the claim the
 // list makes that the IR can check is one-directional: a function whose list
-// holds no site that can panic — every check proven, nothing but `oom` left —
-// has no panic path in its IR either. The other direction is not a property:
-// a site the list keeps may still have no check in the IR, because
-// `--unchecked-indexing` drops a check without proving it, and the attribute
-// pass the list is recorded beside is allowed to say more than the emitter
-// does, never less.
+// holds no site that can panic — every check proven, nothing left but an
+// `"allowed"` `oom` or `unchecked` — has no panic path in its IR either. The
+// other direction is not a property: a site the list keeps may still have no
+// check in the IR, because `--unchecked-indexing` drops a check without
+// proving it, and the attribute pass the list is recorded beside is allowed to
+// say more than the emitter does, never less.
 //
 // A panic path is one of three shapes in unoptimised IR:
 //
@@ -54,7 +54,7 @@ const panicPath = (body) => {
 }
 
 /** Whether `site` can stop the program by itself or through its callee. */
-const canPanic = (site) => site.kind !== "oom" && site.proven !== true
+const canPanic = (site) => site.allowed !== true && site.proven !== true
 
 /**
  * Hold `report` (a parsed `--emit-panics` file) against the IR text `ir`.
