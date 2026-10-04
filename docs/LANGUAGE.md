@@ -3191,12 +3191,15 @@ and both come from the program as written:
     gives.
   - **a guard that ends the path.** After `if (i < 0 || i >= w.length) { … }`
     the negation of the test holds for the rest of the block when the guarded
-    branch ends in `return`, `break`, `continue`, `throw`, `panic(…)` or
-    `process.exit(…)` (`exit` from `nish:process` too). A branch that ends in
-    any other call falls through, so its access keeps the check and the NL9007
-    warning (`tests/cases/bounds_panic_guard`, `bounds_exit_guard`,
-    `bounds_guard_not_exit`). `Map.keyAt`, `Map.valueAt` and `Set.keyAt` in
-    `std/collections.ts` guard their reads this way.
+    branch ends in `return`, `break`, `continue`, `throw`, or a call to the
+    builtin `panic(…)` or `process.exit(…)` (`exit` from `nish:process` too).
+    Only the builtins count: a parameter or local called `process`, or a
+    function parameter called `panic`, is the call it resolves to and falls
+    through, and so does any other call. Such an access keeps its check and
+    the NL9007 warning (`tests/cases/bounds_panic_guard`, `bounds_exit_guard`;
+    `bounds_guard_not_exit`, `bounds_guard_shadowed_exit` and
+    `bounds_guard_shadowed_panic` keep it). `Map.keyAt`, `Map.valueAt` and
+    `Set.keyAt` in `std/collections.ts` guard their reads this way.
   - **both at once from a check that has already passed.** A checked `w[i]`,
     read, store or compound assignment, and a checked `s.charCodeAt(i)`
     either panic or leave `0 <= i < w.length` behind, because the panic does

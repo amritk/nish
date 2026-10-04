@@ -13419,10 +13419,10 @@ function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean -> @termi
   pointer ctx: size=192 writesThrough=false captured=false passedTo=CheckContext.signature#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1034:9 callee: Node (const)
-  local 1039:11 imported: BuiltinExport | null (const)
-  callee 1039:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 1043:39 CheckContext.signature -> @CheckContext.signature
+  local 1043:9 callee: Node (const)
+  local 1048:11 imported: BuiltinExport | null (const)
+  callee 1048:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 1052:39 CheckContext.signature -> @CheckContext.signature
 function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean -> @isArgvExpression [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: expr
@@ -13431,13 +13431,13 @@ function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean 
   pointer expr: size=40 writesThrough=true captured=true
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.lookup#0
   stackSites=0 stackLocals=0
-  local 1060:7 inner: Node (let)
-  local 1068:11 imported: BuiltinExport | null (const)
-  callee 1068:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 1069:74 Scope.lookup -> @Scope.lookup
-  local 1074:9 receiver: Node (const)
-  callee 1079:10 Scope.lookup -> @Scope.lookup
-  callee 1079:46 CheckedProgram.constant -> @CheckedProgram.constant
+  local 1069:7 inner: Node (let)
+  local 1077:11 imported: BuiltinExport | null (const)
+  callee 1077:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 1078:74 Scope.lookup -> @Scope.lookup
+  local 1083:9 receiver: Node (const)
+  callee 1088:10 Scope.lookup -> @Scope.lookup
+  callee 1088:46 CheckedProgram.constant -> @CheckedProgram.constant
 module src/arrays.ts
 import secretContainerMessage from "./secret" -> function @containerMessage
 import secretIndexMessage from "./secret" -> function @indexMessage

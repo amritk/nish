@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 918 programs, 62705 dump lines.
+# 920 programs, 62750 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3410,6 +3410,53 @@ function test(): i32 -> @test [exported]
   calls: sumAt
   stackSites=2 stackLocals=0
   callee 16:35 sumAt -> @sumAt
+program tests/cases/bounds_guard_shadowed_exit.ts
+module tests/cases/bounds_guard_shadowed_exit.ts (entry)
+struct Proc (class) size=4 align=4
+  field calls: i32 index=0 offset=0 initialized
+  method exit -> @Proc.exit
+function Proc.exit(this: Proc, code: i32): void -> @Proc.exit [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 8:5
+  calls: nish_panic_overflow
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pick(process: Proc, xs: i32[], i: i32): i32 -> @pick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Proc.exit
+  escaping: i
+  calls: Proc.exit nish_panic_index
+  pointer process: size=4 writesThrough=true captured=false passedTo=Proc.exit#0
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 14:5 Proc.exit -> @Proc.exit
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pick
+  calls: pick
+  stackSites=2 stackLocals=0
+  callee 19:35 pick -> @pick
+program tests/cases/bounds_guard_shadowed_panic.ts
+module tests/cases/bounds_guard_shadowed_panic.ts (entry)
+function ignore(code: i32): void -> @ignore
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pick$fn.6.ignore
+  calls: pick$fn.6.ignore
+  stackSites=1 stackLocals=0
+  callee 16:35 pick<ignore> -> @pick$fn.6.ignore
+function pick<ignore>(panic: void, xs: i32[], i: i32): i32 -> @pick$fn.6.ignore [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ignore
+  escaping: i
+  calls: ignore nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 11:5 ignore -> @ignore
 program tests/cases/bounds_panic_guard.ts
 module tests/cases/bounds_panic_guard.ts (entry)
 function sumAt(xs: i32[], at: i32[]): i32 -> @sumAt
