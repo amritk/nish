@@ -1,0 +1,1 @@
+`main` reaches `exit`, which the capability policy does not grant (`--allow clock` does not list it); the chain that reaches it: nl2459_policy_allowlist.ts:9:5 calls stop, nl2459_policy_allowlist.ts:4:3 calls process.exit

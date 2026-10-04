@@ -5412,7 +5412,8 @@ Every builtin carries exactly one **capability** label, or a deliberate none,
 and the compiler works out which capabilities every function, module and
 package can reach — directly, through any chain of calls, across packages — with
 one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
-**It is a report today**: no program is refused for what it reaches.
+A program is refused for what it reaches only under a [capability
+policy](#the-capability-policy); without one, the set is a report.
 
 | Capability | Builtins |
 | --- | --- |
@@ -5426,7 +5427,7 @@ one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | reserved; nothing carries it yet |
+| `unsafe` | the five `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul` (`tests/link/caps_policy_deny_unsafe`) |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
@@ -5464,6 +5465,46 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
   with `--emit-checked` both are answered beside the dump, and
   `--fix`, which answers before the program is analysed, takes neither. `nish run` refuses
   `--emit-capabilities` as it refuses every product it keeps to itself.
+
+#### The capability policy
+
+`--allow <cap>[,<cap>...]` and `--deny <cap>[,<cap>...]`, each repeatable,
+and `"nish": { "capabilities": { "allow": [...], "deny": [...] } }` in the
+root `package.json` (the one nearest above the entry, where `noPanic` is read)
+are a **capability policy**, and a program whose entry reaches a capability
+the policy does not grant is refused
+([wp36-capability-policy.md](wp36-capability-policy.md)):
+
+```text
+main.ts:6:36: error: `main` reaches `net`, which the capability policy does not grant (the root package's `deny`); the chain that reaches it: main.ts:6:36 calls dial, client.ts:5:10 calls netAddress
+```
+
+- A denied capability is refused when it is reached. Giving `--allow` or an
+  `allow` list makes the policy an allowlist: a reached capability it does not
+  list is refused, `exit` and `signal` included. The command line can only
+  narrow the manifest: denials union and allowlists intersect.
+- Only the entry is judged: `main`'s closure, or each exported function of an
+  entry with no `main`. The error (NL2459) is spanned at the first call of the
+  witness chain and names every hop of it as `--emit-capabilities` writes them
+  (`tests/wordings/nl2459_policy_deny`, `nl2459_policy_allowlist`;
+  `tests/link/caps_policy_manifest`).
+- `unsafe` can be denied — `--deny unsafe` refuses a program that reaches a
+  `nish:unsafe` export anywhere in its closure
+  (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is
+  the opt-in, so an allowlist does not refuse it and `--allow unsafe` is a
+  usage error.
+- A name that is no capability, `--allow unsafe`, a capability both allowed
+  and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
+  yet) are usage errors, exit 2. In `package.json` they are errors where the
+  manifest writes them: the wrong shape (NL3032,
+  `tests/link/caps_policy_manifest_shape`), a name that is no capability
+  (NL3033, `caps_policy_manifest_unknown`), `unsafe` under `allow` (NL3034,
+  `caps_policy_manifest_unsafe`) and a capability under both (NL3035,
+  `caps_policy_manifest_both`).
+- A policy changes no byte of the IR: a program inside it compiles and runs as
+  it does with none (`tests/link/caps_policy_granted`,
+  `caps_policy_manifest_granted`). `nish run` takes both flags and refuses
+  before it links; `--fix` and `--emit-ast` refuse them.
 
 ## Semantics decisions
 

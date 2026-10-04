@@ -854,6 +854,13 @@ major. Whether it happens at all is still wp22 §10's open question.
    golden or raises `bench/instructions.json`.
 3. **Threads P3, a lock that owns its data** ([wp29-thread-surface.md](wp29-thread-surface.md)
    §4.3), proposed. P1 and P2 are built.
+4. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
+   the process with Landlock and seccomp to the capabilities the compiler
+   computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. WP35, the
+   capability report ([wp35-capabilities.md](wp35-capabilities.md)), and
+   WP36, the compile-time policy that refuses what `--allow`, `--deny` or the
+   root `package.json` does not grant
+   ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.
 
 Shipped from the earlier list: the data-parallel call, threads P1
 (`parallelMapInto` and `parallelReduce`, 0.11.0,

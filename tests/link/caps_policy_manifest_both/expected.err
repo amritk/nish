@@ -1,0 +1,1 @@
+package.json:5:59: error: `net` is both allowed and denied in the root package's capability policy; a policy says one or the other

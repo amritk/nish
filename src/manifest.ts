@@ -217,14 +217,15 @@ const manifestFieldAt = (object: string, name: string): i32 => {
 }
 
 /**
- * The entries of a root package's `"nish": { "noPanic": [...] }`, each as
- * written between its quotes and beside the offset of its opening quote in
- * `manifest`, so that an entry naming no module is reported where it is
- * written. An entry that is not a string is kept as written, and so names no
- * module and is reported, rather than dropped: a list the reader cannot follow
- * must not quietly shrink the scope it promises. Empty when there is no list.
+ * The entries of a list in a root package's `"nish"` field -- `noPanic`, or a
+ * capability policy's `allow` and `deny` -- each as written between its quotes
+ * and beside the offset of its opening quote in the manifest, so that an entry
+ * the compiler cannot honour is reported where it is written. An entry that
+ * is not a string is kept as written, and so names nothing and is reported,
+ * rather than dropped: a list the reader cannot follow must not quietly shrink
+ * what it promises. Empty when there is no list.
  */
-export class NoPanicList {
+export class ManifestList {
   entries: string[]
   offsets: i32[]
 
@@ -234,29 +235,124 @@ export class NoPanicList {
   }
 }
 
-export const manifestNoPanic = (manifest: string, condition: string): NoPanicList => {
-  const out = new NoPanicList()
-  const nishAt = manifestFieldAt(manifest, condition)
-  if (nishAt < 0) {
-    return out
-  }
-  const nish = manifest.substring(nishAt, manifestEndOfValue(manifest, nishAt))
-  const listAt = manifestFieldAt(nish, "noPanic")
-  if (listAt < 0 || nish.charCodeAt(listAt) !== OPEN_BRACKET) {
-    return out
-  }
-  const base = nishAt + listAt
-  let i = manifestSkipBlank(manifest, base + 1)
+/** Read the array that opens at `manifest[at]` into `out`, stopping at the first value it cannot step past. */
+const manifestReadList = (manifest: string, at: i32, out: ManifestList): void => {
+  let i = manifestSkipBlank(manifest, at + 1)
   while (i >= 0 && i < manifest.length && manifest.charCodeAt(i) !== CLOSE_BRACKET) {
     const end = manifestEndOfValue(manifest, i)
     if (end <= i) {
-      return out
+      return
     }
     out.entries.push(manifestUnquoted(manifest.substring(i, end)))
     out.offsets.push(i)
     i = manifestSkipBlank(manifest, end)
     if (i >= 0 && i < manifest.length && manifest.charCodeAt(i) === COMMA) {
       i = manifestSkipBlank(manifest, i + 1)
+    }
+  }
+}
+
+/** Where the root package's `"nish"` field's `name` value starts in `manifest`, or -1 when it has none. */
+const manifestNishFieldAt = (manifest: string, condition: string, name: string): i32 => {
+  const nishAt = manifestFieldAt(manifest, condition)
+  if (nishAt < 0) {
+    return -1
+  }
+  const at = manifestFieldAt(manifest.substring(nishAt, manifestEndOfValue(manifest, nishAt)), name)
+  return at < 0 ? -1 : nishAt + at
+}
+
+/** The root package's `"nish": { "noPanic": [...] }` (`ManifestList`). */
+export const manifestNoPanic = (manifest: string, condition: string): ManifestList => {
+  const out = new ManifestList()
+  const at = manifestNishFieldAt(manifest, condition, "noPanic")
+  if (at >= 0 && manifest.charCodeAt(at) === OPEN_BRACKET) {
+    manifestReadList(manifest, at, out)
+  }
+  return out
+}
+
+/**
+ * The root package's `"nish": { "capabilities": { "allow": [...], "deny": [...] } }`
+ * (docs/wp36-capability-policy.md §3), read but not judged: the names are
+ * resolved, and refused, by `Compilation.readCapabilityPolicy`. `problem` is
+ * the opening of the NL3032 message when the field is not that shape, with the
+ * span it is reported at, and the lists are then empty: a policy the reader
+ * cannot follow is refused rather than half applied.
+ */
+export class CapabilityManifest {
+  problem: string
+  problemStart: i32
+  problemEnd: i32
+  /** Whether `allow` is written at all: an empty list allows nothing, and no list allows everything. */
+  allowGiven: boolean
+  allow: ManifestList
+  deny: ManifestList
+
+  constructor() {
+    this.problem = ""
+    this.problemStart = 0
+    this.problemEnd = 0
+    this.allowGiven = false
+    this.allow = new ManifestList()
+    this.deny = new ManifestList()
+  }
+}
+
+/** The byte at `at`, or -1 past either end: what lets the policy reader below stop at the end of the text as it stops at a break. */
+const manifestByteAt = (text: string, at: i32): i32 =>
+  at >= 0 && at < text.length ? text.charCodeAt(at) : -1
+
+/** A policy refused for its shape, read no further: NL3032's opening and the span of what broke it. */
+const manifestPolicyProblem = (problem: string, start: i32, end: i32): CapabilityManifest => {
+  const out = new CapabilityManifest()
+  out.problem = problem
+  out.problemStart = start
+  out.problemEnd = end <= start ? start + 1 : end
+  return out
+}
+
+export const manifestCapabilities = (manifest: string, condition: string): CapabilityManifest => {
+  const out = new CapabilityManifest()
+  const at = manifestNishFieldAt(manifest, condition, "capabilities")
+  if (at < 0) {
+    // The reader stops at the first break, so a policy below one would be
+    // dropped in silence; a manifest that mentions one is refused there instead.
+    const broken = manifest.indexOf('"capabilities"') >= 0 ? manifestMalformedAt(manifest) : -1
+    return broken < 0
+      ? out
+      : manifestPolicyProblem("`package.json` stops being JSON here", broken, broken + 1)
+  }
+  if (manifestByteAt(manifest, at) !== OPEN_BRACE) {
+    return manifestPolicyProblem("`capabilities` is not an object", at, manifestEndOfValue(manifest, at))
+  }
+  let i = manifestSkipBlank(manifest, at + 1)
+  while (manifestByteAt(manifest, i) !== CLOSE_BRACE) {
+    const keyEnd = manifestByteAt(manifest, i) === QUOTE ? manifestEndOfString(manifest, i) : -1
+    const colon = keyEnd < 0 ? -1 : manifestSkipBlank(manifest, keyEnd)
+    if (colon < 0 || manifestByteAt(manifest, colon) !== COLON) {
+      return manifestPolicyProblem("`capabilities` cannot be read here", i, i + 1)
+    }
+    const key = manifest.substring(i + 1, keyEnd - 1)
+    const valueAt = manifestSkipBlank(manifest, colon + 1)
+    const valueEnd = manifestEndOfValue(manifest, valueAt)
+    if (key !== "allow" && key !== "deny") {
+      return manifestPolicyProblem(`\`${key}\` is no key of \`capabilities\``, i, keyEnd)
+    }
+    if (valueEnd < 0 || manifestByteAt(manifest, valueAt) !== OPEN_BRACKET) {
+      return manifestPolicyProblem(`\`${key}\` is not an array`, valueAt, valueEnd)
+    }
+    if (key === "allow") {
+      out.allowGiven = true
+      manifestReadList(manifest, valueAt, out.allow)
+    } else {
+      manifestReadList(manifest, valueAt, out.deny)
+    }
+    i = manifestSkipBlank(manifest, valueEnd)
+    if (manifestByteAt(manifest, i) === COMMA) {
+      i = manifestSkipBlank(manifest, i + 1)
+    } else if (manifestByteAt(manifest, i) !== CLOSE_BRACE) {
+      return manifestPolicyProblem("`capabilities` cannot be read here", i, i + 1)
     }
   }
   return out

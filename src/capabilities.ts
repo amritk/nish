@@ -42,9 +42,13 @@ const CAP_FS_WRITE: i32 = 6
 const CAP_NET: i32 = 7
 const CAP_PROCESS_SPAWN: i32 = 8
 const CAP_SIGNAL: i32 = 9
-// 10, `unsafe`, is reserved for `nish:unsafe`, which has not landed: nothing
-// answers it yet, so it is the last name in `capabilityName` and no constant
-// until something does.
+/**
+ * A call to a `nish:unsafe` export: not a capability of the world, but the
+ * one way a program gives up a check, so a policy can deny it
+ * (docs/wp36-capability-policy.md). The import is its opt-in, which is why an
+ * allowlist never refuses it.
+ */
+export const CAP_UNSAFE: i32 = 10
 
 /** How many capabilities there are, and so how long a per-capability array is. */
 export const CAPABILITY_COUNT: i32 = 11
@@ -52,7 +56,7 @@ export const CAPABILITY_COUNT: i32 = 11
 /**
  * The capabilities a deterministic program reaches none of: the inputs that
  * are not argv or stdin, and the effects whose outcome depends on the world.
- * `exit` and `signal` are not in it (docs/wp35-capabilities.md §1). A function
+ * `exit`, `signal` and `unsafe` are not in it (docs/wp35-capabilities.md §1). A function
  * rather than a constant because a module constant is a literal.
  */
 const nondeterministic = (): i32 =>
@@ -98,6 +102,21 @@ export const capabilityName = (index: i32): string => {
     return "signal"
   }
   return index === 10 ? "unsafe" : ""
+}
+
+/** Every capability at once: what a missing allowlist allows. */
+export const allCapabilities = (): i32 => (1 << CAPABILITY_COUNT) - 1
+
+/** The index of the capability spelled `name`, as every report spells it, or -1 for no capability. */
+export const capabilityIndex = (name: string): i32 => {
+  let i = 0
+  while (i < CAPABILITY_COUNT) {
+    if (capabilityName(i) === name) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
 }
 
 /** Whether a set reaches none of the nondeterministic capabilities. */
@@ -181,11 +200,10 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_NONE
   }
   // `nish:unsafe` reaches none of the world's capabilities: an unchecked
-  // element access and a wrapping operation are memory and arithmetic. The
-  // reserved `unsafe` bit is what they will answer once it is wired; until
-  // then they are a deliberate none rather than an unlabelled builtin.
+  // element access and a wrapping operation are memory and arithmetic. They
+  // carry `unsafe` of their own, so that a policy can deny giving up a check.
   if (isUnsafeExport(name)) {
-    return CAP_NONE
+    return CAP_UNSAFE
   }
   if (
     name === "readFileSync" ||

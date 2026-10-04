@@ -11668,6 +11668,8 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--fix",
     "--emit-capabilities",
     "[--capabilities]",
+    "--allow",
+    "--deny",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
@@ -12139,6 +12141,49 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       fs.existsSync(cookbookJson) &&
       fs.readFileSync(cookbookJson, "utf8") === shownReport[1],
     shownReport === null ? "no capabilities-report block in docs/IR_COOKBOOK.md" : shown(cookbookRun)
+  )
+
+  // WP36: the policy refusal the cookbook shows is the one the compiler
+  // prints, and a policy the snippet keeps to moves no byte of its IR.
+  const shownRefusal = /<!-- capabilities-refusal builtin-capabilities -->\n```text\n([\s\S]*?)```\n/.exec(
+    cookbookText
+  )
+  const cookbookSource = path.join(root, "docs", "cookbook", "builtin-capabilities.ts")
+  const refusedRun = spawnSync(
+    NISH,
+    [cookbookSource, "-o", path.join(capsDir, "refused") + path.sep, "--deny", "fs.read"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "capability policy: the refusal docs/IR_COOKBOOK.md shows is the one --deny fs.read prints for its snippet",
+    shownRefusal !== null &&
+      refusedRun.status === 1 &&
+      refusedRun.stderr.startsWith(
+        shownRefusal[1].replace("docs/cookbook/", `${path.join(root, "docs", "cookbook")}/`)
+      ),
+    shownRefusal === null ? "no capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(refusedRun)
+  )
+  const grantedDir = path.join(capsDir, "granted") + path.sep
+  const grantedRun = spawnSync(
+    NISH,
+    [cookbookSource, "-o", grantedDir, "--allow", "fs.read", "--deny", "net"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  const ungrantedLl = path.join(capsDir, "cookbook", "builtin-capabilities.ll")
+  const grantedLl = path.join(grantedDir, "builtin-capabilities.ll")
+  check(
+    "capability policy: a program inside its policy compiles to the IR it compiles to with none",
+    grantedRun.status === 0 &&
+      fs.existsSync(grantedLl) &&
+      fs.existsSync(ungrantedLl) &&
+      fs.readFileSync(grantedLl, "utf8") === fs.readFileSync(ungrantedLl, "utf8"),
+    shown(grantedRun)
   )
 
   // A program that will not run gets the refusal alone: the line is promised

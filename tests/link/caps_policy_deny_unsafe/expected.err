@@ -1,0 +1,1 @@
+main.ts:6:35: error: `main` reaches `unsafe`, which the capability policy does not grant (`--deny unsafe`); the chain that reaches it: main.ts:6:35 calls first, fast.ts:3:59 calls uncheckedGet

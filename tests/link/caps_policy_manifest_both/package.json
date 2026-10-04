@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-both",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["clock", "net"], "deny": ["net"] }
+  }
+}

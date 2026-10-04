@@ -1,0 +1,1 @@
+package.json:5:21: error: `capabilities` is not an object: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names

@@ -157,6 +157,14 @@ export class Options {
    * only this much of it is here.
    */
   capabilityReport: boolean
+  /**
+   * WP36: the capabilities `--allow` grants, as a mask (`src/capabilities.ts`),
+   * or every bit when no `--allow` was given, so that the root package's own
+   * allowlist intersects with it by `&` (`Compilation.refuseCapabilities`).
+   */
+  allowCapabilities: i32
+  /** WP36: the capabilities `--deny` refuses, as a mask; 0 when none was given. */
+  denyCapabilities: i32
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -184,6 +192,8 @@ export class Options {
     this.denyPanics = false
     this.noPanicListed = false
     this.capabilityReport = false
+    this.allowCapabilities = -1
+    this.denyCapabilities = 0
   }
 
   /**

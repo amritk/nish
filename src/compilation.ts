@@ -69,6 +69,15 @@ import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import {
+  allCapabilities,
+  CAP_UNSAFE,
+  CAPABILITY_COUNT,
+  capabilityIndex,
+  capabilityName,
+  capabilityNames,
+} from "./capabilities"
+import { functionIndex, witnessChain } from "./capability-report"
+import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
   packageNameOf,
@@ -114,8 +123,10 @@ import {
   manifestEngineCheck,
   manifestEngineRange,
   manifestMalformedAt,
+  manifestCapabilities,
   manifestNoPanic,
   manifestVersion,
+  ManifestList,
   nishExportEntry,
 } from "./manifest"
 import {
@@ -377,6 +388,14 @@ export class Compilation {
    * package's `"nish".noPanic` (`readNoPanic`).
    */
   panicScope: boolean[]
+  /**
+   * WP36: the root package's `"nish".capabilities` policy as masks, read by
+   * `readCapabilityPolicy`: what its `allow` grants (every bit when it has no
+   * `allow`, so the command line's allowlist intersects with it by `&`) and
+   * what its `deny` refuses.
+   */
+  manifestAllow: i32
+  manifestDeny: i32
 
   constructor(opts: Options) {
     this.opts = opts
@@ -395,6 +414,8 @@ export class Compilation {
     this.analysisUnits = []
     this.rootPackageDir = ""
     this.panicScope = []
+    this.manifestAllow = -1
+    this.manifestDeny = 0
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1057,6 +1078,7 @@ export class Compilation {
     }
     // Before anything records: a `noPanic` list turns the recording on.
     this.readNoPanic()
+    this.readCapabilityPolicy()
     this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
       return false
@@ -1164,6 +1186,10 @@ export class Compilation {
         return false
       }
     }
+    this.refuseCapabilities()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     if (this.opts.warnPortability) {
       this.reportPortability()
     }
@@ -1183,20 +1209,12 @@ export class Compilation {
     for (const unit of this.modules) {
       this.panicScope.push(this.opts.denyPanics && unit.packageName === ROOT_PACKAGE)
     }
-    if (this.modules.length === 0) {
+    const source = this.rootManifest()
+    if (source === null) {
       return
     }
-    const dir = this.manifestDirAbove(this.entry().path)
-    if (dir === null) {
-      return
-    }
-    const manifestPath = joinPath([dir, "package.json"])
-    const text = readFileSyncOrNull(manifestPath)
-    if (text === null) {
-      return
-    }
-    const list = manifestNoPanic(text, PACKAGE_CONDITION)
-    const source = new SourceFile(manifestPath, text)
+    const dir = dirname(source.path)
+    const list = manifestNoPanic(source.text, PACKAGE_CONDITION)
     let k = 0
     while (k < list.entries.length) {
       const entry = list.entries[k]
@@ -1216,6 +1234,175 @@ export class Compilation {
       }
       k = k + 1
     }
+  }
+
+  /**
+   * The root package's manifest, the `package.json` nearest above the entry,
+   * spelled from the entry's path, or null when there is none: where
+   * `"nish".noPanic` and `"nish".capabilities` are read.
+   */
+  rootManifest(): SourceFile | null {
+    if (this.modules.length === 0) {
+      return null
+    }
+    const dir = this.manifestDirAbove(this.entry().path)
+    if (dir === null) {
+      return null
+    }
+    const manifestPath = joinPath([dir, "package.json"])
+    const text = readFileSyncOrNull(manifestPath)
+    return text === null ? null : new SourceFile(manifestPath, text)
+  }
+
+  /**
+   * WP36: the root package's `"nish": { "capabilities": { "allow", "deny" } }`
+   * (docs/wp36-capability-policy.md §3), as `manifestAllow` and
+   * `manifestDeny`. Everything it cannot honour is refused where
+   * `package.json` writes it, so that a typo never quietly widens the policy:
+   * the wrong shape (NL3032), a name that is no capability (NL3033), `unsafe`
+   * under `allow` (NL3034), and a capability under both (NL3035).
+   */
+  readCapabilityPolicy(): void {
+    this.manifestAllow = -1
+    this.manifestDeny = 0
+    const source = this.rootManifest()
+    if (source === null) {
+      return
+    }
+    const policy = manifestCapabilities(source.text, PACKAGE_CONDITION)
+    if (policy.problem.length > 0) {
+      this.sink.report(
+        source,
+        policy.problemStart,
+        policy.problemEnd,
+        `${policy.problem}: the root package's \`${PACKAGE_CONDITION}.capabilities\` is an object with an \`allow\` list, a \`deny\` list or both, each an array of capability names`
+      )
+      return
+    }
+    const allow = this.policyListMask(source, policy.allow, true)
+    const deny = this.policyListMask(source, policy.deny, false)
+    const both = allow & deny
+    if (both !== 0) {
+      // Spanned at the `deny` entry, the second word on the capability.
+      const name = capabilityNames(both)[0]
+      const k = policy.deny.entries.indexOf(name)
+      const at = k >= 0 && k < policy.deny.offsets.length ? policy.deny.offsets[k] : 0
+      this.sink.report(
+        source,
+        at,
+        at + name.length + 2,
+        `\`${name}\` is both allowed and denied in the root package's capability policy; a policy says one or the other`
+      )
+      return
+    }
+    this.manifestAllow = policy.allowGiven ? allow : -1
+    this.manifestDeny = deny
+  }
+
+  /** One `allow` or `deny` list of the root package's policy as a mask, refusing each entry that names no capability. */
+  policyListMask(source: SourceFile, list: ManifestList, allow: boolean): i32 {
+    const names = capabilityNames(allCapabilities()).join(", ")
+    const unsafe = unsafeModule()
+    let mask = 0
+    let k = 0
+    while (k < list.entries.length && k < list.offsets.length) {
+      const entry = list.entries[k]
+      const at = list.offsets[k]
+      const index = capabilityIndex(entry)
+      if (index < 0) {
+        this.sink.report(
+          source,
+          at,
+          at + entry.length + 2,
+          `\`${entry}\` is no capability: a policy names capabilities as \`--emit-capabilities\` reports them, one of ${names}`
+        )
+      } else if (allow && index === CAP_UNSAFE) {
+        this.sink.report(
+          source,
+          at,
+          at + entry.length + 2,
+          `\`unsafe\` cannot be allowed: importing \`${unsafe}\` is the opt-in to it, so a policy can only deny it`
+        )
+      } else {
+        mask = mask | (1 << index)
+      }
+      k = k + 1
+    }
+    return mask
+  }
+
+  /**
+   * WP36: refuse what the entry's closure reaches beyond the capability
+   * policy (docs/wp36-capability-policy.md §1): `--deny` and the root
+   * package's `deny` refuse a capability outright, and `--allow` and its
+   * `allow`, each an allowlist when given, refuse every capability they do
+   * not list but `unsafe`, whose opt-in is the import. Only the entry is
+   * judged: `main`'s closure, or each exported function of a library entry.
+   * One error per refused capability, in the fixed order, spanned at the
+   * first call of its witness chain and naming the whole chain, so the reader
+   * sees how the program got there. Nothing here moves a byte of the IR: a
+   * program it accepts is the one the build compiles anyway.
+   */
+  refuseCapabilities(): void {
+    const allow = this.opts.allowCapabilities & this.manifestAllow
+    const deny = this.opts.denyCapabilities | this.manifestDeny
+    const refused = deny | (~allow & ~(1 << CAP_UNSAFE) & allCapabilities())
+    if (refused === 0 || this.modules.length === 0) {
+      return
+    }
+    const facts = this.analyze()
+    const index = functionIndex(this, facts)
+    const program = this.entry().checker.program
+    const judged: FunctionSig[] = []
+    const main = program.entryMain
+    if (main !== null) {
+      judged.push(main)
+    } else {
+      for (const sig of program.functions) {
+        if (sig.exported && sig.definedIn(program.source)) {
+          judged.push(sig)
+        }
+      }
+    }
+    let c = 0
+    while (c < CAPABILITY_COUNT) {
+      if ((refused & (1 << c)) !== 0) {
+        for (const sig of judged) {
+          const chain = witnessChain(index, facts, sig, c)
+          const source: SourceFile | null = chain.length > 0 ? chain[0].source : null
+          const site: Node | null = chain.length > 0 ? chain[0].site : null
+          if (source !== null && site !== null) {
+            const hops: string[] = []
+            for (const hop of chain) {
+              hops.push(`${hop.at} calls ${hop.calls}`)
+            }
+            this.sink.report(
+              source,
+              site.start,
+              site.end,
+              `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which the capability policy does not grant (${this.refusedBy(c)}); the chain that reaches it: ${hops.join(", ")}`
+            )
+            break
+          }
+        }
+      }
+      c = c + 1
+    }
+  }
+
+  /** Which part of the policy refuses capability `c`, as the refusal names it: the first of the four that does. */
+  refusedBy(c: i32): string {
+    const bit = 1 << c
+    if ((this.opts.denyCapabilities & bit) !== 0) {
+      return `\`--deny ${capabilityName(c)}\``
+    }
+    if ((this.manifestDeny & bit) !== 0) {
+      return "the root package's `deny`"
+    }
+    if ((this.opts.allowCapabilities & bit) === 0) {
+      return `\`--allow ${capabilityNames(this.opts.allowCapabilities).join(",")}\` does not list it`
+    }
+    return "the root package's `allow` does not list it"
   }
 
   /**

@@ -14928,6 +14928,26 @@ attributes #1 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin-capabilities -->
 
+### A capability policy: a refusal, not a lowering
+
+`--allow` and `--deny`, and the root package's `"nish".capabilities`, judge
+the capabilities above and change no byte of the IR (`docs/LANGUAGE.md` ->
+Capabilities -> The capability policy). Compiled with `--allow fs.read` the
+snippet above is the listing above, byte for byte; compiled with
+`--deny fs.read` there is no listing at all, only this, spanned at `main`'s
+first call of the witness chain and naming the rest of it the way the report
+does:
+
+<!-- capabilities-refusal builtin-capabilities -->
+```text
+docs/cookbook/builtin-capabilities.ts:15:15: error: `main` reaches `fs.read`, which the capability policy does not grant (`--deny fs.read`); the chain that reaches it: builtin-capabilities.ts:15:15 calls lineCount, builtin-capabilities.ts:4:16 calls load, builtin-capabilities.ts:1:40 calls readFileSync
+  15 |   console.log(lineCount("settings.txt"))
+     |               ^~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+`tests/run.js` compiles the snippet both ways and holds the block above to
+what the compiler prints and the granted IR to the ungranted one.
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather

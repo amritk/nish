@@ -1610,6 +1610,23 @@ that cannot panic, or make the call from a module outside the scope. Neither
 `--unchecked-indexing` nor `uncheckedGet` is a proof — both are undefined
 behaviour out of range — so a module that uses them stays out of `noPanic`.
 
+### Holding it to its capabilities
+
+A package that must not touch the network says so in `package.json`,
+`"nish": { "capabilities": { "deny": ["net"] } }`, and `--deny net` or an
+allowlist such as `--allow fs.read,exit` says the same on the command line. A
+program whose `main` reaches more is refused (NL2459), spanned at the call in
+`main` and naming the whole chain to the builtin; nothing changes in a program
+that keeps to it ([LANGUAGE.md](LANGUAGE.md#the-capability-policy)). Under an
+allowlist `exit` is a capability like the others, and `unsafe` can be denied
+but never allowed: importing `nish:unsafe` is the opt-in.
+
+```ts nish:err NL2459 --deny fs.read
+const settings = (): string => readFileSync("settings.txt");
+
+export const main = (): i32 => settings().length;
+```
+
 ## Before you say it compiles
 
 Run it. `nish file.ts --json` is one command and it is the only proof.
@@ -1630,6 +1647,8 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    the network, the environment, the clock, entropy, signals, `exit`, C calls —
    with the call chain that reaches it, and `nish run --capabilities file.ts`
    prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
+   A package that must not touch the network says so in `package.json`
+   ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
 10. Must it never panic? Compile with `--deny-panics` (or list the module in
    `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
    `pop`, range entry, `expect` and exiting call it cannot prove is an error

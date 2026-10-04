@@ -574,6 +574,15 @@ const DENY_PANICS_NEW = [
   "tests/link/no_panic_unknown_entry/main.ts",
 ]
 
+/** Programs new with the capability policy (WP36), whose exit the reference cannot share: it does not know the flags or the field. */
+const CAPABILITY_POLICY_NEW = [
+  "tests/link/caps_policy_granted/main.ts",
+  "tests/link/caps_policy_manifest_both/main.ts",
+  "tests/link/caps_policy_manifest_shape/main.ts",
+  "tests/link/caps_policy_manifest_unknown/main.ts",
+  "tests/link/caps_policy_manifest_unsafe/main.ts",
+]
+
 const DECLARED = [
   {
     program: "tests/link/net_hpack/main.ts",
@@ -2980,6 +2989,11 @@ const DECLARED = [
     DENY_PANICS_NEW,
     "--deny-panics and noPanic refuse every remaining panic site",
     "a new program: it is compiled under `--deny-panics` or a `noPanic` list, which the reference compiler does not read"
+  ),
+  ...declareMoved(
+    CAPABILITY_POLICY_NEW,
+    "refuse a program that reaches a capability its policy does not grant",
+    "a new program: it is compiled under `--allow`, or its root `package.json` carries a `capabilities` policy, which the reference compiler does not read"
   ),
 ]
 

@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-granted",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["env"], "deny": ["net", "process.spawn"] }
+  }
+}
