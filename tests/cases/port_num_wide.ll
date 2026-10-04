@@ -6,6 +6,9 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #3
+declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64) #3
 
 define internal void @Ledger.constructor(%struct.Ledger* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #0 {
 entry:
@@ -16,11 +19,20 @@ entry:
 
 define internal noundef i64 @scale(i64 noundef %n) #1 {
 entry:
-  %0 = mul nsw i64 %n, 3
-  ret i64 %0
+  %0 = call { i64, i1 } @llvm.smul.with.overflow.i64(i64 %n, i64 3)
+  %1 = extractvalue { i64, i1 } %0, 0
+  %2 = extractvalue { i64, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i64 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %ledger.addr = alloca %struct.Ledger*, align 8
   %Ledger.obj = alloca %struct.Ledger, align 8
@@ -77,38 +89,52 @@ forof.body:
   %23 = getelementptr inbounds %struct.Ledger, %struct.Ledger* %22, i32 0, i32 0
   %24 = load i64, i64* %23, align 8, !tbaa !4
   %25 = load i64, i64* %s.addr, align 8
-  %26 = add nsw i64 %24, %25
-  %27 = sext i32 1 to i64
-  %28 = call i64 @scale(i64 %27)
-  %29 = add nsw i64 %26, %28
-  %30 = getelementptr inbounds %struct.Ledger, %struct.Ledger* %21, i32 0, i32 0
-  store i64 %29, i64* %30, align 8, !tbaa !4
+  %26 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %24, i64 %25)
+  %27 = extractvalue { i64, i1 } %26, 0
+  %28 = extractvalue { i64, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %29 = sext i32 1 to i64
+  %30 = call i64 @scale(i64 %29)
+  %31 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %27, i64 %30)
+  %32 = extractvalue { i64, i1 } %31, 0
+  %33 = extractvalue { i64, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %34 = getelementptr inbounds %struct.Ledger, %struct.Ledger* %21, i32 0, i32 0
+  store i64 %32, i64* %34, align 8, !tbaa !4
   br label %forof.inc
 
 forof.inc:
-  %31 = load i64, i64* %forof.idx, align 8
-  %32 = add i64 %31, 1
-  store i64 %32, i64* %forof.idx, align 8
+  %35 = load i64, i64* %forof.idx, align 8
+  %36 = add i64 %35, 1
+  store i64 %36, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %33 = load %struct.Ledger*, %struct.Ledger** %ledger.addr, align 8
-  %34 = getelementptr inbounds %struct.Ledger, %struct.Ledger* %33, i32 0, i32 0
-  %35 = load i64, i64* %34, align 8, !tbaa !4
-  %36 = trunc i64 %35 to i32
-  %37 = call i8* @nish_str_from_i32(i32 %36)
-  call void @nish_print(i8* %37)
-  %38 = load i64, i64* %step.addr, align 8
-  %39 = load i64, i64* %counted.addr, align 8
-  %40 = add nsw i64 %38, %39
-  %41 = trunc i64 %40 to i32
-  %42 = call i8* @nish_str_from_i32(i32 %41)
-  call void @nish_print(i8* %42)
+  %37 = load %struct.Ledger*, %struct.Ledger** %ledger.addr, align 8
+  %38 = getelementptr inbounds %struct.Ledger, %struct.Ledger* %37, i32 0, i32 0
+  %39 = load i64, i64* %38, align 8, !tbaa !4
+  %40 = trunc i64 %39 to i32
+  %41 = call i8* @nish_str_from_i32(i32 %40)
+  call void @nish_print(i8* %41)
+  %42 = load i64, i64* %step.addr, align 8
+  %43 = load i64, i64* %counted.addr, align 8
+  %44 = add nsw i64 %42, %43
+  %45 = trunc i64 %44 to i32
+  %46 = call i8* @nish_str_from_i32(i32 %45)
+  call void @nish_print(i8* %46)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -116,8 +142,9 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

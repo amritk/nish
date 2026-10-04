@@ -33,10 +33,14 @@ whose run reads or writes outside an object, reads freed memory, races, or
 reaches LLVM undefined behaviour because of a check the compiler removed or
 an attribute it emitted.
 
-Signed overflow is undefined behaviour by the language's own rule
-(`docs/LANGUAGE.md`, "Integer overflow"; `--wrapping` defines it), so a proof
-that leans on `nsw` is sound by specification, and `--unchecked-indexing` is
-the programmer's explicit opt-out of the bounds check. Neither is a finding.
+Signed overflow was undefined behaviour by the language's own rule when this
+audit ran (`--wrapping` defined it), so a proof that leaned on `nsw` was sound
+by specification, and `--unchecked-indexing` is the programmer's explicit
+opt-out of the bounds check. Neither was a finding. Since then overflow is a
+checked panic (`docs/LANGUAGE.md`, "Semantics decisions"): every signed
+`+ - *` is either proven to fit — and only then carries `nsw` — or checked,
+so the proofs that lean on a step not passing `INT_MAX` hold because the step
+panics instead, and no `nsw` the compiler writes is an assumption.
 
 ## Method
 

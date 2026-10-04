@@ -9,6 +9,9 @@
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #3
 declare void @nish_exit(i32 noundef) #4
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define noundef i8 @getByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %i) #0 {
 entry:
@@ -52,9 +55,24 @@ rng.fail:
   unreachable
 
 rng.ok:
-  %2 = mul nsw i32 %base, 10
-  %3 = add nsw i32 %2, %day
-  ret i32 %3
+  %2 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %base, i32 10)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %3, i32 %day)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %6
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %rng.ok ], [ 0, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @low(i32 noundef %x) #0 {
@@ -88,8 +106,17 @@ rng.ok:
   %2 = bitcast i8* %name to i64*
   %3 = load i64, i64* %2, align 8
   %4 = trunc i64 %3 to i32
-  %5 = add nsw i32 %4, %day
-  ret i32 %5
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 %day)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %6
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @lastDigit(i32 noundef %n) #0 {

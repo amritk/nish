@@ -8,8 +8,10 @@ declare void @nish_free_arena() #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -92,21 +94,30 @@ for.body:
   %26 = load i32, i32* %t.addr, align 4
   %27 = load %struct.nish_array*, %struct.nish_array** %rows.addr, align 8
   %28 = call i32 @sumBy$arr.i32$fn.16.nish_main$arrow0(%struct.nish_array* %27)
-  %29 = add nsw i32 %26, %28
-  store i32 %29, i32* %t.addr, align 4
+  %29 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %26, i32 %28)
+  %30 = extractvalue { i32, i1 } %29, 0
+  %31 = extractvalue { i32, i1 } %29, 1
+  br i1 %31, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %30, i32* %t.addr, align 4
   br label %for.inc
 
 for.inc:
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = add nsw i32 %30, 1
-  store i32 %31, i32* %i.addr, align 4
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = add nsw i32 %32, 1
+  store i32 %33, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %32 = load i32, i32* %t.addr, align 4
-  %33 = call i8* @nish_str_from_i32(i32 %32)
-  call void @nish_print(i8* %33)
+  %34 = load i32, i32* %t.addr, align 4
+  %35 = call i8* @nish_str_from_i32(i32 %34)
+  call void @nish_print(i8* %35)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %r) #0 {
@@ -129,8 +140,17 @@ bounds.ok:
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 0
   %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %11 = add nsw i32 %2, %10
-  ret i32 %11
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @sumBy$arr.i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
@@ -159,19 +179,28 @@ forof.body:
   %9 = load i32, i32* %s.addr, align 4
   %10 = load %struct.nish_array*, %struct.nish_array** %x.addr, align 8
   %11 = call i32 @nish_main$arrow0(%struct.nish_array* %10)
-  %12 = add nsw i32 %9, %11
-  store i32 %12, i32* %s.addr, align 4
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %11)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %13, i32* %s.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %13 = load i64, i64* %forof.idx, align 8
-  %14 = add i64 %13, 1
-  store i64 %14, i64* %forof.idx, align 8
+  %15 = load i64, i64* %forof.idx, align 8
+  %16 = add i64 %15, 1
+  store i64 %16, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %15 = load i32, i32* %s.addr, align 4
-  ret i32 %15
+  %17 = load i32, i32* %s.addr, align 4
+  ret i32 %17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -185,7 +214,8 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

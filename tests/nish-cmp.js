@@ -2996,6 +2996,12 @@ const DECLARED = [
     "a program that reaches a capability its policy does not grant",
     "a new program: it is compiled under `--allow`, or its root `package.json` carries a `capabilities` policy, which the reference compiler does not read"
   ),
+  // Last, because it covers every program and a narrower entry above must
+  // still be the one a difference is reported under.
+  {
+    changelog: "Make signed integer overflow a checked panic by default",
+    why: "every signed `+ - *`, negation and step the compiler cannot prove fits is now `llvm.s*.with.overflow` and a branch to `nish_panic_overflow`, and one it can is `nsw` beside its proof, where the reference flagged every one `nsw` unproven",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
@@ -3499,6 +3505,7 @@ const compare = (pair, work, file, options = {}) => {
     "-o",
     `${dir}${path.sep}`,
     ...flags,
+    ...(options.extraFlags ?? []),
     ...(options.sidecars === false ? [] : sidecarFlags(dir, stem)),
   ]
 

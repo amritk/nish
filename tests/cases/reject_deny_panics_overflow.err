@@ -1,0 +1,2 @@
+4:45: error: `overflow` may panic here
+this `+` is not proven to fit `i32` here, and a signed overflow panics: bound its operands with a test the checker reads — a loop below a length or a limit, or a guard on the value — so the result is proven to fit, or, if it is meant to wrap, compute in `u32` or write it as `wrappingAdd(x, y)` from `nish:unsafe`

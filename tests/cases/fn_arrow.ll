@@ -1,11 +1,13 @@
 @.str.0 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"big\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"small\00" }, align 8
 
-declare void @nish_free_arena() #3
-declare noundef i64 @nish_arena_mark() #3
-declare void @nish_arena_release(i64 noundef) #3
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @double(i32 noundef %n) #0 {
 entry:
@@ -36,15 +38,24 @@ cond.true:
 cond.false:
   %1 = sub nsw i32 %n, 1
   %2 = call i32 @sumTo(i32 %1)
-  %3 = add nsw i32 %n, %2
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 %2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   br label %cond.end
 
 cond.end:
-  %4 = phi i32 [ 0, %cond.true ], [ %3, %cond.false ]
-  ret i32 %4
+  %6 = phi i32 [ 0, %cond.true ], [ %4, %ovf.ok ]
+  ret i32 %6
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #1 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @double(i32 21)
@@ -61,7 +72,7 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -69,6 +80,6 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind readnone }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }

@@ -19,14 +19,21 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_exit(i32 noundef) #2
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal void @Cursor.advance(%struct.Cursor* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %by) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
-  %2 = add nsw i32 %1, %by
-  %3 = icmp ult i32 %2, 100
-  br i1 %3, label %rng.ok, label %rng.fail
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %by)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = icmp ult i32 %3, 100
+  br i1 %5, label %rng.ok, label %rng.fail
 
 rng.fail:
   call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*), i32 2, i1 true)
@@ -34,13 +41,13 @@ rng.fail:
   unreachable
 
 rng.ok:
-  %4 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %this, i32 0, i32 0
-  store i32 %2, i32* %4, align 4, !tbaa !4
-  %5 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %this, i32 0, i32 0
-  %6 = load i32, i32* %5, align 4
-  %7 = add nsw i32 %6, 1
-  %8 = icmp ult i32 %7, 100
-  br i1 %8, label %rng.ok.1, label %rng.fail.1
+  %6 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %this, i32 0, i32 0
+  store i32 %3, i32* %6, align 4, !tbaa !4
+  %7 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %this, i32 0, i32 0
+  %8 = load i32, i32* %7, align 4
+  %9 = add nsw i32 %8, 1
+  %10 = icmp ult i32 %9, 100
+  br i1 %10, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
   call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*), i32 2, i1 true)
@@ -48,8 +55,12 @@ rng.fail.1:
   unreachable
 
 rng.ok.1:
-  store i32 %7, i32* %5, align 4
+  store i32 %9, i32* %7, align 4
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @clamp(i1 noundef zeroext %big, i32 noundef %v) #0 {
@@ -245,27 +256,32 @@ forof.body:
   store i32 %59, i32* %v.addr, align 4
   %60 = load i32, i32* %total.addr, align 4
   %61 = load i32, i32* %v.addr, align 4
-  %62 = add nsw i32 %60, %61
-  store i32 %62, i32* %total.addr, align 4
+  %62 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 %61)
+  %63 = extractvalue { i32, i1 } %62, 0
+  %64 = extractvalue { i32, i1 } %62, 1
+  br i1 %64, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %63, i32* %total.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %63 = load i64, i64* %forof.idx, align 8
-  %64 = add i64 %63, 1
-  store i64 %64, i64* %forof.idx, align 8
+  %65 = load i64, i64* %forof.idx, align 8
+  %66 = add i64 %65, 1
+  store i64 %66, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %65 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %Cursor.obj, i32 0, i32 0
-  store i32 0, i32* %65, align 4, !tbaa !4
+  %67 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %Cursor.obj, i32 0, i32 0
+  store i32 0, i32* %67, align 4, !tbaa !4
   store %struct.Cursor* %Cursor.obj, %struct.Cursor** %c.addr, align 8
-  %66 = load %struct.Cursor*, %struct.Cursor** %c.addr, align 8
-  call void @Cursor.advance(%struct.Cursor* %66, i32 4)
+  %68 = load %struct.Cursor*, %struct.Cursor** %c.addr, align 8
+  call void @Cursor.advance(%struct.Cursor* %68, i32 4)
   store i32 0, i32* %count.addr, align 4
-  %67 = load i32, i32* %count.addr, align 4
-  %68 = add nsw i32 %67, 1
-  %69 = icmp ult i32 %68, 10
-  br i1 %69, label %rng.ok.4, label %rng.fail.4
+  %69 = load i32, i32* %count.addr, align 4
+  %70 = add nsw i32 %69, 1
+  %71 = icmp ult i32 %70, 10
+  br i1 %71, label %rng.ok.4, label %rng.fail.4
 
 rng.fail.4:
   call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
@@ -273,11 +289,11 @@ rng.fail.4:
   unreachable
 
 rng.ok.4:
-  store i32 %68, i32* %count.addr, align 4
-  %70 = load i32, i32* %count.addr, align 4
-  %71 = add nsw i32 %70, 2
-  %72 = icmp ult i32 %71, 10
-  br i1 %72, label %rng.ok.5, label %rng.fail.5
+  store i32 %70, i32* %count.addr, align 4
+  %72 = load i32, i32* %count.addr, align 4
+  %73 = add nsw i32 %72, 2
+  %74 = icmp ult i32 %73, 10
+  br i1 %74, label %rng.ok.5, label %rng.fail.5
 
 rng.fail.5:
   call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
@@ -285,42 +301,46 @@ rng.fail.5:
   unreachable
 
 rng.ok.5:
-  store i32 %71, i32* %count.addr, align 4
-  %73 = load %struct.Pixel*, %struct.Pixel** %p.addr, align 8
-  %74 = getelementptr inbounds %struct.Pixel, %struct.Pixel* %73, i32 0, i32 0
-  %75 = load i32, i32* %74, align 4
-  %76 = call i8* @nish_str_from_i32(i32 %75)
-  %77 = call i8* @nish_str_concat(i8* %76, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %78 = load i32, i32* %total.addr, align 4
-  %79 = call i8* @nish_str_from_i32(i32 %78)
-  %80 = call i8* @nish_str_concat(i8* %77, i8* %79)
-  %81 = call i8* @nish_str_concat(i8* %80, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %82 = load %struct.Cursor*, %struct.Cursor** %c.addr, align 8
-  %83 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %82, i32 0, i32 0
-  %84 = load i32, i32* %83, align 4, !tbaa !4
-  %85 = call i8* @nish_str_from_i32(i32 %84)
-  %86 = call i8* @nish_str_concat(i8* %81, i8* %85)
-  %87 = call i8* @nish_str_concat(i8* %86, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %88 = call i32 @clamp(i1 true, i32 -3)
-  %89 = call i8* @nish_str_from_i32(i32 %88)
-  %90 = call i8* @nish_str_concat(i8* %87, i8* %89)
-  %91 = call i8* @nish_str_concat(i8* %90, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %92 = load i32, i32* %count.addr, align 4
-  %93 = call i8* @nish_str_from_i32(i32 %92)
-  %94 = call i8* @nish_str_concat(i8* %91, i8* %93)
-  call void @nish_print(i8* %94)
-  %95 = load i32, i32* %n.addr, align 4
-  %96 = mul nsw i32 %95, 666666666
-  %97 = add nsw i32 %96, 2
-  %98 = call i32 @span(i32 %97)
-  %99 = call i8* @nish_str_from_i32(i32 %98)
-  %100 = call i8* @nish_str_concat(i8* %99, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %101 = call i32 @span(i32 -2000000000)
-  %102 = call i8* @nish_str_from_i32(i32 %101)
-  %103 = call i8* @nish_str_concat(i8* %100, i8* %102)
-  call void @nish_print(i8* %103)
+  store i32 %73, i32* %count.addr, align 4
+  %75 = load %struct.Pixel*, %struct.Pixel** %p.addr, align 8
+  %76 = getelementptr inbounds %struct.Pixel, %struct.Pixel* %75, i32 0, i32 0
+  %77 = load i32, i32* %76, align 4
+  %78 = call i8* @nish_str_from_i32(i32 %77)
+  %79 = call i8* @nish_str_concat(i8* %78, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %80 = load i32, i32* %total.addr, align 4
+  %81 = call i8* @nish_str_from_i32(i32 %80)
+  %82 = call i8* @nish_str_concat(i8* %79, i8* %81)
+  %83 = call i8* @nish_str_concat(i8* %82, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %84 = load %struct.Cursor*, %struct.Cursor** %c.addr, align 8
+  %85 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %84, i32 0, i32 0
+  %86 = load i32, i32* %85, align 4, !tbaa !4
+  %87 = call i8* @nish_str_from_i32(i32 %86)
+  %88 = call i8* @nish_str_concat(i8* %83, i8* %87)
+  %89 = call i8* @nish_str_concat(i8* %88, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %90 = call i32 @clamp(i1 true, i32 -3)
+  %91 = call i8* @nish_str_from_i32(i32 %90)
+  %92 = call i8* @nish_str_concat(i8* %89, i8* %91)
+  %93 = call i8* @nish_str_concat(i8* %92, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %94 = load i32, i32* %count.addr, align 4
+  %95 = call i8* @nish_str_from_i32(i32 %94)
+  %96 = call i8* @nish_str_concat(i8* %93, i8* %95)
+  call void @nish_print(i8* %96)
+  %97 = load i32, i32* %n.addr, align 4
+  %98 = mul nsw i32 %97, 666666666
+  %99 = add nsw i32 %98, 2
+  %100 = call i32 @span(i32 %99)
+  %101 = call i8* @nish_str_from_i32(i32 %100)
+  %102 = call i8* @nish_str_concat(i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %103 = call i32 @span(i32 -2000000000)
+  %104 = call i8* @nish_str_from_i32(i32 %103)
+  %105 = call i8* @nish_str_concat(i8* %102, i8* %104)
+  call void @nish_print(i8* %105)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -334,6 +354,7 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { noreturn nounwind }
 attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

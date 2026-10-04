@@ -3976,17 +3976,18 @@ const p256TableBuild = (table: u32[], p: P256ProjectivePoint, s: P256PointScratc
  * way, at an offset that is the caller's loop position, never the secret.
  */
 const p256TableMove = (out: u32[], table: u32[], at: i32, hit: u32): void => {
+  const p: u32 = toU32(at)
   if (toI32(out.length) < 8 || at < 0 || at > toI32(table.length) - 8) {
     return
   }
-  out[0] = p256FiatCmovznzU32(hit, out[0], table[at])
-  out[1] = p256FiatCmovznzU32(hit, out[1], table[at + 1])
-  out[2] = p256FiatCmovznzU32(hit, out[2], table[at + 2])
-  out[3] = p256FiatCmovznzU32(hit, out[3], table[at + 3])
-  out[4] = p256FiatCmovznzU32(hit, out[4], table[at + 4])
-  out[5] = p256FiatCmovznzU32(hit, out[5], table[at + 5])
-  out[6] = p256FiatCmovznzU32(hit, out[6], table[at + 6])
-  out[7] = p256FiatCmovznzU32(hit, out[7], table[at + 7])
+  out[0] = p256FiatCmovznzU32(hit, out[0], table[p])
+  out[1] = p256FiatCmovznzU32(hit, out[1], table[p + 1])
+  out[2] = p256FiatCmovznzU32(hit, out[2], table[p + 2])
+  out[3] = p256FiatCmovznzU32(hit, out[3], table[p + 3])
+  out[4] = p256FiatCmovznzU32(hit, out[4], table[p + 4])
+  out[5] = p256FiatCmovznzU32(hit, out[5], table[p + 5])
+  out[6] = p256FiatCmovznzU32(hit, out[6], table[p + 6])
+  out[7] = p256FiatCmovznzU32(hit, out[7], table[p + 7])
 }
 
 /**

@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"sumTo","symbol":"sumTo","module":"tests/cases/ovf_proven_below.ts","line":6,"panics":[{"kind":"overflow","line":8,"column":31,"proven":true},{"kind":"overflow","line":9,"column":9,"proven":false}]},
+{"name":"pairs","symbol":"pairs","module":"tests/cases/ovf_proven_below.ts","line":14,"panics":[{"kind":"overflow","line":16,"column":34,"proven":true},{"kind":"overflow","line":17,"column":23,"proven":true},{"kind":"index","line":18,"column":29,"proven":true},{"kind":"index","line":18,"column":39,"proven":true},{"kind":"overflow","line":19,"column":15,"proven":false}]},
+{"name":"test","symbol":"test","module":"tests/cases/ovf_proven_below.ts","line":25,"panics":[{"kind":"overflow","line":25,"column":35,"proven":false},{"kind":"call","line":25,"column":35,"callee":"sumTo","via":"overflow"},{"kind":"call","line":25,"column":47,"callee":"pairs","via":"overflow"}]}
+]}

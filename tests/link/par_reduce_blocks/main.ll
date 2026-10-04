@@ -16,6 +16,8 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #3
 declare void @nish_exit(i32 noundef) #4
 declare void @nish_panic_div(i1 noundef zeroext) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #0
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -117,56 +119,65 @@ for.body:
   %16 = load i32, i32* %n.addr, align 4
   %17 = load i32, i32* %k.addr, align 4
   %18 = call i32 @start(i32 %16, i32 %17)
-  %19 = sub nsw i32 %18, 1
-  store i32 %19, i32* %last.addr, align 4
-  %20 = load i32, i32* %last.addr, align 4
-  %21 = icmp sge i32 %20, 0
-  br i1 %21, label %land.rhs, label %land.end
+  %19 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %18, i32 1)
+  %20 = extractvalue { i32, i1 } %19, 0
+  %21 = extractvalue { i32, i1 } %19, 1
+  br i1 %21, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %20, i32* %last.addr, align 4
+  %22 = load i32, i32* %last.addr, align 4
+  %23 = icmp sge i32 %22, 0
+  br i1 %23, label %land.rhs, label %land.end
 
 land.rhs:
-  %22 = load i32, i32* %last.addr, align 4
-  %23 = trunc i64 %11 to i32
-  %24 = icmp slt i32 %22, %23
+  %24 = load i32, i32* %last.addr, align 4
+  %25 = trunc i64 %11 to i32
+  %26 = icmp slt i32 %24, %25
   br label %land.end
 
 land.end:
-  %25 = phi i1 [ false, %for.body ], [ %24, %land.rhs ]
-  br i1 %25, label %if.then, label %if.end
+  %27 = phi i1 [ false, %ovf.ok ], [ %26, %land.rhs ]
+  br i1 %27, label %if.then, label %if.end
 
 if.then:
-  %26 = load i32, i32* %last.addr, align 4
-  %27 = sext i32 %26 to i64
-  %28 = bitcast i8* %13 to i8*
-  %29 = getelementptr inbounds i8, i8* %28, i64 %27
-  store i8 1, i8* %29, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %28 = load i32, i32* %last.addr, align 4
+  %29 = sext i32 %28 to i64
+  %30 = bitcast i8* %13 to i8*
+  %31 = getelementptr inbounds i8, i8* %30, i64 %29
+  store i8 1, i8* %31, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   br label %if.end
 
 if.end:
   br label %for.inc
 
 for.inc:
-  %30 = load i32, i32* %k.addr, align 4
-  %31 = add nsw i32 %30, 1
-  store i32 %31, i32* %k.addr, align 4
+  %32 = load i32, i32* %k.addr, align 4
+  %33 = add nsw i32 %32, 1
+  store i32 %33, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %32 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %33 = call i8 @nish.parallelReduce$u8$fn.4.step(%struct.nish_array* %32, i8 0)
-  %34 = zext i8 %33 to i64
-  %35 = call i8* @nish_str_from_u64(i64 %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %37 = load i32, i32* %n.addr, align 4
-  %38 = call i32 @start(i32 %37, i32 63)
-  %39 = call i8* @nish_str_from_i32(i32 %38)
-  %40 = call i8* @nish_str_concat(i8* %36, i8* %39)
-  %41 = call i8* @nish_str_concat(i8* %40, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %42 = load i32, i32* %n.addr, align 4
-  %43 = call i32 @start(i32 %42, i32 64)
-  %44 = call i8* @nish_str_from_i32(i32 %43)
-  %45 = call i8* @nish_str_concat(i8* %41, i8* %44)
-  call void @nish_print(i8* %45)
+  %34 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %35 = call i8 @nish.parallelReduce$u8$fn.4.step(%struct.nish_array* %34, i8 0)
+  %36 = zext i8 %35 to i64
+  %37 = call i8* @nish_str_from_u64(i64 %36)
+  %38 = call i8* @nish_str_concat(i8* %37, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %39 = load i32, i32* %n.addr, align 4
+  %40 = call i32 @start(i32 %39, i32 63)
+  %41 = call i8* @nish_str_from_i32(i32 %40)
+  %42 = call i8* @nish_str_concat(i8* %38, i8* %41)
+  %43 = call i8* @nish_str_concat(i8* %42, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %44 = load i32, i32* %n.addr, align 4
+  %45 = call i32 @start(i32 %44, i32 64)
+  %46 = call i8* @nish_str_from_i32(i32 %45)
+  %47 = call i8* @nish_str_concat(i8* %43, i8* %46)
+  call void @nish_print(i8* %47)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {

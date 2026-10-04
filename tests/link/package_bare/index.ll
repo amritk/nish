@@ -1,4 +1,4 @@
-declare noundef i32 @pkg_bare.twice(i32 noundef) #0
+declare noundef i32 @pkg_bare.twice(i32 noundef) #1
 
 define internal noundef i32 @pkg_bare.helper(i32 noundef %n) #0 {
 entry:
@@ -6,7 +6,7 @@ entry:
   ret i32 %0
 }
 
-define noundef i32 @pkg_bare.scale(i32 noundef %n) #0 {
+define noundef i32 @pkg_bare.scale(i32 noundef %n) #1 {
 entry:
   %0 = call i32 @pkg_bare.helper(i32 %n)
   %1 = tail call i32 @pkg_bare.twice(i32 %0)
@@ -14,3 +14,4 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }

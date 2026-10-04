@@ -22,6 +22,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_exit(i32 noundef) #4
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -110,91 +114,115 @@ if.end:
 
 if.then.1:
   %32 = load i32, i32* %found.addr, align 4
-  %33 = add nsw i32 %32, 1
-  store i32 %33, i32* %found.addr, align 4
+  %33 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %32, i32 1)
+  %34 = extractvalue { i32, i1 } %33, 0
+  %35 = extractvalue { i32, i1 } %33, 1
+  br i1 %35, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %34, i32* %found.addr, align 4
   br label %if.end.1
 
 if.end.1:
-  %34 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %35 = load i64, i64* %k2.addr, align 8
-  %36 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %34, i64 %35)
-  br i1 %36, label %if.then.2, label %if.end.2
+  %36 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %37 = load i64, i64* %k2.addr, align 8
+  %38 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %36, i64 %37)
+  br i1 %38, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %37 = load i32, i32* %found.addr, align 4
-  %38 = add nsw i32 %37, 1
-  store i32 %38, i32* %found.addr, align 4
+  %39 = load i32, i32* %found.addr, align 4
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %39, i32 1)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %41, i32* %found.addr, align 4
   br label %if.end.2
 
 if.end.2:
-  %39 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %40 = load i64, i64* %k3.addr, align 8
-  %41 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %39, i64 %40)
-  br i1 %41, label %if.then.3, label %if.end.3
+  %43 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %44 = load i64, i64* %k3.addr, align 8
+  %45 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %43, i64 %44)
+  br i1 %45, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %42 = load i32, i32* %found.addr, align 4
-  %43 = add nsw i32 %42, 1
-  store i32 %43, i32* %found.addr, align 4
+  %46 = load i32, i32* %found.addr, align 4
+  %47 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %46, i32 1)
+  %48 = extractvalue { i32, i1 } %47, 0
+  %49 = extractvalue { i32, i1 } %47, 1
+  br i1 %49, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %48, i32* %found.addr, align 4
   br label %if.end.3
 
 if.end.3:
-  %44 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %45 = load i64, i64* %k4.addr, align 8
-  %46 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %44, i64 %45)
-  br i1 %46, label %if.then.4, label %if.end.4
+  %50 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %51 = load i64, i64* %k4.addr, align 8
+  %52 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %50, i64 %51)
+  br i1 %52, label %if.then.4, label %if.end.4
 
 if.then.4:
-  %47 = load i32, i32* %found.addr, align 4
-  %48 = add nsw i32 %47, 1
-  store i32 %48, i32* %found.addr, align 4
+  %53 = load i32, i32* %found.addr, align 4
+  %54 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %53, i32 1)
+  %55 = extractvalue { i32, i1 } %54, 0
+  %56 = extractvalue { i32, i1 } %54, 1
+  br i1 %56, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  store i32 %55, i32* %found.addr, align 4
   br label %if.end.4
 
 if.end.4:
-  %49 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %50 = load i64, i64* %k0.addr, align 8
-  %51 = call %struct.Map$u64$i32* @nish.Map$u64$i32.set(%struct.Map$u64$i32* %49, i64 %50, i32 10)
-  %52 = load i64, i64* %k1.addr, align 8
-  %53 = call %struct.Map$u64$i32* @nish.Map$u64$i32.set(%struct.Map$u64$i32* %51, i64 %52, i32 20)
-  %54 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %55 = load i64, i64* %k2.addr, align 8
-  %56 = call i1 @nish.Map$u64$i32.delete(%struct.Map$u64$i32* %54, i64 %55)
-  store i1 %56, i1* %gone.addr, align 1
   %57 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %58 = load i64, i64* %k2.addr, align 8
-  %59 = call i1 @nish.Map$u64$i32.delete(%struct.Map$u64$i32* %57, i64 %58)
-  store i1 %59, i1* %again.addr, align 1
-  %60 = load i32, i32* %found.addr, align 4
-  %61 = call i8* @nish_str_from_i32(i32 %60)
-  %62 = call i8* @nish_str_concat(i8* %61, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %63 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %64 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %63, i32 0, i32 0
-  %65 = load i32, i32* %64, align 4, !tbaa !5
-  %66 = call i8* @nish_str_from_i32(i32 %65)
-  %67 = call i8* @nish_str_concat(i8* %62, i8* %66)
-  %68 = call i8* @nish_str_concat(i8* %67, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %69 = load i1, i1* %gone.addr, align 1
-  %70 = select i1 %69, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %71 = call i8* @nish_str_concat(i8* %68, i8* %70)
-  %72 = call i8* @nish_str_concat(i8* %71, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %73 = load i1, i1* %again.addr, align 1
-  %74 = select i1 %73, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %75 = call i8* @nish_str_concat(i8* %72, i8* %74)
+  %58 = load i64, i64* %k0.addr, align 8
+  %59 = call %struct.Map$u64$i32* @nish.Map$u64$i32.set(%struct.Map$u64$i32* %57, i64 %58, i32 10)
+  %60 = load i64, i64* %k1.addr, align 8
+  %61 = call %struct.Map$u64$i32* @nish.Map$u64$i32.set(%struct.Map$u64$i32* %59, i64 %60, i32 20)
+  %62 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %63 = load i64, i64* %k2.addr, align 8
+  %64 = call i1 @nish.Map$u64$i32.delete(%struct.Map$u64$i32* %62, i64 %63)
+  store i1 %64, i1* %gone.addr, align 1
+  %65 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %66 = load i64, i64* %k2.addr, align 8
+  %67 = call i1 @nish.Map$u64$i32.delete(%struct.Map$u64$i32* %65, i64 %66)
+  store i1 %67, i1* %again.addr, align 1
+  %68 = load i32, i32* %found.addr, align 4
+  %69 = call i8* @nish_str_from_i32(i32 %68)
+  %70 = call i8* @nish_str_concat(i8* %69, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %71 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %72 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %71, i32 0, i32 0
+  %73 = load i32, i32* %72, align 4, !tbaa !5
+  %74 = call i8* @nish_str_from_i32(i32 %73)
+  %75 = call i8* @nish_str_concat(i8* %70, i8* %74)
   %76 = call i8* @nish_str_concat(i8* %75, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %77 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %78 = load i64, i64* %k2.addr, align 8
-  %79 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %77, i64 %78)
-  %80 = select i1 %79, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %81 = call i8* @nish_str_concat(i8* %76, i8* %80)
-  %82 = call i8* @nish_str_concat(i8* %81, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %83 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
-  %84 = load i64, i64* %k3.addr, align 8
-  %85 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %83, i64 %84)
-  %86 = select i1 %85, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %87 = call i8* @nish_str_concat(i8* %82, i8* %86)
-  call void @nish_print(i8* %87)
+  %77 = load i1, i1* %gone.addr, align 1
+  %78 = select i1 %77, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %79 = call i8* @nish_str_concat(i8* %76, i8* %78)
+  %80 = call i8* @nish_str_concat(i8* %79, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %81 = load i1, i1* %again.addr, align 1
+  %82 = select i1 %81, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %83 = call i8* @nish_str_concat(i8* %80, i8* %82)
+  %84 = call i8* @nish_str_concat(i8* %83, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %85 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %86 = load i64, i64* %k2.addr, align 8
+  %87 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %85, i64 %86)
+  %88 = select i1 %87, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %89 = call i8* @nish_str_concat(i8* %84, i8* %88)
+  %90 = call i8* @nish_str_concat(i8* %89, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %91 = load %struct.Map$u64$i32*, %struct.Map$u64$i32** %m.addr, align 8
+  %92 = load i64, i64* %k3.addr, align 8
+  %93 = call i1 @nish.Map$u64$i32.has(%struct.Map$u64$i32* %91, i64 %92)
+  %94 = select i1 %93, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %95 = call i8* @nish_str_concat(i8* %90, i8* %94)
+  call void @nish_print(i8* %95)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -212,13 +240,22 @@ entry:
   ret i32 %2
 }
 
-define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #1 {
+define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #0 {
 entry:
   %0 = lshr i32 %h, 24
   %1 = shl i32 %0, 24
-  %2 = add nsw i32 %index, 1
-  %3 = or i32 %1, %2
-  ret i32 %3
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %index, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = or i32 %1, %3
+  ret i32 %5
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #1 {
@@ -414,20 +451,30 @@ entry:
   %1 = load i64, i64* %0, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %2 = trunc i64 %1 to i32
   store i32 %2, i32* %n.addr, align 4
-  %3 = mul nsw i32 %live, 2
-  %4 = icmp slt i32 %3, %used
-  br i1 %4, label %if.then, label %if.end
+  %3 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %live, i32 2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %6 = icmp slt i32 %4, %used
+  br i1 %6, label %if.then, label %if.end
 
 if.then:
   call void @nish.clearSlots(%struct.nish_array* %slots)
   ret %struct.nish_array* %slots
 
 if.end:
-  %5 = load i32, i32* %n.addr, align 4
-  %6 = mul nsw i32 %5, 2
-  %7 = sext i32 %6 to i64
-  %8 = icmp ule i64 %7, 2147483647
-  br i1 %8, label %len.ok, label %len.fail
+  %7 = load i32, i32* %n.addr, align 4
+  %8 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %7, i32 2)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %11 = sext i32 %9 to i64
+  %12 = icmp ule i64 %11, 2147483647
+  br i1 %12, label %len.ok, label %len.fail
 
 len.fail:
   call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*), i32 2, i1 true)
@@ -435,18 +482,22 @@ len.fail:
   unreachable
 
 len.ok:
-  %9 = call i8* @nish_alloc_struct(i64 24)
-  %10 = bitcast i8* %9 to %struct.nish_array*
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  store i64 %7, i64* %11, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 1
-  store i64 %7, i64* %12, align 8, !alias.scope !9, !noalias !10, !tbaa !18
-  %13 = mul i64 %7, 4
-  %14 = call i8* @nish_alloc_struct(i64 %13)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %14, i8 0, i64 %13, i1 false), !alias.scope !10, !noalias !9
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  store i8* %14, i8** %15, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  ret %struct.nish_array* %10
+  %13 = call i8* @nish_alloc_struct(i64 24)
+  %14 = bitcast i8* %13 to %struct.nish_array*
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0
+  store i64 %11, i64* %15, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 1
+  store i64 %11, i64* %16, align 8, !alias.scope !9, !noalias !10, !tbaa !18
+  %17 = mul i64 %11, 4
+  %18 = call i8* @nish_alloc_struct(i64 %17)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %18, i8 0, i64 %17, i1 false), !alias.scope !10, !noalias !9
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
+  store i8* %18, i8** %19, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  ret %struct.nish_array* %14
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
 define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 {
@@ -621,22 +672,36 @@ land.end:
 
 if.then:
   %6 = sext i32 %bucket to i64
-  %7 = sub nsw i32 %used, 1
-  %8 = call i32 @nish.slotWord(i32 %h, i32 %7)
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
-  %10 = load i8*, i8** %9, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  %11 = bitcast i8* %10 to i32*
-  %12 = getelementptr inbounds i32, i32* %11, i64 %6
-  store i32 %8, i32* %12, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  %7 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %used, i32 1)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %10 = call i32 @nish.slotWord(i32 %h, i32 %8)
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %6
+  store i32 %10, i32* %14, align 4, !alias.scope !10, !noalias !9, !tbaa !17
   br label %if.end
 
 if.else:
-  %13 = sub nsw i32 %used, 1
-  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %13)
+  %15 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %used, i32 1)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %16)
   br label %if.end
 
 if.end:
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define internal void @nish.Map$u64$i32.constructor(%struct.Map$u64$i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #0 {
@@ -771,15 +836,29 @@ if.end:
   call void @nish.killEntry(%struct.nish_array* %4, %struct.nish_array* %6, i64 %7)
   %8 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 3
   %9 = load i32, i32* %8, align 4, !tbaa !20
-  %10 = sub nsw i32 %9, 1
-  %11 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 3
-  store i32 %10, i32* %11, align 4, !tbaa !20
-  %12 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
-  %13 = load i32, i32* %12, align 4, !tbaa !5
-  %14 = sub nsw i32 %13, 1
-  %15 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
-  store i32 %14, i32* %15, align 4, !tbaa !5
+  %10 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %9, i32 1)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %13 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 3
+  store i32 %11, i32* %13, align 4, !tbaa !20
+  %14 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
+  %15 = load i32, i32* %14, align 4, !tbaa !5
+  %16 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %15, i32 1)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %19 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
+  store i32 %17, i32* %19, align 4, !tbaa !5
   ret i1 true
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define internal void @nish.Map$u64$i32.setValueAt(%struct.Map$u64$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i32 noundef %value) #2 {
@@ -934,48 +1013,73 @@ push.store.2:
   %58 = trunc i64 %57 to i32
   %59 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 3
   %60 = load i32, i32* %59, align 4, !tbaa !20
-  %61 = add nsw i32 %60, 1
-  %62 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 3
-  store i32 %61, i32* %62, align 4, !tbaa !20
-  %63 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
-  %64 = load i32, i32* %63, align 4, !tbaa !5
-  %65 = add nsw i32 %64, 1
-  %66 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
-  store i32 %65, i32* %66, align 4, !tbaa !5
-  %67 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 4
-  %68 = load %struct.nish_array*, %struct.nish_array** %67, align 8, !tbaa !23
-  %69 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %68, i64 0, i32 0
-  %70 = load i64, i64* %69, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %71 = trunc i64 %70 to i32
-  store i32 %71, i32* %used.addr, align 4
-  %72 = load i32, i32* %used.addr, align 4
-  %73 = mul nsw i32 %72, 4
-  %74 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 1
-  %75 = load %struct.nish_array*, %struct.nish_array** %74, align 8, !tbaa !22
-  %76 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %75, i64 0, i32 0
-  %77 = load i64, i64* %76, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %78 = trunc i64 %77 to i32
-  %79 = mul nsw i32 %78, 3
-  %80 = icmp sgt i32 %73, %79
-  br i1 %80, label %if.then.2, label %if.else
+  %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
+  %62 = extractvalue { i32, i1 } %61, 0
+  %63 = extractvalue { i32, i1 } %61, 1
+  br i1 %63, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %64 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 3
+  store i32 %62, i32* %64, align 4, !tbaa !20
+  %65 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
+  %66 = load i32, i32* %65, align 4, !tbaa !5
+  %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
+  %68 = extractvalue { i32, i1 } %67, 0
+  %69 = extractvalue { i32, i1 } %67, 1
+  br i1 %69, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %70 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 0
+  store i32 %68, i32* %70, align 4, !tbaa !5
+  %71 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 4
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !23
+  %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
+  %74 = load i64, i64* %73, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %75 = trunc i64 %74 to i32
+  store i32 %75, i32* %used.addr, align 4
+  %76 = load i32, i32* %used.addr, align 4
+  %77 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %76, i32 4)
+  %78 = extractvalue { i32, i1 } %77, 0
+  %79 = extractvalue { i32, i1 } %77, 1
+  br i1 %79, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %80 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 1
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !22
+  %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
+  %83 = load i64, i64* %82, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %84 = trunc i64 %83 to i32
+  %85 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %84, i32 3)
+  %86 = extractvalue { i32, i1 } %85, 0
+  %87 = extractvalue { i32, i1 } %85, 1
+  br i1 %87, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %88 = icmp sgt i32 %78, %86
+  br i1 %88, label %if.then.2, label %if.else
 
 if.then.2:
   call void @nish.Map$u64$i32.rebuild(%struct.Map$u64$i32* %this)
   br label %if.end.2
 
 if.else:
-  %81 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 1
-  %82 = load %struct.nish_array*, %struct.nish_array** %81, align 8, !tbaa !22
-  %83 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 2
-  %84 = load i32, i32* %83, align 4, !tbaa !19
-  %85 = load i32, i32* %bucket.addr, align 4
-  %86 = load i32, i32* %h.addr, align 4
-  %87 = load i32, i32* %used.addr, align 4
-  call void @nish.fileAppended(%struct.nish_array* %82, i32 %84, i32 %85, i32 %86, i32 %87)
+  %89 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 1
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !22
+  %91 = getelementptr inbounds %struct.Map$u64$i32, %struct.Map$u64$i32* %this, i32 0, i32 2
+  %92 = load i32, i32* %91, align 4, !tbaa !19
+  %93 = load i32, i32* %bucket.addr, align 4
+  %94 = load i32, i32* %h.addr, align 4
+  %95 = load i32, i32* %used.addr, align 4
+  call void @nish.fileAppended(%struct.nish_array* %90, i32 %92, i32 %93, i32 %94, i32 %95)
   br label %if.end.2
 
 if.end.2:
   ret void
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %push.store.2 ], [ 0, %ovf.ok ], [ 2, %ovf.ok.1 ], [ 2, %ovf.ok.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define internal void @nish.Map$u64$i32.rebuild(%struct.Map$u64$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
@@ -1145,78 +1249,87 @@ if.end:
 if.then.1:
   %50 = load i32, i32* %word.addr, align 4
   %51 = and i32 %50, 16777215
-  %52 = sub nsw i32 %51, 1
-  store i32 %52, i32* %at.addr, align 4
-  %53 = load i32, i32* %at.addr, align 4
-  %54 = icmp sge i32 %53, 0
-  br i1 %54, label %land.rhs.4, label %land.end.4
+  %52 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %51, i32 1)
+  %53 = extractvalue { i32, i1 } %52, 0
+  %54 = extractvalue { i32, i1 } %52, 1
+  br i1 %54, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %53, i32* %at.addr, align 4
+  %55 = load i32, i32* %at.addr, align 4
+  %56 = icmp sge i32 %55, 0
+  br i1 %56, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %55 = load i32, i32* %at.addr, align 4
-  %56 = trunc i64 %23 to i32
-  %57 = icmp slt i32 %55, %56
+  %57 = load i32, i32* %at.addr, align 4
+  %58 = trunc i64 %23 to i32
+  %59 = icmp slt i32 %57, %58
   br label %land.end.4
 
 land.end.4:
-  %58 = phi i1 [ false, %if.then.1 ], [ %57, %land.rhs.4 ]
-  br i1 %58, label %land.rhs.3, label %land.end.3
+  %60 = phi i1 [ false, %ovf.ok ], [ %59, %land.rhs.4 ]
+  br i1 %60, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %59 = load i32, i32* %at.addr, align 4
-  %60 = sext i32 %59 to i64
-  %61 = bitcast i8* %25 to i32*
-  %62 = getelementptr inbounds i32, i32* %61, i64 %60
-  %63 = load i32, i32* %62, align 4, !alias.scope !10, !noalias !9, !tbaa !17
-  %64 = load i32, i32* %h.addr, align 4
-  %65 = icmp eq i32 %63, %64
+  %61 = load i32, i32* %at.addr, align 4
+  %62 = sext i32 %61 to i64
+  %63 = bitcast i8* %25 to i32*
+  %64 = getelementptr inbounds i32, i32* %63, i64 %62
+  %65 = load i32, i32* %64, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  %66 = load i32, i32* %h.addr, align 4
+  %67 = icmp eq i32 %65, %66
   br label %land.end.3
 
 land.end.3:
-  %66 = phi i1 [ false, %land.end.4 ], [ %65, %land.rhs.3 ]
-  br i1 %66, label %land.rhs.2, label %land.end.2
+  %68 = phi i1 [ false, %land.end.4 ], [ %67, %land.rhs.3 ]
+  br i1 %68, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %67 = load i32, i32* %at.addr, align 4
-  %68 = trunc i64 %27 to i32
-  %69 = icmp slt i32 %67, %68
+  %69 = load i32, i32* %at.addr, align 4
+  %70 = trunc i64 %27 to i32
+  %71 = icmp slt i32 %69, %70
   br label %land.end.2
 
 land.end.2:
-  %70 = phi i1 [ false, %land.end.3 ], [ %69, %land.rhs.2 ]
-  br i1 %70, label %land.rhs.1, label %land.end.1
+  %72 = phi i1 [ false, %land.end.3 ], [ %71, %land.rhs.2 ]
+  br i1 %72, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %71 = load i32, i32* %at.addr, align 4
-  %72 = sext i32 %71 to i64
-  %73 = bitcast i8* %29 to i64*
-  %74 = getelementptr inbounds i64, i64* %73, i64 %72
-  %75 = load i64, i64* %74, align 8, !alias.scope !10, !noalias !9, !tbaa !27
-  %76 = icmp eq i64 %75, %key
+  %73 = load i32, i32* %at.addr, align 4
+  %74 = sext i32 %73 to i64
+  %75 = bitcast i8* %29 to i64*
+  %76 = getelementptr inbounds i64, i64* %75, i64 %74
+  %77 = load i64, i64* %76, align 8, !alias.scope !10, !noalias !9, !tbaa !27
+  %78 = icmp eq i64 %77, %key
   br label %land.end.1
 
 land.end.1:
-  %77 = phi i1 [ false, %land.end.2 ], [ %76, %land.rhs.1 ]
-  br i1 %77, label %if.then.2, label %if.end.2
+  %79 = phi i1 [ false, %land.end.2 ], [ %78, %land.rhs.1 ]
+  br i1 %79, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %78 = load i32, i32* %bucket.addr, align 4
-  %79 = load i32, i32* %at.addr, align 4
-  %80 = tail call i64 @nish.foundAt(i32 %78, i32 %79)
-  ret i64 %80
+  %80 = load i32, i32* %bucket.addr, align 4
+  %81 = load i32, i32* %at.addr, align 4
+  %82 = tail call i64 @nish.foundAt(i32 %80, i32 %81)
+  ret i64 %82
 
 if.end.2:
   br label %if.end.1
 
 if.end.1:
-  %81 = load i32, i32* %bucket.addr, align 4
-  %82 = add nsw i32 %81, 1
-  %83 = and i32 %82, %mask
-  store i32 %83, i32* %bucket.addr, align 4
+  %83 = load i32, i32* %bucket.addr, align 4
+  %84 = add nsw i32 %83, 1
+  %85 = and i32 %84, %mask
+  store i32 %85, i32* %bucket.addr, align 4
   br label %while.cond
 
 while.end:
   call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
+  unreachable
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
   unreachable
 }
 

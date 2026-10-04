@@ -14,11 +14,13 @@ declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
-declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_lstat_owner_mode(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_euid() #2
 declare zeroext i1 @nish_is_executable(i8* noundef nonnull readonly align 8 nocapture) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #1
 
 define internal noundef i64 @ownerOf(i64 noundef %ownerMode) #0 {
 entry:
@@ -30,19 +32,28 @@ entry:
   %5 = and i64 %4, 63
   %6 = shl i64 %3, %5
   %7 = sext i32 1 to i64
-  %8 = sub nsw i64 %6, %7
-  %9 = and i64 %2, %8
-  ret i64 %9
+  %8 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %6, i64 %7)
+  %9 = extractvalue { i64, i1 } %8, 0
+  %10 = extractvalue { i64, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %11 = and i64 %2, %9
+  ret i64 %11
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
-define internal noundef i64 @typeOf(i64 noundef %ownerMode) #0 {
+define internal noundef i64 @typeOf(i64 noundef %ownerMode) #1 {
 entry:
   %0 = sext i32 61440 to i64
   %1 = and i64 %ownerMode, %0
   ret i64 %1
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %file.addr = alloca i8*, align 8
   %me.addr = alloca i64, align 8
@@ -126,13 +137,14 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }

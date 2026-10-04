@@ -4,6 +4,8 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal noundef i32 @afterPop(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i) #0 {
 entry:
@@ -59,8 +61,17 @@ bounds.ok.1:
   %25 = bitcast i8* %24 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 %19
   %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %28 = add nsw i32 %18, %27
-  ret i32 %28
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 %27)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %29
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @afterPush(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i) #0 {
@@ -121,8 +132,17 @@ bounds.ok.1:
   %28 = bitcast i8* %27 to i32*
   %29 = getelementptr inbounds i32, i32* %28, i64 %22
   %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %31 = add nsw i32 %21, %30
-  ret i32 %31
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 %30)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %32
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @test() #0 {
@@ -162,14 +182,24 @@ entry:
   %16 = getelementptr inbounds i32, i32* %13, i64 2
   store i32 3, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   %17 = call i32 @afterPush(%struct.nish_array* %arr.hdr.1, i32 2)
-  %18 = add nsw i32 %8, %17
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %18
+  ret i32 %19
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

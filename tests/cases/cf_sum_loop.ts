@@ -1,3 +1,8 @@
+// Compiled with `--wrapping` (see .args): `sum` can pass INT_MAX for a large
+// `n`, so the checked default branches to the overflow panic on every pass,
+// and a loop with a second exit is not vectorised. The guard is about the loop
+// the emitter writes, and that is what the flag leaves to see.
+//
 // The modulo keeps LLVM from folding the whole loop into n*(n-1)/2, so a
 // real loop survives to -O2 and tests/run.js can check that it vectorises.
 // `sumTo` is exported for the same reason: an `internal` function called once

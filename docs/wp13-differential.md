@@ -274,6 +274,17 @@ checked integer division, which panics (`attempt to divide with overflow`
 by-design differences from JavaScript's `0`
 ([LANGUAGE.md: Checked integer division](LANGUAGE.md#checked-integer-division)).
 
+*Since then, too:* signed `+`, `-`, `*`, negation and the steps panic on
+overflow (`attempt to add with overflow` and its siblings, exit 1) unless the
+compiler proves the result fits, and wrap only under `--wrapping`
+([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)). Six
+corpus programs were written while `i32` wrapped and reach past `INT_MAX`
+on purpose — `arr_2d`, `f64_i32_mixed`, `modules_basic`, `parse_argv_sum`,
+`str_large` and `str_template` — and their frozen rewrites still wrap with
+`| 0` and `Math.imul`. Their sources cannot change without staling those
+rewrites, so they are in `known-failures.txt` as by-design differences, the
+way the division programs are.
+
 ### 1. `Math.pow(±1, ±Infinity)` and `Math.pow(1, NaN)` return 1, not NaN
 
 `tests/differential/corpus/f64_pow_spec.ts` (`--number-mode f64`):

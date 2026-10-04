@@ -6,7 +6,9 @@
 %struct.Entry = type { i1, double, i32 }
 %struct.Cell$f64 = type { i1, double, i32 }
 
-declare i32 @llvm.fptosi.sat.i32.f64(double) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare i32 @llvm.fptosi.sat.i32.f64(double) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @test() #0 {
 entry:
@@ -59,23 +61,43 @@ entry:
   %15 = load %struct.Uniform*, %struct.Uniform** %u.addr, align 8
   %16 = getelementptr inbounds %struct.Uniform, %struct.Uniform* %15, i32 0, i32 2
   %17 = load i32, i32* %16, align 4, !tbaa !12
-  %18 = add nsw i32 %14, %17
-  %19 = load %struct.Unavoidable*, %struct.Unavoidable** %v.addr, align 8
-  %20 = getelementptr inbounds %struct.Unavoidable, %struct.Unavoidable* %19, i32 0, i32 1
-  %21 = load i32, i32* %20, align 4, !tbaa !17
-  %22 = add nsw i32 %18, %21
-  %23 = load %struct.Entry*, %struct.Entry** %e.addr, align 8
-  %24 = getelementptr inbounds %struct.Entry, %struct.Entry* %23, i32 0, i32 2
-  %25 = load i32, i32* %24, align 4
-  %26 = add nsw i32 %22, %25
-  %27 = load %struct.Cell$f64*, %struct.Cell$f64** %c.addr, align 8
-  %28 = getelementptr inbounds %struct.Cell$f64, %struct.Cell$f64* %27, i32 0, i32 2
-  %29 = load i32, i32* %28, align 4, !tbaa !19
-  %30 = add nsw i32 %26, %29
-  %31 = load %struct.Single*, %struct.Single** %s.addr, align 8
-  %32 = getelementptr inbounds %struct.Single, %struct.Single* %31, i32 0, i32 0
-  %33 = load i1, i1* %32, align 1, !tbaa !14
-  br i1 %33, label %cond.true, label %cond.false
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %14, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %21 = load %struct.Unavoidable*, %struct.Unavoidable** %v.addr, align 8
+  %22 = getelementptr inbounds %struct.Unavoidable, %struct.Unavoidable* %21, i32 0, i32 1
+  %23 = load i32, i32* %22, align 4, !tbaa !17
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %27 = load %struct.Entry*, %struct.Entry** %e.addr, align 8
+  %28 = getelementptr inbounds %struct.Entry, %struct.Entry* %27, i32 0, i32 2
+  %29 = load i32, i32* %28, align 4
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %33 = load %struct.Cell$f64*, %struct.Cell$f64** %c.addr, align 8
+  %34 = getelementptr inbounds %struct.Cell$f64, %struct.Cell$f64* %33, i32 0, i32 2
+  %35 = load i32, i32* %34, align 4, !tbaa !19
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %39 = load %struct.Single*, %struct.Single** %s.addr, align 8
+  %40 = getelementptr inbounds %struct.Single, %struct.Single* %39, i32 0, i32 0
+  %41 = load i1, i1* %40, align 1, !tbaa !14
+  br i1 %41, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -84,17 +106,31 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %34 = phi i32 [ 1, %cond.true ], [ 2, %cond.false ]
-  %35 = add nsw i32 %30, %34
-  %36 = load %struct.Cell$f64*, %struct.Cell$f64** %c.addr, align 8
-  %37 = getelementptr inbounds %struct.Cell$f64, %struct.Cell$f64* %36, i32 0, i32 1
-  %38 = load double, double* %37, align 8, !tbaa !20
-  %39 = call i32 @llvm.fptosi.sat.i32.f64(double %38)
-  %40 = add nsw i32 %35, %39
-  ret i32 %40
+  %42 = phi i32 [ 1, %cond.true ], [ 2, %cond.false ]
+  %43 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %37, i32 %42)
+  %44 = extractvalue { i32, i1 } %43, 0
+  %45 = extractvalue { i32, i1 } %43, 1
+  br i1 %45, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  %46 = load %struct.Cell$f64*, %struct.Cell$f64** %c.addr, align 8
+  %47 = getelementptr inbounds %struct.Cell$f64, %struct.Cell$f64* %46, i32 0, i32 1
+  %48 = load double, double* %47, align 8, !tbaa !20
+  %49 = call i32 @llvm.fptosi.sat.i32.f64(double %48)
+  %50 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %44, i32 %49)
+  %51 = extractvalue { i32, i1 } %50, 0
+  %52 = extractvalue { i32, i1 } %50, 1
+  br i1 %52, label %ovf.fail, label %ovf.ok.5
+
+ovf.ok.5:
+  ret i32 %51
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define void @Cell$f64.constructor(%struct.Cell$f64* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, double noundef %value) #0 {
+define void @Cell$f64.constructor(%struct.Cell$f64* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, double noundef %value) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Cell$f64, %struct.Cell$f64* %this, i32 0, i32 0
   store i1 false, i1* %0, align 1, !tbaa !21
@@ -105,8 +141,10 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

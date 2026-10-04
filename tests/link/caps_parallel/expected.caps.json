@@ -47,7 +47,8 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/threads.ts:151:5", "callee": "dstTooShort", "via": "panic" }
+                { "kind": "call", "at": "std/threads.ts:151:5", "callee": "dstTooShort", "via": "panic" },
+                { "kind": "call", "at": "std/threads.ts:153:3", "callee": "mapRange<i32, i32, square>", "via": "overflow" }
               ]
             },
             {

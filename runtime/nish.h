@@ -457,6 +457,11 @@ double nish_parse_number(const nish_str *s, int32_t mode);
 /* Checked integer division (Rust semantics): the failed-check path. */
 void nish_panic_div(bool by_zero);
 
+/* Checked signed arithmetic: the failed-check path. `op` is 0 add, 1
+ * subtract, 2 multiply, 3 negate; prints "attempt to <op> with overflow" and
+ * exits 1. */
+void nish_panic_overflow(uint32_t op);
+
 /* ---- Parallel work (WP20 T1 / wp29 stage P1), runtime/runtime-parallel.c ----
  *
  * One region of work, divided. `nish_parallel_range` calls `body(lo, hi, ctx)`

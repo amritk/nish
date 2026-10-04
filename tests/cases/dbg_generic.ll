@@ -6,9 +6,11 @@
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -56,11 +58,20 @@ entry:
   %9 = bitcast i8* %8 to i64*, !dbg !30
   %10 = load i64, i64* %9, align 8, !dbg !30
   %11 = trunc i64 %10 to i32, !dbg !30
-  %12 = add nsw i32 %7, %11, !dbg !29
-  ret i32 %12, !dbg !28
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %11), !dbg !29
+  %13 = extractvalue { i32, i1 } %12, 0, !dbg !29
+  %14 = extractvalue { i32, i1 } %12, 1, !dbg !29
+  br i1 %14, label %ovf.fail, label %ovf.ok, !dbg !29
+
+ovf.ok:
+  ret i32 %13, !dbg !28
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !29
+  unreachable
 }
 
-define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 !dbg !33 {
+define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #1 !dbg !33 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !35, metadata !DIExpression()), !dbg !34
   call void @llvm.dbg.value(metadata i32 %value, metadata !36, metadata !DIExpression()), !dbg !34
@@ -69,7 +80,7 @@ entry:
   ret void, !dbg !34
 }
 
-define internal noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 !dbg !46 {
+define internal noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #2 !dbg !46 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !48, metadata !DIExpression()), !dbg !47
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0, !dbg !50
@@ -77,29 +88,31 @@ entry:
   ret i32 %1, !dbg !49
 }
 
-define internal noundef i32 @identity$i32(i32 noundef %x) #2 !dbg !53 {
+define internal noundef i32 @identity$i32(i32 noundef %x) #3 !dbg !53 {
 entry:
   call void @llvm.dbg.value(metadata i32 %x, metadata !55, metadata !DIExpression()), !dbg !54
   ret i32 %x, !dbg !54
 }
 
-define internal noundef nonnull align 8 i8* @identity$str(i8* noundef nonnull noalias readonly align 8 %x) #2 !dbg !59 {
+define internal noundef nonnull align 8 i8* @identity$str(i8* noundef nonnull noalias readonly align 8 %x) #3 !dbg !59 {
 entry:
   call void @llvm.dbg.value(metadata i8* %x, metadata !61, metadata !DIExpression()), !dbg !60
   ret i8* %x, !dbg !60
 }
 
-define internal noundef nonnull align 8 dereferenceable(4) %struct.Box$i32* @identity$$Box$i32(%struct.Box$i32* noundef nonnull align 8 dereferenceable(4) %x) #2 !dbg !65 {
+define internal noundef nonnull align 8 dereferenceable(4) %struct.Box$i32* @identity$$Box$i32(%struct.Box$i32* noundef nonnull align 8 dereferenceable(4) %x) #3 !dbg !65 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Box$i32* %x, metadata !67, metadata !DIExpression()), !dbg !66
   ret %struct.Box$i32* %x, !dbg !66
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn readnone }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn readnone }
+attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

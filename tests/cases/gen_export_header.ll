@@ -4,11 +4,13 @@
 
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -78,22 +80,34 @@ entry:
   ret i32 %1
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #2 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call %struct.Box$i32* @makeGeneric(i32 4)
   %1 = call i32 @genericValue(%struct.Box$i32* %0)
   %2 = call %struct.Box_i32* @makeDeclared(i32 38)
   %3 = call i32 @declaredValue(%struct.Box_i32* %2)
-  %4 = add nsw i32 %1, %3
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %4
+  ret i32 %5
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

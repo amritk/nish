@@ -1,4 +1,4 @@
 {"functions":[
-{"name":"checked","symbol":"checked","module":"tests/cases/panics_panic.ts","line":3,"panics":[{"kind":"panic","line":5,"column":5,"proven":false}]},
+{"name":"checked","symbol":"checked","module":"tests/cases/panics_panic.ts","line":3,"panics":[{"kind":"panic","line":5,"column":5,"proven":false},{"kind":"overflow","line":7,"column":10,"proven":true}]},
 {"name":"main","symbol":"nish_main","module":"tests/cases/panics_panic.ts","line":10,"panics":[{"kind":"oom","line":11,"column":3,"allowed":true},{"kind":"call","line":11,"column":15,"callee":"checked","via":"panic"}]}
 ]}

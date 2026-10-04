@@ -40,6 +40,9 @@ declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef n
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
 
 define internal noundef nonnull align 8 i8* @hostOf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a) #0 {
 entry:
@@ -474,45 +477,55 @@ while.body.2:
   %41 = sext i32 %40 to i64
   %42 = load i32, i32* %n.addr, align 4
   %43 = load i32, i32* %sent.addr, align 4
-  %44 = sub nsw i32 %42, %43
-  %45 = sext i32 %44 to i64
-  %46 = add i64 %41, %45
-  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
-  %48 = load i64, i64* %47, align 8
-  %49 = icmp ule i64 %41, %46
-  %50 = icmp ule i64 %46, %48
-  %51 = and i1 %49, %50
-  br i1 %51, label %net.ok.1, label %net.fail.1
+  %44 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %42, i32 %43)
+  %45 = extractvalue { i32, i1 } %44, 0
+  %46 = extractvalue { i32, i1 } %44, 1
+  br i1 %46, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %47 = sext i32 %45 to i64
+  %48 = add i64 %41, %47
+  %49 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %50 = load i64, i64* %49, align 8
+  %51 = icmp ule i64 %41, %48
+  %52 = icmp ule i64 %48, %50
+  %53 = and i1 %51, %52
+  br i1 %53, label %net.ok.1, label %net.fail.1
 
 net.fail.1:
-  call void @nish_panic_slice(i64 %41, i64 %46, i64 %48)
+  call void @nish_panic_slice(i64 %41, i64 %48, i64 %50)
   unreachable
 
 net.ok.1:
-  %52 = call i32 @nish_net_write(i32 %39, %struct.nish_array* %buf, i64 %41, i64 %45)
-  store i32 %52, i32* %w.addr, align 4
-  %53 = load i32, i32* %w.addr, align 4
-  %54 = icmp sge i32 %53, 0
-  br i1 %54, label %if.then.4, label %if.else
+  %54 = call i32 @nish_net_write(i32 %39, %struct.nish_array* %buf, i64 %41, i64 %47)
+  store i32 %54, i32* %w.addr, align 4
+  %55 = load i32, i32* %w.addr, align 4
+  %56 = icmp sge i32 %55, 0
+  br i1 %56, label %if.then.4, label %if.else
 
 if.then.4:
-  %55 = load i32, i32* %sent.addr, align 4
-  %56 = load i32, i32* %w.addr, align 4
-  %57 = add nsw i32 %55, %56
-  store i32 %57, i32* %sent.addr, align 4
+  %57 = load i32, i32* %sent.addr, align 4
+  %58 = load i32, i32* %w.addr, align 4
+  %59 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %57, i32 %58)
+  %60 = extractvalue { i32, i1 } %59, 0
+  %61 = extractvalue { i32, i1 } %59, 1
+  br i1 %61, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %60, i32* %sent.addr, align 4
   br label %if.end.4
 
 if.else:
-  %58 = load i32, i32* %w.addr, align 4
-  %59 = icmp ne i32 %58, -11
-  br i1 %59, label %if.then.5, label %if.end.5
+  %62 = load i32, i32* %w.addr, align 4
+  %63 = icmp ne i32 %62, -11
+  br i1 %63, label %if.then.5, label %if.end.5
 
 if.then.5:
-  %60 = load i32, i32* %conn.addr, align 4
-  %61 = call i32 @nish_net_close(i32 %60)
-  %62 = load i32, i32* %w.addr, align 4
+  %64 = load i32, i32* %conn.addr, align 4
+  %65 = call i32 @nish_net_close(i32 %64)
+  %66 = load i32, i32* %w.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %62
+  ret i32 %66
 
 if.end.5:
   br label %if.end.4
@@ -521,18 +534,28 @@ if.end.4:
   br label %while.cond.2
 
 while.end.2:
-  %63 = load i32, i32* %bytes.addr, align 4
-  %64 = load i32, i32* %n.addr, align 4
-  %65 = add nsw i32 %63, %64
-  store i32 %65, i32* %bytes.addr, align 4
+  %67 = load i32, i32* %bytes.addr, align 4
+  %68 = load i32, i32* %n.addr, align 4
+  %69 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %67, i32 %68)
+  %70 = extractvalue { i32, i1 } %69, 0
+  %71 = extractvalue { i32, i1 } %69, 1
+  br i1 %71, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %70, i32* %bytes.addr, align 4
   br label %while.cond.1
 
 while.end.1:
-  %66 = load i32, i32* %conn.addr, align 4
-  %67 = call i32 @nish_net_close(i32 %66)
-  %68 = load i32, i32* %bytes.addr, align 4
+  %72 = load i32, i32* %conn.addr, align 4
+  %73 = call i32 @nish_net_close(i32 %72)
+  %74 = load i32, i32* %bytes.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %68
+  ret i32 %74
+
+ovf.fail:
+  %ovf.op = phi i32 [ 1, %while.body.2 ], [ 0, %if.then.4 ], [ 0, %while.end.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @nish_main() #0 {
@@ -979,6 +1002,7 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

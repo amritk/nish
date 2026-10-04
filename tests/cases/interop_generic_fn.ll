@@ -8,6 +8,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -170,26 +172,60 @@ entry:
   %15 = bitcast i8* %14 to i64*
   %16 = load i64, i64* %15, align 8
   %17 = trunc i64 %16 to i32
-  %18 = add nsw i32 %13, %17
-  %19 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %20 = call %struct.nish_array* @identity$arr.i32(%struct.nish_array* %19)
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
-  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %23 = trunc i64 %22 to i32
-  %24 = add nsw i32 %18, %23
-  %25 = load %struct.Box$i32*, %struct.Box$i32** %box.addr, align 8
-  %26 = call i32 @Box$i32.get(%struct.Box$i32* %25)
-  %27 = add nsw i32 %24, %26
-  %28 = load %struct.Box$i32*, %struct.Box$i32** %box.addr, align 8
-  %29 = call i32 @orZero(%struct.Box$i32* %28)
-  %30 = add nsw i32 %27, %29
-  %31 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %32 = call i32 @firstOf(%struct.nish_array* %31)
-  %33 = add nsw i32 %30, %32
-  %34 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 3, 1
-  %35 = call i32 @okOr({ i1, i32, i32 } %34, i32 0)
-  %36 = add nsw i32 %33, %35
-  ret i32 %36
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %13, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %21 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %22 = call %struct.nish_array* @identity$arr.i32(%struct.nish_array* %21)
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %25 = trunc i64 %24 to i32
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %25)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %29 = load %struct.Box$i32*, %struct.Box$i32** %box.addr, align 8
+  %30 = call i32 @Box$i32.get(%struct.Box$i32* %29)
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 %30)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %34 = load %struct.Box$i32*, %struct.Box$i32** %box.addr, align 8
+  %35 = call i32 @orZero(%struct.Box$i32* %34)
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %32, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %39 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %40 = call i32 @firstOf(%struct.nish_array* %39)
+  %41 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %37, i32 %40)
+  %42 = extractvalue { i32, i1 } %41, 0
+  %43 = extractvalue { i32, i1 } %41, 1
+  br i1 %43, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  %44 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 3, 1
+  %45 = call i32 @okOr({ i1, i32, i32 } %44, i32 0)
+  %46 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %42, i32 %45)
+  %47 = extractvalue { i32, i1 } %46, 0
+  %48 = extractvalue { i32, i1 } %46, 1
+  br i1 %48, label %ovf.fail, label %ovf.ok.5
+
+ovf.ok.5:
+  ret i32 %47
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @identity$roarr.i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %x) #3 {

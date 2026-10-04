@@ -429,6 +429,17 @@ const checkUsageErrors = (t: Suite, cli: Cli): void => {
   const noValue = cli.plain("no_value", [entry, "-o"]);
   t.eqI32("`-o` with no value exits 2", noValue.status, 2);
   t.eqStr("and says nothing on stdout", trim(noValue.stdout), "");
+
+  // `--nsw` once told the compiler it might assume signed overflow away. That
+  // overflow is a checked panic now and no flag brings the assumption back, so
+  // the flag is refused rather than accepted with a meaning it no longer has,
+  // and the refusal names the ways to ask for a wrap that are left.
+  const nsw = cli.plain("nsw_flag", ["--nsw", entry]);
+  t.eqI32("`--nsw` exits 2", nsw.status, 2);
+  t.contains("and says signed overflow is checked", nsw.stderr, "signed overflow is checked");
+  t.contains("and names nish:unsafe as the way to wrap", nsw.stderr, "`wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`");
+  t.contains("and the deprecated --wrapping", nsw.stderr, "--wrapping");
+  t.eqStr("and the refusal says nothing on stdout", trim(nsw.stdout), "");
 };
 
 /**

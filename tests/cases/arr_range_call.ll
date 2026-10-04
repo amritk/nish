@@ -7,6 +7,8 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal void @Permute.constructor(%struct.Permute* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #0 {
 entry:
@@ -40,40 +42,45 @@ entry:
   %i.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
-  %2 = add nsw i32 %1, 1
-  store i32 %2, i32* %0, align 4
-  %3 = icmp ne i32 %n, 0
-  br i1 %3, label %if.then, label %if.end
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %3, i32* %0, align 4
+  %5 = icmp ne i32 %n, 0
+  br i1 %5, label %if.then, label %if.end
 
 if.then:
-  %4 = sub nsw i32 %n, 1
-  store i32 %4, i32* %n1.addr, align 4
-  %5 = load i32, i32* %n1.addr, align 4
-  call void @Permute.permute(%struct.Permute* %this, i32 %5)
-  %6 = load i32, i32* %n1.addr, align 4
-  store i32 %6, i32* %i.addr, align 4
+  %6 = sub nsw i32 %n, 1
+  store i32 %6, i32* %n1.addr, align 4
+  %7 = load i32, i32* %n1.addr, align 4
+  call void @Permute.permute(%struct.Permute* %this, i32 %7)
+  %8 = load i32, i32* %n1.addr, align 4
+  store i32 %8, i32* %i.addr, align 4
   br label %for.cond
 
 for.cond:
-  %7 = load i32, i32* %i.addr, align 4
-  %8 = icmp sge i32 %7, 0
-  br i1 %8, label %for.body, label %for.end
+  %9 = load i32, i32* %i.addr, align 4
+  %10 = icmp sge i32 %9, 0
+  br i1 %10, label %for.body, label %for.end
 
 for.body:
-  %9 = load i32, i32* %n1.addr, align 4
-  %10 = load i32, i32* %i.addr, align 4
-  call void @Permute.swap(%struct.Permute* %this, i32 %9, i32 %10)
   %11 = load i32, i32* %n1.addr, align 4
-  call void @Permute.permute(%struct.Permute* %this, i32 %11)
-  %12 = load i32, i32* %n1.addr, align 4
-  %13 = load i32, i32* %i.addr, align 4
-  call void @Permute.swap(%struct.Permute* %this, i32 %12, i32 %13)
+  %12 = load i32, i32* %i.addr, align 4
+  call void @Permute.swap(%struct.Permute* %this, i32 %11, i32 %12)
+  %13 = load i32, i32* %n1.addr, align 4
+  call void @Permute.permute(%struct.Permute* %this, i32 %13)
+  %14 = load i32, i32* %n1.addr, align 4
+  %15 = load i32, i32* %i.addr, align 4
+  call void @Permute.swap(%struct.Permute* %this, i32 %14, i32 %15)
   br label %for.inc
 
 for.inc:
-  %14 = load i32, i32* %i.addr, align 4
-  %15 = sub nsw i32 %14, 1
-  store i32 %15, i32* %i.addr, align 4
+  %16 = load i32, i32* %i.addr, align 4
+  %17 = sub nsw i32 %16, 1
+  store i32 %17, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
@@ -81,6 +88,10 @@ for.end:
 
 if.end:
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @Permute.swap(%struct.Permute* noundef nonnull align 8 dereferenceable(56) nocapture %this, i32 noundef %i, i32 noundef %j) #0 {
@@ -152,6 +163,8 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

@@ -4,6 +4,9 @@
 %struct.Tagged = type { i32, double, i1, double, i32 }
 %struct.Late = type { i32, double }
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
 define noundef i32 @test() #0 {
 entry:
   %w.addr = alloca %struct.Wide*, align 8
@@ -52,19 +55,34 @@ entry:
   %21 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
   %22 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %21, i32 0, i32 4
   %23 = load i32, i32* %22, align 4
-  %24 = add nsw i32 %20, %23
-  %25 = load %struct.Base*, %struct.Base** %b.addr, align 8
-  %26 = getelementptr inbounds %struct.Base, %struct.Base* %25, i32 0, i32 0
-  %27 = load i32, i32* %26, align 4
-  %28 = add nsw i32 %24, %27
-  %29 = load %struct.Late*, %struct.Late** %l.addr, align 8
-  %30 = getelementptr inbounds %struct.Late, %struct.Late* %29, i32 0, i32 0
-  %31 = load i32, i32* %30, align 4
-  %32 = add nsw i32 %28, %31
-  %33 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
-  %34 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %33, i32 0, i32 2
-  %35 = load i1, i1* %34, align 1
-  br i1 %35, label %cond.true, label %cond.false
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %27 = load %struct.Base*, %struct.Base** %b.addr, align 8
+  %28 = getelementptr inbounds %struct.Base, %struct.Base* %27, i32 0, i32 0
+  %29 = load i32, i32* %28, align 4
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %33 = load %struct.Late*, %struct.Late** %l.addr, align 8
+  %34 = getelementptr inbounds %struct.Late, %struct.Late* %33, i32 0, i32 0
+  %35 = load i32, i32* %34, align 4
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %39 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
+  %40 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %39, i32 0, i32 2
+  %41 = load i1, i1* %40, align 1
+  br i1 %41, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -73,9 +91,20 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %36 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %37 = add nsw i32 %32, %36
-  ret i32 %37
+  %42 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %43 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %37, i32 %42)
+  %44 = extractvalue { i32, i1 } %43, 0
+  %45 = extractvalue { i32, i1 } %43, 1
+  br i1 %45, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  ret i32 %44
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }

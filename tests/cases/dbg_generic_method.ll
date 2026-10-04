@@ -4,6 +4,8 @@
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define noundef i32 @test() #0 !dbg !7 {
 entry:
@@ -16,11 +18,20 @@ entry:
   %1 = call i32 @Box$i32.pair$str(%struct.Box$i32* %0, i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*)), !dbg !18
   %2 = load %struct.Box$i32*, %struct.Box$i32** %b.addr, align 8, !dbg !20
   %3 = call i32 @Box$i32.pair$i32(%struct.Box$i32* %2, i32 2), !dbg !20
-  %4 = add nsw i32 %1, %3, !dbg !18
-  ret i32 %4, !dbg !17
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %3), !dbg !18
+  %5 = extractvalue { i32, i1 } %4, 0, !dbg !18
+  %6 = extractvalue { i32, i1 } %4, 1, !dbg !18
+  br i1 %6, label %ovf.fail, label %ovf.ok, !dbg !18
+
+ovf.ok:
+  ret i32 %5, !dbg !17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !18
+  unreachable
 }
 
-define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 !dbg !24 {
+define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #1 !dbg !24 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !26, metadata !DIExpression()), !dbg !25
   call void @llvm.dbg.value(metadata i32 %value, metadata !27, metadata !DIExpression()), !dbg !25
@@ -29,7 +40,7 @@ entry:
   ret void, !dbg !25
 }
 
-define internal noundef i32 @Box$i32.pair$str(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #1 !dbg !39 {
+define internal noundef i32 @Box$i32.pair$str(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #2 !dbg !39 {
 entry:
   %kept.addr = alloca i8*, align 8
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !41, metadata !DIExpression()), !dbg !40
@@ -41,7 +52,7 @@ entry:
   ret i32 %1, !dbg !46
 }
 
-define internal noundef i32 @Box$i32.pair$i32(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %other) #1 !dbg !50 {
+define internal noundef i32 @Box$i32.pair$i32(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %other) #2 !dbg !50 {
 entry:
   %kept.addr = alloca i32, align 4
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !52, metadata !DIExpression()), !dbg !51
@@ -53,8 +64,11 @@ entry:
   ret i32 %1, !dbg !57
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

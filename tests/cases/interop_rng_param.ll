@@ -6,6 +6,9 @@
 
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_exit(i32 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
 define noundef i32 @pick(i32 noundef %base, i32 noundef %day) #0 {
 entry:
@@ -19,9 +22,24 @@ rng.fail:
   unreachable
 
 rng.ok:
-  %2 = mul nsw i32 %base, 10
-  %3 = add nsw i32 %2, %day
-  ret i32 %3
+  %2 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %base, i32 10)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %3, i32 %day)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %6
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %rng.ok ], [ 0, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define internal noundef i32 @twice(i32 noundef %d) #1 {
@@ -72,12 +90,31 @@ rng.fail:
 
 rng.ok:
   %2 = call i32 @twice(i32 %n)
-  %3 = add nsw i32 %0, %2
-  %4 = load %struct.Clock*, %struct.Clock** %clock.addr, align 8
-  %5 = add nsw i32 %n, 4
-  %6 = call i32 @Clock.set(%struct.Clock* %4, i32 %5)
-  %7 = add nsw i32 %3, %6
-  ret i32 %7
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %6 = load %struct.Clock*, %struct.Clock** %clock.addr, align 8
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 4)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %10 = call i32 @Clock.set(%struct.Clock* %6, i32 %8)
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @test() #0 {
@@ -90,6 +127,7 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { noreturn nounwind }
+attributes #4 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

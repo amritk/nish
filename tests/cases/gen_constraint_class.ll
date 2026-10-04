@@ -5,9 +5,11 @@
 
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -33,13 +35,27 @@ slow:
 
 define internal void @Circle.constructor(%struct.Circle* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %radius) #0 {
 entry:
-  %0 = mul nsw i32 3, %radius
-  %1 = mul nsw i32 %0, %radius
-  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %this, i32 0, i32 0
-  store i32 %1, i32* %2, align 4
-  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %this, i32 0, i32 1
-  store i32 %radius, i32* %3, align 4
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 3, i32 %radius)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %3 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %1, i32 %radius)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %6 = getelementptr inbounds %struct.Circle, %struct.Circle* %this, i32 0, i32 0
+  store i32 %4, i32* %6, align 4
+  %7 = getelementptr inbounds %struct.Circle, %struct.Circle* %this, i32 0, i32 1
+  store i32 %radius, i32* %7, align 4
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
 define noundef i32 @test() #0 {
@@ -56,14 +72,14 @@ entry:
   ret i32 %3
 }
 
-define internal void @Holder$$Circle.constructor(%struct.Holder$$Circle* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Circle* noundef nonnull align 8 dereferenceable(8) %item) #0 {
+define internal void @Holder$$Circle.constructor(%struct.Holder$$Circle* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Circle* noundef nonnull align 8 dereferenceable(8) %item) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Holder$$Circle, %struct.Holder$$Circle* %this, i32 0, i32 0
   store %struct.Circle* %item, %struct.Circle** %0, align 8, !tbaa !4
   ret void
 }
 
-define internal noundef i32 @Holder$$Circle.area(%struct.Holder$$Circle* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Holder$$Circle.area(%struct.Holder$$Circle* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Holder$$Circle, %struct.Holder$$Circle* %this, i32 0, i32 0
   %1 = load %struct.Circle*, %struct.Circle** %0, align 8, !tbaa !4
@@ -72,10 +88,13 @@ entry:
   ret i32 %3
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

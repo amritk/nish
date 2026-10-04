@@ -1,0 +1,9 @@
+{"functions":[
+{"name":"Counter.constructor","symbol":"Counter.constructor","module":"tests/cases/panics_overflow_wrapping.ts","line":8,"panics":[]},
+{"name":"sum","symbol":"sum","module":"tests/cases/panics_overflow_wrapping.ts","line":13,"panics":[]},
+{"name":"scaled","symbol":"scaled","module":"tests/cases/panics_overflow_wrapping.ts","line":15,"panics":[]},
+{"name":"bump","symbol":"bump","module":"tests/cases/panics_overflow_wrapping.ts","line":17,"panics":[{"kind":"index","line":19,"column":3,"proven":true}]},
+{"name":"hash","symbol":"hash","module":"tests/cases/panics_overflow_wrapping.ts","line":22,"panics":[]},
+{"name":"wrapped","symbol":"wrapped","module":"tests/cases/panics_overflow_wrapping.ts","line":24,"panics":[]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_overflow_wrapping.ts","line":26,"panics":[{"kind":"oom","line":31,"column":3,"allowed":true},{"kind":"oom","line":32,"column":3,"allowed":true},{"kind":"oom","line":33,"column":3,"allowed":true},{"kind":"index","line":33,"column":21,"proven":true},{"kind":"oom","line":34,"column":3,"allowed":true},{"kind":"oom","line":35,"column":3,"allowed":true}]}
+]}

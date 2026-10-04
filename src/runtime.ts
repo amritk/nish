@@ -777,6 +777,25 @@ export class RuntimeTable {
     )
     panicDiv.noreturn = true
     this.addWrites(WRITES_PANIC, panicDiv)
+    // Checked signed arithmetic: "attempt to add with overflow" (0), subtract
+    // (1), multiply (2) or negate (3), exit 1. The same shape and attributes
+    // as the division panic, because it is the same kind of failed check.
+    //
+    // `extern_weak`, unlike every other entry, because signed `+` is in
+    // programs that never needed a runtime: `examples/add.ts` links into a
+    // freestanding wasm module with nothing beside it. There an undefined weak
+    // function is a stub wasm-ld writes that traps, which is what
+    // runtime-wasm.c's definition does too; everywhere a runtime is linked its
+    // definition is the one called. The `unreachable` after the call keeps the
+    // path ending either way.
+    const panicOverflow = new RuntimeFunction(
+      "nish_panic_overflow",
+      "declare extern_weak void @nish_panic_overflow(i32 noundef)",
+      attrs3("nounwind", "noreturn", "cold"),
+      EFFECT_WRITE
+    )
+    panicOverflow.noreturn = true
+    this.addWrites(WRITES_PANIC, panicOverflow)
     // WP29 P1, runtime/runtime-parallel.c: how a `parallelMapInto` or a
     // `parallelReduce` becomes several threads (`src/emit-parallel.ts`). It
     // calls `body(lo, hi, ctx)` once per chunk, so it does whatever the body
@@ -838,6 +857,14 @@ export class RuntimeTable {
       this.addIntrinsic(`llvm.smin.${t}`, t, `${t}, ${t}`)
       this.addIntrinsic(`llvm.smax.${t}`, t, `${t}, ${t}`)
       this.addIntrinsic(`llvm.fptosi.sat.${t}.f64`, t, "double")
+    }
+    // Checked signed arithmetic: the sum, difference or product beside a flag
+    // that says it did not fit, which is what `nish_panic_overflow` is
+    // branched to on (`emitIntBinary` in src/emit-ops.ts).
+    for (const t of signed) {
+      this.addIntrinsic(`llvm.sadd.with.overflow.${t}`, `{ ${t}, i1 }`, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.ssub.with.overflow.${t}`, `{ ${t}, i1 }`, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.smul.with.overflow.${t}`, `{ ${t}, i1 }`, `${t}, ${t}`)
     }
     // WP15: the unsigned halves of the same intrinsics. `u8`/`u16` lower to
     // `i8`/`i16`, so the narrow widths appear here and nowhere else.

@@ -4,6 +4,8 @@ declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic_div(i1 noundef zeroext) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @half(i32 noundef %n) #0 {
 entry:
@@ -57,11 +59,20 @@ div.ok:
   %18 = load i8, i8* %bytes.addr, align 1
   %19 = zext i8 %18 to i32
   %20 = load i32, i32* %count.addr, align 4
-  %21 = add nsw i32 %19, %20
-  %22 = call i8* @nish_str_from_i32(i32 %21)
-  call void @nish_print(i8* %22)
+  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %20)
+  %22 = extractvalue { i32, i1 } %21, 0
+  %23 = extractvalue { i32, i1 } %21, 1
+  br i1 %23, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %24 = call i8* @nish_str_from_i32(i32 %22)
+  call void @nish_print(i8* %24)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {

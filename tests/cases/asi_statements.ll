@@ -5,30 +5,52 @@
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"c\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 
 define internal void @Counter.bump(%struct.Counter* noundef nonnull align 8 dereferenceable(16) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !5
-  %2 = add nsw i32 %1, 1
-  %3 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
-  store i32 %2, i32* %3, align 4, !tbaa !5
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
+  store i32 %3, i32* %5, align 4, !tbaa !5
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define internal noundef i32 @twice(i32 noundef %x) #1 {
+define internal noundef i32 @twice(i32 noundef %x) #0 {
 entry:
-  %0 = mul nsw i32 %x, 2
-  ret i32 %0
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 2)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
-define internal noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #2 {
+define internal noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -62,14 +84,19 @@ if.then:
 if.end:
   %11 = load i32, i32* %sum.addr, align 4
   %12 = load i32, i32* %x.addr, align 4
-  %13 = add nsw i32 %11, %12
-  store i32 %13, i32* %sum.addr, align 4
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %14, i32* %sum.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %14 = load i64, i64* %forof.idx, align 8
-  %15 = add i64 %14, 1
-  store i64 %15, i64* %forof.idx, align 8
+  %16 = load i64, i64* %forof.idx, align 8
+  %17 = add i64 %16, 1
+  store i64 %17, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
@@ -80,12 +107,17 @@ while.cond:
   br i1 true, label %while.body, label %while.end
 
 while.body:
-  %16 = load i32, i32* %i.addr, align 4
-  %17 = add nsw i32 %16, 1
-  store i32 %17, i32* %i.addr, align 4
   %18 = load i32, i32* %i.addr, align 4
-  %19 = icmp sgt i32 %18, 2
-  br i1 %19, label %if.then.1, label %if.end.1
+  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 1)
+  %20 = extractvalue { i32, i1 } %19, 0
+  %21 = extractvalue { i32, i1 } %19, 1
+  br i1 %21, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %20, i32* %i.addr, align 4
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = icmp sgt i32 %22, 2
+  br i1 %23, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %while.end
@@ -97,22 +129,32 @@ while.end:
   br label %do.body
 
 do.body:
-  %20 = load i32, i32* %i.addr, align 4
-  %21 = sub nsw i32 %20, 1
-  store i32 %21, i32* %i.addr, align 4
+  %24 = load i32, i32* %i.addr, align 4
+  %25 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %24, i32 1)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %26, i32* %i.addr, align 4
   br label %do.cond
 
 do.cond:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = icmp sgt i32 %22, 0
-  br i1 %23, label %do.body, label %do.end
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = icmp sgt i32 %28, 0
+  br i1 %29, label %do.body, label %do.end
 
 do.end:
-  %24 = load i32, i32* %sum.addr, align 4
-  ret i32 %24
+  %30 = load i32, i32* %sum.addr, align 4
+  ret i32 %30
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %if.end ], [ 0, %while.body ], [ 1, %do.body ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
-define noundef i32 @nish_main() #3 {
+define noundef i32 @nish_main() #0 {
 entry:
   %c.addr = alloca %struct.Counter*, align 8
   %Counter.obj = alloca %struct.Counter, align 8
@@ -176,17 +218,17 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

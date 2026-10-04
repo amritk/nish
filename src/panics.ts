@@ -23,9 +23,11 @@
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
 // places) but never counts: no source-level guard removes it. Stack overflow
-// and signed overflow are not sites at all — the first has no runtime handler
-// and the second is `nsw`, undefined rather than checked, until checked
-// overflow lands.
+// is not a site at all: it has no runtime handler and no check in the IR.
+// Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
+// step, proven where the bounds walk proved the result fits and the emitter
+// writes `nsw` instead of the check; under `--wrapping`, and for the
+// `nish:unsafe` `wrapping*` calls, nothing is checked and nothing is listed.
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
@@ -37,8 +39,9 @@ import { CheckedProgram, FunctionSig } from "./program"
 import { addJsonQuoted, StringBuilder } from "./strings"
 import { TypeTable, isUnsigned } from "./types"
 
-// The kinds, in the order docs/LANGUAGE.md lists them. The number is internal;
-// the name `panicKindName` answers is the contract `--emit-panics` writes.
+// The kinds. The number is internal and never reused, so a kind added later
+// takes the next one wherever docs/LANGUAGE.md lists it; the name
+// `panicKindName` answers is the contract `--emit-panics` writes.
 export const PANIC_INDEX: i32 = 0
 export const PANIC_POP: i32 = 1
 export const PANIC_SLICE: i32 = 2
@@ -57,6 +60,7 @@ const PANIC_OOM: i32 = 11
  * undefined behaviour. Listed so that the no-panic scope can refuse it.
  */
 const PANIC_UNCHECKED: i32 = 12
+export const PANIC_OVERFLOW: i32 = 13
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -85,6 +89,8 @@ const panicKindName = (kind: i32): string => {
       return "call"
     case PANIC_UNCHECKED:
       return "unchecked"
+    case PANIC_OVERFLOW:
+      return "overflow"
     default:
       return "oom"
   }
@@ -112,6 +118,14 @@ export class PanicSite {
   kind: i32
   /** The checker proved the check cannot fail, and the emitter left it out. */
   proven: boolean
+  /**
+   * Where the body reaches the site at run time, among its own: the walk
+   * numbers a node's sites after its operands' (`FactCollector.orderSites`),
+   * so `f(x) + 1` and `1 + f(x)` both call `f` before they add. -1 for a
+   * check the prologue makes, before the body. The listing is in source
+   * order; this decides only which site a function reaches first.
+   */
+  order: i32
 
   constructor(node: Node, source: SourceFile, kind: i32, fn: string, proven: boolean, callee: string) {
     this.node = node
@@ -121,6 +135,7 @@ export class PanicSite {
     this.reaches = null
     this.kind = kind
     this.proven = proven
+    this.order = -1
   }
 }
 
@@ -176,6 +191,26 @@ const sortByPosition = (sites: PanicSite[]): void => {
   }
 }
 
+/** `sites` in the order the body reaches them (`PanicSite.order`), as a new list. */
+const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
+  const out: PanicSite[] = []
+  for (const site of sites) {
+    out.push(site)
+  }
+  let i = 1
+  while (i < out.length) {
+    const site = out[i]
+    let j = i - 1
+    while (j >= 0 && out[j].order > site.order) {
+      out[j + 1] = out[j]
+      j = j - 1
+    }
+    out[j + 1] = site
+    i = i + 1
+  }
+  return out
+}
+
 /**
  * Settle every function's sites, once, after the attribute fixpoint: drop the
  * calls into functions that cannot panic, follow the rest to the site they
@@ -188,33 +223,49 @@ const sortByPosition = (sites: PanicSite[]): void => {
  * `--unchecked-indexing` build clears for the checks it drops.
  */
 export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): void => {
+  const ordered: PanicSite[][] = []
   const reach: (PanicSite | null)[] = []
   for (const f of facts.list) {
     sortByPosition(f.panicSites)
-    let first: PanicSite | null = null
-    for (const site of f.panicSites) {
-      if (first === null && panicsHere(site)) {
-        first = site
-      }
-    }
-    reach.push(first)
+    ordered.push(inEvaluationOrder(f.panicSites))
+    reach.push(null)
   }
-  // A function reaches what its first callee that may panic reaches, in the
-  // order the walk met the callees, which is the order the body calls them.
-  let changed = true
-  while (changed) {
-    changed = false
+  const may = mayPanicSet(facts, ordered)
+  // A function reaches the first of its sites, in the order the body reaches
+  // them, that panics by itself or calls a function that may panic, and then
+  // what that callee reaches. A function is settled once its answer is known
+  // and waits while a call before it is into a function not yet settled. When
+  // nothing settles, every waiting function waits on a cycle of calls, and the
+  // first of them in function order that can settles by passing over its
+  // calls into functions not yet settled; the rest of its cycle then reach
+  // what it reaches. It terminates because each pass settles at least one
+  // function, from null to a site, and no function is settled twice.
+  let settling = true
+  while (settling) {
+    let settled = false
     let i = 0
-    while (i < facts.list.length && i < reach.length) {
-      if (reach[i] === null) {
-        const found = firstReached(facts, reach, facts.list[i])
+    while (i < facts.list.length && i < ordered.length && i < reach.length && i < may.length) {
+      if (may[i] && reach[i] === null) {
+        const found = firstPanic(facts, may, reach, ordered[i], facts.list[i], false)
         if (found !== null) {
           reach[i] = found
-          changed = true
+          settled = true
         }
       }
       i = i + 1
     }
+    i = 0
+    while (!settled && i < facts.list.length && i < ordered.length && i < reach.length && i < may.length) {
+      if (may[i] && reach[i] === null) {
+        const found = firstPanic(facts, may, reach, ordered[i], facts.list[i], true)
+        if (found !== null) {
+          reach[i] = found
+          settled = true
+        }
+      }
+      i = i + 1
+    }
+    settling = settled
   }
   for (const unit of units) {
     const program = unit.program
@@ -228,23 +279,111 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
   }
 }
 
-/** What the function called `name` can panic at first, or null: none, or a runtime symbol. */
-const reachOf = (facts: FactsTable, reach: (PanicSite | null)[], name: string): PanicSite | null => {
-  const at = facts.indexOf(name)
-  return at >= 0 && at < reach.length ? reach[at] : null
+/**
+ * Which functions may panic: one with a site that panics by itself, and one
+ * that calls such a function, to a fixpoint. A function only ever joins the
+ * set, so it settles.
+ */
+const mayPanicSet = (facts: FactsTable, ordered: PanicSite[][]): boolean[] => {
+  const may: boolean[] = []
+  for (const sites of ordered) {
+    let here = false
+    for (const site of sites) {
+      if (panicsHere(site)) {
+        here = true
+      }
+    }
+    may.push(here)
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    let i = 0
+    while (i < facts.list.length && i < ordered.length && i < may.length) {
+      if (!may[i] && callsMayPanic(facts, may, ordered[i], facts.list[i])) {
+        may[i] = true
+        changed = true
+      }
+      i = i + 1
+    }
+  }
+  return may
 }
 
-/** What the first callee of `f` that may panic reaches, or null. */
-const firstReached = (facts: FactsTable, reach: (PanicSite | null)[], f: FunctionFacts): PanicSite | null => {
+/** Whether `f` calls a function in `may`, by a recorded call or as a callee no call names. */
+const callsMayPanic = (facts: FactsTable, may: boolean[], sites: PanicSite[], f: FunctionFacts): boolean => {
+  for (const site of sites) {
+    if (isCallSite(site) && mayPanicAt(facts, may, site.callee)) {
+      return true
+    }
+  }
   let c = 0
   while (c < f.callees.size()) {
-    const found = reachOf(facts, reach, f.callees.at(c))
-    if (found !== null) {
-      return found
+    if (mayPanicAt(facts, may, f.callees.at(c))) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
+}
+
+/** Whether the function called `name` may panic; false for a runtime symbol. */
+const mayPanicAt = (facts: FactsTable, may: boolean[], name: string): boolean => {
+  const at = facts.indexOf(name)
+  return at >= 0 && at < may.length && may[at]
+}
+
+/**
+ * The first site `f` reaches that can panic, given the functions settled so
+ * far: its own unproven check, or what a call into a function that may panic
+ * reaches, whichever the body reaches first. A callee no recorded call names
+ * (a routed `nish/map` method) is reached after them, in the order the walk
+ * met the callees. Null while a call before the answer is into a function not
+ * yet settled, unless `passOver`, which passes over such a call instead.
+ */
+const firstPanic = (
+  facts: FactsTable,
+  may: boolean[],
+  reach: (PanicSite | null)[],
+  sites: PanicSite[],
+  f: FunctionFacts,
+  passOver: boolean
+): PanicSite | null => {
+  for (const site of sites) {
+    if (panicsHere(site)) {
+      return site
+    }
+    if (isCallSite(site) && mayPanicAt(facts, may, site.callee)) {
+      const found = reachOf(facts, reach, site.callee)
+      if (found !== null) {
+        return found
+      }
+      if (!passOver) {
+        return null
+      }
+    }
+  }
+  let c = 0
+  while (c < f.callees.size()) {
+    const callee = f.callees.at(c)
+    if (mayPanicAt(facts, may, callee)) {
+      const found = reachOf(facts, reach, callee)
+      if (found !== null) {
+        return found
+      }
+      if (!passOver) {
+        return null
+      }
     }
     c = c + 1
   }
   return null
+}
+
+/** What the function called `name` can panic at first, or null: none, or a runtime symbol. */
+const reachOf = (facts: FactsTable, reach: (PanicSite | null)[], name: string): PanicSite | null => {
+  const at = facts.indexOf(name)
+  return at >= 0 && at < reach.length ? reach[at] : null
 }
 
 /** The facts of a function `--emit-panics` lists: one with a body, defined in `program`. */
@@ -572,6 +711,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: make " +
         "the call from a module outside the scope"
       )
+    case PANIC_OVERFLOW:
+      return overflowAdvice(program, table, node)
     default:
       return (
         `\`${calledName(program, node)}\` leaves out the bounds check without proving it, so an index out of range is ` +
@@ -622,6 +763,41 @@ const sliceAdvice = (program: CheckedProgram, node: Node): string => {
     return "`slice` panics when its range is outside the string, and no proof removes that check yet: `substring` clamps the range instead"
   }
   return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: make the call from a module outside the scope`
+}
+
+/**
+ * A signed operation not proven to fit: bound it so the bounds walk proves it,
+ * or, where it is meant to wrap, say so with an unsigned type of its width or
+ * the drop-in `nish:unsafe` form of its operator, which is never checked.
+ */
+const overflowAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
+  const op = node.text
+  const type = program.nodeTypes[node.children[0].id]
+  const signed = type >= 0 ? table.typeName(table.baseOf(type)) : "i32"
+  const unsigned = signed === "i64" ? "u64" : "u32"
+  return (
+    `this \`${op}\` is not proven to fit \`${signed}\` here, and a signed overflow panics: bound its operands with a ` +
+    "test the checker reads — a loop below a length or a limit, or a guard on the value — so the result is proven to fit, " +
+    `or, if it is meant to wrap, compute in \`${unsigned}\` or write it as \`${wrappingForm(node)}\` from \`nish:unsafe\``
+  )
+}
+
+/** The `nish:unsafe` call that computes what the operator at `node` computes, wrapping, spelled for `x` and `y`. */
+const wrappingForm = (node: Node): string => {
+  const op = node.text
+  if (node.kind !== N_BINARY) {
+    if (op === "++") {
+      return "x = wrappingAdd(x, 1)"
+    }
+    return op === "--" ? "x = wrappingSub(x, 1)" : "wrappingSub(0, x)"
+  }
+  let fn = "wrappingAdd"
+  if (op === "*" || op === "*=") {
+    fn = "wrappingMul"
+  } else if (op === "-" || op === "-=") {
+    fn = "wrappingSub"
+  }
+  return op.length === 2 ? `x = ${fn}(x, y)` : `${fn}(x, y)`
 }
 
 /** The guard a divisor needs: not zero, and for a signed division not `-1` either. */

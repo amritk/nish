@@ -693,7 +693,7 @@ export class Compilation {
       parser.nodeCount,
       this.sink,
       this.opts.numberMode,
-      !this.opts.nsw && ownPackage,
+      this.opts.wrapping && ownPackage,
       this.opts.uncheckedIndexing && ownPackage,
       this.opts.strictExports,
       packageName
@@ -1668,7 +1668,7 @@ export class Compilation {
         `--unchecked-indexing ${reach} \`uncheckedGet\` and \`uncheckedSet\` from \`${unsafeModule()}\` where an index is meant to go unchecked`
       )
     }
-    if (!this.opts.nsw) {
+    if (this.opts.wrapping) {
       this.sink.reportPerformance(
         entry,
         0,

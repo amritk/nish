@@ -10,6 +10,8 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -103,116 +105,125 @@ forof.body:
   %48 = load %struct.Point*, %struct.Point** %e.addr, align 8
   %49 = getelementptr inbounds %struct.Point, %struct.Point* %48, i32 0, i32 0
   %50 = load i32, i32* %49, align 4
-  %51 = add nsw i32 %50, 5
-  %52 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.3, i32 0, i32 0
-  store i32 %51, i32* %52, align 4
-  %53 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.3, i32 0, i32 1
-  store i32 0, i32* %53, align 4
-  %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
-  %55 = load i8*, i8** %54, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %56 = bitcast i8* %55 to %struct.Point*
-  %57 = getelementptr inbounds %struct.Point, %struct.Point* %56, i64 1
-  %58 = bitcast %struct.Point* %57 to i8*
-  %59 = bitcast %struct.Point* %Point.obj.3 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %58, i8* align 4 %59, i64 8, i1 false), !alias.scope !4, !noalias !3
-  %60 = load %struct.Point*, %struct.Point** %e.addr, align 8
-  %61 = getelementptr inbounds %struct.Point, %struct.Point* %60, i32 0, i32 0
-  %62 = load i32, i32* %61, align 4
-  %63 = call i8* @nish_str_from_i32(i32 %62)
-  call void @nish_print(i8* %63)
-  %64 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %65 = load i8*, i8** %64, align 8
-  %66 = icmp eq i8* %65, %44
-  br i1 %66, label %pass.rewind, label %pass.free
+  %51 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %50, i32 5)
+  %52 = extractvalue { i32, i1 } %51, 0
+  %53 = extractvalue { i32, i1 } %51, 1
+  br i1 %53, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %54 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.3, i32 0, i32 0
+  store i32 %52, i32* %54, align 4
+  %55 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.3, i32 0, i32 1
+  store i32 0, i32* %55, align 4
+  %56 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
+  %57 = load i8*, i8** %56, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %58 = bitcast i8* %57 to %struct.Point*
+  %59 = getelementptr inbounds %struct.Point, %struct.Point* %58, i64 1
+  %60 = bitcast %struct.Point* %59 to i8*
+  %61 = bitcast %struct.Point* %Point.obj.3 to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %60, i8* align 4 %61, i64 8, i1 false), !alias.scope !4, !noalias !3
+  %62 = load %struct.Point*, %struct.Point** %e.addr, align 8
+  %63 = getelementptr inbounds %struct.Point, %struct.Point* %62, i32 0, i32 0
+  %64 = load i32, i32* %63, align 4
+  %65 = call i8* @nish_str_from_i32(i32 %64)
+  call void @nish_print(i8* %65)
+  %66 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %67 = load i8*, i8** %66, align 8
+  %68 = icmp eq i8* %67, %44
+  br i1 %68, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %67 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %46, i64* %67, align 8
+  %69 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %46, i64* %69, align 8
   br label %pass.done
 
 pass.free:
-  %68 = ptrtoint i8* %44 to i64
-  %69 = add i64 %68, %46
-  call void @nish_arena_release(i64 %69)
+  %70 = ptrtoint i8* %44 to i64
+  %71 = add i64 %70, %46
+  call void @nish_arena_release(i64 %71)
   br label %pass.done
 
 pass.done:
   br label %forof.inc
 
 forof.inc:
-  %70 = load i64, i64* %forof.idx, align 8
-  %71 = add i64 %70, 1
-  store i64 %71, i64* %forof.idx, align 8
+  %72 = load i64, i64* %forof.idx, align 8
+  %73 = add i64 %72, 1
+  store i64 %73, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %72 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 2
-  %74 = load i8*, i8** %73, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %75 = bitcast i8* %74 to %struct.Point*
-  %76 = getelementptr inbounds %struct.Point, %struct.Point* %75, i64 0
-  store %struct.Point* %76, %struct.Point** %first.addr, align 8
+  %74 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %75 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %74, i64 0, i32 2
+  %76 = load i8*, i8** %75, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %77 = bitcast i8* %76 to %struct.Point*
+  %78 = getelementptr inbounds %struct.Point, %struct.Point* %77, i64 0
+  store %struct.Point* %78, %struct.Point** %first.addr, align 8
   store i32 0, i32* %i.addr, align 4
-  %77 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %77, i64 0, i32 2
-  %79 = load i8*, i8** %78, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %79 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %80 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %79, i64 0, i32 2
+  %81 = load i8*, i8** %80, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   br label %for.cond
 
 for.cond:
-  %80 = load i32, i32* %i.addr, align 4
-  %81 = icmp slt i32 %80, 2
-  br i1 %81, label %for.body, label %for.end
+  %82 = load i32, i32* %i.addr, align 4
+  %83 = icmp slt i32 %82, 2
+  br i1 %83, label %for.body, label %for.end
 
 for.body:
-  %82 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %83 = load i8*, i8** %82, align 8
-  %84 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  %85 = load i64, i64* %84, align 8
-  %86 = load %struct.Point*, %struct.Point** %first.addr, align 8
-  %87 = getelementptr inbounds %struct.Point, %struct.Point* %86, i32 0, i32 1
-  %88 = load i32, i32* %87, align 4
-  %89 = call i8* @nish_str_from_i32(i32 %88)
-  call void @nish_print(i8* %89)
-  %90 = load i32, i32* %i.addr, align 4
-  %91 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.4, i32 0, i32 0
-  store i32 %90, i32* %91, align 4
+  %84 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %85 = load i8*, i8** %84, align 8
+  %86 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %87 = load i64, i64* %86, align 8
+  %88 = load %struct.Point*, %struct.Point** %first.addr, align 8
+  %89 = getelementptr inbounds %struct.Point, %struct.Point* %88, i32 0, i32 1
+  %90 = load i32, i32* %89, align 4
+  %91 = call i8* @nish_str_from_i32(i32 %90)
+  call void @nish_print(i8* %91)
   %92 = load i32, i32* %i.addr, align 4
-  %93 = add nsw i32 %92, 10
-  %94 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.4, i32 0, i32 1
-  store i32 %93, i32* %94, align 4
-  %95 = bitcast i8* %79 to %struct.Point*
-  %96 = getelementptr inbounds %struct.Point, %struct.Point* %95, i64 0
-  %97 = bitcast %struct.Point* %96 to i8*
-  %98 = bitcast %struct.Point* %Point.obj.4 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %97, i8* align 4 %98, i64 8, i1 false), !alias.scope !4, !noalias !3
-  %99 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %100 = load i8*, i8** %99, align 8
-  %101 = icmp eq i8* %100, %83
-  br i1 %101, label %pass.rewind.1, label %pass.free.1
+  %93 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.4, i32 0, i32 0
+  store i32 %92, i32* %93, align 4
+  %94 = load i32, i32* %i.addr, align 4
+  %95 = add nsw i32 %94, 10
+  %96 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.4, i32 0, i32 1
+  store i32 %95, i32* %96, align 4
+  %97 = bitcast i8* %81 to %struct.Point*
+  %98 = getelementptr inbounds %struct.Point, %struct.Point* %97, i64 0
+  %99 = bitcast %struct.Point* %98 to i8*
+  %100 = bitcast %struct.Point* %Point.obj.4 to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %99, i8* align 4 %100, i64 8, i1 false), !alias.scope !4, !noalias !3
+  %101 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %102 = load i8*, i8** %101, align 8
+  %103 = icmp eq i8* %102, %85
+  br i1 %103, label %pass.rewind.1, label %pass.free.1
 
 pass.rewind.1:
-  %102 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %85, i64* %102, align 8
+  %104 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %87, i64* %104, align 8
   br label %pass.done.1
 
 pass.free.1:
-  %103 = ptrtoint i8* %83 to i64
-  %104 = add i64 %103, %85
-  call void @nish_arena_release(i64 %104)
+  %105 = ptrtoint i8* %85 to i64
+  %106 = add i64 %105, %87
+  call void @nish_arena_release(i64 %106)
   br label %pass.done.1
 
 pass.done.1:
   br label %for.inc
 
 for.inc:
-  %105 = load i32, i32* %i.addr, align 4
-  %106 = add nsw i32 %105, 1
-  store i32 %106, i32* %i.addr, align 4
+  %107 = load i32, i32* %i.addr, align 4
+  %108 = add nsw i32 %107, 1
+  store i32 %108, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -224,6 +235,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

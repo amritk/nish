@@ -6,6 +6,8 @@ declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal noundef i32 @at(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %i) #0 {
 entry:
@@ -94,31 +96,40 @@ for.body:
   %11 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %12 = load i32, i32* %i.addr, align 4
   %13 = call i32 @guarded(%struct.nish_array* %11, i32 %12)
-  %14 = add nsw i32 %10, %13
-  store i32 %14, i32* %sum.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %15, i32* %sum.addr, align 4
   br label %for.inc
 
 for.inc:
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = add nsw i32 %15, 1
-  store i32 %16, i32* %i.addr, align 4
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %17 = load i32, i32* %sum.addr, align 4
-  %18 = call i8* @nish_str_from_i32(i32 %17)
-  call void @nish_print(i8* %18)
-  %19 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %20 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
-  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %23 = trunc i64 %22 to i32
-  %24 = sub nsw i32 %23, 1
-  %25 = call i32 @at(%struct.nish_array* %19, i32 %24)
-  %26 = call i8* @nish_str_from_i32(i32 %25)
-  call void @nish_print(i8* %26)
+  %19 = load i32, i32* %sum.addr, align 4
+  %20 = call i8* @nish_str_from_i32(i32 %19)
+  call void @nish_print(i8* %20)
+  %21 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %22 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %25 = trunc i64 %24 to i32
+  %26 = sub nsw i32 %25, 1
+  %27 = call i32 @at(%struct.nish_array* %21, i32 %26)
+  %28 = call i8* @nish_str_from_i32(i32 %27)
+  call void @nish_print(i8* %28)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -132,6 +143,7 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

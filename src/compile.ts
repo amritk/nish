@@ -603,9 +603,17 @@ export const main = (): number => {
     } else if (value === "--unchecked-indexing") {
       opts.uncheckedIndexing = true
     } else if (value === "--nsw") {
-      opts.nsw = true
+      // Signed overflow used to be `nsw`, undefined behaviour the optimiser
+      // could assume away, and this flag said so. It is a checked panic now,
+      // and no flag brings the undefined behaviour back: the opt-in to a
+      // defined wrap is `--wrapping`, and the refusal says so rather than
+      // letting an old build script mean something it no longer can.
+      console.error(
+        `compile: \`--nsw\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` (or use the deprecated --wrapping)\n${usageText()}`
+      )
+      return 2
     } else if (value === "--wrapping") {
-      opts.nsw = false
+      opts.wrapping = true
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false
     } else if (value === "--threads") {

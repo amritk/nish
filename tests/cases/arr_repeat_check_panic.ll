@@ -8,8 +8,10 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -87,8 +89,17 @@ bounds.ok.1:
   %25 = bitcast i8* %24 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 %19
   %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %28 = add nsw i32 %18, %27
-  ret i32 %28
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 %27)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %29
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #1 {
@@ -232,8 +243,17 @@ bounds.ok.1:
   %29 = bitcast i8* %28 to i32*
   %30 = getelementptr inbounds i32, i32* %29, i64 %23
   %31 = load i32, i32* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %32 = add nsw i32 %20, %31
-  ret i32 %32
+  %32 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %31)
+  %33 = extractvalue { i32, i1 } %32, 0
+  %34 = extractvalue { i32, i1 } %32, 1
+  br i1 %34, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %33
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @popPastEnd() #0 {
@@ -301,16 +321,26 @@ entry:
   %8 = call i32 @afterPop(%struct.nish_array* %arr.hdr, i32 1)
   call void @Box.constructor(%struct.Box* %Box.obj)
   %9 = call i32 @Box.afterFieldStore(%struct.Box* %Box.obj, i32 0)
-  %10 = add nsw i32 %8, %9
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %9)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %10
+  ret i32 %11
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

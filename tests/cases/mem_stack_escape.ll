@@ -13,6 +13,8 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -211,23 +213,52 @@ bounds.ok:
   %17 = load %struct.Point*, %struct.Point** %16, align 8, !alias.scope !13, !noalias !12, !tbaa !21
   %18 = getelementptr inbounds %struct.Point, %struct.Point* %17, i32 0, i32 1
   %19 = load i32, i32* %18, align 4, !tbaa !5
-  %20 = add nsw i32 %8, %19
-  %21 = load %struct.Box*, %struct.Box** %b.addr, align 8
-  %22 = getelementptr inbounds %struct.Box, %struct.Box* %21, i32 0, i32 0
-  %23 = load %struct.Point*, %struct.Point** %22, align 8, !tbaa !8
-  %24 = getelementptr inbounds %struct.Point, %struct.Point* %23, i32 0, i32 0
-  %25 = load i32, i32* %24, align 4, !tbaa !4
-  %26 = add nsw i32 %20, %25
-  %27 = call i32 @captured()
-  %28 = add nsw i32 %26, %27
-  %29 = call i32 @reassigned(i1 true)
-  %30 = add nsw i32 %28, %29
-  %31 = call i32 @aliased()
-  %32 = add nsw i32 %30, %31
-  %33 = call i8* @nish_str_from_i32(i32 %32)
-  call void @nish_print(i8* %33)
+  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %19)
+  %21 = extractvalue { i32, i1 } %20, 0
+  %22 = extractvalue { i32, i1 } %20, 1
+  br i1 %22, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %23 = load %struct.Box*, %struct.Box** %b.addr, align 8
+  %24 = getelementptr inbounds %struct.Box, %struct.Box* %23, i32 0, i32 0
+  %25 = load %struct.Point*, %struct.Point** %24, align 8, !tbaa !8
+  %26 = getelementptr inbounds %struct.Point, %struct.Point* %25, i32 0, i32 0
+  %27 = load i32, i32* %26, align 4, !tbaa !4
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 %27)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %31 = call i32 @captured()
+  %32 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %29, i32 %31)
+  %33 = extractvalue { i32, i1 } %32, 0
+  %34 = extractvalue { i32, i1 } %32, 1
+  br i1 %34, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %35 = call i32 @reassigned(i1 true)
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %33, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %39 = call i32 @aliased()
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %37, i32 %39)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  %43 = call i8* @nish_str_from_i32(i32 %41)
+  call void @nish_print(i8* %43)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {

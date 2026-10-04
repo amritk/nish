@@ -4,6 +4,9 @@
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+
 define noundef i32 @run(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(1) nocapture %h) #0 {
 entry:
   %s.addr = alloca i8*, align 8
@@ -20,18 +23,27 @@ entry:
   %5 = call i32 @Holder.pick$i32(%struct.Holder* %h, i32 1, i32 2)
   %6 = load %struct.Box$i32*, %struct.Box$i32** %b.addr, align 8
   %7 = call i32 @Box$i32.with$bool(%struct.Box$i32* %6, i1 true)
-  %8 = add nsw i32 %5, %7
-  ret i32 %8
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %9
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 {
+define void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
   store i32 %value, i32* %0, align 4, !tbaa !4
   ret void
 }
 
-define noundef nonnull align 8 i8* @Holder.pick$str(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i8* noundef nonnull noalias readonly align 8 %a, i8* noundef nonnull noalias readonly align 8 %b) #1 {
+define noundef nonnull align 8 i8* @Holder.pick$str(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i8* noundef nonnull noalias readonly align 8 %a, i8* noundef nonnull noalias readonly align 8 %b) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
   %1 = load i1, i1* %0, align 1, !tbaa !7
@@ -48,7 +60,7 @@ cond.end:
   ret i8* %2
 }
 
-define noundef i32 @Holder.pick$i32(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i32 noundef %a, i32 noundef %b) #1 {
+define noundef i32 @Holder.pick$i32(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i32 noundef %a, i32 noundef %b) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
   %1 = load i1, i1* %0, align 1, !tbaa !7
@@ -65,15 +77,18 @@ cond.end:
   ret i32 %2
 }
 
-define noundef i32 @Box$i32.with$bool(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i1 noundef zeroext %other) #1 {
+define noundef i32 @Box$i32.with$bool(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i1 noundef zeroext %other) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
   ret i32 %1
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

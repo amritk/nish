@@ -25,6 +25,7 @@
               },
               "panics": [
                 { "kind": "oom", "at": "caps_generic.ts:17:3", "allowed": true },
+                { "kind": "call", "at": "caps_generic.ts:17:15", "callee": "pick<i32, double>", "via": "overflow" },
                 { "kind": "call", "at": "caps_generic.ts:18:15", "callee": "pick<string, firstLine>", "via": "io-exit" }
               ]
             },
@@ -33,7 +34,9 @@
               "exported": true,
               "capabilities": [],
               "witnesses": {},
-              "panics": []
+              "panics": [
+                { "kind": "call", "at": "caps_generic.ts:6:53", "callee": "double", "via": "overflow" }
+              ]
             },
             {
               "name": "pick<string, firstLine>",

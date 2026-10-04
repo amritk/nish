@@ -14,8 +14,11 @@ declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_exit(i32 noundef) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -183,9 +186,18 @@ entry:
   call void @Towers.pushDisk(%struct.Towers* %this, %struct.Disk* %0, i32 %toPile)
   %1 = getelementptr inbounds %struct.Towers, %struct.Towers* %this, i32 0, i32 1
   %2 = load i32, i32* %1, align 4
-  %3 = add nsw i32 %2, 1
-  store i32 %3, i32* %1, align 4
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 1)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %4, i32* %1, align 4
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @test() #1 {
@@ -243,21 +255,46 @@ if.end:
   %22 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
   %23 = getelementptr inbounds %struct.Towers, %struct.Towers* %22, i32 0, i32 1
   %24 = load i32, i32* %23, align 4, !tbaa !8
-  %25 = mul nsw i32 %24, 100
-  %26 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
-  %27 = getelementptr inbounds %struct.Disk, %struct.Disk* %26, i32 0, i32 0
-  %28 = load i32, i32* %27, align 4, !tbaa !6
-  %29 = mul nsw i32 %28, 10
-  %30 = add nsw i32 %25, %29
-  %31 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
-  %32 = getelementptr inbounds %struct.Towers, %struct.Towers* %31, i32 0, i32 0
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !20
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
-  %35 = load i64, i64* %34, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %36 = trunc i64 %35 to i32
-  %37 = add nsw i32 %30, %36
+  %25 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %24, i32 100)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %28 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
+  %29 = getelementptr inbounds %struct.Disk, %struct.Disk* %28, i32 0, i32 0
+  %30 = load i32, i32* %29, align 4, !tbaa !6
+  %31 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %30, i32 10)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %26, i32 %32)
+  %35 = extractvalue { i32, i1 } %34, 0
+  %36 = extractvalue { i32, i1 } %34, 1
+  br i1 %36, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %37 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
+  %38 = getelementptr inbounds %struct.Towers, %struct.Towers* %37, i32 0, i32 0
+  %39 = load %struct.nish_array*, %struct.nish_array** %38, align 8, !tbaa !20
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 0
+  %41 = load i64, i64* %40, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %42 = trunc i64 %41 to i32
+  %43 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %35, i32 %42)
+  %44 = extractvalue { i32, i1 } %43, 0
+  %45 = extractvalue { i32, i1 } %43, 1
+  br i1 %45, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %37
+  ret i32 %44
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %if.end ], [ 2, %ovf.ok ], [ 0, %ovf.ok.1 ], [ 0, %ovf.ok.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
@@ -265,7 +302,8 @@ attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { noreturn nounwind }
 attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

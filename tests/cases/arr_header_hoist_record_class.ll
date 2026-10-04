@@ -13,8 +13,10 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare void @nish_panic_div(i1 noundef zeroext) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -96,48 +98,57 @@ for.body:
   %23 = bitcast i8* %10 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 %22
   %25 = load i32, i32* %24, align 4, !alias.scope !14, !noalias !13, !tbaa !21
-  %26 = add nsw i32 %20, %25
-  store i32 %26, i32* %t.addr, align 4
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = load i32, i32* %n.addr, align 4
-  %29 = icmp eq i32 %28, 0
-  %30 = icmp eq i32 %27, -2147483648
-  %31 = icmp eq i32 %28, -1
-  %32 = and i1 %30, %31
-  %33 = or i1 %29, %32
-  br i1 %33, label %div.fail, label %div.ok
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %25)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %27, i32* %t.addr, align 4
+  %29 = load i32, i32* %i.addr, align 4
+  %30 = load i32, i32* %n.addr, align 4
+  %31 = icmp eq i32 %30, 0
+  %32 = icmp eq i32 %29, -2147483648
+  %33 = icmp eq i32 %30, -1
+  %34 = and i1 %32, %33
+  %35 = or i1 %31, %34
+  br i1 %35, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %29)
+  call void @nish_panic_div(i1 zeroext %31)
   unreachable
 
 div.ok:
-  %34 = srem i32 %27, %28
-  %35 = sext i32 %34 to i64
-  %36 = getelementptr inbounds %struct.Grid, %struct.Grid* %this, i32 0, i32 2
-  %37 = load %struct.Node*, %struct.Node** %36, align 8, !tbaa !9
-  %38 = icmp ult i64 %35, %14
-  br i1 %38, label %bounds.ok, label %bounds.fail
+  %36 = srem i32 %29, %30
+  %37 = sext i32 %36 to i64
+  %38 = getelementptr inbounds %struct.Grid, %struct.Grid* %this, i32 0, i32 2
+  %39 = load %struct.Node*, %struct.Node** %38, align 8, !tbaa !9
+  %40 = icmp ult i64 %37, %14
+  br i1 %40, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %35, i64 %14)
+  call void @nish_panic_index(i64 %37, i64 %14)
   unreachable
 
 bounds.ok:
-  %39 = bitcast i8* %16 to %struct.Node**
-  %40 = getelementptr inbounds %struct.Node*, %struct.Node** %39, i64 %35
-  store %struct.Node* %37, %struct.Node** %40, align 8, !alias.scope !14, !noalias !13, !tbaa !23
+  %41 = bitcast i8* %16 to %struct.Node**
+  %42 = getelementptr inbounds %struct.Node*, %struct.Node** %41, i64 %37
+  store %struct.Node* %39, %struct.Node** %42, align 8, !alias.scope !14, !noalias !13, !tbaa !23
   br label %for.inc
 
 for.inc:
-  %41 = load i32, i32* %i.addr, align 4
-  %42 = add nsw i32 %41, 1
-  store i32 %42, i32* %i.addr, align 4
+  %43 = load i32, i32* %i.addr, align 4
+  %44 = add nsw i32 %43, 1
+  store i32 %44, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %43 = load i32, i32* %t.addr, align 4
-  ret i32 %43
+  %45 = load i32, i32* %t.addr, align 4
+  ret i32 %45
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @nish_main() #1 {
@@ -253,7 +264,8 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

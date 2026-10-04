@@ -11,6 +11,8 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -226,29 +228,38 @@ for.end:
   %122 = getelementptr inbounds %struct.Size, %struct.Size* %121, i64 0
   %123 = getelementptr inbounds %struct.Size, %struct.Size* %122, i32 0, i32 0
   %124 = load i32, i32* %123, align 4
-  %125 = add nsw i32 %117, %124
-  %126 = call i8* @nish_str_from_i32(i32 %125)
-  call void @nish_print(i8* %126)
-  %127 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %128 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %127, i64 0, i32 2
-  %129 = load i8*, i8** %128, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %130 = bitcast i8* %129 to %struct.Point*
-  %131 = getelementptr inbounds %struct.Point, %struct.Point* %130, i64 1
-  store %struct.Point* %131, %struct.Point** %held.addr, align 8
-  %132 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %133 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %132, i64 0, i32 2
-  %134 = load i8*, i8** %133, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %135 = bitcast i8* %134 to %struct.Point*
-  %136 = getelementptr inbounds %struct.Point, %struct.Point* %135, i64 1
-  %137 = getelementptr inbounds %struct.Point, %struct.Point* %136, i32 0, i32 0
-  store i32 8, i32* %137, align 4
-  %138 = load %struct.Point*, %struct.Point** %held.addr, align 8
+  %125 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %117, i32 %124)
+  %126 = extractvalue { i32, i1 } %125, 0
+  %127 = extractvalue { i32, i1 } %125, 1
+  br i1 %127, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %128 = call i8* @nish_str_from_i32(i32 %126)
+  call void @nish_print(i8* %128)
+  %129 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %130 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %129, i64 0, i32 2
+  %131 = load i8*, i8** %130, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %132 = bitcast i8* %131 to %struct.Point*
+  %133 = getelementptr inbounds %struct.Point, %struct.Point* %132, i64 1
+  store %struct.Point* %133, %struct.Point** %held.addr, align 8
+  %134 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %135 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %134, i64 0, i32 2
+  %136 = load i8*, i8** %135, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %137 = bitcast i8* %136 to %struct.Point*
+  %138 = getelementptr inbounds %struct.Point, %struct.Point* %137, i64 1
   %139 = getelementptr inbounds %struct.Point, %struct.Point* %138, i32 0, i32 0
-  %140 = load i32, i32* %139, align 4
-  %141 = call i8* @nish_str_from_i32(i32 %140)
-  call void @nish_print(i8* %141)
+  store i32 8, i32* %139, align 4
+  %140 = load %struct.Point*, %struct.Point** %held.addr, align 8
+  %141 = getelementptr inbounds %struct.Point, %struct.Point* %140, i32 0, i32 0
+  %142 = load i32, i32* %141, align 4
+  %143 = call i8* @nish_str_from_i32(i32 %142)
+  call void @nish_print(i8* %143)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -260,6 +271,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -34,6 +34,11 @@ import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
 // ---- The copies ---------------------------------------------------------------
 
+/** `f25519Add64`, `f25519Sub64` and `f25519Mul64`: limb arithmetic in `u64`, read back as `i64`. */
+const fieldAdd64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+const fieldSub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+const fieldMul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
+
 /** `f25519Width`: 26 bits for an even limb, 25 for an odd one. */
 const fieldWidth = (i: i32): i64 => {
   const odd: i64 = toI64(i & 1)
@@ -41,7 +46,7 @@ const fieldWidth = (i: i32): i64 => {
 }
 
 /** `f25519LimbMask`. */
-const fieldLimbMask = (i: i32): i64 => (toI64(1) << fieldWidth(i)) - toI64(1)
+const fieldLimbMask = (i: i32): i64 => fieldSub64(toI64(1) << fieldWidth(i), toI64(1))
 
 /** `f25519Copy`. */
 const fieldCopy = (out: i64[], f: i64[]): void => {
@@ -55,7 +60,7 @@ const fieldCarryChain = (h: i64[]): void => {
   for (let i: i32 = 0; i < 9; i++) {
     const c: i64 = uncheckedGet(h, i) >> fieldWidth(i)
     uncheckedSet(h, i, uncheckedGet(h, i) & fieldLimbMask(i));
-    uncheckedSet(h, i + 1, uncheckedGet(h, i + 1) + c);
+    uncheckedSet(h, i + 1, fieldAdd64(uncheckedGet(h, i + 1), c));
   }
 }
 
@@ -64,23 +69,23 @@ const fieldCarry = (h: i64[]): void => {
   fieldCarryChain(h)
   const top: i64 = uncheckedGet(h, 9) >> toI64(25)
   uncheckedSet(h, 9, uncheckedGet(h, 9) & fieldLimbMask(9));
-  uncheckedSet(h, 0, uncheckedGet(h, 0) + top * toI64(19));
+  uncheckedSet(h, 0, fieldAdd64(uncheckedGet(h, 0), fieldMul64(top, toI64(19))));
   const c0: i64 = uncheckedGet(h, 0) >> toI64(26)
   uncheckedSet(h, 0, uncheckedGet(h, 0) & fieldLimbMask(0));
-  uncheckedSet(h, 1, uncheckedGet(h, 1) + c0);
+  uncheckedSet(h, 1, fieldAdd64(uncheckedGet(h, 1), c0));
 }
 
 /** `f25519Add`. */
 export const fieldAdd = (out: i64[], f: i64[], g: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    uncheckedSet(out, i, uncheckedGet(f, i) + uncheckedGet(g, i));
+    uncheckedSet(out, i, fieldAdd64(uncheckedGet(f, i), uncheckedGet(g, i)));
   }
 }
 
 /** `f25519Sub`. */
 export const fieldSub = (out: i64[], f: i64[], g: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    uncheckedSet(out, i, uncheckedGet(f, i) - uncheckedGet(g, i));
+    uncheckedSet(out, i, fieldSub64(uncheckedGet(f, i), uncheckedGet(g, i)));
   }
 }
 
@@ -90,7 +95,7 @@ const fieldMulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): v
     const k: i32 = i + j
     const fi: i64 = (i & j & 1) === 1 ? uncheckedGet(doubled, i) : uncheckedGet(f, i)
     if (k >= 0 && k < 19) {
-      uncheckedSet(wide, k, uncheckedGet(wide, k) + fi * uncheckedGet(g, j));
+      uncheckedSet(wide, k, fieldAdd64(uncheckedGet(wide, k), fieldMul64(fi, uncheckedGet(g, j))));
     }
   }
 }
@@ -99,7 +104,7 @@ const fieldMulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): v
 export const fieldMul = (out: i64[], f: i64[], g: i64[]): void => {
   const doubled: i64[] = new Array<i64>(10)
   for (let i: i32 = 0; i < 10; i++) {
-    uncheckedSet(doubled, i, uncheckedGet(f, i) * toI64((i & 1) + 1));
+    uncheckedSet(doubled, i, fieldMul64(uncheckedGet(f, i), toI64((i & 1) + 1)));
   }
   const wide: i64[] = new Array<i64>(19)
   fieldMulRow(wide, f, doubled, g, 0)
@@ -114,7 +119,7 @@ export const fieldMul = (out: i64[], f: i64[], g: i64[]): void => {
   fieldMulRow(wide, f, doubled, g, 9)
   const h: i64[] = new Array<i64>(10)
   for (let k: i32 = 0; k < 9; k++) {
-    uncheckedSet(h, k, uncheckedGet(wide, k) + uncheckedGet(wide, k + 10) * toI64(19));
+    uncheckedSet(h, k, fieldAdd64(uncheckedGet(wide, k), fieldMul64(uncheckedGet(wide, k + 10), toI64(19))));
   }
   uncheckedSet(h, 9, uncheckedGet(wide, 9));
   fieldCarry(h)
@@ -129,14 +134,14 @@ export const fieldSquare = (out: i64[], f: i64[]): void => {
 /** `f25519MulA24`, with a24 = 121665. */
 export const fieldMulA24 = (out: i64[], f: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
-    uncheckedSet(out, i, uncheckedGet(f, i) * toI64(121665));
+    uncheckedSet(out, i, fieldMul64(uncheckedGet(f, i), toI64(121665)));
   }
   fieldCarry(out)
 }
 
 /** `f25519Swap`: the masked xor, the same instructions for either bit. */
 export const condSwap = (f: i64[], g: i64[], bit: i64): void => {
-  const mask: i64 = toI64(0) - bit
+  const mask: i64 = fieldSub64(toI64(0), bit)
   for (let i: i32 = 0; i < 10; i++) {
     const t: i64 = mask & (uncheckedGet(f, i) ^ uncheckedGet(g, i))
     uncheckedSet(f, i, uncheckedGet(f, i) ^ t);
@@ -227,11 +232,11 @@ const fieldEncode = (f: i64[]): u8[] => {
   fieldCopy(h, f)
   fieldCarry(h)
   fieldCarry(h)
-  let q: i64 = (uncheckedGet(h, 0) + toI64(19)) >> toI64(26)
+  let q: i64 = fieldAdd64(uncheckedGet(h, 0), toI64(19)) >> toI64(26)
   for (let i: i32 = 1; i < 10; i++) {
-    q = (uncheckedGet(h, i) + q) >> fieldWidth(i)
+    q = fieldAdd64(uncheckedGet(h, i), q) >> fieldWidth(i)
   }
-  uncheckedSet(h, 0, uncheckedGet(h, 0) + q * toI64(19));
+  uncheckedSet(h, 0, fieldAdd64(uncheckedGet(h, 0), fieldMul64(q, toI64(19))));
   fieldCarryChain(h)
   uncheckedSet(h, 9, uncheckedGet(h, 9) & fieldLimbMask(9));
   const out: u8[] = new Array<u8>(32)

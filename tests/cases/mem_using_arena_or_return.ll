@@ -16,8 +16,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -133,7 +135,7 @@ cond.end:
   ret { i1, i32, i32 } %14
 }
 
-define internal { i1, i32, i32 } @propagate(i32 noundef %n, i32 noundef %k) #0 {
+define internal { i1, i32, i32 } @propagate(i32 noundef %n, i32 noundef %k) #1 {
 entry:
   %a.addr = alloca i64, align 8
   %xs.addr = alloca %struct.nish_array*, align 8
@@ -174,10 +176,19 @@ res.ok:
   %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0
   %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %21 = trunc i64 %20 to i32
-  %22 = add nsw i32 %17, %21
-  %23 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %22, 1
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %21)
+  %23 = extractvalue { i32, i1 } %22, 0
+  %24 = extractvalue { i32, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %25 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %23, 1
   call void @nish_arena_release(i64 %1)
-  ret { i1, i32, i32 } %23
+  ret { i1, i32, i32 } %25
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define void @nish_main() #1 {
@@ -278,7 +289,9 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

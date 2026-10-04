@@ -1,5 +1,8 @@
 %struct.nish_array = type { i64, i64, i8* }
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
+
 define internal noundef i32 @weight(i32 noundef %k) #0 {
 entry:
   switch i32 %k, label %sw.default [
@@ -91,7 +94,7 @@ forof.end:
   ret i32 %17
 }
 
-define noundef i32 @test() #1 {
+define noundef i32 @test() #2 {
 entry:
   %kinds.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -115,16 +118,32 @@ entry:
   %8 = load %struct.nish_array*, %struct.nish_array** %kinds.addr, align 8
   %9 = call i32 @heaviest(%struct.nish_array* %8)
   %10 = call i32 @scale(i32 2)
-  %11 = add nsw i32 %9, %10
-  %12 = call i32 @weight(i32 1)
-  %13 = add nsw i32 %11, %12
-  store i32 %13, i32* %total.addr, align 4
-  %14 = load i32, i32* %total.addr, align 4
-  ret i32 %14
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %14 = call i32 @weight(i32 1)
+  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %14)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %16, i32* %total.addr, align 4
+  %18 = load i32, i32* %total.addr, align 4
+  ret i32 %18
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

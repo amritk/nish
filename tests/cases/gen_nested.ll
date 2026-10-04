@@ -4,9 +4,11 @@
 
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -45,42 +47,54 @@ entry:
   %3 = load %struct.Box$$Box$i32*, %struct.Box$$Box$i32** %outer.addr, align 8
   %4 = call %struct.Box$i32* @Box$$Box$i32.get(%struct.Box$$Box$i32* %3)
   %5 = call i32 @Box$i32.get(%struct.Box$i32* %4)
-  %6 = mul nsw i32 %5, 2
-  ret i32 %6
+  %6 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %5, i32 2)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %7
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
-define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %v) #0 {
+define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %v) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
   store i32 %v, i32* %0, align 4, !tbaa !4
   ret void
 }
 
-define internal noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+define internal noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
   ret i32 %1
 }
 
-define internal void @Box$$Box$i32.constructor(%struct.Box$$Box$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Box$i32* noundef nonnull align 8 dereferenceable(4) %v) #0 {
+define internal void @Box$$Box$i32.constructor(%struct.Box$$Box$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Box$i32* noundef nonnull align 8 dereferenceable(4) %v) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$$Box$i32, %struct.Box$$Box$i32* %this, i32 0, i32 0
   store %struct.Box$i32* %v, %struct.Box$i32** %0, align 8, !tbaa !7
   ret void
 }
 
-define internal noundef nonnull align 8 dereferenceable(4) %struct.Box$i32* @Box$$Box$i32.get(%struct.Box$$Box$i32* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef nonnull align 8 dereferenceable(4) %struct.Box$i32* @Box$$Box$i32.get(%struct.Box$$Box$i32* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Box$$Box$i32, %struct.Box$$Box$i32* %this, i32 0, i32 0
   %1 = load %struct.Box$i32*, %struct.Box$i32** %0, align 8, !tbaa !7
   ret %struct.Box$i32* %1
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

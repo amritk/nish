@@ -8,8 +8,11 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -48,8 +51,17 @@ entry:
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Rect, %struct.Rect* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = mul nsw i32 %1, %3
-  ret i32 %4
+  %4 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %1, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %5
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
 define internal noundef i32 @perimeter(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
@@ -58,12 +70,27 @@ entry:
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = add nsw i32 %1, %3
-  %5 = mul nsw i32 2, %4
-  ret i32 %5
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %7 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 2, i32 %5)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %8
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %entry ], [ 2, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
-define internal noundef nonnull align 8 dereferenceable(8) %struct.Shape* @widest(%struct.Shape* noundef nonnull align 8 dereferenceable(8) %a, %struct.Shape* noundef nonnull align 8 dereferenceable(8) %b) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Shape* @widest(%struct.Shape* noundef nonnull align 8 dereferenceable(8) %a, %struct.Shape* noundef nonnull align 8 dereferenceable(8) %b) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %a, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -83,17 +110,26 @@ cond.end:
   ret %struct.Shape* %5
 }
 
-define internal noundef nonnull align 8 dereferenceable(8) %struct.Shape* @grow(%struct.Rect* noundef nonnull align 8 dereferenceable(8) %r, i32 noundef %by) #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Shape* @grow(%struct.Rect* noundef nonnull align 8 dereferenceable(8) %r, i32 noundef %by) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Rect, %struct.Rect* %r, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
-  %2 = add nsw i32 %1, %by
-  store i32 %2, i32* %0, align 4
-  %3 = bitcast %struct.Rect* %r to %struct.Shape*
-  ret %struct.Shape* %3
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %by)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %3, i32* %0, align 4
+  %5 = bitcast %struct.Rect* %r to %struct.Shape*
+  ret %struct.Shape* %5
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %r.addr = alloca %struct.Rect*, align 8
   %s.addr = alloca %struct.Shape*, align 8
@@ -140,7 +176,7 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -148,7 +184,9 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }

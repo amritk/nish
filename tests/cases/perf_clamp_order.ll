@@ -13,8 +13,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly n
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare i64 @llvm.smin.i64(i64, i64) #0
 declare i64 @llvm.smax.i64(i64, i64) #0
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @width() #0 {
 entry:
@@ -158,33 +160,42 @@ cond.end:
   %97 = load i64, i64* %96, align 8
   %98 = trunc i64 %97 to i32
   store i32 %98, i32* %j.addr, align 4
-  %99 = sub nsw i32 %98, 6
-  %100 = sext i32 %99 to i64
-  %101 = call i64 @llvm.smin.i64(i64 %100, i64 %94)
-  %102 = call i64 @llvm.smax.i64(i64 %101, i64 0)
-  %103 = call i64 @llvm.smin.i64(i64 0, i64 %102)
-  %104 = call i64 @llvm.smax.i64(i64 0, i64 %102)
-  %105 = sub i64 %104, %103
-  %106 = getelementptr inbounds i8, i8* %92, i64 8
-  %107 = getelementptr inbounds i8, i8* %106, i64 %103
-  %108 = call i8* @nish_str_new(i8* %107, i64 %105)
-  store i8* %108, i8** %d.addr, align 8
-  %109 = load i8*, i8** %d.addr, align 8
-  %110 = call i8* @nish_str_concat(i8* bitcast ({ i64, [4 x i8] }* @.str.5 to i8*), i8* %109)
-  %111 = call i8* @nish_str_concat(i8* %110, i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*))
-  %112 = load i8*, i8** %d.addr, align 8
-  %113 = bitcast i8* %112 to i64*
-  %114 = load i64, i64* %113, align 8
-  %115 = trunc i64 %114 to i32
-  %116 = call i8* @nish_str_from_i32(i32 %115)
-  %117 = call i8* @nish_str_concat(i8* %111, i8* %116)
-  %118 = call i8* @nish_str_concat(i8* %117, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
-  %119 = load i32, i32* %j.addr, align 4
-  %120 = call i8* @nish_str_from_i32(i32 %119)
-  %121 = call i8* @nish_str_concat(i8* %118, i8* %120)
-  call void @nish_print(i8* %121)
+  %99 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %98, i32 6)
+  %100 = extractvalue { i32, i1 } %99, 0
+  %101 = extractvalue { i32, i1 } %99, 1
+  br i1 %101, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %102 = sext i32 %100 to i64
+  %103 = call i64 @llvm.smin.i64(i64 %102, i64 %94)
+  %104 = call i64 @llvm.smax.i64(i64 %103, i64 0)
+  %105 = call i64 @llvm.smin.i64(i64 0, i64 %104)
+  %106 = call i64 @llvm.smax.i64(i64 0, i64 %104)
+  %107 = sub i64 %106, %105
+  %108 = getelementptr inbounds i8, i8* %92, i64 8
+  %109 = getelementptr inbounds i8, i8* %108, i64 %105
+  %110 = call i8* @nish_str_new(i8* %109, i64 %107)
+  store i8* %110, i8** %d.addr, align 8
+  %111 = load i8*, i8** %d.addr, align 8
+  %112 = call i8* @nish_str_concat(i8* bitcast ({ i64, [4 x i8] }* @.str.5 to i8*), i8* %111)
+  %113 = call i8* @nish_str_concat(i8* %112, i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*))
+  %114 = load i8*, i8** %d.addr, align 8
+  %115 = bitcast i8* %114 to i64*
+  %116 = load i64, i64* %115, align 8
+  %117 = trunc i64 %116 to i32
+  %118 = call i8* @nish_str_from_i32(i32 %117)
+  %119 = call i8* @nish_str_concat(i8* %113, i8* %118)
+  %120 = call i8* @nish_str_concat(i8* %119, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
+  %121 = load i32, i32* %j.addr, align 4
+  %122 = call i8* @nish_str_from_i32(i32 %121)
+  %123 = call i8* @nish_str_concat(i8* %120, i8* %122)
+  call void @nish_print(i8* %123)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
@@ -197,3 +208,4 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }

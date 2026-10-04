@@ -9,8 +9,10 @@ declare void @llvm.dbg.declare(metadata, metadata, metadata)
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 !dbg !12 {
 entry:
@@ -31,11 +33,20 @@ entry:
   %1 = load i32, i32* %0, align 4, !tbaa !23, !dbg !33
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1, !dbg !34
   %3 = load i32, i32* %2, align 4, !tbaa !26, !dbg !34
-  %4 = add nsw i32 %1, %3, !dbg !33
-  ret i32 %4, !dbg !32
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %3), !dbg !33
+  %5 = extractvalue { i32, i1 } %4, 0, !dbg !33
+  %6 = extractvalue { i32, i1 } %4, 1, !dbg !33
+  br i1 %6, label %ovf.fail, label %ovf.ok, !dbg !33
+
+ovf.ok:
+  ret i32 %5, !dbg !32
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !33
+  unreachable
 }
 
-define internal noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, i8* noundef nonnull noalias readonly align 8 nocapture %name) #2 !dbg !39 {
+define internal noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, i8* noundef nonnull noalias readonly align 8 nocapture %name) #1 !dbg !39 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %p, metadata !41, metadata !DIExpression()), !dbg !40
   call void @llvm.dbg.value(metadata i8* %name, metadata !42, metadata !DIExpression()), !dbg !40
@@ -74,22 +85,31 @@ forof.body:
   store i32 %8, i32* %v.addr, align 4, !dbg !63
   %9 = load i32, i32* %acc.addr, align 4, !dbg !79
   %10 = load i32, i32* %v.addr, align 4, !dbg !80
-  %11 = add nsw i32 %9, %10, !dbg !79
-  store i32 %11, i32* %acc.addr, align 4, !dbg !79
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %10), !dbg !79
+  %12 = extractvalue { i32, i1 } %11, 0, !dbg !79
+  %13 = extractvalue { i32, i1 } %11, 1, !dbg !79
+  br i1 %13, label %ovf.fail, label %ovf.ok, !dbg !79
+
+ovf.ok:
+  store i32 %12, i32* %acc.addr, align 4, !dbg !79
   br label %forof.inc, !dbg !63
 
 forof.inc:
-  %12 = load i64, i64* %forof.idx, align 8, !dbg !63
-  %13 = add i64 %12, 1, !dbg !63
-  store i64 %13, i64* %forof.idx, align 8, !dbg !63
+  %14 = load i64, i64* %forof.idx, align 8, !dbg !63
+  %15 = add i64 %14, 1, !dbg !63
+  store i64 %15, i64* %forof.idx, align 8, !dbg !63
   br label %forof.cond, !dbg !63
 
 forof.end:
-  %14 = load i32, i32* %acc.addr, align 4, !dbg !82
-  ret i32 %14, !dbg !81
+  %16 = load i32, i32* %acc.addr, align 4, !dbg !82
+  ret i32 %16, !dbg !81
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !79
+  unreachable
 }
 
-define noundef i32 @test() #2 !dbg !85 {
+define noundef i32 @test() #1 !dbg !85 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
@@ -173,18 +193,28 @@ if.then:
   %29 = load i32, i32* %t.addr, align 4, !dbg !127
   %30 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !128
   %31 = call i32 @Point.sum(%struct.Point* %30), !dbg !128
-  %32 = add nsw i32 %29, %31, !dbg !127
+  %32 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %29, i32 %31), !dbg !127
+  %33 = extractvalue { i32, i1 } %32, 0, !dbg !127
+  %34 = extractvalue { i32, i1 } %32, 1, !dbg !127
+  br i1 %34, label %ovf.fail, label %ovf.ok, !dbg !127
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark), !dbg !126
-  ret i32 %32, !dbg !126
+  ret i32 %33, !dbg !126
 
 if.end:
   call void @nish_arena_release(i64 %arena.mark), !dbg !129
   ret i32 0, !dbg !129
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !127
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

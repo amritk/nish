@@ -10,19 +10,24 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
-declare void @nish_free_arena() #3
-declare noundef i64 @nish_arena_mark() #3
-declare void @nish_arena_release(i64 noundef) #3
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare void @nish_free_arena() #4
+declare noundef i64 @nish_arena_mark() #4
+declare void @nish_arena_release(i64 noundef) #4
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #3
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
-declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #3
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #4
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #4
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #4
 declare void @nish_exit(i32 noundef) #5
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #3
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #4
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
+declare extern_weak void @nish_panic_overflow(i32 noundef) #6
 declare i32 @llvm.fptosi.sat.i32.f64(double) #1
 declare i64 @llvm.fptosi.sat.i64.f64(double) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #1
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
@@ -126,13 +131,22 @@ entry:
   ret i32 %2
 }
 
-define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #1 {
+define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #0 {
 entry:
   %0 = lshr i32 %h, 24
   %1 = shl i32 %0, 24
-  %2 = add nsw i32 %index, 1
-  %3 = or i32 %1, %2
-  ret i32 %3
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %index, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = or i32 %1, %3
+  ret i32 %5
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #1 {
@@ -144,7 +158,7 @@ entry:
   ret i64 %3
 }
 
-define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #1 {
+define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #0 {
 entry:
   %0 = fneg double 0x3FF0000000000000
   %1 = call i64 @llvm.fptosi.sat.i64.f64(double %0)
@@ -152,8 +166,17 @@ entry:
   %3 = shl i64 %2, 32
   %4 = zext i32 %h to i64
   %5 = or i64 %3, %4
-  %6 = sub nsw i64 %1, %5
-  ret i64 %6
+  %6 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %1, i64 %5)
+  %7 = extractvalue { i64, i1 } %6, 0
+  %8 = extractvalue { i64, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i64 %7
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define internal void @nish.fileEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %h, i32 noundef %index) #0 {
@@ -333,20 +356,30 @@ entry:
   %2 = sitofp i64 %1 to double
   %3 = call i32 @llvm.fptosi.sat.i32.f64(double %2)
   store i32 %3, i32* %n.addr, align 4
-  %4 = mul nsw i32 %live, 2
-  %5 = icmp slt i32 %4, %used
-  br i1 %5, label %if.then, label %if.end
+  %4 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %live, i32 2)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %7 = icmp slt i32 %5, %used
+  br i1 %7, label %if.then, label %if.end
 
 if.then:
   call void @nish.clearSlots(%struct.nish_array* %slots)
   ret %struct.nish_array* %slots
 
 if.end:
-  %6 = load i32, i32* %n.addr, align 4
-  %7 = mul nsw i32 %6, 2
-  %8 = sext i32 %7 to i64
-  %9 = icmp ule i64 %8, 9007199254740992
-  br i1 %9, label %len.ok, label %len.fail
+  %8 = load i32, i32* %n.addr, align 4
+  %9 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %8, i32 2)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %12 = sext i32 %10 to i64
+  %13 = icmp ule i64 %12, 9007199254740992
+  br i1 %13, label %len.ok, label %len.fail
 
 len.fail:
   call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.1 to i8*), i32 2, i1 true)
@@ -354,18 +387,22 @@ len.fail:
   unreachable
 
 len.ok:
-  %10 = call i8* @nish_alloc_struct(i64 24)
-  %11 = bitcast i8* %10 to %struct.nish_array*
-  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
-  store i64 %8, i64* %12, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 1
-  store i64 %8, i64* %13, align 8, !alias.scope !10, !noalias !11, !tbaa !19
-  %14 = mul i64 %8, 4
-  %15 = call i8* @nish_alloc_struct(i64 %14)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %15, i8 0, i64 %14, i1 false), !alias.scope !11, !noalias !10
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
-  store i8* %15, i8** %16, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  ret %struct.nish_array* %11
+  %14 = call i8* @nish_alloc_struct(i64 24)
+  %15 = bitcast i8* %14 to %struct.nish_array*
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
+  store i64 %12, i64* %16, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 1
+  store i64 %12, i64* %17, align 8, !alias.scope !10, !noalias !11, !tbaa !19
+  %18 = mul i64 %12, 4
+  %19 = call i8* @nish_alloc_struct(i64 %18)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %19, i8 0, i64 %18, i1 false), !alias.scope !11, !noalias !10
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
+  store i8* %19, i8** %20, align 8, !alias.scope !10, !noalias !11, !tbaa !16
+  ret %struct.nish_array* %15
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
 define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 {
@@ -530,22 +567,36 @@ land.end:
 
 if.then:
   %7 = sext i32 %bucket to i64
-  %8 = sub nsw i32 %used, 1
-  %9 = call i32 @nish.slotWord(i32 %h, i32 %8)
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
-  %11 = load i8*, i8** %10, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %12 = bitcast i8* %11 to i32*
-  %13 = getelementptr inbounds i32, i32* %12, i64 %7
-  store i32 %9, i32* %13, align 4, !alias.scope !11, !noalias !10, !tbaa !18
+  %8 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %used, i32 1)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %11 = call i32 @nish.slotWord(i32 %h, i32 %9)
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !10, !noalias !11, !tbaa !16
+  %14 = bitcast i8* %13 to i32*
+  %15 = getelementptr inbounds i32, i32* %14, i64 %7
+  store i32 %11, i32* %15, align 4, !alias.scope !11, !noalias !10, !tbaa !18
   br label %if.end
 
 if.else:
-  %14 = sub nsw i32 %used, 1
-  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %14)
+  %16 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %used, i32 1)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  call void @nish.fileEntry(%struct.nish_array* %slots, i32 %mask, i32 %h, i32 %17)
   br label %if.end
 
 if.end:
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define internal void @nish.Set$f64.constructor(%struct.Set$f64* noundef nonnull noalias align 8 dereferenceable(48) nocapture %this) #0 {
@@ -636,14 +687,23 @@ if.end:
   ret %struct.Set$f64* %this
 }
 
-define internal void @nish.Set$f64.walkOpen(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %this) #3 {
+define internal void @nish.Set$f64.walkOpen(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
   %1 = load i32, i32* %0, align 4, !tbaa !22
-  %2 = add nsw i32 %1, 1
-  %3 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
-  store i32 %2, i32* %3, align 4, !tbaa !22
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
+  store i32 %3, i32* %5, align 4, !tbaa !22
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @nish.Set$f64.walkNext(%struct.Set$f64* noundef nonnull readonly align 8 dereferenceable(48) nocapture %this, i32 noundef %from) #2 {
@@ -654,14 +714,23 @@ entry:
   ret i32 %2
 }
 
-define internal void @nish.Set$f64.walkClose(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %this) #3 {
+define internal void @nish.Set$f64.walkClose(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
   %1 = load i32, i32* %0, align 4, !tbaa !22
-  %2 = sub nsw i32 %1, 1
-  %3 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
-  store i32 %2, i32* %3, align 4, !tbaa !22
+  %2 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
+  store i32 %3, i32* %5, align 4, !tbaa !22
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define internal noundef double @nish.Set$f64.keyAt(%struct.Set$f64* noundef nonnull readonly align 8 dereferenceable(48) nocapture %this, i32 noundef %index) #0 {
@@ -809,50 +878,70 @@ push.store.1:
   %47 = sitofp i64 %46 to double
   %48 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
   %49 = load i32, i32* %48, align 4, !tbaa !21
-  %50 = add nsw i32 %49, 1
-  %51 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
-  store i32 %50, i32* %51, align 4, !tbaa !21
-  %52 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
-  %53 = load double, double* %52, align 8, !tbaa !6
-  %54 = fadd double %53, 0x3FF0000000000000
-  %55 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
-  store double %54, double* %55, align 8, !tbaa !6
-  %56 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
-  %57 = load %struct.nish_array*, %struct.nish_array** %56, align 8, !tbaa !24
-  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 0
-  %59 = load i64, i64* %58, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %60 = sitofp i64 %59 to double
-  %61 = call i32 @llvm.fptosi.sat.i32.f64(double %60)
-  store i32 %61, i32* %used.addr, align 4
-  %62 = load i32, i32* %used.addr, align 4
-  %63 = mul nsw i32 %62, 4
-  %64 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
-  %65 = load %struct.nish_array*, %struct.nish_array** %64, align 8, !tbaa !23
-  %66 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %65, i64 0, i32 0
-  %67 = load i64, i64* %66, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %68 = sitofp i64 %67 to double
-  %69 = call i32 @llvm.fptosi.sat.i32.f64(double %68)
-  %70 = mul nsw i32 %69, 3
-  %71 = icmp sgt i32 %63, %70
-  br i1 %71, label %if.then.2, label %if.else
+  %50 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %49, i32 1)
+  %51 = extractvalue { i32, i1 } %50, 0
+  %52 = extractvalue { i32, i1 } %50, 1
+  br i1 %52, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %53 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
+  store i32 %51, i32* %53, align 4, !tbaa !21
+  %54 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
+  %55 = load double, double* %54, align 8, !tbaa !6
+  %56 = fadd double %55, 0x3FF0000000000000
+  %57 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
+  store double %56, double* %57, align 8, !tbaa !6
+  %58 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
+  %59 = load %struct.nish_array*, %struct.nish_array** %58, align 8, !tbaa !24
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
+  %61 = load i64, i64* %60, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %62 = sitofp i64 %61 to double
+  %63 = call i32 @llvm.fptosi.sat.i32.f64(double %62)
+  store i32 %63, i32* %used.addr, align 4
+  %64 = load i32, i32* %used.addr, align 4
+  %65 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %64, i32 4)
+  %66 = extractvalue { i32, i1 } %65, 0
+  %67 = extractvalue { i32, i1 } %65, 1
+  br i1 %67, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %68 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
+  %69 = load %struct.nish_array*, %struct.nish_array** %68, align 8, !tbaa !23
+  %70 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %69, i64 0, i32 0
+  %71 = load i64, i64* %70, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %72 = sitofp i64 %71 to double
+  %73 = call i32 @llvm.fptosi.sat.i32.f64(double %72)
+  %74 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %73, i32 3)
+  %75 = extractvalue { i32, i1 } %74, 0
+  %76 = extractvalue { i32, i1 } %74, 1
+  br i1 %76, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %77 = icmp sgt i32 %66, %75
+  br i1 %77, label %if.then.2, label %if.else
 
 if.then.2:
   call void @nish.Set$f64.rebuild(%struct.Set$f64* %this)
   br label %if.end.2
 
 if.else:
-  %72 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
-  %73 = load %struct.nish_array*, %struct.nish_array** %72, align 8, !tbaa !23
-  %74 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 2
-  %75 = load i32, i32* %74, align 4, !tbaa !20
-  %76 = load i32, i32* %bucket.addr, align 4
-  %77 = load i32, i32* %h.addr, align 4
-  %78 = load i32, i32* %used.addr, align 4
-  call void @nish.fileAppended(%struct.nish_array* %73, i32 %75, i32 %76, i32 %77, i32 %78)
+  %78 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
+  %79 = load %struct.nish_array*, %struct.nish_array** %78, align 8, !tbaa !23
+  %80 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 2
+  %81 = load i32, i32* %80, align 4, !tbaa !20
+  %82 = load i32, i32* %bucket.addr, align 4
+  %83 = load i32, i32* %h.addr, align 4
+  %84 = load i32, i32* %used.addr, align 4
+  call void @nish.fileAppended(%struct.nish_array* %79, i32 %81, i32 %82, i32 %83, i32 %84)
   br label %if.end.2
 
 if.end.2:
   ret void
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %push.store.1 ], [ 2, %ovf.ok ], [ 2, %ovf.ok.1 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define internal void @nish.Set$f64.rebuild(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %this) #0 {
@@ -1024,84 +1113,93 @@ if.end:
 if.then.1:
   %55 = load i32, i32* %word.addr, align 4
   %56 = and i32 %55, 16777215
-  %57 = sub nsw i32 %56, 1
-  store i32 %57, i32* %at.addr, align 4
-  %58 = load i32, i32* %at.addr, align 4
-  %59 = icmp sge i32 %58, 0
-  br i1 %59, label %land.rhs.4, label %land.end.4
+  %57 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %56, i32 1)
+  %58 = extractvalue { i32, i1 } %57, 0
+  %59 = extractvalue { i32, i1 } %57, 1
+  br i1 %59, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %58, i32* %at.addr, align 4
+  %60 = load i32, i32* %at.addr, align 4
+  %61 = icmp sge i32 %60, 0
+  br i1 %61, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %60 = load i32, i32* %at.addr, align 4
-  %61 = sitofp i64 %27 to double
-  %62 = call i32 @llvm.fptosi.sat.i32.f64(double %61)
-  %63 = icmp slt i32 %60, %62
+  %62 = load i32, i32* %at.addr, align 4
+  %63 = sitofp i64 %27 to double
+  %64 = call i32 @llvm.fptosi.sat.i32.f64(double %63)
+  %65 = icmp slt i32 %62, %64
   br label %land.end.4
 
 land.end.4:
-  %64 = phi i1 [ false, %if.then.1 ], [ %63, %land.rhs.4 ]
-  br i1 %64, label %land.rhs.3, label %land.end.3
+  %66 = phi i1 [ false, %ovf.ok ], [ %65, %land.rhs.4 ]
+  br i1 %66, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %65 = load i32, i32* %at.addr, align 4
-  %66 = sext i32 %65 to i64
-  %67 = bitcast i8* %29 to i32*
-  %68 = getelementptr inbounds i32, i32* %67, i64 %66
-  %69 = load i32, i32* %68, align 4, !alias.scope !11, !noalias !10, !tbaa !18
-  %70 = load i32, i32* %h.addr, align 4
-  %71 = icmp eq i32 %69, %70
+  %67 = load i32, i32* %at.addr, align 4
+  %68 = sext i32 %67 to i64
+  %69 = bitcast i8* %29 to i32*
+  %70 = getelementptr inbounds i32, i32* %69, i64 %68
+  %71 = load i32, i32* %70, align 4, !alias.scope !11, !noalias !10, !tbaa !18
+  %72 = load i32, i32* %h.addr, align 4
+  %73 = icmp eq i32 %71, %72
   br label %land.end.3
 
 land.end.3:
-  %72 = phi i1 [ false, %land.end.4 ], [ %71, %land.rhs.3 ]
-  br i1 %72, label %land.rhs.2, label %land.end.2
+  %74 = phi i1 [ false, %land.end.4 ], [ %73, %land.rhs.3 ]
+  br i1 %74, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %73 = load i32, i32* %at.addr, align 4
-  %74 = sitofp i64 %31 to double
-  %75 = call i32 @llvm.fptosi.sat.i32.f64(double %74)
-  %76 = icmp slt i32 %73, %75
+  %75 = load i32, i32* %at.addr, align 4
+  %76 = sitofp i64 %31 to double
+  %77 = call i32 @llvm.fptosi.sat.i32.f64(double %76)
+  %78 = icmp slt i32 %75, %77
   br label %land.end.2
 
 land.end.2:
-  %77 = phi i1 [ false, %land.end.3 ], [ %76, %land.rhs.2 ]
-  br i1 %77, label %land.rhs.1, label %land.end.1
+  %79 = phi i1 [ false, %land.end.3 ], [ %78, %land.rhs.2 ]
+  br i1 %79, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %78 = load i32, i32* %at.addr, align 4
-  %79 = sext i32 %78 to i64
-  %80 = bitcast i8* %33 to double*
-  %81 = getelementptr inbounds double, double* %80, i64 %79
-  %82 = load double, double* %81, align 8, !alias.scope !11, !noalias !10, !tbaa !27
-  %83 = fcmp oeq double %82, %key
-  %84 = fcmp uno double %82, %82
-  %85 = fcmp uno double %key, %key
-  %86 = and i1 %84, %85
-  %87 = or i1 %83, %86
+  %80 = load i32, i32* %at.addr, align 4
+  %81 = sext i32 %80 to i64
+  %82 = bitcast i8* %33 to double*
+  %83 = getelementptr inbounds double, double* %82, i64 %81
+  %84 = load double, double* %83, align 8, !alias.scope !11, !noalias !10, !tbaa !27
+  %85 = fcmp oeq double %84, %key
+  %86 = fcmp uno double %84, %84
+  %87 = fcmp uno double %key, %key
+  %88 = and i1 %86, %87
+  %89 = or i1 %85, %88
   br label %land.end.1
 
 land.end.1:
-  %88 = phi i1 [ false, %land.end.2 ], [ %87, %land.rhs.1 ]
-  br i1 %88, label %if.then.2, label %if.end.2
+  %90 = phi i1 [ false, %land.end.2 ], [ %89, %land.rhs.1 ]
+  br i1 %90, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %89 = load i32, i32* %bucket.addr, align 4
-  %90 = load i32, i32* %at.addr, align 4
-  %91 = tail call i64 @nish.foundAt(i32 %89, i32 %90)
-  ret i64 %91
+  %91 = load i32, i32* %bucket.addr, align 4
+  %92 = load i32, i32* %at.addr, align 4
+  %93 = tail call i64 @nish.foundAt(i32 %91, i32 %92)
+  ret i64 %93
 
 if.end.2:
   br label %if.end.1
 
 if.end.1:
-  %92 = load i32, i32* %bucket.addr, align 4
-  %93 = add nsw i32 %92, 1
-  %94 = and i32 %93, %mask
-  store i32 %94, i32* %bucket.addr, align 4
+  %94 = load i32, i32* %bucket.addr, align 4
+  %95 = add nsw i32 %94, 1
+  %96 = and i32 %95, %mask
+  store i32 %96, i32* %bucket.addr, align 4
   br label %while.cond
 
 while.end:
   call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
+  unreachable
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
   unreachable
 }
 
@@ -1247,8 +1345,8 @@ while.end:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind willreturn }
 attributes #5 = { noreturn nounwind }
 attributes #6 = { nounwind noreturn cold }
 attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }

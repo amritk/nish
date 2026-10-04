@@ -9,12 +9,14 @@
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
-declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -110,7 +112,7 @@ if.end:
   ret i32 %10, !dbg !62
 }
 
-define noundef i32 @test() #0 !dbg !66 {
+define noundef i32 @test() #2 !dbg !66 {
 entry:
   %r.addr = alloca %struct.nish_result.i32.i32*, align 8
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
@@ -167,16 +169,28 @@ if.end:
   %28 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %named.addr, align 8, !dbg !91
   %29 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %28, i32 0, i32 1, !dbg !91
   %30 = load i32, i32* %29, align 4, !dbg !91
-  %31 = add nsw i32 %27, %30, !dbg !89
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 %30), !dbg !89
+  %32 = extractvalue { i32, i1 } %31, 0, !dbg !89
+  %33 = extractvalue { i32, i1 } %31, 1, !dbg !89
+  br i1 %33, label %ovf.fail, label %ovf.ok, !dbg !89
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark), !dbg !88
-  ret i32 %31, !dbg !88
+  ret i32 %32, !dbg !88
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !89
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind willreturn memory(argmem: read) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind willreturn memory(argmem: read) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { nounwind willreturn readnone }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

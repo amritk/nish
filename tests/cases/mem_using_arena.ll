@@ -13,6 +13,8 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
@@ -109,18 +111,23 @@ for.end:
   %37 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %38 = getelementptr inbounds %struct.Point, %struct.Point* %37, i32 0, i32 1
   %39 = load i32, i32* %38, align 4, !tbaa !5
-  %40 = add nsw i32 %36, %39
-  store i32 %40, i32* %total.addr, align 4
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %36, i32 %39)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %41, i32* %total.addr, align 4
   call void @nish_arena_release(i64 %2)
-  %41 = call i64 @nish_arena_used()
-  store i64 %41, i64* %after.addr, align 8
-  %42 = load i32, i32* %total.addr, align 4
-  %43 = call i8* @nish_str_from_i32(i32 %42)
-  call void @nish_print(i8* %43)
-  %44 = load i64, i64* %after.addr, align 8
-  %45 = load i64, i64* %before.addr, align 8
-  %46 = icmp eq i64 %44, %45
-  br i1 %46, label %cond.true, label %cond.false
+  %43 = call i64 @nish_arena_used()
+  store i64 %43, i64* %after.addr, align 8
+  %44 = load i32, i32* %total.addr, align 4
+  %45 = call i8* @nish_str_from_i32(i32 %44)
+  call void @nish_print(i8* %45)
+  %46 = load i64, i64* %after.addr, align 8
+  %47 = load i64, i64* %before.addr, align 8
+  %48 = icmp eq i64 %46, %47
+  br i1 %48, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -129,10 +136,14 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %47 = phi i8* [ bitcast ({ i64, [9 x i8] }* @.str.1 to i8*), %cond.true ], [ bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), %cond.false ]
-  call void @nish_print(i8* %47)
+  %49 = phi i8* [ bitcast ({ i64, [9 x i8] }* @.str.1 to i8*), %cond.true ], [ bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), %cond.false ]
+  call void @nish_print(i8* %49)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
@@ -144,6 +155,8 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
