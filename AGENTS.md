@@ -124,9 +124,9 @@ Every `--json` object is flat:
   an index not proven in range inside a loop, inserts
   `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
   before the statement, which the bounds analysis credits, and only where the
-  index is an `i32`, nothing before the access in that statement is
-  conditional, repeated, a call or an assignment, and `panic` and `toI32` are
-  the builtins.
+  index is an `i32`, the access is not behind a branch or in a loop's
+  header, nothing else the statement runs before its branches calls,
+  allocates or assigns, and `panic` and `toI32` are the builtins.
 - **`nish --fix <files> [flags]`** applies them (`src/fix.ts`): it compiles,
   takes every fix in a file named on the command line (never one under
   `node_modules`, the standard library or a `nish:` module), drops a fix that

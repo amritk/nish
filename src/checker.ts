@@ -1712,7 +1712,9 @@ const boundsGuardEdits = (
  * `if`, a `? :` or an `&&` / `||` other than its first operand, a loop, which
  * is also where an access in a loop's own condition ends up — and the rest of
  * the statement may not call, allocate or assign, which could resize the
- * array, move the index or print before the access fails.
+ * array, move the index or print before the access fails. The branches of
+ * an `if` or a `switch` whose test holds the access run after it, so only
+ * the test is held to that.
  */
 const guardStatement = (body: Node, access: Node): Node | null => {
   const path: Node[] = []
@@ -1744,7 +1746,10 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     i = i + 1
   }
   const stmt = path[at]
-  return hasEffectOffPath(stmt, path) ? null : stmt
+  // The test of an `if` or a `switch` runs before either branch, so only the
+  // test can do anything the guard would run ahead of.
+  const head = (stmt.kind === N_IF || stmt.kind === N_SWITCH) && path[at + 1] === stmt.children[0]
+  return hasEffectOffPath(head ? stmt.children[0] : stmt, path) ? null : stmt
 }
 
 /** Push the nodes from `node` down to `target` onto `path`, and answer whether `target` is under `node`. */
