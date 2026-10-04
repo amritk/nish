@@ -1723,8 +1723,8 @@ const guardStatement = (body: Node, access: Node): Node | null => {
   }
   let at = -1
   let i = 0
-  while (i + 1 < path.length) {
-    if (path[i].kind === N_BLOCK) {
+  while (i < path.length) {
+    if (path[i].kind === N_BLOCK && i + 1 < path.length) {
       at = i + 1
     }
     i = i + 1
@@ -1732,15 +1732,20 @@ const guardStatement = (body: Node, access: Node): Node | null => {
   if (at < 0) {
     return null
   }
+  // Every step down from the statement to the access, which is the last node
+  // and has nothing below it to cross.
   i = at
-  while (i + 1 < path.length) {
+  while (i < path.length) {
     const node = path[i]
-    const first = node.children.length > 0 && node.children[0] === path[i + 1]
+    const down = i + 1 < path.length ? path[i + 1] : node
+    const first = node.children.length > 0 && node.children[0] === down
     const logical = node.kind === N_BINARY && (node.text === "&&" || node.text === "||")
     const branches = node.kind === N_IF || node.kind === N_CONDITIONAL || node.kind === N_SWITCH || logical
     const repeats =
       node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR || node.kind === N_FOR_OF
-    if ((branches && !first) || repeats || node.kind === N_ARROW || node.kind === N_LABELED) {
+    const crosses =
+      down !== node && ((branches && !first) || repeats || node.kind === N_ARROW || node.kind === N_LABELED)
+    if (crosses) {
       return null
     }
     i = i + 1
