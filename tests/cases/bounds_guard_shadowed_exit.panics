@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"Proc.exit","symbol":"Proc.exit","module":"tests/cases/bounds_guard_shadowed_exit.ts","line":7,"panics":[{"kind":"overflow","line":8,"column":18,"proven":false}]},
+{"name":"pick","symbol":"pick","module":"tests/cases/bounds_guard_shadowed_exit.ts","line":12,"panics":[{"kind":"call","line":14,"column":5,"callee":"Proc.exit","via":"overflow"},{"kind":"index","line":16,"column":10,"proven":false}]},
+{"name":"test","symbol":"test","module":"tests/cases/bounds_guard_shadowed_exit.ts","line":19,"panics":[{"kind":"call","line":19,"column":35,"callee":"pick","via":"overflow"}]}
+]}

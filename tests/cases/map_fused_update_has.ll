@@ -808,22 +808,12 @@ if.end:
   %9 = getelementptr inbounds %struct.Map$i32$f64, %struct.Map$i32$f64* %this, i32 0, i32 4
   %10 = load %struct.nish_array*, %struct.nish_array** %9, align 8, !tbaa !24
   %11 = sext i32 %index to i64
-  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %14 = icmp ult i64 %11, %13
-  br i1 %14, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %11, i64 %13)
-  unreachable
-
-bounds.ok:
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %17 = bitcast i8* %16 to i32*
-  %18 = getelementptr inbounds i32, i32* %17, i64 %11
-  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %19
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %14 = bitcast i8* %13 to i32*
+  %15 = getelementptr inbounds i32, i32* %14, i64 %11
+  %16 = load i32, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %16
 }
 
 define internal noundef double @nish.Map$i32$f64.valueAt(%struct.Map$i32$f64* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #0 {
@@ -854,22 +844,12 @@ if.end:
   %9 = getelementptr inbounds %struct.Map$i32$f64, %struct.Map$i32$f64* %this, i32 0, i32 5
   %10 = load %struct.nish_array*, %struct.nish_array** %9, align 8, !tbaa !25
   %11 = sext i32 %index to i64
-  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %14 = icmp ult i64 %11, %13
-  br i1 %14, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %11, i64 %13)
-  unreachable
-
-bounds.ok:
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %17 = bitcast i8* %16 to double*
-  %18 = getelementptr inbounds double, double* %17, i64 %11
-  %19 = load double, double* %18, align 8, !alias.scope !4, !noalias !3, !tbaa !28
-  ret double %19
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %14 = bitcast i8* %13 to double*
+  %15 = getelementptr inbounds double, double* %14, i64 %11
+  %16 = load double, double* %15, align 8, !alias.scope !4, !noalias !3, !tbaa !28
+  ret double %16
 }
 
 define internal void @nish.Map$i32$f64.setValueAt(%struct.Map$i32$f64* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, double noundef %value) #3 {

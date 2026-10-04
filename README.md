@@ -109,14 +109,33 @@ nish run hello.ts             # build into a cache and run it: a script, still n
 The IR is readable as is. `examples/add.ts` compiles to:
 
 ```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
 define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
 entry:
-  %0 = add nsw i32 %a, %b
-  ret i32 %0
+  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 ```
+
+Nothing bounds `a` and `b`, so the `+` is checked: an overflow panics with
+`attempt to add with overflow` rather than wrapping or being undefined, and a
+sum the compiler proves fits is a plain `add nsw` instead
+([Semantics decisions](docs/LANGUAGE.md#semantics-decisions)).
 
 `--plain` drops the attributes and alignment hints and leaves
 `define i32 @add(i32 %a, i32 %b)` with the same body. Every construct's IR
@@ -148,9 +167,10 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io`, which is the same builtin under a name nothing can shadow | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
 | Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic type aliases, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
-Semantics that differ from JavaScript on purpose: signed integer overflow is
-undefined behaviour (`wrappingAdd`, `wrappingSub` and `wrappingMul` from
-`nish:unsafe` wrap two's-complement; the unsigned widths wrap either way), integer division by zero panics instead of
+Semantics that differ from JavaScript on purpose: signed integer overflow
+panics unless the compiler proves the operation fits (`wrappingAdd`,
+`wrappingSub` and `wrappingMul` from `nish:unsafe` wrap two's-complement; the
+unsigned widths wrap either way), integer division by zero panics instead of
 yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 `toI32` saturates, `Math.min`/`max` take two arguments. The reasons are in the
 [FAQ](docs/FAQ.md); [docs/wp13-differential.md](docs/wp13-differential.md)
@@ -249,7 +269,7 @@ Not any one of them; it is more useful to say which piece came from where.
 | Bounds and panics | Rust with `panic=abort` | C |
 | Null | Kotlin and C# nullable reference types: flow narrowing, not a wrapper type | Rust's `Option<T>` |
 | Errors | Rust: `Result<T, E>`, and `orReturn()` is `?` | exceptions, or Go's second return value |
-| Signed overflow | C: undefined by default; Rust's `wrapping_add` as an imported call to opt out at one site | Rust, where it is defined in both profiles |
+| Signed overflow | Rust's debug profile: a checked panic, in every build, unless the compiler proves the operation fits; Rust's `wrapping_add` as an imported call to opt out at one site | C, where it is undefined |
 | Syntax | TypeScript | |
 
 The older relative is region inference as in Cyclone and MLKit: regions the
@@ -260,7 +280,7 @@ weaker: one global arena, per-function granularity, no region polymorphism.
 ### Where it is not safe
 
 > [!CAUTION]
-> Four holes, every one of them asked for by name.
+> Three holes, every one of them asked for by name.
 
 - **`Arena.reset()` / `Arena.release(m)`** release or recycle in O(1), and
   doing either while anything allocated after the mark is still referenced is
@@ -277,18 +297,12 @@ weaker: one global arena, per-function granularity, no region polymorphism.
   `--unchecked-indexing` does the same to every index of your own package and
   never reaches a dependency or `nish/`
   ([`nish:unsafe`](docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)).
-- **Signed integer overflow is undefined** by default, so LLVM may widen
-  induction variables and strength-reduce loops; `wrappingAdd`, `wrappingSub`
-  and `wrappingMul` from `nish:unsafe` wrap two's-complement for a hash or an
-  LCG that overflows on purpose, and the deprecated `--wrapping` does it for
-  your own package's operators
-  ([Semantics](docs/LANGUAGE.md#semantics-decisions)).
 - **Interop** hands a pointer to a C, wasm or N-API host, and what happens to
   it there is the host's business
   ([wp8-interop.md](docs/wp8-interop.md)).
 
 Memory-safe like Go, allocated like Zig, errors like Rust, nulls like Kotlin,
-overflow like C — with two C-shaped holes you have to ask for by name. What it
+overflow checked like Rust's debug builds — with two C-shaped holes you have to ask for by name. What it
 buys is the output: no GC, no runtime, and the sizes under
 [Performance and binary size](#performance-and-binary-size).
 
@@ -320,8 +334,8 @@ nish run [options] <file.ts> [args ...]
                              (x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin,
                              aarch64-apple-darwin, wasm32-unknown-unknown, wasm32-wasi); default: target-neutral IR
   --wrapping                 deprecated: signed add/sub/mul of the entry package's modules wrap
-                             (default: they carry `nsw`, so signed overflow is undefined, like C;
-                             use wrappingAdd/wrappingSub/wrappingMul from nish:unsafe)
+                             (default: an operation not proven to fit is checked and panics on
+                             overflow; use wrappingAdd/wrappingSub/wrappingMul from nish:unsafe)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
   --threads                  give every thread its own arena and random seed; the runtime is
                              built to match by --link (no language surface: nothing in the
@@ -429,8 +443,8 @@ building, a `Vec3` method loop, each in Nish, C and Rust with identical
 algorithms and a shared checksum) is run by `node bench/run.mjs`, which
 writes [docs/BENCHMARKS.md](docs/BENCHMARKS.md): wall time, binary size and
 peak memory per column, plus the exact build commands. The analysis of every
-gap, and what `--nsw` and PGO (`scripts/build.sh --pgo-generate` /
-`--pgo-use`) buy, is in [docs/wp9-optimisation.md](docs/wp9-optimisation.md);
+gap, and what `nsw` and PGO (`scripts/build.sh --pgo-generate` /
+`--pgo-use`) bought when overflow was still undefined, is in [docs/wp9-optimisation.md](docs/wp9-optimisation.md);
 the rules of the game are in [bench/README.md](bench/README.md).
 
 ---
