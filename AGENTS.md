@@ -120,7 +120,13 @@ Every `--json` object is flat:
   (or `reportPerformanceFix`, `reportPortabilityFix`) and, in the checker,
   `ctx.errorFix` / `ctx.performanceFix` with edits built by `ctx.edit`, and
   every fix and every shape refused one has a case in
-  [`tests/fix/`](./tests/fix/README.md).
+  [`tests/fix/`](./tests/fix/README.md). One warning carries a fix: NL9007,
+  an index not proven in range inside a loop, inserts
+  `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
+  before the statement, which the bounds analysis credits, and only where the
+  index is an `i32`, nothing before the access in that statement is
+  conditional, repeated, a call or an assignment, and `panic` and `toI32` are
+  the builtins.
 - **`nish --fix <files> [flags]`** applies them (`src/fix.ts`): it compiles,
   takes every fix in a file named on the command line (never one under
   `node_modules`, the standard library or a `nish:` module), drops a fix that

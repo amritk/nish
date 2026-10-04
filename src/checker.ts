@@ -54,6 +54,7 @@ import {
   N_BREAK,
   N_CLASS,
   N_CONSTRUCTOR,
+  N_CONDITIONAL,
   N_CONTINUE,
   N_DO,
   N_EMPTY,
@@ -67,6 +68,7 @@ import {
   N_EXPORT_DECLARATION,
   N_IMPORT,
   N_IMPORT_EQUALS,
+  N_IMPORT_SPEC,
   N_INDEX,
   N_INTERFACE,
   N_LABELED,
@@ -80,6 +82,7 @@ import {
   N_NEW,
   N_NUMBER,
   N_OBJECT,
+  N_PARAM,
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
@@ -116,6 +119,7 @@ import {
   StructTemplateInfo,
 } from "./program"
 import { BoundsWalk, analyzeBounds } from "./bounds"
+import { isAssignmentOperator } from "./emit-util"
 import { checkResultLocalsHandled } from "./result"
 import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
@@ -1636,13 +1640,192 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   if (holder.length === 0 || name.length === 0) {
     return
   }
-  walk.ctx.performance(
-    index,
+  const message =
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
-      "compares against the length on every iteration: guard it with a test that reaches the access — " +
-      `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
-      "the upper one"
-  )
+    "compares against the length on every iteration: guard it with a test that reaches the access — " +
+    `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
+    "the upper one"
+  const edits = boundsGuardEdits(walk, access, index, name, holder)
+  if (edits.length > 0) {
+    walk.ctx.performanceFix(index, message, edits)
+  } else {
+    walk.ctx.performance(index, message)
+  }
+}
+
+/**
+ * The fix NL9007 carries: a guard inserted at the start of the statement that
+ * holds the access, which `src/bounds.ts` credits because its failing branch
+ * ends in `panic`. `toI32(xs.length)` is the one spelling of the upper bound
+ * that compiles and is credited in both number modes: under `--number-mode
+ * f64` the length is an `f64` and `i < xs.length` does not compile.
+ *
+ * Applying it changes nothing on an index in range, and an index out of range
+ * still stops the program with status 1, at a `panic` rather than at the
+ * runtime's index error. That holds only when nothing the statement does
+ * before the access can be skipped or reordered by the earlier test, so the
+ * fix is offered only where `guardStatement` finds such a statement, the
+ * index is an `i32` the guard's compare is typed for (an `i64` or unsigned one
+ * has no credited spelling), and `panic` and `toI32` are the builtins. An
+ * empty list means the warning goes out with no fix.
+ */
+const boundsGuardEdits = (
+  walk: PerfWalk,
+  access: Node,
+  index: Node,
+  name: string,
+  holder: string
+): Edit[] => {
+  const ctx = walk.ctx
+  const none: Edit[] = []
+  const type = ctx.program.nodeTypes[index.id]
+  if (type !== T_I32 && !ctx.table.isRanged(type)) {
+    return none
+  }
+  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, "toI32")) {
+    return none
+  }
+  const stmt = guardStatement(walk.body, access)
+  if (stmt === null) {
+    return none
+  }
+  // The statement's own indentation when it starts a line, so the guard reads
+  // as the line above it; a statement sharing its line keeps it.
+  const text = ctx.source.text
+  let lineStart = stmt.start
+  while (lineStart > 0 && (text.charCodeAt(lineStart - 1) === 32 || text.charCodeAt(lineStart - 1) === 9)) {
+    lineStart = lineStart - 1
+  }
+  const ownLine = lineStart === 0 || text.charCodeAt(lineStart - 1) === 10
+  const after = ownLine ? `\n${text.substring(lineStart, stmt.start)}` : " "
+  const guard = `if (!(${name} >= 0 && ${name} < toI32(${holder}.length))) { panic("index out of range") }`
+  const edits: Edit[] = [ctx.edit(stmt.start, stmt.start, guard + after)]
+  return edits
+}
+
+/**
+ * The statement a guard for `access` goes before, or `null` when there is
+ * none it can safely go before. It is the innermost statement of a block that
+ * holds the access, and the guard runs everything up to the access earlier
+ * than the statement did, so the path down to the access may not pass through
+ * anything that runs it conditionally or more than once — a branch of an
+ * `if`, a `? :` or an `&&` / `||` other than its first operand, a loop, which
+ * is also where an access in a loop's own condition ends up — and the rest of
+ * the statement may not call, allocate or assign, which could resize the
+ * array, move the index or print before the access fails.
+ */
+const guardStatement = (body: Node, access: Node): Node | null => {
+  const path: Node[] = []
+  if (!pathTo(body, access, path)) {
+    return null
+  }
+  let at = -1
+  let i = 0
+  while (i + 1 < path.length) {
+    if (path[i].kind === N_BLOCK) {
+      at = i + 1
+    }
+    i = i + 1
+  }
+  if (at < 0) {
+    return null
+  }
+  i = at
+  while (i + 1 < path.length) {
+    const node = path[i]
+    const first = node.children.length > 0 && node.children[0] === path[i + 1]
+    const logical = node.kind === N_BINARY && (node.text === "&&" || node.text === "||")
+    const branches = node.kind === N_IF || node.kind === N_CONDITIONAL || node.kind === N_SWITCH || logical
+    const repeats =
+      node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR || node.kind === N_FOR_OF
+    if ((branches && !first) || repeats || node.kind === N_ARROW || node.kind === N_LABELED) {
+      return null
+    }
+    i = i + 1
+  }
+  const stmt = path[at]
+  return hasEffectOffPath(stmt, path) ? null : stmt
+}
+
+/** Push the nodes from `node` down to `target` onto `path`, and answer whether `target` is under `node`. */
+const pathTo = (node: Node, target: Node, path: Node[]): boolean => {
+  path.push(node)
+  if (node === target) {
+    return true
+  }
+  for (const child of node.children) {
+    if (child.start <= target.start && target.end <= child.end && pathTo(child, target, path)) {
+      return true
+    }
+  }
+  path.pop()
+  return false
+}
+
+/**
+ * Whether anything under `node` that is not on `path` calls, allocates or
+ * assigns. The nodes on the path are the access and what consumes its value,
+ * which all run after the access; `charCodeAt` is let through because it only
+ * reads an immutable string, so an index sharing a statement with it can still
+ * be guarded.
+ */
+const hasEffectOffPath = (node: Node, path: Node[]): boolean => {
+  let onPath = false
+  for (const step of path) {
+    onPath = onPath || step === node
+  }
+  if (!onPath) {
+    const callee = node.kind === N_CALL ? unwrapPerfParens(node.children[0]) : node
+    const reads = node.kind === N_CALL && callee.kind === N_MEMBER && callee.text === "charCodeAt"
+    if ((node.kind === N_CALL && !reads) || node.kind === N_NEW) {
+      return true
+    }
+    if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+      return true
+    }
+    if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (hasEffectOffPath(child, path)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether the module declares `name` anywhere: a function, a class, a
+ * constant, a local, a parameter or an import. A guard calls `panic` and
+ * `toI32` by name, so any such declaration might be what the call reaches
+ * instead of the builtin, and the fix is not offered at all rather than
+ * reasoning about scopes.
+ */
+const declaresName = (node: Node, name: string): boolean => {
+  const k = node.kind
+  const declares =
+    k === N_VAR_DECL ||
+    k === N_PARAM ||
+    k === N_FUNCTION ||
+    k === N_CLASS ||
+    k === N_INTERFACE ||
+    k === N_ENUM ||
+    k === N_TYPE_ALIAS ||
+    k === N_IMPORT_SPEC
+  if (declares) {
+    for (const child of node.children) {
+      if (child.kind === N_IDENT && child.text === name) {
+        return true
+      }
+    }
+  }
+  for (const child of node.children) {
+    if (declaresName(child, name)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The test that proves `name` into `[lo, hi]`, for a range starting at 0 or at `-2147483648`. */
