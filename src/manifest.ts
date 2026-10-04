@@ -303,10 +303,6 @@ export class CapabilityManifest {
   }
 }
 
-/** The byte at `at`, or -1 past either end: what lets the policy reader below stop at the end of the text as it stops at a break. */
-const manifestByteAt = (text: string, at: i32): i32 =>
-  at >= 0 && at < text.length ? text.charCodeAt(at) : -1
-
 /** A policy refused for its shape, read no further: NL3032's opening and the span of what broke it. */
 const manifestPolicyProblem = (problem: string, start: i32, end: i32): CapabilityManifest => {
   const out = new CapabilityManifest()
@@ -323,11 +319,12 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
     // The reader stops at the first break, so a policy below one would be
     // dropped in silence; a manifest that mentions one is refused there instead.
     const broken = manifest.indexOf('"capabilities"') >= 0 ? manifestMalformedAt(manifest) : -1
-    return broken < 0
-      ? out
-      : manifestPolicyProblem("`package.json` stops being JSON here", broken, broken + 1)
+    return broken < 0 ? out : manifestPolicyProblem("`package.json` stops being JSON here", broken, broken)
   }
-  if (manifestByteAt(manifest, at) !== OPEN_BRACE) {
+  // Every position below is tested against the text's length before it is
+  // stepped past, so each `+ 1` and `- 1` is proven to fit and carries no
+  // overflow check (docs/LANGUAGE.md, "Semantics decisions").
+  if (at >= manifest.length || manifest.charCodeAt(at) !== OPEN_BRACE) {
     return manifestPolicyProblem("`capabilities` is not an object", at, manifestEndOfValue(manifest, at))
   }
   // A key written twice is refused rather than read twice: JSON.parse keeps
@@ -335,11 +332,14 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
   // disagrees with what one of the two lists says.
   let denyGiven = false
   let i = manifestSkipBlank(manifest, at + 1)
-  while (manifestByteAt(manifest, i) !== CLOSE_BRACE) {
-    const keyEnd = manifestByteAt(manifest, i) === QUOTE ? manifestEndOfString(manifest, i) : -1
-    const colon = keyEnd < 0 ? -1 : manifestSkipBlank(manifest, keyEnd)
-    if (colon < 0 || manifestByteAt(manifest, colon) !== COLON) {
-      return manifestPolicyProblem("`capabilities` cannot be read here", i, i + 1)
+  while (i >= 0 && i < manifest.length && manifest.charCodeAt(i) !== CLOSE_BRACE) {
+    const keyEnd = manifest.charCodeAt(i) === QUOTE ? manifestEndOfString(manifest, i) : -1
+    if (keyEnd <= i || keyEnd <= 0) {
+      return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
+    }
+    const colon = manifestSkipBlank(manifest, keyEnd)
+    if (colon < 0 || colon >= manifest.length || manifest.charCodeAt(colon) !== COLON) {
+      return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
     }
     const key = manifest.substring(i + 1, keyEnd - 1)
     const valueAt = manifestSkipBlank(manifest, colon + 1)
@@ -350,7 +350,12 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
     if ((key === "allow" && out.allowGiven) || (key === "deny" && denyGiven)) {
       return manifestPolicyProblem(`\`${key}\` is written twice`, i, keyEnd)
     }
-    if (valueEnd < 0 || manifestByteAt(manifest, valueAt) !== OPEN_BRACKET) {
+    if (
+      valueEnd < 0 ||
+      valueAt < 0 ||
+      valueAt >= manifest.length ||
+      manifest.charCodeAt(valueAt) !== OPEN_BRACKET
+    ) {
       return manifestPolicyProblem(`\`${key}\` is not an array`, valueAt, valueEnd)
     }
     if (key === "allow") {
@@ -361,11 +366,14 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
       manifestReadList(manifest, valueAt, out.deny)
     }
     i = manifestSkipBlank(manifest, valueEnd)
-    if (manifestByteAt(manifest, i) === COMMA) {
+    if (i >= 0 && i < manifest.length && manifest.charCodeAt(i) === COMMA) {
       i = manifestSkipBlank(manifest, i + 1)
-    } else if (manifestByteAt(manifest, i) !== CLOSE_BRACE) {
-      return manifestPolicyProblem("`capabilities` cannot be read here", i, i + 1)
+    } else if (i < 0 || i >= manifest.length || manifest.charCodeAt(i) !== CLOSE_BRACE) {
+      return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
     }
+  }
+  if (i < 0 || i >= manifest.length) {
+    return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
   }
   return out
 }
