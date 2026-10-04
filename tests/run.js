@@ -3668,6 +3668,25 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 // the command line decides: which files are named, and which may be rewritten.
 // `tests/fix/README.md` is the table.
 {
+  // A case's sidecar, trimmed, or `fallback` when it has none.
+  const sidecar = (file, fallback) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : fallback)
+  // A plain run exits 1 on an error and 0 on a program whose only diagnostics
+  // are warnings, so a warning's fix names its plain status in `plain-exit`.
+  const plainExit = (file) => Number(sidecar(file, "1"))
+  // `code` names the diagnostic a case is about, so a case whose diagnostic
+  // stopped firing fails rather than passing for having nothing to fix.
+  // After the fix it is checked the other way: a fixed program no longer
+  // reports it, so a fix that leaves its own diagnostic standing fails.
+  const codeCheck = (name, file, run, present = true) => {
+    const code = sidecar(file, "")
+    if (code.length > 0) {
+      check(
+        present ? `fix ${name}: reports ${code}` : `fix ${name}: the fixed program no longer reports ${code}`,
+        diagnosticsOf(run.stdout).some((d) => d.code === code) === present,
+        shown(run)
+      )
+    }
+  }
   const fixDir = path.join(root, "tests", "fix")
   // Every file of a directory case, as paths relative to it, depth first.
   const filesUnder = (dir, prefix = "") =>
@@ -3679,7 +3698,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
       .sort()
   // A case's `node-modules/` is its `node_modules/`, renamed so git keeps it.
   const workPath = (rel) => rel.replace(/^node-modules(?=\/)/, "node_modules")
-  const CONTROL = new Set(["argv", "exit", "rewrites", "same-as-plain"])
+  const CONTROL = new Set(["argv", "code", "exit", "plain-exit", "rewrites", "same-as-plain"])
   for (const name of fs.readdirSync(fixDir).sort()) {
     const caseDir = path.join(fixDir, name)
     if (!fs.statSync(caseDir).isDirectory() || (only && !name.includes(only) && !"fix".includes(only))) {
@@ -3702,10 +3721,11 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
       const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
       check(
         `fix ${name}: --json carries a \`fix\``,
-        plain.status === 1 &&
+        plain.status === plainExit(path.join(caseDir, "plain-exit")) &&
           diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
         shown(plain)
       )
+      codeCheck(name, path.join(caseDir, "code"), plain)
     }
     const fixed = spawnSync(NISH, ["--fix", "--json", ...argv], { cwd: work, encoding: "utf8" })
     // Each source comes out as its `.fixed.ts`, or byte-identical when it has none.
@@ -3732,6 +3752,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
         fixed.status === plainJson.status && fixed.stdout === plainJson.stdout,
         `--fix:\n${shown(fixed)}\nplain:\n${shown(plainJson)}`
       )
+      codeCheck(name, path.join(caseDir, "code"), plainJson)
       // The human report too, from a second --fix with nothing left to apply.
       const again = spawnSync(NISH, ["--fix", ...argv], { cwd: work, encoding: "utf8" })
       const plainHuman = spawnSync(NISH, [...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
@@ -3745,10 +3766,12 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     } else if (wantExit === 0) {
       const clean = spawnSync(NISH, ["--json", ...argv, "-o", "clean/"], { cwd: work, encoding: "utf8" })
       check(
-        `fix ${name}: the fixed program compiles with no error`,
-        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        `fix ${name}: the fixed program compiles with no error and nothing left to fix`,
+        clean.status === 0 &&
+          diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("fix" in d)),
         shown(clean)
       )
+      codeCheck(name, path.join(caseDir, "code"), clean, false)
     } else {
       // What --fix may not apply is still reported, fix and all.
       check(
@@ -3776,10 +3799,12 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     const plainObjects = diagnosticsOf(plain.stdout)
     const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
     const after = fs.readFileSync(path.join(work, file))
+    const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
+    codeCheck(name, path.join(fixDir, `${name}.code`), plain)
     if (noFix) {
       check(
         `fix ${name}: reported with no \`fix\` key`,
-        plain.status === 1 && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
         shown(plain)
       )
       check(
@@ -3791,7 +3816,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
       const expected = fs.readFileSync(path.join(fixDir, `${name}.fixed.ts`))
       check(
         `fix ${name}: --json carries a \`fix\``,
-        plain.status === 1 && plainObjects.some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        plain.status === wantPlain && plainObjects.some((d) => Array.isArray(d.fix) && d.fix.length > 0),
         shown(plain)
       )
       check(
@@ -3811,10 +3836,37 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
         encoding: "utf8",
       })
       check(
-        `fix ${name}: ${name}.fixed.ts compiles with no error`,
-        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        `fix ${name}: ${name}.fixed.ts compiles with no error and nothing left to fix`,
+        clean.status === 0 &&
+          diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("fix" in d)),
         shown(clean)
       )
+      codeCheck(name, path.join(fixDir, `${name}.code`), clean, false)
+      // `<name>.stdout`: the fix changes nothing the program does. The input
+      // and its `.fixed.ts` are linked and run, and both print this and exit
+      // with `<name>.run-exit` (default 0), which for an index out of range is
+      // the runtime's index error before the fix and the guard's panic after.
+      const stdoutFile = path.join(fixDir, `${name}.stdout`)
+      if (fs.existsSync(stdoutFile) && !HAS_CLANG) {
+        skip(`fix ${name}: the round trip needs clang`)
+      } else if (fs.existsSync(stdoutFile)) {
+        const want = fs.readFileSync(stdoutFile, "utf8")
+        const wantRun = Number(sidecar(path.join(fixDir, `${name}.run-exit`), "0"))
+        fs.writeFileSync(path.join(work, `${name}.orig.ts`), input)
+        for (const source of [`${name}.orig.ts`, `${name}.fixed.ts`]) {
+          const exe = path.join(work, source.replace(/\.ts$/, ""))
+          const built = spawnSync(NISH, [source, "-o", `${exe}.ll`, "--link", exe], {
+            cwd: work,
+            encoding: "utf8",
+          })
+          const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+          check(
+            `fix ${name}: ${source} prints ${name}.stdout and exits ${wantRun}`,
+            built.status === 0 && ran.status === wantRun && ran.stdout === want,
+            shown(ran)
+          )
+        }
+      }
     }
     fs.rmSync(work, { recursive: true, force: true })
   }
