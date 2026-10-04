@@ -3783,7 +3783,8 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   warning of its own at the site (NL7002):
   `` this index is unchecked only because of --unchecked-indexing, which is deprecated ``,
   then either the rewrite or why there is none
-  (`tests/wordings/nl7002_unchecked_index_site`). A site is a check the
+  (`tests/wordings/nl7002_unchecked_index_site`, and one `nl7002_*` pin per
+  shape that gets no fix, each with its reason). A site is a check the
   emitter writes without the flag: an element access the checker did not
   prove in range, the second check of a compound store whose right side calls
   something, an unproven `charCodeAt` or `pop`, and every `slice`, array `set`
@@ -3798,6 +3799,7 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   | --- | --- | --- |
   | `xs[i]` read, a number element and an `i32` or `i32`-based ranged index | `uncheckedGet(xs, i)` | `unsafe-index-get`, `unsafe-index-ranged`, `unsafe-index-readonly` |
   | `xs[i] = v` as a statement | `uncheckedSet(xs, i, v)` | `unsafe-index-set` |
+  | the same, written in parentheses, `(xs[i] = v)` | the whole parenthesised statement becomes the call | `unsafe-index-paren-store` |
   | `xs[i] op= v` as a statement, `xs`, `i` and `v` plain reads | `uncheckedSet(xs, i, uncheckedGet(xs, i) op v)`, `v` parenthesised unless it is one operand | `unsafe-index-update` |
   | `xs[i][j]` with number elements in the inner array | the access to the inner array; `xs[i]` keeps its warning | `unsafe-index-nested` |
 
@@ -3821,7 +3823,8 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   program then compiles without the flag and prints what it printed with it:
   `tests/link/unsafe-migrate-index-flag` runs `unsafe-index-equivalence`'s
   sources under the flag and `unsafe-migrate-index-fixed` runs their
-  `.fixed.ts` without it, against one `expected.out`.
+  `.fixed.ts` without it, against one `expected.out`; between them its four
+  modules hold every rewritten shape above.
 
 ### Constant time: `ctSelect` and `ctEq`
 

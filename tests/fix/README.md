@@ -47,8 +47,10 @@ run exits 1 on it; `--fix` fixes it in the first round, and a warning's fix is
 applied only once the program checks, so the rounds after that apply the
 warnings' fixes to `main.ts`, and the result must compile clean. A refused
 shape is a `main.ts` with no `main.fixed.ts`, which `--fix` must leave
-byte-identical, and each was checked by hand to report its warning with no
-`fix` under a plain `--json` run of `main.ts` alone.
+byte-identical. The runner cannot tell that it was reported at all — the
+seed's fix satisfies its first check alone — so each refused shape's warning
+is pinned, reason and all, by a `tests/wordings` case of its own: a build
+that stops reporting the warning fails every one of those pins.
 
 The `unsafe-index-` cases are that kind: every `argv` passes
 `--unchecked-indexing`, and each fixed shape and each refused one in the
@@ -59,6 +61,9 @@ one fix and the second the rest, after the round that fixes `seed.ts`.
 `unsafe-index-equivalence`'s sources and their `.fixed.ts` are the two link
 cases `tests/link/unsafe-migrate-index-flag` (under the flag) and
 `unsafe-migrate-index-fixed` (without it), which print one `expected.out`.
+Its four modules hold every fixed shape, so each rewrite is compiled and run
+without the flag; the fix runner itself compiles the result with the case's
+`argv`, flag included.
 
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.

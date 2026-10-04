@@ -1,0 +1,1 @@
+this index is unchecked only because of --unchecked-indexing, which is deprecated: `uncheckedSet` is a statement, and the value of this store is used, so dropping the flag puts its check back

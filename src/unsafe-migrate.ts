@@ -88,20 +88,24 @@ const NO_FORM_REASON: string = "`nish:unsafe` has no unchecked form of it"
 /**
  * One check the flag drops. `node` is the span reported: the access, the
  * call, or the compound store whose second check it is. A store is reported
- * at its access, so that the access and the store over it are one site, and
- * `store` is the assignment its rewrite replaces; it is `node` otherwise.
+ * at its access, so that the access and the store over it are one site;
+ * `store` is the assignment, and `span` what its rewrite replaces: the
+ * expression the statement holds, parentheses and all, because
+ * `uncheckedSet` has to be that expression. Both are `node` otherwise.
  * `reason` says why there is no fix, and a site with one has `SHAPE_NONE`.
  */
 class UncheckedSite {
   node: Node
   store: Node
+  span: Node
   what: string
-  shape: i32
   reason: string
+  shape: i32
 
-  constructor(node: Node, store: Node, what: string, shape: i32, reason: string) {
+  constructor(node: Node, store: Node, span: Node, what: string, shape: i32, reason: string) {
     this.node = node
     this.store = store
+    this.span = span
     this.what = what
     this.shape = reason.length > 0 ? SHAPE_NONE : shape
     this.reason = reason
@@ -156,7 +160,7 @@ export const reportUncheckedIndexSites = (
   }
   for (const into of modules) {
     if (into.program.uncheckedIndexing) {
-      new SiteWalk(into.program, table, into, false).walk(into.program.file, false)
+      new SiteWalk(into.program, table, into, false).walk(into.program.file, null)
     }
   }
   // A generic body is checked once per instantiation, into tables of its
@@ -202,7 +206,7 @@ const walkInstance = (
   for (const into of modules) {
     if (into.program.source === origin && into.program.uncheckedIndexing) {
       holder.enterInstance(info)
-      new SiteWalk(holder, table, into, true).walk(body, false)
+      new SiteWalk(holder, table, into, true).walk(body, null)
       holder.leaveInstance()
       return
     }
@@ -226,8 +230,12 @@ class SiteWalk {
     this.generic = generic
   }
 
-  /** `statement` is true for the expression of an expression statement, the one place `uncheckedSet` may stand. */
-  walk(node: Node, statement: boolean): void {
+  /**
+   * `statement` is the expression of the expression statement `node` is, or
+   * is inside only through parentheses: the one place `uncheckedSet` may
+   * stand, and the span its rewrite replaces. `null` everywhere else.
+   */
+  walk(node: Node, statement: Node | null): void {
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && this.isArrayIndex(node.children[0])) {
       const target = node.children[0]
       if (!this.program.nodeProvenIndex[target.id]) {
@@ -237,9 +245,9 @@ class SiteWalk {
         // right side that may resize the array (CG-10); the flag drops that one.
         this.noForm(node, "the second check of this compound store")
       }
-      this.walk(target.children[0], false)
-      this.walk(target.children[1], false)
-      this.walk(node.children[1], false)
+      this.walk(target.children[0], null)
+      this.walk(target.children[1], null)
+      this.walk(node.children[1], null)
       return
     }
     if (node.kind === N_INDEX && this.isArrayIndex(node) && !this.program.nodeProvenIndex[node.id]) {
@@ -248,7 +256,11 @@ class SiteWalk {
       this.noteCall(node)
     }
     for (const child of node.children) {
-      this.walk(child, node.kind === N_EXPR_STMT)
+      if (node.kind === N_EXPR_STMT) {
+        this.walk(child, child)
+      } else {
+        this.walk(child, node.kind === N_PAREN ? statement : null)
+      }
     }
   }
 
@@ -263,22 +275,23 @@ class SiteWalk {
 
   noteRead(node: Node): void {
     const reason = this.generic ? GENERIC_REASON : this.accessRefusal(node)
-    this.record(new UncheckedSite(node, node, "this index", SHAPE_GET, reason))
+    this.record(new UncheckedSite(node, node, node, "this index", SHAPE_GET, reason))
   }
 
-  noteStore(assign: Node, target: Node, statement: boolean): void {
+  noteStore(assign: Node, target: Node, statement: Node | null): void {
     let reason = this.generic ? GENERIC_REASON : this.accessRefusal(target)
     if (reason.length === 0) {
-      reason = storeRefusal(assign, target, statement)
+      reason = storeRefusal(assign, target, statement !== null)
     }
     const shape = assign.text === "=" ? SHAPE_SET : SHAPE_UPDATE
-    this.record(new UncheckedSite(target, assign, "this index", shape, reason))
+    const span = statement === null ? assign : statement
+    this.record(new UncheckedSite(target, assign, span, "this index", shape, reason))
   }
 
   /** A check `nish:unsafe` has no form of, so its site never has a fix. */
   noForm(node: Node, what: string): void {
     this.record(
-      new UncheckedSite(node, node, what, SHAPE_NONE, this.generic ? GENERIC_REASON : NO_FORM_REASON)
+      new UncheckedSite(node, node, node, what, SHAPE_NONE, this.generic ? GENERIC_REASON : NO_FORM_REASON)
     )
   }
 
@@ -488,19 +501,20 @@ const siteEdit = (source: SourceFile, get: string, set: string, site: UncheckedS
       `${get}(${textOf(source, access.children[0])}, ${textOf(source, access.children[1])})`
     )
   }
-  // A store is reported at its target and rewritten whole, from the start of
-  // the access, which is where the assignment starts, to its end.
+  // A store is reported at its target and rewritten whole: the statement's
+  // expression, parentheses included, becomes the call.
   const target = site.node
   const assign = site.store
+  const span = site.span
   const xs = textOf(source, target.children[0])
   const i = textOf(source, target.children[1])
   if (site.shape === SHAPE_SET) {
-    return new Edit(assign.start, assign.end, `${set}(${xs}, ${i}, ${textOf(source, assign.children[1])})`)
+    return new Edit(span.start, span.end, `${set}(${xs}, ${i}, ${textOf(source, assign.children[1])})`)
   }
   const value = assign.children[1]
   const op = assign.text.substring(0, assign.text.length - 1)
   const right = isAtom(value) ? textOf(source, value) : `(${textOf(source, value)})`
-  return new Edit(assign.start, assign.end, `${set}(${xs}, ${i}, ${get}(${xs}, ${i}) ${op} ${right})`)
+  return new Edit(span.start, span.end, `${set}(${xs}, ${i}, ${get}(${xs}, ${i}) ${op} ${right})`)
 }
 
 /** An operand that needs no parentheses after a binary operator. */

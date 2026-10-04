@@ -1,0 +1,1 @@
+this index is unchecked only because of --unchecked-indexing, which is deprecated: it is in a generic body, whose element and index types are decided per instantiation, and one rewrite would have to hold for each, so dropping the flag puts its check back
