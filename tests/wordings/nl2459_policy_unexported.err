@@ -1,0 +1,1 @@
+`load` reaches `fs.read`, which the capability policy does not grant (`--deny fs.read`); the chain that reaches it: nl2459_policy_unexported.ts:4:40 calls readFileSync

@@ -1,0 +1,1 @@
+package.json:5:3: error: `ni\u0073h` is written with an escape, which this reader does not decode: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names

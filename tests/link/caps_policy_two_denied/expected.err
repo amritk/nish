@@ -1,0 +1,1 @@
+main.ts:9:7: error: `main` reaches `net`, which the capability policy does not grant (`--deny net`); the chain that reaches it: main.ts:9:7 calls dial, client.ts:5:10 calls netAddress

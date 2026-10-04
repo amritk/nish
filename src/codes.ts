@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 576
+export const RULE_COUNT: i32 = 581
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -251,6 +251,8 @@ const diagnosticRules = (): string[] => [
   "NL2055",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
   "NL2288",
+  ".capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names",
+  "NL3032",
   "` may have been wiped already, and a wiped `Secret` holds zeros: read it before `wipe`, or make a new one",
   "NL2443",
   "Object literal needs a contextual class or interface type (annotate the variable: `const p: P = { ... }`)",
@@ -269,6 +271,8 @@ const diagnosticRules = (): string[] => [
   "NL2395",
   "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
   "NL2128",
+  "` is both allowed and denied in the root package's capability policy; a policy says one or the other",
+  "NL3035",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
   "NL2123",
   " compiles one copy of a package per program, so every import of it has to reach the same directory",
@@ -297,6 +301,8 @@ const diagnosticRules = (): string[] => [
   "NL2151",
   ">(n)` would zero-fill with 0, which is outside the range; build it with `[]` and `push` instead",
   "NL2386",
+  "` is no capability: a policy names capabilities as `--emit-capabilities` reports them, one of ",
+  "NL3033",
   "` returns is the one thing that leaves the secret, so it is written down rather than inferred",
   "NL2452",
   "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (",
@@ -567,6 +573,8 @@ const diagnosticRules = (): string[] => [
   "NL2040",
   "` in a constant of integer type (annotate it `f64`)",
   "NL2068",
+  "` is the opt-in to it, so a policy can only deny it",
+  "NL3034",
   "`: an unconstrained type parameter has no members; ",
   "NL2329",
   "`Number` expects a string, number, or boolean, got ",
@@ -617,6 +625,8 @@ const diagnosticRules = (): string[] => [
   "NL2082",
   "` is not part of the standard library (it has: ",
   "NL3011",
+  "`, which the capability policy does not grant (",
+  "NL2459",
   " values; build it with `[]` and `push` instead",
   "NL2022",
   ", and a declared C function takes scalars only",

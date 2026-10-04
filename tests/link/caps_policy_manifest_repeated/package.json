@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-repeated",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["fs.read"], "allow": ["exit"] }
+  }
+}

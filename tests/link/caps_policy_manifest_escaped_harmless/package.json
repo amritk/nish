@@ -1,0 +1,8 @@
+{
+  "n\u0061me": "caps-policy-manifest-escaped-harmless",
+  "description": "\u0063apabilities in a value",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["env"] }
+  }
+}

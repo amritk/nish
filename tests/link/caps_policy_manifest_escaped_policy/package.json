@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-escaped-policy",
+  "private": true,
+  "nish": {
+    "\u0063apabilities": { "deny": ["net"] }
+  }
+}

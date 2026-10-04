@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-allow-narrowed",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["fs.read"] }
+  }
+}

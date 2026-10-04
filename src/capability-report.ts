@@ -26,6 +26,7 @@ import { ROOT_PACKAGE } from "./packages"
 import { isStdModule } from "./std-modules"
 import { dirname, relativePath } from "./paths"
 import { Node } from "./nodes"
+import { SourceFile } from "./diagnostics"
 import { CheckedProgram, FunctionSig } from "./program"
 import { siteReportEntry, sitesOf } from "./panics"
 import { compareStrings, jsonQuote } from "./strings"
@@ -128,6 +129,116 @@ const pushNames = (out: string[], mask: i32): void => {
 }
 
 /**
+ * Every function the program defines, by symbol, with the report's path of
+ * the module it is defined in: what a witness chain is followed through, since
+ * a chain names its next hop by symbol. `moduleMasks` is each module's set,
+ * the union over the functions defined in it, in `modules` order.
+ */
+export class FunctionIndex {
+  bySymbol: StringMap
+  sigs: FunctionSig[]
+  sigModules: i32[]
+  paths: string[]
+  moduleMasks: i32[]
+
+  constructor() {
+    this.bySymbol = new StringMap()
+    this.sigs = []
+    this.sigModules = []
+    this.paths = []
+    this.moduleMasks = []
+  }
+}
+
+export const functionIndex = (compilation: Compilation, facts: FactsTable): FunctionIndex => {
+  const index = new FunctionIndex()
+  const root = dirname(compilation.entry().path)
+  let m = 0
+  for (const unit of compilation.modules) {
+    const program = unit.checker.program
+    let mask = 0
+    for (const sig of program.functions) {
+      if (sig.definedIn(program.source)) {
+        mask = mask | capsOf(facts, sig)
+        if (index.bySymbol.get(sig.name, -1) < 0) {
+          index.bySymbol.set(sig.name, index.sigs.length)
+          index.sigs.push(sig)
+          index.sigModules.push(m)
+        }
+      }
+    }
+    index.paths.push(modulePath(compilation, root, unit))
+    index.moduleMasks.push(mask)
+    m = m + 1
+  }
+  return index
+}
+
+/**
+ * One call of a witness chain: the function that makes it, where, and what it
+ * calls, as the report prints them. `source` and `site` are the call itself,
+ * which is where a refusal for the capability is spanned
+ * (`Compilation.refuseCapabilities`); null only when the facts have no site.
+ */
+export class WitnessHop {
+  caller: string
+  at: string
+  calls: string
+  source: SourceFile | null
+  site: Node | null
+
+  constructor(caller: string, at: string, calls: string, source: SourceFile | null, site: Node | null) {
+    this.caller = caller
+    this.at = at
+    this.calls = calls
+    this.source = source
+    this.site = site
+  }
+}
+
+/**
+ * The witness chain of capability `c` from `sig`, one call per hop: each hop
+ * is one call nearer the builtin, so it ends within `dist` hops, and the bound
+ * only guards that promise. The last hop calls the builtin, or the
+ * `declare function`, itself. Empty when `sig` does not reach `c`.
+ */
+export const witnessChain = (
+  index: FunctionIndex,
+  facts: FactsTable,
+  sig: FunctionSig,
+  c: i32
+): WitnessHop[] => {
+  const chain: WitnessHop[] = []
+  const f = facts.get(sig.name)
+  if (f === null || (f.caps & (1 << c)) === 0) {
+    return chain
+  }
+  let current: FunctionFacts | null = f
+  let hopSig: FunctionSig = sig
+  const limit = c < f.capDist.length ? f.capDist[c] + 1 : 0
+  while (current !== null && chain.length < limit && c < current.capDist.length) {
+    const site: Node | null = c < current.capSite.length ? current.capSite[c] : null
+    const via: string = c < current.capVia.length ? current.capVia[c] : ""
+    const dist: i32 = current.capDist[c]
+    const home = index.bySymbol.get(hopSig.name, -1)
+    const origin = hopSig.origin
+    let where = ""
+    if (site !== null && origin !== null && home >= 0 && home < index.sigModules.length) {
+      const hm = index.sigModules[home]
+      const hopPath = hm >= 0 && hm < index.paths.length ? index.paths[hm] : ""
+      where = `${hopPath}:${origin.lineOf(site.start)}:${origin.columnOf(site.start)}`
+    }
+    const callee: i32 = dist > 0 ? index.bySymbol.get(via, -1) : -1
+    const next: FunctionFacts | null = callee >= 0 ? facts.get(via) : null
+    const nextSig = callee >= 0 && callee < index.sigs.length ? index.sigs[callee] : hopSig
+    chain.push(new WitnessHop(hopSig.sourceName, where, callee >= 0 ? nextSig.sourceName : via, origin, site))
+    current = next
+    hopSig = nextSig
+  }
+  return chain
+}
+
+/**
  * Write the whole report for a compilation that has checked to `file`. It runs
  * the attribute fixpoint if nothing has yet (`analyze` is memoised, so the emit
  * that follows does not run it again). The caller has made the directory.
@@ -137,32 +248,9 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
   const root = dirname(compilation.entry().path)
   const modules = compilation.modules
 
-  // Every function the program defines, by symbol, with its module: what a
-  // witness chain is followed through, since a chain names its next hop by
-  // symbol. A module's mask is the union over the functions defined in it.
-  const bySymbol = new StringMap()
-  const sigs: FunctionSig[] = []
-  const sigModules: i32[] = []
-  const paths: string[] = []
-  const moduleMasks: i32[] = []
-  let m = 0
-  for (const unit of modules) {
-    const program = unit.checker.program
-    let mask = 0
-    for (const sig of program.functions) {
-      if (sig.definedIn(program.source)) {
-        mask = mask | capsOf(facts, sig)
-        if (bySymbol.get(sig.name, -1) < 0) {
-          bySymbol.set(sig.name, sigs.length)
-          sigs.push(sig)
-          sigModules.push(m)
-        }
-      }
-    }
-    paths.push(modulePath(compilation, root, unit))
-    moduleMasks.push(mask)
-    m = m + 1
-  }
+  const index = functionIndex(compilation, facts)
+  const paths = index.paths
+  const moduleMasks = index.moduleMasks
 
   // Packages, sorted with the root first and the rest by name. A module's
   // group is its package, except that the standard library is a group of its
@@ -305,40 +393,17 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
               out.push(first ? "                " : ",\n                ")
               out.push(`"${capabilityName(c)}": [\n`)
               first = false
-              // The chain, one call per line: each hop is one call nearer the
-              // builtin, so it ends within `dist` hops, and the bound only
-              // guards that promise. The last hop calls the builtin, or the
-              // `declare function`, itself.
-              let current: FunctionFacts | null = f
-              let hopSig: FunctionSig = sig
-              let hops = 0
-              const limit = c < f.capDist.length ? f.capDist[c] + 1 : 0
-              while (current !== null && hops < limit && c < current.capDist.length) {
-                const site: Node | null = c < current.capSite.length ? current.capSite[c] : null
-                const via: string = c < current.capVia.length ? current.capVia[c] : ""
-                const dist: i32 = current.capDist[c]
-                const home = bySymbol.get(hopSig.name, -1)
-                const origin = hopSig.origin
-                let where = ""
-                if (site !== null && origin !== null && home >= 0 && home < sigModules.length) {
-                  const hm = sigModules[home]
-                  const hopPath = hm >= 0 && hm < paths.length ? paths[hm] : ""
-                  where = `${hopPath}:${origin.lineOf(site.start)}:${origin.columnOf(site.start)}`
-                }
-                const callee: i32 = dist > 0 ? bySymbol.get(via, -1) : -1
-                const next: FunctionFacts | null = callee >= 0 ? facts.get(via) : null
-                const nextSig = callee >= 0 && callee < sigs.length ? sigs[callee] : hopSig
-                const calls = callee >= 0 ? nextSig.sourceName : via
+              const chain = witnessChain(index, facts, sig, c)
+              let h = 0
+              for (const hop of chain) {
                 out.push('                  { "function": ')
-                out.push(jsonQuote(hopSig.sourceName))
+                out.push(jsonQuote(hop.caller))
                 out.push(', "at": ')
-                out.push(jsonQuote(where))
+                out.push(jsonQuote(hop.at))
                 out.push(', "calls": ')
-                out.push(jsonQuote(calls))
-                out.push(next !== null ? " },\n" : " }\n")
-                current = next
-                hopSig = nextSig
-                hops = hops + 1
+                out.push(jsonQuote(hop.calls))
+                out.push(h < chain.length - 1 ? " },\n" : " }\n")
+                h = h + 1
               }
               out.push("                ]")
             }

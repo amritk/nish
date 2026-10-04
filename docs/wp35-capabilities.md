@@ -283,7 +283,8 @@ and one edge per user call.
 - **Enforcement** of any kind — a manifest field under `"nish"` in
   `package.json`, a `--deny` flag, a diagnostic that refuses a program. That
   is the next work package, and it reads this analysis rather than repeating
-  it.
+  it. It landed as WP36 ([wp36-capability-policy.md](wp36-capability-policy.md)),
+  which also wired the `unsafe` bit.
 - Capability-typed handles and `using` tokens.
 - Argument-level precision: which path is read, which host is dialled, taint.
 - `nish:unsafe`: the bit is reserved and labels nothing yet; the module's

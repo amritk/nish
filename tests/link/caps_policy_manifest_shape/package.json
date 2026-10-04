@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-shape",
+  "private": true,
+  "nish": {
+    "capabilities": ["net"]
+  }
+}

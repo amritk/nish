@@ -61,6 +61,7 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
+import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
 import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
@@ -69,6 +70,7 @@ import { generateDts } from "./interop-dts"
 import { generateHeader } from "./interop-header"
 import { generateNapiShim, napiBridges } from "./interop-napi"
 import { generateWasmLoader, wasmLoaderPath } from "./interop-wasm"
+import { unsafeModule } from "./nish-modules"
 import { Options } from "./options"
 import { basenameWithout, dirname } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
@@ -80,7 +82,7 @@ import { resolveTarget, supportedTargets } from "./target"
 import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -367,6 +369,47 @@ const missingToolchain = (asker: string): string => {
   return lines.join("\n")
 }
 
+/** The byte that separates the names of one `--allow` or `--deny` value. */
+const COMMA: i32 = 44
+
+/**
+ * WP36: one `--allow` or `--deny` value, `fs.read,exit`, as a mask
+ * (`src/capabilities.ts`), or -1 once it has printed why the line is refused,
+ * which is exit 2 like every usage error (docs/wp36-capability-policy.md §2).
+ * A name is exactly one `--emit-capabilities` prints. A directory scope is
+ * refused rather than read as the whole capability: the compiler cannot prove
+ * which path a program opens, and nothing at run time holds it to one, so a
+ * scope it accepted would be a promise nobody keeps.
+ */
+const capabilityListMask = (flag: string, list: string): i32 => {
+  let mask = 0
+  for (const name of splitByte(list, COMMA)) {
+    const scope = name.indexOf("=")
+    const whole = scope >= 0 ? name.slice(0, scope) : name
+    const index = capabilityIndex(whole)
+    if (index < 0) {
+      console.error(
+        `compile: \`${flag} ${name}\` names no capability; the names are ${everyCapabilityName()}`
+      )
+      return -1
+    }
+    if (scope >= 0) {
+      console.error(
+        `compile: \`${flag} ${name}\` scopes a capability to a directory, which the compiler cannot prove and nothing enforces: grant \`${whole}\` whole, or leave it out`
+      )
+      return -1
+    }
+    if ((optInCapabilities() & (1 << index)) !== 0 && flag === "--allow") {
+      console.error(
+        `compile: \`--allow unsafe\` is refused: importing \`${unsafeModule()}\` is the opt-in to it, so a policy can only deny it (\`--deny unsafe\`)`
+      )
+      return -1
+    }
+    mask = mask | (1 << index)
+  }
+  return mask
+}
+
 export const main = (): number => {
   if (process.argv.length < 2) {
     console.error(usageText())
@@ -405,6 +448,10 @@ export const main = (): number => {
   // driver-level, like the warnings: they change no byte of the IR.
   let capabilitiesFile = ""
   let capabilitiesLine = false
+  // WP36: the first policy flag seen, for the refusals that name it, and what
+  // the `--allow`s granted between them (an allowlist is their union).
+  let policyFlag = ""
+  let allowed = 0
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
@@ -527,6 +574,23 @@ export const main = (): number => {
       capabilitiesFile = process.argv[arg]
     } else if (value === "--capabilities") {
       capabilitiesLine = true
+    } else if (value === "--allow" || value === "--deny") {
+      policyFlag = policyFlag.length === 0 ? value : policyFlag
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error(`compile: ${value} needs a list of capabilities, such as fs.read,exit`)
+        return 2
+      }
+      const mask = capabilityListMask(value, process.argv[arg])
+      if (mask < 0) {
+        return 2
+      }
+      if (value === "--allow") {
+        allowed = allowed | mask
+        opts.allowCapabilities = allowed
+      } else {
+        opts.denyCapabilities = opts.denyCapabilities | mask
+      }
     } else if (value === "--fix") {
       notForRun = notForRun.length === 0 ? value : notForRun
       fix = true
@@ -644,12 +708,32 @@ export const main = (): number => {
     )
     return 2
   }
+  // A policy is judged on the analysed program, which `--fix` never reaches.
+  if (fix && policyFlag.length > 0) {
+    console.error(
+      `compile: \`${policyFlag}\` cannot be used with --fix, which answers before the program is analysed; fix first, then compile`
+    )
+    return 2
+  }
+  // A capability both granted and refused is a line that contradicts itself,
+  // and either reading of it would be a guess.
+  const both = opts.denyCapabilities & allowed
+  if (both !== 0) {
+    console.error(
+      `compile: \`${capabilityNames(both)[0]}\` is both allowed and denied on the command line; a policy says one or the other`
+    )
+    return 2
+  }
   // `--emit-ast` answers before the checker runs, and a capability is a fact
   // about a checked program, so the two would otherwise meet in silence.
   // After `run`'s own refusals, which name the flag `run` cannot take.
-  if (emitAst && (capabilitiesFile.length > 0 || capabilitiesLine)) {
+  if (emitAst && (capabilitiesFile.length > 0 || capabilitiesLine || policyFlag.length > 0)) {
+    let refused = capabilitiesLine ? "--capabilities" : "--emit-capabilities"
+    if (policyFlag.length > 0) {
+      refused = policyFlag
+    }
     console.error(
-      `compile: \`${capabilitiesLine ? "--capabilities" : "--emit-capabilities"}\` reports on a checked program, and --emit-ast stops before the check`
+      `compile: \`${refused}\` reports on a checked program, and --emit-ast stops before the check`
     )
     return 2
   }

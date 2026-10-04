@@ -1,0 +1,1 @@
+package.json:5:45: error: `allow` is written twice: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names

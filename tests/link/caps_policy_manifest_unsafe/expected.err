@@ -1,0 +1,1 @@
+package.json:5:42: error: `unsafe` cannot be allowed: importing `nish:unsafe` is the opt-in to it, so a policy can only deny it

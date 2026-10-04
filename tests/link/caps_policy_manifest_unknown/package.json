@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-unknown",
+  "private": true,
+  "nish": {
+    "capabilities": { "deny": ["network"] }
+  }
+}

@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_unknown_key/package.json","line":5,"column":23,"endLine":5,"endColumn":31,"severity":"error","code":"NL3032","message":"`permit` is no key of `capabilities`: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names"}

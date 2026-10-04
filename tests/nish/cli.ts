@@ -104,6 +104,8 @@ const advertisedFlags = (): string[] => [
   "--fix",
   "--emit-capabilities",
   "[--capabilities]",
+  "--allow",
+  "--deny",
   "run [flags] <file.ts> [args ...]",
 ];
 
@@ -702,6 +704,131 @@ const checkCapabilities = (t: Suite, cli: Cli, env: boolean): void => {
   }
   t.eqI32("nish run --capabilities runs the program, and answers its status", ran.status, 0);
   t.eqStr("and prints exactly the one line on stderr", ran.stderr, "capabilities: none (deterministic)\n");
+  t.eqStr("and leaves the program's stdout alone", ran.stdout, "true\n6\n3.5\n");
+};
+
+/**
+ * WP36, the capability policy (docs/wp36-capability-policy.md): each way a
+ * `--allow` or `--deny` line can be refused is a usage error, exit 2, said on
+ * stderr with nothing on stdout; a program inside the policy compiles to the
+ * IR it compiles to without one; a program outside it is refused, band 1, with
+ * one `--json` object whose code is the rule's (NL2459), and `nish run`
+ * refuses it before it runs.
+ */
+const checkCapabilityPolicy = (t: Suite, cli: Cli, env: boolean): void => {
+  const source = "tests/cases/caps_generic.ts";
+  const usage: string[] = [
+    "--allow",
+    "fs.reads",
+    "names no capability",
+    "--allow",
+    "unsafe",
+    "`--allow unsafe` is refused",
+    "--allow",
+    "fs.read=/tmp",
+    "scopes a capability to a directory",
+    "--deny",
+    "net,,exit",
+    "names no capability",
+  ];
+  let k = 0;
+  while (k + 2 < usage.length) {
+    const flag = usage[k];
+    const value = usage[k + 1];
+    const words = usage[k + 2];
+    const refused = cli.plain("policy_usage", [source, flag, value]);
+    t.eqI32(`\`${flag} ${value}\` is a usage error, exit 2`, refused.status, 2);
+    t.contains("and says why on stderr", refused.stderr, words);
+    t.eqStr("and nothing on stdout", trim(refused.stdout), "");
+    k = k + 3;
+  }
+  const both = cli.plain("policy_both", [source, "--allow", "net,fs.read", "--deny", "net"]);
+  t.eqI32("a capability both allowed and denied is a usage error, exit 2", both.status, 2);
+  t.contains("and names the capability", both.stderr, "`net` is both allowed and denied");
+  const noValue = cli.plain("policy_no_value", [source, "--deny"]);
+  t.eqI32("--deny with no list exits 2", noValue.status, 2);
+  const ast = cli.plain("policy_ast", [source, "--deny", "net", "--emit-ast"]);
+  t.eqI32("--deny with --emit-ast exits 2", ast.status, 2);
+  const fix = cli.plain("policy_fix", [source, "--allow", "fs.read", "--fix"]);
+  t.eqI32("--allow with --fix exits 2", fix.status, 2);
+
+  const plainIr = `${WORK}/policy_plain.ll`;
+  const grantedIr = `${WORK}/policy_granted.ll`;
+  cli.plain("policy_plain", [source, "-o", plainIr]);
+  const granted = cli.plain("policy_granted", [source, "-o", grantedIr, "--allow", "fs.read", "--deny", "net"]);
+  if (t.eqI32("a program inside its policy compiles, exit 0", granted.status, 0)) {
+    t.eqStr("to the IR a compile with no policy writes", readOrEmpty(grantedIr), readOrEmpty(plainIr));
+  }
+  const denied = cli.plain("policy_denied", [source, "--deny", "fs.read", "--json", "-o", `${WORK}/policy_denied.ll`]);
+  if (t.eqI32("a program that reaches a denied capability exits 1", denied.status, 1)) {
+    const objects = cliObjectLines(denied.stdout);
+    if (t.eqI32("with one object under --json", toI32(objects.length), 1)) {
+      t.eqStr("whose code is the policy's", cliField(objects[0], "code"), "NL2459");
+      t.contains("and whose message names the capability", cliField(objects[0], "message"), "reaches `fs.read`");
+    }
+  }
+
+  // An open build is judged on every function a host can call, in every
+  // module: here a second root's export, behind a header, with no `main`.
+  writeFileSync(`${WORK}/policy_entry.ts`, "export const answer = (): i32 => 42;\n");
+  writeFileSync(`${WORK}/policy_lib.ts`, "export const stamp = (): f64 => Date.now();\n");
+  const library = cli.plain("policy_library", [
+    `${WORK}/policy_entry.ts`,
+    `${WORK}/policy_lib.ts`,
+    "--emit-header",
+    `${WORK}/policy.h`,
+    "-o",
+    `${WORK}/policy_library/`,
+    "--deny",
+    "clock",
+    "--json",
+  ]);
+  if (t.eqI32("a header build is refused for a second module's export, exit 1", library.status, 1)) {
+    const objects = cliObjectLines(library.stdout);
+    if (t.eqI32("with one object under --json", toI32(objects.length), 1)) {
+      t.contains("naming the export", cliField(objects[0], "message"), "`stamp` reaches `clock`");
+    }
+  }
+  // One object per refused capability, in source order like every diagnostic.
+  writeFileSync(
+    `${WORK}/policy_two.ts`,
+    [
+      "export const main = (): number => {",
+      '  const home = getenv("HOME");',
+      "  return Date.now() > 0 && home !== null ? 0 : 1;",
+      "};",
+      "",
+    ].join("\n")
+  );
+  const two = cli.plain("policy_two", [`${WORK}/policy_two.ts`, "--deny", "clock,env", "--json", "-o", `${WORK}/policy_two/`]);
+  if (t.eqI32("a program reaching two denied capabilities exits 1", two.status, 1)) {
+    const objects = cliObjectLines(two.stdout);
+    if (t.eqI32("with one object per capability under --json", toI32(objects.length), 2)) {
+      t.contains("the first is the earlier call, `env`", cliField(objects[0], "message"), "reaches `env`");
+      t.contains("the second the later, `clock`", cliField(objects[1], "message"), "reaches `clock`");
+      t.eqStr("both with the policy's code", `${cliField(objects[0], "code")} ${cliField(objects[1], "code")}`, "NL2459 NL2459");
+    }
+  }
+
+  if (!env) {
+    t.skip("nish run --deny", "needs env(1) to set XDG_CACHE_HOME, and the probe did not find one");
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("nish run --deny", `cannot resolve ${WORK}`);
+    return;
+  }
+  const cache = `XDG_CACHE_HOME=${abs}/policy-cache`;
+  const refusedRun = cli.run("policy_run_denied", [cache], ["run", "--deny", "fs.read", source]);
+  t.eqI32("nish run refuses a program outside its policy, exit 1", refusedRun.status, 1);
+  t.eqStr("before the program runs", refusedRun.stdout, "");
+  const ran = cli.run("policy_run", [cache], ["run", "--deny", "net", "tests/cases/caps_pure.ts"]);
+  if (ran.status === 3 && contains(ran.stderr, "no usable C compiler")) {
+    t.skip("nish run --deny", "no C compiler, so nothing can be linked");
+    return;
+  }
+  t.eqI32("nish run --deny runs a program inside its policy", ran.status, 0);
   t.eqStr("and leaves the program's stdout alone", ran.stdout, "true\n6\n3.5\n");
 };
 
@@ -1471,6 +1598,7 @@ export const main = (): number => {
   checkPanicSites(t, cli);
   checkDenyPanics(t, cli);
   checkCapabilities(t, cli, env);
+  checkCapabilityPolicy(t, cli, env);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
   checkInternalError(t, cli, env);

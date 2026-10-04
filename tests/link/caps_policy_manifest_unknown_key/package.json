@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-unknown-key",
+  "private": true,
+  "nish": {
+    "capabilities": { "permit": ["net"] }
+  }
+}

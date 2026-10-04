@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-allow-intersect",
+  "private": true,
+  "nish": {
+    "capabilities": { "allow": ["fs.read", "env"] }
+  }
+}

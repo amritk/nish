@@ -1,0 +1,1 @@
+`main` reaches `fs.read`, which the capability policy does not grant (`--deny fs.read`); the chain that reaches it: nl2459_policy_deny.ts:5:35 calls settings, nl2459_policy_deny.ts:3:32 calls readFileSync

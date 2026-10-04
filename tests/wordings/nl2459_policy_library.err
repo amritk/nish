@@ -1,0 +1,1 @@
+`stamp` reaches `clock`, which the capability policy does not grant (`--deny clock`); the chain that reaches it: nl2459_policy_library.ts:3:33 calls Date.now

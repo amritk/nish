@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-escaped-nish",
+  "private": true,
+  "ni\u0073h": {
+    "capabilities": { "deny": ["net"] }
+  }
+}
