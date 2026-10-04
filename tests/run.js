@@ -3675,12 +3675,14 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
   const plainExit = (file) => Number(sidecar(file, "1"))
   // `code` names the diagnostic a case is about, so a case whose diagnostic
   // stopped firing fails rather than passing for having nothing to fix.
-  const codeCheck = (name, file, run) => {
+  // After the fix it is checked the other way: a fixed program no longer
+  // reports it, so a fix that leaves its own diagnostic standing fails.
+  const codeCheck = (name, file, run, present = true) => {
     const code = sidecar(file, "")
     if (code.length > 0) {
       check(
-        `fix ${name}: reports ${code}`,
-        diagnosticsOf(run.stdout).some((d) => d.code === code),
+        present ? `fix ${name}: reports ${code}` : `fix ${name}: the fixed program no longer reports ${code}`,
+        diagnosticsOf(run.stdout).some((d) => d.code === code) === present,
         shown(run)
       )
     }
@@ -3769,6 +3771,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
           diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("fix" in d)),
         shown(clean)
       )
+      codeCheck(name, path.join(caseDir, "code"), clean, false)
     } else {
       // What --fix may not apply is still reported, fix and all.
       check(
@@ -3838,6 +3841,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
           diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("fix" in d)),
         shown(clean)
       )
+      codeCheck(name, path.join(fixDir, `${name}.code`), clean, false)
       // `<name>.stdout`: the fix changes nothing the program does. The input
       // and its `.fixed.ts` are linked and run, and both print this and exit
       // with `<name>.run-exit` (default 0), which for an index out of range is

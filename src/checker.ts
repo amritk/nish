@@ -1685,8 +1685,10 @@ const boundsGuardEdits = (
   if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, "toI32")) {
     return none
   }
+  // A statement that declares the index or the receiver (`const j = i, v = xs[j]`)
+  // would have the guard read it before its declaration.
   const stmt = guardStatement(walk.body, access)
-  if (stmt === null) {
+  if (stmt === null || declaresName(stmt, name) || declaresName(stmt, holder)) {
     return none
   }
   // The statement's own indentation when it starts a line, so the guard reads
@@ -1709,7 +1711,7 @@ const boundsGuardEdits = (
  * holds the access, and the guard runs everything up to the access earlier
  * than the statement did, so the path down to the access may not pass through
  * anything that runs it conditionally or more than once — a branch of an
- * `if`, a `? :` or an `&&` / `||` other than its first operand, a loop, which
+ * `if`, a `? :` or an `&&` / `||` / `??` other than its first operand, a loop, which
  * is also where an access in a loop's own condition ends up — and the rest of
  * the statement may not call, allocate or assign, which could resize the
  * array, move the index or print before the access fails. The branches of
@@ -1739,7 +1741,7 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     const node = path[i]
     const down = i + 1 < path.length ? path[i + 1] : node
     const first = node.children.length > 0 && node.children[0] === down
-    const logical = node.kind === N_BINARY && (node.text === "&&" || node.text === "||")
+    const logical = node.kind === N_BINARY && (node.text === "&&" || node.text === "||" || node.text === "??")
     const branches = node.kind === N_IF || node.kind === N_CONDITIONAL || node.kind === N_SWITCH || logical
     const repeats =
       node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR || node.kind === N_FOR_OF

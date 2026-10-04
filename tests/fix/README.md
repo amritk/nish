@@ -11,9 +11,9 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 | `<name>.rounds` (optional) | how many rounds `--fix` takes: one `fixed <file>` line on stderr per round that rewrote the file |
 | `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
 | `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1; a program whose only diagnostics are warnings exits 0 |
-| `<name>.code` (optional) | a code the plain `--json` run must report, so a case whose diagnostic stopped firing fails rather than passing with nothing to fix |
+| `<name>.code` (optional) | a code the plain `--json` run must report, so a case whose diagnostic stopped firing fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it |
 | `<name>.stdout` (optional) | beside a `.fixed.ts`: the input and the fixed program are each linked and run, and both must print exactly this and exit with `<name>.run-exit` (default 0). Skipped without clang |
-| `<name>/` | a case of several files, for what the command line decides: which files are named and which may be rewritten. `argv` lists the files `--fix` is given; every `x.ts` comes out as its `x.fixed.ts`, or byte-identical when there is none; `exit` (default 0) is `--fix`'s status; `rewrites` (optional) counts the `fixed <file>` lines on stderr. A case that exits 0 must then compile clean, and one that does not must still report the fix it was not allowed to apply. With `same-as-plain`, the report instead has to be byte for byte what a plain run (human and `--json`) prints about the files `--fix` leaves. `plain-exit` and `code` are the sidecars above, checked on the plain run (on the run after `--fix` under `same-as-plain`). `node-modules/` is copied as `node_modules/`, which git would ignore here |
+| `<name>/` | a case of several files, for what the command line decides: which files are named and which may be rewritten. `argv` lists the files `--fix` is given; every `x.ts` comes out as its `x.fixed.ts`, or byte-identical when there is none; `exit` (default 0) is `--fix`'s status; `rewrites` (optional) counts the `fixed <file>` lines on stderr. A case that exits 0 must then compile clean, and one that does not must still report the fix it was not allowed to apply. With `same-as-plain`, the report instead has to be byte for byte what a plain run (human and `--json`) prints about the files `--fix` leaves. `plain-exit` and `code` are the sidecars above, checked on the plain run (on the run after `--fix` under `same-as-plain`), and `code` is checked absent from the fixed program when `--fix` exits 0. `node-modules/` is copied as `node_modules/`, which git would ignore here |
 
 A case is named in kebab-case for the family of rule it fixes — `eq-` for
 loose equality, `expr-` for the expression checker's fixes, `decl-` for the
@@ -44,12 +44,14 @@ The `guard-` cases are NL9007's, whose fix is a guard
 before the statement that ends in `panic`, which the bounds analysis credits.
 A fixed program compiles with no diagnostic left that carries a fix, which is
 what keeps a guard the analysis did not credit from being inserted again every
-round. `guard-array` and `guard-out-of-range` run the program before and after
+round, and each fixed case's `code` is NL9007, which the fixed program must no
+longer report. `guard-array` and `guard-out-of-range` run the program before and after
 the fix: the same output in range, and status 1 out of range, from the
 runtime's index error before and from the guard's panic after. Each refused
 shape — an `i64` or unsigned index, an access in a loop's condition or behind
-`? :`, a call before it in the statement, a `panic` or `toI32` the module
-declares — has a case, and each fails when its refusal in `boundsGuardEdits`
+`? :`, `&&` or `??`, a call before it in the statement, a statement that
+declares the index, a `panic` or `toI32` the module declares, as a function,
+a parameter or a local — has a case, and each fails when its refusal in `boundsGuardEdits`
 (`src/checker.ts`) is taken out. `guard-nofix-deny-panics` pins the last
 refused shape: under `--deny-panics` the index is an error (NL2457), so the
 program does not check and no warning's fix is applied.
