@@ -120,7 +120,7 @@ Every `--json` object is flat:
   (or `reportPerformanceFix`, `reportPortabilityFix`) and, in the checker,
   `ctx.errorFix` / `ctx.performanceFix` with edits built by `ctx.edit`, and
   every fix and every shape refused one has a case in
-  [`tests/fix/`](./tests/fix/README.md). One warning carries a fix: NL9007,
+  [`tests/fix/`](./tests/fix/README.md). A warning can carry one too. NL9007,
   an index not proven in range inside a loop, inserts
   `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
   before the statement, which the bounds analysis credits, and only where the

@@ -1,0 +1,1 @@
+this `pop` is unchecked only because of --unchecked-indexing, which is deprecated: `nish:unsafe` has no unchecked form of it, so dropping the flag puts its check back

@@ -86,9 +86,10 @@ changes or five rounds pass; then it reports what is left exactly as a plain
 run would, `--json` included, and exits with that run's code. It writes no IR,
 so it refuses `-o` and `--link`. It rewrites your files in place, with no
 backup, so run it on a committed or backed-up tree. Run it first, then read
-what remains. A warning can carry a fix too: `NL9007`'s inserts the guard that
-proves an index in range, and `--fix` applies it only when the program
-compiles and the warning would be printed (not under `--no-warn-performance`).
+what remains. A warning can carry a fix too, and `--fix` applies it only when the program
+compiles and the warning would be printed: `NL9007`'s inserts the guard that
+proves an index in range (not under `--no-warn-performance`), and `NL7002`'s
+migrates a site off `--unchecked-indexing` (below).
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -225,7 +226,12 @@ numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
 Calling one without the import is NL2456. `--unchecked-indexing` and
 `--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
-never a dependency or `nish/`.
+never a dependency or `nish/`. To migrate off `--unchecked-indexing`, run
+`nish --unchecked-indexing --fix` on your files: each index the flag leaves
+unchecked is a `deprecation` warning of its own (NL7002), and where the site
+is a number array with an `i32` index its `fix` rewrites it to `uncheckedGet`
+or `uncheckedSet` and adds the import. A site with no rewrite keeps its
+warning; dropping the flag gives it back its bounds check.
 
 ```ts nish:ok
 import { uncheckedGet, wrappingAdd, wrappingMul } from "nish:unsafe";

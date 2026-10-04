@@ -1,0 +1,1 @@
+this index is unchecked only because of --unchecked-indexing, which is deprecated: a compound store becomes a read and a write that evaluate the array and the index twice, and here the array, the index or the right side calls, constructs or assigns, so dropping the flag puts its check back

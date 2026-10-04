@@ -1,0 +1,1 @@
+this index is unchecked only because of --unchecked-indexing, which is deprecated: the module already uses the name `uncheckedGet`, which the `nish:unsafe` import would bind, so dropping the flag puts its check back
