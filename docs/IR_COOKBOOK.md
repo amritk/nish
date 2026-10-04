@@ -2385,22 +2385,12 @@ if.end:
   %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
   %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !22
   %10 = sext i32 %index to i64
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %13 = icmp ult i64 %10, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %10, i64 %12)
-  unreachable
-
-bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %16 = bitcast i8* %15 to i32*
-  %17 = getelementptr inbounds i32, i32* %16, i64 %10
-  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %18
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %15
 }
 
 define internal void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i32 noundef %value) #2 {
@@ -3239,7 +3229,6 @@ export const total = (m: Map<i32, i32>): i32 => {
 
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_exit(i32 noundef) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
@@ -3423,22 +3412,12 @@ if.end:
   %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
   %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !19
   %10 = sext i32 %index to i64
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %13 = icmp ult i64 %10, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %10, i64 %12)
-  unreachable
-
-bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %16 = bitcast i8* %15 to i32*
-  %17 = getelementptr inbounds i32, i32* %16, i64 %10
-  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %18
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %15
 }
 
 attributes #0 = { nounwind }
@@ -4055,22 +4034,12 @@ if.end:
   %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
   %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !22
   %10 = sext i32 %index to i64
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %13 = icmp ult i64 %10, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %10, i64 %12)
-  unreachable
-
-bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %16 = bitcast i8* %15 to i32*
-  %17 = getelementptr inbounds i32, i32* %16, i64 %10
-  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %18
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %15
 }
 
 define internal void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i32 noundef %value) #2 {
@@ -5682,22 +5651,12 @@ if.end:
   %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
   %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !23
   %10 = sext i32 %index to i64
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %13 = icmp ult i64 %10, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %10, i64 %12)
-  unreachable
-
-bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  %16 = bitcast i8* %15 to i32*
-  %17 = getelementptr inbounds i32, i32* %16, i64 %10
-  %18 = load i32, i32* %17, align 4, !alias.scope !10, !noalias !9, !tbaa !17
-  ret i32 %18
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10
+  %15 = load i32, i32* %14, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  ret i32 %15
 }
 
 define internal void @nish.Map$str$i32.insertAt(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this, i64 noundef %absent, i8* noundef nonnull noalias readonly align 8 %key, i32 noundef %value) #0 {
@@ -9868,6 +9827,15 @@ attributes #1 = { nounwind noreturn cold }
 !13 = !{!12, !12, i64 0}
 ```
 <!-- cookbook:end arr-index -->
+
+The check is left out wherever the checker has proved the index in range
+([Element access](LANGUAGE.md#element-access)), a guard ending in the builtin
+`panic(…)` or `process.exit(…)` included: after
+`if (i < 0 || i >= a.length) { panic("…") }`, `a[i]` is the `getelementptr`
+and the load alone, with no `bounds.fail` block
+(`tests/cases/bounds_panic_guard`, `bounds_exit_guard`; `bounds_guard_not_exit`
+and the shadowed `bounds_guard_shadowed_exit` and `bounds_guard_shadowed_panic`
+keep it).
 
 ### A byte element: the same lowering at width 1
 
