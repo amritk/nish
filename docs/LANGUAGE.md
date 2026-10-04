@@ -5512,15 +5512,20 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
-  manifest writes them: the wrong shape, a key written twice included — `allow`, `deny`,
-  `capabilities` or `"nish"` itself (NL3032, `tests/link/caps_policy_manifest_shape`,
-  `caps_policy_manifest_repeated`, `caps_policy_manifest_repeated_policy`,
-  `caps_policy_manifest_repeated_nish`), and a `"nish"` or `capabilities` key written
-  with an escape the reader does not decode (`caps_policy_manifest_escaped_nish`,
-  `caps_policy_manifest_escaped_policy`, `caps_policy_manifest_escaped_second_nish`), a name that is no capability
-  (NL3033, `caps_policy_manifest_unknown`), `unsafe` under `allow` (NL3034,
+  manifest writes them: the wrong shape of `capabilities`, `allow` or `deny`
+  written twice included (NL3032, `tests/link/caps_policy_manifest_shape`,
+  `caps_policy_manifest_repeated`), a name that is no capability (NL3033,
+  `caps_policy_manifest_unknown`), `unsafe` under `allow` (NL3034,
   `caps_policy_manifest_unsafe`) and a capability under both (NL3035,
   `caps_policy_manifest_both`).
+- **The `"nish"` field is read strictly**, as [the no-panic scope](#the-no-panic-scope) says:
+  a key is decoded as `JSON.parse` decodes it, so a policy written with an
+  escape is honoured (`caps_policy_manifest_escaped_policy`,
+  `caps_policy_manifest_escaped_entry`), and anything the reader could
+  otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
+  than `noPanic` and `capabilities` — is NL3036
+  (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
+  `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as
   it does with none (`tests/link/caps_policy_granted`,
   `caps_policy_manifest_granted`). `nish run` takes both flags and refuses
@@ -6457,6 +6462,19 @@ performance warning about the same check is not printed beside the error.
   reported in `package.json` where the entry is written: a typo would
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
+- **The root package's `"nish"` field is one object, written once, whose
+  keys are `noPanic` and `capabilities`, each written once**, and anything
+  else is an error (NL3036) where `package.json` writes it: a second `"nish"`
+  even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
+  a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
+  key it does not know, a misspelt `capabilites` included
+  (`caps_policy_manifest_nish_unknown_key`), a `noPanic` that is not an array
+  (`caps_policy_manifest_no_panic_not_array`), and a manifest that mentions
+  `nish` or carries a `\u` escape and stops being JSON
+  (`caps_policy_manifest_broken_json`). Each would otherwise leave part of
+  what the package says about itself unread. A key is decoded as `JSON.parse`
+  decodes it, so `"ni\u0073h"` is `"nish"`; an escape outside ASCII decodes
+  to a byte no name contains, so it never matches one.
 - **`--unchecked-indexing` is not a proof, and not an opt-in the scope
   takes.** It removes a check and makes an access out of range undefined
   behaviour with nothing in the source to show for it, so an index the flag

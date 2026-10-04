@@ -1,0 +1,1 @@
+package.json:5:16: error: `noPanic` is not an array: the root package's `nish` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once

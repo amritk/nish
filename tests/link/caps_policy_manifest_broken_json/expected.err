@@ -1,1 +1,1 @@
-package.json:7:1: error: `package.json` stops being JSON here: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names
+package.json:7:1: error: `package.json` stops being JSON here: the root package's `nish` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once

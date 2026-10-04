@@ -62,7 +62,7 @@
 // file arrived. The stage0 twin keeps the same names so the two stay diffable.
 
 import { isDigit } from "./lexer"
-import { splitByte } from "./strings"
+import { splitByte, StringBuilder } from "./strings"
 
 const TAB: i32 = 9
 const NEWLINE: i32 = 10
@@ -78,7 +78,16 @@ const DIGIT_ZERO: i32 = 48
 const COLON: i32 = 58
 const UPPER_E: i32 = 69
 const LOWER_A: i32 = 97
+const LOWER_B: i32 = 98
+const LOWER_F: i32 = 102
+const LOWER_N: i32 = 110
+const LOWER_R: i32 = 114
+const LOWER_T: i32 = 116
+const UPPER_A: i32 = 65
+const UPPER_F: i32 = 70
 const LOWER_U: i32 = 117
+/** Above any position a manifest reaches, so a span end `+ 1` past one is provably in range. */
+const MANIFEST_SPAN_LIMIT: i32 = 1073741824
 const LOWER_Z: i32 = 122
 const BACKSLASH: i32 = 92
 const OPEN_BRACE: i32 = 123
@@ -247,7 +256,10 @@ const manifestReadList = (manifest: string, at: i32, out: ManifestList): void =>
     if (end <= i) {
       return
     }
-    out.entries.push(manifestUnquoted(manifest.substring(i, end)))
+    // A string is decoded, escapes and all, as JSON.parse reads it; anything
+    // else is kept as written, and so names nothing and is reported.
+    const decoded: string | null = manifest.charCodeAt(i) === QUOTE ? manifestDecodeString(manifest, i) : null
+    out.entries.push(decoded !== null ? decoded : manifest.substring(i, end))
     out.offsets.push(i)
     out.ends.push(end)
     i = manifestSkipBlank(manifest, end)
@@ -257,21 +269,299 @@ const manifestReadList = (manifest: string, at: i32, out: ManifestList): void =>
   }
 }
 
-/** Where the root package's `"nish"` field's `name` value starts in `manifest`, or -1 when it has none. */
-const manifestNishFieldAt = (manifest: string, condition: string, name: string): i32 => {
-  const nishAt = manifestFieldAt(manifest, condition)
-  if (nishAt < 0) {
-    return -1
+/**
+ * A JSON string at `text[at]` (its opening quote) decoded as JSON.parse
+ * decodes it, or null when it is not a well-formed string. An escape that
+ * stands for a character outside ASCII becomes DEL (127), which no name this
+ * reader compares against contains, so it can never match one by accident.
+ * Every position is tested against the length before it is stepped past, and
+ * the hex digits are combined by shifts, so nothing here carries an overflow
+ * check.
+ */
+const manifestDecodeString = (text: string, at: i32): string | null => {
+  if (at < 0 || at >= text.length || text.charCodeAt(at) !== QUOTE) {
+    return null
   }
-  const at = manifestFieldAt(manifest.substring(nishAt, manifestEndOfValue(manifest, nishAt)), name)
-  return at < 0 ? -1 : nishAt + at
+  const out = new StringBuilder()
+  let i = at + 1
+  while (i >= 0 && i < text.length) {
+    const code = text.charCodeAt(i)
+    if (code === QUOTE) {
+      return out.toText()
+    }
+    if (code !== BACKSLASH) {
+      out.addChar(code)
+      i = i + 1
+      continue
+    }
+    i = i + 1
+    if (i >= text.length) {
+      return null
+    }
+    const escaped = text.charCodeAt(i)
+    if (escaped === QUOTE || escaped === BACKSLASH || escaped === SLASH) {
+      out.addChar(escaped)
+    } else if (escaped === LOWER_B) {
+      out.addChar(8)
+    } else if (escaped === LOWER_F) {
+      out.addChar(12)
+    } else if (escaped === LOWER_N) {
+      out.addChar(NEWLINE)
+    } else if (escaped === LOWER_R) {
+      out.addChar(CARRIAGE_RETURN)
+    } else if (escaped === LOWER_T) {
+      out.addChar(TAB)
+    } else if (escaped === LOWER_U) {
+      let value = 0
+      let digits = 0
+      while (digits < 4) {
+        if (i < 0 || i >= text.length) {
+          return null
+        }
+        i = i + 1
+        if (i >= text.length) {
+          return null
+        }
+        const digit = manifestHexDigit(text.charCodeAt(i))
+        if (digit < 0) {
+          return null
+        }
+        value = (value << 4) | digit
+        digits = digits + 1
+      }
+      out.addChar(value < 128 ? value : 127)
+    } else {
+      return null
+    }
+    if (i < 0 || i >= text.length) {
+      return null
+    }
+    i = i + 1
+  }
+  return null
 }
 
-/** The root package's `"nish": { "noPanic": [...] }` (`ManifestList`). */
-export const manifestNoPanic = (manifest: string, condition: string): ManifestList => {
+/**
+ * The value of a hex digit, or -1 for any other byte. The low nibble of a
+ * digit is its value and that of a letter is its value less nine, so it is
+ * masked rather than subtracted, which keeps an overflow check out of it.
+ */
+const manifestHexDigit = (code: i32): i32 => {
+  if (isDigit(code)) {
+    return code & 15
+  }
+  if ((code >= LOWER_A && code <= LOWER_F) || (code >= UPPER_A && code <= UPPER_F)) {
+    return (code & 7) + 9
+  }
+  return -1
+}
+
+/**
+ * The members of the JSON object that opens at `text[at]`, in order: each
+ * key decoded (`manifestDecodeString`) beside where it and its value start and
+ * end. `broken` is where the walk could not read on, or -1 when it reached the
+ * closing brace; the members before it are kept. Every position is tested
+ * against the length before it is stepped past.
+ */
+class ManifestMembers {
+  keys: string[]
+  keyAt: i32[]
+  keyEnd: i32[]
+  valueAt: i32[]
+  valueEnd: i32[]
+  broken: i32
+
+  constructor() {
+    this.keys = []
+    this.keyAt = []
+    this.keyEnd = []
+    this.valueAt = []
+    this.valueEnd = []
+    this.broken = -1
+  }
+}
+
+const manifestMembers = (text: string, at: i32): ManifestMembers => {
+  const out = new ManifestMembers()
+  if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
+    out.broken = at
+    return out
+  }
+  let i = manifestSkipBlank(text, at + 1)
+  if (i >= 0 && i < text.length && text.charCodeAt(i) === CLOSE_BRACE) {
+    return out
+  }
+  while (i >= 0 && i < text.length) {
+    const key = manifestDecodeString(text, i)
+    const keyEnd = manifestEndOfString(text, i)
+    if (key === null || keyEnd <= i) {
+      out.broken = i
+      return out
+    }
+    const colon = manifestSkipBlank(text, keyEnd)
+    if (colon < 0 || colon >= text.length || text.charCodeAt(colon) !== COLON) {
+      out.broken = colon
+      return out
+    }
+    const valueAt = manifestSkipBlank(text, colon + 1)
+    const valueEnd = manifestEndOfValue(text, valueAt)
+    if (valueEnd <= valueAt) {
+      out.broken = valueAt
+      return out
+    }
+    out.keys.push(key)
+    out.keyAt.push(i)
+    out.keyEnd.push(keyEnd)
+    out.valueAt.push(valueAt)
+    out.valueEnd.push(valueEnd)
+    i = manifestSkipBlank(text, valueEnd)
+    if (i >= 0 && i < text.length && text.charCodeAt(i) === CLOSE_BRACE) {
+      return out
+    }
+    if (i < 0 || i >= text.length || text.charCodeAt(i) !== COMMA) {
+      out.broken = i
+      return out
+    }
+    i = manifestSkipBlank(text, i + 1)
+  }
+  out.broken = i
+  return out
+}
+
+/** The index of the first member whose key an earlier member already has, or -1. */
+const manifestRepeatedMember = (members: ManifestMembers): i32 => {
+  let k = 1
+  while (k < members.keys.length) {
+    let j = 0
+    while (j < k) {
+      if (members.keys[j] === members.keys[k]) {
+        return k
+      }
+      j = j + 1
+    }
+    k = k + 1
+  }
+  return -1
+}
+
+/**
+ * The root package's `"nish"` field, read strictly (docs/wp36-capability-policy.md
+ * §3): where its `noPanic` and `capabilities` values start, or -1 for one it
+ * does not write. `problem` is the opening of the NL3036 message when the
+ * field is not one object, written once, whose only keys are `noPanic` and
+ * `capabilities`, each written once, with the span it is reported at; both
+ * positions are then -1, so nothing in a field the reader cannot vouch for is
+ * honoured. Keys are decoded as JSON.parse decodes them, so an escaped
+ * spelling is the key it spells.
+ */
+export class NishManifest {
+  problem: string
+  problemStart: i32
+  problemEnd: i32
+  noPanicAt: i32
+  capabilitiesAt: i32
+
+  constructor() {
+    this.problem = ""
+    this.problemStart = 0
+    this.problemEnd = 0
+    this.noPanicAt = -1
+    this.capabilitiesAt = -1
+  }
+}
+
+/** A problem's span end: `end`, or one past `start` when `end` does not pass it. */
+const manifestSpanEnd = (start: i32, end: i32): i32 => {
+  if (end > start) {
+    return end
+  }
+  if (start >= 0 && start < MANIFEST_SPAN_LIMIT) {
+    return start + 1
+  }
+  return start
+}
+
+/** A `"nish"` field refused, read no further: NL3036's opening and the span of what broke it. */
+const manifestNishProblem = (problem: string, start: i32, end: i32): NishManifest => {
+  const out = new NishManifest()
+  out.problem = problem
+  out.problemStart = start
+  out.problemEnd = manifestSpanEnd(start, end)
+  return out
+}
+
+export const manifestNish = (manifest: string, condition: string): NishManifest => {
+  const out = new NishManifest()
+  // A manifest that is not JSON cannot be read strictly. One that could hold
+  // the field -- it spells the name, or carries an escape that might -- is
+  // refused where it breaks; any other is no business of this reader's.
+  const broken = manifestMalformedAt(manifest)
+  if (broken >= 0) {
+    if (manifest.indexOf(condition) >= 0 || manifest.indexOf("\\u") >= 0) {
+      return manifestNishProblem("`package.json` stops being JSON here", broken, broken)
+    }
+    return out
+  }
+  const top = manifestMembers(manifest, manifestSkipBlank(manifest, 0))
+  let nish = -1
+  let k = 0
+  while (k < top.keys.length && k < top.keyAt.length && k < top.keyEnd.length) {
+    if (top.keys[k] === condition) {
+      if (nish >= 0) {
+        return manifestNishProblem(`\`${condition}\` is written twice`, top.keyAt[k], top.keyEnd[k])
+      }
+      nish = k
+    }
+    k = k + 1
+  }
+  if (nish < 0 || nish >= top.valueAt.length || nish >= top.valueEnd.length) {
+    return out
+  }
+  const fields = manifestMembers(manifest, top.valueAt[nish])
+  if (fields.broken >= 0) {
+    return manifestNishProblem(`\`${condition}\` is not an object`, top.valueAt[nish], top.valueEnd[nish])
+  }
+  const repeated = manifestRepeatedMember(fields)
+  if (repeated >= 0 && repeated < fields.keyAt.length && repeated < fields.keyEnd.length) {
+    return manifestNishProblem(
+      `\`${fields.keys[repeated]}\` is written twice`,
+      fields.keyAt[repeated],
+      fields.keyEnd[repeated]
+    )
+  }
+  let f = 0
+  while (
+    f < fields.keys.length &&
+    f < fields.keyAt.length &&
+    f < fields.keyEnd.length &&
+    f < fields.valueAt.length &&
+    f < fields.valueEnd.length
+  ) {
+    const key = fields.keys[f]
+    const valueAt = fields.valueAt[f]
+    if (key === "noPanic") {
+      if (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET) {
+        return manifestNishProblem("`noPanic` is not an array", valueAt, fields.valueEnd[f])
+      }
+      out.noPanicAt = valueAt
+    } else if (key === "capabilities") {
+      out.capabilitiesAt = valueAt
+    } else {
+      return manifestNishProblem(
+        `\`${key}\` is no key of \`${condition}\``,
+        fields.keyAt[f],
+        fields.keyEnd[f]
+      )
+    }
+    f = f + 1
+  }
+  return out
+}
+
+/** The root package's `noPanic` list, from the position `manifestNish` found it at (`ManifestList`). */
+export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
   const out = new ManifestList()
-  const at = manifestNishFieldAt(manifest, condition, "noPanic")
-  if (at >= 0 && manifest.charCodeAt(at) === OPEN_BRACKET) {
+  if (at >= 0 && at < manifest.length && manifest.charCodeAt(at) === OPEN_BRACKET) {
     manifestReadList(manifest, at, out)
   }
   return out
@@ -304,235 +594,65 @@ export class CapabilityManifest {
   }
 }
 
-/**
- * Whether the key whose text lies between `start` (just past its opening
- * quote) and `end` (its closing quote) is written with an escape and could
- * decode to `name`. This reader does not decode escapes, so each one stands
- * for one character that may be anything, and every byte outside an escape
- * must be `name`'s at its place. A key with no escape answers false: it is
- * compared as written. Each step is bounded before it is taken, so none
- * carries an overflow check.
- */
-const manifestEscapedKeyMayBe = (text: string, start: i32, end: i32, name: string): boolean => {
-  let escaped = false
-  let skip = 0
-  let p = 0
-  let i = start
-  while (i >= 0 && i < end && i < text.length) {
-    const code = text.charCodeAt(i)
-    if (skip > 0) {
-      skip = skip - 1
-    } else if (code === BACKSLASH) {
-      // `\uXXXX` is the backslash and five more bytes, any other escape one more.
-      if (p >= name.length) {
-        return false
-      }
-      escaped = true
-      skip = i + 1 < end && i + 1 < text.length && text.charCodeAt(i + 1) === LOWER_U ? 5 : 1
-      p = p + 1
-    } else {
-      if (p >= name.length || code !== name.charCodeAt(p)) {
-        return false
-      }
-      p = p + 1
-    }
-    i = i + 1
-  }
-  return escaped && p === name.length
-}
-
-/**
- * Where the key of the object that opens at `text[at]` starts (its opening
- * quote) that hides a key called `name` from `manifestFieldAt`, which answers
- * the first exact match and stops; -1 when there is none or the object cannot
- * be read. A key hides `name` when it is written with an escape that could
- * decode to it (`manifestEscapedKeyMayBe`), or when it is a second exact
- * `name`. Every position is tested against the length before it
- * is stepped past, so no step carries an overflow check.
- */
-const manifestHiddenKeyAt = (text: string, at: i32, name: string): i32 => {
-  if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
-    return -1
-  }
-  let seen = false
-  let i = manifestSkipBlank(text, at + 1)
-  while (i >= 0 && i < text.length && text.charCodeAt(i) === QUOTE) {
-    const keyEnd = manifestEndOfString(text, i)
-    if (keyEnd <= i || keyEnd <= 0) {
-      return -1
-    }
-    const colon = manifestSkipBlank(text, keyEnd)
-    if (colon < 0 || colon >= text.length || text.charCodeAt(colon) !== COLON) {
-      return -1
-    }
-    const valueEnd = manifestEndOfValue(text, manifestSkipBlank(text, colon + 1))
-    if (valueEnd < 0) {
-      return -1
-    }
-    if (manifestEscapedKeyMayBe(text, i + 1, keyEnd - 1, name)) {
-      return i
-    }
-    if (text.substring(i + 1, keyEnd - 1) === name) {
-      if (seen) {
-        return i
-      }
-      seen = true
-    }
-    i = manifestSkipBlank(text, valueEnd)
-    if (i < 0 || i >= text.length || text.charCodeAt(i) !== COMMA) {
-      return -1
-    }
-    i = manifestSkipBlank(text, i + 1)
-  }
-  return -1
-}
-
-/**
- * Where the first key starts that would hide a capability policy from the
- * reader, or -1. The reader takes the first exact `"nish"` and the first
- * exact `"capabilities"` in it and decodes no escape, so it is fooled by:
- * a top-level key written with an escape that could be `"nish"`; inside any
- * `"nish"` object, a `"capabilities"` written with an escape or written
- * twice; and a second `"nish"` that holds a `"capabilities"` of its own.
- * Every top-level `"nish"` is walked, whether or not the plain word appears
- * anywhere, so none of these can carry a policy past it. A second `"nish"`
- * with no policy in it is left as it is, as the `noPanic` reader leaves it.
- */
-const manifestPolicyHiddenAt = (text: string, condition: string): i32 => {
-  const at = manifestSkipBlank(text, 0)
-  if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
-    return -1
-  }
-  let seen = false
-  let i = manifestSkipBlank(text, at + 1)
-  while (i >= 0 && i < text.length && text.charCodeAt(i) === QUOTE) {
-    const keyEnd = manifestEndOfString(text, i)
-    if (keyEnd <= i || keyEnd <= 0) {
-      return -1
-    }
-    const colon = manifestSkipBlank(text, keyEnd)
-    if (colon < 0 || colon >= text.length || text.charCodeAt(colon) !== COLON) {
-      return -1
-    }
-    const valueAt = manifestSkipBlank(text, colon + 1)
-    const valueEnd = manifestEndOfValue(text, valueAt)
-    if (valueEnd < 0) {
-      return -1
-    }
-    if (manifestEscapedKeyMayBe(text, i + 1, keyEnd - 1, condition)) {
-      return i
-    }
-    if (text.substring(i + 1, keyEnd - 1) === condition) {
-      const inner = manifestHiddenKeyAt(text, valueAt, "capabilities")
-      if (inner >= 0) {
-        return inner
-      }
-      const inSecond =
-        seen && valueAt >= 0 && valueAt <= text.length && valueAt <= valueEnd && valueEnd <= text.length
-          ? manifestFieldAt(text.substring(valueAt, valueEnd), "capabilities")
-          : -1
-      if (inSecond >= 0) {
-        return i
-      }
-      seen = true
-    }
-    i = manifestSkipBlank(text, valueEnd)
-    if (i < 0 || i >= text.length || text.charCodeAt(i) !== COMMA) {
-      return -1
-    }
-    i = manifestSkipBlank(text, i + 1)
-  }
-  return -1
-}
-
-/** The NL3032 refusal of the key that opens at `manifest[at]`: written with an escape, or written twice. */
-const manifestKeyProblem = (manifest: string, at: i32): CapabilityManifest => {
-  const end = manifestEndOfString(manifest, at)
-  const key = manifestUnquoted(manifest.substring(at, end))
-  const why =
-    key.indexOf("\\") >= 0
-      ? "is written with an escape, which this reader does not decode"
-      : "is written twice"
-  return manifestPolicyProblem(`\`${key}\` ${why}`, at, end)
-}
-
 /** A policy refused for its shape, read no further: NL3032's opening and the span of what broke it. */
 const manifestPolicyProblem = (problem: string, start: i32, end: i32): CapabilityManifest => {
   const out = new CapabilityManifest()
   out.problem = problem
   out.problemStart = start
-  out.problemEnd = end <= start ? start + 1 : end
+  out.problemEnd = manifestSpanEnd(start, end)
   return out
 }
 
-export const manifestCapabilities = (manifest: string, condition: string): CapabilityManifest => {
+/**
+ * The root package's capability policy, from the position `manifestNish`
+ * found `capabilities` at (-1 for none): an object whose only keys are `allow`
+ * and `deny`, each written once and each an array. Keys are decoded, as
+ * `manifestNish` decodes them.
+ */
+export const manifestCapabilities = (manifest: string, at: i32): CapabilityManifest => {
   const out = new CapabilityManifest()
-  // Fail closed on every key the reader could be fooled by on the way to the
-  // policy, whatever else the manifest says (`manifestPolicyHiddenAt`).
-  const hidden = manifestPolicyHiddenAt(manifest, condition)
-  if (hidden >= 0) {
-    return manifestKeyProblem(manifest, hidden)
-  }
-  const at = manifestNishFieldAt(manifest, condition, "capabilities")
   if (at < 0) {
-    // The reader stops at the first break, so a policy below one would be
-    // dropped in silence; a manifest that mentions one is refused there instead.
-    const broken = manifest.indexOf('"capabilities"') >= 0 ? manifestMalformedAt(manifest) : -1
-    return broken < 0 ? out : manifestPolicyProblem("`package.json` stops being JSON here", broken, broken)
+    return out
   }
-  // Every position below is tested against the text's length before it is
-  // stepped past, so each `+ 1` and `- 1` is proven to fit and carries no
-  // overflow check (docs/LANGUAGE.md, "Semantics decisions").
-  if (at >= manifest.length || manifest.charCodeAt(at) !== OPEN_BRACE) {
+  const members = manifestMembers(manifest, at)
+  if (members.broken >= 0) {
     return manifestPolicyProblem("`capabilities` is not an object", at, manifestEndOfValue(manifest, at))
   }
-  // A key written twice is refused rather than read twice: JSON.parse keeps
-  // the last, and reading both would union them, so either reading quietly
-  // disagrees with what one of the two lists says.
-  let denyGiven = false
-  let i = manifestSkipBlank(manifest, at + 1)
-  while (i >= 0 && i < manifest.length && manifest.charCodeAt(i) !== CLOSE_BRACE) {
-    const keyEnd = manifest.charCodeAt(i) === QUOTE ? manifestEndOfString(manifest, i) : -1
-    if (keyEnd <= i || keyEnd <= 0) {
-      return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
-    }
-    const colon = manifestSkipBlank(manifest, keyEnd)
-    if (colon < 0 || colon >= manifest.length || manifest.charCodeAt(colon) !== COLON) {
-      return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
-    }
-    const key = manifest.substring(i + 1, keyEnd - 1)
-    const valueAt = manifestSkipBlank(manifest, colon + 1)
-    const valueEnd = manifestEndOfValue(manifest, valueAt)
+  const repeated = manifestRepeatedMember(members)
+  if (repeated >= 0 && repeated < members.keyAt.length && repeated < members.keyEnd.length) {
+    return manifestPolicyProblem(
+      `\`${members.keys[repeated]}\` is written twice`,
+      members.keyAt[repeated],
+      members.keyEnd[repeated]
+    )
+  }
+  let k = 0
+  while (
+    k < members.keys.length &&
+    k < members.keyAt.length &&
+    k < members.keyEnd.length &&
+    k < members.valueAt.length &&
+    k < members.valueEnd.length
+  ) {
+    const key = members.keys[k]
+    const valueAt = members.valueAt[k]
     if (key !== "allow" && key !== "deny") {
-      return manifestPolicyProblem(`\`${key}\` is no key of \`capabilities\``, i, keyEnd)
+      return manifestPolicyProblem(
+        `\`${key}\` is no key of \`capabilities\``,
+        members.keyAt[k],
+        members.keyEnd[k]
+      )
     }
-    if ((key === "allow" && out.allowGiven) || (key === "deny" && denyGiven)) {
-      return manifestPolicyProblem(`\`${key}\` is written twice`, i, keyEnd)
-    }
-    if (
-      valueEnd < 0 ||
-      valueAt < 0 ||
-      valueAt >= manifest.length ||
-      manifest.charCodeAt(valueAt) !== OPEN_BRACKET
-    ) {
-      return manifestPolicyProblem(`\`${key}\` is not an array`, valueAt, valueEnd)
+    if (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET) {
+      return manifestPolicyProblem(`\`${key}\` is not an array`, valueAt, members.valueEnd[k])
     }
     if (key === "allow") {
       out.allowGiven = true
       manifestReadList(manifest, valueAt, out.allow)
     } else {
-      denyGiven = true
       manifestReadList(manifest, valueAt, out.deny)
     }
-    i = manifestSkipBlank(manifest, valueEnd)
-    if (i >= 0 && i < manifest.length && manifest.charCodeAt(i) === COMMA) {
-      i = manifestSkipBlank(manifest, i + 1)
-    } else if (i < 0 || i >= manifest.length || manifest.charCodeAt(i) !== CLOSE_BRACE) {
-      return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
-    }
-  }
-  if (i < 0 || i >= manifest.length) {
-    return manifestPolicyProblem("`capabilities` cannot be read here", i, i)
+    k = k + 1
   }
   return out
 }

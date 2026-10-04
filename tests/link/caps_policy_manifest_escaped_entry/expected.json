@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_escaped_entry/main.ts","line":6,"column":36,"endLine":6,"endColumn":46,"severity":"error","code":"NL2459","message":"`main` reaches `net`, which the capability policy does not grant (the root package's `deny`); the chain that reaches it: main.ts:6:36 calls dial, client.ts:5:10 calls netAddress"}

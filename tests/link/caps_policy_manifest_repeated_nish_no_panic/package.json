@@ -1,0 +1,6 @@
+{
+  "name": "caps-policy-manifest-repeated-nish-no-panic",
+  "private": true,
+  "nish": { "noPanic": [] },
+  "nish": { "noPanic": ["client.ts"] }
+}

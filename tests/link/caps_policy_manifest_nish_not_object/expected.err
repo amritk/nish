@@ -1,0 +1,1 @@
+package.json:4:11: error: `nish` is not an object: the root package's `nish` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once
