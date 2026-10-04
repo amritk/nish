@@ -577,8 +577,10 @@ const DENY_PANICS_NEW = [
 /** Programs new with the capability policy (WP36), whose exit the reference cannot share: it does not know the flags or the field. */
 const CAPABILITY_POLICY_NEW = [
   "tests/link/caps_policy_granted/main.ts",
+  "tests/link/caps_policy_manifest/main.ts",
   "tests/link/caps_policy_manifest_both/main.ts",
   "tests/link/caps_policy_manifest_non_string/main.ts",
+  "tests/link/caps_policy_manifest_repeated/main.ts",
   "tests/link/caps_policy_manifest_shape/main.ts",
   "tests/link/caps_policy_manifest_unknown/main.ts",
   "tests/link/caps_policy_manifest_unsafe/main.ts",

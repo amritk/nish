@@ -111,7 +111,7 @@ is:
 
 | Code | Refused |
 | --- | --- |
-| NL3032 | `capabilities` is not an object, `allow` or `deny` is not an array, a key other than those two, or a manifest that mentions `"capabilities"` and stops being JSON before the reader reaches it |
+| NL3032 | `capabilities` is not an object, `allow` or `deny` is not an array or is written twice (reading both would union them and widen the policy), a key other than those two, or a manifest that mentions `"capabilities"` and stops being JSON before the reader reaches it |
 | NL3033 | an entry that is no capability, a non-string entry included |
 | NL3034 | `"unsafe"` under `allow` |
 | NL3035 | a capability under both `allow` and `deny` |

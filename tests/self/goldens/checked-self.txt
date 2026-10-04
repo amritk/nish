@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 82 programs, 1867080 dump lines live, 82 distinct modules.
+# 82 programs, 1867106 dump lines live, 82 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/expressions.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/options.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/symbols.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -37939,7 +37939,7 @@ function manifestPolicyProblem(problem: string, start: i32, end: i32): Capabilit
   callee 312:15 new CapabilityManifest -> @CapabilityManifest.constructor
 function manifestCapabilities(manifest: string, condition: string): CapabilityManifest -> @manifestCapabilities [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 350:7
+  sharedWrite: 357:7
   escaping: condition manifest
   calls: CapabilityManifest.constructor manifestByteAt manifestEndOfString manifestEndOfValue manifestMalformedAt manifestNishFieldAt manifestPolicyProblem manifestReadList manifestSkipBlank nish_alloc_struct nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
@@ -37953,39 +37953,41 @@ function manifestCapabilities(manifest: string, condition: string): CapabilityMa
   callee 330:7 manifestByteAt -> @manifestByteAt
   callee 331:12 manifestPolicyProblem -> @manifestPolicyProblem
   callee 331:73 manifestEndOfValue -> @manifestEndOfValue
-  local 333:7 i: i32 (let)
-  callee 333:11 manifestSkipBlank -> @manifestSkipBlank
-  callee 334:10 manifestByteAt -> @manifestByteAt
-  local 335:11 keyEnd: i32 (const)
-  callee 335:20 manifestByteAt -> @manifestByteAt
-  callee 335:60 manifestEndOfString -> @manifestEndOfString
-  local 336:11 colon: i32 (const)
-  callee 336:37 manifestSkipBlank -> @manifestSkipBlank
-  callee 337:22 manifestByteAt -> @manifestByteAt
-  callee 338:14 manifestPolicyProblem -> @manifestPolicyProblem
-  local 340:11 key: string (const)
-  local 341:11 valueAt: i32 (const)
-  callee 341:21 manifestSkipBlank -> @manifestSkipBlank
-  local 342:11 valueEnd: i32 (const)
-  callee 342:22 manifestEndOfValue -> @manifestEndOfValue
-  callee 344:14 manifestPolicyProblem -> @manifestPolicyProblem
-  callee 346:25 manifestByteAt -> @manifestByteAt
-  callee 347:14 manifestPolicyProblem -> @manifestPolicyProblem
-  callee 351:7 manifestReadList -> @manifestReadList
-  callee 353:7 manifestReadList -> @manifestReadList
-  callee 355:9 manifestSkipBlank -> @manifestSkipBlank
-  callee 356:9 manifestByteAt -> @manifestByteAt
-  callee 357:11 manifestSkipBlank -> @manifestSkipBlank
-  callee 358:16 manifestByteAt -> @manifestByteAt
-  callee 359:14 manifestPolicyProblem -> @manifestPolicyProblem
+  local 336:7 denyGiven: boolean (let)
+  local 337:7 i: i32 (let)
+  callee 337:11 manifestSkipBlank -> @manifestSkipBlank
+  callee 338:10 manifestByteAt -> @manifestByteAt
+  local 339:11 keyEnd: i32 (const)
+  callee 339:20 manifestByteAt -> @manifestByteAt
+  callee 339:60 manifestEndOfString -> @manifestEndOfString
+  local 340:11 colon: i32 (const)
+  callee 340:37 manifestSkipBlank -> @manifestSkipBlank
+  callee 341:22 manifestByteAt -> @manifestByteAt
+  callee 342:14 manifestPolicyProblem -> @manifestPolicyProblem
+  local 344:11 key: string (const)
+  local 345:11 valueAt: i32 (const)
+  callee 345:21 manifestSkipBlank -> @manifestSkipBlank
+  local 346:11 valueEnd: i32 (const)
+  callee 346:22 manifestEndOfValue -> @manifestEndOfValue
+  callee 348:14 manifestPolicyProblem -> @manifestPolicyProblem
+  callee 351:14 manifestPolicyProblem -> @manifestPolicyProblem
+  callee 353:25 manifestByteAt -> @manifestByteAt
+  callee 354:14 manifestPolicyProblem -> @manifestPolicyProblem
+  callee 358:7 manifestReadList -> @manifestReadList
+  callee 361:7 manifestReadList -> @manifestReadList
+  callee 363:9 manifestSkipBlank -> @manifestSkipBlank
+  callee 364:9 manifestByteAt -> @manifestByteAt
+  callee 365:11 manifestSkipBlank -> @manifestSkipBlank
+  callee 366:16 manifestByteAt -> @manifestByteAt
+  callee 367:14 manifestPolicyProblem -> @manifestPolicyProblem
 function manifestTarget(raw: string): string | null -> @manifestTarget
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via splitByte
   calls: nish_str_at nish_str_eq nish_str_new splitByte
   stackSites=0 stackLocals=0
-  local 379:9 text: string (const)
-  local 383:14 segment: string (const)
-  callee 383:25 splitByte -> @splitByte
+  local 387:9 text: string (const)
+  local 391:14 segment: string (const)
+  callee 391:25 splitByte -> @splitByte
 function ManifestEntry.constructor(this: ManifestEntry, status: i32, target: string): void -> @ManifestEntry.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: status target
@@ -37996,114 +37998,114 @@ function manifestHasKeyOrValue(object: string, scan: i32): boolean -> @manifestH
   escaping: object
   calls: manifestEndOfString manifestEndOfValue manifestSkipBlank nish_arena_mark nish_arena_release nish_str_at nish_str_new
   stackSites=0 stackLocals=0
-  local 439:7 i: i32 (let)
-  callee 439:11 manifestSkipBlank -> @manifestSkipBlank
-  callee 443:7 manifestSkipBlank -> @manifestSkipBlank
-  local 445:11 keyEnd: i32 (const)
-  callee 445:20 manifestEndOfString -> @manifestEndOfString
-  callee 452:9 manifestSkipBlank -> @manifestSkipBlank
-  local 456:11 valueAt: i32 (const)
-  callee 456:21 manifestSkipBlank -> @manifestSkipBlank
-  local 458:13 first: i32 (const)
-  local 463:11 valueEnd: i32 (const)
-  callee 463:22 manifestEndOfValue -> @manifestEndOfValue
-  callee 467:9 manifestSkipBlank -> @manifestSkipBlank
-  callee 471:9 manifestSkipBlank -> @manifestSkipBlank
+  local 447:7 i: i32 (let)
+  callee 447:11 manifestSkipBlank -> @manifestSkipBlank
+  callee 451:7 manifestSkipBlank -> @manifestSkipBlank
+  local 453:11 keyEnd: i32 (const)
+  callee 453:20 manifestEndOfString -> @manifestEndOfString
+  callee 460:9 manifestSkipBlank -> @manifestSkipBlank
+  local 464:11 valueAt: i32 (const)
+  callee 464:21 manifestSkipBlank -> @manifestSkipBlank
+  local 466:13 first: i32 (const)
+  local 471:11 valueEnd: i32 (const)
+  callee 471:22 manifestEndOfValue -> @manifestEndOfValue
+  callee 475:9 manifestSkipBlank -> @manifestSkipBlank
+  callee 479:9 manifestSkipBlank -> @manifestSkipBlank
 function nishExportEntry(manifest: string, subpath: string, primary: string, fallback: string, other: string): ManifestEntry -> @nishExportEntry [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via manifestTarget
   escaping: fallback manifest other primary subpath
   calls: ManifestEntry.constructor manifestField manifestHasKeyOrValue manifestSkipBlank manifestTarget nish_alloc_struct nish_panic_index nish_str_eq
   stackSites=0 stackLocals=0
-  local 507:9 exports: string (const)
-  callee 507:19 manifestField -> @manifestField
-  callee 509:12 new ManifestEntry -> @ManifestEntry.constructor
-  local 511:9 forSubpath: string (const)
-  callee 511:22 manifestField -> @manifestField
-  local 520:7 conditions: string (let)
-  callee 525:12 new ManifestEntry -> @ManifestEntry.constructor
-  local 527:7 selected: string (let)
-  callee 527:18 manifestField -> @manifestField
-  callee 529:16 manifestField -> @manifestField
-  local 532:11 target: string | null (const)
-  callee 532:20 manifestTarget -> @manifestTarget
-  callee 534:9 new ManifestEntry -> @ManifestEntry.constructor
-  callee 535:9 new ManifestEntry -> @ManifestEntry.constructor
-  callee 537:34 manifestHasKeyOrValue -> @manifestHasKeyOrValue
-  callee 538:12 new ManifestEntry -> @ManifestEntry.constructor
-  local 544:9 first: i32 (const)
-  callee 544:39 manifestSkipBlank -> @manifestSkipBlank
+  local 515:9 exports: string (const)
+  callee 515:19 manifestField -> @manifestField
+  callee 517:12 new ManifestEntry -> @ManifestEntry.constructor
+  local 519:9 forSubpath: string (const)
+  callee 519:22 manifestField -> @manifestField
+  local 528:7 conditions: string (let)
+  callee 533:12 new ManifestEntry -> @ManifestEntry.constructor
+  local 535:7 selected: string (let)
+  callee 535:18 manifestField -> @manifestField
+  callee 537:16 manifestField -> @manifestField
+  local 540:11 target: string | null (const)
+  callee 540:20 manifestTarget -> @manifestTarget
+  callee 542:9 new ManifestEntry -> @ManifestEntry.constructor
+  callee 543:9 new ManifestEntry -> @ManifestEntry.constructor
+  callee 545:34 manifestHasKeyOrValue -> @manifestHasKeyOrValue
   callee 546:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee 549:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee 551:7 manifestField -> @manifestField
-  callee 552:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee 557:7 manifestHasKeyOrValue -> @manifestHasKeyOrValue
-  callee 558:12 new ManifestEntry -> @ManifestEntry.constructor
-  callee 560:10 new ManifestEntry -> @ManifestEntry.constructor
+  local 552:9 first: i32 (const)
+  callee 552:39 manifestSkipBlank -> @manifestSkipBlank
+  callee 554:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee 557:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee 559:7 manifestField -> @manifestField
+  callee 560:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee 565:7 manifestHasKeyOrValue -> @manifestHasKeyOrValue
+  callee 566:12 new ManifestEntry -> @ManifestEntry.constructor
+  callee 568:10 new ManifestEntry -> @ManifestEntry.constructor
 function nishExportTarget(manifest: string, subpath: string, primary: string, fallback: string): string | null -> @nishExportTarget [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nishExportEntry
   escaping: fallback manifest primary subpath
   calls: nishExportEntry
   stackSites=0 stackLocals=0
-  local 573:9 entry: ManifestEntry (const)
-  callee 573:17 nishExportEntry -> @nishExportEntry
+  local 581:9 entry: ManifestEntry (const)
+  callee 581:17 nishExportEntry -> @nishExportEntry
 function manifestIsScalarByte(code: i32): boolean -> @manifestIsScalarByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: code
   calls: isDigit
   stackSites=0 stackLocals=0
-  callee 582:3 isDigit -> @isDigit
+  callee 590:3 isDigit -> @isDigit
 function manifestCheckValue(text: string, at: i32, depth: i32): i32 -> @manifestCheckValue
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: at text
   calls: isDigit manifestCheckValue manifestEndOfString manifestIsScalarByte manifestSkipBlank nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local 601:9 i: i32 (const)
-  callee 601:13 manifestSkipBlank -> @manifestSkipBlank
-  local 605:9 first: i32 (const)
-  local 607:11 end: i32 (const)
-  callee 607:17 manifestEndOfString -> @manifestEndOfString
-  local 611:11 close: i32 (const)
-  local 612:9 j: i32 (let)
-  callee 612:13 manifestSkipBlank -> @manifestSkipBlank
-  local 621:15 keyEnd: i32 (const)
-  callee 621:24 manifestEndOfString -> @manifestEndOfString
-  callee 625:13 manifestSkipBlank -> @manifestSkipBlank
-  local 631:13 end: i32 (const)
-  callee 631:19 manifestCheckValue -> @manifestCheckValue
-  callee 635:11 manifestSkipBlank -> @manifestSkipBlank
-  local 639:13 next: i32 (const)
-  callee 646:11 manifestSkipBlank -> @manifestSkipBlank
-  local 650:7 j: i32 (let)
-  callee 651:39 manifestIsScalarByte -> @manifestIsScalarByte
-  local 654:9 word: string (const)
-  local 655:9 numeric: boolean (const)
-  callee 655:38 isDigit -> @isDigit
+  local 609:9 i: i32 (const)
+  callee 609:13 manifestSkipBlank -> @manifestSkipBlank
+  local 613:9 first: i32 (const)
+  local 615:11 end: i32 (const)
+  callee 615:17 manifestEndOfString -> @manifestEndOfString
+  local 619:11 close: i32 (const)
+  local 620:9 j: i32 (let)
+  callee 620:13 manifestSkipBlank -> @manifestSkipBlank
+  local 629:15 keyEnd: i32 (const)
+  callee 629:24 manifestEndOfString -> @manifestEndOfString
+  callee 633:13 manifestSkipBlank -> @manifestSkipBlank
+  local 639:13 end: i32 (const)
+  callee 639:19 manifestCheckValue -> @manifestCheckValue
+  callee 643:11 manifestSkipBlank -> @manifestSkipBlank
+  local 647:13 next: i32 (const)
+  callee 654:11 manifestSkipBlank -> @manifestSkipBlank
+  local 658:7 j: i32 (let)
+  callee 659:39 manifestIsScalarByte -> @manifestIsScalarByte
+  local 662:9 word: string (const)
+  local 663:9 numeric: boolean (const)
+  callee 663:38 isDigit -> @isDigit
 function manifestMalformedAt(manifest: string): i32 -> @manifestMalformedAt [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: manifest
   calls: manifestCheckValue manifestSkipBlank
   stackSites=0 stackLocals=0
-  local 668:9 end: i32 (const)
-  callee 668:15 manifestCheckValue -> @manifestCheckValue
-  local 672:9 rest: i32 (const)
-  callee 672:16 manifestSkipBlank -> @manifestSkipBlank
+  local 676:9 end: i32 (const)
+  callee 676:15 manifestCheckValue -> @manifestCheckValue
+  local 680:9 rest: i32 (const)
+  callee 680:16 manifestSkipBlank -> @manifestSkipBlank
 function manifestEngineRange(manifest: string, condition: string): string -> @manifestEngineRange [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: condition manifest
   calls: manifestField manifestUnquoted
   stackSites=0 stackLocals=0
-  callee 691:3 manifestUnquoted -> @manifestUnquoted
-  callee 691:20 manifestField -> @manifestField
-  callee 691:34 manifestField -> @manifestField
+  callee 699:3 manifestUnquoted -> @manifestUnquoted
+  callee 699:20 manifestField -> @manifestField
+  callee 699:34 manifestField -> @manifestField
 function manifestVersion(manifest: string): string -> @manifestVersion [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: manifest
   calls: manifestField manifestUnquoted
   stackSites=0 stackLocals=0
-  callee 699:3 manifestUnquoted -> @manifestUnquoted
-  callee 699:20 manifestField -> @manifestField
+  callee 707:3 manifestUnquoted -> @manifestUnquoted
+  callee 707:20 manifestField -> @manifestField
 function manifestUnquoted(raw: string): string -> @manifestUnquoted
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: raw
@@ -38111,48 +38113,48 @@ function manifestUnquoted(raw: string): string -> @manifestUnquoted
   stackSites=0 stackLocals=0
 function manifestReadNumber(text: string, at: i32, next: i32[]): i32 -> @manifestReadNumber
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 725:3
+  sharedWrite: 733:3
   escaping: at
   calls: isDigit nish_panic_index nish_panic_overflow
   pointer next: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 712:7 i: i32 (let)
-  local 713:7 value: i32 (let)
-  local 715:11 code: i32 (const)
-  callee 716:10 isDigit -> @isDigit
+  local 720:7 i: i32 (let)
+  local 721:7 value: i32 (let)
+  local 723:11 code: i32 (const)
+  callee 724:10 isDigit -> @isDigit
 function manifestVersionParts(text: string, at: i32, next: i32[]): i32[] -> @manifestVersionParts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 743:5
+  sharedWrite: 751:5
   escaping: at text
   calls: manifestReadNumber nish_array_grow nish_panic_index
   pointer next: size=0 writesThrough=true captured=false passedTo=manifestReadNumber#2
   stackSites=0 stackLocals=0
-  local 735:9 parts: i32[] (const)
-  local 736:7 i: i32 (let)
-  local 738:11 value: i32 (const)
-  callee 738:19 manifestReadNumber -> @manifestReadNumber
-  local 740:13 none: i32[] (const)
-  local 754:11 none: i32[] (const)
+  local 743:9 parts: i32[] (const)
+  local 744:7 i: i32 (let)
+  local 746:11 value: i32 (const)
+  callee 746:19 manifestReadNumber -> @manifestReadNumber
+  local 748:13 none: i32[] (const)
+  local 762:11 none: i32[] (const)
 function manifestEngineCheck(manifest: string, condition: string, version: string): i32 -> @manifestEngineCheck [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via manifestVersionParts
   escaping: condition manifest version
   calls: manifestField manifestSkipBlank manifestVersionParts nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_at nish_str_new
   stackSites=1 stackLocals=1
-  local 776:9 raw: string (const)
-  callee 776:15 manifestField -> @manifestField
-  callee 776:29 manifestField -> @manifestField
-  local 783:9 range: string (const)
-  local 784:9 next: i32[] (const)
-  local 785:9 opAt: i32 (const)
-  callee 785:16 manifestSkipBlank -> @manifestSkipBlank
-  local 789:9 floor: i32[] (const)
-  callee 789:17 manifestVersionParts -> @manifestVersionParts
-  callee 789:45 manifestSkipBlank -> @manifestSkipBlank
-  callee 790:29 manifestSkipBlank -> @manifestSkipBlank
-  local 795:9 running: i32[] (const)
-  callee 795:19 manifestVersionParts -> @manifestVersionParts
-  local 799:7 i: i32 (let)
+  local 784:9 raw: string (const)
+  callee 784:15 manifestField -> @manifestField
+  callee 784:29 manifestField -> @manifestField
+  local 791:9 range: string (const)
+  local 792:9 next: i32[] (const)
+  local 793:9 opAt: i32 (const)
+  callee 793:16 manifestSkipBlank -> @manifestSkipBlank
+  local 797:9 floor: i32[] (const)
+  callee 797:17 manifestVersionParts -> @manifestVersionParts
+  callee 797:45 manifestSkipBlank -> @manifestSkipBlank
+  callee 798:29 manifestSkipBlank -> @manifestSkipBlank
+  local 803:9 running: i32[] (const)
+  callee 803:19 manifestVersionParts -> @manifestVersionParts
+  local 807:7 i: i32 (let)
 module src/compile.ts
 import astText from "./ast-text" -> function @astText
 import capabilitySummary from "./capability-report" -> function @capabilitySummary

@@ -5505,8 +5505,8 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
-  manifest writes them: the wrong shape (NL3032,
-  `tests/link/caps_policy_manifest_shape`), a name that is no capability
+  manifest writes them: the wrong shape, a key written twice included (NL3032,
+  `tests/link/caps_policy_manifest_shape`, `caps_policy_manifest_repeated`), a name that is no capability
   (NL3033, `caps_policy_manifest_unknown`), `unsafe` under `allow` (NL3034,
   `caps_policy_manifest_unsafe`) and a capability under both (NL3035,
   `caps_policy_manifest_both`).

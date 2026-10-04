@@ -330,6 +330,10 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
   if (manifestByteAt(manifest, at) !== OPEN_BRACE) {
     return manifestPolicyProblem("`capabilities` is not an object", at, manifestEndOfValue(manifest, at))
   }
+  // A key written twice is refused rather than read twice: JSON.parse keeps
+  // the last, and reading both would union them, so either reading quietly
+  // disagrees with what one of the two lists says.
+  let denyGiven = false
   let i = manifestSkipBlank(manifest, at + 1)
   while (manifestByteAt(manifest, i) !== CLOSE_BRACE) {
     const keyEnd = manifestByteAt(manifest, i) === QUOTE ? manifestEndOfString(manifest, i) : -1
@@ -343,6 +347,9 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
     if (key !== "allow" && key !== "deny") {
       return manifestPolicyProblem(`\`${key}\` is no key of \`capabilities\``, i, keyEnd)
     }
+    if ((key === "allow" && out.allowGiven) || (key === "deny" && denyGiven)) {
+      return manifestPolicyProblem(`\`${key}\` is written twice`, i, keyEnd)
+    }
     if (valueEnd < 0 || manifestByteAt(manifest, valueAt) !== OPEN_BRACKET) {
       return manifestPolicyProblem(`\`${key}\` is not an array`, valueAt, valueEnd)
     }
@@ -350,6 +357,7 @@ export const manifestCapabilities = (manifest: string, condition: string): Capab
       out.allowGiven = true
       manifestReadList(manifest, valueAt, out.allow)
     } else {
+      denyGiven = true
       manifestReadList(manifest, valueAt, out.deny)
     }
     i = manifestSkipBlank(manifest, valueEnd)
