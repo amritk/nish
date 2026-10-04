@@ -950,7 +950,11 @@ const caseResults = caseRuns.map((run) => run.compiled)
 // must leave alone.
 {
   const fn = (panics) => ({ functions: [{ name: "f", symbol: "f", module: "m.ts", panics }] })
-  const clean = fn([{ kind: "oom" }, { kind: "index", proven: true }])
+  const clean = fn([
+    { kind: "oom", allowed: true },
+    { kind: "unchecked", allowed: true },
+    { kind: "index", proven: true },
+  ])
   const unproven = fn([{ kind: "index", proven: false }])
   const define = (lines) => ["define internal i32 @f(i32 %x) {", ...lines, "  ret i32 0", "}"].join("\n")
   const paths = [

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 914 programs, 62621 dump lines.
+# 915 programs, 62654 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -12814,6 +12814,40 @@ function main(): i32 -> @nish_main [exported entry]
   calls: mix nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 9:15 mix -> @mix
+program tests/cases/deny_panics_unsafe.ts
+module tests/cases/deny_panics_unsafe.ts (entry)
+import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
+import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
+unsafe import 8:10 uncheckedGet from "nish:unsafe"
+unsafe import 8:24 uncheckedSet from "nish:unsafe"
+unsafe call 10:41 uncheckedGet (node 23)
+unsafe call 13:3 uncheckedSet (node 45)
+unsafe call 24:15 uncheckedGet (node 129)
+function get(xs: i32[], i: i32): i32 -> @get
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function mark(bytes: u8[], i: i32): void -> @mark
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 13:3
+  pointer bytes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function first(xs: i32[]): i32 -> @first
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: get
+  pointer xs: size=0 writesThrough=false captured=false passedTo=get#0
+  stackSites=0 stackLocals=0
+  callee 16:35 get -> @get
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: first get mark nish_arena_mark nish_arena_release nish_print nish_str_from_i32 nish_str_from_u64
+  stackSites=2 stackLocals=2
+  local 19:9 words: i32[] (const)
+  callee 20:15 get -> @get
+  callee 21:15 first -> @first
+  local 22:9 bytes: u8[] (const)
+  callee 23:3 mark -> @mark
 program tests/cases/diag_order.ts
 module tests/cases/diag_order.ts (entry)
 function banner(n: i32): string -> @banner [exported]

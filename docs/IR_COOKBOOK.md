@@ -9213,6 +9213,12 @@ did. `ratio`'s divisor is guarded against 0 and -1, so the `sdiv` stands alone;
 is decremented with no `pop.empty` branch. The listing is the golden
 `tests/cases/deny_panics_clean.ll`, which `npm test` holds this section to.
 
+An `uncheckedGet` or `uncheckedSet` from `nish:unsafe` is allowed in the scope:
+it lowers to the bare GEP and load or store, so it has no panic path to
+refuse, and its import is the module's opt-in to an index out of range being
+undefined behaviour. `--emit-panics` lists it as an `unchecked` site with
+`"allowed": true` (`tests/cases/deny_panics_unsafe`).
+
 <!-- golden:begin deny_panics_clean -->
 ```ts
 const ratio = (a: i32, d: i32): i32 => {

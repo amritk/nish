@@ -1,0 +1,4 @@
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/link/no_panic_unsafe_callee/main.ts","line":7,"panics":[]},
+{"name":"raw","symbol":"pkg_raw.raw","module":"tests/link/no_panic_unsafe_callee/node_modules/pkg_raw/src/index.ts","line":5,"panics":[{"kind":"unchecked","line":5,"column":48,"allowed":true}]}
+]}
