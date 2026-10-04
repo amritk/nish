@@ -17,8 +17,10 @@ declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 nou
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_exit(i32 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -67,11 +69,20 @@ if.then:
 if.end:
   %4 = load %struct.Element*, %struct.Element** %next.addr, align 8
   %5 = call i32 @Element.length(%struct.Element* %4)
-  %6 = add nsw i32 1, %5
-  ret i32 %6
+  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 1, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %7
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define internal noundef i32 @List.benchmark(%struct.List* noundef nonnull readonly align 8 nocapture %this) #2 {
+define internal noundef i32 @List.benchmark(%struct.List* noundef nonnull readonly align 8 nocapture %this) #1 {
 entry:
   %result.addr = alloca %struct.Element*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -96,7 +107,7 @@ if.end:
   ret i32 %7
 }
 
-define internal noundef align 8 %struct.Element* @List.makeList(%struct.List* noundef nonnull readonly align 8 nocapture %this, i32 noundef %length) #2 {
+define internal noundef align 8 %struct.Element* @List.makeList(%struct.List* noundef nonnull readonly align 8 nocapture %this, i32 noundef %length) #1 {
 entry:
   %e.addr = alloca %struct.Element*, align 8
   %0 = icmp eq i32 %length, 0
@@ -119,7 +130,7 @@ if.end:
   ret %struct.Element* %7
 }
 
-define internal noundef zeroext i1 @List.isShorterThan(%struct.List* noundef nonnull readonly align 8 nocapture %this, %struct.Element* noundef align 8 %x, %struct.Element* noundef align 8 %y) #1 {
+define internal noundef zeroext i1 @List.isShorterThan(%struct.List* noundef nonnull readonly align 8 nocapture %this, %struct.Element* noundef align 8 %x, %struct.Element* noundef align 8 %y) #2 {
 entry:
   %xTail.addr = alloca %struct.Element*, align 8
   %yTail.addr = alloca %struct.Element*, align 8
@@ -155,7 +166,7 @@ while.end:
   ret i1 false
 }
 
-define internal noundef align 8 %struct.Element* @List.tail(%struct.List* noundef nonnull readonly align 8 nocapture %this, %struct.Element* noundef align 8 %x, %struct.Element* noundef align 8 %y, %struct.Element* noundef align 8 %z) #2 {
+define internal noundef align 8 %struct.Element* @List.tail(%struct.List* noundef nonnull readonly align 8 nocapture %this, %struct.Element* noundef align 8 %x, %struct.Element* noundef align 8 %y, %struct.Element* noundef align 8 %z) #1 {
 entry:
   %0 = call i1 @List.isShorterThan(%struct.List* %this, %struct.Element* %y, %struct.Element* %x)
   br i1 %0, label %if.then, label %if.end
@@ -202,7 +213,7 @@ if.end:
   ret %struct.Element* %z
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #1 {
 entry:
   %list.addr = alloca %struct.List*, align 8
   %List.obj = alloca %struct.List, align 8
@@ -258,7 +269,7 @@ for.end:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -266,11 +277,13 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind readonly }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { noreturn nounwind }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { nounwind willreturn readnone }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

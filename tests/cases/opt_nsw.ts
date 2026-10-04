@@ -1,12 +1,12 @@
 // The two fast defaults in one program (WP15 §3), compiled with no flags at all.
 //
-// Every user-level *signed* integer add/sub/mul carries `nsw` — binary
-// operators, unary minus, `op=` on locals, fields and elements, `++`/`--` — so
-// signed overflow is undefined. Division and remainder never carry it, the
-// compiler's own i64 index and length arithmetic never carries it, and neither
-// does any unsigned operation: `u8`..`u64` are defined as wrapping, so `nuw`
-// would be a claim the language does not make and `nsw` would poison an
-// ordinary result. `tests/cases/opt_wrapping` is this same program under
+// Every user-level *signed* integer add/sub/mul — binary operators, unary
+// minus, `op=` on locals, fields and elements, `++`/`--` — is either proven to
+// fit and carries `nsw`, or is checked through `llvm.s*.with.overflow` and
+// panics on overflow, so signed overflow is never undefined. Division and
+// remainder have their own check, the compiler's own i64 index and length
+// arithmetic is neither flagged nor checked, and neither is any unsigned
+// operation: `u8`..`u64` are defined as wrapping. `tests/cases/opt_wrapping` is this same program under
 // `--wrapping`, where nothing is flagged at all.
 //
 // `test` is exported because the C driver calls it; `poly`, `sum`, `mix` and

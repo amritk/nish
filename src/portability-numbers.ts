@@ -155,7 +155,7 @@ const wrapFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[
 /**
  * Whether `+ - *` on `type` wrap in the IR: always at the narrow unsigned
  * widths, and at `i32` only under `--wrapping`, because without it an `i32`
- * overflow is `nsw` — undefined natively, and not a quiet divergence. `i64`
+ * overflow is a checked panic — not a quiet divergence. `i64`
  * and `u64` are NL8009's: the declaration is reported, not each operation.
  */
 const wrapsHere = (walk: PortabilityWalk, type: i32): boolean =>

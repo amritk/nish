@@ -131,6 +131,7 @@ import {
   RuntimeTable,
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
+import { checksOverflow } from "./bounds"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
 import {
@@ -153,6 +154,7 @@ import {
   PANIC_DIVIDE,
   PANIC_EXPECT,
   PANIC_INDEX,
+  PANIC_OVERFLOW,
   PANIC_PARALLEL_LENGTH,
   PANIC_POP,
   PANIC_RANGE,
@@ -1255,6 +1257,8 @@ class FactCollector {
   facts: FunctionFacts
   /** Round 1's fixpoint, or `null` in round 1 itself; see `bodyMayExtend`. */
   known: FactsTable | null
+  /** The next `PanicSite.order`: how many sites the walk has put in evaluation order. */
+  siteOrder: i32
 
   constructor(
     unit: AnalysisUnit,
@@ -1270,6 +1274,7 @@ class FactCollector {
     this.sig = sig
     this.facts = facts
     this.known = known
+    this.siteOrder = 0
   }
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
@@ -1295,6 +1300,22 @@ class FactCollector {
       this.facts.panicSites.push(
         new PanicSite(node, this.unit.program.source, kind, this.sig.name, proven, callee)
       )
+    }
+  }
+
+  /**
+   * Put the sites `node` itself recorded, `panicSites[from]` up to `to`, next
+   * in evaluation order (`PanicSite.order`). The walk calls it once the
+   * node's operands are visited, because a check is made on their values and
+   * a call once its arguments are evaluated, so an operand's sites come first;
+   * a `for...of`'s walk calls are made before its body, and it calls it then.
+   */
+  orderSites(from: i32, to: i32): void {
+    let k = from
+    while (k < to) {
+      this.facts.panicSites[k].order = this.siteOrder
+      this.siteOrder = this.siteOrder + 1
+      k = k + 1
     }
   }
 
@@ -1398,6 +1419,7 @@ class FactCollector {
     if (node.kind === N_THROW) {
       this.facts.hasTrap = true
     }
+    const ownSites = this.facts.panicSites.length
     // WP32 S5: a fused lookup, and a `nish/map` call, call the table's
     // pieces rather than what they were checked as (`fusedCalleesOf`).
     const fused: FunctionSig[] | null =
@@ -1442,11 +1464,19 @@ class FactCollector {
     this.collectResultFacts(node)
     this.collectArrayFacts(node)
     this.collectDivisionFacts(node)
+    this.collectOverflowFacts(node)
     this.collectRangeFacts(node)
     this.collectNamespacePropertyFacts(node)
     this.collectIdentifierBuiltinFacts(node)
+    const ownEnd = this.facts.panicSites.length
+    if (node.kind === N_FOR_OF) {
+      this.orderSites(ownSites, ownEnd)
+    }
     for (const child of node.children) {
       this.visit(child)
+    }
+    if (node.kind !== N_FOR_OF) {
+      this.orderSites(ownSites, ownEnd)
     }
   }
 
@@ -1884,6 +1914,26 @@ class FactCollector {
       }
       this.noteSite(node, PANIC_DIVIDE, proven, "")
     }
+  }
+
+  /**
+   * Every checked signed `+ - *`, negation and step may call the noreturn
+   * overflow panic, as a division may call its own, and is an `overflow` site.
+   * One the bounds walk proved fits (`nodeProvenNoOverflow`) is a plain
+   * `add nsw` and calls nothing, so its site is proven; under `--wrapping`
+   * none is checked and none is a site. The question is `checksOverflow`'s,
+   * the one `emitIntBinary` is reached on, so the two cannot drift apart.
+   */
+  collectOverflowFacts(node: Node): void {
+    const program = this.unit.program
+    if (program.wrapping || !checksOverflow(program, this.table, node)) {
+      return
+    }
+    const proven = program.nodeProvenNoOverflow[node.id]
+    if (!proven) {
+      this.facts.callees.add("nish_panic_overflow")
+    }
+    this.noteSite(node, PANIC_OVERFLOW, proven, "")
   }
 
   /**

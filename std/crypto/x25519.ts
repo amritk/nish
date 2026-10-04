@@ -77,6 +77,17 @@ export const X25519_SIZE: i32 = 32
 /** (A - 2) / 4 for curve25519's A = 486662 (RFC 7748 §5). */
 const X25519_A24: i64 = 121665
 
+/**
+ * `a + b`, `a - b` and `a * b` on limbs: the `u64` arithmetic, read back as
+ * `i64`. Every bound this module states keeps the true result inside `i64`,
+ * so the answer is the signed one bit for bit; the arithmetic is unsigned
+ * because signed arithmetic is checked for an overflow, and a check is a
+ * branch on a secret limb. Each is one instruction once LLVM inlines it.
+ */
+const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+const f25519Mul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
+
 /** The width of limb `i`: 26 bits for an even limb, 25 for an odd one. */
 const f25519Width = (i: i32): i64 => {
   const odd: i64 = toI64(i & 1)
@@ -84,7 +95,7 @@ const f25519Width = (i: i32): i64 => {
 }
 
 /** The mask of limb `i`'s bits, `2^width - 1`. */
-const f25519LimbMask = (i: i32): i64 => (toI64(1) << f25519Width(i)) - toI64(1)
+const f25519LimbMask = (i: i32): i64 => f25519Sub64(toI64(1) << f25519Width(i), toI64(1))
 
 /** A fresh field element, zero. */
 const f25519Zero = (): i64[] => {
@@ -121,7 +132,7 @@ const f25519CarryChain = (h: i64[]): void => {
   for (let i: i32 = 0; i < 9; i++) {
     const c: i64 = h[i] >> f25519Width(i)
     h[i] = h[i] & f25519LimbMask(i)
-    h[i + 1] = h[i + 1] + c
+    h[i + 1] = f25519Add64(h[i + 1], c)
   }
 }
 
@@ -148,10 +159,10 @@ const f25519Carry = (h: i64[]): void => {
   f25519CarryChain(h)
   const top: i64 = h[9] >> toI64(25)
   h[9] = h[9] & f25519LimbMask(9)
-  h[0] = h[0] + top * toI64(19)
+  h[0] = f25519Add64(h[0], f25519Mul64(top, toI64(19)))
   const c0: i64 = h[0] >> toI64(26)
   h[0] = h[0] & f25519LimbMask(0)
-  h[1] = h[1] + c0
+  h[1] = f25519Add64(h[1], c0)
 }
 
 /**
@@ -163,7 +174,7 @@ const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
     return
   }
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i] + g[i]
+    out[i] = f25519Add64(f[i], g[i])
   }
 }
 
@@ -177,7 +188,7 @@ const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
     return
   }
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i] - g[i]
+    out[i] = f25519Sub64(f[i], g[i])
   }
 }
 
@@ -205,7 +216,7 @@ const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
   // product takes `f`'s limb doubled.
   const doubled: i64[] = new Array<i64>(10)
   for (let i: i32 = 0; i < 10; i++) {
-    doubled[i] = f[i] * toI64((i & 1) + 1)
+    doubled[i] = f25519Mul64(f[i], toI64((i & 1) + 1))
   }
   // The plain product, limb `i + j` of nineteen.
   const wide: i64[] = new Array<i64>(19)
@@ -214,14 +225,14 @@ const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
       const k: i32 = i + j
       const fi: i64 = (i & j & 1) === 1 ? doubled[i] : f[i]
       if (k >= 0 && k < 19) {
-        wide[k] = wide[k] + fi * g[j]
+        wide[k] = f25519Add64(wide[k], f25519Mul64(fi, g[j]))
       }
     }
   }
   // Limbs 10 to 18 are past bit 255, and 2^255 = 19 (mod p): fold them down.
   const h: i64[] = new Array<i64>(10)
   for (let k: i32 = 0; k < 9; k++) {
-    h[k] = wide[k] + wide[k + 10] * toI64(19)
+    h[k] = f25519Add64(wide[k], f25519Mul64(wide[k + 10], toI64(19)))
   }
   h[9] = wide[9]
   f25519Carry(h)
@@ -251,7 +262,7 @@ const f25519MulA24 = (out: i64[], f: i64[]): void => {
     return
   }
   for (let i: i32 = 0; i < 10; i++) {
-    out[i] = f[i] * X25519_A24
+    out[i] = f25519Mul64(f[i], X25519_A24)
   }
   f25519Carry(out)
 }
@@ -313,7 +324,7 @@ const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
   if (toI32(f.length) < 10 || toI32(g.length) < 10) {
     return
   }
-  const mask: i64 = toI64(0) - bit
+  const mask: i64 = f25519Sub64(toI64(0), bit)
   for (let i: i32 = 0; i < 10; i++) {
     const t: i64 = mask & (f[i] ^ g[i])
     f[i] = f[i] ^ t
@@ -377,11 +388,11 @@ const f25519Encode = (f: i64[]): u8[] => {
   f25519Carry(h)
   f25519Carry(h)
 
-  let q: i64 = (h[0] + toI64(19)) >> toI64(26)
+  let q: i64 = f25519Add64(h[0], toI64(19)) >> toI64(26)
   for (let i: i32 = 1; i < 10; i++) {
-    q = (h[i] + q) >> f25519Width(i)
+    q = f25519Add64(h[i], q) >> f25519Width(i)
   }
-  h[0] = h[0] + q * toI64(19)
+  h[0] = f25519Add64(h[0], f25519Mul64(q, toI64(19)))
   f25519CarryChain(h)
   h[9] = h[9] & f25519LimbMask(9)
 

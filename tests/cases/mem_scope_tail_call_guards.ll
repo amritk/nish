@@ -10,6 +10,8 @@ declare noundef i64 @nish_arena_used() #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal noundef i32 @walk(i32 noundef %n, i8* noundef nonnull noalias readonly align 8 nocapture %text) #0 {
 entry:
@@ -56,10 +58,19 @@ if.end:
   %6 = bitcast i8* %5 to i64*
   %7 = load i64, i64* %6, align 8
   %8 = trunc i64 %7 to i32
-  %9 = add nsw i32 %acc, %8
-  %10 = call i32 @watch(i32 %4, i32 %9)
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %acc, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %12 = call i32 @watch(i32 %4, i32 %10)
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %10
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @after(i32 noundef %n) #0 {
@@ -83,9 +94,18 @@ if.end:
   %6 = bitcast i8* %5 to i64*
   %7 = load i64, i64* %6, align 8
   %8 = trunc i64 %7 to i32
-  %9 = add nsw i32 %4, %8
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %9
+  ret i32 %10
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @Depth.constructor(%struct.Depth* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %base) #1 {
@@ -105,23 +125,37 @@ entry:
 if.then:
   %1 = getelementptr inbounds %struct.Depth, %struct.Depth* %this, i32 0, i32 0
   %2 = load i32, i32* %1, align 4, !tbaa !4
-  %3 = add nsw i32 %acc, %2
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %acc, i32 %2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %3
+  ret i32 %4
 
 if.end:
-  %4 = call i8* @nish_str_from_i32(i32 %n)
-  %5 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %4)
-  store i8* %5, i8** %label.addr, align 8
-  %6 = sub nsw i32 %n, 1
-  %7 = load i8*, i8** %label.addr, align 8
-  %8 = bitcast i8* %7 to i64*
-  %9 = load i64, i64* %8, align 8
-  %10 = trunc i64 %9 to i32
-  %11 = add nsw i32 %acc, %10
-  %12 = call i32 @Depth.down(%struct.Depth* %this, i32 %6, i32 %11)
+  %6 = call i8* @nish_str_from_i32(i32 %n)
+  %7 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %6)
+  store i8* %7, i8** %label.addr, align 8
+  %8 = sub nsw i32 %n, 1
+  %9 = load i8*, i8** %label.addr, align 8
+  %10 = bitcast i8* %9 to i64*
+  %11 = load i64, i64* %10, align 8
+  %12 = trunc i64 %11 to i32
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %acc, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %16 = call i32 @Depth.down(%struct.Depth* %this, i32 %8, i32 %14)
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %12
+  ret i32 %16
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @nish_main() #0 {
@@ -157,6 +191,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

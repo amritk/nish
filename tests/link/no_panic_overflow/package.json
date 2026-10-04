@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-overflow",
+  "private": true,
+  "nish": {
+    "noPanic": ["score.ts"]
+  }
+}

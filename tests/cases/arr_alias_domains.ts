@@ -1,3 +1,7 @@
+// Compiled with `--wrapping` (see .args): `src[i] * 2` is unbounded, so the
+// checked default adds an overflow exit to the loop, and the single trip count
+// and the vectoriser tests/run.js pins cannot survive a second exit. The alias
+// domains are what this case is about, and the flag leaves them to see.
 // WP15: an element store must not be read as a clobber of an array header.
 // Writing `dst[i]` while reading `src[i]` and `src.length` is the shape where
 // that costs the most — without the alias domains LLVM reloads both headers on

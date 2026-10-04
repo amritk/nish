@@ -85,9 +85,18 @@ const POLY1305_HIGH_BIT: i32 = 0x1000000
 /** `x` rotated left by `n` bits, `n` in 1 to 31. */
 const chacha20Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
 
-/** The little-endian `u32` at `buf[at]` to `buf[at + 3]`. */
-const chacha20Word = (buf: u8[], at: i32): u32 =>
-  toU32(buf[at]) | (toU32(buf[at + 1]) << 8) | (toU32(buf[at + 2]) << 16) | (toU32(buf[at + 3]) << 24)
+/**
+ * The little-endian `u32` at `buf[at]` to `buf[at + 3]`. The offsets are
+ * summed in `u32`, which wraps by definition, rather than as checked `i32`
+ * sums: every caller passes a window inside `buf`, a wrapped offset would
+ * index past it rather than reach another byte, and a check is a branch that
+ * `tests/cases/ct_asm_chacha20poly1305` refuses. `poly1305Le64`,
+ * `poly1305Block` and `chacha20Poly1305TagMatch` sum theirs the same way.
+ */
+const chacha20Word = (buf: u8[], at: i32): u32 => {
+  const p: u32 = toU32(at)
+  return toU32(buf[p]) | (toU32(buf[p + 1]) << 8) | (toU32(buf[p + 2]) << 16) | (toU32(buf[p + 3]) << 24)
+}
 
 /**
  * The sixteen-word state of RFC 8439 §2.3: the four constant words
@@ -346,15 +355,19 @@ export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[]
 }
 
 /** The little-endian `u64` at `buf[at]` to `buf[at + 7]`. */
-const poly1305Le64 = (buf: u8[], at: i32): u64 =>
-  toU64(buf[at]) |
-  (toU64(buf[at + 1]) << 8) |
-  (toU64(buf[at + 2]) << 16) |
-  (toU64(buf[at + 3]) << 24) |
-  (toU64(buf[at + 4]) << 32) |
-  (toU64(buf[at + 5]) << 40) |
-  (toU64(buf[at + 6]) << 48) |
-  (toU64(buf[at + 7]) << 56)
+const poly1305Le64 = (buf: u8[], at: i32): u64 => {
+  const p: u32 = toU32(at)
+  return (
+    toU64(buf[p]) |
+    (toU64(buf[p + 1]) << 8) |
+    (toU64(buf[p + 2]) << 16) |
+    (toU64(buf[p + 3]) << 24) |
+    (toU64(buf[p + 4]) << 32) |
+    (toU64(buf[p + 5]) << 40) |
+    (toU64(buf[p + 6]) << 48) |
+    (toU64(buf[p + 7]) << 56)
+  )
+}
 
 /**
  * `r` from the first 16 bytes of a one-time key, clamped as RFC 8439 §2.5
@@ -397,7 +410,7 @@ const poly1305Clamp = (key: u8[], r: u64[]): void => {
  */
 const poly1305Block = (h: u64[], r: u64[], m: u8[], at: i32, high: u64): void => {
   const lo: u64 = poly1305Le64(m, at)
-  const hi: u64 = poly1305Le64(m, at + 8)
+  const hi: u64 = poly1305Le64(m, toI32(toU32(at) + 8))
   const h0: u64 = h[0] + (lo & 0x3ffffff)
   const h1: u64 = h[1] + ((lo >>> 26) & 0x3ffffff)
   const h2: u64 = h[2] + (((lo >>> 52) | (hi << 12)) & 0x3ffffff)
@@ -602,23 +615,24 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
  * disassembly check; the caller has checked that `sealed` holds the window.
  */
 const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
+  const p: u32 = toU32(at)
   const diff: u32 =
-    toU32(tag[0] ^ sealed[at]) |
-    toU32(tag[1] ^ sealed[at + 1]) |
-    toU32(tag[2] ^ sealed[at + 2]) |
-    toU32(tag[3] ^ sealed[at + 3]) |
-    toU32(tag[4] ^ sealed[at + 4]) |
-    toU32(tag[5] ^ sealed[at + 5]) |
-    toU32(tag[6] ^ sealed[at + 6]) |
-    toU32(tag[7] ^ sealed[at + 7]) |
-    toU32(tag[8] ^ sealed[at + 8]) |
-    toU32(tag[9] ^ sealed[at + 9]) |
-    toU32(tag[10] ^ sealed[at + 10]) |
-    toU32(tag[11] ^ sealed[at + 11]) |
-    toU32(tag[12] ^ sealed[at + 12]) |
-    toU32(tag[13] ^ sealed[at + 13]) |
-    toU32(tag[14] ^ sealed[at + 14]) |
-    toU32(tag[15] ^ sealed[at + 15])
+    toU32(tag[0] ^ sealed[p]) |
+    toU32(tag[1] ^ sealed[p + 1]) |
+    toU32(tag[2] ^ sealed[p + 2]) |
+    toU32(tag[3] ^ sealed[p + 3]) |
+    toU32(tag[4] ^ sealed[p + 4]) |
+    toU32(tag[5] ^ sealed[p + 5]) |
+    toU32(tag[6] ^ sealed[p + 6]) |
+    toU32(tag[7] ^ sealed[p + 7]) |
+    toU32(tag[8] ^ sealed[p + 8]) |
+    toU32(tag[9] ^ sealed[p + 9]) |
+    toU32(tag[10] ^ sealed[p + 10]) |
+    toU32(tag[11] ^ sealed[p + 11]) |
+    toU32(tag[12] ^ sealed[p + 12]) |
+    toU32(tag[13] ^ sealed[p + 13]) |
+    toU32(tag[14] ^ sealed[p + 14]) |
+    toU32(tag[15] ^ sealed[p + 15])
   return ctEq(diff, 0)
 }
 

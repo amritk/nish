@@ -15,11 +15,13 @@ declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -70,20 +72,29 @@ while.body:
   %3 = load %struct.Node*, %struct.Node** %cur.addr, align 8
   %4 = getelementptr inbounds %struct.Node, %struct.Node* %3, i32 0, i32 0
   %5 = load i32, i32* %4, align 4, !tbaa !6
-  %6 = add nsw i32 %2, %5
-  store i32 %6, i32* %total.addr, align 4
-  %7 = load %struct.Node*, %struct.Node** %cur.addr, align 8
-  %8 = getelementptr inbounds %struct.Node, %struct.Node* %7, i32 0, i32 1
-  %9 = load %struct.Node*, %struct.Node** %8, align 8, !tbaa !5
-  store %struct.Node* %9, %struct.Node** %cur.addr, align 8
+  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %7, i32* %total.addr, align 4
+  %9 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %10 = getelementptr inbounds %struct.Node, %struct.Node* %9, i32 0, i32 1
+  %11 = load %struct.Node*, %struct.Node** %10, align 8, !tbaa !5
+  store %struct.Node* %11, %struct.Node** %cur.addr, align 8
   br label %while.cond
 
 while.end:
-  %10 = load i32, i32* %total.addr, align 4
-  ret i32 %10
+  %12 = load i32, i32* %total.addr, align 4
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define internal noundef align 8 %struct.Node* @find(%struct.Node* noundef align 8 %head, i32 noundef %want) #1 {
+define internal noundef align 8 %struct.Node* @find(%struct.Node* noundef align 8 %head, i32 noundef %want) #2 {
 entry:
   %cur.addr = alloca %struct.Node*, align 8
   store %struct.Node* %head, %struct.Node** %cur.addr, align 8
@@ -117,7 +128,7 @@ while.end:
   ret %struct.Node* %10
 }
 
-define internal noundef nonnull align 8 i8* @describe(%struct.Node* noundef readonly align 8 nocapture %n) #2 {
+define internal noundef nonnull align 8 i8* @describe(%struct.Node* noundef readonly align 8 nocapture %n) #1 {
 entry:
   %0 = icmp eq %struct.Node* %n, null
   br i1 %0, label %if.then, label %if.end
@@ -151,7 +162,7 @@ cond.end:
   ret i32 %3
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.Node* @last(%struct.Node* noundef nonnull align 8 dereferenceable(16) %head) #1 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Node* @last(%struct.Node* noundef nonnull align 8 dereferenceable(16) %head) #2 {
 entry:
   %cur.addr = alloca %struct.Node*, align 8
   %next.addr = alloca %struct.Node*, align 8
@@ -181,7 +192,7 @@ while.end:
   ret %struct.Node* %9
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #1 {
 entry:
   %a.addr = alloca %struct.Node*, align 8
   %b.addr = alloca %struct.Node*, align 8
@@ -318,7 +329,7 @@ if.end.1:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -326,11 +337,13 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind readonly }
 attributes #3 = { nounwind willreturn readonly }
 attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { nounwind willreturn readnone }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

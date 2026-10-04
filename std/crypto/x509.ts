@@ -695,8 +695,15 @@ const x509Bytes = (text: string): u8[] => {
 // PEM (RFC 7468) and standard base64 (RFC 4648 §4)
 // ---------------------------------------------------------------------------
 
-/** All ones when `lo <= c <= hi`, else zero, without a branch; `c` is a byte or a sextet. */
-const x509RangeMask = (c: i32, lo: i32, hi: i32): i32 => ((lo - 1 - c) & (c - hi - 1)) >> 31
+/**
+ * All ones when `lo <= c <= hi`, else zero, without a branch; `c` is a byte or
+ * a sextet. The subtractions are `u32`'s, which wrap by definition, rather
+ * than checked `i32` ones, whose check would be a branch on a byte of what may
+ * be a private key's PEM; the sign bit `>> 31` reads is the same.
+ * `x509Base64CharOf` and `x509Base64SextetOf` sum in `u32` for the same reason.
+ */
+const x509RangeMask = (c: i32, lo: i32, hi: i32): i32 =>
+  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
 
 /**
  * The base64 character for the sextet `v`: `'A' + v`, stepped by the gap to
@@ -704,12 +711,14 @@ const x509RangeMask = (c: i32, lo: i32, hi: i32): i32 => ((lo - 1 - c) & (c - hi
  * 63 on `/`.
  */
 const x509Base64CharOf = (v: i32): i32 =>
-  65 +
-  v +
-  (x509RangeMask(v, 26, 63) & 6) -
-  (x509RangeMask(v, 52, 63) & 75) -
-  (x509RangeMask(v, 62, 63) & 15) +
-  (x509RangeMask(v, 63, 63) & 3)
+  toI32(
+    65 +
+      toU32(v) +
+      toU32(x509RangeMask(v, 26, 63) & 6) -
+      toU32(x509RangeMask(v, 52, 63) & 75) -
+      toU32(x509RangeMask(v, 62, 63) & 15) +
+      toU32(x509RangeMask(v, 63, 63) & 3)
+  )
 
 /** The sextet the byte `c` stands for in base64, or `-1` when it is not in the alphabet. */
 const x509Base64SextetOf = (c: i32): i32 => {
@@ -718,7 +727,12 @@ const x509Base64SextetOf = (c: i32): i32 => {
   const digit: i32 = x509RangeMask(c, 48, 57)
   const plus: i32 = x509RangeMask(c, 43, 43)
   const slash: i32 = x509RangeMask(c, 47, 47)
-  const value: i32 = (upper & (c - 65)) | (lower & (c - 71)) | (digit & (c + 4)) | (plus & 62) | (slash & 63)
+  const value: i32 =
+    (upper & toI32(toU32(c) - 65)) |
+    (lower & toI32(toU32(c) - 71)) |
+    (digit & toI32(toU32(c) + 4)) |
+    (plus & 62) |
+    (slash & 63)
   return value | ~(upper | lower | digit | plus | slash)
 }
 

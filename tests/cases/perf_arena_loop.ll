@@ -12,8 +12,10 @@ declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -94,7 +96,7 @@ for.end:
   ret %struct.nish_array* %22
 }
 
-define internal noundef i32 @tally(%struct.Log* noundef nonnull align 8 dereferenceable(8) nocapture %log, i32 noundef %rounds) #0 {
+define internal noundef i32 @tally(%struct.Log* noundef nonnull align 8 dereferenceable(8) nocapture %log, i32 noundef %rounds) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -114,23 +116,32 @@ for.body:
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0
   %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %7 = trunc i64 %6 to i32
-  %8 = add nsw i32 %2, %7
-  store i32 %8, i32* %total.addr, align 4
-  %9 = load i32, i32* %total.addr, align 4
-  %10 = call i8* @nish_str_from_i32(i32 %9)
-  %11 = getelementptr inbounds %struct.Log, %struct.Log* %log, i32 0, i32 0
-  store i8* %10, i8** %11, align 8, !tbaa !17
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %9, i32* %total.addr, align 4
+  %11 = load i32, i32* %total.addr, align 4
+  %12 = call i8* @nish_str_from_i32(i32 %11)
+  %13 = getelementptr inbounds %struct.Log, %struct.Log* %log, i32 0, i32 0
+  store i8* %12, i8** %13, align 8, !tbaa !17
   br label %for.inc
 
 for.inc:
-  %12 = load i32, i32* %i.addr, align 4
-  %13 = add nsw i32 %12, 1
-  store i32 %13, i32* %i.addr, align 4
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = add nsw i32 %14, 1
+  store i32 %15, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %14 = load i32, i32* %total.addr, align 4
-  ret i32 %14
+  %16 = load i32, i32* %total.addr, align 4
+  ret i32 %16
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @flush() #0 {
@@ -143,7 +154,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @drain(i32 noundef %rounds) #0 {
+define internal noundef i32 @drain(i32 noundef %rounds) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -163,20 +174,29 @@ for.body:
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0
   %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %7 = trunc i64 %6 to i32
-  %8 = add nsw i32 %2, %7
-  store i32 %8, i32* %total.addr, align 4
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %9, i32* %total.addr, align 4
   call void @flush()
   br label %for.inc
 
 for.inc:
-  %9 = load i32, i32* %i.addr, align 4
-  %10 = add nsw i32 %9, 1
-  store i32 %10, i32* %i.addr, align 4
+  %11 = load i32, i32* %i.addr, align 4
+  %12 = add nsw i32 %11, 1
+  store i32 %12, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %11 = load i32, i32* %total.addr, align 4
-  ret i32 %11
+  %13 = load i32, i32* %total.addr, align 4
+  ret i32 %13
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @collect(i32 noundef %rounds) #0 {
@@ -240,7 +260,7 @@ for.end:
   ret %struct.nish_array* %26
 }
 
-define internal noundef i32 @quiet(i32 noundef %rounds) #0 {
+define internal noundef i32 @quiet(i32 noundef %rounds) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -265,40 +285,49 @@ for.body:
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0
   %10 = load i64, i64* %9, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %11 = trunc i64 %10 to i32
-  %12 = add nsw i32 %6, %11
-  store i32 %12, i32* %total.addr, align 4
-  %13 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %14 = load i8*, i8** %13, align 8
-  %15 = icmp eq i8* %14, %3
-  br i1 %15, label %pass.rewind, label %pass.free
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %11)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %13, i32* %total.addr, align 4
+  %15 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %16 = load i8*, i8** %15, align 8
+  %17 = icmp eq i8* %16, %3
+  br i1 %17, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %5, i64* %16, align 8
+  %18 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %18, align 8
   br label %pass.done
 
 pass.free:
-  %17 = ptrtoint i8* %3 to i64
-  %18 = add i64 %17, %5
-  call void @nish_arena_release(i64 %18)
+  %19 = ptrtoint i8* %3 to i64
+  %20 = add i64 %19, %5
+  call void @nish_arena_release(i64 %20)
   br label %pass.done
 
 pass.done:
   br label %for.inc
 
 for.inc:
-  %19 = load i32, i32* %i.addr, align 4
-  %20 = add nsw i32 %19, 1
-  store i32 %20, i32* %i.addr, align 4
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = add nsw i32 %21, 1
+  store i32 %22, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %21 = load i32, i32* %total.addr, align 4
+  %23 = load i32, i32* %total.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %21
+  ret i32 %23
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %log.addr = alloca %struct.Log*, align 8
   %Log.obj = alloca %struct.Log, align 8
@@ -338,7 +367,9 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

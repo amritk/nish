@@ -136,6 +136,7 @@
 // put on the §8 warning list, because the rewrite such a warning names is the
 // `const xs = h.xs` hoist, and that is advice about a local.
 
+import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import { DiagnosticSink } from "./diagnostics"
 import {
@@ -181,6 +182,9 @@ import {
   T_I32,
   T_I64,
   T_STRING,
+  T_U16,
+  T_U32,
+  T_U8,
   TypeTable,
   isInteger,
   isNumeric,
@@ -1154,11 +1158,15 @@ const indexLocal = (ctx: CheckContext, expr: Node): Local | null => {
  * function called `toI32` wins over the builtin, and it may answer anything,
  * so the spelling alone is never trusted.
  */
-const isBuiltinToI32 = (program: CheckedProgram, call: Node): boolean => {
+const isBuiltinToI32 = (program: CheckedProgram, call: Node): boolean =>
+  isBuiltinConversion(program, call, "toI32")
+
+/** `isBuiltinToI32`'s question about any one-argument builtin conversion. */
+const isBuiltinConversion = (program: CheckedProgram, call: Node, name: string): boolean => {
   const callee = call.children[0]
   return (
     callee.kind === N_IDENT &&
-    callee.text === "toI32" &&
+    callee.text === name &&
     program.nodeCallees[call.id] === null &&
     program.nodeBuiltins[call.id] === "" &&
     call.children[1].children.length === 1
@@ -1232,11 +1240,13 @@ const literalValue = (expr: Node): i32 => {
     }
     value = value * toI64(10) + toI64(c - 48)
     // Bounds live in `i32` at the source level; a literal past that is not a
-    // bound anybody wrote on purpose. Bailing out here rather than after the
+    // bound anybody wrote on purpose. `INT_MAX` itself is left out too, so that
+    // `n + 1`, which every caller computes from a literal, is still an `i32`:
+    // the compiler's own arithmetic is checked like any program's. Bailing out here rather than after the
     // last digit is also what keeps the `i64` fold from overflowing on a long
     // run of digits, which would be undefined behaviour inside the very check
     // that is deciding whether a program is safe.
-    if (value > I32_MAX) {
+    if (value >= I32_MAX) {
       return -1
     }
     k = k + 1
@@ -1255,7 +1265,7 @@ const isMinusOne = (expr: Node): boolean => {
  * fact could tell: one value for a literal, a negated literal or a folded
  * integer constant, and the declared range of a ranged or unsigned type.
  */
-const valueRange = (ctx: CheckContext, expr: Node): DeclaredRange | null => {
+const declaredValueRange = (ctx: CheckContext, expr: Node): DeclaredRange | null => {
   const e = unwrapBoundsParens(expr)
   const n = literalValue(e)
   if (n >= 0) {
@@ -1290,7 +1300,7 @@ const rangeExcludes = (range: DeclaredRange | null, n: i64): boolean =>
  */
 const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: Node): boolean => {
   const ctx = walk.ctx
-  const range = valueRange(ctx, divisor)
+  const range = declaredValueRange(ctx, divisor)
   const d = indexLocal(ctx, divisor)
   const zero: i64 = 0
   const minusOne: i64 = -1
@@ -1305,7 +1315,7 @@ const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: 
   ) {
     return true
   }
-  const top = valueRange(ctx, dividend)
+  const top = declaredValueRange(ctx, dividend)
   const x = indexLocal(ctx, dividend)
   return (top !== null && top.lo >= zero) || (x !== null && knownNonNegative(state, x))
 }
@@ -1376,6 +1386,50 @@ const judgePop = (walk: BoundsWalk, state: State, call: Node): void => {
 // ---- Conditions -------------------------------------------------------------------
 
 /**
+ * The value of an integer literal in any radix, or -1 for anything else. The
+ * overflow ranges read it; `literalValue`, which the bounds proofs read, stays
+ * decimal-only so that the accesses it proves are the ones it proved before.
+ * A literal the checker accepted fits its type, so a value read here past
+ * `i64` (which `parseIntegerLiteral` wraps) is never one an `i32` operand holds.
+ */
+const anyLiteral = (expr: Node): i64 => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== N_NUMBER) {
+    return toI64(-1)
+  }
+  return parseIntegerLiteral(e.text)
+}
+
+/** The local `v` when `expr` is `v * v` at `i32`, the shape a loop bounded by a square root is written in. */
+const squaredLocal = (ctx: CheckContext, expr: Node): Local | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== N_BINARY || e.text !== "*" || ctx.wrapping) {
+    return null
+  }
+  const a = indexLocal(ctx, e.children[0])
+  const b = indexLocal(ctx, e.children[1])
+  if (a === null || b === null) {
+    return null
+  }
+  return a === b && ctx.table.baseOf(a.type) === T_I32 ? a : null
+}
+
+/** `floor(sqrt(n))` for `0 <= n < 2^31`, by bisection, so no float rounding decides a bound. */
+const squareRootFloor = (n: i32): i32 => {
+  let lo: i64 = 0
+  let hi: i64 = 46341
+  while (lo < hi) {
+    const mid: i64 = (lo + hi + toI64(1)) >> toI64(1)
+    if (mid * mid <= toI64(n)) {
+      lo = mid
+    } else {
+      hi = mid - toI64(1)
+    }
+  }
+  return toI32(lo)
+}
+
+/**
  * What `lo < hi` (or `lo <= hi`) proves. Four shapes carry a bound worth
  * recording; everything else says nothing this domain can hold.
  */
@@ -1396,6 +1450,15 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   if (loVar !== null && hiConst >= 0) {
     out.push(new Fact(FACT_MAX_INDEX, loVar, null, strict ? hiConst : hiConst + 1))
   }
+  // `i < e` for any `e` at all: an `i32` that is less than another `i32` is at
+  // most `INT_MAX - 1`, which is `maxIndex(i, INT_MAX)`. No access is proved
+  // by a bound that large, but it is what proves `i + 1` cannot overflow in
+  // `for (let i = 0; i < n; i++)` whatever `n` is (`judgeOverflow`). Only at
+  // `i32`, the one width whose top fits the family; an `i64` `i < n` says
+  // nothing it can hold.
+  if (loVar !== null && strict && hiConst < 0 && ctx.table.baseOf(loVar.type) === T_I32) {
+    out.push(new Fact(FACT_MAX_INDEX, loVar, null, toI32(I32_MAX)))
+  }
   // `n < i` / `n <= i`: a lower bound. Zero is the one an access needs, and a
   // floor above it is what lets `i - 1` keep one.
   if (hiVar !== null && loConst >= 0) {
@@ -1410,6 +1473,31 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   // `k < i` needs to become `k < w.length`.
   if (loVar !== null && hiLength !== null && !strict) {
     out.push(new Fact(FACT_AT_MOST, loVar, hiLength, 0))
+  }
+  // `i * i <= n` with `n` below a literal: `|i|` is at most the square root.
+  // The product was checked or proven where the condition ran, so it is the
+  // true square — which is what lets a sieve's `j += i` be proven under
+  // `for (let i = 2; i * i <= n; i++)`.
+  const root = squaredLocal(ctx, lo)
+  if (root !== null) {
+    let ceiling = hiConst >= 0 ? hiConst + 1 : -1
+    if (hiVar !== null) {
+      ceiling = maxIndexOf(state, hiVar)
+    }
+    if (ceiling >= 1) {
+      // `i * i < ceiling` (or `<= ceiling - 1`), so `i <= isqrt(ceiling - 1)`.
+      out.push(new Fact(FACT_MAX_INDEX, root, null, squareRootFloor(ceiling - 1) + 1))
+    }
+  }
+  // `i < n` / `i <= n` where `n` is below a literal: `i` is below it too, one
+  // further for a strict compare. It is what bounds a loop over a parameter
+  // every caller passes a literal for (`src/ranges.ts`).
+  if (loVar !== null && hiVar !== null) {
+    const bound = maxIndexOf(state, hiVar)
+    const below = strict ? bound - 1 : bound
+    if (bound >= 0 && below >= 1) {
+      out.push(new Fact(FACT_MAX_INDEX, loVar, null, below))
+    }
   }
   // `i < n` where `n` is itself bounded by a length: the hoisted-length loop.
   // Transitivity is applied here, at the point the condition is evaluated,
@@ -1776,6 +1864,7 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
     differenceFacts(walk, state, v, copied, 0, out)
     return out
   }
+  rangeFacts(walk, state, v, e, out)
   if (e.kind === N_BINARY && e.text === "-") {
     const c = literalValue(e.children[1])
     const w = indexLocal(ctx, e.children[0])
@@ -1791,6 +1880,32 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
     }
   }
   return out
+}
+
+/**
+ * What the range of a computed value gives the `i32` or `i64` variable it is
+ * written into: `const ij = i + j` with both below 3000 is below 5999,
+ * `acc = x & 0xffff` is in `[0, 65535]`, and `toI64(i & 1)` is 0 or 1. Only where the arithmetic is checked,
+ * because a range drawn through a wrap is not one, and only where `e` writes
+ * no local, so that the state describes the values it read.
+ */
+const rangeFacts = (walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact[]): void => {
+  const ctx = walk.ctx
+  const base = ctx.table.baseOf(v.type)
+  const computed = e.kind === N_BINARY || (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toI64"))
+  if (ctx.wrapping || (base !== T_I32 && base !== T_I64) || !computed) {
+    return
+  }
+  if (writesAnyLocal(ctx.program, e)) {
+    return
+  }
+  const range = valueRange(walk, state, e, base)
+  if (range.lo >= toI64(0) && range.lo < I32_MAX) {
+    out.push(new Fact(FACT_MIN_VALUE, v, null, toI32(range.lo)))
+  }
+  if (range.hi >= toI64(0) && range.hi < I32_MAX - toI64(1)) {
+    out.push(new Fact(FACT_MAX_INDEX, v, null, toI32(range.hi) + 1))
+  }
 }
 
 /** An array of known size starts with that many elements. */
@@ -1860,6 +1975,8 @@ export class BoundsWalk {
   proved: Node[]
   /** The `substring` bounds an unrecorded walk proved, waiting as `proved` does. */
   clamps: Node[]
+  /** The arithmetic an unrecorded walk proved cannot overflow, waiting as `proved` does. */
+  noOverflow: Node[]
   /**
    * The `slice` bounds this walk proved inside `[0, length]`, for
    * `proveSliceBounds` to record; `null` in every other walk, which judges no
@@ -1885,8 +2002,23 @@ export class BoundsWalk {
    * that only collects sites — its body has nothing left to prove — is over
    * once it has noted every call to a candidate there is (`done`).
    */
+  /**
+   * The summary of this body's returns being gathered (`noteReturn`), stated
+   * at its declared return type, or `null` for a walk that gathers none — or
+   * that met a return nothing can be said about, after which it gathers no
+   * more. `returnParams` is the body's parameters' locals, by position.
+   */
+  returns: ReturnSummary | null
+  returnParams: (Local | null)[]
   stopAfter: i32
   done: boolean
+  /**
+   * Whether `valueRange` may read a callee's return summary (`callRange`):
+   * only while judging an operation (`judgeOverflow`) or gathering a summary
+   * (`noteReturn`). No fact, and so no entry or index proof, ever rests on a
+   * summary, which keeps the entries of `src/ranges.ts` weakening only.
+   */
+  callRanges: boolean
 
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx
@@ -1901,6 +2033,7 @@ export class BoundsWalk {
     this.record = true
     this.proved = []
     this.clamps = []
+    this.noOverflow = []
     this.sliceClamps = null
     this.literalStrings = []
     this.literalLengths = []
@@ -1908,6 +2041,9 @@ export class BoundsWalk {
     this.callees = []
     this.stopAfter = -1
     this.done = false
+    this.callRanges = false
+    this.returns = null
+    this.returnParams = []
   }
 }
 
@@ -2515,6 +2651,8 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
   if (e.kind === N_UNARY) {
     const operand = e.children[0]
     walkExpression(walk, state, operand)
+    // `-x`, `x++` and `x--` are judged on the value read, before the step.
+    judgeOverflow(walk, state, e, operand, null)
     if (e.text !== "++" && e.text !== "--") {
       return
     }
@@ -2882,6 +3020,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   if (!isBoundsAssignment(op)) {
     walkExpression(walk, state, left)
     walkExpression(walk, state, right)
+    judgeOverflow(walk, state, expr, left, right)
     judgeDivision(walk, state, expr)
     return
   }
@@ -2895,6 +3034,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
       // (`emitElementAssignment`), so the check is judged before `v` runs.
       judge(walk, state, target, target.children[0], target.children[1], true)
       walkExpression(walk, state, right)
+      judgeOverflow(walk, state, expr, target, right)
       judgeDivision(walk, state, expr)
     } else {
       // `a[i] = v` reads the array and the index, evaluates `v`, and only then
@@ -2931,6 +3071,9 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     // second judged `g.hs[i]` in `g.hs[i].n = (i = 0)` against the new `i`.
     walkExpression(walk, state, target.children[0])
     walkExpression(walk, state, right)
+    if (op !== "=") {
+      judgeOverflow(walk, state, expr, target, right)
+    }
     judgeDivision(walk, state, expr)
     forgetPathsThrough(walk, state, target.text)
     // `this.v = new Array<i32>(6)` leaves the path naming an array of six,
@@ -2947,6 +3090,9 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     return
   }
   walkExpression(walk, state, right)
+  if (op !== "=") {
+    judgeOverflow(walk, state, expr, target, right)
+  }
   judgeDivision(walk, state, expr)
   const v = localOf(ctx.program, target)
   if (v === null) {
@@ -2991,8 +3137,40 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
   const ctx = walk.ctx
   const effects = new Effects()
   collectEffects(walk, root, effects)
+  // A variable every write masks to `[0, c]`, and that is in that range on the
+  // way in, is in it at the top of every pass.
+  const kept: Local[] = []
+  const keptTops: i32[] = []
+  let k = 0
+  while (k < effects.masked.length && k < effects.maskTops.length) {
+    const v = effects.masked[k]
+    const top = effects.maskTops[k]
+    const bound = maxIndexOf(state, v)
+    const fresh = !contains(effects.unmasked, v) && !contains(effects.stepped, v)
+    if (
+      fresh &&
+      !contains(effects.decremented, v) &&
+      knownNonNegative(state, v) &&
+      bound >= 0 &&
+      bound <= top + 1
+    ) {
+      kept.push(v)
+      keptTops.push(top)
+    }
+    k = k + 1
+  }
   for (const v of effects.clobbered) {
     forgetLocal(walk, state, v)
+  }
+  k = 0
+  while (k < kept.length && k < keptTops.length) {
+    const v = kept[k]
+    const top = keptTops[k]
+    if (top < toI32(I32_MAX) - 1) {
+      addFact(state, new Fact(FACT_NON_NEGATIVE, v, null, 0))
+      addFact(state, new Fact(FACT_MAX_INDEX, v, null, top + 1))
+    }
+    k = k + 1
   }
   for (const v of effects.stepped) {
     if (contains(effects.clobbered, v)) {
@@ -3042,6 +3220,15 @@ class Effects {
   /** Written only by `v -= c`, `v = v - c` and `v--`, with `c` a non-negative literal. */
   decremented: Local[]
   clobbered: Local[]
+  /**
+   * Of `clobbered`, the variables some write gives a value of any size, and
+   * beside them the ones every write masks — `v = e & c`, `c` a non-negative
+   * literal — with the largest mask. A masked variable is in `[0, c]` after
+   * every pass whatever it was before, so a loop keeps that much of it.
+   */
+  unmasked: Local[]
+  masked: Local[]
+  maskTops: i32[]
   fields: string[]
   calls: boolean
   /** The record types a whole-record store writes (`recordStoreType`), each once. */
@@ -3051,10 +3238,39 @@ class Effects {
     this.stepped = []
     this.decremented = []
     this.clobbered = []
+    this.unmasked = []
+    this.masked = []
+    this.maskTops = []
     this.fields = []
     this.calls = false
     this.records = []
   }
+}
+
+/** Record whether the write `node` makes to `v` is a mask (`Effects.masked`). */
+const noteMask = (node: Node, v: Local, effects: Effects): void => {
+  const value = unwrapBoundsParens(node.children[1])
+  const literal =
+    node.text === "=" && value.kind === N_BINARY && value.text === "&"
+      ? anyLiteral(value.children[1])
+      : toI64(-1)
+  const top = literal >= toI64(0) && literal < I32_MAX ? toI32(literal) : -1
+  if (top < 0) {
+    effects.unmasked.push(v)
+    return
+  }
+  let k = 0
+  while (k < effects.masked.length) {
+    if (effects.masked[k] === v) {
+      if (top > effects.maskTops[k]) {
+        effects.maskTops[k] = top
+      }
+      return
+    }
+    k = k + 1
+  }
+  effects.masked.push(v)
+  effects.maskTops.push(top)
 }
 
 const contains = (list: Local[], v: Local): boolean => {
@@ -3103,6 +3319,7 @@ const collectEffects = (walk: BoundsWalk, node: Node, effects: Effects): void =>
         effects.decremented.push(v)
       } else {
         clobbered.push(v)
+        noteMask(node, v, effects)
       }
     }
   }
@@ -3292,7 +3509,9 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     } else if (init.kind !== N_EMPTY) {
       walkExpression(walk, state, init)
     }
+    const accumulated = accumulatorFacts(walk, state, stmt)
     forgetAcross(walk, state, stmt)
+    addFacts(state, accumulated)
     walk.loops = walk.loops + 1
     const cond = stmt.children[1]
     if (cond.kind !== N_EMPTY) {
@@ -3338,6 +3557,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
 
   if (stmt.kind === N_RETURN) {
     if (stmt.children[0].kind !== N_EMPTY) {
+      noteReturn(walk, state, stmt.children[0])
       walkExpression(walk, state, stmt.children[0])
     }
     return true
@@ -3455,6 +3675,9 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
   if (node.kind === N_INDEX || rangeEntryOf(ctx, node) >= 0) {
     return true
   }
+  if (!ctx.wrapping && checksOverflow(ctx.program, ctx.table, node)) {
+    return true
+  }
   if (node.kind === N_CALL) {
     const callee = unwrapBoundsParens(node.children[0])
     const name = callee.kind === N_MEMBER ? callee.text : ""
@@ -3476,6 +3699,870 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
     }
   }
   return false
+}
+
+// ---- Signed overflow --------------------------------------------------------------
+//
+// A signed `+ - *`, a negation, an increment or a decrement either fits its
+// type or panics (docs/LANGUAGE.md, "Semantics decisions"). The emitter checks
+// every one with `llvm.s*.with.overflow` unless this walk proved the result
+// fits, which it records in `program.nodeProvenNoOverflow`; the emitter then
+// writes the plain instruction with `nsw`, and that flag is the proof.
+//
+// The proof is interval arithmetic. Each operand is given the range of values
+// it can hold at the point it is read: a literal or a folded constant is one
+// value, `w.length` is `[0, MAX]`, a `toI32` of a `u8` or `u16` is its type's
+// range, and a local is its type's range — a declared one for `integer<Lo,
+// Hi>` — narrowed by what the state knows: its floor (`minValueOf`), its
+// `maxIndex`, and `i < w.length`, which leaves it at most `MAX - 1`. A nested
+// operation is the operation of its operands' ranges, cut to the type, which
+// is sound *because* overflow panics: a value past either end never reaches
+// the operator above it. The operation is proven when its range fits.
+//
+// The ranges are read off the state after both operands ran, so the walk
+// proves nothing in an expression that writes a local (`writesAnyLocal`):
+// there a variable could hold one value where it was read and another where
+// the state describes it. A call writes no local of the caller — a local
+// cannot be reached through an alias — so calls do not count.
+//
+// None of this runs under `--wrapping`, where nothing is checked; and every
+// fact it reads is one the bounds walk already keeps sound under checked
+// arithmetic, because a step past `MAX` that would have broken a floor now
+// panics instead (`keepsLowerBound`).
+
+/** `2^63 - 1`, built from `2^62` because a literal past `2^53` cannot be written exactly. */
+const i64Max = (): i64 => {
+  const half: i64 = toI64(1) << toI64(62)
+  return half - toI64(1) + half
+}
+
+/** The closed range of values an operand may hold, `lo <= v <= hi`. */
+class Interval {
+  lo: i64
+  hi: i64
+
+  constructor(lo: i64, hi: i64) {
+    this.lo = lo
+    this.hi = hi
+  }
+}
+
+/**
+ * The base type a node's signed arithmetic is checked at, or -1 when it is
+ * not checked: `+ - *` and `+= -= *=` on an `i32` or an `i64` (a ranged value
+ * computes at its base), unary `-` on one — but not on a literal, which the
+ * emitter writes as the negated constant — and `++` / `--`. `checksOverflow`
+ * is the export, so that `src/attributes.ts` asks the same question the
+ * emitter's path answers, and reads the same verdict.
+ */
+const checkedArithmeticType = (program: CheckedProgram, table: TypeTable, node: Node): i32 => {
+  const op = node.text
+  if (node.kind === N_BINARY) {
+    if (op !== "+" && op !== "-" && op !== "*" && op !== "+=" && op !== "-=" && op !== "*=") {
+      return -1
+    }
+  } else if (node.kind === N_UNARY) {
+    if (op !== "-" && op !== "++" && op !== "--") {
+      return -1
+    }
+    if (op === "-" && unwrapBoundsParens(node.children[0]).kind === N_NUMBER) {
+      return -1
+    }
+  } else {
+    return -1
+  }
+  const type = program.nodeTypes[node.children[0].id]
+  if (type < 0) {
+    return -1
+  }
+  const base = table.baseOf(type)
+  return base === T_I32 || base === T_I64 ? base : -1
+}
+
+/** Whether `node` is signed arithmetic the emitter checks unless it is proven (`checkedArithmeticType`). */
+export const checksOverflow = (program: CheckedProgram, table: TypeTable, node: Node): boolean =>
+  checkedArithmeticType(program, table, node) >= 0
+
+const typeMin = (type: i32): i64 => (type === T_I32 ? I32_MIN : -i64Max() - toI64(1))
+const typeMax = (type: i32): i64 => (type === T_I32 ? I32_MAX : i64Max())
+
+/** `x + y`, held at `[min, max]` rather than overflowing, for the ends of a range. */
+const saturatingAdd = (x: i64, y: i64, min: i64, max: i64): i64 => {
+  if (y > toI64(0) && x > max - y) {
+    return max
+  }
+  if (y < toI64(0) && x < min - y) {
+    return min
+  }
+  const sum = x + y
+  if (sum > max) {
+    return max
+  }
+  return sum < min ? min : sum
+}
+
+/** `x - y`, held at `[min, max]` the same way. */
+const saturatingSub = (x: i64, y: i64, min: i64, max: i64): i64 => {
+  if (y < toI64(0) && x > max + y) {
+    return max
+  }
+  if (y > toI64(0) && x < min + y) {
+    return min
+  }
+  const difference = x - y
+  if (difference > max) {
+    return max
+  }
+  return difference < min ? min : difference
+}
+
+/** `2^31`: products of ends inside `[-2^31, 2^31]` cannot overflow the `i64` they are computed in. */
+const PRODUCT_LIMIT: i64 = 2147483648
+
+const smallEnds = (a: Interval): boolean =>
+  a.lo >= -PRODUCT_LIMIT && a.lo <= PRODUCT_LIMIT && a.hi >= -PRODUCT_LIMIT && a.hi <= PRODUCT_LIMIT
+
+/**
+ * The range of `a * b`, or `null` when an end is too large to multiply in an
+ * `i64` without overflowing the compiler's own arithmetic. The four products
+ * of the ends bound it, because a product is monotone in each factor.
+ */
+const productRange = (a: Interval, b: Interval): Interval | null => {
+  if (!smallEnds(a) || !smallEnds(b)) {
+    return null
+  }
+  const p1 = a.lo * b.lo
+  const p2 = a.lo * b.hi
+  const p3 = a.hi * b.lo
+  const p4 = a.hi * b.hi
+  const lo = p1 < p2 ? p1 : p2
+  const hi = p1 > p2 ? p1 : p2
+  const lo2 = p3 < p4 ? p3 : p4
+  const hi2 = p3 > p4 ? p3 : p4
+  return new Interval(lo < lo2 ? lo : lo2, hi > hi2 ? hi : hi2)
+}
+
+/** The arithmetic operator a node applies: `+`, `-` or `*`, with `++` / `--` as `+` / `-` and unary `-` as `neg`. */
+const arithmeticOperator = (node: Node): string => {
+  const op = node.text
+  if (node.kind === N_UNARY) {
+    if (op === "++") {
+      return "+"
+    }
+    return op === "--" ? "-" : "neg"
+  }
+  return op.endsWith("=") ? op.substring(0, op.length - 1) : op
+}
+
+/**
+ * The range of `a op b` at `type`, cut to the type's own range: a result past
+ * either end panicked rather than reaching whatever reads it.
+ */
+const combinedRange = (op: string, a: Interval, b: Interval, type: i32): Interval => {
+  const min = typeMin(type)
+  const max = typeMax(type)
+  if (op === "+") {
+    return new Interval(saturatingAdd(a.lo, b.lo, min, max), saturatingAdd(a.hi, b.hi, min, max))
+  }
+  if (op === "-") {
+    return new Interval(saturatingSub(a.lo, b.hi, min, max), saturatingSub(a.hi, b.lo, min, max))
+  }
+  if (op === "neg") {
+    const zero = toI64(0)
+    return new Interval(saturatingSub(zero, a.hi, min, max), saturatingSub(zero, a.lo, min, max))
+  }
+  const product = productRange(a, b)
+  if (product === null) {
+    return new Interval(min, max)
+  }
+  return new Interval(product.lo < min ? min : product.lo, product.hi > max ? max : product.hi)
+}
+
+/**
+ * Whether `a op b` lands inside `type` for every pair of values the ranges
+ * allow. Each comparison is arranged so that the compiler's own arithmetic
+ * cannot overflow while it decides: `hi + b.hi <= max` is asked as
+ * `hi <= max - b.hi` with `b.hi > 0`, and so on.
+ */
+const fitsType = (op: string, a: Interval, b: Interval, type: i32): boolean => {
+  const min = typeMin(type)
+  const max = typeMax(type)
+  const zero = toI64(0)
+  if (op === "+") {
+    const highFits = b.hi <= zero || a.hi <= max - b.hi
+    const lowFits = b.lo >= zero || a.lo >= min - b.lo
+    return highFits && lowFits
+  }
+  if (op === "-") {
+    const highFits = b.lo >= zero || a.hi <= max + b.lo
+    const lowFits = b.hi <= zero || a.lo >= min + b.hi
+    return highFits && lowFits
+  }
+  if (op === "neg") {
+    // `-x` fits for every `x` but the minimum, whose negation is one past the top.
+    return a.lo > min
+  }
+  const product = productRange(a, b)
+  return product !== null && product.lo >= min && product.hi <= max
+}
+
+/** Whether `i < w.length` is recorded for any holder, which puts `i` at most one below the top. */
+const knownBelowSome = (state: State, i: Local): boolean => {
+  for (const x of state.belowIndex) {
+    if (x === i) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The range a local holds here: its type's, or its declared one, narrowed by the state. */
+const localRange = (state: State, v: Local, type: i32): Interval =>
+  new Interval(localLow(state, v, type), localHigh(state, v, type))
+
+/** The low end of `localRange`: the type's, the declared range's, or the recorded floor. */
+const localLow = (state: State, v: Local, type: i32): i64 => {
+  let lo = typeMin(type)
+  const declared = state.table.declaredRange(v.type)
+  if (declared !== null && declared.lo > lo) {
+    lo = declared.lo
+  }
+  const floor = minValueOf(state, v)
+  return floor >= 0 && toI64(floor) > lo ? toI64(floor) : lo
+}
+
+/** The high end of `localRange`: the type's, the declared range's, or one below a recorded bound. */
+const localHigh = (state: State, v: Local, type: i32): i64 => {
+  let hi = typeMax(type)
+  const declared = state.table.declaredRange(v.type)
+  if (declared !== null && declared.hi < hi) {
+    hi = declared.hi
+  }
+  const bound = maxIndexOf(state, v)
+  if (bound >= 0 && toI64(bound) - toI64(1) < hi) {
+    hi = toI64(bound) - toI64(1)
+  }
+  // A length is at most the type's top, so an index below one is below the top.
+  if (knownBelowSome(state, v) && hi > typeMax(type) - toI64(1)) {
+    hi = typeMax(type) - toI64(1)
+  }
+  return hi
+}
+
+/**
+ * The range `expr` can evaluate to at `type`, in `state`. Anything it does not
+ * recognise is the whole type, which proves nothing and costs nothing.
+ */
+const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Interval => {
+  const ctx = walk.ctx
+  const e = unwrapBoundsParens(expr)
+  const literal = anyLiteral(e)
+  if (literal >= toI64(0)) {
+    return new Interval(literal, literal)
+  }
+  if (e.kind === N_UNARY && e.text === "-") {
+    const negated = anyLiteral(e.children[0])
+    if (negated >= toI64(0)) {
+      return new Interval(-negated, -negated)
+    }
+  }
+  if (e.kind === N_IDENT) {
+    const constant = ctx.program.nodeConstants[e.id]
+    if (constant !== null) {
+      if (constant.folded && ctx.table.baseOf(constant.type) === type) {
+        return new Interval(constant.intValue, constant.intValue)
+      }
+      return new Interval(typeMin(type), typeMax(type))
+    }
+  }
+  if (lengthOf(walk, e) !== null) {
+    return new Interval(toI64(0), typeMax(type))
+  }
+  const converted = convertedRange(walk, e)
+  if (converted !== null) {
+    return new Interval(converted.lo, converted.hi)
+  }
+  const widened = widenedRange(walk, state, e, type)
+  if (widened !== null) {
+    return widened
+  }
+  const v = localOf(ctx.program, e)
+  if (v !== null && ctx.table.baseOf(v.type) === type) {
+    return localRange(state, v, type)
+  }
+  const masked = maskedRange(walk, state, e, type)
+  if (masked !== null) {
+    return masked
+  }
+  if (
+    checkedArithmeticType(ctx.program, ctx.table, e) === type &&
+    e.kind === N_BINARY &&
+    e.text.length === 1
+  ) {
+    const a = valueRange(walk, state, e.children[0], type)
+    const b = valueRange(walk, state, e.children[1], type)
+    return combinedRange(e.text, a, b, type)
+  }
+  if (e.kind === N_UNARY && e.text === "-" && checkedArithmeticType(ctx.program, ctx.table, e) === type) {
+    const a = valueRange(walk, state, e.children[0], type)
+    return combinedRange("neg", a, a, type)
+  }
+  if (e.kind === N_CALL) {
+    const returned = callRange(walk, state, e, type)
+    if (returned !== null) {
+      return returned
+    }
+  }
+  // A field or an element is its declared range, when its type has one.
+  const declared = ctx.table.declaredRange(ctx.program.nodeTypes[e.id])
+  if (declared !== null && ctx.table.baseOf(ctx.program.nodeTypes[e.id]) === type) {
+    return new Interval(declared.lo, declared.hi)
+  }
+  return new Interval(typeMin(type), typeMax(type))
+}
+
+// ---- Return ranges ----------------------------------------------------------------
+
+/**
+ * `"Ok"` or `"Err"` for a call to the builtin `Result` constructor of that
+ * name, and `""` for anything else, a user function called `Ok` included
+ * (`isResultConstructorCall` in src/emit-result.ts asks the same).
+ */
+const resultConstructor = (program: CheckedProgram, table: TypeTable, call: Node): string => {
+  if (call.kind !== N_CALL || program.nodeCallees[call.id] !== null) {
+    return ""
+  }
+  const callee = call.children[0]
+  if (callee.kind !== N_IDENT || (callee.text !== "Ok" && callee.text !== "Err")) {
+    return ""
+  }
+  return table.isResult(program.nodeTypes[call.id]) ? callee.text : ""
+}
+
+/**
+ * The position of the parameter `e` reads the `Ok` payload of — `r.value`,
+ * with `r` a parameter of the body being walked — or -1. The checker allows
+ * `r.value` only where `r.isOk()` is proved, and a parameter is never
+ * assigned, so the value is the payload the caller passed.
+ */
+const payloadParameter = (walk: BoundsWalk, e: Node): i32 => {
+  if (e.kind !== N_MEMBER || e.text !== "value") {
+    return -1
+  }
+  const receiver = unwrapBoundsParens(e.children[0])
+  const local: Local | null = receiver.kind === N_IDENT ? walk.ctx.program.nodeLocals[receiver.id] : null
+  if (local === null || local.storage !== STORAGE_PARAM || !walk.ctx.table.isResult(local.type)) {
+    return -1
+  }
+  let k = 0
+  for (const p of walk.returnParams) {
+    if (p !== null && p === local) {
+      return k
+    }
+    k = k + 1
+  }
+  return -1
+}
+
+/**
+ * Add what `expr`, returned from the body being walked, can be to its
+ * summary (`ReturnSummary`), in the state the return starts in. A return
+ * whose expression writes a local is read before it runs, so it says nothing,
+ * and neither does any return of a `Result` but `Ok(x)`, `Err(...)` and a call
+ * with a summary of its own.
+ */
+const noteReturn = (walk: BoundsWalk, state: State, expr: Node): void => {
+  if (walk.returns === null) {
+    return
+  }
+  walk.callRanges = true
+  gatherReturn(walk, state, expr)
+  walk.callRanges = false
+}
+
+const gatherReturn = (walk: BoundsWalk, state: State, expr: Node): void => {
+  const summary = walk.returns
+  if (summary === null) {
+    return
+  }
+  const ctx = walk.ctx
+  const table = ctx.table
+  const e = unwrapBoundsParens(expr)
+  if (writesAnyLocal(ctx.program, e)) {
+    walk.returns = null
+    return
+  }
+  if (table.isResult(summary.type)) {
+    const payload = table.baseOf(table.okOf(summary.type))
+    const made = resultConstructor(ctx.program, table, e)
+    if (made === "Err") {
+      return
+    }
+    let range: Interval | null = null
+    if (made === "Ok" && e.children[1].children.length === 1) {
+      range = valueRange(walk, state, e.children[1].children[0], payload)
+    } else if (e.kind === N_CALL) {
+      range = calledPayload(walk, e, payload)
+    }
+    keepGathering(walk, summary, range, payload)
+    return
+  }
+  const type = table.baseOf(summary.type)
+  const k = payloadParameter(walk, e)
+  if (k < 0) {
+    keepGathering(walk, summary, valueRange(walk, state, e, type), type)
+    return
+  }
+  const declared = walk.returnParams[k]
+  if (declared === null || table.baseOf(table.okOf(declared.type)) !== type) {
+    walk.returns = null
+  } else if (summary.flows.indexOf(k) < 0) {
+    summary.flows.push(k)
+  }
+}
+
+/**
+ * Join `range` into the summary being gathered, or stop gathering: when
+ * nothing is known about a return, or when the summary has become the whole
+ * of `type`, which proves nothing and is not worth a caller's walk.
+ */
+const keepGathering = (walk: BoundsWalk, summary: ReturnSummary, range: Interval | null, type: i32): void => {
+  if (range === null) {
+    walk.returns = null
+    return
+  }
+  joinReturn(summary, range)
+  if (summary.lo <= typeMin(type) && summary.hi >= typeMax(type)) {
+    walk.returns = null
+  }
+}
+
+/**
+ * The summary of the function `call` calls, when it is one a summary can be
+ * trusted for: a plain function — a method may be dispatched to another body —
+ * with a body in the tables, called under its own name.
+ */
+const summaryOfCall = (walk: BoundsWalk, call: Node): ReturnSummary | null => {
+  const tables = walk.tables
+  const callee = walk.ctx.program.nodeCallees[call.id]
+  if (!walk.callRanges || tables === null || callee === null) {
+    return null
+  }
+  if (callee.role !== ROLE_FUNCTION || callee.instance !== null) {
+    return null
+  }
+  return tables.returnOf(tables.at(walk.callees, call, callee))
+}
+
+/**
+ * The range a call to a function with a return summary evaluates to at
+ * `type`, or `null`: the summary's own range, joined with the payload range
+ * of each argument whose payload it hands back (`payloadRange`).
+ */
+const callRange = (walk: BoundsWalk, state: State, call: Node, type: i32): Interval | null => {
+  const ctx = walk.ctx
+  const table = ctx.table
+  const callee = ctx.program.nodeCallees[call.id]
+  if (callee === null || table.isResult(callee.returnType) || table.baseOf(callee.returnType) !== type) {
+    return null
+  }
+  const summary = summaryOfCall(walk, call)
+  if (summary === null) {
+    return null
+  }
+  const out = new ReturnSummary(summary.type)
+  if (summary.known) {
+    joinReturn(out, new Interval(summary.lo, summary.hi))
+  }
+  const args = call.children[1].children
+  for (const k of summary.flows) {
+    if (k < 0 || k >= args.length) {
+      return null
+    }
+    joinReturn(out, payloadRange(walk, state, args[k], type))
+  }
+  return out.known ? new Interval(out.lo, out.hi) : null
+}
+
+/**
+ * The range of the `Ok` payload a call to a function returning a `Result`
+ * hands back, from its summary, or `null`. Its summary says nothing about a
+ * payload a parameter passes on, which a `Result` summary never records.
+ */
+const calledPayload = (walk: BoundsWalk, call: Node, type: i32): Interval | null => {
+  const ctx = walk.ctx
+  const table = ctx.table
+  const callee = ctx.program.nodeCallees[call.id]
+  if (callee === null || !table.isResult(callee.returnType)) {
+    return null
+  }
+  if (table.baseOf(table.okOf(callee.returnType)) !== type) {
+    return null
+  }
+  const summary = summaryOfCall(walk, call)
+  if (summary === null || !summary.known || summary.flows.length > 0) {
+    return null
+  }
+  return new Interval(summary.lo, summary.hi)
+}
+
+/** The range of the `Ok` payload `arg`, a `Result`, can carry: from `Ok(x)` or a summarised call, else the whole type. */
+const payloadRange = (walk: BoundsWalk, state: State, arg: Node, type: i32): Interval => {
+  const ctx = walk.ctx
+  const e = unwrapBoundsParens(arg)
+  if (resultConstructor(ctx.program, ctx.table, e) === "Ok" && e.children[1].children.length === 1) {
+    return valueRange(walk, state, e.children[1].children[0], type)
+  }
+  const passed: Interval | null = e.kind === N_CALL ? calledPayload(walk, e, type) : null
+  return passed !== null ? passed : new Interval(typeMin(type), typeMax(type))
+}
+
+/**
+ * The range of an operator that cannot leave its operands' range by much and
+ * cannot overflow at all: `x & c`, `x >> c`, `x >>> c`, `x % c` and `x / c`
+ * for a non-negative literal `c`, or `null` for anything else. These are what
+ * a hash folded into a table size or a byte pulled out of a word look like,
+ * and the sum they feed is then proven.
+ */
+const maskedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interval | null => {
+  const ctx = walk.ctx
+  if (e.kind !== N_BINARY || ctx.program.nodeTypes[e.id] < 0) {
+    return null
+  }
+  if (ctx.table.baseOf(ctx.program.nodeTypes[e.id]) !== type) {
+    return null
+  }
+  const op = e.text
+  const literal = anyLiteral(e.children[1])
+  const c = literal >= toI64(0) && literal < I32_MAX ? toI32(literal) : -1
+  if (op === "&") {
+    // Either side non-negative bounds the result by that side, whatever the other is.
+    const a = valueRange(walk, state, e.children[0], type)
+    const b = valueRange(walk, state, e.children[1], type)
+    if (b.lo >= toI64(0) && (a.lo < toI64(0) || b.hi <= a.hi)) {
+      return new Interval(toI64(0), b.hi)
+    }
+    if (a.lo >= toI64(0)) {
+      return new Interval(toI64(0), a.hi)
+    }
+    return null
+  }
+  if (c < 0) {
+    return null
+  }
+  const bits = type === T_I32 ? 32 : 64
+  if (op === ">>" || op === ">>>") {
+    const count = toI64(c & (bits - 1))
+    const a = valueRange(walk, state, e.children[0], type)
+    if (op === ">>" || a.lo >= toI64(0)) {
+      // An arithmetic shift is monotone, and a logical one is the same shift on a non-negative value.
+      return new Interval(a.lo >> count, a.hi >> count)
+    }
+    // A logical shift of anything by at least one is below `2^(bits - count)`.
+    if (count >= toI64(1)) {
+      return new Interval(toI64(0), typeMax(type) >> (count - toI64(1)))
+    }
+    return null
+  }
+  if ((op === "%" || op === "/") && c > 0) {
+    const a = valueRange(walk, state, e.children[0], type)
+    const divisor = toI64(c)
+    if (op === "/") {
+      // Truncation toward zero is monotone in the dividend.
+      return new Interval(a.lo / divisor, a.hi / divisor)
+    }
+    const top = divisor - toI64(1)
+    return new Interval(a.lo >= toI64(0) ? toI64(0) : -top, a.hi <= toI64(0) ? toI64(0) : top)
+  }
+  return null
+}
+
+// ---- Bounded accumulation -----------------------------------------------------------
+
+/**
+ * The bound a `for` loop's counter gives the number of passes, or -1 when it
+ * gives none. The shape is `for (...; i < X; i++)` (or `<=`, or a step of
+ * `i += c` with `c >= 1`) where the body writes `i` nowhere, `X` is a literal
+ * or a local the loop does not write that the state bounds, and `i` has a
+ * floor on the way in: each pass moves `i` up by at least one, and the pass
+ * that would reach the bound is the condition's `false`.
+ */
+const passBound = (walk: BoundsWalk, state: State, loop: Node, effects: Effects): i64 => {
+  const ctx = walk.ctx
+  const cond = unwrapBoundsParens(loop.children[1])
+  if (cond.kind !== N_BINARY || (cond.text !== "<" && cond.text !== "<=")) {
+    return toI64(-1)
+  }
+  const i = indexLocal(ctx, cond.children[0])
+  if (i === null || ctx.table.baseOf(i.type) !== T_I32 || !stepsByOne(ctx, loop.children[2], i)) {
+    return toI64(-1)
+  }
+  if (contains(effects.clobbered, i) || contains(effects.decremented, i)) {
+    return toI64(-1)
+  }
+  const strict = cond.text === "<"
+  // `i < K` holds on every pass the body runs.
+  let ceiling = toI64(-1)
+  const literal = literalValue(cond.children[1])
+  const bound = indexLocal(ctx, cond.children[1])
+  if (literal >= 0) {
+    ceiling = strict ? toI64(literal) : toI64(literal) + toI64(1)
+  } else if (bound !== null && !writesVariable(effects, bound)) {
+    const below = maxIndexOf(state, bound)
+    if (below >= 0) {
+      ceiling = strict ? toI64(below) - toI64(1) : toI64(below)
+    }
+  }
+  const floor = minValueOf(state, i)
+  if (ceiling < toI64(0) || floor < 0) {
+    return toI64(-1)
+  }
+  return ceiling > toI64(floor) ? ceiling - toI64(floor) : toI64(0)
+}
+
+/** Whether `expr` names the local `v`. */
+const isLocalNamed = (program: CheckedProgram, expr: Node, v: Local): boolean => {
+  const named = localOf(program, expr)
+  return named !== null && named === v
+}
+
+/** Whether `update` is `i++`, `++i`, `i += c` or `i = i + c` with `c >= 1`. */
+const stepsByOne = (ctx: CheckContext, update: Node, i: Local): boolean => {
+  const e = unwrapBoundsParens(update)
+  if (e.kind === N_UNARY && e.text === "++") {
+    return isLocalNamed(ctx.program, e.children[0], i)
+  }
+  if (e.kind !== N_BINARY || !isLocalNamed(ctx.program, e.children[0], i)) {
+    return false
+  }
+  if (e.text === "+=") {
+    return literalValue(e.children[1]) >= 1
+  }
+  return (
+    e.text === "=" &&
+    isIncrement(ctx.program, i, e.children[1]) &&
+    literalValue(unwrapBoundsParens(e.children[1]).children[1]) >= 1
+  )
+}
+
+/** One local's writes in a loop body, while they are all steps of a bounded size. */
+class Accumulator {
+  v: Local
+  /** The sum of each site's largest step up, and of each site's largest step down (as a negative). */
+  up: i64
+  down: i64
+  /** False once any write to `v` is not a bounded step, or sits in a nested loop. */
+  bounded: boolean
+
+  constructor(v: Local) {
+    this.v = v
+    this.up = toI64(0)
+    this.down = toI64(0)
+    this.bounded = true
+  }
+}
+
+/** The accumulator for `v` in `list`, added when it is not there yet. */
+const accumulatorOf = (list: Accumulator[], v: Local): Accumulator => {
+  for (const a of list) {
+    if (a.v === v) {
+      return a
+    }
+  }
+  const fresh = new Accumulator(v)
+  list.push(fresh)
+  return fresh
+}
+
+/** `2^31`: a step or a pass count past it is not one this proof multiplies. */
+const STEP_LIMIT: i64 = 2147483648
+
+/**
+ * Note every write in `node` to a local: a step of a range no state can move —
+ * a literal, `toI32` of a `u8`, a mask — counts once per pass when it is not
+ * inside a nested loop, and anything else, or anything in a nested loop,
+ * leaves the local unbounded.
+ */
+const collectSteps = (walk: BoundsWalk, node: Node, list: Accumulator[], nested: boolean): void => {
+  const ctx = walk.ctx
+  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
+  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || steps) {
+    const v = localOf(ctx.program, node.children[0])
+    if (v !== null) {
+      const a = accumulatorOf(list, v)
+      const delta = stepRange(walk, node, v)
+      if (nested || delta === null || ctx.table.baseOf(v.type) !== T_I32) {
+        a.bounded = false
+      } else {
+        a.up = a.up + (delta.hi > toI64(0) ? delta.hi : toI64(0))
+        a.down = a.down + (delta.lo < toI64(0) ? delta.lo : toI64(0))
+      }
+    }
+  }
+  const inner =
+    nested || node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF
+  if (node.kind === N_ARROW) {
+    return
+  }
+  for (const child of node.children) {
+    if (child.children.length > 0) {
+      collectSteps(walk, child, list, inner)
+    }
+  }
+}
+
+/** The range one write adds to `v`, or `null` when it is not a step of a state-free size. */
+const stepRange = (walk: BoundsWalk, node: Node, v: Local): Interval | null => {
+  const one = toI64(1)
+  if (node.kind === N_UNARY) {
+    return node.text === "++" ? new Interval(one, one) : new Interval(-one, -one)
+  }
+  let delta: Node | null = null
+  let negate = false
+  const rhs = unwrapBoundsParens(node.children[1])
+  if (node.text === "+=" || node.text === "-=") {
+    delta = node.children[1]
+    negate = node.text === "-="
+  } else if (node.text === "=" && rhs.kind === N_BINARY && (rhs.text === "+" || rhs.text === "-")) {
+    if (isLocalNamed(walk.ctx.program, rhs.children[0], v)) {
+      delta = rhs.children[1]
+      negate = rhs.text === "-"
+    } else if (rhs.text === "+" && isLocalNamed(walk.ctx.program, rhs.children[1], v)) {
+      delta = rhs.children[0]
+    }
+  }
+  if (delta === null || writesAnyLocal(walk.ctx.program, delta)) {
+    return null
+  }
+  // An empty state: the range holds whatever the facts at the write are.
+  const range = valueRange(walk, new State(walk.ctx.table), delta, T_I32)
+  if (range.lo <= -STEP_LIMIT || range.hi >= STEP_LIMIT) {
+    return null
+  }
+  return negate ? new Interval(-range.hi, -range.lo) : range
+}
+
+/**
+ * The facts a bounded accumulation keeps at the top of a `for` loop, which
+ * `forgetAcross` would otherwise drop: a local that every pass moves by at
+ * most a bounded step, in a loop that makes at most `passBound` passes, stays
+ * within its entry range widened by that many steps — on every pass, part way
+ * through one, and after the loop. `sum = sum + toI32(buf[i])` over 256 bytes
+ * is at most 65280, and `count++` once a pass under `i <= n` is at most `n`.
+ * Checked arithmetic is what makes the steps steps: under `--wrapping` one can
+ * land anywhere, so nothing is kept.
+ */
+const accumulatorFacts = (walk: BoundsWalk, state: State, loop: Node): Fact[] => {
+  const ctx = walk.ctx
+  const out: Fact[] = []
+  if (ctx.wrapping || loop.children[1].kind === N_EMPTY) {
+    return out
+  }
+  const effects = new Effects()
+  collectEffects(walk, loop, effects)
+  const passes = passBound(walk, state, loop, effects)
+  if (passes < toI64(0) || passes >= STEP_LIMIT) {
+    return out
+  }
+  const list: Accumulator[] = []
+  collectSteps(walk, loop.children[3], list, false)
+  // A write in the condition or the update runs on a schedule of its own,
+  // which the per-pass count does not cover.
+  const head = new Effects()
+  collectEffects(walk, loop.children[1], head)
+  collectEffects(walk, loop.children[2], head)
+  for (const a of list) {
+    if (!a.bounded || a.up >= STEP_LIMIT || a.down <= -STEP_LIMIT || writesVariable(head, a.v)) {
+      continue
+    }
+    const up = a.up * passes
+    const down = a.down * passes
+    const lo = localLow(state, a.v, T_I32) + down
+    const hi = localHigh(state, a.v, T_I32) + up
+    if (lo >= toI64(0) && lo < I32_MAX) {
+      out.push(new Fact(FACT_MIN_VALUE, a.v, null, toI32(lo)))
+    }
+    if (hi >= toI64(0) && hi < I32_MAX - toI64(1)) {
+      out.push(new Fact(FACT_MAX_INDEX, a.v, null, toI32(hi) + 1))
+    }
+  }
+  return out
+}
+
+/**
+ * The range of the builtin `toI64(x)` for an `x` that is an `i32`, a `u8`, a
+ * `u16` or a `u32`: `x`'s own, since the conversion widens without changing
+ * the value. It is what proves `toI64(a) * toI64(b)` cannot overflow, and the
+ * `i64` arithmetic on a value that is really a bit or a byte.
+ */
+const widenedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interval | null => {
+  const program = walk.ctx.program
+  if (type !== T_I64 || e.kind !== N_CALL || !isBuiltinConversion(program, e, "toI64")) {
+    return null
+  }
+  const x = e.children[1].children[0]
+  const from = walk.ctx.table.baseOf(program.nodeTypes[x.id])
+  if (from === T_I32) {
+    return valueRange(walk, state, x, T_I32)
+  }
+  if (from === T_U8 || from === T_U16 || from === T_U32) {
+    const declared = walk.ctx.table.declaredRange(from)
+    return declared !== null ? new Interval(declared.lo, declared.hi) : null
+  }
+  return null
+}
+
+/** Whether evaluating `node` assigns, increments or decrements any local. */
+const writesAnyLocal = (program: CheckedProgram, node: Node): boolean => {
+  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
+  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || steps) {
+    if (localOf(program, node.children[0]) !== null) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (writesAnyLocal(program, child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Record the verdict for one checked operation, in the state its operands
+ * left. `left` is what the operator reads first — the target of a compound
+ * assignment or a step — and `right` the other operand, or `null` for a
+ * unary one. An increment or a decrement adds one. Pass 2 judges every
+ * body, and `src/ranges.ts` judges again what is left with what the callers
+ * prove about the parameters, as it does an access: a loop bounded by a
+ * parameter every caller passes a literal for is where that pays.
+ */
+const judgeOverflow = (walk: BoundsWalk, state: State, node: Node, left: Node, right: Node | null): void => {
+  const ctx = walk.ctx
+  if (ctx.wrapping) {
+    return
+  }
+  const type = checkedArithmeticType(ctx.program, ctx.table, node)
+  if (type < 0 || ctx.program.nodeProvenNoOverflow[node.id]) {
+    return
+  }
+  // The target of `x op= e` and of `x++` is written by the node itself, after
+  // the operator; only what runs before it may not write.
+  if (writesAnyLocal(ctx.program, left) || (right !== null && writesAnyLocal(ctx.program, right))) {
+    return
+  }
+  walk.callRanges = true
+  const a = valueRange(walk, state, left, type)
+  const one = toI64(1)
+  const b = right === null ? new Interval(one, one) : valueRange(walk, state, right, type)
+  walk.callRanges = false
+  if (!fitsType(arithmeticOperator(node), a, b, type)) {
+    return
+  }
+  walk.noOverflow.push(node)
+  if (walk.record) {
+    ctx.program.nodeProvenNoOverflow[node.id] = true
+  }
 }
 
 // ---- What crosses a call (src/ranges.ts) -----------------------------------------
@@ -3529,6 +4616,13 @@ export class RangeTables {
    * `noteCallSite` hands it this rather than working it out.
    */
   settledEmpty: (EntryFacts | null)[]
+  /**
+   * Per body, what its returns are known to be (`ReturnSummary`), or `null`
+   * for nothing known. `src/ranges.ts` sets one only from a walk of the body
+   * under the entry it settles on, and clears them all if the fixpoint does
+   * not settle, so a summary a walk reads is one every call of the body keeps.
+   */
+  returns: (ReturnSummary | null)[]
 
   constructor() {
     this.index = new StringMap()
@@ -3538,6 +4632,7 @@ export class RangeTables {
     this.programs = []
     this.callees = []
     this.settledEmpty = []
+    this.returns = []
   }
 
   /** Record that the candidate at `at` is entered with nothing, which is for good. */
@@ -3581,6 +4676,27 @@ export class RangeTables {
     const unknown: CallSummary | null = null
     this.summaries.push(unknown)
     this.candidates.push(candidate)
+    const nothing: ReturnSummary | null = null
+    this.returns.push(nothing)
+  }
+
+  returnOf(at: i32): ReturnSummary | null {
+    return at < 0 || at >= this.returns.length ? null : this.returns[at]
+  }
+
+  setReturn(at: i32, summary: ReturnSummary | null): void {
+    if (at >= 0 && at < this.returns.length) {
+      this.returns[at] = summary
+    }
+  }
+
+  /** Forget every return summary: what an unsettled fixpoint leaves is not known to hold. */
+  clearReturns(): void {
+    let k = 0
+    while (k < this.returns.length) {
+      this.returns[k] = null
+      k = k + 1
+    }
   }
 
   dropCandidate(at: i32): void {
@@ -3736,6 +4852,82 @@ const applyCallEffects = (walk: BoundsWalk, state: State, call: Node): void => {
  * `FACT_MIN_LENGTH` with its `values`, or
  * `FACT_BELOW` / `FACT_AT_MOST` with the parameter that is the index.
  */
+/**
+ * What a function's returns are known to be, for a call site to read
+ * (`callRange`). For a function returning `i32` or `i64` it is the value's
+ * range; for one returning a `Result` whose `Ok` arm is one of those it is the
+ * `Ok` payload's, its `Err` returns adding nothing. `lo`/`hi` is the join of
+ * every return the walk put a range on, once `known`, and `flows` the
+ * parameters whose own `Ok` payload a `return r.value` hands back unchanged:
+ * only a call site knows a range for that, from its argument
+ * (`payloadRange`). A summary with neither says nothing.
+ */
+export class ReturnSummary {
+  lo: i64
+  hi: i64
+  flows: i32[]
+  /** The declared return type it describes. */
+  type: i32
+  known: boolean
+
+  constructor(type: i32) {
+    this.lo = toI64(0)
+    this.hi = toI64(0)
+    this.flows = []
+    this.type = type
+    this.known = false
+  }
+}
+
+/** Whether two summaries say the same thing; `null` is nothing known. */
+export const sameReturn = (a: ReturnSummary | null, b: ReturnSummary | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null
+  }
+  if (a.known !== b.known || a.flows.length !== b.flows.length) {
+    return false
+  }
+  if (a.known && (a.lo !== b.lo || a.hi !== b.hi)) {
+    return false
+  }
+  for (const k of a.flows) {
+    if (b.flows.indexOf(k) < 0) {
+      return false
+    }
+  }
+  return true
+}
+
+/** The summary a finished walk gathered, or `null` when it cannot be used. */
+export const gatheredReturn = (walk: BoundsWalk): ReturnSummary | null => {
+  const gathered = walk.returns
+  if (gathered === null || walk.done) {
+    return null
+  }
+  if (!gathered.known && gathered.flows.length === 0) {
+    return null
+  }
+  return gathered
+}
+
+const joinReturn = (summary: ReturnSummary, range: Interval): void => {
+  if (summary.known && summary.lo <= range.lo && range.hi <= summary.hi) {
+    return
+  }
+  if (!summary.known) {
+    summary.lo = range.lo
+    summary.hi = range.hi
+    summary.known = true
+    return
+  }
+  if (range.lo < summary.lo) {
+    summary.lo = range.lo
+  }
+  if (range.hi > summary.hi) {
+    summary.hi = range.hi
+  }
+}
+
 export class EntryFacts {
   floor: i32[]
   maxIndex: i32[]
@@ -3807,6 +4999,54 @@ export class EntryFacts {
  * What holds at both of two call sites: the lower floor, the higher `maxIndex`,
  * the shorter minimum length, and a relation only where both state it.
  */
+/** How many times a parameter's floor or bound may move before the entry fixpoint drops it. */
+const WIDEN_AFTER: i32 = 16
+
+/**
+ * `next`, with the floor and the bound of every parameter that has now moved
+ * more than `WIDEN_AFTER` times dropped. A bound an argument computes —
+ * `walk(depth + 1)` — can climb by one per round for as long as the recursion
+ * is unbounded, and the fixpoint would run out of rounds and keep no entry
+ * fact anywhere; dropping that one parameter's bound is what lets it settle.
+ * A recursion that does stop (AWFY Queens' `placeQueen(c + 1)` behind
+ * `c === 7`) settles in fewer moves than that. `moves` is the count so far,
+ * one per parameter, kept by the caller for each function.
+ */
+export const widenEntryFacts = (now: EntryFacts, next: EntryFacts, moves: i32[]): EntryFacts => {
+  let widened: EntryFacts | null = null
+  let k = 0
+  while (k < next.floor.length && k < now.floor.length && k < moves.length) {
+    if (next.floor[k] !== now.floor[k] || next.maxIndex[k] !== now.maxIndex[k]) {
+      moves[k] = moves[k] + 1
+      if (moves[k] > WIDEN_AFTER && (next.floor[k] >= 0 || next.maxIndex[k] >= 0)) {
+        const copy: EntryFacts = widened !== null ? widened : copyEntryFacts(next)
+        copy.floor[k] = -1
+        copy.maxIndex[k] = -1
+        widened = copy
+      }
+    }
+    k = k + 1
+  }
+  return widened !== null ? widened : next
+}
+
+/** A copy of `facts` whose per-parameter floors and bounds can be changed alone. */
+const copyEntryFacts = (facts: EntryFacts): EntryFacts => {
+  const out = new EntryFacts(0)
+  for (const f of facts.floor) {
+    out.floor.push(f)
+  }
+  for (const m of facts.maxIndex) {
+    out.maxIndex.push(m)
+  }
+  out.kinds = facts.kinds
+  out.index = facts.index
+  out.roots = facts.roots
+  out.fields = facts.fields
+  out.values = facts.values
+  return out
+}
+
 export const joinEntryFacts = (a: EntryFacts, b: EntryFacts): EntryFacts => {
   const out = new EntryFacts(a.floor.length)
   let k = 0
@@ -3954,6 +5194,8 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
         indexVar = v
         out.floor[k] = minValueOf(state, v)
         out.maxIndex[k] = maxIndexOf(state, v)
+      } else if (v === null && k + 1 >= quiet) {
+        arithmeticSiteFacts(walk, state, arg, type, out, k)
       }
     } else {
       const links: i32[] = []
@@ -3984,6 +5226,40 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
     r = r + 1
   }
   return out
+}
+
+/**
+ * The floor and bound an `i32` argument computed by arithmetic gives its
+ * parameter: `placeQueen(c + 1)` behind `if (c === 7) return` hands on
+ * `c + 1 <= 7` once `c` is known below 8, which is what lets the recursion's
+ * entry settle at `[0, 7]` (`valueRange`). Only for the last argument that can
+ * write anything or later, so nothing evaluated after it rebinds what it read,
+ * only for one that writes no local itself, and never under `--wrapping`,
+ * where the range is not one.
+ */
+const arithmeticSiteFacts = (
+  walk: BoundsWalk,
+  state: State,
+  arg: Node,
+  type: i32,
+  out: EntryFacts,
+  k: i32
+): void => {
+  const ctx = walk.ctx
+  const e = unwrapBoundsParens(arg)
+  if (ctx.wrapping || e.kind !== N_BINARY || ctx.table.baseOf(type) !== T_I32) {
+    return
+  }
+  if (ctx.program.nodeTypes[e.id] !== type || writesAnyLocal(ctx.program, e)) {
+    return
+  }
+  const range = valueRange(walk, state, e, T_I32)
+  if (range.lo >= toI64(0) && range.lo < I32_MAX) {
+    out.floor[k] = toI32(range.lo)
+  }
+  if (range.hi >= toI64(0) && range.hi < I32_MAX - toI64(1)) {
+    out.maxIndex[k] = toI32(range.hi) + 1
+  }
 }
 
 /**
@@ -4215,6 +5491,9 @@ export const commitProofs = (program: CheckedProgram, walk: BoundsWalk): void =>
   for (const bound of walk.clamps) {
     program.nodeProvenClamp[bound.id] = true
   }
+  for (const node of walk.noOverflow) {
+    program.nodeProvenNoOverflow[node.id] = true
+  }
 }
 
 /**
@@ -4278,13 +5557,20 @@ export const walkWithRanges = (
   callees: i32[],
   entering: EntryFacts | null,
   record: boolean,
-  stopAfter: i32
+  stopAfter: i32,
+  returnType: i32,
+  returnParams: (Local | null)[]
 ): BoundsWalk => {
   const walk = new BoundsWalk(ctx, ctx.uncheckedIndexing)
   walk.tables = tables
   walk.callees = callees
   walk.record = record
   walk.stopAfter = record ? -1 : stopAfter
+  if (returnType >= 0) {
+    walk.returns = new ReturnSummary(returnType)
+    walk.returnParams = returnParams
+    walk.stopAfter = -1
+  }
   const state = new State(ctx.table)
   if (entering !== null && !entering.isEmpty()) {
     seedEntry(walk, state, params, entering)
@@ -4292,6 +5578,8 @@ export const walkWithRanges = (
   if (body.kind === N_BLOCK) {
     walkBoundsStatement(walk, state, body)
   } else {
+    // An arrow written as an expression returns it.
+    noteReturn(walk, state, body)
     walkExpression(walk, state, body)
   }
   return walk

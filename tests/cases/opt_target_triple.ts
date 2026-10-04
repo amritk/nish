@@ -1,3 +1,6 @@
+// Compiled with `--wrapping` as well as `--target` (see .args), for the reason
+// cf_sum_loop gives: the checked reduction is not vectorised by design.
+//
 // Compiled with `--target x86_64-unknown-linux-gnu` (see .args): the module
 // carries `target datalayout` and `target triple`, so tests/run.js can run
 // `opt -O2` on it *without* `-mtriple` and still see the loop vectorised.

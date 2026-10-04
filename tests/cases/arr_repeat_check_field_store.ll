@@ -6,8 +6,10 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -81,8 +83,17 @@ bounds.ok.1:
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 %15
   %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %24 = add nsw i32 %12, %23
-  ret i32 %24
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %25
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @Holder.rebindThrough(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, %struct.Holder* noundef nonnull align 8 dereferenceable(8) nocapture %other, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %fresh) #1 {
@@ -128,8 +139,17 @@ bounds.ok.1:
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 %15
   %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %24 = add nsw i32 %12, %23
-  ret i32 %24
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %25
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @Holder.elementStore(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i) #1 {
@@ -181,8 +201,17 @@ bounds.ok.1:
   %27 = bitcast i8* %26 to i32*
   %28 = getelementptr inbounds i32, i32* %27, i64 %24
   %29 = load i32, i32* %28, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %30 = add nsw i32 %21, %29
-  ret i32 %30
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %31
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @test() #1 {
@@ -247,18 +276,33 @@ entry:
   %34 = getelementptr inbounds i32, i32* %31, i64 2
   store i32 9, i32* %34, align 4, !alias.scope !9, !noalias !8, !tbaa !16
   %35 = call i32 @Holder.rebindThrough(%struct.Holder* %23, i32 1, %struct.Holder* %24, %struct.nish_array* %26)
-  %36 = add nsw i32 %22, %35
-  %37 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
-  %38 = call i32 @Holder.elementStore(%struct.Holder* %37, i32 2)
-  %39 = add nsw i32 %36, %38
-  ret i32 %39
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %22, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %39 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %40 = call i32 @Holder.elementStore(%struct.Holder* %39, i32 2)
+  %41 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %37, i32 %40)
+  %42 = extractvalue { i32, i1 } %41, 0
+  %43 = extractvalue { i32, i1 } %41, 1
+  br i1 %43, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %42
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

@@ -1,3 +1,6 @@
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
 define noundef i32 @test() #0 {
 entry:
   %a.addr = alloca i32, align 4
@@ -16,8 +19,19 @@ entry:
   %5 = load i64, i64* %widened.addr, align 8
   %6 = trunc i64 %5 to i32
   %7 = load i32, i32* %shifted.addr, align 4
-  %8 = add nsw i32 %6, %7
-  ret i32 %8
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %9
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }

@@ -1,3 +1,6 @@
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+
 define internal noundef i32 @score(i32 noundef %limit) #0 {
 entry:
   %total.addr = alloca i32, align 4
@@ -20,37 +23,56 @@ for.body:
 
 sw.case:
   %3 = load i32, i32* %total.addr, align 4
-  %4 = add nsw i32 %3, 100
-  store i32 %4, i32* %total.addr, align 4
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %3, i32 100)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %5, i32* %total.addr, align 4
   br label %sw.end
 
 sw.case.1:
   br label %for.inc
 
 sw.default:
-  %5 = load i32, i32* %total.addr, align 4
-  %6 = add nsw i32 %5, 1
-  store i32 %6, i32* %total.addr, align 4
+  %7 = load i32, i32* %total.addr, align 4
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 1)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %9, i32* %total.addr, align 4
   br label %sw.end
 
 sw.end:
-  %7 = load i32, i32* %total.addr, align 4
-  %8 = add nsw i32 %7, 1000
-  store i32 %8, i32* %total.addr, align 4
+  %11 = load i32, i32* %total.addr, align 4
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 1000)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %13, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
-  %9 = load i32, i32* %i.addr, align 4
-  %10 = add nsw i32 %9, 1
-  store i32 %10, i32* %i.addr, align 4
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = add nsw i32 %15, 1
+  store i32 %16, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %11 = load i32, i32* %total.addr, align 4
-  ret i32 %11
+  %17 = load i32, i32* %total.addr, align 4
+  ret i32 %17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define internal noundef i64 @widen(i64 noundef %w) #0 {
+define internal noundef i64 @widen(i64 noundef %w) #1 {
 entry:
   %out.addr = alloca i64, align 8
   store i64 0, i64* %out.addr, align 8
@@ -77,8 +99,19 @@ entry:
   %0 = call i32 @score(i32 6)
   %1 = call i64 @widen(i64 2)
   %2 = trunc i64 %1 to i32
-  %3 = add nsw i32 %0, %2
-  ret i32 %3
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %4
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }

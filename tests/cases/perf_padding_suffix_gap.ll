@@ -10,11 +10,13 @@
 @.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -67,7 +69,7 @@ entry:
   ret void
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %four.addr = alloca %struct.FourGap*, align 8
   %FourGap.obj = alloca %struct.FourGap, align 8
@@ -117,16 +119,26 @@ entry:
   %20 = load %struct.OneGap*, %struct.OneGap** %one.addr, align 8
   %21 = getelementptr inbounds %struct.OneGap, %struct.OneGap* %20, i32 0, i32 3
   %22 = load i32, i32* %21, align 4
-  %23 = add nsw i32 %19, %22
-  %24 = load %struct.Mixed*, %struct.Mixed** %mixed.addr, align 8
-  %25 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %24, i32 0, i32 3
-  %26 = load i8, i8* %25, align 1
-  %27 = zext i8 %26 to i32
-  %28 = add nsw i32 %23, %27
-  %29 = load %struct.One*, %struct.One** %view.addr, align 8
-  %30 = getelementptr inbounds %struct.One, %struct.One* %29, i32 0, i32 0
-  %31 = load i1, i1* %30, align 1
-  br i1 %31, label %cond.true, label %cond.false
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %26 = load %struct.Mixed*, %struct.Mixed** %mixed.addr, align 8
+  %27 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %26, i32 0, i32 3
+  %28 = load i8, i8* %27, align 1
+  %29 = zext i8 %28 to i32
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %33 = load %struct.One*, %struct.One** %view.addr, align 8
+  %34 = getelementptr inbounds %struct.One, %struct.One* %33, i32 0, i32 0
+  %35 = load i1, i1* %34, align 1
+  br i1 %35, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -135,22 +147,39 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %32 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %33 = add nsw i32 %28, %32
-  %34 = load %struct.Mixed*, %struct.Mixed** %mixed.addr, align 8
-  %35 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %34, i32 0, i32 4
-  %36 = load %struct.nish_array*, %struct.nish_array** %35, align 8
-  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
-  %38 = load i64, i64* %37, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %39 = trunc i64 %38 to i32
-  %40 = add nsw i32 %33, %39
+  %36 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %37 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %36)
+  %38 = extractvalue { i32, i1 } %37, 0
+  %39 = extractvalue { i32, i1 } %37, 1
+  br i1 %39, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %40 = load %struct.Mixed*, %struct.Mixed** %mixed.addr, align 8
+  %41 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %40, i32 0, i32 4
+  %42 = load %struct.nish_array*, %struct.nish_array** %41, align 8
+  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 0
+  %44 = load i64, i64* %43, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %45 = trunc i64 %44 to i32
+  %46 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %38, i32 %45)
+  %47 = extractvalue { i32, i1 } %46, 0
+  %48 = extractvalue { i32, i1 } %46, 1
+  br i1 %48, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %40
+  ret i32 %47
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

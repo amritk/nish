@@ -15,13 +15,13 @@ for.body:
   %2 = load i32, i32* %sum.addr, align 4
   %3 = load i32, i32* %i.addr, align 4
   %4 = srem i32 %3, 1000
-  %5 = add nsw i32 %2, %4
+  %5 = add i32 %2, %4
   store i32 %5, i32* %sum.addr, align 4
   br label %for.inc
 
 for.inc:
   %6 = load i32, i32* %i.addr, align 4
-  %7 = add nsw i32 %6, 1
+  %7 = add i32 %6, 1
   store i32 %7, i32* %i.addr, align 4
   br label %for.cond
 

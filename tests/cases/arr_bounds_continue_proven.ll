@@ -2,12 +2,14 @@
 
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal noundef i32 @sumOdd(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
@@ -35,64 +37,78 @@ for.body:
   %7 = add nsw i32 %6, 1
   store i32 %7, i32* %n.addr, align 4
   %8 = load i32, i32* %i.addr, align 4
-  %9 = add nsw i32 %8, 1
-  store i32 %9, i32* %i.addr, align 4
-  %10 = load i32, i32* %i.addr, align 4
-  %11 = icmp slt i32 %10, 0
-  br i1 %11, label %lor.end, label %lor.rhs
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 1)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %10, i32* %i.addr, align 4
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = icmp slt i32 %12, 0
+  br i1 %13, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %12 = load i32, i32* %i.addr, align 4
-  %13 = trunc i64 %1 to i32
-  %14 = icmp sge i32 %12, %13
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = trunc i64 %1 to i32
+  %16 = icmp sge i32 %14, %15
   br label %lor.end
 
 lor.end:
-  %15 = phi i1 [ true, %for.body ], [ %14, %lor.rhs ]
-  br i1 %15, label %if.then, label %if.end
+  %17 = phi i1 [ true, %ovf.ok ], [ %16, %lor.rhs ]
+  br i1 %17, label %if.then, label %if.end
 
 if.then:
   br label %for.end
 
 if.end:
-  %16 = load i32, i32* %i.addr, align 4
-  %17 = sext i32 %16 to i64
-  %18 = bitcast i8* %3 to i32*
-  %19 = getelementptr inbounds i32, i32* %18, i64 %17
-  %20 = load i32, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %21 = srem i32 %20, 2
-  %22 = icmp eq i32 %21, 0
-  br i1 %22, label %if.then.1, label %if.end.1
+  %18 = load i32, i32* %i.addr, align 4
+  %19 = sext i32 %18 to i64
+  %20 = bitcast i8* %3 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 %19
+  %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %23 = srem i32 %22, 2
+  %24 = icmp eq i32 %23, 0
+  br i1 %24, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %for.inc
 
 if.end.1:
-  %23 = load i32, i32* %s.addr, align 4
-  %24 = load i32, i32* %i.addr, align 4
-  %25 = sext i32 %24 to i64
-  %26 = bitcast i8* %3 to i32*
-  %27 = getelementptr inbounds i32, i32* %26, i64 %25
-  %28 = load i32, i32* %27, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %29 = add nsw i32 %23, %28
-  store i32 %29, i32* %s.addr, align 4
+  %25 = load i32, i32* %s.addr, align 4
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = sext i32 %26 to i64
+  %28 = bitcast i8* %3 to i32*
+  %29 = getelementptr inbounds i32, i32* %28, i64 %27
+  %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %30)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %32, i32* %s.addr, align 4
   br label %for.inc
 
 for.inc:
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = sext i32 %30 to i64
-  %32 = bitcast i8* %3 to i32*
-  %33 = getelementptr inbounds i32, i32* %32, i64 %31
-  %34 = load i32, i32* %33, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  store i32 %34, i32* %last.addr, align 4
+  %34 = load i32, i32* %i.addr, align 4
+  %35 = sext i32 %34 to i64
+  %36 = bitcast i8* %3 to i32*
+  %37 = getelementptr inbounds i32, i32* %36, i64 %35
+  %38 = load i32, i32* %37, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %38, i32* %last.addr, align 4
   br label %for.cond
 
 for.end:
-  %35 = load i32, i32* %s.addr, align 4
-  %36 = load i32, i32* %last.addr, align 4
-  %37 = mul nsw i32 %36, 0
-  %38 = add nsw i32 %35, %37
-  ret i32 %38
+  %39 = load i32, i32* %s.addr, align 4
+  %40 = load i32, i32* %last.addr, align 4
+  %41 = mul nsw i32 %40, 0
+  %42 = add nsw i32 %39, %41
+  ret i32 %42
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @countOdd(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
@@ -109,59 +125,73 @@ entry:
 
 do.body:
   %4 = load i32, i32* %i.addr, align 4
-  %5 = add nsw i32 %4, 1
-  store i32 %5, i32* %i.addr, align 4
-  %6 = load i32, i32* %i.addr, align 4
-  %7 = icmp slt i32 %6, 0
-  br i1 %7, label %lor.end, label %lor.rhs
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 1)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %i.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = icmp slt i32 %8, 0
+  br i1 %9, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %8 = load i32, i32* %i.addr, align 4
-  %9 = trunc i64 %1 to i32
-  %10 = icmp sge i32 %8, %9
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = trunc i64 %1 to i32
+  %12 = icmp sge i32 %10, %11
   br label %lor.end
 
 lor.end:
-  %11 = phi i1 [ true, %do.body ], [ %10, %lor.rhs ]
-  br i1 %11, label %if.then, label %if.end
+  %13 = phi i1 [ true, %ovf.ok ], [ %12, %lor.rhs ]
+  br i1 %13, label %if.then, label %if.end
 
 if.then:
   br label %do.end
 
 if.end:
-  %12 = load i32, i32* %i.addr, align 4
-  %13 = sext i32 %12 to i64
-  %14 = bitcast i8* %3 to i32*
-  %15 = getelementptr inbounds i32, i32* %14, i64 %13
-  %16 = load i32, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %17 = srem i32 %16, 2
-  %18 = icmp eq i32 %17, 0
-  br i1 %18, label %if.then.1, label %if.end.1
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = sext i32 %14 to i64
+  %16 = bitcast i8* %3 to i32*
+  %17 = getelementptr inbounds i32, i32* %16, i64 %15
+  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %19 = srem i32 %18, 2
+  %20 = icmp eq i32 %19, 0
+  br i1 %20, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %do.cond
 
 if.end.1:
-  %19 = load i32, i32* %odd.addr, align 4
-  %20 = add nsw i32 %19, 1
-  store i32 %20, i32* %odd.addr, align 4
+  %21 = load i32, i32* %odd.addr, align 4
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 1)
+  %23 = extractvalue { i32, i1 } %22, 0
+  %24 = extractvalue { i32, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %23, i32* %odd.addr, align 4
   br label %do.cond
 
 do.cond:
-  %21 = load i32, i32* %i.addr, align 4
-  %22 = sext i32 %21 to i64
-  %23 = bitcast i8* %3 to i32*
-  %24 = getelementptr inbounds i32, i32* %23, i64 %22
-  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %26 = icmp sgt i32 %25, 0
-  br i1 %26, label %do.body, label %do.end
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = sext i32 %25 to i64
+  %27 = bitcast i8* %3 to i32*
+  %28 = getelementptr inbounds i32, i32* %27, i64 %26
+  %29 = load i32, i32* %28, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %30 = icmp sgt i32 %29, 0
+  br i1 %30, label %do.body, label %do.end
 
 do.end:
-  %27 = load i32, i32* %odd.addr, align 4
-  ret i32 %27
+  %31 = load i32, i32* %odd.addr, align 4
+  ret i32 %31
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -203,16 +233,17 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

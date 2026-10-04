@@ -1252,7 +1252,14 @@ void nish_panic_slice(int64_t start, int64_t end, int64_t len) {
   _exit(1);
 }
 
-/* ---- Checked division (Rust semantics): the failed-check path */
-void nish_panic_div(_Bool by_zero) {
-  nish_die(by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n");
-}
+/* ---- Checked arithmetic (Rust semantics): the failed-check paths. One table
+   for both panics, because each message is "attempt to <what>" and the two
+   functions then share everything but the index. `nish_panic_overflow`'s `op`
+   is the operator whose `llvm.s*.with.overflow` flagged: 0 add, 1 subtract,
+   2 multiply, 3 negate, the order `src/emit-ops.ts` numbers them in. */
+static const char *const nish_arith_panics[6] = {
+  "attempt to add with overflow\n",      "attempt to subtract with overflow\n",
+  "attempt to multiply with overflow\n", "attempt to negate with overflow\n",
+  "attempt to divide with overflow\n",   "attempt to divide by zero\n"};
+void nish_panic_overflow(uint32_t op) { nish_die(nish_arith_panics[op]); }
+void nish_panic_div(_Bool by_zero) { nish_panic_overflow(4 + by_zero); }

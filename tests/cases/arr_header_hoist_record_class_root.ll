@@ -14,8 +14,10 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare void @nish_panic_div(i1 noundef zeroext) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -83,54 +85,63 @@ for.body:
   %19 = bitcast i8* %8 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 %18
   %21 = load i32, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %22 = add nsw i32 %16, %21
-  store i32 %22, i32* %t.addr, align 4
-  %23 = load i32, i32* %i.addr, align 4
-  %24 = load i32, i32* %n.addr, align 4
-  %25 = icmp eq i32 %24, 0
-  %26 = icmp eq i32 %23, -2147483648
-  %27 = icmp eq i32 %24, -1
-  %28 = and i1 %26, %27
-  %29 = or i1 %25, %28
-  br i1 %29, label %div.fail, label %div.ok
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %21)
+  %23 = extractvalue { i32, i1 } %22, 0
+  %24 = extractvalue { i32, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %23, i32* %t.addr, align 4
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = load i32, i32* %n.addr, align 4
+  %27 = icmp eq i32 %26, 0
+  %28 = icmp eq i32 %25, -2147483648
+  %29 = icmp eq i32 %26, -1
+  %30 = and i1 %28, %29
+  %31 = or i1 %27, %30
+  br i1 %31, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %25)
+  call void @nish_panic_div(i1 zeroext %27)
   unreachable
 
 div.ok:
-  %30 = srem i32 %23, %24
-  %31 = sext i32 %30 to i64
-  %32 = load i32, i32* %i.addr, align 4
-  %33 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj, i32 0, i32 0
-  store i32 %32, i32* %33, align 4
-  %34 = load i32, i32* %t.addr, align 4
-  %35 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj, i32 0, i32 1
+  %32 = srem i32 %25, %26
+  %33 = sext i32 %32 to i64
+  %34 = load i32, i32* %i.addr, align 4
+  %35 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj, i32 0, i32 0
   store i32 %34, i32* %35, align 4
-  %36 = icmp ult i64 %31, %10
-  br i1 %36, label %bounds.ok, label %bounds.fail
+  %36 = load i32, i32* %t.addr, align 4
+  %37 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj, i32 0, i32 1
+  store i32 %36, i32* %37, align 4
+  %38 = icmp ult i64 %33, %10
+  br i1 %38, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %31, i64 %10)
+  call void @nish_panic_index(i64 %33, i64 %10)
   unreachable
 
 bounds.ok:
-  %37 = bitcast i8* %12 to %struct.Rec*
-  %38 = getelementptr inbounds %struct.Rec, %struct.Rec* %37, i64 %31
-  %39 = bitcast %struct.Rec* %38 to i8*
-  %40 = bitcast %struct.Rec* %Rec.obj to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %39, i8* align 4 %40, i64 8, i1 false), !alias.scope !9, !noalias !8
+  %39 = bitcast i8* %12 to %struct.Rec*
+  %40 = getelementptr inbounds %struct.Rec, %struct.Rec* %39, i64 %33
+  %41 = bitcast %struct.Rec* %40 to i8*
+  %42 = bitcast %struct.Rec* %Rec.obj to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %41, i8* align 4 %42, i64 8, i1 false), !alias.scope !9, !noalias !8
   br label %for.inc
 
 for.inc:
-  %41 = load i32, i32* %i.addr, align 4
-  %42 = add nsw i32 %41, 1
-  store i32 %42, i32* %i.addr, align 4
+  %43 = load i32, i32* %i.addr, align 4
+  %44 = add nsw i32 %43, 1
+  store i32 %44, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %43 = load i32, i32* %t.addr, align 4
-  ret i32 %43
+  %45 = load i32, i32* %t.addr, align 4
+  ret i32 %45
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @nish_main() #1 {
@@ -248,7 +259,8 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

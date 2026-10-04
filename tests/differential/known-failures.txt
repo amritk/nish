@@ -16,6 +16,14 @@ corpus/int_div_zero        # x / 0, x % 0: "attempt to divide by zero"; JS gives
 cases/div_zero_panic       # 10 / 0 panics (exit 1); JS gives 0 after | 0
 cases/u_div_zero_panic     # u32 / 0 panics too (one compare instead of two); JS gives Infinity >>> 0
 cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0
+# By design (Rust semantics): signed `+ - *` that leaves its type panics with exit 1;
+# the frozen rewrites wrap with `| 0` and `Math.imul`, as the language did before
+corpus/arr_2d              # an i32 matrix product past INT_MAX: "attempt to multiply with overflow"
+corpus/f64_i32_mixed       # an i32 product past INT_MAX: "attempt to multiply with overflow"
+corpus/modules_basic       # math.ts's cube past INT_MAX: "attempt to multiply with overflow"
+corpus/parse_argv_sum      # `ints += p` past INT_MAX: "attempt to add with overflow"
+corpus/str_large           # an i32 sum past INT_MAX: "attempt to add with overflow"
+corpus/str_template        # `2147483647 + 1`: "attempt to add with overflow"
 # By design (WP31 §6): a value leaving `integer<Lo, Hi>` at an entry panics with exit 1;
 # under Node the type is a `number` alias and nothing is checked
 cases/rng_entry_panic      # the last i++ leaves integer<0, 255> (exit 1); JS finishes the loop

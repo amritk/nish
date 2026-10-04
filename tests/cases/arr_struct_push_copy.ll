@@ -6,6 +6,8 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @test() #0 {
 entry:
@@ -215,20 +217,40 @@ bounds.ok.3:
   %104 = getelementptr inbounds %struct.Cell, %struct.Cell* %103, i64 1
   %105 = getelementptr inbounds %struct.Cell, %struct.Cell* %104, i32 0, i32 0
   %106 = load i32, i32* %105, align 4
-  %107 = add nsw i32 %96, %106
-  %108 = load %struct.Cell*, %struct.Cell** %last.addr, align 8
-  %109 = getelementptr inbounds %struct.Cell, %struct.Cell* %108, i32 0, i32 0
-  %110 = load i32, i32* %109, align 4
-  %111 = add nsw i32 %107, %110
-  %112 = load i32, i32* %found.addr, align 4
-  %113 = add nsw i32 %111, %112
+  %107 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %96, i32 %106)
+  %108 = extractvalue { i32, i1 } %107, 0
+  %109 = extractvalue { i32, i1 } %107, 1
+  br i1 %109, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %110 = load %struct.Cell*, %struct.Cell** %last.addr, align 8
+  %111 = getelementptr inbounds %struct.Cell, %struct.Cell* %110, i32 0, i32 0
+  %112 = load i32, i32* %111, align 4
+  %113 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %108, i32 %112)
+  %114 = extractvalue { i32, i1 } %113, 0
+  %115 = extractvalue { i32, i1 } %113, 1
+  br i1 %115, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %116 = load i32, i32* %found.addr, align 4
+  %117 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %114, i32 %116)
+  %118 = extractvalue { i32, i1 } %117, 0
+  %119 = extractvalue { i32, i1 } %117, 1
+  br i1 %119, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %113
+  ret i32 %118
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

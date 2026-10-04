@@ -37,7 +37,9 @@ declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef n
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare i32 @llvm.fptosi.sat.i32.f64(double) #6
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
@@ -622,12 +624,26 @@ forof.end.1:
   %229 = call i32 @nish_net_close(i32 %228)
   %230 = load i32, i32* %gro.addr, align 4
   %231 = call i32 @nish_net_close(i32 %230)
-  %232 = add nsw i32 %229, %231
-  %233 = load i32, i32* %plain.addr, align 4
-  %234 = call i32 @nish_net_close(i32 %233)
-  %235 = add nsw i32 %232, %234
+  %232 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %229, i32 %231)
+  %233 = extractvalue { i32, i1 } %232, 0
+  %234 = extractvalue { i32, i1 } %232, 1
+  br i1 %234, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %235 = load i32, i32* %plain.addr, align 4
+  %236 = call i32 @nish_net_close(i32 %235)
+  %237 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %233, i32 %236)
+  %238 = extractvalue { i32, i1 } %237, 0
+  %239 = extractvalue { i32, i1 } %237, 1
+  br i1 %239, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %235
+  ret i32 %238
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {

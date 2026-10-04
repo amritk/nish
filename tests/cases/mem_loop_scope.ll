@@ -21,10 +21,13 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
-declare i64 @llvm.smin.i64(i64, i64) #4
-declare i64 @llvm.smax.i64(i64, i64) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare i64 @llvm.smin.i64(i64, i64) #5
+declare i64 @llvm.smax.i64(i64, i64) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -141,39 +144,48 @@ for.body:
   %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
   %11 = load i64, i64* %10, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %12 = trunc i64 %11 to i32
-  %13 = add nsw i32 %8, %12
-  store i32 %13, i32* %total.addr, align 4
-  %14 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %15 = load i8*, i8** %14, align 8
-  %16 = icmp eq i8* %15, %3
-  br i1 %16, label %pass.rewind, label %pass.free
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %14, i32* %total.addr, align 4
+  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %17 = load i8*, i8** %16, align 8
+  %18 = icmp eq i8* %17, %3
+  br i1 %18, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %17 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %5, i64* %17, align 8
+  %19 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %19, align 8
   br label %pass.done
 
 pass.free:
-  %18 = ptrtoint i8* %3 to i64
-  %19 = add i64 %18, %5
-  call void @nish_arena_release(i64 %19)
+  %20 = ptrtoint i8* %3 to i64
+  %21 = add i64 %20, %5
+  call void @nish_arena_release(i64 %21)
   br label %pass.done
 
 pass.done:
   br label %for.inc
 
 for.inc:
-  %20 = load i32, i32* %i.addr, align 4
-  %21 = add nsw i32 %20, 1
-  store i32 %21, i32* %i.addr, align 4
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = add nsw i32 %22, 1
+  store i32 %23, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %22 = call i8* @nish_alloc_struct(i64 4)
-  %23 = bitcast i8* %22 to %struct.Box*
-  %24 = load i32, i32* %total.addr, align 4
-  call void @Box.constructor(%struct.Box* %23, i32 %24)
-  ret %struct.Box* %23
+  %24 = call i8* @nish_alloc_struct(i64 4)
+  %25 = bitcast i8* %24 to %struct.Box*
+  %26 = load i32, i32* %total.addr, align 4
+  call void @Box.constructor(%struct.Box* %25, i32 %26)
+  ret %struct.Box* %25
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef nonnull align 8 i8* @grows(i32 noundef %rounds) #1 {
@@ -194,20 +206,29 @@ entry:
   store %struct.Box* %3, %struct.Box** %box.addr, align 8
   %4 = call i64 @nish_arena_used()
   %5 = load i64, i64* %before.addr, align 8
-  %6 = sub nsw i64 %4, %5
-  store i64 %6, i64* %grown.addr, align 8
-  %7 = load %struct.Box*, %struct.Box** %box.addr, align 8
-  %8 = getelementptr inbounds %struct.Box, %struct.Box* %7, i32 0, i32 0
-  %9 = load i32, i32* %8, align 4, !tbaa !4
-  store i32 %9, i32* %total.addr, align 4
+  %6 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %4, i64 %5)
+  %7 = extractvalue { i64, i1 } %6, 0
+  %8 = extractvalue { i64, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i64 %7, i64* %grown.addr, align 8
+  %9 = load %struct.Box*, %struct.Box** %box.addr, align 8
+  %10 = getelementptr inbounds %struct.Box, %struct.Box* %9, i32 0, i32 0
+  %11 = load i32, i32* %10, align 4, !tbaa !4
+  store i32 %11, i32* %total.addr, align 4
   call void @nish_arena_release(i64 %1)
-  %10 = load i32, i32* %total.addr, align 4
-  %11 = call i8* @nish_str_from_i32(i32 %10)
-  %12 = call i8* @nish_str_concat(i8* %11, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %13 = load i64, i64* %grown.addr, align 8
-  %14 = call i8* @nish_str_from_i64(i64 %13)
-  %15 = call i8* @nish_str_concat(i8* %12, i8* %14)
-  ret i8* %15
+  %12 = load i32, i32* %total.addr, align 4
+  %13 = call i8* @nish_str_from_i32(i32 %12)
+  %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %15 = load i64, i64* %grown.addr, align 8
+  %16 = call i8* @nish_str_from_i64(i64 %15)
+  %17 = call i8* @nish_str_concat(i8* %14, i8* %16)
+  ret i8* %17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define void @nish_main() #1 {
@@ -235,52 +256,62 @@ entry:
   %11 = load i8*, i8** %one.addr, align 8
   %12 = call i64 @nish_str_index_of(i8* %11, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %13 = trunc i64 %12 to i32
-  %14 = add nsw i32 %13, 1
-  %15 = sext i32 %14 to i64
-  %16 = call i64 @llvm.smin.i64(i64 %15, i64 %10)
-  %17 = call i64 @llvm.smax.i64(i64 %16, i64 0)
-  %18 = load i8*, i8** %one.addr, align 8
-  %19 = bitcast i8* %18 to i64*
-  %20 = load i64, i64* %19, align 8
-  %21 = trunc i64 %20 to i32
-  %22 = sext i32 %21 to i64
-  %23 = call i64 @llvm.smin.i64(i64 %22, i64 %10)
-  %24 = call i64 @llvm.smax.i64(i64 %23, i64 0)
-  %25 = call i64 @llvm.smin.i64(i64 %17, i64 %24)
-  %26 = call i64 @llvm.smax.i64(i64 %17, i64 %24)
-  %27 = sub i64 %26, %25
-  %28 = getelementptr inbounds i8, i8* %8, i64 8
-  %29 = getelementptr inbounds i8, i8* %28, i64 %25
-  %30 = call i8* @nish_str_new(i8* %29, i64 %27)
-  store i8* %30, i8** %g1.addr, align 8
-  %31 = load i8*, i8** %many.addr, align 8
-  %32 = bitcast i8* %31 to i64*
-  %33 = load i64, i64* %32, align 8
-  %34 = load i8*, i8** %many.addr, align 8
-  %35 = call i64 @nish_str_index_of(i8* %34, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %36 = trunc i64 %35 to i32
-  %37 = add nsw i32 %36, 1
-  %38 = sext i32 %37 to i64
-  %39 = call i64 @llvm.smin.i64(i64 %38, i64 %33)
-  %40 = call i64 @llvm.smax.i64(i64 %39, i64 0)
-  %41 = load i8*, i8** %many.addr, align 8
-  %42 = bitcast i8* %41 to i64*
-  %43 = load i64, i64* %42, align 8
-  %44 = trunc i64 %43 to i32
-  %45 = sext i32 %44 to i64
-  %46 = call i64 @llvm.smin.i64(i64 %45, i64 %33)
-  %47 = call i64 @llvm.smax.i64(i64 %46, i64 0)
-  %48 = call i64 @llvm.smin.i64(i64 %40, i64 %47)
-  %49 = call i64 @llvm.smax.i64(i64 %40, i64 %47)
-  %50 = sub i64 %49, %48
-  %51 = getelementptr inbounds i8, i8* %31, i64 8
-  %52 = getelementptr inbounds i8, i8* %51, i64 %48
-  %53 = call i8* @nish_str_new(i8* %52, i64 %50)
-  store i8* %53, i8** %g2.addr, align 8
-  %54 = load i8*, i8** %g1.addr, align 8
-  %55 = load i8*, i8** %g2.addr, align 8
-  %56 = call zeroext i1 @nish_str_eq(i8* %54, i8* %55)
-  br i1 %56, label %cond.true, label %cond.false
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %13, i32 1)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %17 = sext i32 %15 to i64
+  %18 = call i64 @llvm.smin.i64(i64 %17, i64 %10)
+  %19 = call i64 @llvm.smax.i64(i64 %18, i64 0)
+  %20 = load i8*, i8** %one.addr, align 8
+  %21 = bitcast i8* %20 to i64*
+  %22 = load i64, i64* %21, align 8
+  %23 = trunc i64 %22 to i32
+  %24 = sext i32 %23 to i64
+  %25 = call i64 @llvm.smin.i64(i64 %24, i64 %10)
+  %26 = call i64 @llvm.smax.i64(i64 %25, i64 0)
+  %27 = call i64 @llvm.smin.i64(i64 %19, i64 %26)
+  %28 = call i64 @llvm.smax.i64(i64 %19, i64 %26)
+  %29 = sub i64 %28, %27
+  %30 = getelementptr inbounds i8, i8* %8, i64 8
+  %31 = getelementptr inbounds i8, i8* %30, i64 %27
+  %32 = call i8* @nish_str_new(i8* %31, i64 %29)
+  store i8* %32, i8** %g1.addr, align 8
+  %33 = load i8*, i8** %many.addr, align 8
+  %34 = bitcast i8* %33 to i64*
+  %35 = load i64, i64* %34, align 8
+  %36 = load i8*, i8** %many.addr, align 8
+  %37 = call i64 @nish_str_index_of(i8* %36, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %38 = trunc i64 %37 to i32
+  %39 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %38, i32 1)
+  %40 = extractvalue { i32, i1 } %39, 0
+  %41 = extractvalue { i32, i1 } %39, 1
+  br i1 %41, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %42 = sext i32 %40 to i64
+  %43 = call i64 @llvm.smin.i64(i64 %42, i64 %35)
+  %44 = call i64 @llvm.smax.i64(i64 %43, i64 0)
+  %45 = load i8*, i8** %many.addr, align 8
+  %46 = bitcast i8* %45 to i64*
+  %47 = load i64, i64* %46, align 8
+  %48 = trunc i64 %47 to i32
+  %49 = sext i32 %48 to i64
+  %50 = call i64 @llvm.smin.i64(i64 %49, i64 %35)
+  %51 = call i64 @llvm.smax.i64(i64 %50, i64 0)
+  %52 = call i64 @llvm.smin.i64(i64 %44, i64 %51)
+  %53 = call i64 @llvm.smax.i64(i64 %44, i64 %51)
+  %54 = sub i64 %53, %52
+  %55 = getelementptr inbounds i8, i8* %33, i64 8
+  %56 = getelementptr inbounds i8, i8* %55, i64 %52
+  %57 = call i8* @nish_str_new(i8* %56, i64 %54)
+  store i8* %57, i8** %g2.addr, align 8
+  %58 = load i8*, i8** %g1.addr, align 8
+  %59 = load i8*, i8** %g2.addr, align 8
+  %60 = call zeroext i1 @nish_str_eq(i8* %58, i8* %59)
+  br i1 %60, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -289,10 +320,14 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %57 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), %cond.true ], [ bitcast ({ i64, [6 x i8] }* @.str.2 to i8*), %cond.false ]
-  call void @nish_print(i8* %57)
+  %61 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), %cond.true ], [ bitcast ({ i64, [6 x i8] }* @.str.2 to i8*), %cond.false ]
+  call void @nish_print(i8* %61)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
@@ -306,8 +341,9 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

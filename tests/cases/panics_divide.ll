@@ -5,6 +5,8 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
 declare void @nish_panic_div(i1 noundef zeroext) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
 define internal noundef i32 @quotient(i32 noundef %a, i32 noundef %b) #0 {
 entry:
@@ -53,12 +55,21 @@ entry:
   ret double %0
 }
 
-define internal noundef i32 @halves(i32 noundef %a) #1 {
+define internal noundef i32 @halves(i32 noundef %a) #0 {
 entry:
   %0 = sdiv i32 %a, 2
   %1 = srem i32 %a, -3
-  %2 = add nsw i32 %0, %1
-  ret i32 %2
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %3
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @share(i32 noundef %a, i32 noundef %d) #1 {

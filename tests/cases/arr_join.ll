@@ -10,13 +10,16 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -123,7 +126,7 @@ join.end:
   ret i8* %24
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %parts.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -216,255 +219,288 @@ push.store.1:
   %40 = bitcast i8* %39 to i64*
   %41 = load i64, i64* %40, align 8
   %42 = trunc i64 %41 to i32
-  %43 = mul nsw i32 %42, 1000
-  %44 = load %struct.nish_array*, %struct.nish_array** %one.addr, align 8
-  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 0
-  %46 = load i64, i64* %45, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %47 = bitcast i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*) to i64*
-  %48 = load i64, i64* %47, align 8
-  %49 = sub i64 %46, 1
-  %50 = mul i64 %48, %49
-  %51 = icmp eq i64 %46, 0
-  %52 = select i1 %51, i64 0, i64 %50
-  store i64 %52, i64* %join.total, align 8
+  %43 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %42, i32 1000)
+  %44 = extractvalue { i32, i1 } %43, 0
+  %45 = extractvalue { i32, i1 } %43, 1
+  br i1 %45, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %46 = load %struct.nish_array*, %struct.nish_array** %one.addr, align 8
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
+  %48 = load i64, i64* %47, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %49 = bitcast i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*) to i64*
+  %50 = load i64, i64* %49, align 8
+  %51 = sub i64 %48, 1
+  %52 = mul i64 %50, %51
+  %53 = icmp eq i64 %48, 0
+  %54 = select i1 %53, i64 0, i64 %52
+  store i64 %54, i64* %join.total, align 8
   store i64 0, i64* %join.at, align 8
   br label %join.sum
 
 join.sum:
-  %53 = load i64, i64* %join.at, align 8
-  %54 = icmp ult i64 %53, %46
-  br i1 %54, label %join.sum.body, label %join.copy
+  %55 = load i64, i64* %join.at, align 8
+  %56 = icmp ult i64 %55, %48
+  br i1 %56, label %join.sum.body, label %join.copy
 
 join.sum.body:
-  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2
-  %56 = load i8*, i8** %55, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %57 = bitcast i8* %56 to i8**
-  %58 = getelementptr inbounds i8*, i8** %57, i64 %53
-  %59 = load i8*, i8** %58, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %60 = load i64, i64* %join.total, align 8
-  %61 = bitcast i8* %59 to i64*
-  %62 = load i64, i64* %61, align 8
-  %63 = add i64 %60, %62
-  store i64 %63, i64* %join.total, align 8
-  %64 = add i64 %53, 1
-  store i64 %64, i64* %join.at, align 8
+  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 2
+  %58 = load i8*, i8** %57, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %59 = bitcast i8* %58 to i8**
+  %60 = getelementptr inbounds i8*, i8** %59, i64 %55
+  %61 = load i8*, i8** %60, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %62 = load i64, i64* %join.total, align 8
+  %63 = bitcast i8* %61 to i64*
+  %64 = load i64, i64* %63, align 8
+  %65 = add i64 %62, %64
+  store i64 %65, i64* %join.total, align 8
+  %66 = add i64 %55, 1
+  store i64 %66, i64* %join.at, align 8
   br label %join.sum
 
 join.copy:
-  %65 = load i64, i64* %join.total, align 8
-  %66 = icmp ugt i64 %65, 2147483647
-  %67 = add i64 %65, 9
-  %68 = select i1 %66, i64 4611686018427387904, i64 %67
-  %69 = call i8* @nish_alloc_struct(i64 %68)
-  %70 = bitcast i8* %69 to i64*
-  store i64 %65, i64* %70, align 8
-  %71 = getelementptr inbounds i8, i8* %69, i64 8
-  store i8* %71, i8** %join.p, align 8
+  %67 = load i64, i64* %join.total, align 8
+  %68 = icmp ugt i64 %67, 2147483647
+  %69 = add i64 %67, 9
+  %70 = select i1 %68, i64 4611686018427387904, i64 %69
+  %71 = call i8* @nish_alloc_struct(i64 %70)
+  %72 = bitcast i8* %71 to i64*
+  store i64 %67, i64* %72, align 8
+  %73 = getelementptr inbounds i8, i8* %71, i64 8
+  store i8* %73, i8** %join.p, align 8
   store i64 0, i64* %join.at, align 8
   br label %join.copy.body
 
 join.copy.body:
-  %72 = load i64, i64* %join.at, align 8
-  %73 = icmp ult i64 %72, %46
-  br i1 %73, label %join.part, label %join.end
+  %74 = load i64, i64* %join.at, align 8
+  %75 = icmp ult i64 %74, %48
+  br i1 %75, label %join.part, label %join.end
 
 join.part:
-  %74 = load i8*, i8** %join.p, align 8
-  %75 = icmp eq i64 %72, 0
-  %76 = select i1 %75, i64 0, i64 %48
-  %77 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i64 8
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %74, i8* %77, i64 %76, i1 false)
-  %78 = getelementptr inbounds i8, i8* %74, i64 %76
-  %79 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2
-  %80 = load i8*, i8** %79, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %81 = bitcast i8* %80 to i8**
-  %82 = getelementptr inbounds i8*, i8** %81, i64 %72
-  %83 = load i8*, i8** %82, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %84 = bitcast i8* %83 to i64*
-  %85 = load i64, i64* %84, align 8
-  %86 = getelementptr inbounds i8, i8* %83, i64 8
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %78, i8* %86, i64 %85, i1 false)
-  %87 = getelementptr inbounds i8, i8* %78, i64 %85
-  store i8* %87, i8** %join.p, align 8
-  %88 = add i64 %72, 1
-  store i64 %88, i64* %join.at, align 8
+  %76 = load i8*, i8** %join.p, align 8
+  %77 = icmp eq i64 %74, 0
+  %78 = select i1 %77, i64 0, i64 %50
+  %79 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %76, i8* %79, i64 %78, i1 false)
+  %80 = getelementptr inbounds i8, i8* %76, i64 %78
+  %81 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 2
+  %82 = load i8*, i8** %81, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %83 = bitcast i8* %82 to i8**
+  %84 = getelementptr inbounds i8*, i8** %83, i64 %74
+  %85 = load i8*, i8** %84, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %86 = bitcast i8* %85 to i64*
+  %87 = load i64, i64* %86, align 8
+  %88 = getelementptr inbounds i8, i8* %85, i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %80, i8* %88, i64 %87, i1 false)
+  %89 = getelementptr inbounds i8, i8* %80, i64 %87
+  store i8* %89, i8** %join.p, align 8
+  %90 = add i64 %74, 1
+  store i64 %90, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %89 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %89, align 1
-  %90 = bitcast i8* %69 to i64*
-  %91 = load i64, i64* %90, align 8
-  %92 = trunc i64 %91 to i32
-  %93 = mul nsw i32 %92, 10
-  %94 = add nsw i32 %43, %93
-  %95 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
-  %96 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %95, i64 0, i32 0
-  %97 = load i64, i64* %96, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %98 = bitcast i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*) to i64*
-  %99 = load i64, i64* %98, align 8
-  %100 = sub i64 %97, 1
-  %101 = mul i64 %99, %100
-  %102 = icmp eq i64 %97, 0
-  %103 = select i1 %102, i64 0, i64 %101
-  store i64 %103, i64* %join.total.1, align 8
+  %91 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %91, align 1
+  %92 = bitcast i8* %71 to i64*
+  %93 = load i64, i64* %92, align 8
+  %94 = trunc i64 %93 to i32
+  %95 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %94, i32 10)
+  %96 = extractvalue { i32, i1 } %95, 0
+  %97 = extractvalue { i32, i1 } %95, 1
+  br i1 %97, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %98 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %44, i32 %96)
+  %99 = extractvalue { i32, i1 } %98, 0
+  %100 = extractvalue { i32, i1 } %98, 1
+  br i1 %100, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %101 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
+  %102 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %101, i64 0, i32 0
+  %103 = load i64, i64* %102, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %104 = bitcast i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*) to i64*
+  %105 = load i64, i64* %104, align 8
+  %106 = sub i64 %103, 1
+  %107 = mul i64 %105, %106
+  %108 = icmp eq i64 %103, 0
+  %109 = select i1 %108, i64 0, i64 %107
+  store i64 %109, i64* %join.total.1, align 8
   store i64 0, i64* %join.at.1, align 8
   br label %join.sum.1
 
 join.sum.1:
-  %104 = load i64, i64* %join.at.1, align 8
-  %105 = icmp ult i64 %104, %97
-  br i1 %105, label %join.sum.body.1, label %join.copy.1
+  %110 = load i64, i64* %join.at.1, align 8
+  %111 = icmp ult i64 %110, %103
+  br i1 %111, label %join.sum.body.1, label %join.copy.1
 
 join.sum.body.1:
-  %106 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %95, i64 0, i32 2
-  %107 = load i8*, i8** %106, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %108 = bitcast i8* %107 to i8**
-  %109 = getelementptr inbounds i8*, i8** %108, i64 %104
-  %110 = load i8*, i8** %109, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %111 = load i64, i64* %join.total.1, align 8
-  %112 = bitcast i8* %110 to i64*
-  %113 = load i64, i64* %112, align 8
-  %114 = add i64 %111, %113
-  store i64 %114, i64* %join.total.1, align 8
-  %115 = add i64 %104, 1
-  store i64 %115, i64* %join.at.1, align 8
+  %112 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %101, i64 0, i32 2
+  %113 = load i8*, i8** %112, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %114 = bitcast i8* %113 to i8**
+  %115 = getelementptr inbounds i8*, i8** %114, i64 %110
+  %116 = load i8*, i8** %115, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %117 = load i64, i64* %join.total.1, align 8
+  %118 = bitcast i8* %116 to i64*
+  %119 = load i64, i64* %118, align 8
+  %120 = add i64 %117, %119
+  store i64 %120, i64* %join.total.1, align 8
+  %121 = add i64 %110, 1
+  store i64 %121, i64* %join.at.1, align 8
   br label %join.sum.1
 
 join.copy.1:
-  %116 = load i64, i64* %join.total.1, align 8
-  %117 = icmp ugt i64 %116, 2147483647
-  %118 = add i64 %116, 9
-  %119 = select i1 %117, i64 4611686018427387904, i64 %118
-  %120 = call i8* @nish_alloc_struct(i64 %119)
-  %121 = bitcast i8* %120 to i64*
-  store i64 %116, i64* %121, align 8
-  %122 = getelementptr inbounds i8, i8* %120, i64 8
-  store i8* %122, i8** %join.p.1, align 8
+  %122 = load i64, i64* %join.total.1, align 8
+  %123 = icmp ugt i64 %122, 2147483647
+  %124 = add i64 %122, 9
+  %125 = select i1 %123, i64 4611686018427387904, i64 %124
+  %126 = call i8* @nish_alloc_struct(i64 %125)
+  %127 = bitcast i8* %126 to i64*
+  store i64 %122, i64* %127, align 8
+  %128 = getelementptr inbounds i8, i8* %126, i64 8
+  store i8* %128, i8** %join.p.1, align 8
   store i64 0, i64* %join.at.1, align 8
   br label %join.copy.body.1
 
 join.copy.body.1:
-  %123 = load i64, i64* %join.at.1, align 8
-  %124 = icmp ult i64 %123, %97
-  br i1 %124, label %join.part.1, label %join.end.1
+  %129 = load i64, i64* %join.at.1, align 8
+  %130 = icmp ult i64 %129, %103
+  br i1 %130, label %join.part.1, label %join.end.1
 
 join.part.1:
-  %125 = load i8*, i8** %join.p.1, align 8
-  %126 = icmp eq i64 %123, 0
-  %127 = select i1 %126, i64 0, i64 %99
-  %128 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i64 8
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %125, i8* %128, i64 %127, i1 false)
-  %129 = getelementptr inbounds i8, i8* %125, i64 %127
-  %130 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %95, i64 0, i32 2
-  %131 = load i8*, i8** %130, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %132 = bitcast i8* %131 to i8**
-  %133 = getelementptr inbounds i8*, i8** %132, i64 %123
-  %134 = load i8*, i8** %133, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %135 = bitcast i8* %134 to i64*
-  %136 = load i64, i64* %135, align 8
-  %137 = getelementptr inbounds i8, i8* %134, i64 8
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %129, i8* %137, i64 %136, i1 false)
-  %138 = getelementptr inbounds i8, i8* %129, i64 %136
-  store i8* %138, i8** %join.p.1, align 8
-  %139 = add i64 %123, 1
-  store i64 %139, i64* %join.at.1, align 8
+  %131 = load i8*, i8** %join.p.1, align 8
+  %132 = icmp eq i64 %129, 0
+  %133 = select i1 %132, i64 0, i64 %105
+  %134 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %131, i8* %134, i64 %133, i1 false)
+  %135 = getelementptr inbounds i8, i8* %131, i64 %133
+  %136 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %101, i64 0, i32 2
+  %137 = load i8*, i8** %136, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %138 = bitcast i8* %137 to i8**
+  %139 = getelementptr inbounds i8*, i8** %138, i64 %129
+  %140 = load i8*, i8** %139, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %141 = bitcast i8* %140 to i64*
+  %142 = load i64, i64* %141, align 8
+  %143 = getelementptr inbounds i8, i8* %140, i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %135, i8* %143, i64 %142, i1 false)
+  %144 = getelementptr inbounds i8, i8* %135, i64 %142
+  store i8* %144, i8** %join.p.1, align 8
+  %145 = add i64 %129, 1
+  store i64 %145, i64* %join.at.1, align 8
   br label %join.copy.body.1
 
 join.end.1:
-  %140 = load i8*, i8** %join.p.1, align 8
-  store i8 0, i8* %140, align 1
-  %141 = bitcast i8* %120 to i64*
-  %142 = load i64, i64* %141, align 8
-  %143 = trunc i64 %142 to i32
-  %144 = add nsw i32 %94, %143
-  %145 = load %struct.nish_array*, %struct.nish_array** %parts.addr, align 8
-  %146 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %145, i64 0, i32 0
-  %147 = load i64, i64* %146, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %148 = bitcast i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*) to i64*
-  %149 = load i64, i64* %148, align 8
-  %150 = sub i64 %147, 1
-  %151 = mul i64 %149, %150
-  %152 = icmp eq i64 %147, 0
-  %153 = select i1 %152, i64 0, i64 %151
-  store i64 %153, i64* %join.total.2, align 8
+  %146 = load i8*, i8** %join.p.1, align 8
+  store i8 0, i8* %146, align 1
+  %147 = bitcast i8* %126 to i64*
+  %148 = load i64, i64* %147, align 8
+  %149 = trunc i64 %148 to i32
+  %150 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %99, i32 %149)
+  %151 = extractvalue { i32, i1 } %150, 0
+  %152 = extractvalue { i32, i1 } %150, 1
+  br i1 %152, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %153 = load %struct.nish_array*, %struct.nish_array** %parts.addr, align 8
+  %154 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %153, i64 0, i32 0
+  %155 = load i64, i64* %154, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %156 = bitcast i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*) to i64*
+  %157 = load i64, i64* %156, align 8
+  %158 = sub i64 %155, 1
+  %159 = mul i64 %157, %158
+  %160 = icmp eq i64 %155, 0
+  %161 = select i1 %160, i64 0, i64 %159
+  store i64 %161, i64* %join.total.2, align 8
   store i64 0, i64* %join.at.2, align 8
   br label %join.sum.2
 
 join.sum.2:
-  %154 = load i64, i64* %join.at.2, align 8
-  %155 = icmp ult i64 %154, %147
-  br i1 %155, label %join.sum.body.2, label %join.copy.2
+  %162 = load i64, i64* %join.at.2, align 8
+  %163 = icmp ult i64 %162, %155
+  br i1 %163, label %join.sum.body.2, label %join.copy.2
 
 join.sum.body.2:
-  %156 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %145, i64 0, i32 2
-  %157 = load i8*, i8** %156, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %158 = bitcast i8* %157 to i8**
-  %159 = getelementptr inbounds i8*, i8** %158, i64 %154
-  %160 = load i8*, i8** %159, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %161 = load i64, i64* %join.total.2, align 8
-  %162 = bitcast i8* %160 to i64*
-  %163 = load i64, i64* %162, align 8
-  %164 = add i64 %161, %163
-  store i64 %164, i64* %join.total.2, align 8
-  %165 = add i64 %154, 1
-  store i64 %165, i64* %join.at.2, align 8
+  %164 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %153, i64 0, i32 2
+  %165 = load i8*, i8** %164, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %166 = bitcast i8* %165 to i8**
+  %167 = getelementptr inbounds i8*, i8** %166, i64 %162
+  %168 = load i8*, i8** %167, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %169 = load i64, i64* %join.total.2, align 8
+  %170 = bitcast i8* %168 to i64*
+  %171 = load i64, i64* %170, align 8
+  %172 = add i64 %169, %171
+  store i64 %172, i64* %join.total.2, align 8
+  %173 = add i64 %162, 1
+  store i64 %173, i64* %join.at.2, align 8
   br label %join.sum.2
 
 join.copy.2:
-  %166 = load i64, i64* %join.total.2, align 8
-  %167 = icmp ugt i64 %166, 2147483647
-  %168 = add i64 %166, 9
-  %169 = select i1 %167, i64 4611686018427387904, i64 %168
-  %170 = call i8* @nish_alloc_struct(i64 %169)
-  %171 = bitcast i8* %170 to i64*
-  store i64 %166, i64* %171, align 8
-  %172 = getelementptr inbounds i8, i8* %170, i64 8
-  store i8* %172, i8** %join.p.2, align 8
+  %174 = load i64, i64* %join.total.2, align 8
+  %175 = icmp ugt i64 %174, 2147483647
+  %176 = add i64 %174, 9
+  %177 = select i1 %175, i64 4611686018427387904, i64 %176
+  %178 = call i8* @nish_alloc_struct(i64 %177)
+  %179 = bitcast i8* %178 to i64*
+  store i64 %174, i64* %179, align 8
+  %180 = getelementptr inbounds i8, i8* %178, i64 8
+  store i8* %180, i8** %join.p.2, align 8
   store i64 0, i64* %join.at.2, align 8
   br label %join.copy.body.2
 
 join.copy.body.2:
-  %173 = load i64, i64* %join.at.2, align 8
-  %174 = icmp ult i64 %173, %147
-  br i1 %174, label %join.part.2, label %join.end.2
+  %181 = load i64, i64* %join.at.2, align 8
+  %182 = icmp ult i64 %181, %155
+  br i1 %182, label %join.part.2, label %join.end.2
 
 join.part.2:
-  %175 = load i8*, i8** %join.p.2, align 8
-  %176 = icmp eq i64 %173, 0
-  %177 = select i1 %176, i64 0, i64 %149
-  %178 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*), i64 8
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %175, i8* %178, i64 %177, i1 false)
-  %179 = getelementptr inbounds i8, i8* %175, i64 %177
-  %180 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %145, i64 0, i32 2
-  %181 = load i8*, i8** %180, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %182 = bitcast i8* %181 to i8**
-  %183 = getelementptr inbounds i8*, i8** %182, i64 %173
-  %184 = load i8*, i8** %183, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %185 = bitcast i8* %184 to i64*
-  %186 = load i64, i64* %185, align 8
-  %187 = getelementptr inbounds i8, i8* %184, i64 8
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %179, i8* %187, i64 %186, i1 false)
-  %188 = getelementptr inbounds i8, i8* %179, i64 %186
-  store i8* %188, i8** %join.p.2, align 8
-  %189 = add i64 %173, 1
-  store i64 %189, i64* %join.at.2, align 8
+  %183 = load i8*, i8** %join.p.2, align 8
+  %184 = icmp eq i64 %181, 0
+  %185 = select i1 %184, i64 0, i64 %157
+  %186 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*), i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %183, i8* %186, i64 %185, i1 false)
+  %187 = getelementptr inbounds i8, i8* %183, i64 %185
+  %188 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %153, i64 0, i32 2
+  %189 = load i8*, i8** %188, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %190 = bitcast i8* %189 to i8**
+  %191 = getelementptr inbounds i8*, i8** %190, i64 %181
+  %192 = load i8*, i8** %191, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %193 = bitcast i8* %192 to i64*
+  %194 = load i64, i64* %193, align 8
+  %195 = getelementptr inbounds i8, i8* %192, i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %187, i8* %195, i64 %194, i1 false)
+  %196 = getelementptr inbounds i8, i8* %187, i64 %194
+  store i8* %196, i8** %join.p.2, align 8
+  %197 = add i64 %181, 1
+  store i64 %197, i64* %join.at.2, align 8
   br label %join.copy.body.2
 
 join.end.2:
-  %190 = load i8*, i8** %join.p.2, align 8
-  store i8 0, i8* %190, align 1
-  %191 = bitcast i8* %170 to i64*
-  %192 = load i64, i64* %191, align 8
-  %193 = trunc i64 %192 to i32
-  %194 = add nsw i32 %144, %193
+  %198 = load i8*, i8** %join.p.2, align 8
+  store i8 0, i8* %198, align 1
+  %199 = bitcast i8* %178 to i64*
+  %200 = load i64, i64* %199, align 8
+  %201 = trunc i64 %200 to i32
+  %202 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %151, i32 %201)
+  %203 = extractvalue { i32, i1 } %202, 0
+  %204 = extractvalue { i32, i1 } %202, 1
+  br i1 %204, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %194
+  ret i32 %203
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %push.store.1 ], [ 2, %join.end ], [ 0, %ovf.ok.1 ], [ 0, %join.end.1 ], [ 0, %join.end.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

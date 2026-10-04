@@ -79,7 +79,7 @@ export class PortabilityFinding {
  *   `nodeCallees`, a folded constant in `nodeConstants` and the bounds proofs
  *   in `nodeProvenIndex` / `nodeProvenClamp`; never recompute one.
  * - `table` interns every type id those tables hold (`typeName` spells one).
- * - `opts` is the command line as it reached the checker: `nsw` is false
+ * - `opts` is the command line as it reached the checker: `wrapping` is true
  *   under `--wrapping`, `numberMode` says what `number` is, and
  *   `uncheckedIndexing` whether indices are checked at all.
  * - `parents` finds a node's parent, which the tree itself does not carry.

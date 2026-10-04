@@ -7,16 +7,28 @@ declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
 define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 !dbg !7 {
 entry:
   call void @llvm.dbg.value(metadata i32 %a, metadata !9, metadata !DIExpression()), !dbg !8
   call void @llvm.dbg.value(metadata i32 %b, metadata !10, metadata !DIExpression()), !dbg !8
-  %0 = add nsw i32 %a, %b, !dbg !11
-  ret i32 %0, !dbg !8
+  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b), !dbg !11
+  %1 = extractvalue { i32, i1 } %0, 0, !dbg !11
+  %2 = extractvalue { i32, i1 } %0, 1, !dbg !11
+  br i1 %2, label %ovf.fail, label %ovf.ok, !dbg !11
+
+ovf.ok:
+  ret i32 %1, !dbg !8
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !11
+  unreachable
 }
 
-define internal noundef i32 @span(i32 noundef %lo, i32 noundef %hi) #0 !dbg !13 {
+define internal noundef i32 @span(i32 noundef %lo, i32 noundef %hi) #1 !dbg !13 {
 entry:
   call void @llvm.dbg.value(metadata i32 %lo, metadata !15, metadata !DIExpression()), !dbg !14
   call void @llvm.dbg.value(metadata i32 %hi, metadata !16, metadata !DIExpression()), !dbg !14
@@ -24,7 +36,7 @@ entry:
   ret i32 %0, !dbg !14
 }
 
-define internal noundef i32 @scaled(i32 noundef %n) #1 !dbg !21 {
+define internal noundef i32 @scaled(i32 noundef %n) #0 !dbg !21 {
 entry:
   %acc.addr = alloca i32, align 4
   %v.addr = alloca i32, align 4
@@ -68,23 +80,41 @@ forof.body:
   store i32 %16, i32* %v.addr, align 4, !dbg !27
   %17 = load i32, i32* %acc.addr, align 4, !dbg !49
   %18 = load i32, i32* %v.addr, align 4, !dbg !50
-  %19 = mul nsw i32 %18, %n, !dbg !50
-  %20 = add nsw i32 %17, %19, !dbg !49
-  store i32 %20, i32* %acc.addr, align 4, !dbg !49
+  %19 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %18, i32 %n), !dbg !50
+  %20 = extractvalue { i32, i1 } %19, 0, !dbg !50
+  %21 = extractvalue { i32, i1 } %19, 1, !dbg !50
+  br i1 %21, label %ovf.fail, label %ovf.ok, !dbg !50
+
+ovf.ok:
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %20), !dbg !49
+  %23 = extractvalue { i32, i1 } %22, 0, !dbg !49
+  %24 = extractvalue { i32, i1 } %22, 1, !dbg !49
+  br i1 %24, label %ovf.fail.1, label %ovf.ok.1, !dbg !49
+
+ovf.ok.1:
+  store i32 %23, i32* %acc.addr, align 4, !dbg !49
   br label %forof.inc, !dbg !27
 
 forof.inc:
-  %21 = load i64, i64* %forof.idx, align 8, !dbg !27
-  %22 = add i64 %21, 1, !dbg !27
-  store i64 %22, i64* %forof.idx, align 8, !dbg !27
+  %25 = load i64, i64* %forof.idx, align 8, !dbg !27
+  %26 = add i64 %25, 1, !dbg !27
+  store i64 %26, i64* %forof.idx, align 8, !dbg !27
   br label %forof.cond, !dbg !27
 
 forof.end:
-  %23 = load i32, i32* %acc.addr, align 4, !dbg !53
-  ret i32 %23, !dbg !52
+  %27 = load i32, i32* %acc.addr, align 4, !dbg !53
+  ret i32 %27, !dbg !52
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2), !dbg !50
+  unreachable
+
+ovf.fail.1:
+  call void @nish_panic_overflow(i32 0), !dbg !49
+  unreachable
 }
 
-define noundef i32 @nish_main() #2 !dbg !56 {
+define noundef i32 @nish_main() #0 !dbg !56 {
 entry:
   %arena.mark = call i64 @nish_arena_mark(), !dbg !57
   %0 = call i32 @add(i32 2, i32 3), !dbg !60
@@ -100,17 +130,17 @@ entry:
   ret i32 0, !dbg !72
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 !dbg !74 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 !dbg !74 {
 entry:
   %0 = call i32 @nish_main(), !dbg !75
   call void @nish_free_arena(), !dbg !75
   ret i32 %0, !dbg !75
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind }
+attributes #3 = { nounwind noreturn cold }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

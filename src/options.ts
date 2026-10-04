@@ -36,12 +36,14 @@ export class Options {
   /** A triple for `--target`, or the empty string to keep the IR target-neutral. */
   target: string
   /**
-   * Emit `nsw` on signed user-level integer `add`/`sub`/`mul` (WP9). Off is
-   * `--wrapping`, which restores two's-complement wrapping. Unsigned
-   * arithmetic is defined as wrapping and never carries a flag either way.
-   * Default: on (WP15 §3).
+   * `--wrapping`: signed user-level integer `add`/`sub`/`mul`, negation,
+   * `++`/`--` and their compound forms wrap in two's complement, with no
+   * check. Off — the default — every one of them either is proven to fit
+   * (`nodeProvenNoOverflow`, and then carries a justified `nsw`) or goes
+   * through `llvm.s*.with.overflow` to `nish_panic_overflow`. Unsigned
+   * arithmetic is defined as wrapping and is never checked either way.
    */
-  nsw: boolean
+  wrapping: boolean
   /**
    * Emit DWARF debug metadata (`-g`, WP10): a compile unit, a `DISubprogram`
    * per function, a `!dbg` location per instruction and the local variables
@@ -166,7 +168,7 @@ export class Options {
     this.strictExports = true
     this.uncheckedIndexing = false
     this.target = ""
-    this.nsw = true
+    this.wrapping = false
     this.debugInfo = false
     this.threads = false
     this.emitHeader = ""
