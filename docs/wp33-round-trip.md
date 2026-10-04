@@ -150,7 +150,7 @@ collected in §7.
 | `Math.min` / `max` with a NaN operand, `Math.round(-0.3)` | known-failures | C | runtime helpers, `min`/`max`/`round` | Keep. Cheap to translate exactly. |
 | 1-ulp `sin` / `cos` / `log` / `pow` | known-failures | — | nothing | Platform noise, not a language difference: two native targets can disagree the same way. Stated, not translated. |
 | integer divide by zero, `MIN / -1` | known-failures | B | `idiv`, which panics as native does | — |
-| signed overflow is UB without `--wrapping` | LANGUAGE.md | B | wrapping, via the `\| 0` above | A program that overflows is wrong natively, and the TS reading picks one defined answer. |
+| signed overflow panics without `--wrapping` or `wrapping*` | LANGUAGE.md | B | wrapping, via the `\| 0` above | A program that overflows stops natively, and the TS reading picks one defined answer. |
 
 ### 3.2 Strings
 

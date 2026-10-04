@@ -122,26 +122,28 @@ branch to a cold block, and LLVM folds it away for constant divisors
 
 ### Do integers overflow?
 
-Signed overflow is **undefined behaviour** by default: every user-level
-`i32`/`i64` `add`, `sub` and `mul` carries `nsw`, exactly as in C, so LLVM may
-widen `i32` loop counters instead of sign-extending them every iteration and
-strength-reduce the loops around them.
+Not silently. A signed `i32`/`i64` `+`, `-`, `*`, negation, `++`, `--` or
+`op=` the compiler cannot prove fits is checked, and an overflow stops the
+program with `attempt to add with overflow` (or its siblings) and exit 1, the
+rule of a Rust debug build kept in every build. One the bounds walk proves fits
+— a loop counter below a length, a value built from two bytes — is a plain
+`add nsw` with no check, so the common loops cost nothing.
 
 Code that overflows on purpose — a hash, a linear congruential generator, a
-wrap-around counter — must say so, in one of two ways:
+wrap-around counter — must say so:
 
-- **`--wrapping`** turns the flag off for the whole compilation and restores
-  two's-complement wrapping, like a Rust release build: `2147483647 + 1` is
-  `-2147483648` again.
+- **`wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`** wrap
+  two's-complement at the one site that means it: `wrappingAdd(2147483647, 1)`
+  is `-2147483648`.
 - **Write it in an unsigned type.** `u8`, `u16`, `u32` and `u64` are *defined*
-  to wrap and never carry a no-wrap flag in either mode, which is what they are
-  for; an FNV-1a round in `u32` needs no compiler flag at all.
+  to wrap and are never checked, which is what they are for; an FNV-1a round in
+  `u32` needs nothing more.
+- The deprecated **`--wrapping`** makes every operator of your own package wrap
+  (never a dependency's or the standard library's).
 
-This is a guarantee earlier versions made and this one withdraws, so it is
-worth being blunt: a program that quietly relied on wrapping keeps compiling
-and stops being correct. `--wrapping` is the whole remedy
-([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions),
-[wp15-performance.md](wp15-performance.md)).
+Earlier versions made signed overflow undefined behaviour, as C does; that is
+gone, and no flag brings it back (`--nsw` is refused)
+([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)).
 
 ### How do I know the compiled program behaves like Node?
 

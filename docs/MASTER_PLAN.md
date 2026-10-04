@@ -145,10 +145,14 @@ function, class, interface or method is monomorphised, WP18), `symbol`,
 
 ### 3.3 Semantics decisions already made
 
-- Signed integer overflow is undefined behaviour (`nsw`, C semantics);
-  `--wrapping` restores two's-complement wrapping (Rust release semantics).
-  Unsigned overflow is defined as wrapping in both modes. Was "overflow
-  wraps" until WP15 §3 flipped the default; see docs/LANGUAGE.md.
+- Signed integer overflow is a checked panic: an operation the bounds walk
+  cannot prove fits is `llvm.s*.with.overflow` and a branch to
+  `nish_panic_overflow`, and one it can is `nsw` (#426). `wrappingAdd`,
+  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap at one site, and the
+  deprecated `--wrapping` makes the entry package's operators wrap. Unsigned
+  overflow is defined as wrapping in both modes. Was "overflow wraps" until
+  WP15 §3 made it `nsw` undefined behaviour, and that until #426 made it
+  checked; see docs/LANGUAGE.md.
 - Strings are immutable and shared by pointer; equality is by content.
 - Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)` prints and exits 1.
 - Parameters are immutable (`const` semantics) and used as SSA values.
@@ -163,7 +167,7 @@ function, class, interface or method is monomorphised, WP18), `symbol`,
 | Question | Options | Recommendation |
 | --- | --- | --- |
 | Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. |
-| Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
+| Overflow | wrap / trap / `nsw` UB | **Decided (#426): trap — a checked panic by default, `nsw` only where proven, `wrapping*` from `nish:unsafe` to opt out at one site.** WP15 §3 had chosen `nsw` UB. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |

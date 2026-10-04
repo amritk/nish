@@ -45,9 +45,11 @@ existing dispatch tables with a spread. stage0's `src/codegen/attributes.ts` own
   the SSA form, so the pattern below optimises exactly like clang's output.
 - **Integer arithmetic goes through one opcode helper**, so compound
   assignment and `++`/`--` are flagged exactly like every other Nish
-  integer operation. When this was written that meant no `nsw` at all; since
-  WP15 §3 the signed widths carry `nsw` by default and `--wrapping` takes it
-  off (docs/LANGUAGE.md is normative).
+  integer operation. When this was written that meant no `nsw` at all; WP15 §3
+  then gave the signed widths `nsw` by default, and since #426 an operation not
+  proven to fit is checked and panics on overflow, with `nsw` only where the
+  bounds walk proves it fits and `--wrapping` making the operators plain
+  (docs/LANGUAGE.md is normative).
 
 ## `if` / `else`
 
@@ -634,8 +636,8 @@ fail to return. A function keeps it when all of the following hold
      disqualifies, conservatively) and contains no `throw`;
    - the step cannot wrap. The analysis takes the wrapping reading, which is
      the conservative one: `i <= n; i++` runs forever when `n === 2147483647`
-     if the arithmetic wraps, and is undefined if it does not, so a loop that
-     would only be counted because overflow is undefined is refused either
+     if the arithmetic wraps, and panics if it is checked, so a loop that
+     would only be counted because the step cannot overflow is refused either
      way. With an identifier bound only `<` with step `+1` and `>` with step
      `-1` are wrap-free for every possible bound value; with a literal bound
      any step is fine as long as the last in-range value plus the step still
