@@ -190,9 +190,12 @@ const intMin = (ty: string): string => (ty === "i32" ? "-2147483648" : "-9223372
  * `<opcode> <ty> lhs, rhs` for an integer type, with the checked division
  * described above and the checked signed arithmetic of `emitSignedArith`.
  * `opcode` is the *signed* spelling; the unsigned form is selected from
- * `type`, so every caller names one opcode per operator. `node` is the
+ * `type`, so every caller names one opcode per operator. `site` is the
  * operator's own node — the binary expression, the compound assignment or the
- * increment — whose `nodeProvenNoOverflow` verdict decides the check.
+ * increment. Its `nodeProvenNoOverflow` verdict decides a signed `+ - *`'s
+ * check, and a division whose divisor the bounds walk proved neither zero
+ * nor, signed, `-1` against a dividend that may be the minimum
+ * (`judgeDivision` in `src/bounds.ts`) is written with no check.
  */
 export const emitIntBinary = (
   emitter: Emitter,
@@ -200,15 +203,15 @@ export const emitIntBinary = (
   type: i32,
   lhs: string,
   rhs: string,
-  node: Node
+  site: Node
 ): string => {
   const ty = emitter.llvm(type)
   const op = signedOpcode(opcode, type)
   const fn = emitter.fn
   if (isOverflowOpcode(op) && !isUnsigned(type)) {
-    return emitSignedArith(emitter, op, ty, lhs, rhs, node, overflowCode(op))
+    return emitSignedArith(emitter, op, ty, lhs, rhs, site, overflowCode(op))
   }
-  if (!isDivision(op)) {
+  if (!isDivision(op) || emitter.program.nodeProvenIndex[site.id]) {
     return fn.emitValue(`${op} ${ty} ${lhs}, ${rhs}`)
   }
   const byZero = fn.emitValue(`icmp eq ${ty} ${rhs}, 0`)

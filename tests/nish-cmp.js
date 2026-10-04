@@ -515,6 +515,65 @@ const CG10_MOVED = ["tests/cases/cg_sec_compound_element_order.ts", "tests/cases
  * paragraph in `CHANGELOG.md` to match, and it should feel like a bigger thing
  * to write than five narrow ones, because it is.
  */
+/**
+ * The no-panic scope's proofs: a divisor proven to be neither 0 nor -1 (a
+ * constant, a declared range, or a guard such as `d !== 0 && d !== -1`), and a
+ * `pop` behind a test that its array holds an element, are left unchecked, so
+ * the `div.fail` or `pop.empty` block goes, and with it the `nish_panic_*`
+ * callee its function no longer reaches.
+ */
+const DENY_PANICS_MOVED = [
+  "bench/result.ts",
+  "docs/cookbook/expr-logical.ts",
+  "docs/cookbook/stmt-break-continue.ts",
+  "docs/cookbook/stmt-do.ts",
+  "docs/cookbook/stmt-result-by-value.ts",
+  "docs/cookbook/stmt-result.ts",
+  "docs/cookbook/stmt-while.ts",
+  "docs/cookbook/types-i64.ts",
+  "tests/cases/arr_path_cond_call.ts",
+  "tests/cases/arr_path_cond_f64.ts",
+  "tests/cases/arr_path_cond_generic.ts",
+  "tests/cases/arr_path_cond_or.ts",
+  "tests/cases/arr_path_cond_ternary.ts",
+  "tests/cases/arr_pop_index.ts",
+  "tests/cases/cf_break_continue.ts",
+  "tests/cases/cf_collatz.ts",
+  "tests/cases/cf_compound_assign.ts",
+  "tests/cases/cf_do_while.ts",
+  "tests/cases/cf_logical.ts",
+  "tests/cases/cf_nested.ts",
+  "tests/cases/cf_sum_loop.ts",
+  "tests/cases/cf_while.ts",
+  "tests/cases/cls_compound_field.ts",
+  "tests/cases/dbg_result.ts",
+  "tests/cases/gen_result_payload.ts",
+  "tests/cases/interop_rng_host.ts",
+  "tests/cases/mem_stack_loop.ts",
+  "tests/cases/opt_nsw.ts",
+  "tests/cases/opt_target_triple.ts",
+  "tests/cases/panics_divide.ts",
+  "tests/cases/panics_pop.ts",
+  "tests/cases/perf_overflow_quiet.ts",
+  "tests/cases/port_num_div.ts",
+  "tests/cases/res_basic.ts",
+  "tests/cases/res_by_value.ts",
+  "tests/cases/res_by_value_propagate.ts",
+  "tests/cases/res_export.ts",
+  "tests/cases/res_stack.ts",
+  "tests/differential/corpus/digits.ts",
+  "tests/differential/corpus/int_literal_edges.ts",
+  "tests/link/std_pair_held/main.ts",
+]
+
+/** Programs new with the no-panic scope, whose exit the reference cannot share: it does not know the flag or the field. */
+const DENY_PANICS_NEW = [
+  "tests/cases/deny_panics_clean.ts",
+  "tests/link/no_panic_module/main.ts",
+  "tests/link/no_panic_transitive/main.ts",
+  "tests/link/no_panic_unknown_entry/main.ts",
+]
+
 const DECLARED = [
   {
     program: "tests/link/net_hpack/main.ts",
@@ -2912,6 +2971,16 @@ const DECLARED = [
       "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
     why: "a new program: the aioquic lifecycle replay under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic-listener",
   },
+  ...declareMoved(
+    DENY_PANICS_MOVED,
+    "--deny-panics and noPanic refuse every remaining panic site",
+    "a divisor proven to be neither 0 nor -1, or a `pop` behind a test that its array holds an element, is left unchecked, so its `div.fail` or `pop.empty` block is gone"
+  ),
+  ...declareMoved(
+    DENY_PANICS_NEW,
+    "--deny-panics and noPanic refuse every remaining panic site",
+    "a new program: it is compiled under `--deny-panics` or a `noPanic` list, which the reference compiler does not read"
+  ),
   // Last, because it covers every program and a narrower entry above must
   // still be the one a difference is reported under.
   {

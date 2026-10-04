@@ -1,4 +1,3 @@
-declare void @nish_panic_div(i1 noundef zeroext) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #2
@@ -28,53 +27,41 @@ entry:
   %8 = shl i32 1, 31
   store i32 %8, i32* %shifted.addr, align 4
   %9 = load i64, i64* %wide.addr, align 8
-  %10 = icmp eq i64 100000000, 0
-  %11 = icmp eq i64 %9, -9223372036854775808
-  %12 = icmp eq i64 100000000, -1
-  %13 = and i1 %11, %12
-  %14 = or i1 %10, %13
-  br i1 %14, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %10)
-  unreachable
-
-div.ok:
-  %15 = sdiv i64 %9, 100000000
-  %16 = trunc i64 %15 to i32
-  %17 = load i32, i32* %n.addr, align 4
-  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %17)
-  %19 = extractvalue { i32, i1 } %18, 0
-  %20 = extractvalue { i32, i1 } %18, 1
-  br i1 %20, label %ovf.fail, label %ovf.ok
+  %10 = sdiv i64 %9, 100000000
+  %11 = trunc i64 %10 to i32
+  %12 = load i32, i32* %n.addr, align 4
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %21 = load i32, i32* %fits.addr, align 4
-  %22 = sub nsw i32 %21, 2147483646
-  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %22)
-  %24 = extractvalue { i32, i1 } %23, 0
-  %25 = extractvalue { i32, i1 } %23, 1
-  br i1 %25, label %ovf.fail, label %ovf.ok.1
+  %16 = load i32, i32* %fits.addr, align 4
+  %17 = sub nsw i32 %16, 2147483646
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %14, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %26 = load i32, i32* %shifted.addr, align 4
-  %27 = load i32, i32* %shifted.addr, align 4
-  %28 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %26, i32 %27)
-  %29 = extractvalue { i32, i1 } %28, 0
-  %30 = extractvalue { i32, i1 } %28, 1
-  br i1 %30, label %ovf.fail, label %ovf.ok.2
+  %21 = load i32, i32* %shifted.addr, align 4
+  %22 = load i32, i32* %shifted.addr, align 4
+  %23 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %21, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 %29)
-  %32 = extractvalue { i32, i1 } %31, 0
-  %33 = extractvalue { i32, i1 } %31, 1
-  br i1 %33, label %ovf.fail, label %ovf.ok.3
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %24)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok.3
 
 ovf.ok.3:
-  ret i32 %32
+  ret i32 %27
 
 ovf.fail:
-  %ovf.op = phi i32 [ 0, %div.ok ], [ 0, %ovf.ok ], [ 1, %ovf.ok.1 ], [ 0, %ovf.ok.2 ]
+  %ovf.op = phi i32 [ 0, %entry ], [ 0, %ovf.ok ], [ 1, %ovf.ok.1 ], [ 0, %ovf.ok.2 ]
   call void @nish_panic_overflow(i32 %ovf.op)
   unreachable
 }

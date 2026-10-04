@@ -1,0 +1,2 @@
+error: `pop` may panic here
+`xs` is not proven to hold an element here, and `pop` panics on an empty one: guard it with a test that reaches the call — `if (xs.length > 0)` proves it

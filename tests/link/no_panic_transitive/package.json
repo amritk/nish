@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-transitive",
+  "private": true,
+  "nish": {
+    "noPanic": ["main.ts"]
+  }
+}

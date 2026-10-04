@@ -1,0 +1,2 @@
+error: `unchecked` may panic here
+`uncheckedGet` leaves out the bounds check without proving it, so an index out of range is undefined behaviour rather than a panic the scope can rule out: index with a guard instead, or leave this module out of the scope

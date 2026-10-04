@@ -67,7 +67,7 @@ import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
-import { panicsJson, resolvePanicSites } from "./panics"
+import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -114,6 +114,7 @@ import {
   manifestEngineCheck,
   manifestEngineRange,
   manifestMalformedAt,
+  manifestNoPanic,
   manifestVersion,
   nishExportEntry,
 } from "./manifest"
@@ -370,6 +371,12 @@ export class Compilation {
    * is a dependency and carries that package's.
    */
   rootPackageDir: string
+  /**
+   * Per module, in `modules` order: whether it is in the no-panic scope, by
+   * `--deny-panics` (every module of the root package) or by the root
+   * package's `"nish".noPanic` (`readNoPanic`).
+   */
+  panicScope: boolean[]
 
   constructor(opts: Options) {
     this.opts = opts
@@ -387,6 +394,7 @@ export class Compilation {
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
+    this.panicScope = []
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1047,6 +1055,8 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false // pass 1 and module resolution ran during load
     }
+    // Before anything records: a `noPanic` list turns the recording on.
+    this.readNoPanic()
     this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
       return false
@@ -1149,11 +1159,112 @@ export class Compilation {
     if (this.opts.recordsPanics()) {
       const facts = this.analyze()
       resolvePanicSites(this.analysisUnits, facts)
+      this.denyPanicSites(facts)
+      if (this.sink.hasErrors()) {
+        return false
+      }
     }
     if (this.opts.warnPortability) {
       this.reportPortability()
     }
     return true
+  }
+
+  /**
+   * Settle the no-panic scope: every module of the root package under
+   * `--deny-panics`, and each module the root package's `"nish".noPanic`
+   * names. The manifest is the `package.json` nearest above the entry, and an
+   * entry is a path relative to it. One that names no module of the program is
+   * refused where it is written (NL3031): a typo would otherwise leave the
+   * module it meant outside the scope, and the build would say nothing.
+   */
+  readNoPanic(): void {
+    this.panicScope = []
+    for (const unit of this.modules) {
+      this.panicScope.push(this.opts.denyPanics && unit.packageName === ROOT_PACKAGE)
+    }
+    if (this.modules.length === 0) {
+      return
+    }
+    const dir = this.manifestDirAbove(this.entry().path)
+    if (dir === null) {
+      return
+    }
+    const manifestPath = joinPath([dir, "package.json"])
+    const text = readFileSyncOrNull(manifestPath)
+    if (text === null) {
+      return
+    }
+    const list = manifestNoPanic(text, PACKAGE_CONDITION)
+    const source = new SourceFile(manifestPath, text)
+    let k = 0
+    while (k < list.entries.length) {
+      const entry = list.entries[k]
+      const at = this.byPath.get(this.identityOf(joinPath([dir, entry])), -1)
+      if (at >= 0 && at < this.panicScope.length) {
+        this.panicScope[at] = true
+        this.opts.noPanicListed = true
+      } else {
+        this.sink.report(
+          source,
+          list.offsets[k],
+          list.offsets[k] + entry.length + 2,
+          `\`noPanic\` names \`${entry}\`, which is no module of this program: an entry is the path of a ` +
+            "module the program compiles, relative to the `package.json` that lists it, and one that names " +
+            "nothing would leave the module it meant outside the scope without a word"
+        )
+      }
+      k = k + 1
+    }
+  }
+
+  /**
+   * The directory of the `package.json` nearest above `path`, spelled from
+   * `path` (so a diagnostic in it reads as the entry was named), or null. The
+   * walk ends where a parent is the directory itself, the top of the tree.
+   */
+  manifestDirAbove(path: string): string | null {
+    let dir = dirname(normalizePath(path))
+    let steps = 0
+    while (steps < PACKAGE_WALK_LIMIT) {
+      if (readFileSyncOrNull(joinPath([dir, "package.json"])) !== null) {
+        return dir
+      }
+      const parent = parentDirectory(dir)
+      if (parent.length === 0 || this.identityOf(parent) === this.identityOf(dir)) {
+        return null
+      }
+      dir = parent
+      steps = steps + 1
+    }
+    return null
+  }
+
+  /**
+   * Refuse what can still panic in the no-panic scope (`reportDeniedPanics`),
+   * and take back the WP15 section 8 warning that a refused index or range
+   * entry keeps its check: the error already names the guard, and an author
+   * told the same thing twice reads two problems.
+   */
+  denyPanicSites(facts: FactsTable): void {
+    let any = false
+    for (const scoped of this.panicScope) {
+      any = any || scoped
+    }
+    if (!any) {
+      return
+    }
+    const refused = reportDeniedPanics(this.analysisUnits, this.panicScope, facts, this.table, this.sink)
+    if (refused.length === 0) {
+      return
+    }
+    const kept: Diagnostic[] = []
+    for (const warning of this.sink.warnings) {
+      if (!restatedBy(warning, refused)) {
+        kept.push(warning)
+      }
+    }
+    this.sink.warnings = kept
   }
 
   /** Every module's enum table, keyed for the emitter now that no name is resolved (`CheckedProgram.keyEnumsBySymbol`). */
@@ -1934,6 +2045,23 @@ const parentDirectory = (dir: string): string => {
     return `${dir}/..`
   }
   return dirname(dir)
+}
+
+/** Whether `warning` says a check survives inside one of the `refused` sites, which the error says already. */
+const restatedBy = (warning: Diagnostic, refused: PanicSite[]): boolean => {
+  const text = warning.text
+  if (
+    text.indexOf("is not proven to be in range for") < 0 &&
+    text.indexOf("so entering the range keeps its check") < 0
+  ) {
+    return false
+  }
+  for (const site of refused) {
+    if (warning.source === site.source && warning.start >= site.node.start && warning.end <= site.node.end) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */

@@ -140,6 +140,25 @@ export class Options {
    * when something will read them (`recordsPanics`).
    */
   emitPanics: string
+  /**
+   * `--deny-panics`: every function in the program's own modules is held to no
+   * panic site but out of memory (`reportDeniedPanics` in `src/panics.ts`).
+   * It changes no byte of the IR: a program it refuses writes none, and one it
+   * accepts is the one the build would have compiled anyway.
+   */
+  denyPanics: boolean
+  /**
+   * The root package's `"nish".noPanic` named at least one module, which puts
+   * those modules in the scope `--deny-panics` puts all of them in. Set by
+   * `Compilation` once it has read the manifest, before anything records.
+   */
+  noPanicListed: boolean
+  /**
+   * `--emit-capabilities` will be written, and each function's entry in it
+   * carries its panic sites. Driver-level like the file's path, which is why
+   * only this much of it is here.
+   */
+  capabilityReport: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -164,10 +183,17 @@ export class Options {
     this.unlabelledBuiltin = ""
     this.warnPortability = false
     this.emitPanics = ""
+    this.denyPanics = false
+    this.noPanicListed = false
+    this.capabilityReport = false
   }
 
-  /** Whether the attribute walk records panic sites and `Compilation.check` resolves them. */
+  /**
+   * Whether the attribute walk records panic sites and `Compilation.check`
+   * resolves them: something reads them, the file, the capability report or
+   * the no-panic scope.
+   */
   recordsPanics(): boolean {
-    return this.emitPanics.length > 0
+    return this.emitPanics.length > 0 || this.denyPanics || this.noPanicListed || this.capabilityReport
   }
 }

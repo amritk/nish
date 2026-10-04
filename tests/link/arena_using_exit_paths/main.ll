@@ -22,7 +22,6 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
-declare void @nish_panic_div(i1 noundef zeroext) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
@@ -160,37 +159,25 @@ ovf.ok:
   %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 0
   %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %19 = trunc i64 %18 to i32
-  %20 = icmp eq i32 2, 0
-  %21 = icmp eq i32 %k, -2147483648
-  %22 = icmp eq i32 2, -1
-  %23 = and i1 %21, %22
-  %24 = or i1 %20, %23
-  br i1 %24, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %20)
-  unreachable
-
-div.ok:
-  %25 = sdiv i32 %k, 2
-  %26 = icmp sgt i32 %19, %25
-  br i1 %26, label %if.then, label %if.end
+  %20 = sdiv i32 %k, 2
+  %21 = icmp sgt i32 %19, %20
+  br i1 %21, label %if.then, label %if.end
 
 if.then:
   call void @nish_arena_release(i64 %14)
   ret %struct.Tally* %t
 
 if.end:
-  %27 = getelementptr inbounds %struct.Tally, %struct.Tally* %t, i32 0, i32 0
-  %28 = load i32, i32* %27, align 4, !tbaa !17
-  %29 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %28, i32 1)
-  %30 = extractvalue { i32, i1 } %29, 0
-  %31 = extractvalue { i32, i1 } %29, 1
-  br i1 %31, label %ovf.fail, label %ovf.ok.1
+  %22 = getelementptr inbounds %struct.Tally, %struct.Tally* %t, i32 0, i32 0
+  %23 = load i32, i32* %22, align 4, !tbaa !17
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %23, i32 1)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %32 = getelementptr inbounds %struct.Tally, %struct.Tally* %t, i32 0, i32 0
-  store i32 %30, i32* %32, align 4, !tbaa !17
+  %27 = getelementptr inbounds %struct.Tally, %struct.Tally* %t, i32 0, i32 0
+  store i32 %25, i32* %27, align 4, !tbaa !17
   call void @nish_arena_release(i64 %14)
   ret %struct.Tally* %t
 

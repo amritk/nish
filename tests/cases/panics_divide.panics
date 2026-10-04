@@ -1,6 +1,9 @@
 {"functions":[
-{"name":"quotient","symbol":"quotient","module":"tests/cases/panics_divide.ts","line":3,"panics":[{"kind":"divide","line":3,"column":43,"proven":false}]},
-{"name":"remainder","symbol":"remainder","module":"tests/cases/panics_divide.ts","line":5,"panics":[{"kind":"divide","line":7,"column":3,"proven":false}]},
-{"name":"ratio","symbol":"ratio","module":"tests/cases/panics_divide.ts","line":11,"panics":[]},
-{"name":"main","symbol":"nish_main","module":"tests/cases/panics_divide.ts","line":13,"panics":[{"kind":"oom","line":14,"column":3,"allowed":true},{"kind":"call","line":14,"column":15,"callee":"quotient","via":"divide"},{"kind":"oom","line":15,"column":3,"allowed":true},{"kind":"call","line":15,"column":15,"callee":"remainder","via":"divide"},{"kind":"oom","line":16,"column":3,"allowed":true}]}
+{"name":"quotient","symbol":"quotient","module":"tests/cases/panics_divide.ts","line":6,"panics":[{"kind":"divide","line":6,"column":43,"proven":false}]},
+{"name":"remainder","symbol":"remainder","module":"tests/cases/panics_divide.ts","line":8,"panics":[{"kind":"divide","line":10,"column":3,"proven":false}]},
+{"name":"ratio","symbol":"ratio","module":"tests/cases/panics_divide.ts","line":14,"panics":[]},
+{"name":"halves","symbol":"halves","module":"tests/cases/panics_divide.ts","line":16,"panics":[{"kind":"overflow","line":16,"column":33,"proven":false},{"kind":"divide","line":16,"column":33,"proven":true},{"kind":"divide","line":16,"column":41,"proven":true}]},
+{"name":"share","symbol":"share","module":"tests/cases/panics_divide.ts","line":18,"panics":[{"kind":"divide","line":20,"column":12,"proven":true}]},
+{"name":"guarded","symbol":"guarded","module":"tests/cases/panics_divide.ts","line":25,"panics":[{"kind":"divide","line":27,"column":12,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_divide.ts","line":32,"panics":[{"kind":"oom","line":33,"column":3,"allowed":true},{"kind":"call","line":33,"column":15,"callee":"quotient","via":"divide"},{"kind":"oom","line":34,"column":3,"allowed":true},{"kind":"call","line":34,"column":15,"callee":"remainder","via":"divide"},{"kind":"oom","line":35,"column":3,"allowed":true},{"kind":"oom","line":36,"column":3,"allowed":true},{"kind":"call","line":36,"column":15,"callee":"halves","via":"overflow"},{"kind":"oom","line":37,"column":3,"allowed":true},{"kind":"oom","line":38,"column":3,"allowed":true}]}
 ]}

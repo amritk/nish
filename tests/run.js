@@ -11795,6 +11795,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-napi",
     "--emit-napi-async",
     "--emit-panics",
+    "--deny-panics",
     "--target",
     "--profile",
     "--warn-portability",
@@ -12155,6 +12156,21 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       shown(refused)
     )
   }
+  // `--deny-panics` refuses sites that only a checked program has, so it is
+  // refused beside `--emit-ast` the same way (docs/LANGUAGE.md, "The no-panic scope").
+  const denyAst = spawnSync(NISH, [panicsSource, "--emit-ast", "--deny-panics"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "no-panic scope: --deny-panics with --emit-ast is a usage error, exit 2",
+    denyAst.status === 2 &&
+      denyAst.stdout === "" &&
+      denyAst.stderr.includes(
+        "`--deny-panics` reports on a checked program, and --emit-ast stops before the check"
+      ),
+    shown(denyAst)
+  )
   const panicsChecked = path.join(capsDir, "panics-checked.json")
   const dumped = spawnSync(NISH, [panicsSource, "--emit-checked", "--emit-panics", panicsChecked], {
     cwd: root,
@@ -12625,6 +12641,13 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // and it prints a popped value, the `pop` divergence above.
       "a typed array flowing into `T[]`, refused by lib.es5 at the assignment (docs/LANGUAGE.md)",
     ],
+    [
+      "deny_panics_clean.ts",
+      // The no-panic scope's clean module returns a guarded `xs.pop()`, the
+      // proof `if (xs.length > 0)` gives (docs/LANGUAGE.md, "The no-panic
+      // scope"): `T` here, `T | undefined` in lib.es5, the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
   ])
   const acceptedCases = fs
     .readdirSync(casesDir)
@@ -12677,6 +12700,41 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     library.ok,
     library.output
   )
+}
+
+// ---- The no-panic scope: the clean module has no panic path ----------------------------
+// `tests/cases/deny_panics_clean` compiles under `--deny-panics` (its `.args`),
+// which the golden loop already proves; this says what that is worth: not one
+// `nish_panic_*` call and no panic tail in its IR. `docs/IR_COOKBOOK.md` quotes
+// the golden between `golden:` markers, and every IR line it quotes must be the
+// golden's, in order, so the page cannot keep showing a check that is gone.
+if (!only || "deny_panics_clean".includes(only) || "cookbook".includes(only)) {
+  const golden = path.join(casesDir, "deny_panics_clean.ll")
+  if (fs.existsSync(golden)) {
+    const ir = fs.readFileSync(golden, "utf8")
+    check(
+      "no-panic scope: deny_panics_clean's IR has no nish_panic_ call and no panic tail",
+      !ir.includes("nish_panic_") &&
+        !ir.includes("@nish_exit(") &&
+        !ir.includes("div.fail") &&
+        !ir.includes("pop.empty"),
+      ir
+    )
+    const page = fs.readFileSync(path.join(root, "docs", "IR_COOKBOOK.md"), "utf8")
+    const quoted =
+      /<!-- golden:begin deny_panics_clean -->[\s\S]*?```llvm\n([\s\S]*?)```\n<!-- golden:end deny_panics_clean -->/.exec(
+        page
+      )
+    const functions = quoted === null ? [] : quoted[1].split(/\n(?=define )/).map((f) => f.trim())
+    const missing = functions.filter((f) => !ir.includes(f))
+    check(
+      "no-panic scope: docs/IR_COOKBOOK.md quotes deny_panics_clean's golden IR verbatim",
+      quoted !== null && functions.length >= 3 && missing.length === 0,
+      quoted === null ? "no golden:begin deny_panics_clean block" : missing.join("\n\n")
+    )
+  } else {
+    check("no-panic scope: tests/cases/deny_panics_clean.ll exists", false, "the golden is missing")
+  }
 }
 
 // ---- docs/AI.md: the rules card compiles ---------------------------------------------

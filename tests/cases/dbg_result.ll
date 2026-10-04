@@ -10,10 +10,9 @@
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_panic_div(i1 noundef zeroext) #5
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
@@ -44,45 +43,21 @@ slow:
 define internal { i1, i32, i32 } @half(i32 noundef %n) #0 !dbg !15 {
 entry:
   call void @llvm.dbg.value(metadata i32 %n, metadata !17, metadata !DIExpression()), !dbg !16
-  %0 = icmp eq i32 2, 0, !dbg !19
-  %1 = icmp eq i32 %n, -2147483648, !dbg !19
-  %2 = icmp eq i32 2, -1, !dbg !19
-  %3 = and i1 %1, %2, !dbg !19
-  %4 = or i1 %0, %3, !dbg !19
-  br i1 %4, label %div.fail, label %div.ok, !dbg !19
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0), !dbg !19
-  unreachable, !dbg !19
-
-div.ok:
-  %5 = srem i32 %n, 2, !dbg !19
-  %6 = icmp ne i32 %5, 0, !dbg !19
-  br i1 %6, label %if.then, label %if.end, !dbg !18
+  %0 = srem i32 %n, 2, !dbg !19
+  %1 = icmp ne i32 %0, 0, !dbg !19
+  br i1 %1, label %if.then, label %if.end, !dbg !18
 
 if.then:
-  %7 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2, !dbg !23
-  ret { i1, i32, i32 } %7, !dbg !23
+  %2 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2, !dbg !23
+  ret { i1, i32, i32 } %2, !dbg !23
 
 if.end:
-  %8 = icmp eq i32 2, 0, !dbg !26
-  %9 = icmp eq i32 %n, -2147483648, !dbg !26
-  %10 = icmp eq i32 2, -1, !dbg !26
-  %11 = and i1 %9, %10, !dbg !26
-  %12 = or i1 %8, %11, !dbg !26
-  br i1 %12, label %div.fail.1, label %div.ok.1, !dbg !26
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %8), !dbg !26
-  unreachable, !dbg !26
-
-div.ok.1:
-  %13 = sdiv i32 %n, 2, !dbg !26
-  %14 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %13, 1, !dbg !25
-  ret { i1, i32, i32 } %14, !dbg !25
+  %3 = sdiv i32 %n, 2, !dbg !26
+  %4 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %3, 1, !dbg !25
+  ret { i1, i32, i32 } %4, !dbg !25
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @tag(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 !dbg !39 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @tag(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 !dbg !39 {
 entry:
   call void @llvm.dbg.value(metadata i8* %path, metadata !41, metadata !DIExpression()), !dbg !40
   %0 = call zeroext i1 @nish_str_eq(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*)), !dbg !43
@@ -110,7 +85,7 @@ if.end:
   ret %struct.nish_result.i32.str* %9, !dbg !49
 }
 
-define internal noundef i32 @score({ i1, i32, i32 } %r) #2 !dbg !54 {
+define internal noundef i32 @score({ i1, i32, i32 } %r) #1 !dbg !54 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   call void @llvm.dbg.value(metadata { i1, i32, i32 } %r, metadata !56, metadata !DIExpression()), !dbg !55
@@ -137,7 +112,7 @@ if.end:
   ret i32 %10, !dbg !62
 }
 
-define noundef i32 @test() #0 !dbg !66 {
+define noundef i32 @test() #2 !dbg !66 {
 entry:
   %r.addr = alloca %struct.nish_result.i32.i32*, align 8
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
@@ -208,9 +183,9 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
 attributes #5 = { nounwind noreturn cold }

@@ -6600,9 +6600,8 @@ const low = (x: i64): number => toI32(x % 1000)
 ```
 
 ```llvm
-declare void @nish_panic_div(i1 noundef zeroext) #1
-declare extern_weak void @nish_panic_overflow(i32 noundef) #1
-declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64) #1
 
 define internal noundef i64 @square(i64 noundef %x) #0 {
 entry:
@@ -6619,28 +6618,16 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @low(i64 noundef %x) #0 {
+define internal noundef i32 @low(i64 noundef %x) #1 {
 entry:
-  %0 = icmp eq i64 1000, 0
-  %1 = icmp eq i64 %x, -9223372036854775808
-  %2 = icmp eq i64 1000, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i64 %x, 1000
-  %6 = trunc i64 %5 to i32
-  ret i32 %6
+  %0 = srem i64 %x, 1000
+  %1 = trunc i64 %0 to i32
+  ret i32 %1
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end types-i64 -->
 
@@ -7900,7 +7887,6 @@ const countDigits = (n: number): number => {
 ```
 
 ```llvm
-declare void @nish_panic_div(i1 noundef zeroext) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
@@ -7919,33 +7905,21 @@ while.cond:
 
 while.body:
   %2 = load i32, i32* %rest.addr, align 4
-  %3 = icmp eq i32 10, 0
-  %4 = icmp eq i32 %2, -2147483648
-  %5 = icmp eq i32 10, -1
-  %6 = and i1 %4, %5
-  %7 = or i1 %3, %6
-  br i1 %7, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %3)
-  unreachable
-
-div.ok:
-  %8 = sdiv i32 %2, 10
-  store i32 %8, i32* %rest.addr, align 4
-  %9 = load i32, i32* %digits.addr, align 4
-  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 1)
-  %11 = extractvalue { i32, i1 } %10, 0
-  %12 = extractvalue { i32, i1 } %10, 1
-  br i1 %12, label %ovf.fail, label %ovf.ok
+  %3 = sdiv i32 %2, 10
+  store i32 %3, i32* %rest.addr, align 4
+  %4 = load i32, i32* %digits.addr, align 4
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 1)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %11, i32* %digits.addr, align 4
+  store i32 %6, i32* %digits.addr, align 4
   br label %while.cond
 
 while.end:
-  %13 = load i32, i32* %digits.addr, align 4
-  ret i32 %13
+  %8 = load i32, i32* %digits.addr, align 4
+  ret i32 %8
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -7974,7 +7948,6 @@ const sumDigits = (n: number): number => {
 ```
 
 ```llvm
-declare void @nish_panic_div(i1 noundef zeroext) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
@@ -7989,51 +7962,27 @@ entry:
 do.body:
   %0 = load i32, i32* %sum.addr, align 4
   %1 = load i32, i32* %rest.addr, align 4
-  %2 = icmp eq i32 10, 0
-  %3 = icmp eq i32 %1, -2147483648
-  %4 = icmp eq i32 10, -1
-  %5 = and i1 %3, %4
-  %6 = or i1 %2, %5
-  br i1 %6, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %2)
-  unreachable
-
-div.ok:
-  %7 = srem i32 %1, 10
-  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %7)
-  %9 = extractvalue { i32, i1 } %8, 0
-  %10 = extractvalue { i32, i1 } %8, 1
-  br i1 %10, label %ovf.fail, label %ovf.ok
+  %2 = srem i32 %1, 10
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %9, i32* %sum.addr, align 4
-  %11 = load i32, i32* %rest.addr, align 4
-  %12 = icmp eq i32 10, 0
-  %13 = icmp eq i32 %11, -2147483648
-  %14 = icmp eq i32 10, -1
-  %15 = and i1 %13, %14
-  %16 = or i1 %12, %15
-  br i1 %16, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %12)
-  unreachable
-
-div.ok.1:
-  %17 = sdiv i32 %11, 10
-  store i32 %17, i32* %rest.addr, align 4
+  store i32 %4, i32* %sum.addr, align 4
+  %6 = load i32, i32* %rest.addr, align 4
+  %7 = sdiv i32 %6, 10
+  store i32 %7, i32* %rest.addr, align 4
   br label %do.cond
 
 do.cond:
-  %18 = load i32, i32* %rest.addr, align 4
-  %19 = icmp sgt i32 %18, 0
-  br i1 %19, label %do.body, label %do.end
+  %8 = load i32, i32* %rest.addr, align 4
+  %9 = icmp sgt i32 %8, 0
+  br i1 %9, label %do.body, label %do.end
 
 do.end:
-  %20 = load i32, i32* %sum.addr, align 4
-  ret i32 %20
+  %10 = load i32, i32* %sum.addr, align 4
+  ret i32 %10
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -8190,7 +8139,6 @@ const sumOdd = (n: number): number => {
 ```
 
 ```llvm
-declare void @nish_panic_div(i1 noundef zeroext) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
@@ -8209,54 +8157,42 @@ for.cond:
 
 for.body:
   %2 = load i32, i32* %i.addr, align 4
-  %3 = icmp eq i32 2, 0
-  %4 = icmp eq i32 %2, -2147483648
-  %5 = icmp eq i32 2, -1
-  %6 = and i1 %4, %5
-  %7 = or i1 %3, %6
-  br i1 %7, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %3)
-  unreachable
-
-div.ok:
-  %8 = srem i32 %2, 2
-  %9 = icmp eq i32 %8, 0
-  br i1 %9, label %if.then, label %if.end
+  %3 = srem i32 %2, 2
+  %4 = icmp eq i32 %3, 0
+  br i1 %4, label %if.then, label %if.end
 
 if.then:
   br label %for.inc
 
 if.end:
-  %10 = load i32, i32* %s.addr, align 4
-  %11 = icmp sgt i32 %10, 1000
-  br i1 %11, label %if.then.1, label %if.end.1
+  %5 = load i32, i32* %s.addr, align 4
+  %6 = icmp sgt i32 %5, 1000
+  br i1 %6, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %for.end
 
 if.end.1:
-  %12 = load i32, i32* %s.addr, align 4
-  %13 = load i32, i32* %i.addr, align 4
-  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %13)
-  %15 = extractvalue { i32, i1 } %14, 0
-  %16 = extractvalue { i32, i1 } %14, 1
-  br i1 %16, label %ovf.fail, label %ovf.ok
+  %7 = load i32, i32* %s.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %15, i32* %s.addr, align 4
+  store i32 %10, i32* %s.addr, align 4
   br label %for.inc
 
 for.inc:
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = add nsw i32 %17, 1
-  store i32 %18, i32* %i.addr, align 4
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = add nsw i32 %12, 1
+  store i32 %13, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %19 = load i32, i32* %s.addr, align 4
-  ret i32 %19
+  %14 = load i32, i32* %s.addr, align 4
+  ret i32 %14
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -8310,10 +8246,9 @@ const describe = (n: number): string => {
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_panic_div(i1 noundef zeroext) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -8339,52 +8274,28 @@ slow:
 
 define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @half(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 2, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 2, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 2
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %if.then, label %if.end
+  %0 = srem i32 %n, 2
+  %1 = icmp ne i32 %0, 0
+  br i1 %1, label %if.then, label %if.end
 
 if.then:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  %3 = bitcast i8* %2 to %struct.nish_result.i32.str*
+  %4 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %3, i32 0, i32 0
+  store i1 false, i1* %4, align 1
+  %5 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %3, i32 0, i32 2
+  store i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8** %5, align 8
+  ret %struct.nish_result.i32.str* %3
+
+if.end:
+  %6 = sdiv i32 %n, 2
   %7 = call i8* @nish_alloc_struct(i64 16)
   %8 = bitcast i8* %7 to %struct.nish_result.i32.str*
   %9 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %8, i32 0, i32 0
-  store i1 false, i1* %9, align 1
-  %10 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %8, i32 0, i32 2
-  store i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8** %10, align 8
+  store i1 true, i1* %9, align 1
+  %10 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %8, i32 0, i32 1
+  store i32 %6, i32* %10, align 4
   ret %struct.nish_result.i32.str* %8
-
-if.end:
-  %11 = icmp eq i32 2, 0
-  %12 = icmp eq i32 %n, -2147483648
-  %13 = icmp eq i32 2, -1
-  %14 = and i1 %12, %13
-  %15 = or i1 %11, %14
-  br i1 %15, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %11)
-  unreachable
-
-div.ok.1:
-  %16 = sdiv i32 %n, 2
-  %17 = call i8* @nish_alloc_struct(i64 16)
-  %18 = bitcast i8* %17 to %struct.nish_result.i32.str*
-  %19 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %18, i32 0, i32 0
-  store i1 true, i1* %19, align 1
-  %20 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %18, i32 0, i32 1
-  store i32 %16, i32* %20, align 4
-  ret %struct.nish_result.i32.str* %18
 }
 
 define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @quarter(i32 noundef %n) #0 {
@@ -8440,11 +8351,9 @@ if.end:
   ret i8* %11
 }
 
-attributes #0 = { nounwind }
+attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end stmt-result -->
 
@@ -8500,48 +8409,23 @@ const describe = (n: number): number => {
 ```llvm
 %struct.nish_result.i32.i32 = type { i1, i32, i32 }
 
-declare void @nish_panic_div(i1 noundef zeroext) #1
-declare extern_weak void @nish_panic_overflow(i32 noundef) #1
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
 
 define internal { i1, i32, i32 } @half(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 2, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 2, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 2
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %if.then, label %if.end
+  %0 = srem i32 %n, 2
+  %1 = icmp ne i32 %0, 0
+  br i1 %1, label %if.then, label %if.end
 
 if.then:
-  %7 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2
-  ret { i1, i32, i32 } %7
+  %2 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2
+  ret { i1, i32, i32 } %2
 
 if.end:
-  %8 = icmp eq i32 2, 0
-  %9 = icmp eq i32 %n, -2147483648
-  %10 = icmp eq i32 2, -1
-  %11 = and i1 %9, %10
-  %12 = or i1 %8, %11
-  br i1 %12, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %8)
-  unreachable
-
-div.ok.1:
-  %13 = sdiv i32 %n, 2
-  %14 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %13, 1
-  ret { i1, i32, i32 } %14
+  %3 = sdiv i32 %n, 2
+  %4 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %3, 1
+  ret { i1, i32, i32 } %4
 }
 
 define internal { i1, i32, i32 } @quarter(i32 noundef %n) #0 {
@@ -8596,7 +8480,7 @@ res.ok:
   ret { i1, i32, i32 } %30
 }
 
-define internal noundef i32 @describe(i32 noundef %n) #0 {
+define internal noundef i32 @describe(i32 noundef %n) #1 {
 entry:
   %outcome.addr = alloca %struct.nish_result.i32.i32*, align 8
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
@@ -8640,9 +8524,10 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end stmt-result-by-value -->
 
@@ -8813,8 +8698,6 @@ const zeroOrSmallQuotient = (x: number): boolean => x === 0 || 100 / x < 50
 ```
 
 ```llvm
-declare void @nish_panic_div(i1 noundef zeroext) #2
-
 define internal noundef zeroext i1 @inRange(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
   %0 = icmp sge i32 %x, %lo
@@ -8829,36 +8712,22 @@ land.end:
   ret i1 %2
 }
 
-define internal noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #1 {
+define internal noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #0 {
 entry:
   %0 = icmp eq i32 %x, 0
   br i1 %0, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %1 = icmp eq i32 %x, 0
-  %2 = icmp eq i32 100, -2147483648
-  %3 = icmp eq i32 %x, -1
-  %4 = and i1 %2, %3
-  %5 = or i1 %1, %4
-  br i1 %5, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %1)
-  unreachable
-
-div.ok:
-  %6 = sdiv i32 100, %x
-  %7 = icmp slt i32 %6, 50
+  %1 = sdiv i32 100, %x
+  %2 = icmp slt i32 %1, 50
   br label %lor.end
 
 lor.end:
-  %8 = phi i1 [ true, %entry ], [ %7, %div.ok ]
-  ret i1 %8
+  %3 = phi i1 [ true, %entry ], [ %2, %lor.rhs ]
+  ret i1 %3
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end expr-logical -->
 
@@ -9155,8 +9024,11 @@ divisor or `MIN / -1` branches to the cold `div.fail` block, which calls the
 `noreturn` `nish_panic_div` (`attempt to divide by zero` when its `i1`
 argument is true, `attempt to divide with overflow` otherwise) and exits 1;
 `div.ok` holds the plain `sdiv`. Because the panic path exists the function
-is neither `willreturn` nor `readnone`. LLVM folds the check away for a
-constant divisor at `-O1`. `f64` division is a bare `fdiv`.
+is neither `willreturn` nor `readnone`. A divisor the bounds walk proves to
+be neither 0 nor -1 — a constant, a declared range that leaves both out, or a
+guard such as `if (d !== 0 && d !== -1)` — gets the bare `sdiv` and no
+`div.fail` at all ([A module with no panic site](#a-module-with-no-panic-site---deny-panics)).
+`f64` division is a bare `fdiv`.
 
 <!-- cookbook:begin expr-div-checked -->
 ```ts
@@ -9327,6 +9199,101 @@ attributes #2 = { nounwind willreturn readnone }
 !10 = !{!9, !7, i64 0}
 ```
 <!-- cookbook:end expr-overflow-proven -->
+
+### A module with no panic site: `--deny-panics`
+
+Under `--deny-panics`, or for a module the root `package.json` lists in
+`"nish".noPanic`, every check that could still panic is a compile error
+(docs/LANGUAGE.md, "The no-panic scope"), so a module that compiles has none
+left in its IR: no `nish_panic_*` call, no `div.fail` or `pop.empty` block, no
+panic tail. Each check came off because a proof removed it, not because a flag
+did. `ratio`'s divisor is guarded against 0 and -1, so the `sdiv` stands alone;
+`half` divides by constants, which need no guard; `last` pops behind
+`xs.length > 0`, the length fact the bounds proof already keeps, so the length
+is decremented with no `pop.empty` branch. The listing is the golden
+`tests/cases/deny_panics_clean.ll`, which `npm test` holds this section to.
+
+<!-- golden:begin deny_panics_clean -->
+```ts
+const ratio = (a: i32, d: i32): i32 => {
+  if (d !== 0 && d !== -1) {
+    return a / d;
+  }
+  return 0;
+};
+
+const half = (a: i32): i32 => a / 2 + a % 10;
+
+const last = (xs: i32[]): i32 => {
+  if (xs.length > 0) {
+    return xs.pop();
+  }
+  return 0;
+};
+
+const last = (xs: i32[]): i32 => {
+  if (xs.length > 0) {
+    return xs.pop();
+  }
+  return 0;
+};
+```
+
+```llvm
+define internal noundef i32 @ratio(i32 noundef %a, i32 noundef %d) #1 {
+entry:
+  %0 = icmp ne i32 %d, 0
+  br i1 %0, label %land.rhs, label %land.end
+
+land.rhs:
+  %1 = icmp ne i32 %d, -1
+  br label %land.end
+
+land.end:
+  %2 = phi i1 [ false, %entry ], [ %1, %land.rhs ]
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = sdiv i32 %a, %d
+  ret i32 %3
+
+if.end:
+  ret i32 0
+}
+
+define internal noundef i32 @half(i32 noundef %a) #1 {
+entry:
+  %0 = sdiv i32 %a, 2
+  %1 = srem i32 %a, 10
+  %2 = add nsw i32 %0, %1
+  ret i32 %2
+}
+
+define internal noundef i32 @last(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = icmp sgt i32 %2, 0
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = sub i64 %5, 1
+  store i64 %6, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %11
+
+if.end:
+  ret i32 0
+}
+```
+<!-- golden:end deny_panics_clean -->
 
 ### Unsigned integers
 
@@ -16065,7 +16032,9 @@ with a witness chain for each — but nothing in the IR reads them. The listing
 below is the same with `--emit-capabilities` and without it, and `tests/run.js`
 compiles every `caps_*` case both ways to hold that. `load` is `readFileSync`
 under another name, and `lineCount` and `main` reach it through one and two
-calls; what the flag adds is this file, written beside the IR:
+calls; what the flag adds is this file, written beside the IR. Each function
+also lists its `"panics"` — here the `io-exit` that `readFileSync` is, reached
+through the same calls — the sites `--emit-panics` writes:
 
 <!-- capabilities-report builtin-capabilities -->
 ```json
@@ -16092,7 +16061,13 @@ calls; what the flag adds is this file, written beside the IR:
                   { "function": "lineCount", "at": "builtin-capabilities.ts:4:16", "calls": "load" },
                   { "function": "load", "at": "builtin-capabilities.ts:1:40", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "builtin-capabilities.ts:4:16", "callee": "load", "via": "io-exit" },
+                { "kind": "overflow", "at": "builtin-capabilities.ts:6:36", "proven": true },
+                { "kind": "index", "at": "builtin-capabilities.ts:7:9", "proven": true },
+                { "kind": "overflow", "at": "builtin-capabilities.ts:8:15", "proven": false }
+              ]
             },
             {
               "name": "main",
@@ -16104,7 +16079,11 @@ calls; what the flag adds is this file, written beside the IR:
                   { "function": "lineCount", "at": "builtin-capabilities.ts:4:16", "calls": "load" },
                   { "function": "load", "at": "builtin-capabilities.ts:1:40", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "builtin-capabilities.ts:15:3", "allowed": true },
+                { "kind": "call", "at": "builtin-capabilities.ts:15:15", "callee": "lineCount", "via": "io-exit" }
+              ]
             }
           ]
         }

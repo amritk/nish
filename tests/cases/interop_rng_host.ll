@@ -9,7 +9,6 @@
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #3
 declare void @nish_exit(i32 noundef) #4
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
-declare void @nish_panic_div(i1 noundef zeroext) #5
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
@@ -122,35 +121,11 @@ ovf.fail:
 
 define noundef i32 @lastDigit(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 10, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 10, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 10
-  %6 = add nsw i32 %5, 10
-  %7 = icmp eq i32 10, 0
-  %8 = icmp eq i32 %6, -2147483648
-  %9 = icmp eq i32 10, -1
-  %10 = and i1 %8, %9
-  %11 = or i1 %7, %10
-  br i1 %11, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %7)
-  unreachable
-
-div.ok.1:
-  %12 = srem i32 %6, 10
-  %13 = icmp ult i32 %12, 10
-  br i1 %13, label %rng.ok, label %rng.fail
+  %0 = srem i32 %n, 10
+  %1 = add nsw i32 %0, 10
+  %2 = srem i32 %1, 10
+  %3 = icmp ult i32 %2, 10
+  br i1 %3, label %rng.ok, label %rng.fail
 
 rng.fail:
   call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
@@ -158,7 +133,7 @@ rng.fail:
   unreachable
 
 rng.ok:
-  ret i32 %12
+  ret i32 %2
 }
 
 define noundef i32 @count(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {

@@ -40,7 +40,10 @@
  * anything else still fails; and an entry that covers nothing in a run fails
  * as stale, so that the reseed after the release that ships the change is
  * what retires it. `explainDifference` decides, and `selfCheckDeclarations`
- * drives it over fabricated modules on every `npm test`.
+ * drives it over fabricated modules on every `npm test`. A change that
+ * removes instructions rather than attributes, such as a check a new proof
+ * leaves out, is a `DECLARED_CHECKS` entry instead, which states its
+ * direction as a predicate over the two modules.
  *
  * There used to be a second, default mode that ran each program natively and
  * under Node through the live rewrite. The rewriter was stage0's checker and
@@ -535,6 +538,74 @@ const DECLARED = [
   },
 ]
 
+/**
+ * The changes a group comparison cannot state: a program whose IR loses
+ * instructions, not only attributes. An entry carries the same `changelog`
+ * and `why`, and `explains(reference, candidate)` decides one module from the
+ * two texts. A module only an entry here explains still has to show every
+ * group change it makes under a function `DECLARED` names, or it counts
+ * toward none of them (`groupTransitions`).
+ */
+const DECLARED_CHECKS = [
+  {
+    changelog: "--deny-panics and noPanic refuse every remaining panic site",
+    why: "a divisor proven to be neither 0 nor -1, and a `pop` behind a test that its array holds an element, lose their check",
+    explains: (reference, candidate) => onlyDropsChecks(reference, candidate),
+  },
+]
+
+/** How many times each runtime panic is called, and each check block opened, in an IR text. */
+const panicCounts = (ir) => {
+  const counts = new Map()
+  const bump = (key) => counts.set(key, (counts.get(key) ?? 0) + 1)
+  for (const m of ir.matchAll(/call void @(nish_panic_\w+|nish_exit)\(/g)) {
+    bump(m[1])
+  }
+  for (const m of ir.matchAll(/^(div\.fail|pop\.empty)\d*:/gm)) {
+    bump(m[1])
+  }
+  return counts
+}
+
+/** The functions an IR text defines, in order. */
+const definedNames = (ir) => [...ir.matchAll(/^define [^@]*@([\w.$]+)\(/gm)].map((m) => m[1]).join(" ")
+
+/**
+ * The candidate defines the same functions, and differs from the reference
+ * only by division and `pop` checks it no longer writes: every removed
+ * `div.fail` block takes its `nish_panic_div` call with it, every removed
+ * `pop.empty` block its `nish_panic_index` call, at least one is removed, and
+ * every other panic is called exactly as often. A dropped bounds check
+ * anywhere else is not explained by this, and stays a disagreement.
+ */
+const onlyDropsChecks = (reference, candidate) => {
+  if (definedNames(reference) !== definedNames(candidate)) {
+    return false
+  }
+  const ref = panicCounts(reference)
+  const cand = panicCounts(candidate)
+  const n = (map, key) => map.get(key) ?? 0
+  const divs = n(ref, "div.fail") - n(cand, "div.fail")
+  const pops = n(ref, "pop.empty") - n(cand, "pop.empty")
+  if (divs < 0 || pops < 0 || divs + pops === 0) {
+    return false
+  }
+  if (n(ref, "nish_panic_div") - n(cand, "nish_panic_div") !== divs) {
+    return false
+  }
+  if (n(ref, "nish_panic_index") - n(cand, "nish_panic_index") !== pops) {
+    return false
+  }
+  for (const key of new Set([...ref.keys(), ...cand.keys()])) {
+    if (key !== "div.fail" && key !== "pop.empty" && key !== "nish_panic_div" && key !== "nish_panic_index") {
+      if (n(ref, key) !== n(cand, key)) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
 const ATTRIBUTE_GROUP = /^attributes #(\d+) = (.*)$/
 const GROUP_REFERENCE = / #(\d+)(?=$| )/g
 const FUNCTION_LINE = /^(?:declare|define) [^@]*@("[^"]+"|[^\s(]+)\(/
@@ -552,6 +623,32 @@ const splitGroups = (text) => {
     }
   }
   return { groups, body }
+}
+
+/**
+ * The `DECLARED` entries a module shows, read off its `declare` and `define`
+ * lines: each whose function carries the entry's `seed` group in the
+ * reference and its `head` group in the candidate. A module a
+ * `DECLARED_CHECKS` entry explains differs in its instructions, so
+ * `explainDifference` cannot read it, and this is what still lets it keep an
+ * attribute entry from going stale.
+ */
+const groupTransitions = (reference, candidate, declarations) => {
+  const groupsOf = (text) => {
+    const { groups, body } = splitGroups(text)
+    const byFunction = new Map()
+    for (const line of body) {
+      const fn = FUNCTION_LINE.exec(line)?.[1]
+      const ref = [...line.matchAll(GROUP_REFERENCE)].pop()?.[1]
+      if (fn !== undefined && ref !== undefined) {
+        byFunction.set(fn, groups.get(ref))
+      }
+    }
+    return byFunction
+  }
+  const a = groupsOf(reference)
+  const b = groupsOf(candidate)
+  return declarations.filter((d) => a.get(d.function) === d.seed && b.get(d.function) === d.head)
 }
 
 /**
@@ -680,6 +777,7 @@ const selfCheckDeclarations = () => {
       "a declaration that matches nothing fails as stale",
       stale.length === 1 && stale[0] === other ? null : `stale: ${JSON.stringify(stale)}`,
     ],
+    ["a dropped division or `pop` check is explained, and only that", checksFailure()],
     [
       "a declaration whose words the release notes do not carry fails",
       unnamed.length === 1 && unnamed[0].changelog === "Close CG-9"
@@ -687,6 +785,33 @@ const selfCheckDeclarations = () => {
         : `unnamed: ${JSON.stringify(unnamed)}`,
     ],
   ]
+}
+
+/**
+ * `onlyDropsChecks` over fabricated pairs: a dropped division or `pop` check
+ * is explained, and a dropped bounds check, an added check or a function more
+ * is not. Answers the first case that comes out wrong, or null.
+ */
+const checksFailure = () => {
+  const fn = (body) => `define internal i32 @f(i32 %a) {\nentry:\n${body}}\n`
+  const div =
+    "  br i1 %0, label %div.fail, label %div.ok\ndiv.fail:\n  call void @nish_panic_div(i1 zeroext %0)\n  unreachable\n"
+  const pop = "pop.empty:\n  call void @nish_panic_index(i64 0, i64 0)\n  unreachable\n"
+  const index = "arr.oob:\n  call void @nish_panic_index(i64 %i, i64 %n)\n  unreachable\n"
+  const cases = [
+    [fn(div + index), fn(index), true, "a dropped division check"],
+    [fn(pop + index), fn(index), true, "a dropped pop check"],
+    [fn(div + index), fn(div), false, "a dropped bounds check"],
+    [fn(div), fn(div), false, "no check dropped"],
+    [fn(div), fn(div + pop), false, "a check added"],
+    [fn(div), `${fn("")}define internal i32 @g() {\n}\n`, false, "a function more"],
+  ]
+  for (const [reference, candidate, want, what] of cases) {
+    if (onlyDropsChecks(reference, candidate) !== want) {
+      return `onlyDropsChecks is ${!want} for ${what}`
+    }
+  }
+  return null
 }
 
 /** The declarations no difference in a run used, each of which fails it. */
@@ -749,15 +874,21 @@ const explainAll = (pair, work, differences) => {
     }
     const normal = (text, compiler) =>
       cmp.withoutOwnVersion(cmp.withoutOwnRoot(text, compiler.packageRoot), compiler.version)
-    const one = explainDifference(
-      normal(reference, pair.reference),
-      normal(candidate, pair.candidate),
-      DECLARED
-    )
-    if (one.undeclared !== null) {
+    const seedText = normal(reference, pair.reference)
+    const headText = normal(candidate, pair.candidate)
+    const one = explainDifference(seedText, headText, DECLARED)
+    if (one.undeclared === null) {
+      for (const d of one.covered) {
+        covered.add(d)
+      }
+      continue
+    }
+    const change = DECLARED_CHECKS.find((c) => c.explains(seedText, headText))
+    if (change === undefined) {
       return { covered, undeclared: `${difference.surface}: ${one.undeclared}` }
     }
-    for (const d of one.covered) {
+    covered.add(change)
+    for (const d of groupTransitions(seedText, headText, DECLARED)) {
       covered.add(d)
     }
   }
@@ -841,7 +972,9 @@ const stage1Run = ({
     const explained = result.differences === undefined ? null : explainAll(pair, work, result.differences)
     if (explained?.undeclared === null) {
       entry.verdict = "declared"
-      entry.detail = [...explained.covered].map((d) => `@${d.function} ${d.seed} -> ${d.head}`).join(", ")
+      entry.detail = [...explained.covered]
+        .map((d) => (d.function === undefined ? d.why : `@${d.function} ${d.seed} -> ${d.head}`))
+        .join(", ")
       for (const d of explained.covered) {
         used.add(d)
       }
@@ -867,11 +1000,12 @@ const stage1Run = ({
     log(entry)
   }
   fs.rmSync(work, { recursive: true, force: true })
-  const stale = staleDeclarations(DECLARED, used)
+  const every = [...DECLARED, ...DECLARED_CHECKS]
+  const stale = staleDeclarations(every, used)
   const changelogFile = path.join(root, "CHANGELOG.md")
   const changelogText = fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : ""
-  const pending = DECLARED.some((d) => !changelogText.includes(d.changelog)) ? cmp.pendingNotes() : null
-  const unnamed = unnamedDeclarations(DECLARED, changelogText, pending)
+  const pending = every.some((d) => !changelogText.includes(d.changelog)) ? cmp.pendingNotes() : null
+  const unnamed = unnamedDeclarations(every, changelogText, pending)
   return { seed, count, pair, agreed, declared, stale, unnamed, pending, files, lines, disagreements }
 }
 

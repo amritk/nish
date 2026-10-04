@@ -16,7 +16,6 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare void @nish_exit(i32 noundef) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
-declare void @nish_panic_div(i1 noundef zeroext) #4
 declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
@@ -60,20 +59,8 @@ ovf.ok:
   br i1 %5, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %6 = icmp eq i32 1000, 0
-  %7 = icmp eq i32 %4, -2147483648
-  %8 = icmp eq i32 1000, -1
-  %9 = and i1 %7, %8
-  %10 = or i1 %6, %9
-  br i1 %10, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %6)
-  unreachable
-
-div.ok:
-  %11 = srem i32 %4, 1000
-  ret i32 %11
+  %6 = srem i32 %4, 1000
+  ret i32 %6
 
 ovf.fail:
   %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ]

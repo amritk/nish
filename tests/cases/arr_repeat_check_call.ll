@@ -5,8 +5,8 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
@@ -46,28 +46,20 @@ entry:
 if.then:
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %6 = icmp eq i64 %5, 0
-  br i1 %6, label %pop.empty, label %pop.ok
-
-pop.empty:
-  call void @nish_panic_index(i64 0, i64 0)
-  unreachable
-
-pop.ok:
-  %7 = sub i64 %5, 1
-  store i64 %7, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %10 = bitcast i8* %9 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %7
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %6 = sub i64 %5, 1
+  store i64 %6, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   br label %if.end
 
 if.end:
   ret i32 1
 }
 
-define internal noundef i32 @afterCall(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i) #0 {
+define internal noundef i32 @afterCall(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i) #1 {
 entry:
   %a.addr = alloca i32, align 4
   %0 = sext i32 %i to i64
@@ -118,7 +110,7 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @storeCall(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i, i32 noundef %j) #0 {
+define internal noundef i32 @storeCall(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i, i32 noundef %j) #1 {
 entry:
   %0 = sext i32 %i to i64
   %1 = sext i32 %j to i64
@@ -182,7 +174,7 @@ ovf.fail:
   unreachable
 }
 
-define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #1 {
+define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #0 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
@@ -207,7 +199,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @Box.replace(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Box.replace(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %this) #0 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
@@ -232,7 +224,7 @@ entry:
   ret i32 10
 }
 
-define internal noundef i32 @Box.storeReplaced(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %i) #0 {
+define internal noundef i32 @Box.storeReplaced(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %i) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
@@ -274,7 +266,7 @@ bounds.ok.1:
   ret i32 %21
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %b.addr = alloca %struct.Box*, align 8
   %Box.obj = alloca %struct.Box, align 8
@@ -337,8 +329,8 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
 attributes #4 = { nounwind willreturn readnone }

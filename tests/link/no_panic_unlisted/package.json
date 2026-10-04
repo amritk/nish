@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-unlisted",
+  "private": true,
+  "nish": {
+    "noPanic": ["clean.ts"]
+  }
+}

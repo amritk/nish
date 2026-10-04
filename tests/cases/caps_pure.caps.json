@@ -16,13 +16,21 @@
               "name": "main",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "oom", "at": "caps_pure.ts:14:3", "allowed": true },
+                { "kind": "call", "at": "caps_pure.ts:14:15", "callee": "total", "via": "overflow" },
+                { "kind": "oom", "at": "caps_pure.ts:15:3", "allowed": true }
+              ]
             },
             {
               "name": "total",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "caps_pure.ts:7:11", "proven": false }
+              ]
             }
           ]
         }

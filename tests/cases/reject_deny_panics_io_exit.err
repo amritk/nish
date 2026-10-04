@@ -1,0 +1,2 @@
+error: `io-exit` may panic here
+`readFileSync` exits when the file cannot be read: call `readFileSyncOrNull`, which answers `null` instead

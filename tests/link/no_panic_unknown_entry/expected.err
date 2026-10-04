@@ -1,0 +1,1 @@
+package.json:5:28: error: `noPanic` names `parser.ts`, which is no module of this program

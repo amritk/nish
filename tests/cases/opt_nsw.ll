@@ -1,7 +1,6 @@
 %struct.Acc = type { i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
-declare void @nish_panic_div(i1 noundef zeroext) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
@@ -75,53 +74,29 @@ ovf.ok.1:
   %28 = bitcast i8* %3 to i32*
   %29 = getelementptr inbounds i32, i32* %28, i64 %27
   %30 = load i32, i32* %29, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %31 = icmp eq i32 2, 0
-  %32 = icmp eq i32 %30, -2147483648
-  %33 = icmp eq i32 2, -1
-  %34 = and i1 %32, %33
-  %35 = or i1 %31, %34
-  br i1 %35, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %31)
-  unreachable
-
-div.ok:
-  %36 = sdiv i32 %30, 2
-  %37 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %25, i32 %36)
-  %38 = extractvalue { i32, i1 } %37, 0
-  %39 = extractvalue { i32, i1 } %37, 1
-  br i1 %39, label %ovf.fail, label %ovf.ok.2
+  %31 = sdiv i32 %30, 2
+  %32 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %25, i32 %31)
+  %33 = extractvalue { i32, i1 } %32, 0
+  %34 = extractvalue { i32, i1 } %32, 1
+  br i1 %34, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  store i32 %38, i32* %24, align 4
+  store i32 %33, i32* %24, align 4
   br label %for.inc
 
 for.inc:
-  %40 = load i32, i32* %i.addr, align 4
-  %41 = add nsw i32 %40, 1
-  store i32 %41, i32* %i.addr, align 4
+  %35 = load i32, i32* %i.addr, align 4
+  %36 = add nsw i32 %35, 1
+  store i32 %36, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %42 = load i32, i32* %s.addr, align 4
-  %43 = icmp eq i32 1000, 0
-  %44 = icmp eq i32 %42, -2147483648
-  %45 = icmp eq i32 1000, -1
-  %46 = and i1 %44, %45
-  %47 = or i1 %43, %46
-  br i1 %47, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %43)
-  unreachable
-
-div.ok.1:
-  %48 = srem i32 %42, 1000
-  ret i32 %48
+  %37 = load i32, i32* %s.addr, align 4
+  %38 = srem i32 %37, 1000
+  ret i32 %38
 
 ovf.fail:
-  %ovf.op = phi i32 [ 0, %for.body ], [ 2, %ovf.ok ], [ 1, %div.ok ]
+  %ovf.op = phi i32 [ 0, %for.body ], [ 2, %ovf.ok ], [ 1, %ovf.ok.1 ]
   call void @nish_panic_overflow(i32 %ovf.op)
   unreachable
 }

@@ -9,7 +9,6 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
-declare void @nish_panic_div(i1 noundef zeroext) #4
 declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
 
@@ -39,48 +38,24 @@ slow:
 
 define noundef i64 @half(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 2, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 2, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 2
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %if.then, label %if.end
+  %0 = srem i32 %n, 2
+  %1 = icmp ne i32 %0, 0
+  br i1 %1, label %if.then, label %if.end
 
 if.then:
-  %7 = zext i32 %n to i64
-  %8 = shl i64 %7, 32
-  ret i64 %8
+  %2 = zext i32 %n to i64
+  %3 = shl i64 %2, 32
+  ret i64 %3
 
 if.end:
-  %9 = icmp eq i32 2, 0
-  %10 = icmp eq i32 %n, -2147483648
-  %11 = icmp eq i32 2, -1
-  %12 = and i1 %10, %11
-  %13 = or i1 %9, %12
-  br i1 %13, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %9)
-  unreachable
-
-div.ok.1:
-  %14 = sdiv i32 %n, 2
-  %15 = zext i32 %14 to i64
-  %16 = shl i64 %15, 32
-  %17 = or i64 %16, 1
-  ret i64 %17
+  %4 = sdiv i32 %n, 2
+  %5 = zext i32 %4 to i64
+  %6 = shl i64 %5, 32
+  %7 = or i64 %6, 1
+  ret i64 %7
 }
 
-define noundef i64 @checkPort(i32 noundef %port) #1 {
+define noundef i64 @checkPort(i32 noundef %port) #0 {
 entry:
   %0 = icmp sle i32 %port, 0
   br i1 %0, label %if.then, label %if.end
@@ -94,7 +69,7 @@ if.end:
   ret i64 1
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.$IoError* @openFile(i8* noundef nonnull noalias readonly align 8 %path) #1 {
+define noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.$IoError* @openFile(i8* noundef nonnull noalias readonly align 8 %path) #0 {
 entry:
   %problem.addr = alloca %struct.IoError*, align 8
   %0 = call zeroext i1 @nish_str_eq(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*))
@@ -127,7 +102,7 @@ if.end:
   ret %struct.nish_result.i32.$IoError* %11
 }
 
-define noundef i32 @describe(i64 noundef %r) #0 {
+define noundef i32 @describe(i64 noundef %r) #1 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   %0 = trunc i64 %r to i1
@@ -165,8 +140,8 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { nounwind noreturn cold }

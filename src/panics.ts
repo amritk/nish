@@ -30,11 +30,14 @@
 // `nish:unsafe` `wrapping*` calls, nothing is checked and nothing is listed.
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
+import { unwrapBoundsParens } from "./bounds"
+import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
 import { isNetExport, netRangeBuffer } from "./nish-modules"
-import { Node } from "./nodes"
+import { N_BINARY, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { addJsonQuoted, StringBuilder } from "./strings"
+import { TypeTable, isUnsigned } from "./types"
 
 // The kinds. The number is internal and never reused, so a kind added later
 // takes the next one wherever docs/LANGUAGE.md lists it; the name
@@ -51,7 +54,13 @@ const PANIC_IO_EXIT: i32 = 8
 export const PANIC_PARALLEL_LENGTH: i32 = 9
 export const PANIC_CALL: i32 = 10
 const PANIC_OOM: i32 = 11
-export const PANIC_OVERFLOW: i32 = 12
+/**
+ * `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check, so nothing
+ * panics, but nothing is proven either, and an index out of range is
+ * undefined behaviour. Listed so that the no-panic scope can refuse it.
+ */
+const PANIC_UNCHECKED: i32 = 12
+export const PANIC_OVERFLOW: i32 = 13
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -78,6 +87,8 @@ const panicKindName = (kind: i32): string => {
       return "parallel-length"
     case PANIC_CALL:
       return "call"
+    case PANIC_UNCHECKED:
+      return "unchecked"
     case PANIC_OVERFLOW:
       return "overflow"
     default:
@@ -96,6 +107,8 @@ const panicKindName = (kind: i32): string => {
  */
 export class PanicSite {
   node: Node
+  /** The module the site is written in, for a diagnostic that points at it from another. */
+  source: SourceFile
   /** The LLVM symbol of the function the site is in. */
   fn: string
   /** The callee's symbol, for a `call` or a `parallel-length`; `""` otherwise. */
@@ -114,8 +127,9 @@ export class PanicSite {
    */
   order: i32
 
-  constructor(node: Node, kind: i32, fn: string, proven: boolean, callee: string) {
+  constructor(node: Node, source: SourceFile, kind: i32, fn: string, proven: boolean, callee: string) {
     this.node = node
+    this.source = source
     this.fn = fn
     this.callee = callee
     this.reaches = null
@@ -150,6 +164,9 @@ export const builtinPanicKind = (name: string): i32 => {
     name === "crypto.getRandomValues"
   ) {
     return PANIC_IO_EXIT
+  }
+  if (name === "uncheckedGet" || name === "uncheckedSet") {
+    return PANIC_UNCHECKED
   }
   // `netRead` and its siblings check the range of their buffer the way
   // `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
@@ -405,7 +422,7 @@ const keepSites = (
     const callee = f.callees.at(c)
     const found = reachOf(facts, reach, callee)
     if (found !== null && !named.has(callee)) {
-      const site = new PanicSite(sig.decl, PANIC_CALL, sig.name, false, callee)
+      const site = new PanicSite(sig.decl, program.source, PANIC_CALL, sig.name, false, callee)
       site.reaches = found
       sites.push(site)
       named.add(callee)
@@ -413,7 +430,7 @@ const keepSites = (
     c = c + 1
   }
   for (const node of f.arenaNodes) {
-    sites.push(new PanicSite(node, PANIC_OOM, sig.name, false, ""))
+    sites.push(new PanicSite(node, program.source, PANIC_OOM, sig.name, false, ""))
   }
   sortByPosition(sites)
   for (const site of sites) {
@@ -490,4 +507,361 @@ const siteJson = (out: StringBuilder, program: CheckedProgram, facts: FactsTable
     out.add(`,"via":"${panicKindName(reaches.kind)}"`)
   }
   out.add("}")
+}
+
+/** The settled sites of the function whose symbol is `fn`, in source order. */
+export const sitesOf = (program: CheckedProgram, fn: string): PanicSite[] => {
+  const out: PanicSite[] = []
+  for (const site of program.panicSites) {
+    if (site.fn === fn) {
+      out.push(site)
+    }
+  }
+  return out
+}
+
+/**
+ * One site as the capability report writes it (`src/capability-report.ts`):
+ * the keys `--emit-panics` writes, in its order, but with the position as one
+ * `"at": "path:line:col"` in the path the report gives the module, and
+ * spaced the way the report's witnesses are.
+ */
+export const siteReportEntry = (site: PanicSite, path: string, facts: FactsTable): string => {
+  const out = new StringBuilder()
+  const source = site.source
+  out.add(`{ "kind": "${panicKindName(site.kind)}", "at": `)
+  addJsonQuoted(out, `${path}:${source.lineOf(site.node.start)}:${source.columnOf(site.node.start)}`)
+  if (site.kind === PANIC_OOM) {
+    out.add(', "allowed": true }')
+    return out.toText()
+  }
+  if (site.kind !== PANIC_CALL) {
+    out.add(`, "proven": ${site.proven ? "true" : "false"}`)
+  }
+  if (isCallSite(site)) {
+    const callee = facts.get(site.callee)
+    out.add(', "callee": ')
+    addJsonQuoted(out, callee === null ? site.callee : callee.sourceName)
+  }
+  const reaches = site.reaches
+  if (site.kind === PANIC_CALL && reaches !== null) {
+    out.add(`, "via": "${panicKindName(reaches.kind)}"`)
+  }
+  out.add(" }")
+  return out.toText()
+}
+
+// ---- The no-panic scope (`--deny-panics`, `"nish".noPanic`) --------------------------
+
+/**
+ * Refuse every site that can still panic in a module of the no-panic scope:
+ * `inScope[k]` says whether `units[k]` is in it. A site of the module's own is
+ * NL2457, naming its kind and, where a proof the checker makes would remove
+ * it, the guard that gives the proof. A call is refused only when its callee
+ * is outside the scope (NL2458), because a callee inside it has its own sites
+ * refused where they are written, and a second error at every call into it
+ * would say the same thing again. Out of memory is never refused: no guard
+ * in the source removes it.
+ *
+ * Answers the sites it refused, so that the driver can take back a
+ * performance warning about the same check: the error already says it.
+ */
+export const reportDeniedPanics = (
+  units: AnalysisUnit[],
+  inScope: boolean[],
+  facts: FactsTable,
+  table: TypeTable,
+  sink: DiagnosticSink
+): PanicSite[] => {
+  const refused: PanicSite[] = []
+  const scoped = new StringSet()
+  // The programs in scope, read once: `inScope` is in step with `units`.
+  const programs: CheckedProgram[] = []
+  let k = 0
+  for (const unit of units) {
+    if (k < inScope.length && inScope[k]) {
+      programs.push(unit.program)
+    }
+    k = k + 1
+  }
+  for (const program of programs) {
+    for (const sig of program.functions) {
+      if (listedFacts(program, facts, sig) !== null) {
+        scoped.add(sig.name)
+      }
+    }
+  }
+  for (const program of programs) {
+    for (const site of program.panicSites) {
+      if (refuseSite(program, facts, table, scoped, site, sink)) {
+        refused.push(site)
+      }
+    }
+  }
+  return refused
+}
+
+/** Report `site` when it can panic in the scope; whether it did. */
+const refuseSite = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  table: TypeTable,
+  scoped: StringSet,
+  site: PanicSite,
+  sink: DiagnosticSink
+): boolean => {
+  if (site.proven || site.kind === PANIC_OOM) {
+    return false
+  }
+  const node = site.node
+  const reaches = site.reaches
+  if (site.kind === PANIC_CALL) {
+    if (reaches === null || scoped.has(site.callee)) {
+      return false
+    }
+    const callee = facts.get(site.callee)
+    const name = callee === null ? site.callee : callee.sourceName
+    const at = `${reaches.source.path}:${reaches.source.lineOf(reaches.node.start)}:${reaches.source.columnOf(reaches.node.start)}`
+    sink.report(
+      program.source,
+      node.start,
+      node.end,
+      `This call to \`${name}\` may panic: it reaches the \`${panicKindName(reaches.kind)}\` site at ${at}, ` +
+        "outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a " +
+        "function that cannot panic, or make the call from a module outside the scope"
+    )
+    return true
+  }
+  // A `parallelMapInto` is kept only when its body can panic, which is the length check.
+  if (site.kind === PANIC_PARALLEL_LENGTH && reaches === null) {
+    return false
+  }
+  sink.report(
+    program.source,
+    node.start,
+    node.end,
+    `\`${panicKindName(site.kind)}\` may panic here, and a module in the no-panic scope (\`--deny-panics\` or ` +
+      `\`noPanic\`) may keep no panic site but out of memory: ${siteAdvice(program, table, site)}`
+  )
+  return true
+}
+
+/** The source name of the local a bare identifier binds, or `""`. */
+const siteLocalName = (program: CheckedProgram, expr: Node): string => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== N_IDENT) {
+    return ""
+  }
+  const local = program.nodeLocals[e.id]
+  return local === null ? "" : local.name
+}
+
+/** The builtin a call names, through a `nish:` import's local name; else a method's or a function's as written. */
+const calledName = (program: CheckedProgram, call: Node): string => {
+  if (call.kind !== N_CALL) {
+    return ""
+  }
+  const builtin = program.nodeBuiltins[call.id]
+  if (builtin.length > 0) {
+    return builtin
+  }
+  const callee = unwrapBoundsParens(call.children[0])
+  return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : ""
+}
+
+/**
+ * What fails at `site`, and what removes it. The index, range and divisor
+ * guards are the ones `src/bounds.ts` reads, worded as the WP15 section 8
+ * warnings word them, so an author is told one way of writing each; a kind
+ * no proof removes says so and names the twin that does not panic.
+ */
+const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite): string => {
+  const node = site.node
+  switch (site.kind) {
+    case PANIC_INDEX:
+      return indexAdvice(program, node)
+    case PANIC_POP: {
+      const holder = siteLocalName(program, unwrapBoundsParens(node.children[0]).children[0])
+      const xs = holder.length > 0 ? holder : "xs"
+      const what =
+        holder.length > 0
+          ? `\`${xs}\` is not proven to hold an element here`
+          : "this array is not proven to hold an element here"
+      return `${what}, and \`pop\` panics on an empty one: guard it with a test that reaches the call — \`if (${xs}.length > 0)\` proves it`
+    }
+    case PANIC_SLICE:
+      return sliceAdvice(program, node)
+    case PANIC_DIVIDE:
+      return divideAdvice(program, table, node)
+    case PANIC_RANGE:
+      return rangeAdvice(program, table, site)
+    case PANIC_ARRAY_LENGTH:
+      return (
+        "`new Array` checks a length of this type before it allocates: give the length a type that needs no " +
+        "check — `u8`, `u16` or a range starting at 0, `integer<0, N>` — or write it as a literal"
+      )
+    case PANIC_PANIC:
+      return "`panic` stops the program, and no proof removes a call to it: return a `Result` and let the caller decide"
+    case PANIC_EXPECT:
+      return "`expect` panics on an `Err`: hand the error on with `orReturn`, or supply a value with `unwrapOr`"
+    case PANIC_IO_EXIT:
+      return ioExitAdvice(program, node)
+    case PANIC_PARALLEL_LENGTH:
+      return (
+        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: make " +
+        "the call from a module outside the scope"
+      )
+    case PANIC_OVERFLOW:
+      return overflowAdvice(program, table, node)
+    default:
+      return (
+        `\`${calledName(program, node)}\` leaves out the bounds check without proving it, so an index out of range is ` +
+        "undefined behaviour rather than a panic the scope can rule out: index with a guard instead, or leave " +
+        "this module out of the scope"
+      )
+  }
+}
+
+/** The guard for an element access or a `charCodeAt`, and for the second check of a compound store. */
+const indexAdvice = (program: CheckedProgram, node: Node): string => {
+  if (node.kind === N_BINARY) {
+    return (
+      "a compound store checks its index again after its right side, which may resize the array, and no " +
+      "proof survives that call: compute the right side into a local first"
+    )
+  }
+  let receiver = node
+  let index = node
+  if (node.kind === N_INDEX) {
+    receiver = node.children[0]
+    index = node.children[1]
+  } else {
+    receiver = unwrapBoundsParens(node.children[0]).children[0]
+    index = node.children[1].children[0]
+  }
+  const holder = siteLocalName(program, receiver)
+  const name = siteLocalName(program, index)
+  const xs = holder.length > 0 ? holder : "xs"
+  const i = name.length > 0 ? name : "i"
+  const what =
+    name.length > 0 && holder.length > 0
+      ? `\`${i}\` is not proven to be in range for \`${xs}\` here`
+      : "this index is not proven to be in range here"
+  const unchecked = program.uncheckedIndexing
+    ? " (`--unchecked-indexing` removes the check without proving it, which makes an access out of range undefined behaviour rather than a proven one)"
+    : ""
+  return (
+    `${what}${unchecked}: guard it with a test that reaches the access — ` +
+    `\`if (${i} >= 0 && ${i} < ${xs}.length)\` proves both ends, and an unsigned index needs only the upper one`
+  )
+}
+
+/** A `slice`, an array `set` or a socket call whose buffer range is checked: no proof removes any of them. */
+const sliceAdvice = (program: CheckedProgram, node: Node): string => {
+  const name = calledName(program, node)
+  if (name === "slice") {
+    return "`slice` panics when its range is outside the string, and no proof removes that check yet: `substring` clamps the range instead"
+  }
+  return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: make the call from a module outside the scope`
+}
+
+/**
+ * A signed operation not proven to fit: bound it so the bounds walk proves it,
+ * or, where it is meant to wrap, say so with an unsigned type or the
+ * `nish:unsafe` function for its operator, which is never checked.
+ */
+const overflowAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
+  const op = node.text
+  const type = program.nodeTypes[node.children[0].id]
+  const signed = type >= 0 ? table.typeName(table.baseOf(type)) : "i32"
+  const unsigned = signed === "i64" ? "u64" : "u32"
+  let wrapping = "wrappingAdd"
+  if (op === "*" || op === "*=") {
+    wrapping = "wrappingMul"
+  } else if (op === "-" || op === "-=" || op === "--") {
+    wrapping = "wrappingSub"
+  }
+  return (
+    `this \`${op}\` is not proven to fit \`${signed}\` here, and a signed overflow panics: bound its operands with a ` +
+    "test the checker reads — a loop below a length or a limit, or a guard on the value — so the result is proven to fit, " +
+    `or, if it is meant to wrap, compute in \`${unsigned}\` or write it as \`${wrapping}\` from \`nish:unsafe\``
+  )
+}
+
+/** The guard a divisor needs: not zero, and for a signed division not `-1` either. */
+const divideAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
+  const name = siteLocalName(program, node.children[1])
+  const d = name.length > 0 ? name : "d"
+  const left = program.nodeTypes[node.children[0].id]
+  const unsigned = left >= 0 && isUnsigned(table.baseOf(left))
+  const what = name.length > 0 ? `the divisor \`${d}\`` : "the divisor"
+  const bind = name.length > 0 ? "" : "bind it to a local and "
+  if (unsigned) {
+    return `${what} may be 0 here: ${bind}guard it with a test that reaches the division — \`if (${d} !== 0)\` proves it`
+  }
+  return (
+    `${what} may be 0 here, or -1 with a dividend that may be the minimum: ` +
+    `${bind}guard it with a test that reaches the division — \`if (${d} !== 0 && ${d} !== -1)\` proves it, and so does \`${d} > 0\``
+  )
+}
+
+/** The NL9013 guard for a value entering a range, and what to do where no guard proves one. */
+const rangeAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite): string => {
+  const node = site.node
+  if (isPrologueSite(program, site)) {
+    return (
+      "an exported function checks a ranged parameter on entry, because a caller outside the program may " +
+      "pass anything, and no proof removes that check: take an `i32` and enter the range in the body, behind a guard"
+    )
+  }
+  const stored = program.nodeCoercions[node.id] < 0
+  const at = stored ? node.children[0] : node
+  const range = program.nodeTypes[at.id]
+  const spelled = table.typeName(range)
+  if (stored) {
+    const target = siteLocalName(program, at)
+    const what = target.length > 0 ? `the value written to \`${target}\`` : "the value written back"
+    return (
+      `${what} is not proven to lie in ${spelled} here: declare the counter \`i32\` and give the range to ` +
+      "the value that is used, where a guard proves it"
+    )
+  }
+  const lo = table.rangeLo(range)
+  const hi = table.rangeHi(range)
+  const name = siteLocalName(program, node)
+  if (name.length === 0 || (lo !== 0 && lo !== -2147483648)) {
+    return (
+      `this value is not proven to lie in ${spelled} here: bind it to an \`i32\` local and guard that local, ` +
+      "for a range that starts at 0 or at the minimum, or enter it from a value whose type already lies in the range"
+    )
+  }
+  let guard = `${name} >= 0 && ${name} <= ${hi}`
+  if (lo !== 0) {
+    guard = `${name} <= ${hi}`
+  } else if (hi === 2147483647) {
+    guard = `${name} >= 0`
+  }
+  return `\`${name}\` is not proven to lie in ${spelled} here: guard it with a test that reaches it — \`if (${guard})\` proves it`
+}
+
+/** Whether `site` is the check an exported function makes of its ranged parameters, recorded at its declaration. */
+const isPrologueSite = (program: CheckedProgram, site: PanicSite): boolean => {
+  for (const sig of program.functions) {
+    if (sig.name === site.fn) {
+      return sig.decl === site.node
+    }
+  }
+  return false
+}
+
+/** The io builtins exit inside the runtime; one of them has a twin that answers `null` instead. */
+const ioExitAdvice = (program: CheckedProgram, node: Node): string => {
+  const name = calledName(program, node)
+  if (name === "readFileSync") {
+    return "`readFileSync` exits when the file cannot be read: call `readFileSyncOrNull`, which answers `null` instead"
+  }
+  if (name === "crypto.getRandomValues" || name === "getRandomValues") {
+    return "`crypto.getRandomValues` exits when the system cannot supply entropy, and has no twin that answers instead: draw it in a module outside the scope"
+  }
+  return `\`${name}\` exits when the file cannot be written, and has no twin that answers instead: write it from a module outside the scope`
 }

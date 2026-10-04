@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-module",
+  "private": true,
+  "nish": {
+    "noPanic": ["parse.ts"]
+  }
+}

@@ -1574,6 +1574,67 @@ names, or take the value and document the sentinel.
 wall clock is `Date.now()`, and that is all of `Date`). Say so rather than
 emitting code that cannot compile.
 
+### Proving it cannot panic
+
+Under `--deny-panics`, or for a module the root `package.json` lists in
+`"nish": { "noPanic": [...] }`, every place the program could stop with a panic
+is an error (NL2457) until a proof removes it; out of memory is the one kind
+allowed. Each error names its fix, and there are five:
+
+- **Guard** what the checker cannot prove: `if (i >= 0 && i < xs.length)` before
+  `xs[i]`, `if (d !== 0 && d !== -1)` before `a / d` (a constant divisor needs
+  nothing), `if (xs.length > 0)` before `xs.pop()`, `if (n >= 0 && n <= 9)`
+  before `n` enters `integer<0, 9>`.
+- **Bound a signed `+ - *`, or say it wraps**: an `i32`/`i64` operation the
+  checker cannot prove fits is an `overflow` site; bound its operands (a loop
+  below a length, a guard on the value), compute in `u32`/`u64`, or write
+  `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`.
+- **Swap `expect` for `orReturn` or `unwrapOr`**, which hand the error on or
+  supply a value instead of stopping.
+- **Swap `readFileSync` for `readFileSyncOrNull`**, which answers `null` where
+  the other exits.
+- **Read the list**: `nish file.ts --emit-panics panics.json` writes every site
+  per function, proven or not, and the `"panics"` of `--emit-capabilities` the
+  same.
+
+```ts nish:ok --deny-panics
+const at = (xs: i32[], i: i32): i32 => {
+  if (i >= 0 && i < xs.length) {
+    return xs[i];
+  }
+  return 0;
+};
+
+const ratio = (a: i32, d: i32): i32 => {
+  if (d !== 0 && d !== -1) {
+    return a / d;
+  }
+  return a / 2;
+};
+
+const size = (path: string): i32 => {
+  const text = readFileSyncOrNull(path);
+  return text === null ? -1 : text.length;
+};
+
+export const main = (): i32 => {
+  console.log(`${at([4, 5], 1)} ${ratio(9, 3)} ${size("missing.txt")}`);
+  return 0;
+};
+```
+
+The same function without its guard is refused, and the error names the guard:
+
+```ts nish:err NL2457 --deny-panics
+export const at = (xs: i32[], i: i32): i32 => xs[i];
+```
+
+A call into the standard library or a dependency that may panic is refused at
+the call (NL2458), because only its own author can prove it: call a function
+that cannot panic, or make the call from a module outside the scope. Neither
+`--unchecked-indexing` nor `uncheckedGet` is a proof — both are undefined
+behaviour out of range — so a module that uses them stays out of `noPanic`.
+
 ## Before you say it compiles
 
 Run it. `nish file.ts --json` is one command and it is the only proof.
@@ -1594,7 +1655,11 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    the network, the environment, the clock, entropy, signals, `exit`, C calls —
    with the call chain that reaches it, and `nish run --capabilities file.ts`
    prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
-10. If you are adding to this repository: `npm run check` and `npm test` green,
+10. Must it never panic? Compile with `--deny-panics` (or list the module in
+   `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
+   `pop`, range entry, `expect` and exiting call it cannot prove is an error
+   naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)).
+11. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
    `CHANGELOG.md` line.
