@@ -1,0 +1,6 @@
+{
+  "name": "caps-policy-manifest-broken-json",
+  "private": true,
+  "nish": {
+    "capabilities": { "deny": ["net"] }
+  

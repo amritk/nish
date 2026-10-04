@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_not_array/package.json","line":5,"column":31,"endLine":5,"endColumn":36,"severity":"error","code":"NL3032","message":"`deny` is not an array: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names"}

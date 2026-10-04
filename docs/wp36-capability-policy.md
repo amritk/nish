@@ -111,7 +111,7 @@ is:
 
 | Code | Refused |
 | --- | --- |
-| NL3032 | `capabilities` is not an object, `allow` or `deny` is not an array or is written twice (reading both would union them and widen the policy), a second `capabilities` key in `"nish"` or a second top-level `"nish"` in a manifest that carries a policy (the reader takes the first, and would drop the other's policy in silence), or a `"nish"` or `capabilities` key written with a JSON escape (the reader does not decode escapes, so the policy behind one would be invisible; an escaped key that cannot decode to either is read as it always was), a key other than those two, or a manifest that mentions `"capabilities"` and stops being JSON before the reader reaches it |
+| NL3032 | `capabilities` is not an object, `allow` or `deny` is not an array or is written twice (reading both would union them and widen the policy), a second `capabilities` key in `"nish"` or a second top-level `"nish"` in a manifest that carries a policy (the reader takes the first, and would drop the other's policy in silence), or a `"nish"` or `capabilities` key written with a JSON escape (the reader does not decode escapes, so the policy behind one would be invisible; an escaped key that cannot decode to either is read as it always was). Every top-level `"nish"` is walked for these, whether or not the plain word `capabilities` appears, and a second `"nish"` that holds a `capabilities` of its own is refused too, a key other than those two, or a manifest that mentions `"capabilities"` and stops being JSON before the reader reaches it |
 | NL3033 | an entry that is no capability, a non-string entry included |
 | NL3034 | `"unsafe"` under `allow` |
 | NL3035 | a capability under both `allow` and `deny` |

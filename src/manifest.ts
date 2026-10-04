@@ -346,11 +346,11 @@ const manifestEscapedKeyMayBe = (text: string, start: i32, end: i32, name: strin
  * quote) that hides a key called `name` from `manifestFieldAt`, which answers
  * the first exact match and stops; -1 when there is none or the object cannot
  * be read. A key hides `name` when it is written with an escape that could
- * decode to it (`manifestEscapedKeyMayBe`), or, when `repeats`, when it is a
- * second exact `name`. Every position is tested against the length before it
+ * decode to it (`manifestEscapedKeyMayBe`), or when it is a second exact
+ * `name`. Every position is tested against the length before it
  * is stepped past, so no step carries an overflow check.
  */
-const manifestHiddenKeyAt = (text: string, at: i32, name: string, repeats: boolean): i32 => {
+const manifestHiddenKeyAt = (text: string, at: i32, name: string): i32 => {
   if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
     return -1
   }
@@ -373,7 +373,65 @@ const manifestHiddenKeyAt = (text: string, at: i32, name: string, repeats: boole
       return i
     }
     if (text.substring(i + 1, keyEnd - 1) === name) {
-      if (seen && repeats) {
+      if (seen) {
+        return i
+      }
+      seen = true
+    }
+    i = manifestSkipBlank(text, valueEnd)
+    if (i < 0 || i >= text.length || text.charCodeAt(i) !== COMMA) {
+      return -1
+    }
+    i = manifestSkipBlank(text, i + 1)
+  }
+  return -1
+}
+
+/**
+ * Where the first key starts that would hide a capability policy from the
+ * reader, or -1. The reader takes the first exact `"nish"` and the first
+ * exact `"capabilities"` in it and decodes no escape, so it is fooled by:
+ * a top-level key written with an escape that could be `"nish"`; inside any
+ * `"nish"` object, a `"capabilities"` written with an escape or written
+ * twice; and a second `"nish"` that holds a `"capabilities"` of its own.
+ * Every top-level `"nish"` is walked, whether or not the plain word appears
+ * anywhere, so none of these can carry a policy past it. A second `"nish"`
+ * with no policy in it is left as it is, as the `noPanic` reader leaves it.
+ */
+const manifestPolicyHiddenAt = (text: string, condition: string): i32 => {
+  const at = manifestSkipBlank(text, 0)
+  if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
+    return -1
+  }
+  let seen = false
+  let i = manifestSkipBlank(text, at + 1)
+  while (i >= 0 && i < text.length && text.charCodeAt(i) === QUOTE) {
+    const keyEnd = manifestEndOfString(text, i)
+    if (keyEnd <= i || keyEnd <= 0) {
+      return -1
+    }
+    const colon = manifestSkipBlank(text, keyEnd)
+    if (colon < 0 || colon >= text.length || text.charCodeAt(colon) !== COLON) {
+      return -1
+    }
+    const valueAt = manifestSkipBlank(text, colon + 1)
+    const valueEnd = manifestEndOfValue(text, valueAt)
+    if (valueEnd < 0) {
+      return -1
+    }
+    if (manifestEscapedKeyMayBe(text, i + 1, keyEnd - 1, condition)) {
+      return i
+    }
+    if (text.substring(i + 1, keyEnd - 1) === condition) {
+      const inner = manifestHiddenKeyAt(text, valueAt, "capabilities")
+      if (inner >= 0) {
+        return inner
+      }
+      const inSecond =
+        seen && valueAt >= 0 && valueAt <= text.length && valueAt <= valueEnd && valueEnd <= text.length
+          ? manifestFieldAt(text.substring(valueAt, valueEnd), "capabilities")
+          : -1
+      if (inSecond >= 0) {
         return i
       }
       seen = true
@@ -409,24 +467,11 @@ const manifestPolicyProblem = (problem: string, start: i32, end: i32): Capabilit
 
 export const manifestCapabilities = (manifest: string, condition: string): CapabilityManifest => {
   const out = new CapabilityManifest()
-  // A policy written twice is refused at the second: the reader below takes
-  // the first and would ignore the other, whichever of the two was meant. A
-  // key written with an escape this reader does not decode is refused the
-  // same way when it could be `"nish"` or `"capabilities"`, whatever the rest
-  // of the manifest says, because the policy it hides is invisible otherwise.
-  const repeats = manifest.indexOf('"capabilities"') >= 0
-  const hiddenNish = manifestHiddenKeyAt(manifest, manifestSkipBlank(manifest, 0), condition, repeats)
-  if (hiddenNish >= 0) {
-    return manifestKeyProblem(manifest, hiddenNish)
-  }
-  const hiddenPolicy = manifestHiddenKeyAt(
-    manifest,
-    manifestFieldAt(manifest, condition),
-    "capabilities",
-    true
-  )
-  if (hiddenPolicy >= 0) {
-    return manifestKeyProblem(manifest, hiddenPolicy)
+  // Fail closed on every key the reader could be fooled by on the way to the
+  // policy, whatever else the manifest says (`manifestPolicyHiddenAt`).
+  const hidden = manifestPolicyHiddenAt(manifest, condition)
+  if (hidden >= 0) {
+    return manifestKeyProblem(manifest, hidden)
   }
   const at = manifestNishFieldAt(manifest, condition, "capabilities")
   if (at < 0) {

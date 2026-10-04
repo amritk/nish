@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_broken_json/package.json","line":7,"column":1,"endLine":7,"endColumn":2,"severity":"error","code":"NL3032","message":"`package.json` stops being JSON here: the root package's `nish.capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names"}
