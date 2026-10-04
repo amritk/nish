@@ -48,7 +48,7 @@ const CAP_SIGNAL: i32 = 9
  * (docs/wp36-capability-policy.md). The import is its opt-in, which is why an
  * allowlist never refuses it.
  */
-export const CAP_UNSAFE: i32 = 10
+const CAP_UNSAFE: i32 = 10
 
 /** How many capabilities there are, and so how long a per-capability array is. */
 export const CAPABILITY_COUNT: i32 = 11
@@ -106,6 +106,16 @@ export const capabilityName = (index: i32): string => {
 
 /** Every capability at once: what a missing allowlist allows. */
 export const allCapabilities = (): i32 => (1 << CAPABILITY_COUNT) - 1
+
+/**
+ * The capabilities whose import is their opt-in, so that an allowlist never
+ * refuses them and none may be allowed: `unsafe` alone
+ * (docs/wp36-capability-policy.md §1).
+ */
+export const optInCapabilities = (): i32 => 1 << CAP_UNSAFE
+
+/** Every capability's name, comma-separated in the fixed order: what a refusal of an unknown name lists. */
+export const everyCapabilityName = (): string => capabilityNames(allCapabilities()).join(", ")
 
 /** The index of the capability spelled `name`, as every report spells it, or -1 for no capability. */
 export const capabilityIndex = (name: string): i32 => {

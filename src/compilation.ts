@@ -70,11 +70,12 @@ import { proveCallSiteRanges } from "./ranges"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import {
   allCapabilities,
-  CAP_UNSAFE,
   CAPABILITY_COUNT,
   capabilityIndex,
   capabilityName,
   capabilityNames,
+  everyCapabilityName,
+  optInCapabilities,
 } from "./capabilities"
 import { functionIndex, witnessChain } from "./capability-report"
 import {
@@ -1077,8 +1078,9 @@ export class Compilation {
       return false // pass 1 and module resolution ran during load
     }
     // Before anything records: a `noPanic` list turns the recording on.
-    this.readNoPanic()
-    this.readCapabilityPolicy()
+    const manifest = this.rootManifest()
+    this.readNoPanic(manifest)
+    this.readCapabilityPolicy(manifest)
     this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
       return false
@@ -1204,12 +1206,11 @@ export class Compilation {
    * refused where it is written (NL3031): a typo would otherwise leave the
    * module it meant outside the scope, and the build would say nothing.
    */
-  readNoPanic(): void {
+  readNoPanic(source: SourceFile | null): void {
     this.panicScope = []
     for (const unit of this.modules) {
       this.panicScope.push(this.opts.denyPanics && unit.packageName === ROOT_PACKAGE)
     }
-    const source = this.rootManifest()
     if (source === null) {
       return
     }
@@ -1262,10 +1263,7 @@ export class Compilation {
    * the wrong shape (NL3032), a name that is no capability (NL3033), `unsafe`
    * under `allow` (NL3034), and a capability under both (NL3035).
    */
-  readCapabilityPolicy(): void {
-    this.manifestAllow = -1
-    this.manifestDeny = 0
-    const source = this.rootManifest()
+  readCapabilityPolicy(source: SourceFile | null): void {
     if (source === null) {
       return
     }
@@ -1301,26 +1299,27 @@ export class Compilation {
 
   /** One `allow` or `deny` list of the root package's policy as a mask, refusing each entry that names no capability. */
   policyListMask(source: SourceFile, list: ManifestList, allow: boolean): i32 {
-    const names = capabilityNames(allCapabilities()).join(", ")
+    const names = everyCapabilityName()
     const unsafe = unsafeModule()
     let mask = 0
     let k = 0
     while (k < list.entries.length && k < list.offsets.length) {
       const entry = list.entries[k]
       const at = list.offsets[k]
+      const end = at + entry.length + 2 // the entry and its quotes
       const index = capabilityIndex(entry)
       if (index < 0) {
         this.sink.report(
           source,
           at,
-          at + entry.length + 2,
+          end,
           `\`${entry}\` is no capability: a policy names capabilities as \`--emit-capabilities\` reports them, one of ${names}`
         )
-      } else if (allow && index === CAP_UNSAFE) {
+      } else if (allow && (optInCapabilities() & (1 << index)) !== 0) {
         this.sink.report(
           source,
           at,
-          at + entry.length + 2,
+          end,
           `\`unsafe\` cannot be allowed: importing \`${unsafe}\` is the opt-in to it, so a policy can only deny it`
         )
       } else {
@@ -1346,7 +1345,7 @@ export class Compilation {
   refuseCapabilities(): void {
     const allow = this.opts.allowCapabilities & this.manifestAllow
     const deny = this.opts.denyCapabilities | this.manifestDeny
-    const refused = deny | (~allow & ~(1 << CAP_UNSAFE) & allCapabilities())
+    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities())
     if (refused === 0 || this.modules.length === 0) {
       return
     }

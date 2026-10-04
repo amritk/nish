@@ -2992,7 +2992,7 @@ const DECLARED = [
   ),
   ...declareMoved(
     CAPABILITY_POLICY_NEW,
-    "refuse a program that reaches a capability its policy does not grant",
+    "a program that reaches a capability its policy does not grant",
     "a new program: it is compiled under `--allow`, or its root `package.json` carries a `capabilities` policy, which the reference compiler does not read"
   ),
 ]

@@ -61,7 +61,7 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
-import { allCapabilities, CAP_UNSAFE, capabilityIndex, capabilityNames } from "./capabilities"
+import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
 import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
@@ -389,7 +389,7 @@ const capabilityListMask = (flag: string, list: string): i32 => {
     const index = capabilityIndex(whole)
     if (index < 0) {
       console.error(
-        `compile: \`${flag} ${name}\` names no capability; the names are ${capabilityNames(allCapabilities()).join(", ")}`
+        `compile: \`${flag} ${name}\` names no capability; the names are ${everyCapabilityName()}`
       )
       return -1
     }
@@ -399,7 +399,7 @@ const capabilityListMask = (flag: string, list: string): i32 => {
       )
       return -1
     }
-    if (index === CAP_UNSAFE && flag === "--allow") {
+    if ((optInCapabilities() & (1 << index)) !== 0 && flag === "--allow") {
       console.error(
         `compile: \`--allow unsafe\` is refused: importing \`${unsafeModule()}\` is the opt-in to it, so a policy can only deny it (\`--deny unsafe\`)`
       )
