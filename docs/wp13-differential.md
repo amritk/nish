@@ -161,17 +161,17 @@ visible as known failures):
 
 - **`number` is a 32-bit integer** in the default mode
   ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)):
-  `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`. Since WP15 §3, signed
-  overflow is *undefined* rather than wrapping, and the shim has no way to
-  reproduce undefined behaviour, so **a corpus program that overflows on
-  purpose carries `--wrapping` in its `.args`** — only then does
+  `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`. Signed overflow is a
+  checked panic (#426; it was *undefined* from WP15 §3 until then) rather than
+  wrapping, and the JavaScript rewrite wraps, so **a corpus program that
+  overflows on purpose carries `--wrapping` in its `.args`** — only then does
   `2147483647 + 1` mean `-2147483648` on both sides. Comparing a wrapping
-  JavaScript rewrite against a native binary that was allowed to assume the
-  overflow never happens would be testing nothing at all. The programs that
+  JavaScript rewrite against a native binary that stops at the overflow would
+  be testing nothing at all. The programs that
   carry the flag are `int_wrap`, `int_literal_edges`, `int_incdec`,
   `int_compound`, `i64_arith`, `conversions_roundtrip`, `digits`, `recursion`,
   `bool_logic`, `bit_fnv1a`, `prng_lcg` and `const_module`.
-- **`i64` wraps at 64 bits under `--wrapping`**, and is undefined on overflow
+- **`i64` wraps at 64 bits under `--wrapping`**, and panics on overflow
   without it; literals are typed by context (docs/wp7-runtime.md).
 - **An array of records holds them by value** (WP15 §2a,
   [LANGUAGE.md, Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)):

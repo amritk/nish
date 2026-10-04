@@ -785,9 +785,10 @@ so the compiler's own speed is one of the things self-hosting buys.
 Both of the performance questions this section used to leave open have since
 been answered by WP15 §3: `--strict-exports` (internal linkage for non-exported
 functions, which unlocks inlining and specialisation) and `--nsw` are both on
-by default, with `--no-strict-exports` and `--wrapping` as the opt-outs. What
-each is worth on the benchmark suite is still a `bench/` question rather than
-an opinion.
+by default, with `--no-strict-exports` and `--wrapping` as the opt-outs. (Since
+#426 the second answer has changed: signed overflow is checked, `nsw` is kept
+only where proven, and `--nsw` is refused.) What each is worth on the benchmark
+suite is still a `bench/` question rather than an opinion.
 
 ## 6. Rules for this work package
 

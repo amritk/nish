@@ -228,6 +228,11 @@ is what bought that decision, and the -8 % on sieve is why: the table's
 "wrapping" column is now what `--wrapping` produces, not what a default build
 does. `docs/LANGUAGE.md` is normative for the overflow rule.
 
+**And it has flipped again.** Since #426 signed overflow is a checked panic: an
+operation the bounds walk proves fits keeps `nsw`, which is where the sieve's
+counters live, and every other one is `llvm.s*.with.overflow` and a branch to
+`nish_panic_overflow`. `--nsw` is refused; `--wrapping` is deprecated.
+
 ### `dereferenceable(24)` on array parameters and returns
 
 Every `%struct.nish_array*` parameter and return value now carries
@@ -574,7 +579,7 @@ it instead of `objdump -d` says there is no vectorisation in either mode.
 
 ### What i32 costs, for the same honesty
 
-Signed overflow is undefined above 2^31 (`--wrapping` opts out), where f64 is
+Signed overflow panics above 2^31 (`wrappingAdd` and its siblings opt out), where f64 is
 exact to 2^53 and then rounds silently — i32 is not "more exact", it is exact
 over a narrower range with a sharper edge. Fractional literals and direct
 `Math.*` need `f64` and `toF64`. `/` truncates. And the whole differential

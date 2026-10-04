@@ -56,7 +56,7 @@ sentence each:
 | `align 4` / `align 8` on `alloca`, `load`, `store` | The natural alignment of the type, as clang and rustc emit. |
 | `inbounds` on `getelementptr` | The computed address stays inside the object (field or element access on a valid pointer). |
 | `immarg` | The operand must be a constant (the `isvolatile` flag of `llvm.memset`). |
-| `nsw` (flag on `add`/`sub`/`mul`) | On every user-level **signed** integer add/sub/mul by default: signed overflow is undefined, so LLVM may assume it never happens. `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` are the same instructions without it; the deprecated `--wrapping` removes it from the entry package's modules. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
+| `nsw` (flag on `add`/`sub`/`mul`) | On a user-level **signed** integer add/sub/mul the bounds walk has *proven* fits, restating the proof so LLVM may widen and fold on it. Every other signed `+`, `-`, `*`, negation, `++`, `--` and `op=` is checked instead — `llvm.s{add,sub,mul}.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](LANGUAGE.md#semantics-decisions)). `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` are the plain instructions, neither flagged nor checked; the deprecated `--wrapping` makes the entry package's operators plain too. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
 
 `--plain` drops every attribute and alignment hint and produces the bare
 form shown under [Functions](#functions).
@@ -68,11 +68,13 @@ form shown under [Functions](#functions).
 A function is an arrow bound to a module-level `const`
 ([Declarations](LANGUAGE.md#declarations)), and a **concise body** (`=> a + b`)
 is the single `return` it means. Parameters are SSA values (`%a`, `%b`); the
-module is target-neutral (no `target triple`); the attribute group says the
-function is pure and always returns. `add` is not `export`ed, so it is
+module is target-neutral (no `target triple`). `add` is not `export`ed, so it is
 `internal` — that is the default
-([Linkage](#linkage-export-and---no-strict-exports)) — and the `nsw` on its
-`add` is the other default ([Integer overflow](#integer-overflow-nsw-by-default---wrapping-to-opt-out)).
+([Linkage](#linkage-export-and---no-strict-exports)) — and its `+` is checked,
+the other default: nothing bounds `a` and `b`, so the sum goes through
+`llvm.sadd.with.overflow` and a cold branch to `nish_panic_overflow`, which is
+`noreturn`, so the function is `nounwind` but not `willreturn`
+([Integer overflow](#integer-overflow-checked-by-default-nsw-where-proven)).
 
 <!-- cookbook:begin fn-add -->
 ```ts
@@ -6589,8 +6591,10 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 ### `i64` and the explicit conversions
 
-`i64` arithmetic overflows like `i32` — undefined by default, wrapping through
-the `nish:unsafe` `wrapping*` calls (or the deprecated `--wrapping`); `toI32` on an `i64` is a `trunc`, which wraps either way.
+`i64` arithmetic overflows like `i32` — a checked panic by default unless
+proven to fit ([Semantics decisions](LANGUAGE.md#semantics-decisions)),
+wrapping through the `nish:unsafe` `wrapping*` calls (or the deprecated
+`--wrapping`); `toI32` on an `i64` is a `trunc`, which wraps either way.
 
 <!-- cookbook:begin types-i64 -->
 ```ts
@@ -16337,12 +16341,18 @@ attributes #1 = { nounwind willreturn }
 
 ## Optimisation flags
 
-### Integer overflow: `nsw` by default, `--wrapping` to opt out
+### Integer overflow: checked by default, `nsw` where proven
 
 Every user-level **signed** integer `add`, `sub`, and `mul` (binary operators,
-unary minus, `op=`, `++`/`--`) carries `nsw`: signed overflow is undefined
-behaviour, as in C, and LLVM may widen induction variables and fold
-`(a + 1) - 1`. Division and remainder have no `nsw` form, the compiler's own
+unary minus, `op=`, `++`/`--`) that the bounds walk has not proven to fit is
+checked: `llvm.s{add,sub,mul}.with.overflow` computes the result and a flag,
+and the flag branches to the function's cold `ovf.fail` block, which calls
+`nish_panic_overflow` and exits 1 with `attempt to add with overflow`
+([Semantics decisions](LANGUAGE.md#semantics-decisions)). One that is proven
+to fit is the plain instruction with `nsw`, the flag restating the proof
+([Checked signed arithmetic](#checked-signed-arithmetic)); the deprecated
+`--wrapping` makes the entry package's operators plain, neither flagged nor
+checked. Division and remainder have no `nsw` form, the compiler's own
 index and length arithmetic is never flagged, and an **unsigned** type is never
 flagged at all — `u8`..`u64` are defined as wrapping, which is what hashing and
 bit-packing are written against. A negated integer *literal* is no instruction
@@ -16351,7 +16361,7 @@ wrapped to the type's width, so `sub nsw i32 0, -2147483648` — poison, since
 negating `INT_MIN` overflows — is never written
 (`tests/cases/neg_literal_int_min_hex`, `neg_literal_i64_min`,
 `neg_literal_unsigned`). This is the default, so the snippet below is compiled
-with no flags.
+with no flags; nothing bounds `x` and `y`, so all five operations are checked.
 
 <!-- cookbook:begin opt-nsw -->
 ```ts
@@ -16415,7 +16425,7 @@ A wrap the program means is a call: `wrappingAdd`, `wrappingSub` and
 whatever the command line says, so `wrappingAdd(2147483647, 1)` is
 `-2147483648`. It is what a hash, a linear congruential generator or a
 wrap-around counter needs. Beside it, the same step written with operators
-keeps `nsw`:
+is checked, and panics where the hash would have wrapped:
 
 <!-- cookbook:begin unsafe-wrapping -->
 ```ts
@@ -16476,9 +16486,10 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end unsafe-wrapping -->
 
-The deprecated `--wrapping` turns the flag off for every operator of the entry
-package's modules (never a dependency's or a `nish/` module's) and prints
-NL9015; the same source, one flag, and no `nsw` anywhere:
+The deprecated `--wrapping` makes every operator of the entry package's
+modules (never a dependency's or a `nish/` module's) the plain instruction,
+neither flagged nor checked, and prints NL9015; the same source, one flag, and
+no `nsw` or overflow check anywhere:
 
 <!-- cookbook:begin opt-wrapping -->
 Compiled with `--wrapping`.

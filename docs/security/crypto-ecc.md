@@ -101,8 +101,9 @@ ladder step differ only in the ways the fixture's header documents. So the
 disassembly check proves the shape of the code that ships.
 `node tests/run.js ct_asm` passes on x86-64 and aarch64.
 
-**Bounds of the X25519 limbs.** Signed `i64` overflow is undefined behaviour
-here, so `f25519Mul`'s bound was re-derived rather than trusted. Inputs have
+**Bounds of the X25519 limbs.** Signed `i64` overflow was undefined behaviour
+when this was audited and is a checked panic since #426, so either way
+`f25519Mul`'s bound was re-derived rather than trusted. Inputs have
 limbs below 2^27 in magnitude. Each output limb collects ten products, each
 scaled by at most 2 × 19, so each limb is below 380 × 2^54 < 2^62.6. Every
 partial sum is bounded by the same sum of absolute values. `wide[k + 10] × 19`
