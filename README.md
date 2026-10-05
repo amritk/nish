@@ -576,8 +576,9 @@ to are all still free to change.
 | M1 "Programs" | pipeline prep, validator, control flow, strings, modules, CI | done |
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
 | M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw` (since removed)/PGO, differential testing against Node | done |
-| M4 "1.0" | frozen language reference, tagged release | next |
+| M4 "1.0" | frozen language reference, tagged release | not scheduled: the project stays on 0.x until its owner declares 1.0 |
 | M5 "Self-hosting" | `src/`: the compiler, written in Nish, compiling itself | done |
+| M6 "One compiler" | the TypeScript twin deleted; `src/` built by the last release, the seed | done |
 
 Not in the language yet, in the order they are likely to land: optional
 reference counting for objects that must outlive an arena reset, and dynamic

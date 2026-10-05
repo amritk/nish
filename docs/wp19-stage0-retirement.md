@@ -135,22 +135,29 @@ arrow-declared function placed at its parameter list (`FunctionSig.declSite`,
 `parity.yml` then ran the corpus half nightly and opened an issue whenever a
 run was not green.
 
-### A6–A9. Four more ways the gate lied
+### A6. A cached binary
 
-- **A6, a cached binary.** The mode reused a stale stage1, so it could
-  report green against a compiler nobody had rebuilt.
-- **A7, a corpus that grew under the measurement.** `main` added 53 programs
-  in a day. The undeclared count went 37 → 0 → 18, and the 18 included a
-  `CPtr` internal compiler error under `-g`. The cause of the 37 was
-  `nish/<name>` modules named by absolute path. A module's name is now its
-  package-relative specifier (`std/text.ts`), kept apart from its identity in
-  `ModuleUnit.name`.
-- **A8, a surface missing from `VARIATIONS`.** `--json` had never been
-  compared. It hid 180 undeclared differences, and 178 of them were one defect:
-  stage1 wrote an empty stdout for a syntax error.
-- **A9, a directory missing from `CORPUS_DIRS`.** `tests/differential/corpus`
-  (71 programs) had never been compiled by stage1. Two of them found a checker
-  bug in `-1 / z` with `z: f64`, now fixed in `src/expressions.ts`.
+The mode reused a stale stage1, so it could report green against a compiler
+nobody had rebuilt.
+
+### A7. A corpus that grew under the measurement
+
+`main` added 53 programs in a day, and the undeclared count went 37 → 0 → 18;
+the 18 included a `CPtr` internal compiler error under `-g`. The 37 were
+`nish/<name>` modules named by absolute path. A module's name is now its
+package-relative specifier (`std/text.ts`), kept apart from its identity in
+`ModuleUnit.name`.
+
+### A8. A surface missing from `VARIATIONS`
+
+`--json` had never been compared. It hid 180 undeclared differences, 178 of
+them one defect: stage1 wrote an empty stdout for a syntax error.
+
+### A9. A directory missing from `CORPUS_DIRS`
+
+`tests/differential/corpus` (71 programs) had never been compiled by stage1.
+Two of them found a checker bug in `-1 / z` with `z: f64`, now fixed in
+`src/expressions.ts`.
 
 The final figure, measured on merged `main` at `1e95aac` on 2026-09-22, was
 `parity: 15776 runs over 986 programs (2938.5 s); 0 undeclared difference(s),
@@ -214,7 +221,7 @@ stage0 answers, with identical output and exit codes. **Check:**
 `node tests/run.js --parity`: the two `--help` flag sets diffed inside
 `npm test`, and the corpus × `VARIATIONS` cross product nightly, failing on
 any difference no narrow declaration covered. **Closed:** 0 undeclared
-differences over 986 programs on 2026-09-22 (§A6–A9). The mode went with
+differences over 986 programs on 2026-09-22 (§A9). The mode went with
 stage0.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
@@ -344,7 +351,7 @@ on purpose, because only a harness needs them and the harness stays on Node.
 
 | | Milestone | How it closed |
 | --- | --- | --- |
-| **R1** | Parity | G1 green over the whole corpus, 2026-09-22, `1e95aac` (§A6–A9) |
+| **R1** | Parity | G1 green over the whole corpus, 2026-09-22, `1e95aac` (§A9) |
 | **R2** | The seed protocol | `NISH_BOOTSTRAP`, the `seeds` and `bootstrap` jobs, the policy sentence, and darwin seed rows from 0.4.0 (G3, G4) |
 | **R3** | Oracle succession | `nish-cmp`, the fuzzer, the goldens and the wording gap (G2). `reject-oracle.js` holds its parser bucket to `tests/self/parser-refusals.txt` in both directions |
 | **R4** | Distribution | Four native binaries, the launcher and the platform packages (G5) |

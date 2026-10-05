@@ -1,152 +1,81 @@
 # WP29: The thread surface, and what is legal TypeScript
 
-**P1 and P2 are built; P3 is proposed.** §4.1's two forms and §4.2's scope are
-in `std/threads.ts`, and [LANGUAGE.md](LANGUAGE.md#data-parallelism-nishthreads)
+**Status: P1 and P2 are built; P3 is proposed.** P1, `parallelMapInto` and
+`parallelReduce`, shipped in 0.11.0 ([#219](https://github.com/amritk/nish/pull/219),
+with allocating bodies and the cost-sized grain in [#223](https://github.com/amritk/nish/pull/223)).
+P2, `using s = scope()`, shipped in 0.13.0
+([#262](https://github.com/amritk/nish/pull/262)). Both live in
+`std/threads.ts`, and [LANGUAGE.md](LANGUAGE.md#data-parallelism-nishthreads)
 and [its next section](LANGUAGE.md#scoped-tasks-using-s--scope) state their
-rules; the status notes under §4.1 and §4.2 say what was decided on the way
-and §11 what closed. [wp20-threads.md](wp20-threads.md) is the
-plan of record for *whether* and *why* — 1:1 OS threads, data races rejected at
-compile time, T0 and the partitioner built, and the payoff measured at 3.96x on
-four cores (wp20 §8). It deliberately left the surface open: "the stage that decides how much
-real work is expressible, so it is the one to prototype against a real program
-before committing to the surface". This note is that commitment, and the
-question it answers is the narrower one: **given that a Nish program must be
-legal TypeScript, what is the best surface we can actually spell?**
-
-Read wp20 §1 to §4 first. [LANGUAGE.md](LANGUAGE.md) stays normative; where
-they disagree, LANGUAGE.md wins.
+rules. P3, a lock that owns its data (§4.3), is the open stage, and
+[MASTER_PLAN](MASTER_PLAN.md#what-remains) lists it as next.
+[wp20-threads.md](wp20-threads.md) records *whether* and *why*: 1:1 OS
+threads, data races rejected at compile time, and 3.96x on four cores
+(wp20 §8). This note answers the narrower question: **given that a Nish
+program must be legal TypeScript, what is the best surface we can actually
+spell?** LANGUAGE.md is normative, and wins wherever the two disagree.
 
 ---
 
 ## 1. The decision
 
 **Take Rust's shapes and Go's posture, and let the compiler supply what both
-of them had to ask the programmer for.** Five parts:
+of them had to ask the programmer for.**
 
-1. **Data parallelism comes first, not last.** wp20 orders the work T1 spawn →
-   T2 the shareable rule → T3 channels → T4 data parallelism. That order is
-   backwards, and §8 says why in detail: the data-parallel intrinsic is where
-   the entire measured payoff is, and it is also the *only* stage that needs no
-   thread handle, no join proof, no capture analysis and no shareable-argument
-   rule — because the partition belongs to the intrinsic, so disjointness is a
-   property of the call rather than something a checker has to prove.
-2. **The spawn primitive is Rust's scoped thread, spelled `using`.**
-   TypeScript will not give us a new keyword, so every construct here has to be
-   a call — with exactly one exception, which is *lifetime*. `using` (TS 5.2,
-   and legal under `--strict` with no tsconfig change, §5) is the one
-   block-scoped deterministic-cleanup construct the language has, and a scoped
-   thread group is precisely a block-scoped lifetime. Spelling it that way
-   makes "every handle is joined on every path" a property of the construct
-   instead of a whole analysis and a diagnostic that wp20 T1 was going to need.
-3. **A lock owns the data it protects**, as in Rust: `Mutex<T>` holds the `T`
-   and `lock()` returns a guard released by `using`, so there is no unguarded
-   path to the value to forget to take the lock for. Generic classes are
-   monomorphised as of this month, so this is buildable today rather than
-   waiting on WP18.
-4. **Race freedom comes from the fixpoint, not from annotations or a
-   detector.** This is the part that is neither Rust's nor Go's. Rust asks the
-   programmer for `Send`/`Sync` bounds; Go ships a runtime race detector and
-   tolerates the bug until it fires. Nish already proves `readnone` and
-   `readonly` over the whole call graph for other reasons, so a parallel body
-   the fixpoint cannot clear is a compile error that costs the programmer no
-   annotation at all — and wp20 §1 shows we have no *choice* but to reject
-   statically, because a false attribute is a miscompile rather than a missed
-   optimisation.
-5. **Nothing detached, no `Arc`, no M:N, no `select` yet.** §9 has the rule
-   each of those breaks.
-
-The shape of the answer, in one line: **Rayon's ergonomics, Rust's lifetimes,
-Go's one-liner ambition, and no borrow checker — because the whole-program pass
-already knows what a borrow checker is asked to be told.**
+1. **Data parallelism comes first, not last** (§8). The partition belongs to
+   the intrinsic, so disjointness is a property of the call. It needs no
+   handle, no join proof and no capture analysis.
+2. **The spawn primitive is Rust's scoped thread, spelled `using`.** `using` is
+   the one block-scoped cleanup construct TypeScript has, so "every task is
+   joined on every path" becomes a property of the construct instead of an
+   analysis.
+3. **A lock owns the data it protects**, as in Rust. `Mutex<T>` holds the `T`,
+   and `lock()` returns a guard that `using` releases.
+4. **Race freedom comes from the whole-program fixpoint**, not from `Send`/`Sync`
+   annotations or a runtime detector. wp20 §1 explains why rejecting races
+   statically is not optional: a false attribute is a miscompile.
+5. **Nothing detached, no `Arc`, no M:N, no `select` yet** (§9).
 
 ---
 
 ## 2. The constraint that decides everything: no new keywords
 
-A Nish program is a TypeScript program that `tsc --strict` accepts. That is the
-project's whole differentiator and it is absolute here: we cannot add `go f()`,
-we cannot add `spawn { ... }`, and we cannot add `parallel for`. What we *can*
-do is import any name with any declared type, which is far more than it sounds:
-
-| What a concurrency design usually wants | Legal TypeScript? |
-| --- | --- |
-| a new statement keyword (`go`, `spawn`, `parallel for`) | **no** — and this is the hard limit |
-| any imported function, class or generic, with any signature | **yes** — the entire surface is one module |
-| generic classes with methods (`Mutex<T>`, `Channel<T>`) | **yes**, and already monomorphised (`tests/cases/gen_box_struct`) |
-| block-scoped deterministic cleanup | **yes** — `using`, and only `using` |
-| a callback written at the call site | **yes** in TypeScript; not yet in Nish (§6) |
-| a decorator as a marker (`@parallel`) | legal TypeScript, **forbidden by Phase 0**, and it can only decorate a declaration rather than a region |
-| operator overloading, a custom `for` form, a new modifier | **no** |
-
-So the design space is: *calls, generic types, and one lifetime construct.*
-Everything below is built out of exactly those three, and the note's claim is
-that they are enough — with `using` doing more work than its one line suggests,
-because scoped concurrency is a lifetime problem wearing a concurrency hat.
+A Nish program is a TypeScript program that `tsc --strict` accepts. So there is
+no `go f()`, no `spawn { }` and no `parallel for`. What is available is any
+imported function, class or generic with any declared type, plus `using`. A
+decorator such as `@parallel` is legal TypeScript, but Phase 0 forbids it, and
+it can only mark a declaration, not a region. The design space is *calls,
+generic types and one lifetime construct*, and this note's claim is that they
+are enough.
 
 ---
 
 ## 3. What to take from each language, and what to refuse
 
-| From Rust | Take? | Why |
+| From | Taken | Refused |
 | --- | --- | --- |
-| **scoped threads** (`thread::scope`) | **yes, as `using`** | join is guaranteed by the block; children may read what the parent owns; no `Arc`, no lifetime annotations. It is the best fit for a language whose arenas are already block-bracketed (WP6) |
-| **Rayon** (`par_iter`) | **yes, as the first stage** | disjointness by construction; §8 |
-| **`Mutex<T>` owning its data** | **yes** | there is no way to reach the data without the guard, which is the half of the design that survives without a borrow checker |
-| `Send` / `Sync` as traits | **no — as a fixpoint** | wp20 §2: with the whole program in hand, a trait system is not needed for the cases threads care about |
-| `Arc<T>` | **no** | atomic refcounting, and scoped threads remove the need (wp20 §3.4) |
-| the borrow checker | **no** | Nish has escape analysis and a whole-program pass; §7 is what replaces it, and it is weaker on purpose |
-
-| From Go | Take? | Why |
-| --- | --- | --- |
-| **the posture that the common case is one line** | **yes** | this is Go's real contribution and it is a design value, not a primitive. Our one-liner is the data-parallel intrinsic, not a `go` statement |
-| **blocking is fine, so write synchronous code** | **already have it** | every I/O call in the language is synchronous ([wp24-async.md](wp24-async.md) §2), which reads as a limitation until threads exist and then reads as the design |
-| **channels** for pipelines | **yes, but later** | `parallelFor` is the wrong tool for producer/consumer. Needs blocking, and `select` needs more (§9) |
-| `WaitGroup` / `errgroup` | **subsumed** | the `using` scope *is* a wait group whose `Wait()` cannot be forgotten |
-| `go` for cheap spawn | **no** | needs closures and a growable stack; wp20 §1 |
-| the race detector | **no** | wp20 §1: we have already spent the assumption a detector would have to preserve |
+| Rust | scoped threads (as `using`), Rayon's data parallelism (as P1), `Mutex<T>` owning its data | `Send`/`Sync` as traits (a fixpoint instead, wp20 §2), `Arc<T>` (scoped threads remove the need), the borrow checker (§7 replaces it, and is weaker on purpose) |
+| Go | the posture that the common case is one line (here, the data-parallel call), synchronous blocking code ([wp24-async.md](wp24-async.md) §2), channels later, `WaitGroup` subsumed by the scope | `go` for cheap spawn (it needs closures and a growable stack, wp20 §1), the race detector |
 
 ---
 
 ## 4. The surface
 
-All of it is one module, imported by a bare specifier of the kind WP21 S2
-landed — a package name plus an `exports` subpath, resolved through the `nish`
-condition:
-
 ```ts
-import { parallelMapInto, parallelReduce, scope, Mutex } from "nish/threads";
+import { parallelMapInto, parallelReduce, scope } from "nish/threads";
 ```
 
-`nish/threads` rather than a `nish:threads` prefix, because S2 resolves
-*package names* through `node_modules` and an `exports` map and not
-Node-builtin-style prefixes — and `nish` is already the package a user of the
-compiler has installed, so the subpath needs no new resolution machinery at
-all.
+The surface is one module, resolved as a package subpath through the `nish`
+condition. It is `nish/threads` rather than a `nish:` builtin prefix because
+it is ordinary Nish that the compiler recognises.
 
 ### 4.0 Why an import rather than a global like `Arena`
 
-Every builtin the language has today is a global: `console`, `Math`, `Arena`,
-`process`. By [wp26-stdlib.md](wp26-stdlib.md) §2's rule these belong in that
-company — a builtin is for a syscall, a memory layout, or an effect the
-whole-program pass has to see, and threads are all three at once, so they are
-certainly not a `std/` module written in Nish. But the *spelling* is a separate
-question from the implementation, and an import wins it on three counts:
-
-- **`Mutex<T>` and `Channel<T>` are constructible generic types**, not
-  namespaced functions. `declare global { class Mutex<T> { ... } }` is legal
-  TypeScript, but it puts `Mutex`, `Guard`, `Channel` and `ThreadScope` in the
-  global namespace of every program whether or not it spawns anything, where
-  they can collide with a user's own names. `Arena.mark()` has no such problem
-  because `Arena` is one name with methods under it.
-- **A reader can see where they came from.** The import line is the only place
-  a program says "this uses threads", which is worth something in review and
-  costs nothing.
-- **S2 made it free.** Before bare specifiers there was no import spelling that
-  was not a relative path, which is why `Arena` is a global; that constraint is
-  gone.
-
-A program that imports nothing from `nish/threads` is unchanged, which is the
-same property `--threads` has today and the one wp20 §8c wants kept.
+`Mutex<T>` and `Channel<T>` are constructible generic types. As globals they
+would put `Mutex`, `Guard`, `Channel` and `ThreadScope` into every program's
+namespace. The import line also shows a reader where threads are used. A
+program that imports nothing from `nish/threads` is byte-identical to one built
+before the module existed.
 
 ### 4.1 Stage P1 — data parallelism, and nothing else
 
@@ -156,190 +85,70 @@ parallelMapInto(src, dst, square);              // or a named function
 const total = parallelReduce(src, (a, b) => a + b, 0);
 ```
 
-Two forms, and the omission is deliberate: `parallelFor(lo, hi, body)` is in
-§10's declaration file to show it is spellable and is **not** in this stage.
-The reason is the whole soundness argument. `parallelMapInto`'s body is a pure
-`(x: T) => U` and the *intrinsic* performs every store, so there is no way for
-two workers to write the same slot and nothing to check beyond the body's
-purity. A `parallelFor` body writes for itself, and "it writes only `dst[i]`
-for its own `i`" is a comment, not a proof — it is a disjointness obligation
-handed back to the programmer, which is exactly the thing this design is trying
-not to do. So `parallelFor` waits for either a real disjointness analysis or an
-explicitly unchecked framing beside `--unchecked-indexing`, and the first stage
-ships the two forms whose safety is structural.
+**Status: built.** The two forms rest on these arguments:
 
-Why this is the right first stage, and it is not only the measurement:
-
-- **Disjointness is the intrinsic's, not the checker's.** The runtime
-  partitions `[0, len)` and hands each worker a range. Two workers cannot
-  touch the same output slot because the partitioner says so, which is the
-  same argument Rayon's `split_at_mut` makes and it needs no borrow checker to
-  make it.
-- **No closures means no capture analysis.** A body can only reach its
-  parameters, because Nish has no function values and nothing to capture with
-  (wp20 §2 lists this as an asset; this is the sharpest instance of it). The
-  entire "what did the closure capture and who owns it after the spawning
-  frame returns" problem — which costs Rust `move` plus `Send` bounds and
-  costs Go a garbage collector — does not arise.
-- **No handle means no join proof.** There is nothing to store, nothing to
-  leak, and no path on which a join can be forgotten.
-- **A short array must come out as an ordinary loop.** Dividing costs about
-  125 µs for the spawns and joins and 3 ns when it declines to divide
-  ([wp20-threads.md](wp20-threads.md) §8e), so the intrinsic's `grain` has to be
-  chosen such that a region carries on the order of a millisecond of work before
-  it is worth four threads. That is a default the compiler picks, not a knob,
-  and it is the reason `parallelMapInto` over eight elements is not slower than
-  the loop it replaced.
-- **The purity rule is already computed, and it is the only rule.** The body
-  must be one the fixpoint clears as `readnone` or `readonly` — it may read
-  what the parent owns and may write nothing — and
-  stage0's `src/codegen/attributes.ts` computes that today, for other reasons, over the
-  whole call graph. A body it cannot clear is a compile error naming the write.
-  That is the entire race-freedom argument for this stage: no `Send`, no
-  `Sync`, no detector, and no annotation.
-
-**Status: built.** `import { parallelMapInto, parallelReduce } from "nish/threads"`
-compiles, over the function parameter wp23 §6 now provides. What the build
-decided, beyond what is written above:
-
+- **The intrinsic performs every store.** A body is a pure `(x: T) => U`, so two
+  workers cannot write the same slot. `parallelFor(lo, hi, body)` is left out
+  on purpose: its body stores for itself, which hands a disjointness obligation
+  back to the programmer.
+- **"Pure" is a fact of its own.** The fixpoint records a *shared write*
+  (`FunctionFacts.sharedWrite`). That excludes panics, traps and allocation,
+  and names the node or callee that makes the write. `readnone`/`readonly`
+  would be the wrong question, because a bounds check is a write to LLVM. A
+  reachability rule refuses a body that could read `dst` through its argument.
 - **The module is ordinary Nish.** `std/threads.ts` writes both functions as
-  the sequential loop — which is what runs under Node and what `npm run check`
-  types — and the compiler recognises the two templates by module and name.
-  It replaces one call in each instance, the chunk loop over the whole range,
-  with a context block and a call to `nish_parallel_range`
-  (`src/emit-parallel.ts`), so the length check and its message, the reduce's
-  blocking and its combine are the module's code, and the chunk loop keeps its
-  bounds proofs and TBAA. There is no `declare global`, no `Disposable` and no
-  `using` in P1.
-- **"Pure" is a fact of its own.** `readnone`/`readonly` is the wrong
-  question: a bounds check, an integer division and an arena allocation are
-  all writes to LLVM. The fixpoint records a *shared write*
-  (`FunctionFacts.sharedWrite`) that leaves out panics, traps and allocation,
-  and names the node or callee that makes one; the rule judges the function
-  passed as `f`, never the instance, whose own loop writes `dst[i]`.
-- **Purity is not enough, so there is a reachability rule.** A body that only
-  reads can still read `dst` through its argument (`T = Row { cells: f64[] }`
-  with a `f64[]` `dst`). An array of `dst`'s element type reachable from `T` is
-  refused, naming the path.
-- **A body may allocate, and gives it back per element.** The result is a
-  scalar, per §7. A body that allocates gets an arena scope of its own
-  (`scopeParallelBodies` in `src/attributes.ts`) when the escape analysis
-  sees every allocation die and the body leaves `Arena` alone, and is refused
-  otherwise (NL2352, NL2351). The arena is thread-local, so each element marks
-  and releases the arena of the thread it runs on. It compiles with §8a's
-  warning, NL9012 — not NL9011, which the arena-loop rule had taken by then.
-- **The grain is sized from the body.** `2^22` over the estimated cost of `f`, in
-  `[1, 2^22]` (`mapGrain` in `src/parallel.ts`): a static estimate of one
-  element, so a cheap body is divided only past about a million elements and
-  one with a loop far sooner. Up to the grain the map calls its chunk loop
-  directly, which inlines, instead of going through the partitioner. §8a has
-  the calibration. P1 first shipped a constant 2^20.
-- **`--threads` is implied** by importing the module (wp20 §8c.3). It is a
-  soundness requirement rather than a default: allocation is left out of a
-  shared write only because the arena is thread-local. A program that does not
-  import it is byte-identical.
+  the sequential loop that runs under Node. The compiler recognises the two
+  templates by module and name, and replaces the chunk loop with a call to
+  `nish_parallel_range` (`src/emit-parallel.ts`).
+- **A body may allocate, and gives the memory back per element.** It gets an
+  arena scope of its own (`scopeParallelBodies` in `src/attributes.ts`) and the
+  warning NL9012 (§8a). A body that touches `Arena` is refused (NL2351).
+- **The grain is sized from the body**: `2^22` over a static cost estimate
+  (`mapGrain` in `src/parallel.ts`). A map within its grain calls its loop
+  directly. P1 first shipped a constant 2^20.
+- **`--threads` is implied** by importing the module (wp20 §8c.3). This is a
+  soundness requirement: allocation counts as no shared write only because the
+  arena is thread-local.
+- **`parallelReduce` takes an identity and blocks deterministically** (§11), so
+  its answer is the same bits on any core count.
 
 ### 4.2 Stage P2 — the scope, for heterogeneous work
 
 ```ts
 using s = scope();
-s.spawn(indexShard, 0);
-s.spawn(indexShard, 1);
+s.spawn(indexShard, shards, sums, 0);
+s.spawn(indexShard, shards, sums, 1);
 // joined here, on every path, by the block
 ```
 
-`using` is doing three jobs at once, which is why it is worth the one new
-construct:
+**Status: built.** `using` does three jobs. It joins on every path, because the
+compiler emits the join at every exit of the block, so `reject_thread_unjoined`
+and its analysis are not needed. It nests inside WP6's arena bracket. And a
+TypeScript reader already knows what it means. Decisions taken in the build:
 
-1. **Join on every path, by construction.** wp20 T1's rule 2 was "every handle
-   is joined on every path of the frame that spawned it", proved with the same
-   CFG analysis as `reject_missing_return`. With `using`, the compiler emits
-   the join at every exit of the block, so the rule is not proved — it is
-   emitted. That deletes an analysis and the `reject_thread_unjoined`
-   diagnostic, and replaces them with one much simpler rule: **a scope must be
-   introduced by `using`**, because `const s = scope()` would be a scope
-   nobody joins.
-2. **It nests inside the arena bracket that already exists.** WP6 brackets a
-   dynamic extent with `nish_arena_mark` / `release`; a `using` block is the
-   same shape, and the ordering the runtime needs — parent marks, children run
-   in their own arenas, children join, parent releases — falls out of nesting
-   the join inside the bracket rather than being a new invariant to maintain.
-3. **A TypeScript reader already knows what it means.** `using` means
-   "disposed at the end of this block" to anyone who has met the construct,
-   and that is exactly what it means here. No Nish-specific idiom to learn.
-
-The argument must be shareable (wp20 T2), the entry must be a named top-level
-function (free — there is nothing else to pass), and what a worker may hand
-back is §7.
-
-**Status: built.** `using s = scope(); s.spawn(entry, arg, dst, at)` compiles,
-and the same file runs under Node. What the build decided, against the
-defaults the plan proposed where it says so:
-
-- **A task runs when its scope joins, not when it is spawned.** This is the
-  decision the rest follows from, and it is what settles §7's question soundly
-  with no lending rule. `spawn` files the task (`nish_scope_spawn` copies its
-  argument, destination and slot into a payload the runtime keeps), and the
-  join (`nish_scope_join`) runs every task of the scope at once — the first on
-  the calling thread, the others one thread each — waits for them, and then
-  stores each answer on the calling thread in spawn order. While the tasks run
-  the parent is inside the join and runs nothing, and the tasks are held to
-  P1's rule — no shared write, no arena control — so nothing writes memory any
-  task can read. A parent that kept running beside its tasks would need either
-  wp20 T2's list or §7's "write through a pointer the parent lent it", and
-  neither can be proved locally: a `readonly T[]` promises only that *this*
-  reference does not store, so the parent can write the same array through
-  another one while a task reads it, and a lent pointer is exclusive only if
-  nothing else aliases it. So T2's list is not the rule, there is no
-  "argument is not shareable" refusal, and any argument may be handed to a task.
-- **A worker hands its result back as its return value, into a destination
-  the parent names:** `spawn(entry, arg, dst, at)` with `entry` of type
-  `(a: A) => R`, storing `dst[at] = entry(arg)` at the join. That is the
-  `parallelMapInto`-style disjoint destination the plan asked for, with the
-  store made by the thread that owns `dst` rather than by the worker, so two
-  tasks naming one slot are not a race either: the later spawn's answer wins,
-  as it would in sequence. A `(a: A) => void` entry, the plan's default, could
-  hand nothing back under P1's rule and was dropped. `R` is a number, a
-  `boolean` or an enum, per §7.
-- **`using` is accepted only for `scope()`**, and a scope only from `using`; a
-  scope is only ever the receiver of a `spawn` statement, which is what keeps
-  it in its block, and the join is emitted at the block's end, at a `return`
-  (before the value is computed), and at a `break` or `continue` that leaves
-  it — inside every arena scope, which releases after it. `using` is parsed as
-  a flag on the existing variable declaration, as a contextual keyword, and
-  `[Symbol.dispose]` is the one computed member name the parser reads, legal
-  only in `nish/threads`. The whole-program pass treats a spawn's parameters
-  as escaping, so an argument is never stack-promoted or given back by a
-  loop's pass before the join reads it.
-- **The entry is a named top-level function**: an arrow, which a data-parallel
-  call takes, is refused for a task, whose name is what a debugger shows for
-  its thread. A `Result` small enough to travel as its parts is refused as an
-  argument.
-- **Nesting.** A task cannot spawn, and cannot call `parallelMapInto` or
-  `parallelReduce`: each is a shared write (a scope's join stores; a map writes
-  `dst`; both reach the runtime), which P1's rule refuses. So `nish_par_depth`
-  never has to decide either case for a program that compiled; the runtime still
-  sets it on a task's thread and runs a task inline where it is non-zero, as it
-  does a nested region. A scope may open inside another scope's block and joins
-  at its own block's end.
-- **Under Node**, `scope()` answers an object whose `spawn` runs its task and
-  stores the answer at once, and whose `[Symbol.dispose]` does nothing. The two
-  print the same because the checker refuses what could tell them apart: a
-  destination is a `const` bound to a fresh array that is never handed on, and
-  between a scope's first `spawn` and the end of its block its thread may not
-  read a destination nor write memory a task could read — a store is allowed
-  only into a never-handed-on fresh literal's own slots, and a call only if it
-  writes through no pointer it is handed (`PointerParamFacts.writesThrough`),
-  which lets a call that builds and fills its own array through while it
-  refuses one that writes its argument ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
-  `using` needs `--js-explicit-resource-management` on Node 22, whose flagged
-  `using` never calls `[Symbol.dispose]` — which this design does not need —
-  and is native from Node 24. `runtime/nish.d.ts` declares the disposable
-  protocol (§5), so a program needs no `lib` change.
-- **Measured** on the four-core machine of §8a by `examples/tasks.ts`, four
-  unlike tasks sized to about 0.5 s each on one core: **1.81 s run in sequence,
-  0.547 s as four tasks of one scope, 3.30x** (minimum of five runs), bounded by
-  the longest task.
+- **A task runs when its scope joins, not when it is spawned.** `spawn` files
+  the task (`nish_scope_spawn`). The join (`nish_scope_join`) runs every task
+  at once, the first on the calling thread. It waits for them all, then stores
+  the answers on the calling thread in spawn order. The parent runs nothing
+  while tasks run, and tasks are held to P1's rule. So there is no
+  shareable-argument rule (wp20 T2) and no lending rule (§7): any argument may
+  be handed over.
+- **A task answers through a destination the parent names:**
+  `spawn(entry, arg, dst, at)` stores `dst[at] = entry(arg)` at the join. `R`
+  is a number, a `boolean` or an enum.
+- **`using` takes only `scope()`**, and a scope comes only from `using`. Since
+  [#420](https://github.com/amritk/nish/pull/420), `using` also takes the
+  builtin `arena()`. The join is emitted at the block's end, at a `return`,
+  and at a `break` or `continue` that leaves the block, inside every arena
+  scope. `[Symbol.dispose]` may be declared only in `nish/threads`.
+- **The entry is a named top-level function**, because a debugger shows its
+  name for the thread. A task cannot spawn or call P1's forms, because both are
+  shared writes.
+- **Under Node**, `spawn` runs at once. The checker refuses anything that could
+  tell the two orders apart ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
+- **Measured** by `examples/tasks.ts`, four unlike tasks of about 0.5 s each on
+  the four-core machine of §8a: **1.81 s in sequence, 0.547 s as one scope,
+  3.30x**.
 
 ### 4.3 Stage P3 — a lock that owns its data
 
@@ -351,323 +160,156 @@ const hits = new Mutex<Counter>(new Counter());
 }
 ```
 
-Rust's design, unchanged, and the reason to copy it rather than ship a bare
-`lock()`/`unlock()` pair is that a bare pair has an unguarded path to the data
-and this one does not: the only way to name the `Counter` is through a guard,
-and the guard is released by the block. `using` again, for the same three
-reasons.
+Rust's design, unchanged. The reason to copy it rather than ship a bare
+`lock()`/`unlock()` pair is that a bare pair leaves an unguarded path to the
+data, and this design does not. The only way to name the `Counter` is through
+a guard, and the block releases the guard. `using` is used again, for the same
+three reasons as in §4.2.
 
-`Channel<T>` belongs in this stage and is the one piece that genuinely needs
-design work rather than transcription — see §9.
+`Channel<T>` belongs in this stage. It is the one piece that needs design work
+rather than transcription; see §9 and §11.
 
 ---
 
 ## 5. The legality report, tested
 
-The claim that this is legal TypeScript is the load-bearing one, so it was run
-rather than asserted. The declaration file and a program using every construct
-above are in §10; `tsc --strict` with `"lib": ["ES2022"]` and no other
-configuration accepts both, **exit 0**.
+The whole surface, `Mutex` and `parallelFor` included, was put through
+`tsc --strict` with `"lib": ["ES2022"]` before anything was built (§10), and
+exited 0. Two costs came out of that run, and both have since been paid:
 
-Two things that cost something, both worth saying out loud:
+- **`using` needs the disposable protocol.** `runtime/nish.d.ts` declares
+  `SymbolConstructor.dispose` and `Disposable`, so a program needs no
+  `"ESNext.Disposable"` in its `lib`. Those declarations use `unique symbol`,
+  which the language refuses in a program. They are a declaration file the
+  compiler never compiles, like the `Arena` and `console` surfaces.
+- **`using` used to reach the validator's `var` rule.** It is now parsed as a
+  contextual keyword and judged by its own rule.
 
-**`using` needs the disposable protocol, and we can ship it ourselves.** With
-`"lib": ["ES2022"]` alone, `[Symbol.dispose]` is `error TS2550: Property
-'dispose' does not exist on type 'SymbolConstructor'` and `Disposable` is
-`error TS2318`. The obvious fix is to make consumers add `"ESNext.Disposable"`
-to their `lib`, which works and costs them a line. The better fix, which is
-what §10 does, is to declare both in our own `.d.ts`:
-
-```ts
-declare global {
-  interface SymbolConstructor { readonly dispose: unique symbol }
-  interface Disposable { [Symbol.dispose](): void }
-}
-```
-
-That makes the surface self-contained — a program that imports `nish/threads`
-needs no tsconfig change at all — and it is the difference between a feature
-and a feature with a setup step.
-
-**Our own declaration file breaks two Phase 0 rules.** `declare global` and
-`unique symbol` are both forbidden constructs with rejections of their own, and
-the file above uses both. That is not a contradiction — it is a declaration the
-compiler special-cases and never a program it compiles, exactly as the builtin
-`Arena` and `console` surfaces are — but a note that did not mention it would be
-hiding the one place where the shipped surface is spelled in language the
-language rejects. If it grates, the alternative is the `lib` line.
-
-**And one thing that is already almost right.** `using` today reaches the
-validator's `var` rule and is rejected with `` `var` is forbidden; use `let` or
-`const` ``. If `using` is adopted, that message has to split — the rule is
-right to reject it *now* and would be wrong to reject it then, and a reader who
-writes `using` and is told about `var` learns nothing.
-
-Worth noting what TypeScript enforces for us: `using x = notDisposable` is
-`error TS2850` before Nish ever sees it. The `--strict` run is a real part of
-the checking here, not a formality.
+`using x = notDisposable` is `TS2850` before Nish ever sees the program, so
+the `--strict` run does part of the checking.
 
 ---
 
-## 6. The one thing the surface needs that does not exist
+## 6. The one thing the surface needed that did not exist
 
-Every parallel form above takes a body, and a body is a function passed as an
-argument — which is `Unsupported type `(n: i32) => i32`` today, because there
-are no function values and no function type in the type table.
-
-This is **not** a request to admit function values. It is
-[wp23-language-surface.md](wp23-language-surface.md) §6's *compile-time
-function parameter*: the callee is written at the call site or named directly,
-so the checker knows exactly which function it is and monomorphises the
-intrinsic against it. The call that comes out is direct, and
-[wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 measured what
-that costs: **nothing**. The same spike measured what the *other* kind costs —
-a callee the checker cannot name — at 1.26x for the call and up to 8.76x for
-the escape proof it forfeits, which is the argument for making sure the
-intrinsic only ever takes the first kind.
-
-So the dependency is: wp23 §6 for a statically known callee, and it is a
-prerequisite for P1 rather than a nice-to-have. Nothing else on this page needs
-a language feature that does not exist.
-
-**That prerequisite is scheduled with P1.** [wp23](wp23-language-surface.md)
-§6 left it *not scheduled* until a second real program asked, and named this
-section as the first. [MASTER_PLAN](MASTER_PLAN.md#what-remains) makes P1
-the next item, which is the decision to build the parameter with it, for a
-callee the checker can name and no other kind. What must not happen is P1
-being built against the *other* kind of callee: WP28 §7.4 measured a callee the checker cannot name at 1.26x for the
-call and up to 8.76x for the escape proof it forfeits, and an intrinsic that
-accepted one would spend the whole margin this page exists to buy.
+Every parallel form takes a body, which is a function passed as an argument.
+That is [wp23-language-surface.md](wp23-language-surface.md) §6's *compile-time
+function parameter*: a callee named at the call or written there as an arrow,
+monomorphised per callee, with a direct call in the IR. **It landed with P1**
+(0.11.0, [#213](https://github.com/amritk/nish/pull/213)), for a callee the
+checker can name and no other kind. The constraint stays. WP28 §7.4 measured a
+callee the checker cannot name at 1.26x for the call and up to 8.76x for the
+escape proof it forfeits. An intrinsic that accepted one would spend the whole
+margin this surface exists to buy.
 
 ---
 
 ## 7. What replaces the borrow checker, and what a worker may hand back
 
-Rust's scoped threads are sound because the borrow checker proves the parent's
-data outlives the scope. Nish has no borrow checker, and what it has instead is
-narrower and, for this purpose, enough — because the arena is thread-local
-(T0), which turns the lifetime question into a *locational* one:
+The arena is thread-local (wp20 T0), so the lifetime question becomes a
+question of *where* memory lives. A worker's allocations are freed when its
+thread exits, so a pointer into them dangles once the join returns. This is
+the same shape as WP15 §7's `NL2290`/`NL2291` interior-pointer rule. Hence:
 
-> **A worker may write through a pointer the parent lent it, and may not
-> allocate anything the parent will read.**
-
-That single rule covers both stages. It is sound because a worker's allocations
-live in the worker's own arena, which is freed when the thread exits, so a
-pointer into it is dangling the moment the join returns — the same shape as
-WP15 §7's `NL2290`/`NL2291` interior-pointer rule, and checkable the same way.
-Its consequences, in the order they bite:
-
-- **A worker's result type is a scalar** in the first version. `parallelMapInto`
-  with a `U` that is a string or a class is rejected with a message that names
-  the type, because the value would be in the wrong arena.
-- **Results come back through memory the parent owns**, which is what
-  `parallelMapInto`'s `dst` is and what makes the restriction above survivable
-  rather than crippling: the numeric kernels where wp20 §8 measured 3.96x are
-  exactly this shape.
-- **Lifting the restriction is a copy at the join**, into the parent's arena,
-  for a type whose size is known at the boundary. That is a later stage and it
-  is where a `Channel<T>` of a non-scalar lands too, so the two want designing
+- **A worker's result is a scalar** (a number, a `boolean` or an enum).
+  `parallelMapInto` with a `string` or class `U` is refused, with a message
+  that names the type.
+- **Results come back through memory the parent owns**: `dst` for P1 and the
+  destination array for P2.
+- **Lifting the restriction means a copy at the join** into the parent's arena,
+  for a type whose size is known at the boundary. That is a later stage. It is
+  also where a `Channel<T>` of a non-scalar lands, so the two should be designed
   together.
-- **The fourth escape flow finally has an owner.** wp20 §3.3 and wp24 §10 both
-  named "escapes to another thread" as a class nobody was building. It is this
-  rule, and P2 is where it lands.
+
+The plan's original rule was "a worker may write through a pointer the parent
+lent it". It was not needed: P2 runs tasks only while the parent waits (§4.2),
+and P1's intrinsic does every store itself.
 
 ---
 
-## 8. Why data parallelism should be built before spawn
+## 8. Why data parallelism was built before spawn
 
-wp20's staging puts `parallelFor` last, as the payoff that the three stages
-before it earn. Reversing that is this note's most actionable recommendation,
-and there are four arguments, of which only the first is the measurement:
+wp20 staged `parallelFor` last. This note reversed that order, for four reasons:
 
-1. **The payoff is there and nowhere else.** wp20 §8: 3.96x on four cores for
-   a compute kernel and 3.97x for an allocating one that recycles its arena,
-   through the runtime partitioner that is now built. Nothing in T1 to T3
-   produces a number at all — they produce the *ability* to produce one.
-2. **It is the smallest stage, not the largest.** It needs no handle type, no
-   join analysis, no `reject_thread_unjoined`, no `reject_thread_handle_escapes`,
-   and no capture rule. What it needs is the runtime partitioner — **which has
-   landed**, as `nish_parallel_range` in `runtime/runtime-parallel.c` (wp20
-   §8d) — plus wp23 §6's known callee and the purity check the fixpoint already
-   performs. T1 and T2 are strictly more machinery for strictly less measured
-   benefit.
-3. **It answers wp20 §4 T2's own request.** That section asks for the shareable
-   rule to be "prototype[d] against a real program before committing to the
-   surface". A `parallelMapInto` over a benchmark kernel *is* that program, and
-   it exercises the rule in its narrowest form — one lent buffer, scalar
-   results — where getting it wrong is cheap to correct.
-4. **It is the form a user reaches for first.** Which is Go's lesson, arriving
-   from the other direction: if the common case is not one line, the feature
-   reads as expert-only.
+1. **The measured payoff is there**: 3.96x on a compute kernel (wp20 §8).
+2. **It is the smallest stage.** It needs the partitioner, which already
+   existed (wp20 §8d), plus a known callee and the purity fact.
+3. **It is the narrowest form of the sharing rule**: one buffer and scalar
+   results, so a mistake is cheap to correct.
+4. **It is the form a user reaches for first**, which is Go's lesson.
 
-The revised order, then: **P1 data parallelism, P2 the scope, P3 locks and
-channels** — which is wp20's T4, T1, T3, with T2's shareable rule split across
-P1 (its narrow form, one lent buffer) and P2 (its general form).
+The order became **P1 data parallelism, P2 the scope, P3 locks and channels**.
+In wp20's numbering that is T4, T1, T3.
 
 ### 8a. One thing the compiler can do that neither Rust nor Go can
 
-wp20 §8 measured that arena discipline in a parallel body is worth about **3x**
-of wall clock and three orders of magnitude of peak memory — 1.37 GiB against
-1.8 MB for the same source — independently of how many cores the region gets.
-That is a fact about a program that this compiler can *see*: the
-fixpoint knows whether the body allocates, and the `performance` diagnostic
-class already exists (WP15 item 2, the `NL9xxx` band, `--json`,
-`--no-warn-performance`).
-
-So the surface should ship with a warning that neither Rayon nor a `go`
-statement can give you. Note which case it is for: a body whose *result* is
-allocated is already a compile error under §7, so what is left — and what a
-real program does — is a body that returns a scalar and allocates a temporary
-on the way there:
-
-```
-warning[NL9xxx]: the body of this `parallelMapInto` allocates per element
-  --> src/index.ts:212:3
-   = `scoreLine` returns i32 but allocates 1 string per call: about 3x of wall
-     clock and 780x of peak resident memory against the same body with the
-     arena recycled (measured, wp20 §8a)
-   = rewrite: compute over the bytes in place, or `Arena.reset()` per chunk
-     inside the body
-```
-
-It costs nothing to compute, it is the single most useful thing that can be
-said about a parallel region before it is run, and it exists only because the
-whole-program pass and the warning class were both built for other reasons.
-
-**As built (NL9012).** The compiler went one step past the warning: rather than
-telling the program to recycle the arena, it recycles it. A body that
-allocates gets an arena scope of its own, so each element marks and releases
-the arena of the thread it runs on, and the 780x of peak memory is not there to
-warn about. What is left to say is that every element still pays for the
-allocation and the release, and that is what the warning says, one line long,
-at the call:
+The fixpoint knows whether a parallel body allocates, and wp20 §8a measured
+what an undisciplined body costs: about 3x of wall clock and 1.37 GiB against
+1.8 MB of peak memory. The plan was a warning. The build went one step further
+and gives an allocating body an arena scope per element, so the peak memory
+problem disappears. What remains is the per-element cost, and NL9012 reports
+it at the call:
 
 ```
 main.ts:23:3: performance: the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both
 ```
 
-`Arena.reset()` inside the body is no longer the advice, and is refused
-(NL2351): each thread has an arena of its own, and a body that moves it
-could rewind past the mark its element scope is about to release to. The
-warning honours `--no-warn-performance` and `--json` like every other.
-
-**Measured**, on the four-core machine `docs/BENCHMARKS.md` names, by
-`node bench/run.mjs` (the kernels are `bench/par_*.ts`, each one binary run as
-the loop and as the map):
+It honours `--no-warn-performance` and `--json`. Measured by `node bench/run.mjs`
+on `bench/par_*.ts`, minimum of five runs:
 
 | kernel | loop | `parallelMapInto` | speedup |
 | --- | ---: | ---: | ---: |
 | `par-compute`: 64 square roots per element, 2^21 elements | 780 ms | 210 ms | **3.71x** |
-| `par-nbody`: 1024 bodies, 16 steps, 3n probes per step | 171 ms | 49.0 ms | 3.49x |
+| `par-nbody`: 1024 bodies, 16 steps | 171 ms | 49.0 ms | 3.49x |
 | `par-alloc`: a string built and summed per element, 2^22 elements | 167 ms | 74.9 ms | 2.23x |
 | `par-short`: an 8-element map, 2^20 calls | 54.7 ms | 56.1 ms | 0.97x |
 
-Minimum of five runs after one warm-up. The compute kernel clears the 3x the
-stage was held to. The allocating kernel's peak memory is 33,956 KB as the loop
-and 34,596 KB as the map, which is its two arrays of 2^22 `i32` and nothing
-else: the arena is recycled per element on every thread, where wp20 §8a's
-unrecycled body held 1.37 GiB. It divides worse than the compute kernel
-because each element is a bump, a format and a mark and release through the
-thread-local arena rather than arithmetic.
+`par-alloc` peaks at 34,596 KB as the map, which is its two arrays and nothing
+else. Over 40 interleaved runs, `par-short` measured 50.9 ms against the loop's
+50.7 by minimum: it is no slower than the loop it replaced.
 
-The short map is the one where "no slower than the loop" is the claim, and
-five runs cannot resolve 2.6%, so it was run 40 more times, interleaved with
-the loop: 50.9 ms against 50.7 by minimum, 57.9 against 56.3 by median. Up to
-its grain a map calls its chunk loop directly, which LLVM inlines, so what is
-left is the per-call length check and two header reads the loop hoists out of
-its caller; measured on a one-operation body (`(x * 3 + 1) % 1000003`) that
-difference is about 3 ns per call, and on the four-operation body the kernel
-uses it is within the noise. Before this stage, the same call cost an arena
-mark and release (the wrapper's panic message was its own allocation) and an
-indirect call through `nish_parallel_range`.
-
-**The grain's calibration.** The estimate counts one unit per operation, 32
-per allocation, 4 per call, and a loop body as many times as its literal bound
-says, or 64 times when the bound is data. Against measured time per element
-the unit runs from 0.07 ns (the allocating kernel, whose loop over a string's
-bytes runs about 7 times and is estimated at 64) to 0.18 ns (the compute
-kernel, 372 ns per element estimated at 2,060 units) and 1.6 ns (n-body,
-whose inner loop over 1024 bodies is estimated at 64 trips). The target was
-then set by the cheapest body there is, `(x) => x * 3 + 1` (5 units), at
-exactly two chunks: with a target of 2^20 it lost 12% to the loop at 262,144
-elements (60.8 ms against 54.1 over 400 maps), and with 2^22 it wins 1.54x at
-1,677,722 (223.6 ms against 345.0). The default of 64 trips is what divides
-n-body four ways: at 16, its 3,072 probes were two chunks.
+**The grain's calibration.** The estimate counts one unit per operation, 32 per
+allocation and 4 per call. A loop counts its literal trip count, or 64 trips
+when the bound is data. Measured time per unit runs from 0.07 ns to 1.6 ns
+across the kernels. The target was set by the cheapest body,
+`(x) => x * 3 + 1`, at exactly two chunks. With a target of 2^20 it lost 12%
+to the loop at 262,144 elements. With 2^22 it wins 1.54x at 1,677,722. The
+default of 64 trips is what divides n-body four ways.
+[BENCHMARKS.md](BENCHMARKS.md) carries the current numbers.
 
 ---
 
 ## 9. Declined, with the rule each one breaks
 
-- **A `go`-style detached spawn.** Needs a closure to be useful and an owner
-  for the spawned work's memory after the spawning frame returns. wp20 §3.4
-  defers detached threads and §1 refuses the growable stack that makes them
-  cheap.
-- **`Arc<T>`.** Atomic refcounting, for a need scoped threads remove. If
-  detached threads ever arrive it arrives with them, not before.
-- **`select` over channels.** A multi-way blocking receive has no closure-free
-  spelling that is also legal TypeScript and also not a combinatorial family of
-  `select2`, `select3`, ... Discriminated unions would give it one and they are
-  deferred (WP15 item 8). Channels can ship without it; `select` should wait
-  for a program that needs it.
-- **A thread pool a program can configure.** A knob before a measurement. The
-  partitioner picks `nish_cpu_count()` and caps at 64, and the scaling wp20 §8
-  measured — within a few per cent of linear to four cores on all three
-  kernels — is the measurement that would have to stop holding before a knob is
-  worth its documentation.
-- **`Atomic<T>` as the first escape hatch.** wp20 §6's argument stands: an
-  escape hatch should be designed after the rule it escapes has met a real
-  program. `AtomicI32` is in §10's declaration file to prove it is *spellable*,
-  not to propose it for P1.
-- **Decorators (`@parallel`) as the spelling.** Legal TypeScript, forbidden by
-  Phase 0, and they decorate declarations rather than regions — so they could
-  not mark the one thing that needs marking.
-- **A `Thread` handle stored in a field, an array or a variable.** wp20 T1's
-  rule, kept: it is what makes the `using` block's join a local fact instead of
-  a whole-program one.
-- **Async/await as the spelling for any of this.** wp28 §6 is where that
-  question lives, it is sequenced behind this note by decision, and nothing
-  here is designed to accommodate it beyond what §4.2 already is.
+- **A `go`-style detached spawn.** It needs a closure, and an owner for the
+  memory after the spawning frame returns. wp20 §3.4 defers detached threads.
+- **`Arc<T>`.** Atomic reference counting, for a need that scoped threads
+  remove. It arrives with detached threads or not at all.
+- **`select` over channels.** It has no closure-free spelling that is also
+  legal TypeScript and is not a `select2`, `select3` family. Channels can ship
+  without it, and `select` waits for a program that needs it.
+- **A configurable thread pool, or `scope(n)`.** That would be a knob before a
+  measurement. The partitioner uses `nish_cpu_count()` and caps at 64 chunks.
+- **`Atomic<T>` as the first escape hatch.** An escape hatch should be
+  designed after the rule it escapes has met real programs (wp20 §6).
+- **Decorators (`@parallel`).** Phase 0 forbids them, and they mark
+  declarations, not regions.
+- **A task handle stored in a field, an array or a variable.** A scope is only
+  ever the receiver of `spawn`, which keeps the join local.
+- **Async/await as the spelling.** [wp28-compatibility-mode.md](wp28-compatibility-mode.md)
+  §6 owns that question, sequenced behind this note.
 
 ---
 
-## 10. Appendix: the surface as a declaration file, and the program that typechecks it
+## 10. Appendix: the surface as a declaration file
 
-Both files below were run through `tsc --strict` with `"lib": ["ES2022"]`,
-`"module": "Node16"` and nothing else, and both come out clean. The
-declaration file is what `nish/threads` would ship; the program uses every
-construct this note proposes. The program imports it as `./threads.js` rather
-than `nish/threads` only so that the `tsc` invocation below is self-contained —
-resolution is WP21's and is not what this appendix is checking.
+The whole candidate surface was typechecked with
+`tsc --noEmit --strict --lib ES2022 --module Node16`, together with a program
+that used every construct, and exited 0. The P1 and P2 halves now exist as real
+code in `std/threads.ts` and `runtime/nish.d.ts`. What remains of the candidate
+is P3's half:
 
 ```ts
-// `nish/threads`, the whole candidate surface. Self-contained: the disposable
-// protocol is declared here rather than required from the consumer's `lib`, so
-// a program using threads needs no tsconfig change.
-declare global {
-  interface SymbolConstructor {
-    readonly dispose: unique symbol;
-  }
-  interface Disposable {
-    [Symbol.dispose](): void;
-  }
-}
-
-/** Data parallelism: the partition is the runtime's, so disjointness is a
- *  property of the call rather than a proof obligation. */
-export declare function parallelMapInto<T, U>(src: readonly T[], dst: U[], f: (x: T) => U): void;
-export declare function parallelReduce<T>(src: readonly T[], f: (acc: T, x: T) => T, identity: T): T;
-/** Spellable, and deliberately not part of stage P1: a body that stores for
- *  itself hands the disjointness obligation back to the programmer (§4.1). */
-export declare function parallelFor(lo: number, hi: number, body: (i: number) => void): void;
-
-/** Structured spawn: Rust's scoped threads, joined by the block rather than by
- *  a proof that every path joined. */
-export declare class ThreadScope {
-  spawn<A>(entry: (arg: A) => void, arg: A): void;
-  [Symbol.dispose](): void;
-}
-export declare function scope(): ThreadScope;
-
 /** The lock owns what it protects, so there is no unguarded path to the data. */
 export declare class Guard<T> {
   readonly value: T;
@@ -678,6 +320,7 @@ export declare class Mutex<T> {
   lock(): Guard<T>;
 }
 
+/** Spellable, and not proposed (§9). */
 export declare class AtomicI32 {
   constructor(value: number);
   add(delta: number): number;
@@ -685,96 +328,29 @@ export declare class AtomicI32 {
 }
 ```
 
-```ts
-import { parallelMapInto, parallelReduce, parallelFor, scope, Mutex, AtomicI32 } from "./threads.js";
-
-class Counter {
-  n: number = 0;
-}
-
-const square = (x: number): number => x * x;
-
-function shard(id: number): void {
-  const local = id * 2;
-  sink = sink + local;
-}
-
-let sink = 0;
-
-export function main(): number {
-  // 1. data parallelism, body written at the call site
-  const src: readonly number[] = [1, 2, 3, 4];
-  const dst: number[] = [0, 0, 0, 0];
-  parallelMapInto(src, dst, (x) => x * 3);
-  // ... or by name
-  parallelMapInto(src, dst, square);
-  const total = parallelReduce(src, (a, b) => a + b, 0);
-  parallelFor(0, 100, (i) => {
-    sink = sink + i;
-  });
-
-  // 2. structured spawn, joined by the block
-  {
-    using s = scope();
-    s.spawn(shard, 1);
-    s.spawn(shard, 2);
-  }
-
-  // 3. a lock that owns its data, unlocked by the block
-  const m = new Mutex<Counter>(new Counter());
-  for (let i = 0; i < 4; i++) {
-    using g = m.lock();
-    g.value.n = g.value.n + 1;
-  }
-
-  const a = new AtomicI32(0);
-  a.add(1);
-  return total + a.load() + dst[0] + sink;
-}
-```
-
-```bash
-tsc --noEmit --strict --lib ES2022 --module Node16 --moduleResolution Node16 \
-    threads.d.ts prog.ts
-# exit 0
-```
-
-Note what the program is *not*: it is not a Nish program yet. `parallelMapInto`
-needs §6's known callee, `using` needs the rule split §5 describes, and none of
-the intrinsics exist. What the exit code establishes is the thing this note had
-to establish before designing anything — that the surface is sayable in the
-language Nish is a subset of.
+The full appendix, including `parallelFor` and the typechecked program, is this
+file at commit `c3529665`.
 
 ## 11. Open
 
-- ~~**Whether `parallelReduce` needs an identity argument or an initial value.**~~
-  **Closed by P1: an identity, and a deterministic blocking.** `src` is split
-  into `min(64, ceil(n / 2^20))` blocks, each folded from the identity, and the
-  block results combined left to right; `std/threads.ts` does the same blocking
-  on one thread, so the answer is the same bits on any core count, compiled or
-  under Node. The rule for a plainly non-associative body is to refuse it when
-  it can be read: an arrow whose whole body is `-`, `/`, `%`, `**` or a shift
-  on its two parameters, and a recognised operator given a literal that is not
-  its identity. A named function is opaque, and LANGUAGE.md says the obligation
-  is its author's.
-- ~~**Whether `scope()` should take the thread count.**~~ **Closed by P2: it
-  does not.** Each spawn is one task and each task one thread, the first on the
-  calling thread; a scope with more tasks than cores leaves the scheduler to
-  share them. §9 declines the knob until a measurement asks for it.
-- **What a `Channel<T>` of a non-scalar costs**, which is §7's copy-at-join
-  question and the reason channels and non-scalar results should be designed in
-  one go rather than separately.
-- ~~**Whether `using` should be admitted in strict at all, or only alongside the
-  threads surface.**~~ **Closed by P2 with the narrow answer**: `using` takes
-  only `scope()` from `nish/threads`, and `[Symbol.dispose]` may be declared
-  only there. The original question, kept for the record: This has no deadline: on 0.x any minor may change the
-  language, and after 1.0 the rule at the head of LANGUAGE.md still lets a
-  minor turn a refusal into an acceptance. That also settles which way to err:
-  the narrow answer — `using` is accepted only for the types the threads module
-  declares — can be widened later without a break, and the wide one could only
-  be narrowed by one. It still makes `using` a keyword that works on two
-  types, which is an odd thing to write down.
-- **Whether the partitioner belongs in the runtime or in emitted IR.** T0's
-  arena went into the C, but a partition loop is code the optimiser would like
-  to see. It is the kind of question wp7's budget rule (§2 of MASTER_PLAN)
-  decides, and nobody has costed it.
+- **How P3 fits P2's rule.** A task is held to P1's no-shared-write rule (§4.2),
+  and taking a lock and writing through its guard is a shared write. P3 has to
+  decide how a guard's write is admitted, and `using` has to take a guard as a
+  third disposable beside `scope()` and `arena()`.
+- **What a `Channel<T>` of a non-scalar costs.** This is §7's copy-at-join
+  question, and channels and non-scalar results should be designed together.
+- **Whether the partitioner belongs in the runtime or in emitted IR.** A
+  partition loop is code the optimiser would like to see, and nobody has costed
+  the move.
+- ~~Identity or initial value for `parallelReduce`.~~ **Closed by P1: an
+  identity.** `src` is split into `min(64, ceil(n / 2^20))` blocks. Each block
+  is folded from the identity, and the block results are combined left to
+  right, the same way on one thread and under Node. An arrow that is plainly
+  non-associative is refused when it can be read. For a named function, the
+  obligation is its author's.
+- ~~Whether `scope()` takes a thread count.~~ **Closed by P2: it does not.**
+  Each task is one thread.
+- ~~Whether `using` is admitted only beside the threads surface.~~ **Closed by
+  P2 with the narrow answer.** `using` takes only the values whose disposal the
+  language defines. The narrow answer can be widened without a break, and the
+  wide one could only be narrowed by one.
