@@ -188,6 +188,8 @@ Several files list every `std/` module and every lane, and each stage must add i
 | [std/README.md](../../std/README.md) | its module's row in the `nish/net` section |
 | [docs/wp34-hosting-cs.md](../../docs/wp34-hosting-cs.md) | its lane's State cell in §5 and its row in §5a |
 | [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) | an entry only if it ports code (`.claude/licensing.md`) |
+| [src/std-modules.ts](../../src/std-modules.ts) | its new module's name in the list of `std/` modules (`npm test` checks the list is complete) — a data string, the only `src/` edit any stage makes |
+| [tests/nish-cmp.js](../../tests/nish-cmp.js) | its `declareMoved` entries for the IR its module moves against the last release, or CI's `nish-cmp` job fails |
 | `tests/self/goldens/*` | regenerated with `node tests/self/goldens.js --update`, never edited by hand |
 
 ## H1 server
