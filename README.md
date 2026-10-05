@@ -433,7 +433,7 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,696 bytes. The runtime is five translation units
+`hello.ts` with `--link` is 4,712 bytes. The runtime is five translation units
 with a measured ceiling each, so that the core does not grow every time the
 language reaches further into the operating system, and section GC drops
 whatever a program does not call: `runtime.c` is the 3,606 bytes every program

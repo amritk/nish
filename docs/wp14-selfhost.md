@@ -250,8 +250,8 @@ In addition to `docs/MASTER_PLAN.md` §7.
 4. **The runtime budget still holds.** Lower inline rather than growing
    `runtime.c` past `docs/MASTER_PLAN.md` §2.
 5. **Nish-0 does not grow quietly.** Adding a construct to the subset in §2 is
-   an edit to this file (and `.claude/selfhost.md`) and a line in
-   `CHANGELOG.md`, because every addition is something the compiler must then
+   an edit to this file (and `.claude/selfhost.md`), and its commit says so
+   (the commit message is the changelog entry), because every addition is something the compiler must then
    implement to compile itself.
 6. **A new construct is lowered for speed, and the lowering is checked** by
    reading the assembly when the choice is not obvious.

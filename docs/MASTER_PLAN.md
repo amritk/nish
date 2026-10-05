@@ -240,7 +240,7 @@ is its plan. [README.md](README.md) indexes them.
 | 29 | The thread surface | P1 and P2 built; P3 proposed | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
-| 32 | `Map` and `Set` | landed in 0.11.0 | [wp32](wp32-map.md) |
+| 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |
 | 33 | The round trip to TypeScript | R0–R2 built, R5's exact half built; R3, R4 open | [wp33](wp33-round-trip.md) |
 | 34 | Hosting cs: the network stack | in progress | [wp34](wp34-hosting-cs.md) |
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
@@ -350,9 +350,10 @@ for after 1.0 is written at the head of [LANGUAGE.md](LANGUAGE.md) so that it
 is not invented under pressure: a minor may add a rule or turn a refusal into
 an acceptance, and withdrawing or narrowing an accepted construct, or changing
 what one means, needs a major. The changelog generator never computes 1.0.0 on
-its own; when 1.0 is declared it is chosen with a `Release-As:` trailer
-([#200](https://github.com/amritk/nish/pull/200) adds the trailer and is parked
-until then), followed by the Release PR, which a human merges.
+its own; when 1.0 is declared it is chosen with a `Release-As:` trailer,
+which `scripts/changelog-gen.mjs` has honoured since
+[#200](https://github.com/amritk/nish/pull/200), followed by the Release PR,
+which a human merges.
 
 Breaking changes taken while a break is still a minor: the reserved name
 `integer` (0.10.0, [#201](https://github.com/amritk/nish/pull/201)), which let

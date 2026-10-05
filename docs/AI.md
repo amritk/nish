@@ -1717,7 +1717,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 11. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
-   `CHANGELOG.md` line.
+   conventional commit message, which is its changelog entry.
 
 Every `ts nish:ok` and `ts nish:err` block on this page is compiled by
 `npm test`, so an example that has gone stale is a failing test rather than a

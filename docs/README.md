@@ -59,7 +59,7 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp31-ranged-integers.md](wp31-ranged-integers.md) | Landed in 0.13.0. `integer<Lo, Hi>`: the type, the proofs, the host boundary and DWARF. |
 | [wp32-map.md](wp32-map.md) | Landed, one item open. The global `Map` and `Set` written in Nish: the layout prototypes, the decisions, and the measurement against Node. |
 | [wp33-round-trip.md](wp33-round-trip.md) | In progress. TypeScript into Nish and back out: the portability class, the typed-array rows and `nish --fix` built; the runtime split and `--emit ts` next. |
-| [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3 and QUIC built; HTTP/1.1, HTTP/2, HTTP/3 and WebTransport next. |
+| [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3 (T1, T2) and QUIC packets and connections (Q1, Q2) built; QUIC Q3–Q4, the HTTP/1.1 and HTTP/2 servers, HTTP/3 and WebTransport next. |
 | [wp35-capabilities.md](wp35-capabilities.md) | Landed. The capability report: what every function, module and package can reach, with a witness chain. |
 | [wp36-capability-policy.md](wp36-capability-policy.md) | Landed. Refusing at compile time what `--allow`, `--deny` or the root manifest does not grant, and the bridge to an OS sandbox. |
 
