@@ -966,8 +966,6 @@ export class QuicConnection {
   eventHead: i32 = 0
   /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
-  /** How long the ACK opening the payload `buildPayload` last wrote is: 0 for none. */
-  ackLength: i32 = 0
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
@@ -2373,11 +2371,10 @@ export class QuicConnection {
    * PATH_RESPONSE and stream data, and for a probe with nothing else to
    * carry a PING. Empty when nothing is due. What it carries is written to
    * the space's staging row, and `stagedEliciting` says whether anything
-   * elicits an acknowledgement; `ackLength` is the ACK's length.
+   * elicits an acknowledgement.
    */
   buildPayload(space: QuicConnSpace, room: i32, elicit: boolean): u8[] {
     let out: u8[] = []
-    this.ackLength = 0
     space.clearStaged()
     if (space.received.ackPending) {
       // The ACK opens the payload, so its array becomes the payload; one too
@@ -2386,7 +2383,6 @@ export class QuicConnection {
       if (space.received.pushAck(ack, QUIC_CONN_NONE)) {
         if (toI32(ack.length) <= room) {
           out = ack
-          this.ackLength = toI32(ack.length)
         } else {
           space.received.ackPending = true
         }
