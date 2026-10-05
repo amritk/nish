@@ -45,10 +45,13 @@ have since closed:
 
 `result` arrived with WP17 at 2.49x and went to 1.00x once a `Result` got a
 private ABI with one slot per arm ([wp17-result-abi.md](wp17-result-abi.md)
-§4). On the run recorded in BENCHMARKS.md, every program was within 1.10x of
-Rust. fib's 1.15x on one run was spread: interleaved re-runs gave 261 ms
-against Rust's 262, and fib retires the fewest instructions of the four
-languages. On a shared VM the medians sit 15–20 % above the minima, and the
+§4). On the 0.11.0 run, every program was within 1.10x of Rust (fib's 1.15x
+on one run was spread: interleaved re-runs gave 261 ms against Rust's 262).
+That stopped being true with #426, which made signed overflow a checked panic:
+on the 0.16.0 run in BENCHMARKS.md (2026-10-05) fib is 1.68x Rust by default
+and at parity under `--wrapping` (564 ms against 338), because every `+` in its
+recursion now carries an overflow check the bounds walk cannot prove away.
+The other six are within 1.10x. On a shared VM the medians sit 15–20 % above the minima, and the
 ratios move by about that much between back-to-back runs. **A row near 1.10x
 needs several runs, or cachegrind, before it means anything.** Nish binaries
 are 5.5–21 KB, against 14.5 KB for C and 350–380 KB for Rust, and Nish is
