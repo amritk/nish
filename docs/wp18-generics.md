@@ -608,8 +608,8 @@ stopped compiling.
   given, and never without one. The `.d.ts` declares instantiations only.
 - **A constraint is satisfied by a declaration, not a name** (#161). Arguments
   are compared by `StructInfo` identity, and an implementer by
-  `implementsDeclaration`, which is exact only while NL2079-style refusal of an
-  imported interface stands (§16 item 5).
+  `implementsDeclaration`, which is exact only while NL2079 keeps refusing an
+  imported interface (§16 item 5).
 - **The fuzzer emits generics** (#163), comparing the seed with HEAD. In the
   measurement, 300 of 300 programs agreed and 747 of 1,000 seeds contained
   generics.
@@ -675,7 +675,7 @@ would bring it back.
    (`docs/wp19-stage0-retirement.md` §6, item 6). Until then, the fuzzer's
    seed-versus-HEAD IR comparison (§15.7) and the golden round trips cover
    generics. *Trigger:* a stage1-typed rewriter.
-5. **Implementing an imported interface** (refused: `` `Shape` is not a
+5. **Implementing an imported interface** (NL2079, `` `Shape` is not a
    declared interface ``). Both §15.7's constraint check and the implicit
    class-to-interface conversion (#173) rely on that refusal. Both fail closed,
    so lifting the refusal alone would reject a class that implements an
