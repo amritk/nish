@@ -1,114 +1,77 @@
 # WP17: `Result` across the ABI
 
-[wp16-results.md](wp16-results.md) §2 shipped `Result<T, E>` as a pointer to
-an arena struct and said the reason was the C ABI rather than the design. It
-left three things for this package, all of them recorded in the source:
-
-1. return small `Result`s by value, so an inlined ok path costs no allocation;
-2. let a `Result` cross the host boundary (`--emit-header`, `--emit-dts`,
-   `--emit-napi`);
-3. emit DWARF members for a `Result`, so `-g` describes the fields.
-
-(2) and (3) needed no ABI decision. (1) did, and the rest of this note is it.
-The normative rules are in [LANGUAGE.md](LANGUAGE.md#result-and-error-handling);
-the IR is in [IR_COOKBOOK.md](IR_COOKBOOK.md).
+**Status: complete** (#8, with the private per-arm ABI of §4 following under
+WP15). [wp16-results.md](wp16-results.md) §2 shipped `Result<T, E>` as a
+pointer to an arena struct and left three things: return small `Result`s by
+value; let a `Result` cross the host boundary (`--emit-header`, `--emit-dts`,
+`--emit-napi`); and describe its fields in DWARF. The last two needed no ABI
+decision; the first did, and this note records it. The normative rules are in
+[LANGUAGE.md](LANGUAGE.md#result-and-error-handling) and the IR in
+[IR_COOKBOOK.md](IR_COOKBOOK.md).
 
 Tests: `tests/cases/res_by_value`, `res_by_value_propagate`,
 `res_by_value_payloads`, `res_by_value_param`, `res_export`, `dbg_result`,
 `reject_result_by_value_unchecked`, the "WP17: a `Result` across the host
-boundary" block in `tests/run.js`, `bench/result`, and the S3/S4 oracles and
-the bootstrap in `tests/self/`.
+boundary" block in `tests/run.js`, and `bench/result`.
 
 ## 1. The decision
 
 **A `Result` whose two payloads are each a scalar of at most four bytes
-travels by value, packed into a single `i64`** — returned *and* passed.
-Everything else keeps WP16's pointer. That is option (a) of the three the
-package was framed with, and the threshold is not a tuning knob: eight bytes
-is the largest value the six supported targets agree about.
+travels by value, packed into a single `i64`** — returned and passed. Every
+other `Result` keeps WP16's pointer. Eight bytes is not a tuning knob: it is
+the largest value the six supported targets agree about (§2).
 
 ```
 bits  0..31   the discriminant: 1 for Ok, 0 for Err
 bits 32..63   the live arm's payload, zero-extended (f32 through a bitcast)
 ```
 
-The dead arm is not represented at all. That is the whole difference from the
-in-memory `{ i1 ok, T value, E error }`, and it is what makes it fit:
-`Result<i32, i32>` is twelve bytes as a struct and eight as this word.
+The dead arm is not represented, which is what makes `Result<i32, i32>` —
+twelve bytes as a struct — fit. The tag gets 32 bits rather than one byte so
+the payload's offset does not depend on its alignment: one shift amount in the
+emitter and one union offset in the header. Every supported data layout is
+little-endian, so bit 0 of the word is byte 0 of the struct.
 
-The tag gets a full 32 bits rather than the one byte it needs so that the
-payload's offset does not depend on the payload's alignment. Otherwise
-`Result<boolean, boolean>` would put its payload at byte 1 and
-`Result<i32, i32>` at byte 4: two shift amounts in the emitter and two union
-offsets in the header, for one language rule. Every supported data layout is
-little-endian (all six begin `e-`), so bit 0 of the word is byte 0 of the
-struct and the encoding is exact rather than approximately right.
-
-`resultByValue` in stage0's `src/types.ts` (and `TypeTable.resultByValue` in
-`src/types.ts`) is the one place that decides, and the payload predicate is
-the whole of it: `void`,
-`boolean`, `u8`, `u16`, `i32`, `u32`, `f32`. `i64`, `u64` and `f64` are four
-bytes too many; a `string`, an array, a class, a nullable or a nested
-`Result` is a pointer, and a pointer payload would need the whole word.
+`TypeTable.resultByValue` in `src/types.ts` is the one place that decides. The
+payloads that qualify are `void`, `boolean`, `u8`, `u16`, `i32`, `u32` and
+`f32`; `i64`, `u64` and `f64` are too wide, and a string, array, class,
+nullable or nested `Result` is a pointer that would need the whole word.
 
 ## 2. Why not the other two
 
 ### (b) A real by-value aggregate
 
-LLVM does not lower an aggregate to a platform's calling convention — the
-frontend does, per target. That is not an opinion; it is measurable in one
-command. `struct R { bool ok; int32_t value; int32_t error; }` returned from
-`clang --target=<triple> -O2 -S -emit-llvm`:
+LLVM does not lower an aggregate to a platform's calling convention; the
+frontend does, per target. `struct R { bool ok; int32_t value; int32_t error; }`
+returned from `clang --target=<triple> -O2 -S -emit-llvm`:
 
 | triple | what clang returns |
 | --- | --- |
-| `x86_64-unknown-linux-gnu` | `define { i64, i32 } @agg_12(i32)` |
-| `aarch64-unknown-linux-gnu` | `define [2 x i64] @agg_12(i32)` |
-| `x86_64-apple-darwin` | `define { i64, i32 } @agg_12(i32)` |
-| `aarch64-apple-darwin` | `define [2 x i64] @agg_12(i32)` |
-| `wasm32-unknown-unknown` | `define void @agg_12(ptr sret(%struct.R), i32)` |
-| `wasm32-wasi` | `define void @agg_12(ptr sret(%struct.R), i32)` |
+| `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin` | `define { i64, i32 } @agg_12(i32)` |
+| `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` | `define [2 x i64] @agg_12(i32)` |
+| `wasm32-unknown-unknown`, `wasm32-wasi` | `define void @agg_12(ptr sret(%struct.R), i32)` |
 
-Three different signatures for one C type, and the same split in argument
-position — `int32_t describe(struct R)` is `i32 @describe(i64)` on the four
-native triples and `i32 @describe(ptr byval(%struct.R))` on both wasm32 ones.
-stage0's `src/codegen/target.ts` emits
-target-neutral IR by default — no `target triple`, no `target datalayout` —
-precisely so one `.ll` links against a C host built for any of them, and
-`--target` exists to pin the *layout*, not to change what the module means.
-Choosing (b) would mean by-value returns only under `--target`, a `.ll` that
-is no longer portable between hosts, and a header generator that has to say
-so. It buys nothing over (a) that (a) does not already have.
+Three signatures for one C type, and the same split in argument position. The
+compiler emits target-neutral IR by default so one `.ll` links against a host
+built for any target; (b) would have meant by-value returns only under
+`--target`, and a `.ll` no longer portable between hosts.
 
 ### (c) `sret`
 
-Uniform — every target above agrees, because `sret` is what they fall back to
-— and it gives up the win the package exists for. The value goes through
-memory on every call that is not inlined away: the caller reserves a stack
-slot and passes its address in an argument register, the callee stores the
-fields, the caller loads them back. §4 measures it: 1.5× slower than the
-packed word on the same program. It also costs an argument register and makes
-the function's return type `void`, so a `Result`-returning call can never
-occupy a return register at all.
+Uniform, because every target falls back to it, but the value goes through
+memory on every call that is not inlined: the caller reserves a slot, the
+callee stores, the caller loads. It also costs an argument register and makes
+the return type `void`. §4 measures it at about half the win of (a).
 
 ### And why not a wider scalar
 
-`i128` was the obvious way to raise the threshold to a 16-byte `Result`
-(`Result<f64, i32>`, `Result<i32, string>`). It is not uniform either:
-
-| triple | `unsigned __int128 f(int32_t)` |
-| --- | --- |
-| `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin` | `define { i64, i64 } @pack_128(i32)` |
-| `aarch64-*`, `wasm32-*` | `define i128 @pack_128(i32)` |
-
-`i64` is the only width where all six agree, and that is where the four-byte
-payload rule comes from. It is a fact about the targets, not a guess about
-what is worth packing.
+`i128` would have admitted 16-byte `Result`s, but x86-64 returns it as
+`{ i64, i64 }` while aarch64 and wasm32 return `i128`. `i64` is the only width
+where all six agree, which is where the four-byte payload rule comes from.
 
 ## 3. Why the C header can still describe it
 
-The point of (a) is that the header does not have to explain a private
-convention. `--emit-header` writes the encoding as a C type:
+`--emit-header` writes the encoding as a C type:
 
 ```c
 typedef struct nish_result_i32_i32_word {
@@ -119,39 +82,34 @@ NISH_RESULT_ASSERT(sizeof(nish_result_i32_i32_word) == 8, "...");
 ```
 
 and clang, told to return that type, produces the declaration the module
-already defines — on every native target:
+already defines, on every native target:
 
 ```
-$ clang --target=<triple> -O2 -S -emit-llvm host.c   # host.c calls half()
 x86_64-unknown-linux-gnu    declare i64 @half(i32 noundef)
 aarch64-unknown-linux-gnu   declare i64 @half(i32 noundef)
 x86_64-apple-darwin         declare i64 @half(i32 noundef)
 aarch64-apple-darwin        declare i64 @half(i32 noundef)
 ```
 
-So the header is not a description of the ABI that has to be kept true; it is
-the same declaration. The WP17 block of `tests/run.js` proves it end to end: a
-`-Wall -Wextra -Werror -pedantic` C driver includes the generated header and
-calls `half` (by value), `openFile` (an arena pointer, because its error arm
-carries a struct) and `describe` (a `Result` *parameter*, which is a pointer
-whatever its size) against the compiled `tests/cases/res_export.ts`.
-`NISH_RESULT_ASSERT` — `_Static_assert` where the host compiler has it — pins
-`sizeof(...) == 8` in the header itself, so a compiler that disagreed would
-fail to build rather than mis-read a register.
+So the header is not a description of the ABI that must be kept true; it is
+the same declaration, in both directions. The WP17 block of `tests/run.js`
+compiles a `-Wall -Wextra -Werror -pedantic` C driver against the header for
+`tests/cases/res_export.ts` and calls `half` and `checkPort` (by value),
+`describe` (a by-value parameter) and `openFile` (an arena pointer, because its
+error arm is a struct). `NISH_RESULT_ASSERT` is `_Static_assert` where the host
+has it, so a compiler that disagreed fails the build rather than misreading a
+register.
 
-wasm32 is the exception: there an eight-byte C struct is returned through
-`sret` while a `uint64_t` is returned as a value, so a *C* host compiled for
-wasm32 would have to read the word as a `uint64_t` rather than through the
-typedef. That costs nothing in practice, because the wasm boundary this
-compiler generates is JavaScript and not C: `--emit-dts` declares
-`{ ok: true; value } | { ok: false; error }` and the generated loader unpacks
-the bigint the export returns. `--emit-napi` does the same for a native
-addon, handing JS the object it already models.
+wasm32 is the exception — an eight-byte C struct goes through `sret` there —
+and it costs nothing in practice, because the wasm boundary the compiler
+generates is JavaScript: `--emit-dts` declares
+`{ ok: true; value } | { ok: false; error }` and the loader unpacks the bigint.
+`--emit-napi` hands a native addon's caller the same object.
 
 ## 4. What it is worth, measured
 
-§5 of [wp14-selfhost.md](wp14-selfhost.md) says performance is the tiebreaker
-and that "faster" means measured. Everything below is one program:
+Performance is the tiebreaker, measured
+([wp14-selfhost.md](wp14-selfhost.md) §5). The program:
 
 ```ts
 function half(n: i32): Result<i32, i32> {
@@ -165,306 +123,91 @@ function use(n: i32): i32 {
 }
 ```
 
-compiled by two real compilers — the one at the commit before this package,
-and this one — with `scripts/build.sh --profile speed` (`clang -O3`, LTO).
-Nothing below is hand-written IR.
+**The assembly**, with `half` inlined into `use` (`--profile speed`): on
+x86-64 the arena pointer cost 47 instructions, 8 blocks and 3 calls (the arena
+scope, the bump, the cold grow); the packed word is 14 instructions in one
+block with no calls and no memory. aarch64 went from 50 instructions to 10.
+SROA sees through the entry-block object the caller unpacks into, which is
+why the rest of WP16's lowering could stay as it was.
 
-### The assembly
+**The clock**, `use(i)` over 2 × 10^8 iterations on x86-64: 0.50 s as an arena
+pointer, **0.14 s** packed — **3.5× faster**, same checksum.
 
-`half` is inlined into `use`, which is the case the package is named for.
-**x86-64, before:**
-
-```asm
-;; WP16: a pointer to an arena struct. The bump survives inlining, because the
-;; arena is a global and LLVM may not delete a write to it — and the caller
-;; carries the WP6 arena scope for the Result it now owns.
-use:  pushq  %r14
-      pushq  %rbx
-      pushq  %rax
-      movl   %edi, %ebx
-      callq  nish_arena_mark@PLT       ; the scope
-      testb  $1, %bl
-      jne    .LBB1_1
-      sarl   %ebx
-      movq   nish_arena@GOTPCREL(%rip), %rdx
-      movq   8(%rdx), %rcx            ; arena.off
-      leaq   16(%rcx), %rsi
-      cmpq   16(%rdx), %rsi           ; arena.cap
-      ja     .LBB1_8                  ; -> callq nish_arena_grow
-      movq   %rsi, 8(%rdx)            ; publish the new bump
-      addq   (%rdx), %rcx
-.LBB1_9:
-      movb   $1, (%rcx)               ; store ok
-      movl   %ebx, 4(%rcx)            ; store value
-      jmp    .LBB1_7
-      ...                             ; 47 instructions, 8 blocks, 3 calls
-```
-
-**x86-64, after:**
-
-```asm
-;; WP17: packed into i64. No memory, no frame, no call.
-use:  movq   %rdi, %rax
-      shlq   $32, %rax
-      movl   %edi, %ecx
-      sarl   %ecx
-      shlq   $32, %rcx
-      incq   %rcx
-      testb  $1, %dil
-      cmovneq %rax, %rcx
-      movq   %rcx, %rax
-      shrq   $32, %rax
-      xorl   %edx, %edx
-      testb  %cl, %cl
-      cmovel %edx, %eax
-      retq                            ; 14 instructions, 1 block, no calls
-```
-
-**aarch64, before** (50 instructions, 8 blocks, 3 calls — `bl nish_arena_mark`,
-`bl nish_arena_release`, and the cold `bl nish_arena_grow`) **and after:**
-
-```asm
-use:  asr  w9, w0, #1
-      mov  w8, #1
-      lsl  x10, x0, #32
-      tst  w0, #0x1
-      orr  x8, x8, x9, lsl #32        ; pack
-      csel x8, x8, x10, eq
-      lsr  x9, x8, #32                ; unpack
-      tst  x8, #0x1
-      csel w0, wzr, w9, eq
-      ret                             ; 10 instructions, 1 block, no calls
-```
-
-The entry-block `alloca` the caller unpacks into is gone in both: SROA sees
-straight through it, which is the whole reason the lowering can leave the rest
-of WP16 alone and still cost nothing.
-
-### The clock
-
-`use(i)` in a 2 × 10^8 iteration loop, both binaries built with
-`--profile speed`, three runs each on x86-64:
-
-| | time | checksum |
-| --- | --- | --- |
-| WP16, `Result` as an arena pointer | 0.505 / 0.499 / 0.499 s | 887459712 |
-| **WP17, packed `i64`** | **0.142 / 0.147 / 0.143 s** | 887459712 |
-
-**3.5× faster**, same answer. That is the inlined path, which is the one the
-package set out to make free.
-
-### And what `sret` would have got
-
-The compiler does not implement (c), so this last comparison is three
-hand-written `.ll` files that mimic exactly what each lowering emits, with
-`half` marked `noinline` so the call boundary is real (2 × 10^8 calls, x86-64,
-`clang -O3`, three runs; the arena stub is `runtime.c`'s bump and the pointer
-version carries the caller's `nish_arena_mark` / `nish_arena_release`):
-
-| lowering | time | vs. WP16 |
-| --- | --- | --- |
-| (b/WP16) pointer to an arena struct | 1018 / 1033 / 1058 ms | — |
-| (c) `sret` | 713 / 727 / 724 ms | 1.43× faster |
-| **(a) packed `i64`** | **480 / 480 / 521 ms** | **2.09× faster** |
-
-Identical checksums. So the win survives contact with the ABI even where the
-call is not inlined away, and `sret` — the only other uniform option — gets
+**Against `sret`**, with `half` `noinline` so the call boundary is real
+(hand-written `.ll` mimicking each lowering, since the compiler implements
+only one): arena pointer about 1,030 ms, `sret` about 720 ms (1.43×), packed
+`i64` about 480 ms (**2.09×**). The win survives a real call, and `sret` gets
 about half of it.
 
 ### Where the packing still costs something
 
-`bench/result` is the same program as a benchmark, against C and Rust twins
-that use the shape each language would use anyway — a two-word C struct (the
-one `--emit-header` declares) and Rust's own `Result<i32, i32>`. Nish was
-**1.46x behind C and 2.6x behind Rust** there when this was written, and the
-reason is not the encoding but *how the two halves reach the optimiser*:
+`bench/result` against C and Rust twins, when WP17 landed:
 
-| the same program, written three ways | time |
+| the same program, written four ways | time |
 | --- | --- |
 | Rust `Result<i32, i32>` (two SSA values throughout) | 251 ms |
 | C, an eight-byte struct clang coerces at the boundary | 444 ms |
 | C, the word assembled by hand with `<< 32` and `\|` | 653 ms |
-| **Nish** | **650 ms** |
+| **Nish** (packed word) | **650 ms** |
 
-The third row is the important one: C written the way `nish` emits is
-*exactly* our number, so this is not a code-generation defect on our side.
-What separates the first two rows from the last two is whether the ok arm and
-the error arm are ever separate SSA values. When they are, instcombine folds
-`odd ? n : n >> 1` into a single variable shift; when they are halves of one
-64-bit word, the `select` happens on the word and the simplification never
-fires. Neither loop unrolling nor the checked-division blocks explain any of
-it — both were ruled out by measurement.
-
-**The obvious fix was tried and did not work.** Emitting the pack the way
-clang does — store the tag and the payload into a two-word alloca, `load i64`
-out of it, and the reverse on the way in — produces byte-identical assembly
-to the `shl`/`or` form in *our* IR, on this program. So the shorter IR stays.
-What would actually close the gap is not respelling the word but not forming
-it at all inside a module: give an internal (non-exported) function a private
-ABI of two scalars, the way rustc's `ScalarPair` does, and pack only where a
-host can see. That needs `--strict-exports` to be more than advisory and is
-the natural next step rather than something to bolt on here.
+C written the way `nish` emits matched Nish exactly, so this was the shape and
+not the code generation. What separates the fast rows from the slow ones is
+whether the ok arm and the error arm are ever separate SSA values. Respelling
+the pack the way clang does (through a two-word alloca) gave byte-identical
+assembly, so the shorter `shl`/`or` IR stayed (`src/emit-result.ts`).
 
 ### That step has since been taken (WP15), in two halves
 
-A non-exported function now takes and answers a by-value `Result` as
-**the tag and one slot per arm**, `{ i1, i32, i32 }`, rather than the packed
-word — on exactly the condition that gives it `internal` linkage. It arrived
-as two changes, and reading them in order is the whole lesson of this section.
+A non-exported function takes and answers a by-value `Result` in a private
+shape, on exactly the condition that gives it `internal` linkage: `privateAbi`
+in `src/emit-result.ts` is `strictExports && !exported`, so
+`--no-strict-exports` turns it off with the linkage, a cross-module call is
+always packed, and the interop generators, which see exported functions only,
+are untouched.
 
-**Half one: the tag leaves the word.** `{ i1, i32 }` — rustc's `ScalarPair` —
-took `bench/result` from **650 ms to 464 ms**, against C's 444: the row above
-that reads "C, an eight-byte struct clang coerces at the boundary" is the one
-we then sat next to, and the 1.46x behind C became 1.04x. That change moved no
-packing code. `packArm`, `packObject` and `unpackResult` still built and read
-the same `i64`; the pair was made from that word at the call boundary and
-taken apart again on the other side. LLVM folded the round trip away
-completely, and a hand-written two-scalar lowering of this benchmark measured
-**467 ms against 464 ms** — the same, within noise.
+- **Half one: the tag leaves the word**, `{ i1, i32 }` (rustc's `ScalarPair`).
+  `bench/result` went from 650 ms to **464 ms**, level with C's 444, and no
+  further.
+- **Half two: one slot per arm**, `{ i1, i32, i32 }` (#39). With one payload
+  slot, `half`'s two returns meet in a `phi(n, n >> 1)` that instcombine folds
+  into a *variable* shift the enclosing `select` cannot undo; patching that one
+  instruction to a constant shift took the loop from 472 ms to 256 ms. With a
+  slot per arm the dead slot is `undef`, the `phi` disappears and the shift is
+  constant. `bench/result` went from 1.84× behind Rust `-O3` to **1.00×**, and
+  left the WP9 gap table. `armsForArm`, `armsForObject` and `unpackArms` build
+  that shape; `packArm`, `packObject` and `unpackResult` still serve every
+  packed boundary.
 
-**Half two: the two arms stop sharing a slot.** 464 ms was C's number and not
-Rust's 253, and the four-way table above says why in a sentence it was easy to
-read as being only about the word: *what separates the fast columns from the
-slow ones is whether the ok arm and the error arm are ever separate SSA
-values.* One payload slot means they are not. `half`'s two `return`s put `n`
-and `n / 2` in the same `i32`, so once it is inlined the value the ok path
-reads is `phi(n, n >> 1)` — and instcombine folds that to a *variable* shift:
-
-```llvm
-  %2 = and i32 %0, 1                      ; odd?
-  %3 = xor i32 %2, 1
-  %spec.select1.i = lshr i32 %1, %3       ; n >> (1 - odd)
-  %4 = select i1 %ok, i32 %spec.select1.i, i32 65535
-```
-
-The `select` cannot undo it. Nothing in LLVM propagates "on this arm `odd` is
-0" into a shift amount, so the loop carries a shift whose count is a data
-dependency, three instructions to compute and discard on the arm that never
-uses it. That is the whole remaining gap, and one edit proves it: patching
-exactly that instruction to `lshr i32 %1, 1` in the optimised `.ll` and
-changing nothing else takes the benchmark from 472 ms to 256 ms (minimum of
-15 interleaved runs) — Rust's 277 ms, from a one-word patch.
-
-The fix is not to fight the fold but to remove the `phi`. With one slot per
-arm the dead slot is `undef`, `phi(undef, n >> 1)` is `n >> 1`, and the shift
-is constant again:
-
-```llvm
-  %4 = lshr exact i32 %1, 1
-  %5 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %4, 1
-```
-```asm
-.LBB0_1:                     ; 9 instructions; the shift count is a constant
-      leal   1(%r15,%r14), %ecx
-      movzwl %cx, %edx
-      shrl   %edx
-      testb  $1, %cl
-      cmovnel %eax, %edx
-      addl   %r14d, %edx
-      movzwl %dx, %r14d
-      incl   %r15d
-      cmpl   $199999999, %r15d
-      jb     .LBB0_1
-```
-
-The program this package is named for is now **exactly level with Rust and
-1.9x ahead of its own C twin**: 218 / 263 ms against Rust's 218 / 263 and C's
-405 / 485 (minimum / median) in [BENCHMARKS.md](BENCHMARKS.md). `bench/result`
-goes from **1.84x behind Rust `-O3` to 1.00x**, and leaves the WP9 gap table.
-
-The same program written five ways, all in one batch on the machine in that
-report's header — 25 runs interleaved, so the VM's drift falls on every column
-alike:
-
-| | min | median |
-| --- | ---: | ---: |
-| C, a three-member struct clang coerces at the boundary | 169 ms | 208 ms |
-| Rust `Result<i32, i32>` | 218 ms | 275 ms |
-| **Nish, one slot per arm** | **220 ms** | **271 ms** |
-| C, an eight-byte struct clang coerces at the boundary | 398 ms | 496 ms |
-| Nish, tag split out but one payload slot | 401 ms | 498 ms |
-
-The first row is a check on the diagnosis rather than a target: it is
-`result.c` with `ok`, `value` and `error` as three separate members, which is
-the C spelling of what this change does, and clang reaches the same constant
-shift from it. The last two rows are the two spellings of one shared payload
-slot, and they are the same program at the same speed — which is what said the
-gap was the shape and not the code generation.
-
-**This half did move the packing code, and it had to.** `armsForArm`,
-`armsForObject` and `unpackArms` build and read the arms directly rather than
-routing through a word with only one slot to route through. Half one's "the
-packing code did not move" was true and was not the point: the round trip
-through the word was free, and the *shape* it round-tripped through was not.
-`packArm`, `packObject` and `unpackResult` are untouched and still serve every
-packed boundary.
-
-**The condition is the linkage condition, and must stay that way.** The
-private shape is safe only because no host can name the symbol, so
-`privateResultAbi` is `strictExports && !exported` — the same test that writes
-`internal` — and `--no-strict-exports` turns it off everywhere along with the
-linkage it mirrors. An imported function is exported by definition, so a
-cross-module call is always packed and the two modules agree without
-consulting each other. `--emit-header`, `--emit-dts` and `--emit-napi` describe
-exported functions only and are therefore untouched: `tests/cases/res_export`
-still emits `i64` for all four of its shapes.
+Current figures are in [BENCHMARKS.md](BENCHMARKS.md).
 
 ## 5. What is *not* by value
 
-- **Large `Result`s**, by the rule in §1. They still travel as the arena
-  pointer, and they now have a C spelling too: `--emit-header` declares the
-  in-memory struct and the signature uses a pointer to it.
-- **A `Result` in a field or an array element.** Those are the in-memory
-  object, because they have to outlive the frame that built them. This is
-  what makes a by-value *parameter* interesting rather than trivial: the
-  callee unpacks the word into an object, and if any use of the parameter
-  stores that pointer somewhere longer-lived — an object literal, `push` —
-  the object has to be an arena bump rather than an entry-block `alloca`.
-  `EscapeResult.stackParams` is that decision, and it is the same
-  `localOutcome` walk WP6 already used for a local holding an allocation
-  (`tests/cases/res_by_value_param` pins both halves in one golden).
-- **The in-memory layout.** `%struct.nish_result.<T>.<E>` is unchanged from
-  WP16, and so is every construct that reads it. The packed word exists only
-  at the return boundary: the callee packs where it would have allocated, and
-  the caller unpacks into the entry-block object the rest of the lowering
-  already understands. That is what kept the change to the emitter small
-  enough to mirror into `src/` in one go.
+- **Large `Result`s**, by §1's rule. They stay the arena pointer, and
+  `--emit-header` declares the in-memory struct and a pointer to it.
+- **A `Result` in a field or an array element**, which has to outlive the
+  frame. That is why a by-value *parameter* is not trivial: the callee unpacks
+  the word into an object, and if any use stores that pointer somewhere
+  longer-lived the object must be an arena bump rather than an `alloca`.
+  `EscapeResult.stackParams` makes that decision with the same `localOutcome`
+  walk WP6 uses for a local holding an allocation (`res_by_value_param`).
+- **The in-memory layout.** `%struct.nish_result.<T>.<E>` is unchanged. The
+  word exists only at the boundary: the callee packs where it would have
+  allocated, and the caller unpacks into the entry-block object the rest of the
+  lowering already understands.
 
 ## 6. Both compilers
 
-Same rule as WP16 and for the same reason: stage0 is frozen as the bootstrap
-seed and the differential oracle, not retired, and `tests/self/ir_oracle.js`
-requires stage1 to compile every program in the corpus with no exemption
-list. So this lands in stage0's `src/` and `src/` together — stage0's `src/types.ts` /
-`src/types.ts` (the predicate and the return slot),
-stage0's `src/codegen/emit/result.ts` / `src/emit-result.ts` (the pack and the
-unpack), stage0's `src/codegen/emitter.ts`, `emit/statements.ts`, `emit/expressions.ts`
-and `emit/classes.ts` / `src/emit.ts` and `src/emit-classes.ts` (the
-`define`, the `declare`, the `ret`, the prologue and the two call sites), plus
-`escape.ts` and `attributes.ts` on each side (the allocation moved to whichever
-side unpacks, so the sites, the reported allocator call and the new
-`stackParams` decision move with it) — and the oracle is what says the two
-agree, byte for byte, before the bootstrap is allowed to reach its fixed
-point: **274 of 274 programs, 941 modules, 1,286,495 lines of IR**, with
-`IR(stage1) == IR(stage2)` and stage3 byte-identical to stage2 still holding
-over the 43 modules of `src/`.
+WP17 landed in stage0 and `src/` together, as WP16 had, and the IR oracle held
+them byte-identical (274 of 274 programs) before the bootstrap was allowed to
+reach its fixed point. stage0 is gone now
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md)); the DWARF for a
+`Result` (`src/debug.ts`, [§`-g` on both sides](wp14-selfhost.md#-g-on-both-sides))
+and the C shapes above (`src/interop-*.ts`, [wp14-selfhost.md](wp14-selfhost.md)
+§7) are `src/`'s like everything else.
 
-**Nish-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
-§6 — the subset `src/` is written in does not grow quietly — did not fire:
-the packing is shifts, `zext`, `trunc`, `select` and one `bitcast`, all of
-which `src/` could already express, and no construct entered the language
-either. What this package adds to Nish is a *lowering* of a type that was
-already there, which is why it ships no new surface syntax and its `reject_*`
-case pins that the WP16 rules still hold on the new shape rather than a new
-rule of its own.
-
-`-g` and the interop sidecars were stage0's when this package landed, as they
-had been since WP14 §4: stage1 had no DWARF builder and no header generator,
-and the driver reported those flags by name rather than ignoring them. (3) was
-therefore a stage0-only change, and the IR oracle skipped the `-g` corpus
-exactly as it had before. Both have since been ported to `src/` — the
-sidecars in [wp14-selfhost.md](wp14-selfhost.md) §7, the DWARF in
-`src/debug.ts` ([§`-g` on both sides](wp14-selfhost.md#-g-on-both-sides)) —
-so the two compilers now write the C shapes above byte for byte alike, and
-`tests/cases/dbg_result` is compared between them rather than skipped: how a
-packed `Result` is described in DWARF is a two-sided change like every other.
+**Nish-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md) §6 did
+not fire: the packing is shifts, `zext`, `trunc`, `select` and one `bitcast`,
+all of which `src/` could already express, and no construct entered the
+language. WP17 is a lowering of a type that already existed, so it ships no
+new syntax, and its `reject_*` case pins that WP16's rules hold on the new
+shape.

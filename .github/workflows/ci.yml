@@ -6,8 +6,9 @@
 #       job summary, and the IR cookbook staleness check. The matrix is
 #       written for macOS too and that row is commented out; the comment beside
 #       it names the six checks that still fail there, with the run that
-#       measured them. It is the one macOS gap in this file -- `bootstrap` and
-#       `nish-cmp` below have had darwin rows since the 0.4.0 seeds.
+#       measured them. `bootstrap` below has had darwin rows since the 0.4.0
+#       seeds; `nish-cmp` runs on the Linux rows only (.github/seed-matrix.sh
+#       says why).
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -284,8 +285,9 @@ jobs:
           NISH: build/nish
         run: bash docs/cookbook/regen.sh --check
 
-      # The diagnostic-code registry is generated from the compiler's own
-      # diagnostic sites; a new diagnostic without a code must not ship.
+      # The diagnostic-code registry, src/codes.ts, is kept by hand: a new
+      # code takes the next free number in its band, and this checks its
+      # format and that every code is unique.
       # `npm test` checks it too -- this names it in its own step so a stale
       # registry reads as itself rather than as one failure among a thousand.
       - name: Diagnostic codes (registry up to date)
@@ -362,8 +364,9 @@ jobs:
   # path.
   #
   # WHY a missing x86_64-linux seed IS red. There the release exists and is
-  # supposed to carry it: .github/seed-targets.json marks that target
-  # `attached`, which is release.yml's own statement that it builds one. Its
+  # supposed to carry it: .github/seed-targets.json gives that target an
+  # `attachedSince` the release has reached (.github/seed-due.sh decides),
+  # which is release.yml's own statement that it builds one. Its
   # absence is a regression in that workflow or in the asset name the two
   # workflows share, not a state of the world -- and it costs the rolling
   # freeze its only check.
@@ -395,8 +398,8 @@ jobs:
   #     rather than as the arm that decides a row.
   #
   # So `bootstrap (aarch64-darwin)` and `bootstrap (x86_64-darwin)` are rows
-  # this workflow runs, and the `test` row above is the one macOS gap left in
-  # the file. The `stage3 == stage2` comparison that tests/self/bootstrap.js
+  # this workflow runs. The macOS gaps left in the file are the `test` row
+  # above and `nish-cmp`, which runs on the Linux rows only. The `stage3 == stage2` comparison that tests/self/bootstrap.js
   # makes is *not* the one settled here -- it links its two stages at two
   # paths and is one of the six checks named up there.
   seeds:

@@ -16,8 +16,8 @@
 - [ ] Markdown changed: `node docs/check-links.mjs` passes
 - [ ] New construct: implemented in `src/`, golden `.ll`, native round trip (`.out`), at least one `reject_*` case
 - [ ] New construct: not *used* in `src/`'s own source until the next release (the rolling freeze CI's `bootstrap` job checks)
-- [ ] `docs/LANGUAGE.md` and the IR cookbook updated, `CHANGELOG.md` line added
-- [ ] `runtime.c` / `runtime-os.c` size reported if either changed (`node tests/run.js budget`)
+- [ ] `docs/LANGUAGE.md` and the IR cookbook updated; the title is a conventional commit subject, because the squash commit is the changelog entry (`CHANGELOG.md` is generated from it)
+- [ ] Runtime size reported for any `runtime/*.c` unit that changed (`node tests/run.js budget`)
 
 ## Related issues
 

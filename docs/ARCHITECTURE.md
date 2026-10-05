@@ -51,9 +51,13 @@ Compilation                                                            src/compi
 | Emitter | `src/emit.ts` + `emit-util.ts`, `emit-ops.ts`, `emit-control.ts`, `emit-strings.ts`, `emit-arrays.ts`, `emit-classes.ts`, `emit-builtins.ts`, `emit-result.ts`, `emit-map.ts`, `tbaa.ts`, `debug.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct lowerings. Contains no user-facing error handling. |
 | IR builder | `src/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `src/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic (the `RuntimeTable`); the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/runtime-os.c`, `runtime/nish.h`, `runtime/runtime-wasm.c` | The C implementation, in two translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime-os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both, and it defines one `static inline`, `nish_cpath`, which every path, name and spawn argument the runtime hands the OS goes through, so a string holding a NUL names nothing ([docs/security/runtime.md](security/runtime.md), RT-3); it is written with `__builtin_strlen`, so the header still includes no libc header and still compiles for wasm32. `runtime-host.c` holds the host primitives (the wall clock, entropy, file times, signals) and the ownership and executability checks `nish_lstat_owner_mode`, `nish_euid` and `nish_is_executable` (RT-9). `runtime-wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. `runtime/nish.d.ts` declares the builtins so that `tsc` can type-check a Nish program. |
+| Runtime | `runtime/runtime.c`, `runtime/runtime-os.c`, `runtime/runtime-host.c`, `runtime/runtime-parallel.c`, `runtime/runtime-net.c`, `runtime/nish.h`, `runtime/runtime-wasm.c` | The C implementation, in five translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime-os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both, and it defines one `static inline`, `nish_cpath`, which every path, name and spawn argument the runtime hands the OS goes through, so a string holding a NUL names nothing ([docs/security/runtime.md](security/runtime.md), RT-3); it is written with `__builtin_strlen`, so the header still includes no libc header and still compiles for wasm32. `runtime-host.c` holds the host primitives (the wall clock, entropy, file times, signals) and the ownership and executability checks `nish_lstat_owner_mode`, `nish_euid` and `nish_is_executable` (RT-9). `runtime-parallel.c` divides a range of work across threads, and `runtime-net.c` holds the sockets of `nish:net`. `runtime-wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. `runtime/nish.d.ts` declares the builtins so that `tsc` can type-check a Nish program. |
 | Interop | `src/interop-abi.ts`, `interop-header.ts`, `interop-dts.ts`, `interop-wasm.ts`, `interop-napi.ts` | C header, wasm `.d.ts` and its loader, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
-| Dumps | `src/dump.ts`, `src/ast-text.ts` | The `--emit-checked` and `--emit-ast` text. |
+| Dumps | `src/dump.ts`, `src/ast-text.ts`, `src/dump-checked.ts`, `src/dump-ast.ts`, `src/dump-tokens.ts` | The `--emit-checked` and `--emit-ast` text, and the one-file entry points the self-hosting goldens and oracles spawn. |
+| Packages | `src/manifest.ts`, `src/paths.ts`, `src/nish-modules.ts`, `src/std-modules.ts` | Module resolution: the root and dependency `package.json` reads (the `nish` export condition, `engines.nish`, and the root's `nish` field with `noPanic` and `capabilities`), the `nish:` builtin modules, and the `nish/` standard-library modules. |
+| Panics and capabilities | `src/panics.ts`, `src/capabilities.ts`, `src/capability-report.ts` | Every panic site with its kind (`--emit-panics`, `--deny-panics` / `noPanic`), and the capability each builtin reaches, carried over the call graph by the attribute fixpoint (`--emit-capabilities`, `--capabilities`, and the `--allow` / `--deny` policy `src/compilation.ts` enforces). |
+| Warnings | `src/portability*.ts`, `src/unsafe-migrate.ts` | The NL8xxx portability rows (`--warn-portability`) and the NL7002 site report that migrates `--unchecked-indexing` to `nish:unsafe`. The NL9xxx performance warnings are reported from the checker's own passes. |
+| Fixes | `src/fix.ts` | `nish --fix`: applies the machine-applicable edits diagnostics carry and compiles again until none is left. |
 | Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh`, `bootstrap.sh`, `fetch-seed.sh` | The clang/LTO profiles, the size table, the example smoke test, and the seeded build of the compiler itself. |
 | Tests | `tests/run.js` + `tests/{cases,link,ir,layout,self}`, `tests/runtime-test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, the bootstrap, benchmark checksums. |
 | Differential tests | `tests/differential/{run,lib,fuzz}.js`, `tests/differential/corpus/`, `tests/differential/goldens/`, `runtime/shim.mjs` | Every whole program compiled natively and compared, byte for byte, with its frozen JavaScript rewrite run under Node; a seeded random-program fuzzer (WP13). |
@@ -189,18 +193,22 @@ own source until the seed compiles it, which is the next release.
 7. **Runtime.** New C symbol? Add it to the `RuntimeTable` in
    `src/runtime.ts` (signature, attributes, effect, `noreturn`), to the
    runtime, and to `runtime/nish.h`; `tests/run.js` fails if the three
-   disagree. The runtime is two translation units: a symbol that wraps a system
-   call goes in `runtime/runtime-os.c`, everything else in `runtime/runtime.c`.
-   Any struct layout change touches `src/runtime.ts` and `runtime.c` in the
-   same commit and extends a layout test. Keep each file within its budget —
-   every `.text*` section summed, at `-Oz`, under 3,584 bytes for `runtime.c`
-   and 1,280 for `runtime-os.c` (§2 of the master plan, and
+   disagree. The runtime is five translation units: a symbol that wraps a
+   system call for files, directories, processes or the environment goes in
+   `runtime/runtime-os.c`, the wall clock, entropy, file times and signals in
+   `runtime/runtime-host.c`, sockets in `runtime/runtime-net.c`, the range
+   partitioner in `runtime/runtime-parallel.c`, and everything else in
+   `runtime/runtime.c`. Any struct layout change touches `src/runtime.ts` and
+   `runtime.c` in the same commit and extends a layout test. Keep each file
+   within its budget — every `.text*` section summed, at `-Oz`, under the
+   `*_TEXT_BUDGET` constant `tests/run.js` holds for it (3,606 bytes for
+   `runtime.c` and 1,536 for `runtime-os.c` today; §2 of the master plan, and
    [wp7-runtime.md](wp7-runtime.md) for each measurement, why the ceilings are
-   separate and why either moved). `node tests/run.js budget` measures both, so
-   this is a check you can run rather than a number to remember;
+   separate and why each moved). `node tests/run.js budget` measures every
+   unit, so this is a check you can run rather than a number to remember;
    `clang -Oz -c <file> && size -A <file>.o` is the same measurement by hand.
-   A link line names only `runtime.c`: `scripts/build.sh` compiles
-   `runtime-os.c` beside it, and a direct `clang` line names both.
+   A link line names only `runtime.c`: `scripts/build.sh` compiles the other
+   units beside it, and a direct `clang` line names them all.
 8. **Attributes.** Tell the fact collector in `src/attributes.ts` what the
    construct does: memory effect (`readsMemory`, the callee symbols the
    `collect*Facts` methods record), escapes
@@ -209,13 +217,22 @@ own source until the seed compiles it, which is the next release.
 9. **Tests.** A golden `tests/cases/<name>.ts` + `.ll` (`npm run test:update`
    writes a missing golden), an `llvm-as` pass, a native round trip (`.out`,
    using `tests/driver.c`'s `test()` or an `export const main`), at least one
-   `reject_*` case, and `.args` for flags.
+   `reject_*` case, and `.args` for flags. A new positive case moves the
+   generated `tests/self/goldens/checked.txt`, which is rewritten with
+   `node tests/self/goldens.js --update` and never by hand; a case the last
+   release compiles differently, or refuses, needs its `DECLARED` entry in
+   `tests/nish-cmp.js`. A new builtin touches more files than this list
+   names: `.claude/selfhost.md`, "Adding a builtin", has them all, the
+   capability row in `src/capabilities.ts` included.
 10. **Docs.** Add the rule to [LANGUAGE.md](LANGUAGE.md) with the test-case
-    citation, a snippet to `docs/cookbook/` with a marker in
-    [IR_COOKBOOK.md](IR_COOKBOOK.md), and a line to `CHANGELOG.md`. The
-    cookbook is regenerated by `docs/cookbook/regen.sh` against `build/nish`,
-    the compiler the change itself builds, so the entry is written in the same
-    pull request as the construct rather than a release later.
+    citation, and a snippet to `docs/cookbook/` with a marker in
+    [IR_COOKBOOK.md](IR_COOKBOOK.md). The cookbook is regenerated by
+    `docs/cookbook/regen.sh` against `build/nish`, the compiler the change
+    itself builds, so the entry is written in the same pull request as the
+    construct rather than a release later. The changelog entry is the
+    commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
+    writes `CHANGELOG.md` from the commits when a release is cut, so the
+    file is never edited by hand.
 
 ## ABI contracts and the tests that guard them
 
@@ -244,12 +261,14 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (3,562 bytes of `.text*` at `-Oz` against a budget of
-3,584, plus 10,068 bytes of `.rodata` that is almost all Ryu's two
-power-of-five tables) and `runtime/runtime-os.c` (the system-call half: 1,495
+`runtime/runtime.c` (3,606 bytes of `.text*` at `-Oz` against a budget of
+3,606, plus 10,279 bytes of `.rodata` that is almost all Ryu's two
+power-of-five tables) and `runtime/runtime-os.c` (the system-call half: 1,530
 bytes against 1,536) provide, in the order of the `RuntimeTable` in `src/runtime.ts`, the symbols
-below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
-`scripts/size-report.sh`, which reports every row:
+below, with `runtime-parallel.c`, `runtime-host.c` and `runtime-net.c` beside
+them under budgets of their own; measure any of them with
+`clang -Oz -c <file> && size -A <file>.o`, or `scripts/size-report.sh`, which
+reports every row:
 
 | Symbol | Purpose |
 | --- | --- |
@@ -270,6 +289,7 @@ below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
 | `nish_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
 | `nish_panic_slice(start, end, len)` | Failed `slice` range check (`cold noreturn`): `slice out of range: [<start>, <end>) of length <len>` on stderr, `_exit(1)`. Its own symbol because a reversed pair is as common a mistake as an end past the string, and `index out of range` describes neither (WP15 §4). |
 | `nish_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
+| `nish_panic_overflow(op)` | Failed signed-overflow check (`cold noreturn`, the `ovf.fail` block of [Checked arithmetic](#checked-arithmetic-nsw---wrapping---strict-exports-and---target)): `attempt to add with overflow` and its siblings for subtract, multiply and negate, from the one table of messages `nish_panic_div` also reads, `_exit(1)`. |
 | `nish_parallel_range(body, ctx, len, grain)` | `runtime/runtime-parallel.c`, the third translation unit with its own budget: runs `body(lo, hi, ctx)` over a partition of `[0, len)` into contiguous chunks, at most `nish_cpu_count()` of them and never more than `len / grain`, chunk 0 on the calling thread, and returns when all have run; without `-DNISH_THREADS`, and on WASI, the whole range runs on the calling thread. What a `parallelMapInto` or `parallelReduce` from `nish/threads` lowers onto (WP29 P1, `src/emit-parallel.ts`). `nounwind` only: it runs whatever the body does, so it is a shared write and not `willreturn`. |
 | `nish_cpu_count()` | The online CPU count, read once and cached in a relaxed atomic word; the partitioner's own question, declared because `nish.h` publishes it. No compiled code calls it. |
 
@@ -590,6 +610,13 @@ ordinary class.
   about them. `opt_nsw.ll` is the golden that pins all three facts, the
   `ovf_proven_*` goldens pin one proof each, and `opt_wrapping.ll` pins the
   same program with `--wrapping`, where nothing is flagged or checked.
+- **A wrap is asked for per site.** `wrappingAdd`, `wrappingSub` and
+  `wrappingMul` from `nish:unsafe` are the plain instruction with no flag and
+  no check, whatever the command line says (`emitWrapping` in
+  `src/emit-ops.ts`, `tests/cases/unsafe_wrapping`). `--wrapping` is
+  deprecated (NL9015) and reaches only the modules of the entry package, never
+  a dependency or the standard library; `--nsw`, which made overflow undefined
+  behaviour, is refused with exit 2.
 - **Constant folding follows the same rule** (`src/constants.ts`): by
   default an initialiser that overflows its width is refused rather than
   folded, because the fold must agree with the instruction it replaces;

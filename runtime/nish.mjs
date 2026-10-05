@@ -16,14 +16,14 @@
  * That is enough for a real and useful subset — **f64 mode**, where JavaScript's
  * `+ - * / %` on doubles *are* `fadd/fsub/fmul/fdiv/frem` and `Math.*` are the
  * same IEEE operations, so the arithmetic needs no help. It is not enough for
- * i32 mode, and it never will be: `number` is a wrapping 32-bit integer there
- * and every operator would have to change.
+ * i32 mode, and it never will be: `number` is a 32-bit integer there, whose
+ * signed overflow panics, and every operator would have to change.
  *
  * `docs/RUN_UNDER_NODE.md` states the overlap and the whole list of what stays
  * divergent. The short version, because it belongs next to the code too:
  *
- *   - **i32 mode is out.** Wrapping, truncating `/`, and the divide-by-zero
- *     panic are all operator-level and cannot be reached from here.
+ *   - **i32 mode is out.** The overflow panic, truncating `/`, and the
+ *     divide-by-zero panic are all operator-level and cannot be reached from here.
  *   - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and
  *     so is every string offset. ASCII agrees; nothing else does.
  *   - **`a[i]` is unchecked**: out of range is `undefined` here and an exit-1

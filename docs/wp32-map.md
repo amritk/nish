@@ -1,541 +1,260 @@
 # WP32: the global `Map` and `Set`
 
-**Design note (S1 of seven; decided, nothing built).** This decides every
-question the global `Map<K, V>` and `Set<T>` raise, so that stages S2 to S7
-build rather than decide. [LANGUAGE.md](LANGUAGE.md) stays normative, and this
-note adds no rule to it; where they disagree, LANGUAGE.md wins. §10 is S7's:
-it measures the `Map` that S2 to S6 built and records whether an unordered map
-is ever needed.
-
-The evidence is of three kinds, and every decision below names its own:
-
-- **measurements** of four hand-written layout prototypes against Node's `Map`
-  (`bench/map_proto_*.ts`, `bench/map-node.mjs`; §2);
-- **`tsc --strict` experiments**, with TypeScript 5.9.3 and `"lib": ["ES2022"]`,
-  the repository's settings (§3, §7);
-- **pointers into the compiler** at `main` `468f09a`, where the
-  answer is already fixed by something the compiler does.
-
-`Map` and `Set` do not exist today: `new Map<string, i32>()` is
-`` Unknown class `Map` `` ([AI.md](AI.md) lists them under "none of these
-exist"). `src/map.ts`'s `StringMap` is the in-house precedent. It keeps its
-entries in insertion order behind a bucket table of entry indices, compares the
-full key at every occupied bucket, and hashes every key again when it grows.
-[wp28-compatibility-mode.md](wp28-compatibility-mode.md) names `Map` the
-library tier's first need, and [wp18-generics.md](wp18-generics.md) §16 said
-it waits on generic classes. Those have landed.
-
----
+**Status: shipped, with one item open.** The design note and layout
+prototypes (S1, [#227](https://github.com/amritk/nish/pull/227)), the global
+`Map` and `Set` on `std/collections.ts` (S2,
+[#229](https://github.com/amritk/nish/pull/229)), `get` typed
+`V | undefined` (S3, [#232](https://github.com/amritk/nish/pull/232)),
+iteration (S4, [#237](https://github.com/amritk/nish/pull/237)) and
+`StringMap` on the same slot (S6,
+[#228](https://github.com/amritk/nish/pull/228)) shipped in 0.11.0; fusion and
+`nish/map` (S5, [#239](https://github.com/amritk/nish/pull/239)), the −0 key
+([#247](https://github.com/amritk/nish/pull/247)) and the measurement (S7,
+[#244](https://github.com/amritk/nish/pull/244)) in 0.12.0. Open: a `Map` read
+inside a parallel body (§9.3) is still refused. The rules are normative in
+[LANGUAGE.md → `Map` and `Set`](LANGUAGE.md#map-and-set); the lowering is in
+[IR_COOKBOOK.md](IR_COOKBOOK.md); the timings are in
+[BENCHMARKS.md](BENCHMARKS.md#map-and-set-wp32). This note keeps the decisions,
+the evidence behind each, and the trigger that would reopen §10.
 
 ## 1. The decisions
 
 | # | Question | Decision | § | Rejected |
 | --- | --- | --- | --- | --- |
-| 1 | Layout | Insertion-ordered. A `u32[]` bucket table holds eight fingerprint bits above a 24-bit entry index plus one. The entries sit in parallel arrays (`keys`, `values`, `hashes`), and the full 32-bit hash of each is stored in `hashes`. The cap is 2^24 − 1 entries, one fewer than Node's 2^24. | 2 | an `i64` slot holding the whole hash; the StringMap shape; an unordered table |
-| 2 | Load factor | At most 3/4 of the buckets taken, counting deleted entries until a rebuild. | 2.4 | 7/8 |
-| 3 | `get`'s type | `V \| undefined`. It is narrowed by `!== undefined` / `=== undefined`, or collapsed by `??`. A maybe value may be bound to a `const`, annotated or not. It may not cross a call, and it is never in memory: S3 lowers it to two SSA values, a found bit and the value. That is a new lowering, analogous to WP17's in-module register shape. | 3 | `has` + `get(k)!`; `get(k, default)`; a maybe value as a parameter or return type |
-| 4 | Output | The implicitly loaded `std/collections.ts` writes no `.ll` of its own. Every instance, and every helper it reaches, is emitted into each module that uses it with `internal` linkage, so `-o x.ll` keeps working for a one-file program. | 4.1 | a separate module, with its tests in `tests/link/` |
-| 5 | Names, and a user's `Map` | The std templates are `class Map<K, V>` and `class Set<T>`, mangled like any template (`%struct.Map$str$i32`). A module that declares or imports its own `Map` or `Set` gets no implicit import. A program where one module does that and another names the global is refused, naming both. | 4.2 | a reserved IR prefix for the std classes |
-| 6 | Keys | Strings, every integer width, `number` in either mode, `f64`, `f32`, `boolean`, enums and class instances by identity. Refused in v1: interfaces, arrays, `T \| null` and `Result`. | 5 | records by value; nullable keys in v1 |
-| 7 | Values | Anything except an `interface`, which is stored inline and would be copied, and `void`. | 5.1 | copying records in |
-| 8 | Hashing | FNV-1a for strings and murmur3's `fmix32` for 32-bit and narrower integers. 64-bit integers, pointers and floats use `fmix64` folded to 32 bits. A float is normalised first (−0 → +0, every NaN → one canonical NaN), and equality is SameValueZero. A hash of 0 is moved to 1. Hash flooding is out of scope. | 5.2 | a seeded hash; hashing the float's raw bits |
-| 9 | `delete` | A tombstone in the bucket, and a stored hash of 0 on the entry. At the load bound a rebuild compacts in place, at the same size, when more than half of the entries are dead, and doubles otherwise. The table never shrinks. | 6.1 | backward-shift deletion (it needs the unordered layout); a fresh table per compaction |
-| 10 | Mutation during iteration | Exact JavaScript semantics. The walk re-reads the entry count each pass, and a live-iteration counter on the table defers compaction until no loop is walking it. `clear` during a walk marks every entry dead instead of truncating. | 6.2 | weaker semantics, or a refusal |
-| 11 | `Set` | The same table with no values. `for (const x of s)`, `s.keys()` and `s.values()` are the same walk. | 6.3 | — |
-| 12 | Small choices | `size` is a read-only `number`, and `set`/`add` return `this`. `new Map(...)` / `new Set(...)` with arguments are refused in v1. Type arguments may be left off `new` only where an annotated declaration initialises from it. | 7 | `size()` as a method; a `void` `set` |
-| 13 | Interop | `--emit-header` declares an instance as an opaque struct. `--emit-dts` and `--emit-napi` leave the function unbridged, naming the type, as they already do for a class. | 8 | exposing the layout; refusing the compile |
-| 14 | Fusion | Three patterns, each one probe (§9.1). Nothing between the probe and the write may call, assign or allocate. | 9.1 | fusion through a call proven pure |
-| 15 | Threads | `get`, `has` and `size` may appear in a wp29 parallel body. Three things are needed for that: `probe` writes nothing, the `dst` reachability rule sees through the table's private arrays, and iterating a map in a body remains a shared write. | 9.3 | — |
+| 1 | Layout | Insertion-ordered. A `u32` bucket holds eight fingerprint bits above a 24-bit entry index plus one; entries sit in parallel arrays with each entry's full 32-bit hash stored. Cap 2^24 − 1 entries, one fewer than Node's. | 2 | an `i64` slot; the old `StringMap` shape; an unordered table |
+| 2 | Load factor | At most 3/4 of buckets taken, dead entries counted until a rebuild. | 2.4 | 7/8 |
+| 3 | `get`'s type | `V \| undefined`, narrowed by `!== undefined` / `=== undefined` or collapsed by `??`; bound only to a `const`; never crosses a call; lowered to two SSA values. | 3 | `has` + `get(k)!`; `get(k, default)` |
+| 4 | Output | `std/collections.ts` writes no `.ll`; every instance and helper is emitted `internal` into each module that uses it. | 4.1 | a separate module |
+| 5 | Names | `class Map<K, V>`, `class Set<T>`, mangled like any template; a module with its own `Map` gets no implicit import; one program with both is refused. | 4.2 | a reserved IR prefix |
+| 6 | Keys | Strings, every integer width, `number`, `f64`, `f32`, `boolean`, enums, class instances by identity. Not interfaces, arrays, `T \| null` or `Result`. | 5 | records by value |
+| 7 | Values | Anything but an `interface` (stored inline, so copied) and `void`. | 5.1 | copying records in |
+| 8 | Hashing | FNV-1a for strings, `fmix32`/`fmix64` for integers, pointers and floats; floats normalised, equality SameValueZero; a hash of 0 moved to 1; unseeded. | 5.2 | a seeded hash; raw float bits |
+| 9 | `delete` | A tombstone and a stored hash of 0; at the load bound, compact in place when more than half are dead, double otherwise; never shrink. | 6.1 | backward-shift deletion |
+| 10 | Mutation during iteration | Exact JavaScript semantics; a live-walk counter defers compaction. | 6.2 | weaker semantics, or a refusal |
+| 11 | `Set` | The same table with no values. | 6.3 | — |
+| 12 | Small choices | `size` read-only `number`; `set`/`add` return `this`; constructor arguments refused; type arguments required on `new` except from an annotation. | 7 | `size()`; a `void` `set` |
+| 13 | Interop | Opaque struct in `--emit-header`; unbridged, named, in `--emit-dts` and `--emit-napi`. | 8 | exposing the layout |
+| 14 | Fusion | Three patterns, each one probe; nothing between probe and write may call, assign or allocate. | 9.1 | fusion through a call proven pure |
+| 15 | Threads | `get`, `has` and `size` in a parallel body. **Not built.** | 9.3 | — |
 
-**The hard requirement is the layout, not a measurement outcome.** Each bucket
-slot carries a fingerprint beside the entry index, and each entry stores its
-full hash. So a probe reads the entry list only on a fingerprint match. Growth
-and compaction re-file buckets from the stored hashes and never hash a key
-again. `probe` answers either the entry it found or the empty bucket it
-stopped at, so fusion and `getOrInsert` write through that one probe. §2.3
-measures the first property directly.
-
-**What each stage takes from this note:**
-
-| Stage | Builds | From |
-| --- | --- | --- |
-| S2 map-core | `std/collections.ts` with the §2 layout; the implicit load and the §4 output shape; `hashKey`/`sameKey` per §5.2; the §5 key and value refusals; §7's surface; §8's sidecars | §2, §4, §5, §6.1, §7, §8 |
-| S3 map-get | `V \| undefined`, the maybe `const`, `??`, narrowing, each as §3 specifies, and the new two-value lowering of a maybe (§3.2) | §3 |
-| S4 map-iteration | `for...of` over `keys()`, `values()` and a `Set`, with §6.2's counter | §6 |
-| S5 map-fusion-extras | §9.1's three patterns and `nish/map`'s `reserve` and `getOrInsert` | §9 |
-| S6 stringmap-fingerprints | `StringMap` on the §2 slot and stored hashes, in Nish-0 | §2, §6.1 |
-| S7 map-measure | comparisons (b) to (d), and §10 | §2.5, §10 |
-
----
+**The hard requirement is the layout.** Each bucket carries a fingerprint
+beside the entry index, and each entry stores its full hash, so a probe reads
+the entry list only on a fingerprint match, growth and compaction re-file from
+the stored hashes without hashing a key again, and `probe` answers either the
+entry it found or the empty bucket it stopped at — which is what lets fusion
+and `getOrInsert` write through one probe.
 
 ## 2. The layout
 
-### 2.1 The four prototypes
+Four hand-written prototypes (`bench/map-proto-ordered.ts`,
+`map-proto-ordered-fp.ts`, `map-proto-ordered-fp32.ts`,
+`map-proto-unordered.ts`) implement `string → i32` and `i32 → i32` tables in
+each candidate layout, against `bench/map-node.mjs` on Node's `Map`, over five
+workloads (insert, hit, miss, word count, churn) whose checksums
+`node bench/run.mjs --only maps --validate` requires to agree. They stay in the
+instruction gate (`bench/instructions.json`), where they are the only
+hash-table code: a regression in a probe loop moves their counts and nothing
+else's.
 
-Four monomorphic programs implement a `string → i32` and an `i32 → i32` table
-in each candidate layout, with no compiler change. Each is an ordinary Nish
-program that compiles today with no warning:
+Comparison (a), on a shared four-core VM (clang 18, Node 22.22.2,
+`--profile speed`): the chosen `u32`-fingerprint layout was ahead of Node's
+`Map` on every workload, 1.7x to 4.9x at 2^20 keys and 1.8x to 6.2x at 65,536,
+and within 10% of the unordered layout on every workload in cache and eight of
+ten out of it, ahead on insert and churn. Cells moved by up to a quarter between
+sessions, so decisions rest only on differences that held in every session and
+on instruction counts and peak RSS, which do not move.
 
-| Program | Layout | Bucket | Probe reads the entries | Growth |
-| --- | --- | --- | --- | --- |
-| [`map-proto-ordered.ts`](../bench/map-proto-ordered.ts) | StringMap's: ordered, bucket = index + 1 | `i32` | at every occupied bucket, for a full key compare | hashes every key again |
-| [`map-proto-ordered-fp.ts`](../bench/map-proto-ordered-fp.ts) | ordered, `hash32 << 32 \| index + 1` | `i64` | only when the bucket's hash equals the key's | re-files from `hashes` |
-| [`map-proto-ordered-fp32.ts`](../bench/map-proto-ordered-fp32.ts) | ordered, `hash >>> 24 << 24 \| index + 1` | `u32` | only on a fingerprint match. The stored hash is compared before the key | re-files from `hashes` |
-| [`map-proto-unordered.ts`](../bench/map-proto-unordered.ts) | unordered: hash, key and value in the bucket | three parallel bucket arrays | never: the key is in the bucket | re-files from the bucket hashes |
-
-All four run five workloads over the same `2n` distinct keys. The keys are
-`i * 2654435761` as an `i32`, and `` `k${key}` `` for the string map. A 32-bit
-LCG drives the workloads, in the program, with no I/O:
-
-| Workload | What it does | Checksum |
-| --- | --- | --- |
-| insert | four fresh tables of the first `n` keys, each mapped to its index | the sizes, and the last table's sum over an insertion-order walk |
-| hit | `8n` lookups of random present keys | the sum of the values found |
-| miss | `8n` lookups of random absent keys, answering `j & 7` | the sum of the defaults |
-| count | word count: `8n` words drawn from `n / 4`, skewed towards low indices by `r1 & r2`, each counted with one probe | distinct words, and `Σ count × index` |
-| churn | `8n` inserts into a sliding window of `n / 2` live keys, each paired with the delete of the key that leaves it | the live count, and the sum over a walk |
-
-[`bench/map-node.mjs`](../bench/map-node.mjs) runs the same workloads on Node's
-global `Map`, spelling every 32-bit step as the prototypes compute it
-(`Math.imul`, `>>> 0`). `node bench/run.mjs --only maps --validate` requires
-all five programs to print the same ten lines. `npm test` runs that at
-`n = 1024` in its `bench` check. Each checksum is order-independent, so the
-unordered layout can agree too. The ordered layouts' walks are in insertion
-order, and that is what S4 pins against Node.
-
-Two findings about the language came out of writing them. Both are recorded
-because S2 is written in the same language:
-
-- **An array of strings cannot be allocated at a length.** `new Array<string>(n)`
-  is refused (`reject_arr_new_string`). So the unordered layout's string buckets
-  are `(string | null)[]`, and its integer buckets are `i32[]`. A generic
-  `Map<K, V>` with keys in its buckets would need a different storage type for
-  each kind of `K`. The ordered layouts only ever `push` a key, so one generic
-  class body serves every `K`.
-- **A module constant cannot be a `u32` or an `i64[]`**, and a field initialiser
-  must be a literal. So the packed slot's sentinels are literals at their use,
-  and the tables are allocated in the constructor.
-
-### 2.2 The measurement: comparison (a)
-
-`node bench/run.mjs --only maps --n maps=<n> --runs <r>` runs these tables. Each
-cell is a workload's minimum in ms over the timed runs, as the program measures
-it with `monotonicNanos` around the workload alone. They were taken on an x86-64
-Xeon at 2.10 GHz, a four-core virtual machine, with clang 18 and Node 22.22.2,
-`--profile speed`, bounds checks on. The runs were 9 at the two smaller sizes
-and 5 at 2^20.
-
-**`n` = 2^20: the tables are larger than the cache.**
-
-| workload | ordered | ordered + `i64` fp | **ordered + `u32` fp** | unordered | Node `Map` | `u32` fp / unordered | `u32` fp / Node |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| insert str | 822.9 | 446.1 | **383.8** | 447.8 | 1222.7 | 0.86 | 0.31 |
-| hit str | 1496.1 | 1416.4 | **1294.2** | 1251.1 | 2726.5 | 1.03 | 0.47 |
-| miss str | 2346.5 | 1395.0 | **1330.0** | 1243.8 | 4418.7 | 1.07 | 0.30 |
-| count str | 605.2 | 546.5 | **535.2** | 490.4 | 1505.7 | 1.09 | 0.36 |
-| churn str | 1797.6 | 1081.3 | **958.4** | 1165.7 | 2950.1 | 0.82 | 0.32 |
-| insert int | 347.6 | 580.3 | **294.2** | 297.9 | 506.8 | 0.99 | 0.58 |
-| hit int | 431.3 | 337.2 | **382.1** | 270.3 | 1637.8 | 1.41 | 0.23 |
-| miss int | 516.4 | 409.3 | **356.0** | 358.8 | 1718.2 | 0.99 | 0.21 |
-| count int | 186.0 | 196.4 | **173.2** | 133.3 | 843.8 | 1.30 | 0.21 |
-| churn int | 826.6 | 984.9 | **593.5** | 850.2 | 1962.6 | 0.70 | 0.30 |
-
-**`n` = 65536: the tables fit in the last-level cache.**
-
-| workload | ordered | ordered + `i64` fp | **ordered + `u32` fp** | unordered | Node `Map` | `u32` fp / unordered | `u32` fp / Node |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| insert str | 24.4 | 18.5 | **15.6** | 19.7 | 30.3 | 0.79 | 0.51 |
-| hit str | 33.6 | 31.0 | **29.7** | 28.4 | 68.1 | 1.05 | 0.44 |
-| miss str | 46.8 | 32.5 | **30.1** | 30.1 | 80.6 | 1.00 | 0.37 |
-| count str | 11.1 | 10.4 | **10.7** | 11.4 | 31.0 | 0.94 | 0.35 |
-| churn str | 41.4 | 33.5 | **27.4** | 40.6 | 74.3 | 0.67 | 0.37 |
-| insert int | 11.8 | 14.5 | **12.1** | 15.1 | 21.3 | 0.80 | 0.57 |
-| hit int | 6.6 | 6.6 | **7.1** | 8.3 | 36.9 | 0.86 | 0.19 |
-| miss int | 9.6 | 9.1 | **9.0** | 10.8 | 40.0 | 0.83 | 0.23 |
-| count int | 4.0 | 4.1 | **4.3** | 4.7 | 26.5 | 0.91 | 0.16 |
-| churn int | 20.6 | 19.8 | **19.0** | 26.8 | 51.8 | 0.71 | 0.37 |
-
-At `n` = 4096 every Nish layout runs every workload in 0.2 to 2.0 ms, and no
-layout is ahead by more than the resolution. Node's column there is JIT
-warm-up, 1.2 to 3.5 ms, and says nothing about its table.
-
-**How far to trust a cell.** This machine is a shared VM. The same cell moved by
-up to a quarter between sessions. The `i64` layout's insert int at 2^20 read 347,
-393 and 580 ms in three sessions. So the decisions below rest only on
-differences that held in every session, and on two measures that do not
-move at all:
-
-- **Instructions**, counted by cachegrind at `n` = 16384. The prototypes are in
-  the instruction gate (§2.6): ordered 251,794,504; `i64` fp 236,784,417;
-  `u32` fp 254,837,532; unordered 219,736,662. They were counted at `6451cf2`,
-  with #220's array-header TBAA, which moved them by −0.37% to +0.02%.
-- **Peak RSS at 2^20**, in KB, whole process, keys included: ordered 586,936;
-  `i64` fp 828,212; `u32` fp 660,280; unordered 681,400; Node 744,072.
+Two language findings shaped `std/collections.ts`: `new Array<string>(n)` is
+refused, so an unordered layout would need a different bucket type per kind of
+`K` while the ordered one only ever `push`es a key; and a module constant cannot
+be a `u32` or an `i64[]`, so sentinels are literals at their use.
 
 ### 2.3 What the fingerprint buys, counted
 
-The requirement says the entry list is read only on a fingerprint match. It was
-checked directly with a copy of each prototype that counts the probe's reads
-outside the bucket array. The count is at `n` = 65536, over the 524,288 hits
-and 524,288 misses of the string workloads:
+Entry-list reads per probe at 65,536 keys, over the string workloads:
 
-| Layout | entry-list reads per hit | per miss |
+| Layout | per hit | per miss |
 | --- | ---: | ---: |
-| ordered (StringMap) | 1.49 | 1.47 |
+| ordered (old `StringMap`) | 1.49 | 1.47 |
 | ordered + `i64` fp | 1.00001 | 0 |
 | ordered + `u32` fp | 1.0017 | 0.0059 |
-| unordered | 1.00001 (its key is in the bucket) | 0 |
+| unordered | 1.00001 | 0 |
 
-The `u32` slot's false-match rate is the 1-in-256 its eight bits predict, over
-about 1.5 foreign buckets per probe. Every false match is then turned away by
-the stored full hash, which sits beside the key and is compared before it, so
-the key compare stays at one per hit. That is also why "string miss" and
-"string insert" are where the fingerprints pay: 1.7x and 2.1x over the
-StringMap shape at 2^20. On an integer key a full key compare costs what the
-fingerprint compare costs, so the StringMap shape holds its own on the integer
-rows and the fingerprints buy growth without rehashing. That is visible only
-on insert.
+The `u32` slot's false-match rate is the 1-in-256 its eight bits predict, and
+the stored full hash, compared before the key, turns each one away, so the key
+compare stays at one per hit. That is why string miss and string insert are
+where fingerprints pay (1.7x and 2.1x over the `StringMap` shape at 2^20); on an
+integer key a key compare costs what a fingerprint compare does, and the
+fingerprints buy only growth without rehashing.
 
 ### 2.4 The decisions
 
-**The slot is a packed `u32`: 8 fingerprint bits, 24 bits of entry index plus one.**
-
-- It is never slower than the `i64` slot by more than the noise, and it was
-  faster on string insert and integer churn at 2^20 in every session. It is
-  half the bucket memory: 4 bytes a bucket against 8, which is 168 MB of peak
-  RSS at 2^20. It retires 18.1 million more instructions than the `i64` slot
-  at `n` = 16384, 7.6%, for the stored-hash compare and the index mask. It buys
-  that back in cache lines once the table leaves the cache.
-- **The index cap is one entry short of Node's, deliberately.** Node's `Map`
-  and `Set` hold 2^24 (16,777,216) entries and throw `RangeError: Map maximum
-  size exceeded` on the 16,777,217th insert, measured on Node 22.22.2. A 24-bit
-  field that holds the index plus one holds 2^24 − 1 entries, one fewer. An
-  empty bucket is 0. A deleted entry's bucket is `0x01000000`, fingerprint 1
-  and index field 0, which no live entry has, so the field needs no reserved
-  all-ones value. Holding the 2^24-th entry would take an `i64` slot or a
-  reserved encoding, and keeping the `u32` slot is the trade: half the bucket
-  memory, for that one entry. S2 panics with Node's wording, `Map maximum size
-  exceeded` (or `Set …`), when an insert would pass the cap after compaction.
-  While a loop walks the table there is no compaction (§6.2), so an insert at
-  the cap then panics at once, however few entries are live: a walk whose
-  body churns about 16.7 million times panics where Node's would not. S4
-  records it in [LANGUAGE.md → `Map` and `Set`](LANGUAGE.md#map-and-set).
-- **The fingerprint is the hash's top eight bits, and the bucket its low bits
-  folded with the high half:** `home = (h ^ (h >>> 16)) & mask`, as `StringMap`
-  does. The fold brings the top bits into the bucket index only XORed with
-  bits 8 to 15, so two keys in neighbouring buckets still have independent
-  fingerprints. Only a table of 2^25 buckets, reachable just at the entry cap,
-  uses hash bit 24 directly in its index. There the fingerprint shares that
-  bit, which is why it is "7–8 bits", as the plan says.
-- **The full hash lives in the entry**, in `hashes: u32[]`, parallel to `keys`
-  and `values`. A stored hash of 0 marks a deleted entry, so a computed hash of
-  0 is moved to 1. The `i64` slot kept the hash in the bucket as well, and the
-  entry copy was then used only by compaction. The `u32` slot needs it at every
-  fingerprint match, so the one copy does both jobs.
-
-**The load factor is 3/4**, counting dead entries until a rebuild, as
-`StringMap` does. A 7/8 bound was built into both fingerprinted layouts and run
-at 2^20. There the two bounds end at the same table size, so the hit and miss
-rows ran on identical tables. They still moved by up to 19% between the two
-builds, which is this machine's noise. The churn rows are the ones where the
-bound changes the work, because it decides how often a rebuild comes. At 7/8
-they were slower in both layouts: +13% (string) and +20% (integer) on the
-`u32` slot, and +20% and +10% on the `i64` slot. Linear probing's
-expected unsuccessful probe length is ½(1 + 1/(1 − α)²). That is 8.5 buckets at
-α = 3/4 against 32.5 at 7/8. With a four-byte fingerprint slot a miss at 3/4
-still reads one or two cache lines, and at 7/8 it reads several. The memory 7/8
-would save is only in the bucket array, 0.8 to 1.5 bytes an entry. The
-entries are dense either way, and they spend at least 12 bytes each in `keys`,
-`values` and `hashes`.
-
-### 2.5 What (a) says about the unordered layout
-
-The ordered, fingerprinted table is **within 10% of the unordered one on every
-workload at 65536 and on eight of the ten at 2^20, and ahead of it on insert
-and churn at both**. The
-unordered layout has no entry list to append to, but it pays in its growth and
-its backward-shift delete. The two exceptions are integer hit and integer
-count at 2^20, 1.41x and 1.30x behind. There the table is out of cache, and the
-ordered layout's second dependent load, bucket then entry, is a second miss
-the unordered layout does not take. The chosen layout is ahead of Node's
-`Map` on every workload at both sizes: 1.7x (integer insert) to 4.9x (integer
-count) at 2^20, and 1.8x to 6.2x at 65536.
-
-That is the whole of comparison (a). Whether the integer exception is worth an
-unordered `Map` is §10's question, and S7 answers it with (b) to (d).
-
-### 2.6 The prototypes in the instruction gate
-
-The four prototypes are in `bench/instructions.json` (#218's gate), at `n` =
-16384, where they run 219.7 to 254.8 million instructions each. They are single-threaded.
-They read the clock only when timing, so an untimed run's count does not depend
-on the vDSO. `--instructions --runs 3` gave a spread of 0 on all four. They are
-the only hash-table code in the gate: a bounds-proof, loop or call-lowering
-regression in a probe loop moves their counts and nothing else's. They do not
-use `Map`, so S2 to S7 do not move them. A stage that does is a codegen change,
-and the gate asks it to say so.
-
----
+- **A packed `u32` slot.** Never slower than the `i64` slot beyond the noise,
+  faster on string insert and integer churn at 2^20, and half the bucket memory
+  (168 MB of peak RSS at 2^20), for 7.6% more instructions in cache.
+- **The cap is one entry short of Node's 2^24, deliberately.** An empty bucket
+  is 0 and a tombstone is `0x01000000` (fingerprint 1, index 0), so the 24-bit
+  field holds the index plus one and needs no reserved value; the 2^24-th entry
+  would cost an `i64` slot. Past the cap an insert panics in Node's words,
+  `Map maximum size exceeded`. While a loop walks the table nothing compacts
+  (§6.2), so an insert at the cap during a walk panics however few entries are
+  live.
+- **The fingerprint is the hash's top eight bits; the bucket is
+  `(h ^ (h >>> 16)) & mask`**, so neighbouring buckets keep independent
+  fingerprints.
+- **The full hash lives in the entry** (`hashes: u32[]`); a stored 0 marks a
+  deleted entry, which is why a computed 0 becomes 1.
+- **Load factor 3/4.** At 7/8, churn was 10–20% slower in both fingerprinted
+  layouts: linear probing's expected miss length is 8.5 buckets at 3/4 against
+  32.5 at 7/8, and the memory saved is only in the bucket array, under 1.5 bytes
+  an entry beside at least 12 in the entry arrays.
 
 ## 3. `get`'s type
 
 ### 3.1 What `tsc` accepts
 
-`tsc --strict` 5.9.3 over one file declaring `const m = new Map<string, number>()`:
+`tsc --strict` 5.9.3, with `const m = new Map<string, number>()`:
 
 | # | Spelling | `tsc --strict` |
 | --- | --- | --- |
 | A | `const a = m.get(k); if (a !== undefined) { use(a); }` | accepted |
 | B | `const b: number = m.get(k) ?? 0;` | accepted |
-| C | `if (m.has(k)) { use(m.get(k)); }` | **TS2345**: `number \| undefined` is not assignable to `number` — `has` does not narrow `get` |
+| C | `if (m.has(k)) { use(m.get(k)); }` | **TS2345** — `has` does not narrow `get` |
 | D | `if (m.has(k)) { use(m.get(k)!); }` | accepted |
-| E | `m.set(k, m.get(k) + 1);` | **TS2532**: Object is possibly `undefined` |
+| E | `m.set(k, m.get(k) + 1);` | **TS2532** |
 | F | `m.set(k, (m.get(k) ?? 0) + 1);` | accepted |
 | G | `const g: number \| undefined = m.get(k);` | accepted |
 | H | `maybe(m.get(k))` into `(x: number \| undefined)` | accepted |
 | I | `let i = m.get(k); if (i !== undefined) { i = i + 1; }` | accepted |
 | J | `const j: number = m.get(k);` | **TS2322** |
 
-So a program that type-checks under `tsc` reads a map in one of three ways:
-narrow a binding (A), default it (B, F), or assert after `has` (D). No fourth
-way exists, because `get`'s declared result is `V | undefined` and `has` does
-not narrow it.
+A program that type-checks reads a map one of three ways: narrow a binding (A),
+default it (B, F), or assert after `has` (D).
 
 ### 3.2 The decision: `V | undefined`, admitted narrowly
 
-- **`m.get(k)` has type `V | undefined`**, a *maybe* type. It may appear in
-  exactly these places:
-  - as the initialiser of a `const`, which is unannotated or annotated
-    `V | undefined` (A, G);
-  - as the left operand of `??` (B, F);
-  - as an operand of `=== undefined` / `!== undefined`.
+`m.get(k)` is a *maybe*, admitted only as a `const` initialiser (unannotated or
+annotated `V | undefined`), the left operand of `??`, or an operand of
+`=== undefined` / `!== undefined`. A `let` (I), an argument (H), a return, a
+store, a template hole and an arithmetic operand (E) are refused with a
+diagnostic suggesting `??` or a `const` and a test; every refused spelling
+fails under `tsc` too (E, J) or is one v1 chose not to need (H, I). `nish --fix`
+now rewrites the `let`, argument and arithmetic cases to `m.get(k) ?? 0` (or
+`0.0`, `""`, `false`) where `V` allows one.
 
-  Anywhere else it is refused with a named diagnostic that suggests `??` or a
-  `const` and a test. Those places are a `let` (I), an argument (H), a return,
-  a store, a template hole and an arithmetic operand (E). Every refused
-  spelling either fails under `tsc` too (E, J) or is one v1 chooses not to
-  need (H, I).
-- **Narrowing reuses the nullable *rules*, not the nullable representation.**
-  - **Reused:** the checker's type-level narrowing
-    ([LANGUAGE.md → Nullable types](LANGUAGE.md#nullable-types)). The table of
-    forms there applies with `undefined` in place of `null`, and so do the
-    region rules. The scope narrowing and stripping in `src/expressions.ts`
-    are generalised from `null` to `undefined`. A maybe `const` reads as `V`
-    where a test proves it present.
-  - **New:** what is narrowed. `T | null` exists only for a class, interface,
-    array or string, because `null` is a spare pointer value
-    ([same section](LANGUAGE.md#nullable-types)). A maybe covers every `V`,
-    scalars included (every §3.1 example is `Map<string, i32>`). So it is a
-    payload with a separate found bit, and the code that tests it and reads it
-    is S3's to write. It is not a pointer compared with `null`.
-  - A `const` cannot be reassigned, so the "narrowing ends at an assignment"
-    rule never fires. That is why `let` is refused: it is the case that needs
-    that rule.
-- **`??` parses with TypeScript's precedence.** It is at the level of `||`,
-  its operands bind as tightly as `|` does, and it does not mix with `||` or
-  `&&` without parentheses. `m.get(k) ?? 1 || 2` is TS5076 under `tsc`, and it
-  is a syntax error in Nish too. Its right operand has type `V`, and so does the
-  whole expression. Any `??` whose left operand is not a maybe keeps NL1048,
-  unchanged. When `V` is itself nullable (`Map<string, Node | null>`), `??`
-  also replaces `null`, as JavaScript's does, and `!== undefined` narrows to
-  `V`, keeping the `null`.
-- **`undefined` stays refused everywhere else**, as a value
-  (`reject_undefined_value`) and as a type (`reject_union_undefined`). The
-  maybe type is spelled only as the annotation of a `const` initialised
-  directly from `get`.
-- **It lowers to two SSA values: the probe's found bit, and the value, loaded
-  only when found.** This is a new lowering, and building it is S3's work.
-  - It is *analogous to* WP17's in-module register shape
-    ([LANGUAGE.md → Result and error handling](LANGUAGE.md#result-and-error-handling)),
-    but it is not that shape. A `Result` between two functions of one module is
-    `{ i1, i32, i32 }`: the discriminant and one slot per arm. A maybe has no
-    error arm.
-  - The pair never crosses a call and never reaches memory, so it needs no
-    struct type at all. There is nothing in WP17 for S3 to reuse beyond the
-    idea.
-  - `get` is one probe, and `m.get(k) ?? d` is that probe and a `select`.
+- **Narrowing reuses the nullable *rules*, not the representation.** `T | null`
+  exists only for pointer types, because `null` is a spare pointer value; a
+  maybe covers every `V`, scalars included, so it is a found bit and a payload.
+  A `const` cannot be reassigned, which is why `let` — the case that needs
+  "narrowing ends at an assignment" — is refused.
+- **`??` parses with TypeScript's precedence** and does not mix with `||` or
+  `&&` unparenthesised (TS5076, a syntax error here too). Any other `??` keeps
+  its refusal. For a nullable `V`, `??` also replaces `null`, as JavaScript's
+  does.
+- **It lowers to two SSA values**, the probe's found bit and the value loaded
+  only when found. It never crosses a call and never reaches memory, so it
+  needs no struct type: `get` is one probe, and `m.get(k) ?? d` that probe and a
+  `select`.
 
-**Why not `has` + `get(k)!`.** `tsc` needs the `!` (C against D). Nish's parser
-does not accept a postfix `!` at all today: `p!` is `` syntax error: expected
-`;`, found `!` ``. Under Node the assertion is erased, so `get(k)!` on an absent
-key is `undefined`, which flows on. Natively it would have to panic. The two
-runtimes would then disagree on exactly the programs that are wrong. It is also
-two probes unless fusion recognises it. `V | undefined` with `??` means the same
-thing on both runtimes, and it is one probe as written.
-
-**Why not `get(k, missing)`,** `StringMap`'s spelling. It is TS2554 under
-`tsc`. A Nish program is a TypeScript program, so it would not type-check.
-
-**Why a maybe value does not cross a call in v1.** H is legal TypeScript, but
-it needs `V | undefined` as a parameter type. That opens `undefined` in type
-positions generally, and the maybe then has to be laid out in memory: in a
-field, in an argument slot of an exported function, in the C header. A later
-stage would carry it the way WP17 carries a `Result`: a register pair for an
-internal callee, and a packed word for an exported one when `V` fits in four
-bytes. That would be a new ABI shape, not WP17's. Nothing in v1 needs it.
-The refusal names the rewrite (`?? d`, or narrow first). Relaxing it later is a
-minor, because it turns a refusal into an acceptance.
-
----
+**Why not `has` + `get(k)!`.** Under Node the `!` is erased and an absent key's
+`undefined` flows on, while natively it would have to panic, so the runtimes
+would disagree on exactly the wrong programs — and it is two probes. **Why not
+`get(k, missing)`**: it is TS2554. **Why a maybe does not cross a call**:
+`V | undefined` as a parameter type opens `undefined` in type positions and
+needs a memory and ABI shape; relaxing that later turns a refusal into an
+acceptance, so it can come in a minor.
 
 ## 4. Where the code lives
 
 ### 4.1 Output: instances go into the module that uses them
 
-Today a program that imports anything from `nish/` is two modules. A one-file
-program importing `nish/testing` gets this from `nish t.ts -o t.ll`:
-
-```
-compile: 2 modules would be written (t.ts, std/testing.ts); pass `-o <dir>/` to write one .ll per module
-```
-
-(`planOutputs`, [`src/compile.ts`](../src/compile.ts) line 127.) An imported
-generic's instances are defined by the module that declares the template and
-`declare`d by every other ([LANGUAGE.md → Generic classes and interfaces](LANGUAGE.md#generic-classes-and-interfaces),
-`tests/link/generic_import`). If `Map` went through that path, a program that
-names `Map` would become two modules without importing anything. Its
-`-o x.ll`, and every `tests/cases/` golden written that way, would stop
-working.
-
-**So the implicit collections module writes no output of its own.** S2
-compiles it like any module, typed and checked once. Its instances are emitted
-into each module that uses them, and so are the non-generic helpers they reach.
-All of them get `internal` linkage, which is a private copy per module:
-
-- `-o x.ll` keeps working, and S2's goldens live in `tests/cases/` as one-file
-  programs. Cross-module programs go to `tests/link/map_*`.
-- `internal` is what gives a function this compiler's private calling
-  convention (the condition `--strict-exports` uses for WP17's by-value pair).
-  `linkonce_odr` would keep one copy per program at link time and lose that
-  convention, so it is the wrong trade for code on the hot path.
-- Two modules that pass one `Map<string, i32>` between them each call their own
-  copy of `get` on it. The struct is laid out by name, program-wide
-  (`%struct.Map$str$i32`), so the copies agree on it. The duplication costs
-  code size in a multi-module binary. It is one probe loop per instance and
-  method used, and LLVM deletes an `internal` function that nothing calls.
-- Under `-g`, S2 gives each copy a `DIFile` for `std/collections.ts`, the file
-  its source is in.
-
-The load is conditional. A module that never names `Map` or `Set` loads
-nothing, so every program that compiles today compiles to byte-identical IR.
-S2's `tests/nish-cmp.js` run must show no moved program.
+An imported generic's instances are normally defined by the declaring module,
+which would make every program that names `Map` two modules and break
+`-o x.ll`. So `std/collections.ts` is compiled and checked once but writes no
+output; each instance, and every helper it reaches, is emitted into each module
+that uses it with `internal` linkage. That keeps one-file goldens in
+`tests/cases/` (cross-module programs are `tests/link/map_*`), and `internal` is
+what gives a function this compiler's private calling convention — `linkonce_odr`
+would merge copies and lose it, the wrong trade on a hot path. Two modules
+passing one `Map<string, i32>` call their own copies, which agree because the
+struct is laid out by name program-wide. A module that never names `Map` or
+`Set` loads nothing, so every earlier program's IR is byte-identical.
 
 ### 4.2 The names, and a user's own `Map`
 
-- **`std/collections.ts` declares `class Map<K, V>` and `class Set<T>`**,
-  mangled as every template is: `%struct.Map$str$i32`, `@Map$str$i32.get`. A
-  diagnostic names them as written (`` `Map<string, i32>` ``). No reserved
-  prefix is needed, because of the next rule.
-- **A user's own `Map` wins in its own module.** A class named `Map` compiles
-  today (`class Map { size: i32 = 0 }`, checked at `468f09a`). In a module
-  file it also shadows the lib declaration under `tsc`. So a module that
-  declares a class, interface, enum or alias named `Map` or `Set`, or imports
-  one, gets no implicit import, and its `Map` is its own.
-- **One name, two classes, one program: refused.** Class names are
-  program-wide ([LANGUAGE.md → Generic classes and interfaces](LANGUAGE.md#generic-classes-and-interfaces), NL3028).
-  So if one module declares `Map` and another names the global, the program is
-  refused with S2's clashing-`Map` code. The message names the declaring
-  module and says the global is the standard one. That is a deviation from
-  TypeScript, where each module's `Map` is its own. It is the deviation every
-  class name already has.
-- **Internal members are not visible.** Only the JavaScript members of §7
-  resolve. `m.slots`, `m.probe(...)` and the rest are refused with S2's
-  internal-member code, as if they did not exist, which under `tsc` they do not.
-
----
+`%struct.Map$str$i32` and `@Map$str$i32.get` are ordinary template names, and
+no reserved prefix is needed because **a user's own `Map` wins in its own
+module**: a module that declares or imports a `Map` or `Set` gets no implicit
+import. Class names are program-wide (NL3028), so one module declaring `Map`
+while another names the global is refused, naming the declaring module — the
+deviation from TypeScript every class name already has. Only the JavaScript
+members of §7 resolve; `m.probe(...)` and the table's fields are refused as if
+they did not exist, which under `tsc` they do not.
 
 ## 5. Keys, values and hashing
 
 ### 5.1 What may be a key, and what may be a value
 
-| Kind | Key in v1 | Value | Why |
+| Kind | Key | Value | Why |
 | --- | --- | --- | --- |
-| `string` | yes | yes | compared by content (`nish_str_eq`); keys are immutable, so the table stores the pointer |
-| `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `number` (either mode) | yes | yes | by value |
-| `f64`, `f32` | yes, SameValueZero | yes | JavaScript's key equality: −0 is +0 and NaN is NaN |
-| `boolean`, enums | yes | yes | by value, at the enum's width |
-| a class | yes, by identity | yes | a class value is a pointer and has identity ([LANGUAGE.md → Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)) |
-| an `interface` | **no** | **no** | stored inline: `values.push(p)` copies the record ([same section](LANGUAGE.md#arrays-of-records-are-contiguous)), so `m.set(k, p); p.x = 1` would not change what `m.get(k)` reads, which JavaScript's `Map` would. As a key it would have no identity at all |
-| `T[]` | **no** | yes | an array as a key has identity semantics in JavaScript, which surprises more often than it helps, and nothing in v1 needs it |
-| `T \| null` | **no** | yes | a null key is legal JavaScript. It needs a null test in `hashKey` and `sameKey`, and it waits for a program that wants one |
-| `Result<T, E>` | **no** | yes | no identity and no equality worth hashing |
-| `void` | — | **no** | there is nothing to store |
-
-Each refusal is one S2 code per position (key, value), naming the type and the
-reason above.
+| `string` | yes | yes | compared by content; keys are immutable, so the pointer is stored |
+| every integer width, `number` | yes | yes | by value |
+| `f64`, `f32` | yes, SameValueZero | yes | −0 is +0 and NaN is NaN |
+| `boolean`, enums | yes | yes | by value |
+| a class | yes, by identity | yes | a class value is a pointer |
+| an `interface` | **no** | **no** | stored inline, so `m.set(k, p); p.x = 1` would not change what `get` reads |
+| `T[]` | **no** | yes | identity semantics surprise more than they help |
+| `T \| null` | **no** | yes | waits for a program that wants a null key |
+| `Result<T, E>` | **no** | yes | no identity, no useful equality |
+| `void` | — | **no** | nothing to store |
 
 ### 5.2 Hash and equality per key type
 
-`hashKey<K>` and `sameKey<K>` are intrinsics that S2 lowers per `K` in
-`src/emit-map.ts`, as inline IR. They make no runtime call, because the
-runtime's `.text` budget has no room:
+`hashKey<K>`, `sameKey<K>` and `storedKey<K>` are intrinsics lowered per `K` in
+`src/emit-map.ts` as inline IR, with no runtime call (the runtime's `.text`
+budget has no room), and because `fmix64`'s constants are above 2^53, which a
+Nish literal cannot spell.
 
 | `K` | `hashKey` | `sameKey` |
 | --- | --- | --- |
-| `string` | FNV-1a, 32-bit, over the UTF-8 bytes, as `hashString` in `src/map.ts` | `nish_str_eq` |
-| ≤ 32-bit integer, `boolean`, enum | `fmix32` (murmur3's finaliser) of the value, zero-extended | `icmp eq` |
-| `i64`, `u64` | `fmix64`, then the two halves XORed | `icmp eq` |
-| `f64` | normalise, then `f64ToBits`, then as `i64` | SameValueZero: `a == b` (`fcmp oeq`, so −0 equals +0), or both are NaN (`fcmp uno` on each) |
-| `f32` | normalise, then `fpext` to `f64`, then as `f64` | as `f64` |
-| a class | the pointer (`ptrtoint`) as `i64` | `icmp eq` on the pointers |
+| `string` | FNV-1a, 32-bit, over the UTF-8 bytes | `nish_str_eq` |
+| ≤ 32-bit integer, `boolean`, enum | `fmix32` of the zero-extended value | `icmp eq` |
+| `i64`, `u64` | `fmix64`, halves XORed | `icmp eq` |
+| `f64` | normalise, then its bits as `i64` | `fcmp oeq`, or both NaN |
+| `f32` | normalise, `fpext`, then as `f64` | as `f64` |
+| a class | the pointer as `i64` | pointer `icmp eq` |
 
-Normalising a float means −0 becomes +0 (`fadd x, 0.0` does it), and every NaN
-becomes the one canonical `0x7FF8000000000000`. Keys that SameValueZero calls
-equal then hash equal. A hash of 0 is moved to 1 (§2.4).
-
-An entry stores a −0 key as +0, as JavaScript's `Map.prototype.set` and
-`Set.prototype.add` do, so a walk yields +0 whichever zero was inserted. That
-is a third intrinsic, `storedKey<K>`, called where `insertAt` pushes the key:
-the same `fadd x, 0.0` for a float, and nothing at all for every other key
-(`tests/cases/map_key_negzero`, `map_key_f32_negzero`). `fmix64`'s constants
-are above 2^53, which a Nish literal cannot spell. That is why this is IR the
-compiler writes, and not Nish in `std/`.
-
-**Hash flooding is out of scope for v1**, and the hash is unseeded. Insertion
-order decides iteration order, so the hash never reaches a program's output.
-Only its speed depends on it. A seeded hash can come later without changing
+Normalising makes −0 into +0 and every NaN the canonical one, so keys
+SameValueZero calls equal hash equal; `storedKey` stores a −0 key as +0, as
+JavaScript does (`map_key_negzero`). **Hash flooding is out of scope**: the hash
+is unseeded, and since insertion order decides iteration order, it never
+reaches a program's output, so a seeded hash can come later without changing
 what any program prints.
-
----
 
 ## 6. Deletion, iteration and `Set`
 
 ### 6.1 `delete`, compaction and `clear`
 
-- **`delete(k)` is one probe.** It writes the tombstone `0x01000000` into the
-  bucket the probe found, sets the entry's stored hash to 0 and drops `size`.
-  The key and value stay in the entry until a rebuild. A probe walks past a
-  tombstone, and an insert does not reuse one. So the number of taken buckets
-  is always the number of entries, live or dead, and the load bound can be one
-  compare.
-- **A rebuild happens at the load bound**, when entries (live + dead) pass 3/4 of
-  the buckets. It **compacts at the same size** when more than half of the
-  entries are dead, and **doubles** otherwise. Either way the live entries
-  slide down in order, and the buckets are re-filed from `hashes`. No key is
-  hashed again, and no key is compared.
-- **Compaction reuses the bucket array.** There is no collector, so a new array
-  leaves the old one in the arena until the enclosing scope ends. On the churn
-  workload that is one abandoned table per compaction, with no bound. The first
-  version of the prototypes allocated a new array for every rebuild. Clearing
-  the array in place instead took the `i64` layout at 2^20 from 1,673 ms to
-  917 ms on integer churn, and its peak RSS from 1,057,848 KB to 828,212 KB.
-  Doubling still abandons the old array, but the abandoned sizes sum to less
-  than the final one, so growth's garbage is bounded by the table's own size.
-- **The table never shrinks.** V8's does, but a smaller table here is a new
-  allocation with the old one abandoned. A map keeps the memory of its largest
-  size, as an array keeps its capacity after `pop`.
-- **`clear()`** sets `size` to 0 and marks the table empty in place. When no
-  loop is walking it (§6.2), that means zeroing the buckets and truncating the
-  entries. When one is, every entry is marked dead and the entry count is kept,
-  so the walk sees what is inserted after the `clear`, as JavaScript's does.
+`delete(k)` is one probe that writes the tombstone and zeroes the entry's
+stored hash; a probe walks past a tombstone and an insert does not reuse it, so
+taken buckets always equal entries live or dead and the load bound is one
+compare. At the bound a rebuild **compacts at the same size** when more than
+half the entries are dead and **doubles** otherwise, sliding live entries down
+in order and re-filing from `hashes` with no key hashed or compared.
+Compaction **reuses the bucket array**: with no collector, a fresh array per
+compaction is unbounded garbage on churn, and reusing it took the `i64`
+prototype's integer churn from 1,673 ms to 917 ms. Doubling still abandons the
+old array, but those sum to less than the final one. The table never shrinks,
+as an array keeps its capacity after `pop`. `clear()` truncates in place unless
+a walk is live, in which case it marks every entry dead and keeps the count, so
+the walk sees what is inserted afterwards, as JavaScript's does.
 
 ### 6.2 Iteration, and mutation during it
 
-`for (const k of m.keys())` and `for (const v of m.values())` walk the entries
-in index order. They skip dead ones, and **re-read the entry count every pass**.
-S4 lowers them in `emitForOf` ([`src/emit-arrays.ts`](../src/emit-arrays.ts)
-line 1127). **The semantics are JavaScript's exactly**, because an entry never
-moves while a loop is walking the table:
+`for (const k of m.keys())` and `m.values()` walk the entries in index order,
+skip dead ones, and **re-read the entry count every pass**, so the semantics
+are JavaScript's exactly, because an entry never moves while a loop is walking
+the table:
 
 | During the walk | JavaScript | Here |
 | --- | --- | --- |
@@ -546,353 +265,121 @@ moves while a loop is walking the table:
 | `clear` | nothing more, then anything added after | every entry is dead and the count is kept (§6.1) |
 | growth | invisible | the buckets move and the entries do not |
 
-**Compaction is the one operation that moves entries**, so it is deferred while
-any loop is walking the table. The table carries a count of live walks. S4
-increments it where the loop is entered and decrements it on every edge that
-leaves: the fall-through, `break`, and each `return` out of an enclosing
-walk. `panic` and `process.exit` end the process, so they need nothing. A
-rebuild with the count above zero doubles instead of compacting, and the next
-rebuild after the walk compacts. The one cost is the cap (§2.4): an insert
-at 2^24 − 1 entries during a walk cannot compact dead entries away first, so
-it panics. Iterators are not values ("iterators as
-values" is out of the plan's scope), so every walk is a lexical loop and the
-counter is exact, nested walks and a walk in a callee included. It costs two
-stores a loop, not one per element.
-
-`keys()` and `values()` are allowed only as a `for...of` iterable in v1. S4's
-named refusal covers anything else. There is no `entries()` and no `forEach`:
-there is no destructuring, and a method cannot take a function parameter
-(NL2338).
+**Compaction is the one operation that moves entries**, so the table counts its
+live walks: incremented where a loop is entered, decremented on the
+fall-through, `break` and every `return` out of an enclosing walk (`panic` and
+`process.exit` need nothing). A rebuild with walks live doubles instead, and the
+next one compacts. Iterators are not values, so every walk is a lexical loop and
+the count is exact, nested walks and walks in a callee included, at two stores
+a loop. `keys()` and `values()` are allowed only as a `for...of` iterable; there
+is no `entries()` (no destructuring) and no `forEach` (a method cannot take a
+function parameter, NL2338).
 
 ### 6.3 `Set`
 
-`Set<T>` is the same table without `values`, and the same class body shape, so
-S2 writes one probe for both. `add` returns `this`. `has` and `delete` are
-`Map`'s. `for (const x of s)`, `s.keys()` and `s.values()` are one walk in
-insertion order. JavaScript's `Set.prototype.keys` *is* `values`, and
-`for...of` over a `Set` is `values()`. The key rules of §5 apply to `T`.
-
----
+`Set<T>` is the same table without values, sharing the probe. `add` returns
+`this`; `for (const x of s)`, `s.keys()` and `s.values()` are one insertion-order
+walk, as in JavaScript. §5's key rules apply to `T`.
 
 ## 7. The small choices
 
-| Choice | Decision | Evidence |
-| --- | --- | --- |
-| `size` | a read-only property of type `number`: `i32` in `--number-mode i32`, the `i32` count converted in `f64` | `tsc`: `const n: number = m.size` is accepted, and `m.size = 3` is TS2540. Nish's `.length` is `number` the same way ([LANGUAGE.md → Member access](LANGUAGE.md#member-access)) |
-| `set` / `add` result | the receiver, `this`, so `m.set(a, 1).set(b, 2)` chains | `tsc` accepts the chain. In statement position the result is dropped. S2 must check that a `const m = new Map…()` used only through `set` still gets the stack-or-arena decision it would get with a `void` result. If the facts cannot say "returns its receiver", that decision is an arena bump of the table header, which is recorded, not a refusal |
-| `new Map(entries)`, `new Set(array)` | refused in v1, naming the loop that replaces them | `tsc` accepts both, but a Nish class has one constructor and no optional parameter, so `std/` cannot declare them. Accepting them needs compiler special-casing, and S2 keeps the surface to what the class can say |
-| type arguments on `new` | required, except that `const m: Map<string, i32> = new Map()` (and a `let`) takes them from the annotation | `tsc` infers from the annotation, and `bad.set(1, 1)` on such a map is TS2345. Unannotated, `const loose = new Map()` is `Map<any, any>` under `tsc --strict` with no error at all. Nish refuses it and asks for the type arguments |
-| `delete` as a name | allowed as a member name | `class Box { delete(): i32 … }` compiles today. The validator's `delete` refusal is the operator (`reject_delete`) |
-| visible members | `size`, `get`, `set`, `has`, `delete`, `clear`, `keys`, `values` (Map); `size`, `add`, `has`, `delete`, `clear`, `keys`, `values` (Set) | the ES2022 declarations, less `entries`, `forEach` and `[Symbol.iterator]`, which §6.2 defers |
-
----
+- **`size`** is a read-only `number` property (`m.size = 3` is TS2540).
+- **`set` and `add` return `this`**, so calls chain as under `tsc`.
+- **`new Map(entries)` and `new Set(array)` are refused**, naming the loop
+  that replaces them: a Nish class has one constructor and no optional
+  parameter, so `std/` cannot declare them.
+- **Type arguments are required on `new`**, except from an annotated
+  declaration (`const m: Map<string, i32> = new Map()`); unannotated, `tsc`
+  makes `Map<any, any>` with no error, and Nish asks for them.
+- **Visible members** are the ES2022 declarations less `entries`, `forEach` and
+  `[Symbol.iterator]`.
 
 ## 8. Interop
 
-| Sidecar | A function whose signature has a `Map` or `Set` | Why |
-| --- | --- | --- |
-| `--emit-header` | declared, with the instance as an opaque struct: `typedef struct nish_gen_Map_str_i32 nish_gen_Map_str_i32;` and no body. A pointer to it crosses as a class pointer does | a C host can hold a map it was given and hand it back. Laying the struct out would make `std/collections.ts`'s private fields an ABI, which the §2 layout must stay free to change |
-| `--emit-dts` | not exported to JS, with the existing reason comment naming the type | a wasm host cannot follow an arena pointer. This is the rule a class parameter already gets ([wp8-interop.md → `--emit-dts`](wp8-interop.md#--emit-dts-filedts-typings-and-a-loader-for-the-wasm-build)) |
-| `--emit-napi` | not bridged, with the existing comment naming the position and the type | the same rule ([wp8-interop.md → Functions the shim cannot bridge say so](wp8-interop.md#functions-the-shim-cannot-bridge-say-so)). Converting to and from a JavaScript `Map` is a later item |
-
-None of the three refuses the compile. A program that uses `Map` internally and
-exports only scalars is unaffected.
-
----
+`--emit-header` declares an instance as an opaque struct
+(`typedef struct nish_gen_Map_str_i32 nish_gen_Map_str_i32;`), so a C host can
+hold a map and hand it back; laying it out would make `std/collections.ts`'s
+private fields an ABI. `--emit-dts` and `--emit-napi` leave the function
+unbridged with the existing reason comment, the rule a class parameter already
+gets. None refuses the compile.
 
 ## 9. Fusion, `nish/map`, and threads
 
 ### 9.1 The fusion patterns
 
-S5 recognises three patterns in a new `src/fusion.ts`. Each becomes one
-`probe` and a write through its packed result. That write is `setValueAt(i,
-v)` when the key was found, and `insertAt(bucket, k, h, v)` when it was not,
-reusing the probe's hash.
+`src/fusion.ts` turns three patterns into one `probe` and a write through its
+packed answer — `setValueAt` where the key was found, `insertAt` with the
+probe's hash where it was not:
 
-1. **Update:** `m.set(k, E)`, where `E` contains exactly one `m.get(k)` or
-   `m.has(k)` on the same receiver and key. For example
-   `counts.set(w, (counts.get(w) ?? 0) + 1)` is word count.
-2. **Guarded write:** `if (m.has(k)) { m.set(k, E); … }` or
-   `if (!m.has(k)) { m.set(k, E); … }`, where the `set` is the branch's first
-   statement.
-3. **Set insert-if-absent:** `if (!s.has(x)) { s.add(x); … }`, where the `add`
-   is the branch's first statement. The rest of the branch runs only if the
-   element was inserted, as it did before.
+1. **Update**: `m.set(k, E)` where `E` holds exactly one `m.get(k)` or
+   `m.has(k)` — word count's `counts.set(w, (counts.get(w) ?? 0) + 1)`.
+2. **Guarded write**: `if (m.has(k)) { m.set(k, E); … }`, or with `!`, the
+   `set` first in the branch.
+3. **Set insert-if-absent**: `if (!s.has(x)) { s.add(x); … }`.
 
-**The same receiver and key** means both are spelled the same way, and each is
-a local or parameter identifier, or a `this.<field>` path; the key may also be a
-literal. The receiver is not a call and not an element access.
-
-**"Nothing in between"** means that between the probe and the write — within
-`E`, and between the `has` and the branch's first statement — there is:
-
-- no call of any kind (a user function, a method, a builtin, `console.log`);
-- no `new`, array or object literal, template literal or string `+`, which
-  are allocations;
-- no assignment, `++`/`--` or compound assignment, to anything;
-- no `?.`-style control flow, since there is none. `&&`, `||`, `??` and the
-  ternary are allowed, because they only choose among values `E` already has.
-
-A call could insert into `m` and grow it, delete, or `clear`. Any of those
-makes the probe's bucket wrong, and the whole-program facts do not yet say
-"does not touch this map". Relaxing the rule to a callee the facts prove pure
-is a later minor. A pattern that falls outside these rules is not an error. It
-compiles as the separate calls it is, with one probe each. S5's IR check pins
-one `probe` call, and no second `hashKey`, per word-count iteration.
-
-`const v = m.get(k); if (v !== undefined) { … }` needs no fusion. It is one
-probe as written (§3).
+Receiver and key must be spelled the same and be identifiers or `this.<field>`
+paths (the key may be a literal). Between probe and write there may be **no
+call, no allocation and no assignment** of any kind, because a call could grow,
+delete from or clear `m` and make the probe's bucket wrong, and the facts do
+not yet say "does not touch this map". Anything outside the patterns is not an
+error; it compiles as separate calls.
 
 ### 9.2 `nish/map`
 
-`std/map.ts` exports `reserve(m, n)` and `getOrInsert(m, k, v)`. Their bodies
-are Node-faithful: `reserve` does nothing, and `getOrInsert` is
-`has`/`get`/`set`. They run as written under Node. Natively the compiler routes
-them to the table's `reserveSlots` and to one `probe` with a write through its
-result.
+`std/map.ts` exports `reserve(m, n)` and `getOrInsert(m, k, v)`, whose bodies
+are the Node meaning (`reserve` does nothing; `getOrInsert` is
+`get`/`set`). Natively the compiler lowers `reserve` to the table's
+`reserveSlots` and `getOrInsert` to one probe and a write through its answer.
 
 ### 9.3 A `Map` read inside a parallel body
 
-A wp29 body may not write memory its caller can see, and may allocate only
-temporaries it drops (`src/parallel.ts`'s header). A body can only reach a
-map through its element, since there are no closures and a module constant
-cannot be a class. For `m.get(k)`, `m.has(k)` and `m.size` in such a body to
-be legal, S2 must make sure of three things:
-
-1. **`probe` writes nothing.** It answers the found entry or the empty bucket
-   in its packed result. The prototypes' `found` field, which `delete` reads,
-   is exactly what S2 must not copy, because it would make every `get` a
-   shared write (`FunctionFacts.sharedWrite`, [`src/attributes.ts`](../src/attributes.ts)
-   line 276). Hashing a string allocates nothing, so a `get` is no NL9012
-   either.
-2. **The `dst` reachability rule sees through the table's private arrays.** The
-   rule judges by type (`reachingPath`, [`src/parallel.ts`](../src/parallel.ts)
-   line 286). A `Row { index: Map<string, i32> }` element would "reach an
-   `i32[]` through `r.index.values`", and a `dst: i32[]` would be refused.
-   Those arrays are never handed out, so no `dst` can be one of them. The rule
-   must follow `K` and `V`, which a `get` does return, and skip the table's own
-   arrays.
-3. **Iterating a map in a body stays refused**, and needs no new rule. The walk
-   counter of §6.2 is a store into the table, so the existing shared-write
-   message reports it at the loop. So does any `set`, `delete`, `add` or
-   `clear` in a body.
-
-S2 adds one positive case, a map read from a `parallelReduce` body, to pin all
-three. It adds a `reject_*` case for a `set` in a body, which the existing rule
-must already name.
-
----
+**Planned, not built.** A `nish/threads` body may write nothing its caller can
+see, and could reach a map only through its element. For `get`, `has` and
+`size` to be legal there, `probe` must write nothing (it does not), the `dst`
+reachability rule must see through the table's private arrays to `K` and `V`
+only, and iterating stays refused (the walk counter is a store). Today a body
+that reads `x.index.get("a")` is refused on both counts: it "can reach a `i32[]`
+through `x.index.entryValues`", and it "writes memory its caller can see
+through `Map<string, i32>.probe`" (checked with 0.15.0). `probe` writes no
+memory, as `std/collections.ts` states, so the second refusal is the effect
+analysis not yet crediting it, and the first is the reachability rule not yet
+skipping the table's own arrays. The work is those two rules, one positive
+case and a `reject_*` for a `set` in a body.
 
 ## 10. Is an unordered map ever needed? (S7)
 
-**No, not for v1.** The ordered `Map` is 1.47x to 4.5x ahead of Node's on every
-workload, at both sizes. The unordered layout's lead is on lookups of integer
-keys. On integer count it is 1.25x in the cache and 1.35x out of it, and on
-integer hit 1.13x to 1.14x. On insert and churn the two are level, or the
-ordered `Map` is ahead. In instructions, the unordered prototype runs the ten
-workloads in 0.82x of `Map`'s.
+**No, not for v1.** Measured by `bench/map-wordcount.ts` (b),
+`bench/map-presize.ts` (c) and `bench/map-vs-stringmap.ts` (d), each with a
+Node twin; see [bench/README.md](../bench/README.md#the-global-map-measured)
+and [BENCHMARKS.md](BENCHMARKS.md#map-and-set-wp32). Wall time on the shared
+VM is noisy — a cell is worth about ±25%, and an independent pass disagreed on
+two cells by more than that — so claims rest on instruction counts where they
+can.
 
-Fusion and `reserve` cut instructions by more than that lead. Fusion runs word
-count in 0.55x of the double lookup's instructions, and `reserve` runs insert
-in 0.71x of growing's. A second table with a different iteration order is not
-worth the gap. The shape that would reopen the question is at the end of this
-section.
+- **Against Node**, the ordered `Map` is 1.47x to 4.5x ahead on all ten
+  workloads at both sizes.
+- **Against `StringMap`** it is level (0.91x to 1.28x) on the string workloads:
+  same layout, and genericity costs nothing above the noise.
+- **Against the unordered layout**, it trails only on integer lookups, 1.13x to
+  1.14x on hit and 1.25x to 1.35x on count, the second dependent load (bucket,
+  then entry) the layout predicted; insert, churn and integer miss are level or
+  ahead. In instructions over all ten workloads it runs 1.22x the unordered
+  prototype's, about a third of which is generic code over the hand-written
+  twin (1.06x).
+- **Fusion** runs word count in 1.82x fewer instructions than the double lookup
+  (about 1.2x to 1.7x in wall time).
+- **`reserve`** runs insert in 1.41x fewer instructions and 13% less peak
+  memory, since a presized table abandons no bucket arrays; its wall-time gain
+  is reliable in cache and inside the noise at 2^20.
 
-### 10.1 How it was measured
+JavaScript fixes iteration order, so an unordered table could never be the
+global `Map`, only a second type a program chooses by hand, and fusion and
+`reserve` are each worth more than its lead.
 
-Three programs time the shipped `Map` on §2's workloads, each beside a Node
-twin. [`bench/README.md`](../bench/README.md#the-global-map-measured)
-describes them:
-
-- **(b)** [`map-wordcount`](../bench/map-wordcount.ts) is fused against double
-  lookup on word count.
-- **(c)** [`map-presize`](../bench/map-presize.ts) is `reserve` against growing
-  on insert.
-- **(d)** [`map-vs-stringmap`](../bench/map-vs-stringmap.ts) is `Map` against
-  `StringMap` on all ten workloads.
-
-Each program prints lines that `bench/map-node.mjs` prints, and `--validate`
-requires that. So every row is the same work, over the same keys, as the
-unordered prototype's row beside it. `StringMap` is compiler-internal, so the
-program carries a verbatim copy of it from `src/map.ts`. `tests/run.js` fails
-when the copy drifts, and `StringMap`, being `string -> i32` with no `delete`,
-runs the four string workloads it can.
-
-The **double lookup** reads the count into a `const`, then sets it:
-`const c = counts.get(w); counts.set(w, (c ?? 0) + 1);`. The `get` is not in
-the `set`'s value, so §9.1 leaves the pair unfused, with no call and no
-allocation added. In the IR the fused loop calls `probe` once per word, then
-`setValueAt` or `insertAt`. The double loop calls `probe` for the `get` and then
-`Map.set`, which probes again.
-
-**Two kinds of evidence, and how far each goes.**
-
-- **Instruction counts.** These do not move, and they carry every claim below
-  that says "fewer instructions".
-  - `--instructions` counts the three programs at `n` = 16,384 with a spread of
-    0 over three runs: `map-wordcount` 111,693,790, `map-presize` 56,609,708
-    and `map-vs-stringmap` 330,510,892 (`bench/instructions.json`).
-  - Each variant was counted alone the same way, from `build/bench/instructions/`
-    after `node bench/run.mjs --instructions`:
-
-    ```bash
-    env -i GLIBC_TUNABLES=<bench/run.mjs's PINNED_LIBC> \
-      valgrind --tool=cachegrind --cache-sim=no --cachegrind-out-file=cg.out ./<program> <variant>
-    grep '^summary' cg.out
-    ```
-
-  - Building the key set is counted by naming a variant the program does not
-    have, `./map-wordcount none` and `./map-presize none`, which run neither
-    variant. They read 8,264,248 and 8,231,470. Each variant's figure below is
-    its summary less its program's key-set count.
-  - `./map-vs-stringmap map` is `Map` on all ten workloads, key set included,
-    as each prototype's whole-program count in `bench/instructions.json` is.
-- **Wall time.** These are the tables in [BENCHMARKS.md](BENCHMARKS.md#map-and-set-wp32),
-  from `node bench/run.mjs --runs 9`.
-  - Each column is its own process, and the columns take turns round by round.
-  - Each cell is the minimum and median of 9 timed runs after one warm-up, at
-    `n` = 65,536 (in cache) and 1,048,576 (out of cache).
-  - The machine is the same four-core shared VM as §2, with clang 18 and Node
-    22.22.2, `--profile speed`, checks on.
-
-**How noisy the wall time is.** Very noisy: 70 of the 80 cells at 65,536, and
-74 of 80 at 2^20, have a median more than 5% above their minimum. Two passes of
-the same programs on the same kind of VM also disagree by more than that. The
-[review's independent pass](https://github.com/amritk/nish/pull/244#discussion_r4110580133) read string `reserve` at 2^20 as 0.96x,
-where the committed table reads 1.39x. It read string fusion at 2^20 as 1.28x,
-where the table reads 1.74x.
-
-So the ratios below divide minimums from the one committed table, and a claim
-that depends on wall time alone is made only where it is large or matches the
-instruction counts. A single cell is worth about ±25%.
-
-### 10.2 (b) Fused against double lookup
-
-| `n` | | `Map` fused | `Map` double | unordered | Node fused | Node double | double / fused | fused / unordered | fused / Node |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 65,536 | count str | 13.5 | 17.1 | 9.77 | 49.6 | 39.4 | 1.26x | 1.38x | 0.27x |
-| 65,536 | count int | 5.67 | 6.82 | 4.36 | 28.6 | 28.6 | 1.20x | 1.30x | 0.20x |
-| 2^20 | count str | 512 | 889 | 510 | 1507 | 1448 | 1.74x | 1.00x | 0.34x |
-| 2^20 | count int | 187 | 238 | 144 | 966 | 1080 | 1.28x | 1.29x | 0.19x |
-
-- **Instructions.** The double lookup runs 66,777,903 instructions where the
-  fused count runs 36,652,275, 1.82x. That is the second hash and the second
-  search.
-- **Wall time.** Fusion was faster in every cell, by 1.20x to 1.74x in this
-  table. The review's pass read 1.28x to 1.52x. So fusion is **about 1.2x to
-  1.5x on integer keys and 1.3x to 1.7x on strings**, and the exact figure is
-  inside this machine's noise.
-- **Under Node** the two spellings run the same work. Its 0.79x to 1.12x is
-  noise.
-- **Against the unordered layout,** even fused, the ordered `Map` trails the
-  prototype on word count by up to 1.38x.
-
-### 10.3 (c) Presized against growing
-
-| `n` | | `Map` growing | `Map` `reserve` | unordered | Node | growing / reserve | reserve / unordered | reserve / Node |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 65,536 | insert str | 14.7 | 10.8 | 17.3 | 33.0 | 1.36x | 0.62x | 0.33x |
-| 65,536 | insert int | 12.0 | 6.25 | 13.0 | 18.0 | 1.91x | 0.48x | 0.35x |
-| 2^20 | insert str | 350 | 252 | 357 | 1002 | 1.39x | 0.71x | 0.25x |
-| 2^20 | insert int | 265 | 197 | 326 | 492 | 1.34x | 0.60x | 0.40x |
-
-- **Instructions.** A grown insert runs 28,338,434 instructions and a presized
-  one 20,046,347, 1.41x.
-- **What it saves.** Both end at the same bucket count, so what presizing saves
-  is the rebuilds. At 2^20 that is eighteen doublings, from 8 buckets to 2^21,
-  each re-filing every bucket from `hashes`.
-- **Wall time, in the cache.** Presized insert is faster there, and that
-  reproduces. This table reads 1.91x (integer) and 1.36x (string). The review's
-  two passes read 1.50x and 1.52x (integer), and 1.41x and 1.37x (string).
-- **Wall time, out of the cache.** Insert at 2^20 is **not reliably faster,
-  for either key kind.** This table reads 1.34x (integer) and 1.39x (string).
-  The review's passes read 1.50x and [1.03x](https://github.com/amritk/nish/pull/244#discussion_r4110702334)
-  (integer), and 0.96x and 1.03x (string), medians agreeing. At that size an
-  insert is dominated by hashing the key and by cache misses on the entry
-  arrays, not by rebuilds, and the rebuilds' saving is inside this machine's
-  noise.
-- **Memory.** `reserve` saves memory as well as instructions, the opposite of
-  the trade the plan expected. Each abandoned bucket array stays in the arena
-  until its scope ends, and a presized table never abandons one. Peak RSS of
-  `map-presize` running one variant alone (the whole process, with both key
-  sets) was 33,588 KB growing and 29,108 KB presized at 65,536, −13%. At 2^20
-  it was 510,388 KB and 444,340 KB, −13%. Unlike the times, those are the same
-  in every run.
-- **Under Node** there is no `reserve`, and its column shows that `nish/map`'s
-  empty body costs nothing there.
-
-### 10.4 (d) The new `Map` against `StringMap`, and against the unordered layout
-
-| workload | `Map` / `StringMap` 65,536 | 2^20 | `Map` / unordered 65,536 | 2^20 | `Map` / Node 65,536 | 2^20 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| insert str | 1.00x | 1.07x | 1.00x | 0.98x | 0.67x | 0.35x |
-| hit str | 1.03x | 0.99x | 1.40x | 0.97x | 0.54x | 0.48x |
-| miss str | 1.28x | 1.01x | 1.34x | 1.02x | 0.45x | 0.34x |
-| count str | 1.09x | 0.91x | 1.29x | 1.02x | 0.43x | 0.40x |
-| churn str | — | — | 1.02x | 0.92x | 0.50x | 0.38x |
-| insert int | — | — | 1.05x | 0.97x | 0.68x | 0.68x |
-| hit int | — | — | **1.14x** | **1.13x** | 0.24x | 0.31x |
-| miss int | — | — | 1.00x | 0.95x | 0.30x | 0.25x |
-| count int | — | — | **1.25x** | **1.35x** | 0.22x | 0.25x |
-| churn int | — | — | 0.84x | 0.87x | 0.48x | 0.47x |
-
-- **Against `StringMap`,** the generic `Map` is level, 0.91x to 1.28x across
-  the four string workloads and both sizes. That is within this table's noise
-  of 1.00x, because they are the same layout. What genericity and JavaScript's
-  semantics add is:
-  - `probe` answers a packed `i64` that `get` unpacks;
-  - `hashKey` and `sameKey` are per-`K` intrinsics;
-  - `delete` needs a dead-entry test that `StringMap`, with no `delete`, does
-    without.
-
-  None of those shows up above the noise.
-- **Against Node,** `Map` is ahead on every workload at both sizes. The lead
-  runs from 1.47x (integer insert, 0.68x at both sizes) to 4.5x (integer count
-  at 65,536, 0.22x).
-- **Against the unordered layout,** in wall time, only integer hit and integer
-  count are behind at both sizes: 1.13x to 1.14x and 1.25x to 1.35x. This is
-  the shape §2.5 predicted, the ordered layout's second dependent load: bucket,
-  then entry hash, then key.
-  - The string lookups trail by 1.29x to 1.40x at 65,536 and are level at 2^20.
-    That is the opposite of what cache effects would do, and it is within this
-    table's noise.
-  - Insert, churn and integer miss are level, or ahead.
-- **In instructions,** the ten workloads on `Map` (key set included) run
-  251,616,455. The unordered prototype runs 206,997,262, 1.22x fewer, and the
-  `u32` fingerprint prototype 237,755,219, 1.06x fewer. So about a third of the
-  gap to the unordered layout, 13.9 of 44.6 million, is the generic `Map` over
-  its hand-written monomorphic twin. The rest is the layout.
-
-### 10.5 The decision
-
-**An unordered map is not needed for v1.**
-
-- **The ordered layout's loss is small and narrow.** In wall time it trails
-  the unordered prototype on integer lookups, by 1.13x to 1.35x, and is level
-  or ahead on insert and churn. In instructions it runs 1.22x the prototype's
-  over all ten workloads. JavaScript fixes iteration order, so an unordered
-  `Map` could not be the global `Map` at all. It would be a second type with a
-  different contract, and a program would have to choose it by hand.
-- **The two levers the language already has are each worth more than that.**
-  - Fusion runs word count in 1.82x fewer instructions.
-  - `reserve` runs insert in 1.41x fewer, with 13% less peak memory.
-
-  A program that wants the unordered layout's lookup speed has these first,
-  and they need no second type.
-- **Node is not close.** The ordered `Map` is 1.47x to 4.5x ahead of Node's on
-  all ten workloads at both sizes. The unordered layout would widen a lead, not
-  close a gap.
-
-**What would reopen it.** A program whose time goes to lookups of integer keys
-in a table larger than the cache, where neither fusion nor `reserve` applies.
-There the ordered `Map` trails by 1.13x (hit) to 1.35x (count) at 2^20 keys. A
-table with more than about 2^20 integer keys, read far more often than it is
-written, and never iterated, is the one workload where an unordered `nish/`
-table would pay. It would be an opt-in library type beside `Map`, never a
-replacement.
-
-The measurement to repeat before building one is (d)'s `hit int` and
-`count int` rows at 2^20, and at 2^22 if the tables grow further, on a quiet
-machine. The trigger is a gap above 1.3x that holds across passes. Before that,
-the cheaper thing to try is the generic code: the 1.06x of instructions between
-`Map` and the hand-written fingerprint prototype.
+**What would reopen it**: a program whose time goes to lookups of integer keys
+in a table larger than the cache — more than about 2^20 keys, read far more than
+written, never iterated — where neither fusion nor `reserve` applies. Repeat
+(d)'s `hit int` and `count int` rows at 2^20 (and 2^22) on a quiet machine; the
+trigger is a gap above 1.3x that holds across passes, and the cheaper thing to
+try first is the 1.06x of generic code. It would be an opt-in `nish/` type
+beside `Map`, never a replacement.

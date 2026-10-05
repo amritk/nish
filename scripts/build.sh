@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build an Nish .ll module (plus optional C sources) into a native binary.
 #
-#   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm]
+#   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
 # The C runtime is five translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
@@ -20,8 +20,6 @@
 #          load it from Node. Add runtime/runtime-wasm.c to the inputs when a
 #          function uses arrays (the arena and the array cold paths, no libc);
 #          strings and I/O still need a WASI runtime and are not available.
-#   wasm   wasm32 freestanding module exporting every non-internal function
-#          (for modules that do not use the C runtime); load it from Node.
 #   wasi   wasm32-wasi command module: runtime.c linked against wasi-libc, so
 #          string programs run under any WASI host (`_start` runs `main`;
 #          `node examples/wasi-host.mjs app.wasm args...`). Needs a WASI

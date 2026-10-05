@@ -256,8 +256,9 @@ it is never a silent wrap and never undefined. The compiler drops the check
 where it can prove the result fits — a loop counter under `i < n`, a byte
 widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
 that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
-which always wrap and are never checked; convert back with `toI32` (free).
-`--wrapping` makes every signed operation wrap instead, for a whole build.
+which always wrap and are never checked; convert back with `toI32` (free), or
+call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site. The deprecated
+`--wrapping` makes every signed operation of your own package wrap instead.
 
 ```ts nish:ok
 // FNV-1a: the multiply overflows on purpose, so the state is a `u32`.
@@ -1237,6 +1238,8 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 `u64` only, every operand one type. The mask sits behind an optimisation
 barrier, so neither ever becomes a branch; select and compare on a secret with
 these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
+`secureZero(bytes)` sets every byte of a `u8[]` to zero in stores the optimiser
+may not drop, as a statement: how a key in a plain array is cleared once used.
 
 **Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
 array or a record of integer fields). It is opaque: no printing, interpolating,
@@ -1306,7 +1309,11 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),
-`monotonicNanos()` (`i64`; elapsed time only).
+`monotonicNanos()` (`i64`; elapsed time only), and, for checking a path before
+trusting it, `lstatOwnerModeSync(path)` (an `i64`: the owner's uid in the high
+32 bits, `st_mode` in the low 32, `-1` when it does not resolve; a symbolic
+link answers for itself), `geteuid()` (`i64`) and `isExecutableSync(path)`
+(`boolean`).
 
 **The host.** `Date.now()` (an `f64` of whole milliseconds, the wall clock —
 **the only `Date` there is**: `new Date()`, `Date.parse` and the rest are
@@ -1703,13 +1710,14 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
 10. Must it never panic? Compile with `--deny-panics` (or list the module in
    `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
-   `pop`, range entry, `expect` and exiting call it cannot prove is an error
+   signed `+ - *`, `pop`, range entry, `expect` and exiting call it cannot
+   prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
    `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
 11. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
-   `CHANGELOG.md` line.
+   conventional commit message, which is its changelog entry.
 
 Every `ts nish:ok` and `ts nish:err` block on this page is compiled by
 `npm test`, so an example that has gone stale is a failing test rather than a

@@ -2518,7 +2518,8 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). `throw` and a panic end the process and join nothing.
+  another). A panic ends the process and joins nothing (`throw` is refused by
+  Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope or an
   [`arena()`](#using-a--arena).** A scope bound any other way is
   `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
@@ -2766,7 +2767,7 @@ end.** That is the trade the feature is: the whole-program fact fixpoint is the
 performance thesis, and a foreign call is a hole in it.
 
 **And it is outside the differential oracle by construction.** The oracle
-runs a program's JavaScript rewrite against `runtime/shim.mjs`, on the
+runs a program's frozen JavaScript rewrite against `runtime/shim.mjs`, on the
 premise that the same source means the same thing in both worlds; that premise
 does not hold for a source whose meaning is "whatever this C function does"
 ([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the
@@ -3191,7 +3192,7 @@ and both come from the program as written:
     gives.
   - **a guard that ends the path.** After `if (i < 0 || i >= w.length) { … }`
     the negation of the test holds for the rest of the block when the guarded
-    branch ends in `return`, `break`, `continue`, `throw`, or a call to the
+    branch ends in `return`, `break`, `continue`, or a call to the
     builtin `panic(…)` or `process.exit(…)` (`exit` from `nish:process` too).
     Only the builtins count: a parameter or local called `process`, or a
     function parameter called `panic`, is the call it resolves to and falls
@@ -5048,8 +5049,8 @@ const tally = (rows: string[]): i32 => {
   automatic scope releases before they do; a `return` releases only the
   outermost of them, whose mark is the lowest. A `return g(n)` whose
   arguments are all numbers is a tail call with the release moved ahead of
-  it, unless `g` reads the arena (`mem_using_arena_tail`). `throw` and a
-  panic end the process. Statements of the block before the declaration are
+  it, unless `g` reads the arena (`mem_using_arena_tail`). A panic ends
+  the process. Statements of the block before the declaration are
   outside it.
 - **Nothing allocated inside may outlive the block.** From the declaration to
   the end of the block, each of these is refused, naming the value and where
@@ -6034,9 +6035,13 @@ by the caller.
   `--json` stream and is a contract rather than a presentation detail. Within a
   file it is **not** the order the analysis finds them in: a generic's body is
   checked when one of its instantiations is finished, and the padding rule below
-  is decided a whole pass earlier than the other ten
+  is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  Eleven warnings exist today, and each names the rewrite:
+  The twelve below each name the rewrite; the class also holds NL9012, a
+  `parallelMapInto` body that allocates per element
+  ([Data parallelism](#data-parallelism-nishthreads)), and NL9014 and NL9015,
+  the deprecated `--unchecked-indexing` and `--wrapping`
+  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)):
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -6136,6 +6141,14 @@ by the caller.
     whatever took the proof away — with an unsigned index named beside it,
     since half the proof then comes off the declaration
     (`tests/cases/perf_bounds_loop`). Reported on the index, once per access.
+    Where the index is an `i32` or an `i32`-based ranged integer and nothing
+    between the start of its statement and the access branches, loops,
+    calls, allocates or assigns (the README below lists the rest of the
+    conditions), the warning carries a fix: `nish --fix`
+    inserts `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
+    at the start of that statement, a guard the proof credits, so an index in
+    range runs as before and one out of range still exits 1, at the guard
+    (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
     Silent outside a loop, where one check is not a cost anybody is paying;
     silent under `--unchecked-indexing`, where no check survives to report;
     and silent unless the receiver and the index are both plain locals, which

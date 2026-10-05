@@ -1,29 +1,28 @@
 # WP22: Arrow functions as the declaration form
 
-**Stages A and B have landed, C is all but its last surface, and D has not
-started.** Both compilers read `const f = (n: i32): i32 => n * 2` today, the two
-spellings emit byte-identical IR, and `tests/cases/fn_arrow` carries the golden,
-the `llvm-as` pass and the native round trip (§8 has what each stage cost). C's
-docs half landed first — `README.md`, `docs/LANGUAGE.md`, every
-`docs/cookbook/` snippet, `examples/`, the playground and the `.claude/` rules —
-and §8a records the two concise-body bugs that rewrite found. **`src/` is
-arrows now too**: all 739 of its declarations, in the two passes §8b prescribes,
-with `arrow-verify --applied` comparing 1,407 emitted files byte for byte across
-each of them and the bootstrap reproducing stage1 from the rewritten source.
-What is left of C is `tests/cases/`, which the goldens gate; a `function`
-declaration is still accepted — whether stage D ever rejects it is open, and §10
-is where that is argued. It is the plan of record for one decision —
-**`const f = (...) => ...` becomes how Nish declares a function, and
-`function` is legacy and eventually removed** — and for the order that
-decision has to happen in, which is forced by the bootstrap and is the only
-hard part.
+**Status: A and B are built; C is done everywhere but the test corpus; D is an
+open question.** Stages A and B (both compilers accept
+`const f = (n: i32): i32 => n * 2`, and the two spellings emit byte-identical
+IR) landed before 0.1.0. `tests/cases/fn_arrow` carries the golden, the
+`llvm-as` pass and the native round trip. Stage C rewrote the docs, `examples/`
+and the playground first, then `src/` (0.3.0), then every other Nish program and
+the JavaScript tooling (0.13.0, [#253](https://github.com/amritk/nish/pull/253)).
+The Biome plugin `biome-plugins/no-function-declaration.grit` now makes a
+`function` declaration an error in every file its override in `biome.json`
+lists. What C has left is
+the test corpus, which Biome does not read (§7). A `function` definition is
+still accepted. Whether stage D ever rejects one is §10's open question, and
+[MASTER_PLAN](MASTER_PLAN.md#what-remains) lists it as the one open language
+question. The full plan, including the codemod's design history, is this file
+at commit `2b2eb95c`.
 
-The normative rules land in [LANGUAGE.md](LANGUAGE.md) as each stage does;
-where this note and LANGUAGE.md disagree, LANGUAGE.md wins.
+The decision: **`const f = (...) => ...` is how Nish declares a function, and
+`function` is legacy.** The rules are in [LANGUAGE.md](LANGUAGE.md)
+("Functions"), which is normative.
 
 ## 1. The decision
 
-One spelling for a top-level callable, and it is the arrow bound to a `const`:
+There is one spelling for a top-level callable: an arrow bound to a `const`.
 
 ```typescript
 const double = (n: i32): i32 => n * 2;
@@ -34,98 +33,55 @@ export const main = (): number => {
 };
 ```
 
-`function` keeps working until stage D, then stops. This is a spelling change
-and nothing else: it adds no expressiveness, removes none, and cannot change
-the output of a single program.
+This is a spelling change and nothing else. It adds no expressiveness, removes
+none, and cannot change the output of any program.
 
 ## 2. Why it costs nothing at runtime
 
-**The IR is identical, and that is structural rather than lucky.** The emitter
-never sees the declaration form: `codegen/emitter.ts` iterates
-`program.functions` — the checked `FunctionSig`s — and there is no
-`isFunctionDeclaration` anywhere in stage0's `src/codegen/`. Everything that shapes the
-output comes from the signature (name, params, return type, `exported`) and
-from the attribute facts. An arrow-declared function produces the same
-`define`, the same attributes, the same body.
+**The IR is identical by construction.** The parser normalises both spellings
+to one `N_FUNCTION` node. The name comes from the `const`, and the parameters,
+return type and body come from the arrow. So nothing after the parser can tell
+the two apart. There is no closure, no `this` binding and no allocation. The
+existing goldens are therefore the migration's oracle: a rewrite that moves any
+`.ll` byte is wrong.
 
-Two consequences, and the second is what makes the migration affordable:
-
-- There is no closure, no `this` binding and no allocation. The arrow is erased
-  before codegen begins, exactly as the `function` keyword is.
-- **The golden `.ll` files do not change.** Rewriting a test case's `.ts` from
-  `function f()` to `const f = () => ...` must leave its golden byte for byte
-  identical, so the existing goldens are the migration's oracle rather than
-  work the migration creates. A diff in any `.ll` means the rewrite was wrong.
-
-The same holds for the compiler's own source under Node. Measured over 2x10^9
-calls at a monomorphic call site, three runs each in a fresh process:
-declarations 1475.6 / 1494.9 / 1495.2 ms, arrows 1510.1 / 1486.1 / 1486.3 ms —
-noise, with the arrow ahead in two of three.
-
-A first attempt at that measurement said arrows were 7.6x slower, and the
-reason it was wrong is worth keeping: it passed both forms through one
-`bench(f)` helper, so the second form made the call site polymorphic and
-deoptimised it. The declaration then measured 10.5 s too. What costs 7x in
-JavaScript is an indirect call site with more than one callee — and Nish
-forbids function values outright (`Function` is a Phase 0 error, "no dynamic
-function values"), so every call site is monomorphic by construction. The
-prohibition is doing the work; the spelling is doing none.
+The same holds under Node. Measured over 2×10^9 calls at a monomorphic call
+site, the two forms were within noise. A first measurement said arrows were
+7.6x slower. It passed both forms through one helper, which made the call site
+polymorphic. What costs 7x in JavaScript is a polymorphic call site, and Nish
+cannot have one, because there are no function values.
 
 ## 3. What is not changing
 
-- **Class methods stay methods.** `m(): void { ... }` inside a class body is
-  not an arrow and will not become one. So the "one way to declare a callable"
-  goal has exactly one permanent exception: a callable is a top-level arrow
-  `const`, or a method. That is the same split stage0's `src/` already lives with
-  (`.claude/typescript.md`), and for the same reason — a method is not a value
-  either.
-- **Function values stay forbidden.** This note does not relax `Function`, and
-  §5's second rule exists to keep it that way.
+- **Class methods stay methods.** A callable is a top-level arrow `const` or a
+  method, and that exception is permanent.
+- **Function values stay forbidden.** `Function` is a Phase 0 error, and
+  §5's second rule exists to keep it so. A compile-time function *parameter*
+  ([wp23-language-surface.md](wp23-language-surface.md) §6) is not a function
+  value.
 - **Constructors** are unaffected.
 
 ## 4. What is genuinely new: the concise body
 
-`ArrowFunction.body` may be an expression rather than a `Block`:
-
-```typescript
-const double = (n: i32): i32 => n * 2;          // concise
-const double = (n: i32): i32 => { return n * 2; };  // block
-```
-
-Both are accepted, and the concise form is checked and emitted exactly as the
-block form with one `return`. This is the one place the four declaration kinds
-stop agreeing: `FunctionDeclaration`, `MethodDeclaration` and
-`ConstructorDeclaration` always carry a `Block`, so the ~40 sites that reach
-`sig.decl.body` need one desugaring helper rather than a special case each.
+`ArrowFunction.body` may be an expression. A concise body is checked and
+emitted exactly like a block body holding one `return`. This is the one place
+the declaration kinds stop agreeing, and §8a is what that cost.
 
 ## 5. The two rules the checker gains
 
 1. **A module-level `const` whose initializer is an arrow is a function
-   declaration**, and takes its signature from the arrow's own annotations —
-   which are already there. The current failure is that it is treated as a
-   value: `` Module constant `double` needs a type annotation ``, and
-   annotating it gives `` Unsupported type `(n: i32) => i32` ``, because
-   function types are forbidden. Neither error is reachable once the
-   initializer is recognised, and the function-type prohibition stays exactly
-   as it is.
-2. **A name bound to a function may appear only in call position.**
-   `const g = double;`, `foo(double)`, `[double]` and `obj.f = double` are all
-   rejected. This is what keeps rule 1 from quietly introducing first-class
-   functions, and it is the same shape as the existing `` `process.argv` is
-   read-only ``.
-
-`FunctionSig.decl` is already `FunctionDeclaration | MethodDeclaration |
-ConstructorDeclaration`; arrows are a fourth member, not a refactor.
+   declaration**, and takes its signature from the arrow's own annotations. The
+   function-type prohibition stays exactly as it is.
+2. **A name bound to a function may appear only in call position**, or as the
+   argument to a function-typed parameter (wp23 §6). `const g = double`,
+   `[double]` and `obj.f = double` are refused. This is what keeps rule 1 from
+   introducing first-class functions.
 
 ## 6. Where the removal rule lives
 
-In the **checker**, not Phase 0. The validator's own doctrine is that Phase 0
-is for what the language "can never compile: anything that requires dynamic
-typing, prototype lookup, reflection, unwinding, exceptions, or a
-garbage-collected heap". A `function` declaration requires none of those — it
-compiles perfectly, and did for every program in the repo up to stage D. It is
-a deprecated spelling, which is the checker's business, and its message names
-the rewrite:
+In the **checker**, not in Phase 0. Phase 0 is for what the language can never
+compile, and a `function` declaration compiles perfectly. A deprecated spelling
+is the checker's business, and its message names the rewrite:
 
 ```
 `function double` is not how Nish declares a function; write
@@ -134,676 +90,193 @@ the rewrite:
 
 ## 7. The surfaces, measured
 
-Re-measured on 2026-09-13, because the first row had drifted by a fifth since
-it was written and a count nobody re-derives is a count nobody can act on. A
-*definition* here is a top-level `function` that carries a body; the seven
-`declare function` lines in the repository are not in any of these numbers and
-are not stage D's to take (§9).
+A *definition* is a top-level `function` with a body. `declare function` lines
+are not counted, and are not stage D's to take (§9). Counted on 2026-10-05 with
+`grep -rhE --include=*.ts '^(export )?(default )?(async )?function\b' <dir> | wc -l`:
 
-| Surface | `function` | arrow | Note |
-| --- | --- | --- | --- |
-| `src/` | **0** | 755 | **Done.** 739 declarations were rewritten in two passes and `arrowify --check src/*.ts` now answers `0 declaration(s) left to rewrite`, which is the form this row should always have been read in: it was 721 when the table was first taken, 723 after `--emit-napi-async`, 734 by the time the migration ran, 736 once WP21's package resolution had been merged in, and 739 after `CPtr` |
-| `tests/cases/` | **693** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates. Derived the same way: `arrowify --check tests/cases/*.ts` answers 689, and four more carry a body while having no arrow spelling — two `export default`, one `async`, one `function*` — which this column counts and the seven `declare function` lines it does not |
-| `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
-| `tests/link/` | 51 | 32 | whole programs, several modules each |
-| `bench/` | 22 | 0 | `bench/run.mjs` reads the same `.args` sidecars `tests/` does |
-| `tests/parser/` | 9 | 0 | fixtures no checker accepts; the parser is the only reader |
-| `docs/cookbook/` | 3 | 137 | `decl-ffi` (done in stage C) and `fn-add-function`, which exists *to be* the `function` spelling |
-| `examples/`, `std/`, `tests/nish/` | 0 | 76 | done |
-| `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | — | the real cost centre; IR blocks beside them stay as they are. Done |
-| stage0's `src/checker` | 2 new rules, 1 desugaring | — | `FunctionSig.decl` gains a fourth member |
-| `src/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`src/lexer.ts:772`) |
-| `src/parser.ts` | arrow parsing | — | done in stage B |
+| Surface | `function` definitions | Note |
+| --- | ---: | --- |
+| `src/`, `std/`, `examples/`, `bench/`, `tests/self/`, `tests/nish/`, the JavaScript tooling the plugin lists | **0** | done, and the Biome plugin keeps it that way |
+| `runtime/shim.mjs`, `bin/launcher.js` (JavaScript, outside the plugin's list) | 90, 1 | not Nish programs; counted with the same pattern over `.mjs` and `.js` and not in the total below |
+| `docs/cookbook/` | 1 | `fn-add-function.ts`, which exists *to be* the `function` spelling and is excluded from the plugin in `biome.json` (§9a) |
+| `tests/cases/` | 715 | the goldens gate the rewrite. The count grows as new cases are written in the old spelling, and the corpus is outside Biome |
+| `tests/differential/corpus/` | 153 | also rewritten to JavaScript, so the arrow-parity guard (§8b) covers it |
+| `tests/link/` | 51 | whole multi-module programs |
+| `tests/parser/` | 32 | parser fixtures no checker accepts |
+| `tests/layout/` | 71 | all in `structs.ts`, the C-layout twins |
+| `tests/wordings/` | 5 | |
+| `tests/fix/` | 3 | `nish --fix` fixtures |
+| `tests/differential/arrow-parity/` | 3 | `declared.ts` |
 
-**1,664 definitions**, against 78 when stage C's docs half was finished. The
-number matters to one decision and no other: §10 argues stage D on the size of
-what is left, and the honest figure for that argument is this one rather than
-the 798 the row above used to carry. It was 1,647 when the row was taken and
-1,664 three releases of `src/` later — and five of that difference is not drift
-at all but a row that had been counting the rewritable declarations rather than
-the definitions its own column names. Both numbers are re-derivable from the
-commands beside them, which is the only property worth having here.
+That is **1,034** definitions in all, against 1,664 when stage C's docs half was
+finished and `src/` had not been converted. §10 argues stage D from this
+number.
 
 ## 8. The order, and why it is forced
 
-The bootstrap is the constraint. `src/` is Nish compiled by stage0, and
-stage1 compiles itself. So `function` cannot be removed from the language
-before `src/` is arrows, and `src/` cannot *be* arrows before stage1 parses
-them. That forces four stages, and no two of them can be merged:
+`function` could not be removed before `src/` was arrows, and `src/` could not
+*be* arrows before the compiler that builds it parsed them. That forced four
+stages:
 
-| Stage | What lands | Done when |
+| Stage | What lands | State |
 | --- | --- | --- |
-| **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
-| **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `src/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
-| **C** | The migration: the docs and `examples/` first (done), then `src/` (done), then the corpus | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
-| **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any Nish source |
+| **A** | the first compiler accepts arrows: §5's rules, the concise body, negative tests | **done** |
+| **B** | the self-hosted compiler accepts arrows, and the parser oracle builds the same tree | **done**, with `tests/cases/fn_arrow` |
+| **C** | the migration: docs and `examples/`, then `src/`, then the corpus | **done but for the corpus** (§7) |
+| **D** | a `function` *definition* is refused with §6's message and a `reject_function_declaration` case; `declare function` stays legal (§9) | **open** (§10) |
 
-**A cannot carry its own positive golden, and that is the plan's one real
-correction.** *(Resolved in B: `tests/cases/fn_arrow` ships there, with its
-golden `.ll`, its `llvm-as` pass and its native round trip.)* Every `.ts` in `tests/cases/` is compiled by *both* compilers —
-`tests/self/ir_oracle.js` requires stage1 to emit what stage0 emits for each of
-them — so an arrow program in the corpus fails the oracle until B lands, with
-`1 rejected by stage1`. Stage A therefore ships its rejection cases (stage1's
-parser refuses those, which the reject oracle already tolerates as "refused by
-the parser instead") and the positive `fn_arrow` golden with its native round
-trip lands in B. The identity of the two spellings is still proven in A, by
-compiling one program written both ways and diffing the IR; it just cannot live
-in the corpus yet.
-
-Stage C is where the risk is, and it is worth doing `src/` in one commit of
-its own: the bootstrap comparing stage1's output against itself is the only
-check that the 603 rewrites were all meaning-preserving.
-
-The order inside C turned out to be the other way round from the row above, and
-for a reason worth keeping: the docs and `examples/` were done first *because*
-they are the cheap surface to verify. Every `docs/cookbook/*.ts` is compiled by
-`regen.sh`, so rewriting all 68 of them and diffing the emitted `.ll` against
-the previous run is one command — and that diff is what found both bugs in §8a.
-Doing `src/` first would have put 603 rewrites and two latent stage0 bugs in
-the same commit.
-
-`src/` has that property now too, and §8b is the tooling that gives it to
-every other surface as well.
+The docs were converted first because they were the cheapest surface to verify.
+`regen.sh` compiles every cookbook listing, so a byte diff of the emitted
+`.ll` is one command, and that diff found both bugs in §8a. B's surprise was
+outside the compiler: three test-harness regexes looked for
+`export function main` to decide whether a case was a whole program. Tooling
+that reads Nish with a regex is where a spelling change breaks things.
 
 ### 8a. What C's first half cost: two concise-body bugs
 
-§4 said a concise body "is checked and emitted exactly as the block form with
-one `return`". That was true of the checker's own `checkReturnValue` and false
-twice over, because two kinds of pass decide what a `return` is by looking at
-the *parent node* rather than by being told:
+Both bugs came from passes that decide what a value is *for* by climbing to
+its parent and expecting to find a `return` statement. A concise body's parent
+is the arrow.
 
-1. **Contextual typing.** Three walks climb the parent chain to ask what the
-   enclosing construct expects — `contextualType` in stage0's `src/checker/classes.ts`
-   (object literals, and a class value where an interface is wanted),
-   `contextualType` in stage0's `src/checker/arrays.ts` (the element type of `[]`), and
-   `contextType` in stage0's `src/checker/math.ts` (the width of a numeric literal).
-   Each stopped at `ts.isReturnStatement(parent)`, and a concise body's parent
-   is the arrow. So `const swap = (p: Pair): Pair => ({ first: p.second,
-   second: p.first })` was `Object literal needs a contextual class or
-   interface type` and `const asPair = (o: Ordered): Pair => o` was `Return
-   type mismatch`, while both block-bodied twins compiled.
+1. **Contextual typing.** An object literal or a narrower type returned from a
+   concise body lost its contextual type. A program whose block-bodied twin
+   compiled was refused.
+2. **The call-site reclaim.** `flowTarget` in the escape analysis read a concise
+   body that returned an allocation as producing a local. WP9's
+   `nish_arena_mark` / `keep` bracket then disappeared from every call. The
+   result was worse code rather than an error, and a byte diff of
+   `docs/cookbook/mem-reclaim` caught it.
 
-2. **The call-site reclaim.** `flowTarget` in stage0's `src/codegen/escape.ts` and its
-   twin in `src/escape.ts` decided where a freshly allocated value goes by the
-   same test, so a concise body that returns an allocation was read as
-   producing a *local*. That made `allocates` false for the callee, and WP9's
-   `nish_arena_mark` / `nish_arena_keep` bracket disappeared from every call to
-   it — quietly worse code rather than an error, which is why
-   `docs/cookbook/mem-reclaim` catching it in a byte-for-byte IR diff
-   mattered.
-
-Both are one predicate on this side, `isFunctionResult` in
-stage0's `src/checker/declarations.ts`: the operand of a `return`, or the body an arrow
-*is*.
-
-**Stage1 had exactly one of the two**, and which one is the useful part.
-Its checker threads the wanted type down as `want` (`checkReturnValue` in
-`src/statements.ts`) rather than climbing to a parent, so bug 1 was never
-reachable there — for a while the two compilers silently disagreed about
-programs no test had written. Its `flowTarget` (`src/escape.ts`) *does* climb,
-so it had bug 2, and `tests/self/ir_oracle.js` caught it the moment
-`docs/cookbook/mem-reclaim.ts` became an arrow: stage0 emitted the bracket,
-stage1 did not.
-
-The general lesson for the rest of C: the gap is never in the code that reads
-`sig.body`, which sees the expression either way. It is in the code that reads
-`node.parent` and expects to find a statement there. `tests/cases/fn_arrow_concise`
-pins all five behaviours, and `--emit-checked` will not show you any of them —
-only the IR diff and the type errors will.
-
-### What B cost, measured
-
-Stage1's parser needed one piece of genuine work and the rest fell out. The
-piece: the parenthesis that opens a parameter list also opens a parenthesised
-expression, and `src/parser.ts` keeps one token of lookahead, which cannot
-tell `const x = (a + b) * c` from `const f = (a: i32): i32 => a`. A scratch
-`Lexer` over the same source runs ahead from the `const`, counts to the
-parenthesis that closes this one and looks at what follows — `=>`, or the `:`
-of a return type. Nothing else can follow a parameter list, and at the head of
-an initialiser nothing else puts a `:` after a parenthesis, so the test is
-exact rather than heuristic.
-
-Everything downstream was free, because the parser **normalises**: it builds
-the same `N_FUNCTION` node the `function` spelling builds, with the name from
-the `const` and the parameters, return type and body from the arrow. Stage1's
-checker, emitter, attribute pass and escape analysis are untouched for block
-bodies. `tests/parser-oracle.js` normalises the same way, and says so — it is
-the one place that oracle reshapes a `typescript` tree rather than
-transcribing it, and it does so because the language says the two spellings
-declare one thing.
-
-The concise body cost four small branches, mirroring stage A's: `body()`
-answers the expression rather than `null`, the checker calls
-`checkReturnValue`, the emitter calls `emitReturnValue`, and the dump already
-tested for a block. The analyses that only walk the tree took the expression
-unchanged.
-
-The oracles caught one thing the branches missed: `src/dump.ts` guarded its
-body walk on `N_BLOCK`, so a call inside a concise body never reached
-`--emit-checked`, and `tests/self/checked_oracle.js` said so. The emitted IR was
-never affected — `walkBody` prints the callee table, it does not build it — but
-it is the shape of mistake this migration invites, and the reason every branch
-added for the concise body is worth reading twice.
-
-**The surprise was outside the compiler.** `tests/run.js` decided whether a
-case is a whole program by matching `/\bexport\s+function\s+main\b/` against
-the source, and `tests/differential/{lib,unmodified}.js` did the same — so an
-arrow entry point linked against `tests/driver.c` and failed with *multiple
-definition of `main`*. Three regexes, each now accepting either spelling. This
-is the shape of what stage C will keep finding: not the compiler, but the
-tooling around it that reads Nish with a regex.
+The fix is to ask whether a node is the function's result (the operand of a
+`return`, or the body an arrow *is*) instead of asking for its parent's kind.
+`tests/cases/fn_arrow_concise` and `fn_arrow_concise_flow` pin the behaviours.
 
 ### 8b. The codemod, and the diff that is one command
 
-The reason the docs half went first is the reason the rest of C can now go at
-all: `regen.sh` made "did this rewrite change anything?" a single command, and
-a question you can ask in one command is a question you ask on every file
-rather than on the ones you are worried about. `src/` had no such command —
-its 733 declarations are a program whose output is checked by the bootstrap,
-which is the slowest check in the repository — so stage C's expensive half
-starts by building one.
-
 ```bash
-node scripts/arrowify.mjs src/lexer.ts          # rewrite, in place
-node scripts/arrowify.mjs --check src/*.ts      # what is left, and why
-node scripts/arrow-verify.mjs                    # the whole corpus, before and after
-node scripts/arrow-verify.mjs --debug src/       # the same, under `-g`
-node scripts/arrow-verify.mjs --applied src/     # the rewrite the tree already carries
+node scripts/arrowify.mjs <files>              # rewrite in place, block bodies
+node scripts/arrowify.mjs --concise <files>    # collapse a lone `return` body
+node scripts/arrowify.mjs --check <files>      # what is left, and why
+node scripts/arrow-verify.mjs [--applied] [--debug] <dirs>
 ```
 
-**`scripts/arrowify.mjs` is textual, driven by the parse tree.** `typescript`
-locates each declaration and the splice is computed from its spans, so every
-byte outside the edit survives: comments, blank lines, formatting, and the
-body's own indentation. *Every* span, including the keyword's and the
-parentheses': those came from `indexOf` at first, and a comment is allowed to
-contain the word `function` or a parenthesis, so the splice began or ended
-inside the comment and wrote back a file that no longer parsed — silently,
-because a tool that located its own edit by searching has nothing left to check
-the search against. That is not tidiness. Moving `{` to sit after `=>`
-leaves every line of the body where it already was, so a block-bodied rewrite
-**preserves the line count of the file** and cannot move a `-g` line number or
-the line of a diagnostic somebody pinned. Columns hold too, with two exceptions
-that §8c measures and enumerates rather than leaving to be discovered. §A5 of
-[wp19-stage0-retirement.md](wp19-stage0-retirement.md) is what happens when a
-declaration's position moves and nothing is watching.
-
-What it will not touch, and why each one is a decision rather than a gap:
-
-| Left alone | Because |
-| --- | --- |
-| `declare function` | it defines nothing, so §9 keeps it legal; the arrow spelling for it needs a function type, which Phase 0 forbids |
-| `function*` | there is no arrow-generator syntax, as §9's table says; dropping the asterisk turns a refused program into a compiling one |
-| `export default function` | `export default const f = ...` is not a sentence |
-| `async function`, an unnamed declaration | neither compiles here, and converting one would only move the error |
-| class methods and constructors | §3: a method is not an arrow and will not become one |
-| anything below the top level | Nish-0 has no nested functions, so a nested one is a program this tool has no opinion about |
-| a comment between the signature and the `{` | it would have to be rewritten rather than moved, and a codemod that silently drops a comment is worse than one that refuses |
-| a comment between `function` and the parameter list | the same rule from the other side: the keyword, the name and the space around them are the one region the splice throws away, and a comment in there has nowhere to go |
-
-**Each of the first four is recognised by the syntax that makes it that form,
-and that sentence is load-bearing.** The first draft recognised `declare` by
-"has no body" — true of every `declare function` anybody would write, and false
-of `tests/cases/reject_ffi_body`, where the body *is* the mistake the case
-exists to make. §8c has what that cost and how it was caught.
-
-**`scripts/arrow-verify.mjs` is the answer in one command.** It copies the
-tracked tree, compiles every whole program of the corpus, changes the copy in
-place, compiles again, and compares every emitted `.ll` byte for byte. Both
-compiles run **out of the same directory**, which is the detail that makes `-g`
-comparable at all: `; ModuleID` and `!DIFile` carry the path, so two sibling
-copies would differ in every module for a reason that has nothing to do with
-arrows (wp19 §A3).
-
-**What it changes is what it compares, and the set is derived rather than
-declared.** The programs are the 374 of the six directories
-`tests/self/corpus.js` enumerates, *plus* the 21 multi-module programs of
-`tests/link/` and the 71 of `tests/differential/corpus/` — 92 programs the tool
-used to rewrite and never compile, whose rewrite nothing was reading. All 550
-rejections beside them are re-diagnosed, `tests/wordings/` included. The files
-rewritten are exactly those programs and the modules they import, followed
-through the import graph, so a file nothing would compile afterwards is never
-touched, and the summary counts one set rather than putting a whole-tree rewrite
-count next to a slice-scoped comparison.
-
-**Two modes, because there are two questions.** The default *derives* the
-rewrite — it runs the codemod on the copy — which asks whether a rewrite would
-be safe. `--applied` runs no codemod at all: it puts each in-scope file back to
-what it is at a revision (`--rev`, default `HEAD`) for the first compile and
-leaves the working tree's own text for the second, which asks whether the
-rewrite already sitting in the tree *was* safe. That is the mode §8b's recipe
-needs, and the reason is the failure mode the tool now refuses to have: run the
-codemod in place first and a derived sweep has nothing left to rewrite, so it
-compiles the same source twice and reports zero differences over a rewrite it
-never saw. A derived run that rewrites nothing, and an applied run with nothing
-changed since the revision, both **fail** rather than passing quietly.
-
-**Every subject ends in one verdict, and there is one place that decides it.**
-A program and a rejection differ in how they are *reported*, not in how they are
-compared: both are compiled, and `verdict` answers with exactly one of
-
-| | what it means |
-| --- | --- |
-| `status` | refused on one side and not the other — the rewrite changed whether the program compiles |
-| `refusal` | refused on both, and the words of its `--json` diagnostics agree with the positions stripped (`moved` says a caret shifted, which `--concise` does by construction) |
-| `reworded` | refused on both, for different words — a `reject_*` case that starts compiling, or is refused under another rule, which §8c calls the worst thing a codemod can do |
-| `emitted` | compiled on both, compared file by file over the union of what each side wrote — the WP8 sidecars included, which is why `--emit-header` and friends are redirected into the subject's own directory rather than left to resolve against the working directory, where both sides would write one path and the second would overwrite the first |
-| `dump` | compiled on both and wrote nothing, so stdout is the output: `--emit-ast` and `--emit-checked` print there |
-| `blind` | none of the above. Nothing to compare, which **fails the run** |
-
-**That table is the fix for a defect this tool had five times.** Each instance
-was a subject counted as covered and then never compared: a dump case
-(`0 module(s) compared`, exit 0), a program refused on both sides and skipped, a
-sweep that rewrote almost nothing, a module that existed only afterwards — and
-the fifth in the *other* loop, where a "rejection" that is not refused under the
-flags the sweep passes (`tests/link/no_main` is refused by `--link`, which is not
-one of them) compared empty with empty and continued. Four of the five were in
-one loop and the fifth in the other, which is the reason there is now one loop:
-the discipline has to be in the code both halves run, not applied twice.
-
-A dump's stdout *does* change when its declarations become arrows. That is a
-real consequence with a golden behind it, so it is a difference rather than
-something to wave through.
-
-**A compile that succeeded is compared by its diagnostics too**, which is the
-half this tool's own header promises — "a declaration that changes shape can
-move a line and a column without moving a byte of anybody's IR" — and did not
-deliver: the `--json` read was asked only where the status was non-zero, so a
-`performance:` warning could move, change or disappear under a rewrite and the
-sweep answered `0 difference(s)`. 76 corpus programs warn on a successful
-compile, most of `src/` among them, and `--concise` moves every warning below a
-collapsed declaration, so the silence was pointed straight at the migration.
-Every subject that says anything is now read on both sides by the rule the
-refusals use: the words may not change, a position may, and the summary prints
-how many moved so that quiet cannot be mistaken for absence.
-
-The flags each side is compiled with come out of the copy rather than out of the
-working tree, so `--applied` gives the before side the `.args` the *revision*
-had; a changed sidecar is part of the diff — `*.args`, and
-`tests/link/<name>/args`, which needs `:(glob)**/args` to match at all — and
-counts as a change to the program it belongs to.
-
-**A comparison is evidence only where the change reached it.** A program whose
-own modules are identical on both sides is compiled twice and agrees with
-itself, so the summary says how many of the programs and rejections sit on a
-source the change touched — `1 of 77 program(s)` over `docs/cookbook`, where one
-listing still had a `function` in it — rather than letting `0 difference(s)`
-stand for a coverage it does not have. That matters most for the incremental
-sweeps the migration is meant to be done with, where the surface is mostly
-converted already and the number that shrinks is exactly this one.
-
-The rejections are compared in two halves, and only one of them is fatal. The
-**words** — severity, the stable `NL` code, the message, every position
-stripped — may not change: a `reject_*` case that starts compiling, or that is
-refused under a different rule, is the worst thing a codemod can do (§8c), and
-it fails the run. A **position** that moved is reported and does not, because
-under `--concise` the lines move by construction and a block-bodied rewrite is
-allowed to move a caret pointed at the function's own name.
-
-`--debug` is not decoration. §A5 records a closed parity gate reopening because
-stage0 took an arrow-declared function's position from the `ArrowFunction`
-rather than from the declaration — and it stood for as long as it did because
-*no corpus program had ever been compiled as an arrow with `-g`*. The sweep
-asks that question of every program at once, which is the only form of the
-question that does not depend on somebody having thought to write the case.
-
-`--concise` collapses a body that is exactly one `return expr;`, for an arrow
-the run just wrote *and* for one that was already there. **The second half is
-not a flourish, and finding out why is what this preparation was for.** Biome's
-`useConsistentArrowReturn` is an **error** in `biome.json`, not a warning — so a
-block-bodied arrow whose body is one `return` fails `npm run lint` in every
-directory Biome reads, which is every Nish surface except the test fixtures.
-A block-only rewrite of `src/` would land **119 lint errors**, one per
-single-return declaration of its 733 at the time it was counted, and `npm run lint` may not get worse than
-`main`. The rewrite is therefore two passes and not one, and the order is the
-point:
-
-```bash
-node scripts/arrow-verify.mjs src/                      # the question, before touching anything
-node scripts/arrowify.mjs src/*.ts                     # block bodies; lines and columns hold
-node scripts/arrow-verify.mjs --applied src/            # 0 differences, or stop
-node scripts/arrowify.mjs --concise src/*.ts           # the 119, for the lint
-node scripts/arrow-verify.mjs --applied src/            # 0 differences again, collapse included
-```
-
-**The verification steps are `--applied` and they have to be.** The rewrite is
-in the tree by then, so a derived sweep would rewrite nothing, compile the same
-source twice and answer with a zero that means only that it did nothing — which
-is how the collapse pass, the half with §8a's whole history, could have gone to
-`src/` never having been IR-checked at all. `--applied` compares the text that
-is actually there against `HEAD`, so the second run checks the collapse and the
-first checks the block-bodied pass, each on its own.
-
-Collapsing second rather than first is what keeps a difference down to one
-cause. A concise body is the one shape where the four declaration kinds stop
-agreeing (§4), it changes the line count where a block-bodied rewrite does not,
-and it is what found both bugs in §8a — so it is the pass to be able to blame,
-and it can only be blamed if the other one has already come back clean. The same
-flag over the whole corpus is the search for the rest of that bug class, which
-§8c reports.
-
-`npm test` pins the tool against a file a person wrote rather than against its
-own output: `tests/differential/arrow-parity/declared.ts` and `arrow.ts` are one
-program in the two spellings, and three checks ride on the pair — that the two
-spellings emit identical IR (stage A's defining claim, which until now nothing
-in the suite asked), that the codemod turns the first into the second character
-for character, and that it leaves `ffi_scalar`'s `declare function` alone while
-rewriting the definitions beside it. The comparison is anchored on a sentinel
-both fixtures carry, and the check requires it to be *found*: `indexOf` answers
--1 for a fixture somebody renamed, `slice(-1)` is then the last byte of each
-file, and a check that compares one newline with another passes for as long as
-nobody looks.
-
-Eight more pin the properties the tooling's own worth rests on, because a sweep
-that takes half an hour is not where a regression in it should be discovered.
-Four say that `--concise` parenthesises by what the grammar restricts — a
-concise body may not *begin* with `{` — rather than by the returned node being
-an object literal, which is the same "recognised by what usually accompanies it"
-mistake one node deeper and turns `return { a: 1 } as Pair;` into two parse
-errors; each shape is parsed back rather than string-matched, because the
-failure being watched for is output that no longer parses. One says a body-less
-declaration with no `declare` is reported as the overload signature it is, and
-not under the reason that says the line is legal. One says the verifier's module
-comparison walks the union of the two sides, so a `.ll` that exists only *after*
-a rewrite is a difference rather than a blind spot. One says its diagnostic
-comparison normalises positions away and nothing else, so a rejection whose code
-or words changed fails while a caret that moved does not. And the last asks the
-tarball whether every script it ships can resolve its own imports — which is why
-`arrow-verify.mjs`, which reads `tests/self/corpus.js`, a path `files` does not
-ship, is excluded from the package rather than shipped broken.
+- **`arrowify.mjs` is textual and driven by the parse tree.** Every span comes
+  from the tree, so comments and formatting survive, and a block-bodied rewrite
+  keeps the file's line count. It recognises each form it leaves alone
+  (`declare function`, `function*`, `export default`, `async`) by the syntax
+  that makes it that form, not by something that usually goes with it (§8c).
+- **`arrow-verify.mjs` compiles the corpus before and after a rewrite and
+  compares every output.** It covers emitted `.ll` files and sidecars, the
+  `--json` diagnostics of every rejection and every warning with positions
+  stripped, and dump output. Every subject ends in exactly one verdict, and a
+  subject with nothing to compare fails the run. `--applied` checks a rewrite
+  already in the tree against a revision. This is the mode the `src/` migration
+  used, because a sweep run after the rewrite would otherwise compare the same
+  source with itself.
+- **The rewrite is two passes**: block bodies first, then `--concise`, with an
+  `--applied` verification after each. The order is forced by Biome's
+  `useConsistentArrowReturn` error, and doing the collapse second keeps each
+  difference down to one cause.
+- `tests/differential/arrow-parity/declared.ts` and `arrow.ts` are one program
+  in both spellings. `npm test` checks that they emit identical IR and that the
+  codemod turns the first into the second character for character.
 
 ### 8c. The rest of §8a's bug class, looked for before the rewrite rather than during it
 
-§8a found two bugs and named the shape: **a pass that decides what a value is
-*for* by climbing to its parent, and expects to find a statement there.** Both
-were fixed by one predicate, `isFunctionResult` in `checker/declarations.ts`.
-The obvious next question is how many more there are, and it is a question
-worth answering before 1,664 rewrites rather than one file at a time
-afterwards.
+The whole corpus was rewritten and recompiled before `src/` was touched: 1,678
+modules, 0 differences. A source search for passes that climb to a parent found
+no third compiler bug. One gap in the capture scan exists in both compilers and
+cannot be reached, because a concise body has no statement for an assignment to
+be in.
 
-**Empirically: none in the compiler, and three in the codemod** — the sweep is
-in two halves and the second half is where anything was found at all. The first:
-the whole corpus, rewritten and recompiled —
-
-```
-arrow-verify: 372 program(s)
-arrow-verify: rewrote 1765 declaration(s)
-arrow-verify: 1678 module(s) compared, 0 difference(s), 38 declaration(s) left alone
-```
-
-— which is every `function` definition in the repository outside stage0's `src/`,
-the self-hosted compiler's 721 (then in `self/`) included, turned into an arrow and
-compiled to the same 1,678 modules, byte for byte. That is the evidence for the
-compiler's migration, and it
-exists before the migration rather than after it. The same sweep under `-g`
-comes back with one difference in 373 programs, and it is a *position* rather
-than a lowering — the subsection below is what it was and why the corpus has 77
-of it and `src/` none.
-
-**By reading: also none.** A search that finds nothing is only worth what the
-search was, so here is the search, reproducible in four commands:
-
-```bash
-# stage0's src/ (deleted in R6): the typescript-API side
-grep -rn "isReturnStatement" src/ --include=*.ts      # 5 hits
-grep -rn "\.parent" src/ --include=*.ts               # 47, of which 19 bind it to a name
-grep -rn "decl\.body\|sig\.body" src/ --include=*.ts  # the body walkers
-grep -n  "parentOf\|N_RETURN" src/*.ts               # the stage1 side: 11 and 10
-```
-
-The first two are the class's signature — a pass that names a `return` by its
-kind, or climbs to a parent to find out what a value is for. The third is the
-other way in, because a pass that reaches a body and expects a `Block` has the
-same problem from the other end (`src/dump.ts` had exactly that, §8's "What B
-cost"). The fourth runs the same two searches against the self-hosted compiler,
-which has no `node.parent` and a `parents.ts` table instead, so the query is
-spelled differently and the class is identical.
-
-Of the five `isReturnStatement` hits, two are `isFunctionResult` itself.
-`classes.ts:630` and `bounds.ts:1095` are statement walks, reached only with a
-`ts.Statement` in hand, and a concise body is not a statement — their arrow
-path goes through `walkExpression` instead (`bounds.ts:1161`).
-`performance.ts:337` is the one real gap, and it is the unreachable one below.
-
-Every pass among the 19 that consults `node.parent` to classify a use was then
-re-read against a concise body, and they divide into three kinds:
-
-| Pass | What it asks the parent | Concise body |
-| --- | --- | --- |
-| `contextualType` (`classes.ts`, `arrays.ts`), `contextType` (`math.ts`), `flowTarget` (`codegen/escape.ts`) | is this a `return`? | **fixed in §8a**, through `isFunctionResult` |
-| `classifyUse` and `classifyElementUse` (`codegen/attributes.ts`) | what consumes this parameter? | safe **by fallthrough**: an unrecognised parent is `USE_ESCAPE` / `USE_READ`, and a `ReturnStatement` was already unrecognised, so the arrow lands on the same conservative answer |
-| `isAssignmentTarget` (three copies), `mutatesArgv` (`io.ts`), `assignedLocal` (`escape.ts`), `nullContext` (`nullable.ts`), `collectClassFacts` (`emit/classes.ts`) | is this an assignment target? | safe for the same reason, from the other side: neither a `return` nor an arrow is one, so both answer `false` |
-
-The middle row is the one to keep. Those two are not *right* about arrows by
-design; they are right because their default is the conservative answer and a
-`return` was never in their list either. A future arm added for
-`ts.isReturnStatement` and not for the arrow would put them straight back into
-§8a's class, which is why the comment on `isFunctionResult` says to ask it
-rather than the node kind.
-
-Nine passes walk a body; three branch on `ts.isBlock` and see the concise case
-explicitly, and six walk whatever they are handed, which for an arrow is the
-expression. Three of those six reached it as `sig.decl.body` rather than as the
-normalised `sig.body` — the same node today, and named here because the field
-`FunctionSig` documents is the one a reader should find them using.
-
-One gap exists and is unreachable, in both compilers, identically:
-`capturesLocal` in `checker/performance.ts` and `isLocalRef` in
-`src/checker.ts` both treat a `return` as a capture of the value it hands back
-and have no arm for the expression an arrow *is*. Neither can be reached — the
-scan they belong to looks for captures that happen *before* an assignment in
-the same body, and a concise body has no statement for an assignment to be in.
-It is written down here rather than fixed because an arm no case can reach is
-an arm no case can test, and because the two compilers agreeing about it is
-worth more than either of them being tidy.
-
-`tests/cases/fn_arrow_concise_flow` is the positive half: a concise body in each
-of the positions the *other* passes decide — `null`, `process.argv`, a `Result`,
-a parameter's field, an array element — with the golden as the claim. Its
-block-bodied twin compiles to the same module byte for byte, and the attributes
-are where that is visible: `field` and `element` keep `readonly nocapture` on
-their parameters, which is `classifyUse` saying a concise body returning a field
-is a read rather than a capture.
-
-#### What the concise sweep found, and what it was in
-
-Running the same sweep with `--concise` is the search proper, because a concise
-body is the shape §8a's bugs were in. 1,770 declarations collapsed across the
-corpus; **1,678 of 1,680 modules identical**. The two that differ are
-`tests/cases/dbg_enum` and `dbg_locals` — the only corpus programs whose own
-`.args` carry `-g` — and the difference is position and nothing else: a
-collapsed body is a shorter file, so a `!DILocation` names a different line.
-Every instruction still carries its `!dbg`; no lowering moved.
-
-An IR diff cannot see a diagnostic, though, and §8a's *first* bug was a
-diagnostic — a contextual type lost, so a program that compiled stopped
-compiling. So every `reject_*` case was rewritten and re-diagnosed with
-positions stripped, comparing the codes and the words alone. **Three came back
-different, and all three were bugs in the codemod rather than in the compiler:**
+**The concise sweep found three bugs, all in the codemod**, each by
+re-diagnosing a `reject_*` case:
 
 | Case | What the rewrite did | Result |
 | --- | --- | --- |
 | `reject_ffi_body` | `declare function h(): i32 { ... }` became `declare const h = ...` | a refused program **compiled** |
 | `reject_generator` | `function* g()` lost its asterisk | a refused program **compiled** |
-| `reject_export_default` | `export default const f = ...` | refused, but for a syntax error instead of the rule the case pins |
+| `reject_export_default` | `export default const f = ...` | refused, for the wrong rule |
 
-The first is the instructive one. `declare` was being recognised by "has no
-body", which is true of every `declare function` anybody would write and false
-of exactly the case whose subject is that a body there is a contradiction. The
-rule is keyed on the `declare` modifier now, and the other two on the `default`
-modifier and the asterisk — the syntax that *makes* each form, rather than
-something that usually accompanies it.
+A codemod that turns a refused program into a compiling one is the worst
+failure, because every gate after it reads the program it was handed. The
+three cases are pinned in `npm test`.
 
-**None of the three can appear in `src/`**, so the rewrite that the whole
-package is pointed at would never have found them; all three are in
-`tests/cases`, which stage C still has to convert. A codemod that turns a
-refused program into a compiling one is the worst thing one can do, because
-every gate downstream reads the program it was handed rather than the program
-somebody wrote — and the goldens, the oracles and `--parity` would all have
-agreed with each other about the wrong file. `npm test` carries the three cases
-now, each asserting that the line carrying its shape survives verbatim.
-
-#### What a block-bodied rewrite does to a position, exactly
-
-§A5's failure mode is a declaration whose position moves, so the sweep runs
-again under `-g` — where a column is a byte of output rather than a caret
-nobody diffed — and puts every `reject_*` case through `--json` on both sides.
-A block-bodied rewrite moves **no line at all**, and moves a column in exactly
-two ways.
-
-The first is a pleasant accident of arithmetic. `function ` is nine characters
-and `const ` is six, and the arrow form spends the other three on ` = (` where
-the declaration form spends one on `(`, so `function NAME(` and
-`const NAME = (` are the same width **for every NAME**:
-
-```
-export function widget(a: i32, b: any): i32     `any` at column 35
-export const widget = (a: i32, b: any): i32 =>  `any` at column 35
-```
-
-Every parameter, the return type and the `{` therefore keep the column they
-had. What does move is a caret pointed at the function's *own name*, three
-characters to the left:
-
-```
-export function nish_alloc(...)   name at column 17
-export const nish_alloc = (...)   name at column 14
-```
-
-**The second was found by the sweep rather than by the arithmetic, which is the
-point of running it.** One program in 373 came back different under `-g`, and
-it is the one whose whole body is on the line its declaration is on:
-
-```typescript
-export function main(): number { let big: i64 = 9007199254740992; console.log(`${big}`); return 0; }
-```
-
-The ` =>` that the arrow form adds sits between the return type and the `{`, so
-everything *after* the brace on that physical line shifts right by three —
-seven `!DILocation` columns in `tests/cases/i64_literal_2pow53`, 34 becoming 37
-and so on. In the conventional layout the `{` ends its line and there is nothing
-after it to move, which is why 372 of the 373 were identical and why the
-arithmetic above looked complete until something asked.
-
-So the whole rule, and it is short enough to check a file against:
+**What a block-bodied rewrite does to a position**, and the rule is short
+enough to check a file against:
 
 > A block-bodied rewrite moves no line. It moves the function's own name three
 > columns left, and — only where a body is written on the same line as its
 > declaration — everything inside that body three columns right.
 
-Both are enumerable rather than discoverable. **`src/` has no single-line body
-at all**, so the second cannot reach the migration that matters; the corpus has
-77, and 76 of them are `reject_*` cases, where a column is precisely what the
-diagnostic carries. No gate sees that shift today — the `.err` sidecars pin
-words rather than positions, and both compilers shift together so no oracle and
-no `--parity` run diverges — which makes it the kind of change that lands
-silently and is worth deciding rather than discovering. The cheap answer is to
-give those cases the ordinary layout while converting them, so that the rewrite
-owes nothing to a column at all.
+`function NAME(` and `const NAME = (` are the same width, so parameters and
+the return type keep their columns. `src/` has no single-line body. The corpus
+has 77, and 76 of them are `reject_*` cases, where a column is what the
+diagnostic carries. Give those the ordinary layout when converting them.
 
 ## 9. What stage D forecloses
 
-Stages A to C are additive and reversible. **D removes a spelling, and a
-removed spelling cannot express anything later**, so this is the audit of what
-`function` can say that an arrow `const` cannot:
+Stages A to C are additive. **D removes a spelling**, so this is the audit of
+what `function` can say that an arrow `const` cannot:
 
 | `function` form | Arrow equivalent | Consequence of D |
 | --- | --- | --- |
 | `function* g()` | **none.** `const g = *() => {}` is a TypeScript syntax error (TS1109); JavaScript has no arrow-generator syntax | forecloses top-level generators |
 | overload signatures | none. `const f: { (a: i32): void; (a: string): void }` is an object type with call signatures, which Phase 0 forbids | forecloses overloading |
-| `declare function f(...)` | `declare const f: (a: i32) => i32` needs a function type, which Phase 0 forbids | forecloses ambient/extern declarations |
-| `function f<T>(x: T): T` | `const f = <T>(x: T): T => x` — valid in a `.ts` file (the `<T,>` disambiguation is only needed in `.tsx`) | none, but see below |
+| `declare function f(...)` | `declare const f: (a: i32) => i32` needs a free-standing function type, which is refused outside a parameter | forecloses ambient/extern declarations |
+| `function f<T>(x: T): T` | `const f = <T>(x: T): T => x` — valid in a `.ts` file (the `<T,>` disambiguation is only needed in `.tsx`) | none |
 | `async function f()` | `async (n: i32): Promise<i32> => ...` | none |
 
-Three of those need an answer before D lands, and two have one already.
+**Generators are a forbid being kept, not a plan being blocked.** `function*`
+and `yield` are Phase 0 errors ("no coroutine runtime"), and D does not change
+that. If a coroutine runtime ever arrives, a generator *method* survives D,
+which is the same exception §3 keeps.
 
-**Generators are not a plan being blocked; they are a forbid being kept.**
-`function*` and `yield` are Phase 0 errors today with a stated reason — "no
-coroutine runtime" (`reject_generator`, `reject_yield`) — and MASTER_PLAN §3.2
-lists them among the constructs the language excludes rather than defers. D
-does not change that. And if a coroutine runtime ever arrives, the spelling is
-still reachable, because **class methods survive D**: `class Chars { *bytes():
-Generator<i32> { ... } }` parses as TypeScript and is a generator method, not a
-generator function. So the escape hatch is the same exception §3 already keeps
-for an unrelated reason.
-
-**WP18's surface has been restated.** [wp18-generics.md](wp18-generics.md) is
-the plan of record for user generics and every example in it was written
-`function identity<T>(x: T): T`. Nothing technical was lost — `const identity =
-<T>(x: T): T => x` parses in a `.ts` file, the `<T,>` disambiguation being a
-`.tsx` problem only — and the rewrite went in with the rest of C's docs rather
-than waiting for generics to land and the two notes to contradict each other.
-
-**Ambient declarations are the live hazard, and D's rule should be narrower
-than "no `function`".** `declare function` is refused by the checker today as
-*not supported yet* rather than forbidden, which is exactly the bucket things
-climb out of: declaring an external C function is the natural thing to want the
-first time somebody binds a library, and the arrow spelling for it needs a
-function type. The fix is to scope D to what it is actually for:
+**Ambient declarations are the live hazard, so D's rule is narrower than "no
+`function`".** `declare function` has bound C functions since 0.2.0
+([#62](https://github.com/amritk/nish/pull/62)), and the arrow spelling for it
+would need a function type. So:
 
 > **D rejects a function *definition* written with the `function` keyword.**
 > `declare function` is not a competing way to define a function — it defines
 > nothing — so it stays legal, and the extern surface stays open.
 
-That keeps D to one spelling of one thing, which is the whole point of taking
-it.
-
 ### 9a. The `function` declarations stage D may not simply delete
 
-Stage C's rewrite is mechanical for all but a handful of files, and the handful
-is the part worth naming before the flag day rather than during it. These are
-the places where the `function` keyword is **the subject** rather than the
-spelling — a case that exists to say something about the keyword, or a fixture
-that exists to *be* the other spelling — and each one is a decision stage D
-owes an answer to:
+These are the files where the `function` keyword is **the subject**, not just
+the spelling. Each is a decision stage D owes an answer to:
 
 | File | What it is | What stage D owes it |
 | --- | --- | --- |
-| `tests/cases/reject_fn_nested.ts` | a `function` inside a body, refused as `Unsupported statement in Phase 1: FunctionDeclaration` | **scope §6's rule to the top level.** A nested declaration is already refused, by a rule with its own registry code; a stage D rejection that fired first would shadow that wording and `tests/diagnostic-coverage.js` would then have a code no program provokes |
+| `tests/cases/reject_fn_nested.ts` | a `function` inside a body, refused as `Unsupported statement in Phase 1: FunctionDeclaration` | **scope §6's rule to the top level.** A nested declaration is already refused by a rule with its own registry code; a stage D rejection that fired first would shadow that wording and `tests/diagnostic-coverage.js` would then have a code no program provokes |
 | `tests/cases/reject_fn_anonymous.ts` | `export default function ()`, refused as `Functions must be named` | **name the function before refusing the spelling.** §6's message interpolates the name, so there is nothing for it to say here; the existing rule has to keep firing first |
 | `tests/cases/reject_arrow_annotated.ts`, `reject_arrow_let.ts` | the arrow rules, whose `main` is still a `function` | mechanical, but **before** stage D rather than with it: each case pins a *first* diagnostic, and a rejection of its entry point would become the first |
 | `docs/cookbook/fn-add-function.ts` | the listing that exists to be the legacy spelling, beside `fn-add` | the listing is the evidence for §2, so deleting it removes the demonstration that the two spellings compile identically. Either the section goes with the spelling, or the pair moves somewhere the rejection does not reach |
 | `tests/differential/arrow-parity/declared.ts` | half of the guard that the two spellings rewrite to the same JavaScript (§8b) | the same question, and it is the sharper one: the guard *is* a pair of spellings, so stage D removes one of its halves. The guard has value after D only if a `function` program can still be checked somewhere |
 
-The last two are one question — **what proves an equivalence after one of its
-two sides is illegal?** — and it is stage D's to answer, not stage C's. It is
-the concrete form of what §10 is arguing about: A and B are additive, and D is
-the stage that takes something away.
+The last two are one question: **what proves an equivalence after one of its
+two sides is illegal?** It is stage D's to answer.
 
-`tests/cases/reject_ffi_body.ts` is the opposite case and needs nothing:
-`declare function f() { }` is refused for carrying a body, and §9 keeps that
-rule exactly where it is.
+`tests/cases/reject_ffi_body.ts` needs nothing. `declare function f() { }` is
+refused for carrying a body, and §9 keeps that rule.
 
-**Where the rule goes, which settles the first two rows without a special
-case.** `collectFunctionSignature` and `collectFunctionTemplate`
-(stage0's `src/checker/declarations.ts`) are the two places a `function` declaration
-becomes a signature, and both already refuse an unnamed one and a bodiless one
-before anything else. Putting §6's rejection *after* those two checks and under
-`if (!foreign)` gives, for free:
+**Where the rule goes.** The parser normalises both spellings to one
+`N_FUNCTION` and records no flag for which one it read (§2). So D needs a flag
+on the node for the keyword form, set in `src/parser.ts`. The refusal then goes
+in `refuseBindingForm` (`src/statements.ts`), *after* the two checks that
+already run there: `Functions must be named` (NL2203) and the `export default`
+refusal. It must not fire for a `declare function`. That ordering gives the
+first two rows above for free. `reject_fn_nested` is untouched, because a
+nested declaration is refused as a statement before it reaches either check.
+So stage D is one flag, one refusal, the `reject_function_declaration` case and
+its wording, and the corpus. The corpus is the work.
 
-- `reject_fn_anonymous` keeps `Functions must be named`, because there is no
-  name for §6's message to interpolate and the name check has already thrown;
-- `reject_ffi_body` keeps its own wording, because the body rule is the foreign
-  rule's mirror and runs first;
-- `reject_fn_nested` is untouched, because a nested declaration never reaches
-  either function — it is refused as a statement, by
-  `Unsupported statement in Phase 1: FunctionDeclaration`;
-- `declare function` stays legal, by the `foreign` guard, which is §9's whole
-  rule in one condition.
-
-So stage D is one rejection at two call sites in each compiler, plus the
-`reject_function_declaration` case and its wording — and the corpus. The corpus
-is the work; the rule is not.
-
-**The two entry-point wordings §10 names are `NL2149` and `NL2229`**, verified
-against the registry rather than taken on trust:
+**The two entry-point wordings §10 names are `NL2149` and `NL2229`**:
 `` `process.argv` requires a `main` entry point (this program has no `export
 function main`) `` and `` Only the entry module may declare `export function
-main` ``. `scripts/gen-diagnostic-codes.mjs` keys a code on the words, so
-rewording either retires its number and issues a new one — which is why they
-are stage D's to change, alongside the rejection that makes the spelling they
-name wrong. Nothing else the compiler *prints* names the spelling: every other
-occurrence of the phrase across stage0's `src/` and `src/` is a comment or a piece of
-JSDoc, which costs nothing to reword and carries no code.
+main` ``. A code is keyed on its words, so rewording either retires its number.
+That is why they are stage D's to change, together with the rejection that
+makes the spelling they name wrong.
 
 ## 10. Open
 
@@ -811,16 +284,15 @@ JSDoc, which costs nothing to reword and carries no code.
   (): number => ...` is the consequence of §1 and is now the first line of
   every example, of the README quickstart, of `docs/INSTALL.md`'s hello world
   and of `decl-main` in the cookbook. The diagnostics that name the entry still
-  say `export function main`: their text is what
-  `scripts/gen-diagnostic-codes.mjs` keys a stable code on, so rewording them
-  retires `NL2229` and `NL2149` for a spelling change. They are stage D's to
-  change, alongside the rejection that makes the other spelling wrong.
-- **Whether stage D happens at all.** A and B are cheap and strictly additive.
-  C and D are 1,401 rewrites for zero expressiveness. Shipping A and B, letting
-  new code use arrows and converting a file when it is opened for another
-  reason — the migration policy `.claude/typescript.md` already applies to
-  stage0's `src/` — reaches the same place without a flag day, and leaves D as a
-  decision to take when the count is small rather than now. D withdraws an
-  accepted construct: on 0.x that is a breaking minor, and after 1.0 it would
-  need a major ([LANGUAGE.md](LANGUAGE.md)'s head), so it is cheaper while the
-  project is on 0.x.
+  say `export function main`: their text is what keys a stable code, so
+  rewording them retires `NL2229` and `NL2149` for a spelling change. They are
+  stage D's to change, alongside the rejection that makes the other spelling
+  wrong.
+- **Whether stage D happens at all.** A, B and most of C are done, and new
+  code outside the test corpus cannot use `function` (the Biome plugin). What
+  is left is 1,034 rewrites of test programs, for zero expressiveness (§7).
+  The alternative is to leave D undone, convert a case when it is opened for
+  another reason, and take D when the count is small. D withdraws an accepted
+  construct. On 0.x that is a breaking minor, and after 1.0 it would need a
+  major ([LANGUAGE.md](LANGUAGE.md)'s head), so it is cheaper while the project
+  is on 0.x.

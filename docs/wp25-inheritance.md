@@ -1,7 +1,8 @@
 # WP25: Inheritance removed, `implements` widened
 
-**Landed.** This note is the plan of record for two changes made in one
-commit, because neither is coherent without the other:
+**Status: landed, before the first release (0.1.0), in one commit
+(`bd0440a8`), because neither change is coherent without the other.** This
+note is the record of both:
 
 1. `extends`, `super` and method overriding are removed from the language.
 2. `implements` becomes a **prefix** check rather than an exact field match,
@@ -122,8 +123,8 @@ Almost nothing, which is the argument.
 | `tests/link/` — programs deleted | 2 |
 | `docs/cookbook/` — entries replaced | 1 |
 
-The self-hosted compiler is 25,911 lines over 57 modules and declares no
-derived class at all. That is not an accident:
+The self-hosted compiler was 25,911 lines over 57 modules at the time and
+declared no derived class at all. That is not an accident:
 [wp14-selfhost.md](wp14-selfhost.md) §2.1 chose **one `Node` class with a
 `kind: i32` discriminant** over a hierarchy, and Nish-0 — the subset `src/` is
 written in — was defined as the language minus "inheritance and downcasts".
@@ -143,7 +144,7 @@ rewrite.
   offsets they did as derived classes.
 - **`src/` did not change**, so the bootstrap fixpoint (`IR(stage1) ==
   IR(stage2)`, stage3 byte-identical to stage2) is re-established over the
-  same source, and the diagnostic-code registry appended three numbers
+  same source, and the diagnostic-code registry gained three numbers
   (`NL2277`–`NL2279`) without renumbering one.
 - **Classes are otherwise untouched**: fields, layout, constructors, methods,
   `readonly`, definite assignment, `new`, identity `===`, and the interop

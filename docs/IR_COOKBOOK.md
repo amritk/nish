@@ -13807,6 +13807,12 @@ attributes #1 = { nounwind willreturn }
 
 ### `Arena.mark` / `release` / `used` / `reset`
 
+`Arena.release` and `Arena.reset` are deprecated (NL7001): a release to a
+mark something allocated after it still references is undefined behaviour the
+compiler does not check, and [`using a = arena()`](#using-a--arena) below is
+the checked bracket that replaces them. The listing stays because a program
+written before it still compiles to this.
+
 The explicit builtins lower to one runtime call each. `measure` calls
 `Arena.release` itself, so the compiler never wraps it in an automatic
 scope (its own mark would be invalidated by the user's release); the

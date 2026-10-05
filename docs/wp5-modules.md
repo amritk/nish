@@ -1,80 +1,52 @@
 # WP5: Modules, entry point, linkage
 
-Nish programs can span several files. Each file is one module and becomes
-one LLVM IR module (`.ll`); `scripts/build.sh` links them with the C runtime
-into a native binary. This document is the reference for how modules resolve,
-how the process entry is produced, which functions are visible to the linker,
-and how the CLI drives all of it.
+**Status: landed** before the first release (merged as `wp5/modules`,
+160ad63): `export`/`import` across files, whole-program compilation, the
+`main` entry wrapper, linkage and `--link`. The rules are normative in
+[LANGUAGE.md: `export` and `import`](LANGUAGE.md#export-and-import) and
+[`main`](LANGUAGE.md#main); the IR is in
+[IR_COOKBOOK.md](IR_COOKBOOK.md#modules-the-exporter). The code is
+`src/compilation.ts` (loading, binding, the symbol check) and `src/emit.ts`;
+the goldens are `tests/cases/export_*`, `entry_main*`, and the whole programs
+under `tests/link/`.
 
 ## Modules
 
-### `export`
+Each file is one module and one LLVM IR module (`.ll`); `--link` builds every
+module and the C runtime into one binary.
 
-`export` is accepted on top-level function declarations and nothing else:
-
-```ts
-export function square(n: number): number {   // callable from other modules
-  return n * n;
-}
-
-function helper(n: number): number { ... }      // module-private (see Linkage)
-```
-
-`export const`, `export { f }`, `export * from`, `export default`, and
-`export =` are rejected with a message that names the form. `export class` /
-`export interface` are accepted since WP2 (see docs/wp2-classes.md).
-
-### `import`
-
-The only import form is a named import from a relative specifier:
-
-```ts
-import { square, cube as pow3 } from "./math";
-```
-
-- The specifier must start with `./` or `../`. Bare specifiers (`"math"`,
-  `"lodash"`) are rejected: Nish has no package resolution.
-- The `.ts` extension is optional. `./math.js` is also accepted and mapped to
-  `./math.ts`, matching the TypeScript convention for ESM-style sources.
-- The path is resolved relative to the *importing* file, not the working
-  directory.
-- `as` renames the binding locally; the LLVM symbol stays the exporter's name.
-- Default imports (`import m from`), namespace imports (`import * as m`),
-  side-effect imports (`import "./m"`), and type-only imports are errors.
-- Importing a name that the module does not export is an error. The message
-  distinguishes "declared but not exported" from "no such function".
-- Importing the same local name twice, or a name that is also declared in
-  the importing module, is an error.
+As built, `export` was accepted on top-level functions only (classes and
+interfaces followed with WP2), and the only import was a named import from a
+relative specifier resolved against the importing file. `as` renames the
+local binding while the LLVM symbol stays the exporter's. Since then `export` has reached `enum`, `type` and `const`, and bare
+specifiers resolve to the standard library (`nish/<module>`), builtin modules
+(`nish:`) and packages ([wp21-packages.md](wp21-packages.md)).
 
 ### Whole-program compilation
 
-stage0's `src/compilation.ts` owns the program:
+The compiler holds the whole program, in this order:
 
-1. **Load.** The root file(s) are parsed; every `import` is resolved and the
-   target is loaded recursively. Each file is parsed exactly once (keyed by
-   absolute path), so cycles terminate. As soon as a module is parsed its
-   signatures are collected (checker pass 1), before any body is checked.
-2. **Bind.** Every import is bound to the exporter's signature (pass 1b), so
-   calls into other modules are checked with full parameter and return types.
-3. **Symbol check.** Any two functions that would both be external symbols
-   in the final link must have different names (see Linkage). Clashes are a
-   compile error instead of a linker error.
-4. **Check bodies** (pass 2) for every module.
-5. **Analyse.** `analyzeFunctions` runs over *all* modules at once, keyed by
-   LLVM symbol, so purity, loop, and escape facts are program-wide.
+1. **Load.** Parse the root files and every import, recursively, each file
+   once (keyed by absolute path), so cycles terminate. Each module's
+   signatures are collected as soon as it is parsed.
+2. **Bind** every import to the exporter's signature, so cross-module calls
+   are checked with full types.
+3. **Check symbols**: two functions that would collide in the program are an
+   error here rather than at link time.
+4. **Check bodies** for every module.
+5. **Analyse** all modules at once, keyed by LLVM symbol, so purity, loop and
+   escape facts are program-wide.
 6. **Emit** one IR module per source module.
 
-Cycles are allowed: `main.ts` may import from `other.ts` while `other.ts`
-imports from `main.ts`. Because signatures of every module are known before
-any body is checked, and the link step sees all modules, nothing about a
-cycle is special (`tests/link/cycle`).
+Import cycles are allowed and nothing about them is special, because every
+signature is known before any body is checked (`tests/link/cycle`).
 
 ### Imported functions in IR
 
-An imported function appears in the importer as a `declare` that carries
-*exactly* the parameter attributes, return attributes, and function attribute
-set of the exporter's `define`. Both are rendered from the same signature and
-the same program-wide facts table:
+An imported function appears in the importer as a `declare` carrying
+*exactly* the parameter attributes, return attributes and function attribute
+set of the exporter's `define`, both rendered from the same signature and the
+same program-wide facts:
 
 ```llvm
 ; math.ll
@@ -87,156 +59,66 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 
 This is the point of compiling the program as a whole: the optimiser working
-on `main.ll` knows `square` is `readnone` and `willreturn` and can hoist,
-fold, or drop the call exactly as if it were local. The attribute-group
-*numbers* may differ between modules (they are interned per module); the
-contents are identical, and `tests/run.js` checks that for every link test.
+on `main.ll` can hoist, fold or drop a call to `square` as if it were local.
+Attribute-group *numbers* may differ between modules; the contents may not,
+and `tests/run.js` checks the agreement for every link test.
 
 ## Entry point
 
-An entry module that declares
+The entry module's exported `main` (written today as
+`export const main = (): number => { ... }`, or `: void`) gets a C-ABI entry
+by **rename and wrapper**: the user's function is emitted as `@nish_main`,
+and the compiler adds a C `@main(i32 %argc, i8** %argv)` that calls it,
+calls `nish_free_arena`, and returns its value (or `0` for `void`).
 
-```ts
-export function main(): number { ... }   // or  export function main(): void
-```
+Why rename rather than keep `@main` and skip the wrapper: one scheme covers
+both return types, the arena is always released, the wrapper has the
+signature every libc start-up expects (which is where WP7 later built
+`process.argv`), and an importer of `main` simply calls `@nish_main` like any
+other symbol.
 
-gets a C-ABI entry. The chosen scheme is **rename + wrapper**:
-
-- The user's function is emitted under the symbol `@nish_main`
-  (`FunctionSig.name`; the source name stays `main` for diagnostics).
-- The emitter adds
-
-  ```llvm
-  define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
-  entry:
-    %0 = call i32 @nish_main()
-    call void @nish_free_arena()
-    ret i32 %0
-  }
-  attributes #1 = { nounwind }
-  ```
-
-  For a `void` main the wrapper returns `0`. The arena is lazy, so nothing is
-  initialised; `nish_free_arena` releases every chunk on the way out.
-
-Why rename rather than keep `@main` and skip the wrapper? One scheme covers
-both return types, the arena is always released, the wrapper's signature is
-the one every libc start-up code expects (`argc`/`argv` are accepted now and
-exposed in WP7), and an importer that does `import { main } from "./main"`
-simply calls `@nish_main` like any other symbol.
-
-Rules:
-
-- Only the **entry module** (the first file on the command line) may declare
-  `export function main`; in any other module it is an error.
-- `main` takes no parameters yet (`process.argv` arrives in WP7).
-- `main` returns `void` or an `i32`-lowered `number`. Under
-  `--number-mode f64` write `main(): i32`.
-- A non-exported `function main` is not an entry: it is emitted as `@main`
-  with its own signature, exactly as before WP5 (so C drivers such as
-  `tests/driver.c` keep working with library-style modules).
-- `nish_` is a reserved prefix for function names.
-
-`--link` requires the entry module to declare `export function main`.
+Only the entry module (the first file on the command line) may export `main`;
+it takes no parameters and returns `void` or an `i32` (`main(): i32` under
+`--number-mode f64`). A non-exported `main` is an ordinary function named
+`@main`, so C drivers such as `tests/driver.c` keep working. `--link`
+requires an exported `main`, and `nish_` is a reserved prefix.
 
 ## Linkage
 
 | Function | default | `--no-strict-exports` |
 | --- | --- | --- |
-| `export function f` | external (`define ... @f`) | external |
-| `function f` | `define internal ... @f` | external |
-| entry `export function main` | external `@nish_main` + external `@main` wrapper | same |
+| `export const f` | external (`define ... @f`) | external |
+| `const f` (not exported) | `define internal ... @f` | external |
+| entry `export const main` | external `@nish_main` + external `@main` wrapper | same |
 | inline arena allocator | `internal` | `internal` |
 
-This table was the other way round until WP15 §3: default linkage used to be
-external so C drivers and the wasm profile (`--export-all`) saw every
-function, and `--strict-exports` was the opt-in Rust-like mode. The Rust-like
-mode is now the default, because `internal` is what lets LLVM inline,
-specialise or drop a function and keeps it out of the symbol table — a win on
-speed and on size — and `--no-strict-exports` is the opt-out for a C driver
-that calls something the module does not export.
+WP5 made every function an external symbol by default, with
+`--strict-exports` as the opt-in that made non-exported functions `internal`.
+WP15 §3 swapped the default: `internal` is what lets LLVM inline, specialise
+or drop a function and keeps it out of the symbol table, a win on both speed
+and size, so it is now the default and `--no-strict-exports` is the opt-out
+for a C driver that calls something the module does not export.
 
-Because an external symbol is global to the whole link, the compiler rejects
-name clashes up front:
+**A function name is unique across the whole program, exported or not, in
+either mode.** `internal` keeps a name away from the linker, but the
+whole-program facts are keyed by symbol name, so two functions sharing one
+would get each other's attributes: a miscompile rather than a link error.
+That is why the rule does not consult the flag
+(`tests/link/duplicate_internal`; the check used to be skipped under an
+explicit `--strict-exports`).
 
-- Two modules exporting the same name is always an error.
-- Two modules defining the same **non-exported** name is an error too, in
-  either mode. `internal` linkage keeps the name away from the linker, but
-  `analyzeFunctions` keys the whole-program fact fixpoint by symbol name, so a
-  duplicate would give each function the other's attributes. That is a
-  miscompile rather than a link error, so the rule does not consult the flag
-  (`tests/link/duplicate_internal`). This is also a bug fix: with
-  `--strict-exports` passed explicitly, the check used to be skipped.
-- A module defining `main` while the entry has an entry wrapper is an error.
+## Output files
 
-## CLI
+Two modules never share an output file: one module goes to `-o file.ll` (or
+`<input>.ll`), several need `-o <dir>/` and get one `.ll` each, with
+same-named modules told apart by their path from the entry. The current rule
+is in [LANGUAGE.md](LANGUAGE.md#export-and-import).
 
-```
-nish <entry.ts> [more.ts ...] [options]
-  -o, --output <file.ll>     output path for a single module (default: <input>.ll)
-  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
-  --link <exe>               build a native binary from every module + runtime/runtime.c
-  --profile speed|size|debug build profile for --link (default: speed)
-  --no-strict-exports        every function is an external symbol (default: non-exported
-                             functions get `internal` linkage)
-  --number-mode i32|f64      lowering of `number` (default: i32)
-  --plain                    no performance attributes or alignment hints
-  --runtime-decls            always emit the runtime ABI prelude (arena + strings)
-```
+## Not built
 
-Output rules:
-
-- One resulting module: `-o file.ll` writes it there (as before); with no
-  `-o` it goes next to the source as `<input>.ll`.
-- Several modules (more than one input, or an import graph): `-o <dir>/`
-  writes `<dir>/<basename>.ll` per module (a trailing slash or an existing
-  directory marks a directory). If two modules share a basename, those two
-  use their path relative to the entry's directory with `/` turned into `_`.
-  A single `-o file.ll` for several modules is an error.
-- With `--link <exe>` and no `-o`, intermediates go next to the binary:
-  `<exe>.ll` for one module, `<exe>.modules/<basename>.ll` for several.
-
-`--link` runs `bash scripts/build.sh <every .ll> runtime/runtime.c -o <exe>
---profile <profile>` and prints the binary path and size that the script
-reports. The runtime is always linked because the entry wrapper calls
-`nish_free_arena`.
-
-Example (`examples/multi/`):
-
-```bash
-node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; echo $?
-# linked build/multi: 4488 bytes (speed)
-# 49
-```
-
-## Tests
-
-- `tests/cases/`: `export_fn` (the default: `define internal @helper`),
-  `export_strict` (the same, with the flag spelled out), `export_no_strict`
-  (`--no-strict-exports`: every function external again), `entry_main` and
-  `entry_main_void` (wrapper goldens,
-  linked without `tests/driver.c` because the source contains
-  `export function main`), and `reject_*` cases for `main` with parameters,
-  non-function exports, `export default`, default/namespace/side-effect/bare
-  imports, and a missing module.
-- `tests/link/<name>/`: whole programs built with `--link`. Since nothing can
-  print until WP3 lands `console.log`, each `main` returns its result and
-  `expected.code` holds the exit code; `expected.out` is the expected stdout
-  (empty for now). `two_file` also carries goldens for both modules,
-  `diamond` checks that a shared dependency is compiled once, `cycle`
-  imports in both directions, `strict` asserts `define internal` on a
-  helper via `expected.ir`, and the negative directories cover a missing
-  module, a non-exported import, an unknown export, duplicate imports,
-  duplicate exports across modules, `main` with parameters, `--link` without
-  `main`, and `export function main` outside the entry. Every positive link
-  test is assembled with `llvm-as`, verified with `opt -passes=verify`, and
-  checked for `declare`/`define` attribute agreement across modules.
-
-## Not in this package
-
-- `.d.nish.json` sidecars from the master plan are unnecessary: the
-  Compilation has every module in memory, so the importer's `declare` is
-  rendered from the exporter's actual signature and facts. Separate
-  compilation of a library against a sidecar can be added when a use case
-  needs it.
-- `process.argv` (WP7), `console.log` (WP3), header generation (WP8).
+- **`.d.nish.json` sidecars.** The master plan specified them, but they are
+  unnecessary: the compilation has every module in memory, so the importer's
+  `declare` is rendered from the exporter's actual signature and facts.
+  Separate compilation of a library against a sidecar can be added when a use
+  case needs it ([wp21-packages.md](wp21-packages.md) keeps the shape it would
+  take).

@@ -30,8 +30,8 @@ partial sums), plus about 12 KB of binary for the double formatter that
 `console.log` then needs:
 [wp9-optimisation.md](wp9-optimisation.md#what-the-number-mode-costs) has the
 tables and the three mechanisms. The cost is that `number`
-does not behave like JavaScript's number: signed integer overflow is
-undefined behaviour rather than a wrap, and `1.5` is rejected in i32 mode
+does not behave like JavaScript's number: signed integer overflow panics
+rather than wrapping (see below), and `1.5` is rejected in i32 mode
 ([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)). The
 explicit types `i32`, `i64`, and `f64` are always available whatever the
 mode.
@@ -64,8 +64,9 @@ places memory statically ([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model),
 literal that provably never leaves its function is an `alloca`, and a
 function whose arena temporaries all die with it marks the arena on entry
 and releases it before returning, so a hot loop keeps the arena flat.
-`Arena.mark()` / `Arena.release(m)` / `Arena.reset()` / `Arena.used()`
-give explicit control. Optional reference counting for objects that must
+`using a = arena()` frees a batch explicitly, and `Arena.mark()` /
+`Arena.used()` read the arena (`Arena.release(m)` and `Arena.reset()` still
+work but are deprecated). Optional reference counting for objects that must
 outlive an arena reset is still on the plan; it has not been built.
 
 ### How do I keep memory flat in a long-running loop?
@@ -74,11 +75,13 @@ Usually by doing nothing: a temporary `new`, `[...]`, or `{ ... }` that does
 not escape is a stack slot reused every iteration, and a helper function
 whose strings or dynamic arrays die with it gets an automatic arena scope.
 Two things defeat that: returning or storing the object (the caller now
-owns arena memory), and calling `Arena.reset` / `Arena.release` inside the
-callee (the compiler then never scopes it). If a batch does accumulate,
-take `const m = Arena.mark()` before it and `Arena.release(m)` after it,
-once nothing allocated in between is referenced any more; releasing earlier
-is undefined behaviour. `Arena.used()` tells you whether it worked
+owns arena memory), and calling the deprecated `Arena.reset` /
+`Arena.release` inside the callee (the compiler then never scopes it). If a
+batch does accumulate, open a block with `using a = arena()` around it: the
+block releases everything allocated after that line on every exit, and the
+compiler refuses the block if anything allocated in it could outlive it
+([LANGUAGE.md: `using a = arena()`](LANGUAGE.md#using-a--arena)).
+`Arena.used()` tells you whether it worked
 (`tests/cases/mem_scope_dynamic_array` prints it before and after 100000
 calls). `--no-stack-alloc` shows the arena-only IR for comparison.
 
@@ -148,12 +151,14 @@ gone, and no flag brings it back (`--nsw` is refused)
 ### How do I know the compiled program behaves like Node?
 
 `npm run test:diff` compiles every whole program in `tests/cases` and a
-50-program corpus, runs each binary, rewrites the same program to
-JavaScript using the compiler's own recorded types (`(a + b) | 0` for
-`i32`, `BigInt` for `i64`, a bounds-checked index helper, byte lengths),
-runs it under Node with `runtime/shim.mjs`, and compares stdout and exit
-status byte for byte; `node tests/differential/fuzz.js --count 200`
-does the same for random integer programs. Everything that still differs
+71-program corpus, runs each binary, runs the same program's JavaScript
+rewrite under Node with `runtime/shim.mjs`, and compares stdout and exit
+status byte for byte. The rewrite was made from the compiler's own recorded
+types (`(a + b) | 0` for `i32`, `BigInt` for `i64`, a bounds-checked index
+helper, byte lengths) by a rewriter that was deleted with stage0, so it is
+frozen in `tests/differential/goldens/`. `node tests/differential/fuzz.js --count 200`
+compiles random integer programs with the last release and with the current
+compiler and compares the IR. Everything that still differs
 is listed with a reproducer in
 [wp13-differential.md](wp13-differential.md) and
 `tests/differential/known-failures.txt`: 1-ulp libm differences in
@@ -201,13 +206,14 @@ source line and a caret marking the offending node, and the process exits
 with status 1:
 
 ```
-tests/cases/reject_type_mismatch.ts:1:40: error: Operator `+` requires two operands of the same numeric type, got i32 and boolean
+tests/cases/reject_type_mismatch.ts:1:40: error: Operator `+` requires two operands of the same numeric type or two strings, got i32 and boolean
   1 | function f(a: number): number { return a + true; }
     |                                        ^~~~~~~~
 ```
 
-Syntax errors use the same layout with `syntax error:`. The compiler stops at
-the first error. The message texts are catalogued in
+Syntax errors use the same layout with `syntax error:`. The compiler reports
+every error it finds, in source order, up to 20 before `...and N more errors`,
+and `--json` prints each as one object with a stable `code`. The message texts are catalogued in
 [LANGUAGE.md](LANGUAGE.md#forbidden-constructs-phase-0-validator) and the
 format in [wp10-ci.md](wp10-ci.md#diagnostic-format).
 
@@ -258,10 +264,11 @@ when you inspect optimised IR by hand compile with `--target host` and
 
 Because the compiler could not prove it. A `while` loop, a `for` loop that
 is not a counted loop, a checked `a[i]`, an integer `/` or `%`
-(the divisor check can panic), or a call to `process.exit` drops
+(the divisor check can panic), a signed `+`, `-` or `*` not proven to fit
+(the overflow check can panic), or a call to `process.exit` drops
 `willreturn`; any arena allocation, `console.log`, string concatenation,
-field store through a non-stack object, integer division, or `Math.random`
-makes the function impure. An object that lives in a stack slot is the
+field store through a non-stack object, integer division, a checked signed
+operation, or `Math.random` makes the function impure. An object that lives in a stack slot is the
 function's own memory, so reading and writing its fields keeps `readnone`
 (`tests/cases/mem_stack_struct`, `swapped`). The
 exact rules are in

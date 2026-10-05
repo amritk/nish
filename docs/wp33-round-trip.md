@@ -1,10 +1,12 @@
 # WP33: The round trip — TypeScript into Nish, and back out
 
-**Decided (§7, 2026-09-28); R1's portability half is built: the class, its
-flag and its eleven codes (#293), the number, record and string rows (#301,
-#302, #304), and NL8011's retirement with NL8008 narrowed to the counts that
-can diverge (#329). Every row is live except NL8011. R2 is built: the
-typed-array names refuse `push` and `pop`.** This is the plan of record for one
+**Decided (§7, 2026-09-28); in progress. Built: R1 (the portability class
+behind `--warn-portability`, #293, #301, #302, #304, #329; the parser that
+names every refusal's rule, #292 to #337), R2 (the typed-array names refuse
+`push` and `pop`, #335, widened by #409), and the `exact` half of R5, ahead of
+R4 (`fix` in `--json` and `nish --fix`, #421, #429, #431, #459, #460). Next:
+R3, the runtime split by host, and R4, `--emit ts`. §9 has each stage's
+state.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
@@ -142,7 +144,7 @@ collected in §7.
 
 | Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
-| `number` is `i32` by default: `+ - *` wrap (or are UB without `--wrapping`), `/` truncates | LANGUAGE.md | C | `(a + b) \| 0`, `Math.imul(a, b)`, `idiv(a, b)` | Keep. The translation is one token per operator, and the way in must default to f64 (wp28 §5.3), so ingested code never silently truncates. |
+| `number` is `i32` by default: signed `+ - *` overflow panics (and wraps under the deprecated `--wrapping`), `/` truncates | LANGUAGE.md | C | `(a + b) \| 0`, `Math.imul(a, b)`, `idiv(a, b)` | Keep. The translation is one token per operator, and the way in must default to f64 (wp28 §5.3), so ingested code never silently truncates. |
 | `u8` / `u16` / `u32` wrap | LANGUAGE.md | C | `& 0xff`, `& 0xffff`, `>>> 0` | Keep. |
 | `i64` / `u64` are native 64-bit | the prelude throws at the first mixed arithmetic | C | `bigint`, `BigInt.asIntN(64, …)` / `asUintN` | Keep. The type becomes `bigint`, which is also the honest TS type. |
 | `i32 >>> n` reads back signed | `-1 >>> 0` is `-1` | C | `(a >>> n) \| 0` | Keep. It is the documented wart that `u32` exists for. |
@@ -341,6 +343,22 @@ A diagnostic with a mechanical rewrite carries it:
 ignores unknown fields is unaffected, but the shape is part of the contract
 (orientation rule 7), so §7 Q5 asks for it explicitly.
 
+**What shipped (#421) is the `exact` tier, in a flatter shape.** `fix` is the
+list of edits itself, `"fix":[{"line","column","endLine","endColumn","text"}]`,
+placed as the diagnostic's own span is, and it is attached only when the
+rewrite keeps the program's meaning, so there is no `safety` key: every fix
+that exists is `exact`. The applier is a flag, `nish --fix <files>`, not a
+`nish fix` subcommand: it rewrites only the files named on its command line,
+recompiles until a round applies nothing or five have, and then reports what
+is left as a plain run would. The rewrites so far are loose equality (#421);
+`export default`, export lists, type-only imports and `fs` imports (#429);
+truthiness, `String(n)`, `Map.get` and call-site type arguments (#431); the
+`--unchecked-indexing` migration to `uncheckedGet` and `uncheckedSet`,
+NL7002 (#459); and the range guard for NL9007 (#460). `tests/fix/` pins each,
+and [AI.md](AI.md) states the loop. The `review` tier is not built: a fix that
+touches a class-C row would need a key of its own, which is a change to the
+`--json` contract and is still this section's plan.
+
 ### 5.2 The `portability` diagnostic class
 
 A warning at every class-C site in the program, with `--json` and a code in a
@@ -384,8 +402,11 @@ where it meets an outside fact. Both are warnings, so neither changes the IR
    `--emit ts` output under Node against the native binary is the differential.
 7. Narrow `nish.compat` (wp28 §5.2) until it is empty.
 
-[AI.md](AI.md) gains a section that states this loop, and an agent skill can
-wrap it. Neither is worth writing before §5.1 and §5.2 exist.
+[AI.md](AI.md)'s "The loop: compile, read the code, fix" states steps 1, 2
+and 4 against strict today, with `nish --fix` as step 2, and names
+`--warn-portability`, step 3's warnings. The rest of step 3 waits on the
+`review` tier, step 6's differential on `--emit ts` (R4), and step 7 on wp28's
+compat mode; an agent skill that wraps the whole loop waits with them.
 
 ---
 
@@ -436,7 +457,7 @@ and the stages in §9 build it.
 | Q2 | Default `number` | i32 in strict and f64 in compat (wp28 §5.3), or f64 everywhere | **Leave it as wp28 has it.** Strict keeps i32's speed, and the way out handles it in one token per operator. Ingested code starts in f64, where it means what it meant. Moving a module to i32 is then a step on wp28's ratchet: a measured speed-up, with the §5.2 flags as the checklist of what could change. |
 | Q3 | Record copies | (a) C row, flagged on the way in (§3.3); (b) a checker rule that rejects every observable aliasing; (c) store records by pointer, as JS does | **(a).** (c) gives up the contiguous layout that makes `Point[]` vectorise. (b) costs nothing natively, but it refuses programs that are fine, and the flag already names the site. |
 | Q4 | Typed-array names | (a) translate to `number[]` where `push`/`pop` is used; (b) refuse `push`/`pop` on the four names | **(b).** A compile-time refusal, so the IR of every program that still compiles is unchanged. It is breaking but small, and it makes the row A. A program that pushes writes `f64[]`, which is what it meant. |
-| Q5 | `fix` in `--json` | a nested `fix` field on the diagnostic; or separate `{"severity":"fix"}` lines | **The field.** One object per diagnostic is the contract, and the fix belongs to the diagnostic. |
+| Q5 | `fix` in `--json` | a nested `fix` field on the diagnostic; or separate `{"severity":"fix"}` lines | **The field.** One object per diagnostic is the contract, and the fix belongs to the diagnostic. Built as a list of edits with no `safety` key (§5.1). |
 | Q6 | `slice` | JS clamping and negative indices, or keep the panic | **Keep the panic** (§3.2). The clamp is measured at 13 instructions a call and can never be proven away. `substring` is the JS-exact spelling. |
 
 ---
@@ -493,20 +514,33 @@ itself refuses as syntax — numeric separators where they cannot stand, octal
 and leading-zero literals, `#!` after the first line, a `\u{…}` escape out of
 range, `??` mixed with `&&` or `||` — and the entries left in
 `tests/self/parser-refusals.txt`. It was built in six stages: #292
-statements, #311 expressions, #313 declarations, #314 functions and bindings,
-#315 classes, interfaces and enums, and #337 imports and exports.
+statements, #311 expressions, #313 declarations, #314 functions and
+bindings, #315 classes, interfaces and enums, and #337 imports and exports.
 
 **R2 is built.** The typed-array row of §3.3 is class A for every receiver
 [LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop) lists: a
 receiver spelled `Int32Array`, `Float32Array`, `Float64Array` or
-`BigInt64Array` refuses `push` and `pop` (NL2415, `src/arrays.ts`), and no
-`.ll` golden moved. #347 closed the three shapes R2 left — another module's
-`type` alias, a `Map` read, and a generic function's `T` result — again with
-no `.ll` golden moving. The row names the class-C residue the spelling still
-does not reach: a member of a generic class instantiated at a name.
+`BigInt64Array` refuses `push` and `pop` (NL2415, `src/arrays.ts`, #335), and
+no `.ll` golden moved. #409 closed the three shapes #335 left — another
+module's `type` alias, a `Map` read, and a generic function's `T` result —
+again with no `.ll` golden moving (`reject_typed_push_map`,
+`reject_typed_push_generic`, `tests/link/reject_typed_push_alias`). The row
+names the class-C residue the spelling still does not reach: a member of a
+generic class instantiated at a name, `new Box<Float64Array>(t).value`.
 
-R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
-and it is also what gives R5 its differential.
+**R3 and R4 are not started.** `runtime/shim.mjs` is still one module over
+`node:` imports with no Bun or browser adapter, `runtime/nish.mjs` is still the
+Node prelude, and the compiler has no `--emit ts`.
+
+**R5's `exact` half is built, ahead of R4.** `fix` rides in `--json` and
+`nish --fix` applies it (#421, #429, #431, #459, #460; §5.1 has the shape and
+the rewrites), and AI.md states the loop (§5.3). It went first because it
+needs no differential: a fix is attached only where it keeps the program's
+meaning, which the compiler decides on its own. The `review` tier, whose
+rewrites touch class-C rows, is the half that does need one, and it still
+waits for R4. R4 still comes before it on purpose: the way out is what makes
+the way in low-risk, and it is also what gives R5's `review` fixes their
+differential.
 
 Every stage is held to §1 rule 6 by the tests `npm test` already runs: no
 `.ll` golden moves, and the instruction gate stays green without its baseline

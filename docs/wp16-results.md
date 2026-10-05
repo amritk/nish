@@ -1,226 +1,121 @@
 # WP16: Result and the end of `throw`
 
-Rust-style error handling for Nish: a function that can fail says so in
-its return type, hands the caller a `Result<T, E>`, and the caller cannot
-reach the success value without first deciding what happens to the failure.
-`throw` is removed in the same package, because leaving it in would have left
-a second, invisible way to report a failure.
+**Status: complete** (#5). A function that can fail says so in its return
+type and hands the caller a `Result<T, E>`, and the caller cannot reach the
+success value without first deciding what happens to the failure. `throw` was
+removed in the same package. The normative rules and the full method table
+are in [LANGUAGE.md](LANGUAGE.md#result-and-error-handling); the IR is in
+[IR_COOKBOOK.md](IR_COOKBOOK.md); this note is the *why*.
 
-The normative rules are in [LANGUAGE.md](LANGUAGE.md#result-and-error-handling);
-this note is the *why*.
-
-**Both compilers have it.** S5 froze stage0 as the bootstrap seed and the
-differential oracle, and said new constructs land in `src/` (§4 of
-[wp14-selfhost.md](wp14-selfhost.md)); the IR oracle enforces that by
-requiring stage1 to compile every program in the corpus, with no exemption
-list. So this package is implemented twice, and the oracle is what says the
-two agree: `IR(stage0, p) == IR(stage1, p)` byte for byte over all six
-`res_*` cases and the `result_import` link test, and every one of the ten
-`reject_result_*` messages matching character for character.
-
-Files, stage0: stage0's `src/types.ts` (the type and its mangling),
-stage0's `src/checker/result.ts` (the rules), stage0's `src/checker/narrowing.ts` (the engine
-`T | null` and `Result` now share), stage0's `src/codegen/emit/result.ts` (the
-lowering), stage0's `src/codegen/escape.ts` and `attributes.ts` (allocation sites and
-pointer facts), stage0's `src/validator.ts` (Phase 0 refuses `throw`).
-Stage1, mirroring each: `src/types.ts`, `src/annotations.ts`,
-`src/result.ts`, `src/expressions.ts` (`narrow`), `src/emit-result.ts`,
-`src/escape.ts`, `src/attributes.ts`, `src/validator.ts`.
-Shared: `runtime/nish.d.ts` (the ambient declarations),
-`runtime/shim.mjs` and `tests/differential/rewrite.js` (the Node twin).
-Tests: `tests/cases/res_*`, `tests/cases/reject_result_*`,
-`tests/cases/reject_throw`, `tests/link/result_import`, the
-"WP16: the ambient declarations" block in `tests/run.js`, and the S3/S4
-oracles in `tests/self/`.
+It was the first construct after the WP14 freeze and landed in stage0 and
+`src/` together, the IR oracle holding the two byte-identical; stage0 has
+since been deleted ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)).
+In `src/` the type and its mangling live in `src/types.ts`, the rules in
+`src/result.ts`, narrowing in `src/expressions.ts` (`narrow`), the lowering in
+`src/emit-result.ts`, and allocation sites and pointer facts in
+`src/escape.ts` and `src/attributes.ts`. `runtime/nish.d.ts` holds the ambient
+declarations. Tests: `tests/cases/res_*`, `reject_result_*`, `reject_throw`
+and `tests/link/result_import`.
 
 ## 1. Why `throw` had to go
 
-Nish's `throw` never unwound. It evaluated its operand, discarded it, and
-executed `llvm.trap`, which is a SIGILL and no message. That is an *abort*
-wearing the syntax of error handling, and it had three costs:
-
-- a program could report a failure in a way no caller could see or handle;
-- the value it threw was dropped, so the one thing a reader most wants when a
-  program dies — what went wrong — was the one thing it could not keep;
-- every reader arriving from TypeScript assumed `try`/`catch` semantics that
-  the language does not and cannot have (functions are `nounwind`; there is no
-  landing pad, no personality function, and no unwind tables).
-
-Both of its real uses now have a better spelling. A failure the caller should
-handle is a `Result<T, E>`. An invariant that cannot hold is `panic(message)`,
-which has existed since WP14 D1 and keeps the message. So `throw` is a Phase 0
-rejection (`tests/cases/reject_throw`), with a message that names both
-replacements, and `try` keeps its own rejection for the same reason.
-
-Stage1 (`src/`) refuses it in Phase 0 too. Its parser still *reads* `throw`,
-which is deliberate: a rejection that can point at the whole statement beats a
-syntax error at the keyword.
+Nish's `throw` never unwound: it evaluated its operand, discarded it and
+executed `llvm.trap` — a SIGILL with no message. That let a program report a
+failure no caller could see or handle, dropped the one thing a reader wants
+when a program dies, and promised TypeScript readers `try`/`catch` semantics
+the language cannot have (functions are `nounwind`; there are no landing pads
+or unwind tables). Both real uses have a better spelling: a failure the caller
+should handle is a `Result`, and an invariant that cannot hold is
+`panic(message)`, which keeps the message. So `throw` is a Phase 0 rejection
+whose message names both. The parser still reads `throw`, so the rejection can
+point at the whole statement rather than at a syntax error on the keyword.
 
 ## 2. Why a pointer, not a value
 
-Rust returns a `Result` by value, and a monomorphised `{ i1, T, E }` in an
-LLVM aggregate is what this package would ideally emit. It does not, and the
-reason is the C ABI.
+A by-value `{ i1, T, E }` LLVM aggregate is what Rust would suggest, and it
+was ruled out by the C ABI. LLVM does not lower aggregates to a platform's
+calling convention; the frontend does, per target, and Nish's output has to be
+something a C host links against and a generated header can describe.
 
-LLVM does not lower aggregates to a platform's calling convention — the
-frontend does. clang decides, per target, whether a small struct goes in
-registers, in a register pair, or through an `sret` pointer; emitting
-`define { i32, i8* } @f()` and hoping is how a frontend produces something
-that links but does not interoperate. Nish's whole point is that its
-output is C-ABI-compatible (`--emit-header`, `--emit-napi`, a `.ll` a C
-program links against), so an ABI it cannot describe in a header is not an
-option.
+A pointer to an arena struct has none of that problem and costs little here:
+the layout is computed as a `class`'s, so `nonnull`, `align 8` and
+`dereferenceable` apply unchanged; the WP6 escape analysis treats `Ok(v)` and
+`Err(e)` as ordinary allocation sites, so a `Result` that does not outlive its
+function is an entry-block `alloca` (`tests/cases/res_stack`); and a returned
+one is a single arena bump.
 
-A pointer to an arena struct has none of that problem and, in this compiler,
-costs much less than it sounds:
-
-- the layout is computed exactly as a `class` is, so `dereferenceable`,
-  `align 8` and `nonnull` are all true of it and the existing attribute
-  machinery applies unchanged;
-- the WP6 escape analysis treats `Ok(v)` and `Err(e)` as ordinary allocation
-  sites, so a `Result` that does not outlive its function becomes an
-  entry-block `alloca` and there is no allocator call at all
-  (`tests/cases/res_stack`);
-- a `Result` that *is* returned is one arena bump — a pointer increment —
-  and the arena is reclaimed in O(1).
-
-The cost that remains is a returned `Result`: one bump, plus the load of the
-discriminant the caller cannot avoid.
-
-**WP17 removed that cost for the small cases, and this section's premise
-turned out to be half right.** A by-value *aggregate* really is unavailable —
-clang returns `struct { bool; int32_t; int32_t; }` as `{ i64, i32 }` on
-x86-64, `[2 x i64]` on aarch64 and through `sret` on wasm32, so there is no
-one signature to emit — but a by-value *scalar* is not: a `Result` whose two
-payloads are each at most four bytes packs into one `i64`, which is the same
-LLVM type on all six triples and is expressible in a C header as an eight-byte
-struct clang itself lowers to that `i64`. So the ABI was never the obstacle to
-returning a small `Result` in a register; only to returning it as a struct.
-The reasoning, the six-target table and the measurements are in
-[wp17-result-abi.md](wp17-result-abi.md).
+That premise turned out half right. A by-value *aggregate* is unavailable
+(clang returns the same C struct three different ways across the six
+targets), but a by-value *scalar* is not: a `Result` whose payloads are each at
+most four bytes packs into one `i64`, the same LLVM type on every target.
+[wp17-result-abi.md](wp17-result-abi.md) did that, so the pointer is now the
+in-memory representation and the shape of a large `Result`, not of every one.
 
 ## 3. Monomorphisation without generics
 
-Nish had no user generics when this package landed, and it did not add them;
-WP18 added them later ([wp18-generics.md](wp18-generics.md) §15).
-`Result<T, E>` is a built-in type constructor, in the same way `Array<T>` is:
-`resolveTypeNode` recognises the name, resolves the two arguments, and returns
-a `{ kind: "result", ok, err, state }`.
+`Result<T, E>` is a built-in type constructor, as `Array<T>` is; Nish had no
+user generics then (WP18 added them later). Each distinct pair gets one LLVM
+struct named by a prefix-coded mangling of its payloads —
+`Result<i32, string>` is `%struct.nish_result.i32.str`, `Result<i32, IoError>`
+is `%struct.nish_result.i32.$IoError`. Writing each constructor's tag before
+its operands makes the encoding unambiguous without separators, and `$` cannot
+appear in a TypeScript identifier, so a class called `res` cannot collide.
 
-Each distinct pair gets one LLVM struct, named by a prefix-coded mangling of
-the two payload types (stage0's `src/types.ts`, `mangleType`): `Result<i32, string>` is
-`%struct.nish_result.i32.str`, `Result<i32, IoError>` is
-`%struct.nish_result.i32.$IoError`. Writing each constructor's tag before its
-operands makes the encoding unambiguous without separators of its own —
-`res.res.i32.str.str` can only be read one way — and the `$` on a named type
-cannot appear in a TypeScript identifier, so a class called `res` cannot
-collide with the `Result` constructor.
-
-The layout is **derived, never declared** (`resultLayout` in
-stage0's `src/checker/result.ts`): both the checker and the emitter compute it from the
-type, so there is no registry entry to keep in sync and an imported signature
-that mentions a `Result` needs nothing brought across but the layouts of its
-payloads (`tests/link/result_import`).
-
-`state` — `"unknown"`, `"ok"`, `"err"` — is a checker-only refinement. It is
-part of the `StaticType` because narrowing is keyed by type
-(`Scope.narrow(v, type)`), and `sameType` ignores it, because the LLVM value
-is the same pointer whatever the checker has proved about it.
+The layout is **derived, never declared**: checker and emitter both compute it
+from the type, so there is no registry to keep in sync and an imported
+signature needs only its payloads' layouts (`tests/link/result_import`). The
+`ok` / `err` / unknown state is a checker-only refinement keyed by type, and
+type identity ignores it, because the LLVM value is the same pointer whatever
+the checker has proved.
 
 ## 4. The three rules, and why each is a hard error
 
-**A `Result` cannot be dropped.** Rust makes this a lint (`#[must_use]`);
-here it is an error, because the whole value of the feature is that a failure
-cannot go unnoticed, and a warning in a build nobody reads is not that. Two
-shapes are refused: a `Result`-valued expression statement, and a local that
-holds one and is never read. Handing the value on — an argument, a `return` —
-counts as reading it, since the responsibility travels with the value and the
-receiving signature carries the same rules.
+**A `Result` cannot be dropped.** Rust makes this a lint; here it is an error,
+because the value of the feature is that a failure cannot go unnoticed. An
+expression statement of `Result` type and a local holding one that is never
+read are refused; passing it on (an argument, a `return`) counts as reading it.
 
-**The error arm comes first.** This is what the user-visible ordering
-guarantee reduces to: `r.value` is legal only where the checker proved
-`isOk()`, `r.error` only where it proved `isErr()`. Since those are the only
-spellings that reach a payload, there is no way to write the success path
-before the failure path has been decided.
+**The error arm comes first.** `r.value` is legal only where the checker
+proved `isOk()`, `r.error` only where it proved `isErr()`, so the success path
+cannot be written before the failure has been decided. The narrowing reuses
+the `T | null` flow engine from WP6, so the soundness argument is the same: a
+narrowing applies to a variable, ends at any assignment to it, and is dropped
+before a loop that assigns it.
 
-The narrowing is not new machinery. WP6 already had a flow engine for
-`T | null`, and this package extracted it into stage0's `src/checker/narrowing.ts` with
-a small registry: `nullable.ts` contributes the rule that recognises a null
-test, `result.ts` the one that recognises a discriminant test, and the engine
-owns the boolean algebra (`!`, `&&`, `||`, parentheses) and the scope
-plumbing. The soundness argument is therefore the same one, unchanged: a
-narrowing applies to a *variable*, ends at any assignment to it, and is
-dropped before a loop that assigns it.
-
-**Propagation is contagious.** `orReturn()` is this language's `?`. It is
-legal only inside a function returning a `Result` whose error arm accepts the
-propagated one, which is exactly the contagion `?` enforces in Rust — minus
-the `From<E>` conversion, because Nish has no trait to hang one on, so a
-mismatched error type is named rather than silently widened.
-
-It is a method rather than an operator because TypeScript has no postfix
-operator to spare that would still parse and still mean something sane. `!`
-was available syntactically (Nish never accepted a non-null assertion) and
-was rejected on purpose: it means "trust me, not null" to a TypeScript reader
-and "panic" to a Rust one, and it would have meant neither here.
+**Propagation is contagious.** `orReturn()` is Rust's `?`, legal only inside a
+function returning a `Result` whose error type matches, without `From<E>`
+conversion because there is no trait to hang one on. It is a method because
+TypeScript has no spare postfix operator; `!` was rejected on purpose, since it
+means "not null" to a TypeScript reader and "panic" to a Rust one.
 
 ## 5. It has to stay TypeScript
 
-An Nish program has always been parseable TypeScript. This package makes
-one stronger claim, and tests it: with `runtime/nish.d.ts` on the include
-path, a `Result` program **type-checks** under plain `tsc --strict`.
-
-That is not decoration. It is what keeps an editor useful on an Nish file,
-and it is a design constraint on the surface: every spelling here had to be
-one TypeScript can model. `Result` is declared as the tagged union TypeScript
-would use anyway, intersected with the method surface —
+With `runtime/nish.d.ts` on the include path a `Result` program type-checks
+under plain `tsc --strict`, which keeps an editor useful and constrains the
+surface to spellings TypeScript can model:
 
 ```ts
 type Result<T, E> = (ResultOk<T> | ResultErr<E>) & ResultMethods<T, E>;
 ```
 
-— so `if (r.ok)` narrows by TypeScript's own discriminated-union rule, and
-`isOk()` / `isErr()` narrow through `this is` predicates. `tests/run.js`
-asserts both directions: every `res_*` case type-checks, and
-`reject_result_value_unchecked` is refused by `tsc` with
-`Property 'value' does not exist` — which is the check that proves the
-declarations model the *narrowing* and not just the names.
-
-`nish` is still the authority. `tsc` cannot see that a `Result` may not
-be dropped, that `orReturn()` returns early, or that the enclosing function
-has to return a `Result` at all; and the integer widths are aliases of
-`number` there. A program `tsc` accepts may still be rejected here. The
-reverse would be a bug in the declarations.
+`if (r.ok)` narrows by TypeScript's discriminated-union rule and `isOk()` /
+`isErr()` through `this is` predicates. `tests/run.js` checks both directions:
+every `res_*` case type-checks, and `reject_result_value_unchecked` is refused
+by `tsc` too, which proves the declarations model the narrowing and not just
+the names. `nish` stays the authority: `tsc` cannot see the drop rule or
+`orReturn()`'s early return, so a program `tsc` accepts may still be refused,
+and the reverse would be a bug in the declarations.
 
 ## 6. Left out
 
-- **`unwrap()`.** `expect(message)` says the same thing and insists on a
-  reason. An unwrap with no message is the one call that turns a careful error
-  type back into `throw`.
+- **`unwrap()`.** `expect(message)` says the same and insists on a reason.
 - **`map` / `andThen` / `orElse`.** They need function values, which Nish
   forbids: the whole-program pass cannot prove purity, termination or escape
-  through an unknown callee. Narrowing plus `orReturn()` covers what they are
-  for.
-- **`match`.** No pattern matching in TypeScript syntax, and the narrowing
-  gives the same guarantee.
-- **Error conversion on propagation.** Rust's `?` applies `From<E>`; there is
-  no trait system here to carry one.
-- ~~**`Result` across the host boundary**, and **by-value returns**~~ — both
-  landed in WP17. A `Result` whose payloads are each a scalar of at most four
-  bytes is returned in a register as a packed `i64`; `--emit-header` declares
-  both C shapes and a C host calls across with no glue; `--emit-napi` and
-  `--emit-dts` bridge a by-value `Result` as `{ ok, value }` / `{ ok, error }`.
-  The packing is symmetric: a `Result` argument travels the same way, so what
-  is still left out is only a `Result` whose payloads do not fit the word, and
-  one held in a field or an array element, which has to outlive the frame.
-- ~~**DWARF members for a `Result`.**~~ Also WP17: `resultLayout` is enough to
-  build a `DW_TAG_structure_type`, so `-g` now describes `ok`, `value` and
-  `error` at their offsets, and a return slot the ABI packs is described as the
-  packed shape rather than as a pointer that is not there.
-- **Nothing, on the stage1 side.** `src/` implements the whole package, and
-  the S3 and S4 oracles hold it to stage0's exact messages and exact IR. What
-  the two do *not* share is the shape of the code: stage0 interns nothing and
-  compares types structurally, stage1 interns every type into a table and
-  compares ids, so the `state` refinement is a third interned id there rather
-  than a field on an object. That is the same difference the rest of the port
-  already carries, not a WP16 decision.
+  through an unknown callee. Narrowing plus `orReturn()` covers their use.
+- **`match`.** No pattern matching in TypeScript syntax; narrowing gives the
+  same guarantee.
+- **Error conversion on propagation.** No trait system to carry `From<E>`.
+
+By-value returns and parameters, the host boundary (`--emit-header`,
+`--emit-dts`, `--emit-napi`) and DWARF members for a `Result`, all left out
+here, landed in [WP17](wp17-result-abi.md).

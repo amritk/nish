@@ -223,7 +223,8 @@ routes are
   # in the glibc container, where build/nish runs
   build/nish app.ts -o app.ll
   # on the musl host, with its own clang and the runtime from this repository
-  clang app.ll runtime/runtime.c runtime/runtime-os.c -lm -o app
+  clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
+    runtime/runtime-host.c runtime/runtime-net.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -290,21 +291,20 @@ to the machine that built it.
 
 The last column is there because a release is a past event and a workflow is
 not. `release.yml` builds all four, but a release already published cannot grow
-an asset: **v0.2.0, the current release, attaches `x86_64-linux` only**. Those
+an asset: **the releases before v0.4.0 attach `x86_64-linux` only**. Those
 versions are not prose — they are `attachedSince` in
 [`.github/seed-targets.json`](https://github.com/amritk/nish/blob/main/.github/seed-targets.json),
 the same file the release workflow builds its matrix from, so this table and
 the assets cannot drift apart without a test failing.
 
-**The three new rows say v0.4.0 rather than v0.3.0 on purpose.** The workflow
-builds all four now, but nothing in this repository has ever run on macOS or on
-ARM Linux, and a row that has never run is not something to put in front of a
-release: `release` needs the whole matrix, so one red row blocks the publish.
-They wait for a release after the run that exercises them. The two macOS rows
-wait on a second thing as well — the bootstrap's `stage3 == stage2` check does
-not hold as a raw byte comparison under `ld64`, and which bytes actually differ
-has not been measured on real hardware, so a darwin row may turn up work rather
-than a green tick. `scripts/verify-binaries.sh`'s header is the long version.
+**The three newer rows say v0.4.0 rather than v0.3.0 on purpose.** Nothing in
+this repository had run on macOS or on ARM Linux before, and a row that has
+never run is not something to put in front of a release: `release` needs the
+whole matrix, so one red row blocks the publish. So they waited until a run on
+their own hardware had exercised them. The two macOS rows waited on a second
+thing as well: the bootstrap's `stage3 == stage2` check did not hold as a raw
+byte comparison under `ld64` until both stages were linked at one output path.
+`scripts/verify-binaries.sh`'s header is the long version.
 
 Check [the releases page](https://github.com/amritk/nish/releases/latest) for
 what a given version actually carries; on a platform whose row has not shipped
@@ -312,15 +312,15 @@ yet, take the npm package above, or build from source below.
 
 ```bash
 # pick the row above that matches `uname -s` and `uname -m`
-curl -LO https://github.com/amritk/nish/releases/download/v0.2.0/nish-0.2.0-x86_64-linux.tar.gz
-tar -xzf nish-0.2.0-x86_64-linux.tar.gz
-nish-0.2.0-x86_64-linux/bin/nish --version
+curl -LO https://github.com/amritk/nish/releases/download/v0.16.0/nish-0.16.0-x86_64-linux.tar.gz
+tar -xzf nish-0.16.0-x86_64-linux.tar.gz
+nish-0.16.0-x86_64-linux/bin/nish --version
 ```
 
 Both URLs name the version rather than using GitHub's version-neutral
 `/releases/latest/download/` form, because that form needs the asset's exact
-file name and every asset name carries the version in it. **v0.2.0 is the
-current release**; v0.1.1 before it was the first one with a binary attached.
+file name and every asset name carries the version in it. The example names
+v0.16.0; v0.1.1 was the first release with a binary attached.
 The `v0.1.0` tag exists but has no release behind it and no assets, so every
 `v0.1.0` download URL is a 404 — the tag was pushed by a workflow, and GitHub
 raises no event for that, so nothing ever built it
@@ -338,8 +338,7 @@ find `scripts/build.sh`.
 
 It still needs `clang` and `lld` on `PATH` for `--link` (§1), because linking
 is the C toolchain's job, not the compiler's; what it does not need is Node.
-x86_64 Linux is the only platform built today — on anything else, take the
-`.tgz` above or build from a checkout.
+On a platform outside the table, build from a checkout.
 
 From a checkout:
 
@@ -359,7 +358,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — two translation units and their header),
+`runtime/` (the C runtime — five translation units and their header),
 `scripts/build.sh` (the link pipeline) and `std/` (the standard library). The
 compiler itself is not in it: it arrives as one prebuilt
 `@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
@@ -369,22 +368,27 @@ working directory — and the binary runs from inside its own platform package
 for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is two files:
+on the `clang` line, and it is five files:
 
 ```bash
-clang app.ll runtime/runtime.c runtime/runtime-os.c -lm -o app
+clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
+  runtime/runtime-host.c runtime/runtime-net.c -lm -o app
 ```
 
-`runtime.c` is the half every program touches — the arena, strings, arrays,
-number formatting, the panics — and `runtime-os.c` is the half that wraps the
-system calls: files, directories, subprocesses, `getenv`, the monotonic clock.
-They are separate so that each carries its own measured size ceiling
-([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
-system-call half, so an older line that names `runtime.c` alone still links a
-program that reads no files and spawns nothing. `scripts/build.sh` compiles
-`runtime-os.c` beside any `runtime.c` it is handed, so a build that goes
-through it — every `--link`, and every `--profile` recipe in these documents —
-needs to name only the one.
+`runtime.c` is the part every program touches — the arena, strings, arrays,
+number formatting, the panics — and `runtime-os.c` wraps the system calls:
+files, directories, subprocesses, `getenv`, the monotonic clock.
+`runtime-parallel.c` divides work across threads for `nish/threads` (a
+program built with `--threads`, as every importer of `nish/threads` is, also
+needs `-DNISH_THREADS=1 -pthread` on the line), `runtime-host.c` holds the
+wall clock, entropy, file times and signals, and `runtime-net.c` the sockets
+of `nish:net`. They are separate so that each
+carries its own measured size ceiling ([docs/wp7-runtime.md](wp7-runtime.md));
+nothing in the core calls into the others, so a line that names only
+`runtime.c` and `runtime-os.c` still links a program that uses none of the
+other three. `scripts/build.sh` compiles the other four beside any
+`runtime.c` it is handed, so a build that goes through it — every `--link`,
+and every `--profile` recipe in these documents — needs to name only the one.
 
 ## 2a. What `npm run build` does
 
@@ -407,7 +411,7 @@ release is expected to move it. `--stages 1` stops one link sooner.
 `build/nish` is then the compiler you run: it takes the same `-o`, `--link`
 and `--profile` spellings as an installed `nish`, because it is the same
 program, and makes every directory in the way of the IR, a sidecar or the
-binary itself. It looks for `scripts/build.sh` and the two `runtime/*.c` files
+binary itself. It looks for `scripts/build.sh` and the `runtime/*.c` files
 one level up from wherever it was invoked (and one level up from the file a
 symbolic link to it names), so it wants a checkout or an installed package
 around it the way `nish` does. It falls back to the working directory only

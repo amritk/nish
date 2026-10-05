@@ -1,8 +1,8 @@
 # `std/` — the standard library
 
 Nish modules written in Nish, for Nish programs to import. There is no magic
-here and — with three exceptions, `threads.ts`, `collections.ts` and `map.ts` —
-nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
+here and — with four exceptions, `threads.ts`, `collections.ts`, `map.ts` and
+`secret.ts` — nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
 whatever program imports it, and subject to the same rules as `examples/` or
 `src/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
 
@@ -264,7 +264,7 @@ A `std/` module is its own package (`nish`), so its symbols are scoped and a
 program may declare a function one of these modules also exports
 (`tests/link/std_package_scope`, `docs/wp21-packages.md` §5a). The package is
 decided by the `nish/` specifier rather than by the directory the file is found
-in — read off the path it would be `nish` from `node_modules/nish/std/` and the
+in — read off the path it would be `nish` from `node_modules/@amritk/nish/std/` and the
 root package from a checkout, and the same program would compile against an
 installed compiler and be refused by a checkout of it.
 
@@ -316,18 +316,17 @@ that are *not* this package.
   mode pays nothing for it, because `toI32` on an `i32` is identity.
   `tests/link/std_text_f64` is what keeps this from being prose;
   [`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §4 is the reasoning.
-- **Name the private helpers as though they were exported.** A function name is
-  unique across the whole program whether or not it is exported, because the
-  whole-program attribute analysis is keyed by symbol name — and a `std/` module
-  is compiled *into* the program that imports it, so its private helpers are not
-  private to the namespace. A helper called `isBlank` would stop any program that
-  declares its own `isBlank` from compiling (`` Function `isBlank` is also
-  defined in main.ts ``), which is why `text.ts` calls it `isTextBlankByte`. Keep
-  the helpers few and their names distinctive; a module whose internals want
-  `compare`, `next` or `parse` is asking for package-scoped symbols, which do not
-  exist yet ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3e). Module
-  constants are exempt — `NEWLINE` and `SPACE` fold at their uses, so a program
-  may declare those names itself.
+- **Name the private helpers as though they were exported.** A `std/` module
+  belongs to package `nish`, so its symbols no longer collide with the
+  importing program's (`tests/link/std_package_scope`), but every `std/` module
+  shares that one package's flat namespace: a function name is unique across
+  the package whether or not it is exported, because the whole-program
+  attribute analysis is keyed by symbol name. A helper called `isBlank` in one
+  module would stop another `std/` module that declares its own `isBlank` from
+  compiling, which is why `text.ts` calls it `isTextBlankByte`. Keep the
+  helpers few and their names distinctive
+  ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3e). Module constants are
+  exempt — `NEWLINE` and `SPACE` fold at their uses.
 - **It is an Nish program**, so the constraints are the language's: a function is
   an arrow bound to a module-level `const`, a function is never a value, there
   is no `try` / `catch`, and there are no optional or default parameters. Those
@@ -341,7 +340,7 @@ that are *not* this package.
   multi-module program is exercised end to end, and it is also what puts the
   module into the corpus the stage1 oracles read
   ([`.claude/selfhost.md`](../.claude/selfhost.md)): a `std/` module with no
-  importer in `tests/link/` is compiled by neither compiler on any run.
+  importer in `tests/link/` is compiled on no run.
   `testing.ts` has two, one per outcome — `tests/link/std_testing` (exit 0) and
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
   message) — and `text.ts` and `json.ts` have `tests/link/std_text` and

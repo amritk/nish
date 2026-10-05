@@ -100,7 +100,8 @@ drives that path with.
 4. **The runtime budget still holds.** Lower inline rather than growing
    `runtime.c`.
 5. **Nish-0 does not grow quietly.** Adding a construct to the subset is an
-   edit to `docs/wp14-selfhost.md` and a line in `CHANGELOG.md`.
+   edit to `docs/wp14-selfhost.md`, and its commit says so, because the commit
+   message is the changelog entry.
 
 ## Nish-0, the subset `src/` is written in
 

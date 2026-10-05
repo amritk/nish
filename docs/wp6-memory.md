@@ -1,929 +1,247 @@
 # WP6: Memory strategy
 
-The zero-GC model in four layers, each a proven guarantee rather than a
-heuristic, plus `T | null`:
+**Status: complete.** §1–§4 and the call-site reclaim shipped in 0.1.0; the
+tail-call release and marker (§2b) in 0.3.0 (#85, #86); callee-earned scopes
+(§2c, #210) and loop-pass scopes (§2d, #221) in 0.11.0. After 0.16.0,
+`using a = arena()` (#420) added a checked bracket and `Arena.release` /
+`Arena.reset` became deprecated (#428, NL7001); see §3. Reference counting
+was never built (see "Left out"). The living rules are
+[LANGUAGE.md "Memory model"](LANGUAGE.md#memory-model) and
+[`Arena`](LANGUAGE.md#arena). This note keeps the decisions and the reasons
+behind them.
 
-1. **Escape-analysed stack allocation.** A `new C(...)`, object literal,
-   array literal, or `new Array<T>(<literal>)` whose value provably does not
-   outlive its function becomes an `alloca` in the entry block. The module
-   then often needs no arena at all.
-2. **Automatic arena scopes.** A function whose arena temporaries all die
-   with it brackets its body with `nish_arena_mark` / `nish_arena_release`, so
-   calling it a million times keeps the arena flat.
-3. **The call-site reclaim** (WP9, section 2a). A function that *returns* a
-   string cannot have a scope, because the string has to outlive it — so its
-   caller brackets the call instead, with `nish_arena_mark` /
-   `nish_arena_keep`, and reclaims everything the callee bumped underneath the
-   value it handed back.
-4. **Explicit control.** `Arena.reset()`, `Arena.mark()`, `Arena.release(m)`,
-   `Arena.used()` for programs that manage batches themselves.
-5. **`T | null`** for pointer types, with narrowing enforced by the checker.
+There is no garbage collector. Each value is placed by a compile-time proof,
+not a heuristic, and every mechanism leaves what the program computes
+unchanged:
 
-Reference counting is not in this package (see "Left out").
+1. stack allocation (§1);
+2. automatic arena scopes: per function (§2), around a tail call (§2b),
+   earned through callees (§2c), per loop pass (§2d);
+3. the call-site reclaim of a returned string (§2a);
+4. explicit control (§3);
+5. `T | null` for pointer types, narrowed by the checker (§4).
 
-Files: stage0's `src/codegen/escape.ts` (the analysis), stage0's `src/codegen/attributes.ts`
-(integration into the fact fixpoint), stage0's `src/codegen/emit/{classes,arrays}.ts`
-(allocas), stage0's `src/codegen/emitter.ts` and `emit/statements.ts` (scopes),
-stage0's `src/checker/nullable.ts`, stage0's `src/checker/arena.ts`, stage0's `src/codegen/emit/arena.ts`,
-`runtime/runtime.c`, `runtime/nish.h`; the call-site reclaim adds
-stage0's `src/codegen/emit/{expressions,classes}.ts` (the bracket) and
-`nish_arena_keep`. Tests: `tests/cases/mem_*`,
-`tests/cases/reject_null_*`, `reject_nullable_scalar`,
-`reject_arena_release_type`, the `WP6: memory` block in `tests/run.js`, and
-the scope checks in `tests/runtime-test.c`.
+Code: `src/escape.ts` (the analysis, loop scopes, the NL9011 findings),
+`src/attributes.ts` (the `FunctionFacts` fixpoint), the emitters, and
+`runtime/runtime.c` / `runtime/nish.h`. Tests: `tests/cases/mem_*`,
+`reject_null*`, `reject_nullable_scalar`, `reject_arena_release_type`,
+`reject_using_arena_*`, `tests/link/tail_call_depth{,_debug}`, the scope checks
+in `tests/runtime-test.c` and the `WP6: memory` block in `tests/run.js`.
 
 ## 1. Stack allocation
 
-### Allocation sites and flows
+`new C(...)`, an object literal, an array literal and `new Array<T>(<literal>)`
+are allocation sites. The analysis follows a site's value through parentheses,
+ternary arms and `const`-like locals and their aliases, and classifies every
+use with `classifyUse`, the same classifier that decides `nocapture`:
 
-An *allocation site* is an expression that produces fresh memory:
+- **`local`**: consumed on the spot (an operand, a field or element access,
+  `.length`, `for...of`, a non-capturing argument, a runtime builtin);
+- **`returned`**;
+- **`leaks`**: anything else (stored, pushed, assigned to another variable,
+  `let q = p` included, or passed to a capturing callee).
 
-| Site | Kind | Stackable |
-| --- | --- | --- |
-| `new C(...)`, `{ ... }` | struct | yes |
-| `[a, b, c]`, `new Array<T>(<non-negative integer literal>)` | array | yes, while `n * sizeof(T) <= 4096` bytes (`STACK_ARRAY_BYTES`) |
-| `new Array<T>(n)` with a non-literal `n` | array | no (dynamic size) |
-| `a + b` on strings, a template with a hole, `readFileSync(p)` | string | no |
-| a call to a user function returning a pointer type | whatever the callee allocated and returned | no |
-
-The value of a site *flows* somewhere. The analysis follows it through the
-transparent wrappers (parentheses, ternary arms) and through the `const` /
-`let` local it is stored in and every alias of that local (`const y = x`),
-and classifies each use with `classifyUse`, the same classifier that decides
-`nocapture` on parameters (docs/wp2-classes.md, docs/wp4-arrays.md):
-
-| Flow | Uses |
-| --- | --- |
-| `local` | consumed on the spot: an operand of an operator or condition, a field / element read or write through it, `.length`, a `for...of` source, an `===` operand, the receiver of a method whose `this` is not captured, an argument to a user function whose matching parameter is not captured (the `pointerParams` fixpoint for structs and arrays, `escaping` for strings), an argument to a runtime builtin (all `nocapture`) |
-| `returned` | returned, directly or through an alias |
-| `leaks` | anything else: stored into a field, an element, an array or object literal, `push`ed, assigned to another variable (`y = x`, including a `let` alias), passed to a callee that captures the parameter, or any use not listed |
-
-### The rule, as implemented
-
-A site becomes an entry-block `alloca` when
-
-- it is stackable,
-- its flow is `local`, and
-- no local on the path from the site to its uses is ever reassigned
-  (`let p = new P(); ... p = other;` disqualifies, as does `let q = p;`,
-  which is an assignment-style alias and therefore `leaks`).
-
-Why this is sound: every reference to the object is either consumed inside
-the site's own statement or lives in a local declared at or below the site's
-block, so once control leaves that block, or the function returns, nothing
-can name the object. The holding locals are `const`-like (never reassigned),
-so the object they name is always the site's.
-
-**Loops.** A site inside a loop is allocated once, in the entry block, and
-the slot is reused on every iteration. This is correct because the previous
-iteration's object is unreachable by the argument above (its locals are out
-of scope when the block is re-entered) and the initializer stores or the
-constructor run again on every pass, so the slot never holds a stale object
-that is still observable. Storing the object anywhere that survives the
-iteration (`xs.push(p)`, `best = p`, `node.child = p`) is a `leaks` flow and
-keeps the site in the arena, which is exactly the case where slot reuse
-would be wrong.
-
-**Arrays.** A stack array is a header alloca plus a data alloca:
-`%arr.hdr = alloca %struct.nish_array, align 8` and
-`%arr.data = alloca [n x T], align 8` (an empty literal has `data = null`).
-A later `xs.push(v)` calls `nish_array_grow`, which moves the elements into
-the arena and repoints the header; the header stays on the stack and stays
-valid. The data cap keeps stack frames bounded.
-
-**Alignment.** Every stack object is `align 8`, like arena objects, so every
-pointer attribute the compiler emits (`align 8`, `dereferenceable(sizeof)`,
-`noalias` on a constructor's `this`) remains true for stack objects.
-
-**Effects.** A stack object is the function's own memory: its allocation is
-no longer a write or an allocator call, and a field access through a local
-that only ever holds a stack object (`stackLocals`) is no longer a memory
-read or write. So a function like `swapped` below is `readnone`; a function
-that runs a constructor still inherits the constructor's `write` effect, per
-the existing effect rules. Element reads and writes on stack arrays are
-still counted, because a `push` may have moved the data into the arena.
-
-**Disable.** `--no-stack-alloc` keeps every allocation in the arena (the
-scopes of section 2 still apply). Use it to compare IR or to rule the
-analysis out while debugging.
-
-### IR before and after
-
-`tests/cases/mem_stack_struct.ts` (excerpt):
-
-```ts
-interface Pair { first: number; second: number; }
-class Point { x: number; y: number; constructor(x: number, y: number) { ... } manhattan(): number { ... } }
-function sumX(p: Point, q: Point): number { return p.x + q.x; }
-
-function swapped(a: number, b: number): number {
-  const p: Pair = { first: b, second: a };
-  return p.first * 10 + p.second;
-}
-
-function nearest(): number {
-  const p = new Point(3, 4);
-  const q = new Point(10, 20);
-  const alias = p;
-  return sumX(alias, q) + p.manhattan() + new Point(1, 1).manhattan();
-}
-```
-
-With `--no-stack-alloc` (before), every object is bumped from the arena and,
-because they all die with the function, each function gets an arena scope:
-
-```llvm
-define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #0 {
-entry:
-  %p.addr = alloca %struct.Pair*, align 8
-  %arena.mark = call i64 @nish_arena_mark()
-  %0 = call i8* @nish_alloc_struct(i64 8)
-  %1 = bitcast i8* %0 to %struct.Pair*
-  %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %1, i32 0, i32 0
-  store i32 %b, i32* %2, align 4
-  ...
-  call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %11
-}
-
-define noundef i32 @nearest() #0 {
-entry:
-  %p.addr = alloca %struct.Point*, align 8
-  %q.addr = alloca %struct.Point*, align 8
-  %alias.addr = alloca %struct.Point*, align 8
-  %arena.mark = call i64 @nish_arena_mark()
-  %0 = call i8* @nish_alloc_struct(i64 8)
-  %1 = bitcast i8* %0 to %struct.Point*
-  call void @Point.constructor(%struct.Point* %1, i32 3, i32 4)
-  ...
-  %11 = call i8* @nish_alloc_struct(i64 8)
-  %12 = bitcast i8* %11 to %struct.Point*
-  call void @Point.constructor(%struct.Point* %12, i32 1, i32 1)
-  %13 = call i32 @Point.manhattan(%struct.Point* %12)
-  %14 = add i32 %10, %13
-  call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %14
-}
-
-attributes #0 = { nounwind willreturn }
-```
-
-By default (after), the module contains no `nish_alloc_struct`, no arena
-prelude, and `swapped` is `readnone` (golden `mem_stack_struct.ll`):
-
-```llvm
-define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #2 {
-entry:
-  %p.addr = alloca %struct.Pair*, align 8
-  %Pair.obj = alloca %struct.Pair, align 8
-  %0 = getelementptr inbounds %struct.Pair, %struct.Pair* %Pair.obj, i32 0, i32 0
-  store i32 %b, i32* %0, align 4
-  %1 = getelementptr inbounds %struct.Pair, %struct.Pair* %Pair.obj, i32 0, i32 1
-  store i32 %a, i32* %1, align 4
-  store %struct.Pair* %Pair.obj, %struct.Pair** %p.addr, align 8
-  ...
-  ret i32 %9
-}
-
-define noundef i32 @nearest() #0 {
-entry:
-  %p.addr = alloca %struct.Point*, align 8
-  %Point.obj = alloca %struct.Point, align 8
-  %q.addr = alloca %struct.Point*, align 8
-  %Point.obj.1 = alloca %struct.Point, align 8
-  %alias.addr = alloca %struct.Point*, align 8
-  %Point.obj.2 = alloca %struct.Point, align 8
-  call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4)
-  store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
-  call void @Point.constructor(%struct.Point* %Point.obj.1, i32 10, i32 20)
-  ...
-  call void @Point.constructor(%struct.Point* %Point.obj.2, i32 1, i32 1)
-  %7 = call i32 @Point.manhattan(%struct.Point* %Point.obj.2)
-  %8 = add i32 %6, %7
-  ret i32 %8
-}
-
-attributes #0 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readnone }
-```
-
-After `opt -O2`, `mem2reg` and SROA turn `%Pair.obj` into registers and
-`swapped` becomes `a + b * 10`; `Point.constructor` inlines into `nearest`
-and the three `Point` slots disappear entirely.
-
-A loop temporary (`tests/cases/mem_stack_loop.ts`): `const v = new Vec(i, 1)`
-inside `for` becomes one `%Vec.obj = alloca %struct.Vec, align 8` in the
-entry block, re-initialised by the constructor call in `for.body`; 100000
-iterations leave `Arena.used()` unchanged.
+A site becomes an entry-block `alloca` when it is stackable (array data at most
+4,096 bytes, `STACK_ARRAY_BYTES`; a non-literal length never is), its flow is
+`local`, and no local on its path is reassigned. This is sound because every
+reference is either consumed in the site's own statement or held by a
+never-reassigned local in scope, so nothing can name the object after the block
+exits. A site in a loop gets one slot, reused on every pass. Reuse is correct
+because the previous pass's object is unreachable, and any use that would keep
+it alive is a `leaks` flow. A stack array is a header alloca plus a data
+alloca. A later `push` moves the data into the arena, and the header stays
+valid. Every stack object is `align 8`, so every pointer attribute stays true.
+Field access through a local that only ever holds a stack object is not a
+memory effect, which is how `swapped` in `mem_stack_struct` becomes `readnone`.
+`--no-stack-alloc` turns the rule off.
 
 ## 2. Arena scopes
 
-### Rule
+A function brackets its body with `nish_arena_mark` on entry and
+`nish_arena_release` before every `ret` (after the return value is computed)
+when all four of these hold:
 
-A function gets an automatic scope when
-
-- it has a *direct* arena allocation whose flow is `local`: a non-stack
-  site (a dynamic `new Array<T>(n)`, a string concatenation or template, a
-  `readFileSync`), `push` growth on an array that is a local allocation of
-  this function, a number-to-string conversion inside `console.log(n)`, or
-  the result of a user call whose callee allocates;
-- none of its sites is `returned` (the caller owns that memory) and none
-  `leaks`;
-- no callee, transitively, leaks an allocation (`allocLeaks`), because
-  memory a callee stores into an object the caller can still reach must not
-  be freed; a callee's returned allocation is instead treated as a site of
-  the caller and classified there;
+- it has a direct arena allocation whose flow is `local`;
+- none of its sites is `returned` or `leaks`;
+- no callee, transitively, leaks an allocation (`allocLeaks`);
 - neither it nor a callee calls `Arena.reset` / `Arena.release`
-  (`usesArenaControl`): those move the arena under the compiler's mark.
+  (`usesArenaControl`).
 
-These facts (`allocates`, `allocLeaks`, `returnsAllocation`,
-`usesArenaControl`, `directArena`) live in `FunctionFacts` and propagate over
-the call graph in the same fixpoint as purity. `push` on an array that is not
-a local allocation site (a parameter, a field, an element, a returned array)
-is a leak: the growth belongs to an array someone else owns.
+The facts (`allocates`, `allocLeaks`, `returnsAllocation`, `usesArenaControl`,
+`directArena`) propagate in the same fixpoint as purity. A `push` onto an array
+the function did not allocate counts as a leak.
 
-The scope is emitted as `%arena.mark = call i64 @nish_arena_mark()` as the
-first instruction after the allocas and `call void @nish_arena_release(i64
-%arena.mark)` before every `ret`, after the return value has been computed.
-Paths that end in `unreachable` (`process.exit`, `throw`) need no release.
-Both runtime calls are `willreturn` and the function already writes memory
-(it allocates), so no attribute changes.
-
-### Example
-
-`tests/cases/mem_scope_dynamic_array.ts`:
-
-```ts
-function histogram(n: number, seed: number): number {
-  const counts = new Array<number>(n); // dynamic size: arena, non-escaping
-  ...
-  return best;
-}
-```
-
-```llvm
-define noundef i32 @histogram(i32 noundef %n, i32 noundef %seed) #0 {
-entry:
-  %counts.addr = alloca %struct.nish_array*, align 8
-  ...
-  %arena.mark = call i64 @nish_arena_mark()
-  %0 = sext i32 %n to i64
-  %1 = call i8* @nish_alloc_struct(i64 24)
-  ...
-for.end.1:
-  %57 = load i32, i32* %best.addr, align 4
-  call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %57
-}
-```
-
-`main` calls `histogram` 100000 times and prints `Arena.used()` before and
-after the loop; the two lines are identical (`tests/run.js` checks that, no
-RSS tooling needed). `mem_scope_string_temp.ts` does the same for
-`"hello, " + label(i, name) + "!"`; `label` returns its template, so it has no
-scope and the caller `greet` owns and releases the string.
-
-### Runtime ABI
-
-```c
-uint64_t nish_arena_mark(void);            /* buf + off, or 0 while the arena is empty */
-void     nish_arena_release(uint64_t mark);
-uint64_t nish_arena_used(void);            /* bytes bumped in the current chunk */
-```
-
-A mark is the absolute bump address, which identifies both the chunk and the
-offset in one `i64`. `nish_arena_release(mark)`:
-
-- `mark == 0` (the arena was empty when marked): behaves like
-  `nish_reset_arena`, keeping the newest chunk so a hot loop does not
-  `malloc`/`free` a chunk per call;
-- the mark lies in the current chunk: `off = mark - buf`;
-- the mark lies in an older chunk: every newer chunk is freed, that chunk
-  becomes current, and `off` is rewound;
-- the mark is in no live chunk (a stale mark, undefined behaviour by the
-  rule below): nothing happens.
-
-Scopes nest LIFO with the call stack, so a scoped function calling another
-scoped function is always released innermost first. `tests/runtime-test.c`
-exercises all four cases and a 100000-iteration mark/release loop.
+`mem_scope_dynamic_array` and `mem_scope_string_temp` call such a function
+100,000 times and print the same `Arena.used()` before and after. A mark is
+the absolute bump address (`0` for an empty arena). `nish_arena_release`
+rewinds within the current chunk, or frees every newer chunk and rewinds an
+older one, and ignores a mark that names no live chunk. Scopes nest LIFO with
+the call stack.
 
 ## 2a. The call-site reclaim (WP9)
 
-Section 2's scopes stop at the one function that most needs them. A string
-builder returns what it built, so `returnsAllocation` is set and it gets no
-scope: every intermediate it made lives as long as the program. That is the
-whole of strbuild's 48 MB, and the full account — the rule, the soundness
-argument, the runtime primitive and the measurements — is in
-[wp9-optimisation.md](wp9-optimisation.md#the-call-site-reclaim). What belongs
-here is how it fits beside the two mechanisms above.
-
-### Rule
-
-A call to a user function `f` is bracketed by
-
-```llvm
-%mark = call i64 @nish_arena_mark()
-%t    = call i8* @f(…)
-%kept = call i8* @nish_arena_keep(i64 %mark, i8* %t)
-```
-
-when `f` returns a plain `string`, `f.allocates` is true, and neither
-`f.allocEscapes` nor `f.usesArenaControl` is. The mark is taken *after* the
-arguments, so the bracket contains only what the callee bumped, and `%kept`
-replaces `%t` at every later use.
-
-The value is not freed — it is *moved* down onto the mark, and only the bytes
-underneath it are released. That is why the rule needs no claim at all about how
-the caller uses the result, and why only a `string` qualifies: a string is one
-flat block with no interior pointers, so relocating its bytes relocates the whole
-value. An array header names a separate data block, a struct or a `Result` may
-name other blocks, and a `T | null` may be null; none of them may be moved.
-
-### How the facts relate
-
-`allocLeaks` (section 2) answers "may an allocation survive this call at all",
-and it counts `s = s + t` — an assignment to a local of the frame — as a leak,
-because the *stack* rule needs a fixed binding. `allocEscapes` is the same walk
-asking the narrower question the reclaim needs: "may an allocation be reached by
-the **caller** after the call, other than through the return value". An
-assignment to a local is not that; a store into a field, an element, a literal, a
-`push` or a capturing callee is. So `allocEscapes` implies `allocLeaks` and never
-the reverse, and the automatic scopes still read `allocLeaks` and decide exactly
-what they decided before.
-
-### Interactions
-
-| With | What happens |
-| --- | --- |
-| an automatic scope in the *caller* | Nested LIFO, like any two scopes: the caller's mark is older, so a reclaim only ever frees chunks newer than it. `tests/cases/mem_reclaim_argument.ts` has both. |
-| an automatic scope in the *callee* | Cannot arise. A callee with a scope releases its own temporaries and does not return an allocation, so `allocates` is false at the boundary that matters and no bracket is emitted. |
-| `Arena.mark()` / `Arena.release(m)` in the caller | Safe: a user mark taken before the call is older than the reclaim's, so nothing it names is released. A callee that touches `Arena.reset` / `Arena.release` itself is excluded by `usesArenaControl`. |
-| `--no-stack-alloc` | No effect. The reclaim is in this layer, not layer 1: the flag moves allocations into the arena and leaves every bracket where it was (`tests/cases/mem_reclaim_no_stack_alloc.ts`). |
-| a `Result` carrying a string payload | No bracket. `Ok(s)` bumps the payload *before* the `Result` object that names it, so relocating the object would release its own payload. Only a plain `string` return qualifies (`tests/cases/mem_reclaim_guards.ts`). |
-| a temporary passed on rather than concatenated | Bracketed like any other, and the callee is handed `%kept`. Nothing about the rule depends on the temporary dying soon. |
-
-### Runtime ABI
-
-```c
-void *nish_arena_keep(uint64_t mark, void *p);
-```
-
-`p` must be the newest block the arena handed out; the call is emitted directly
-after the allocation it keeps, which is what makes that true. Two outcomes and
-three refusals:
-
-- the mark's chunk has room below it: `p` moves down onto `mark` and every newer
-  chunk is freed;
-- it does not (the mark sat at the end of a full chunk): `p` stays put and the
-  chunks strictly between it and the mark's chunk are unlinked and freed;
-- `p` is not in the current chunk (a literal, a parameter, anything older than
-  the mark), the mark is in no live chunk (stale, or `0` for an arena that was
-  empty), or the mark is newer than `p`: nothing happens and `p` is answered
-  unchanged.
-
-Refusing is always safe — it reclaims less — which is why every uncertain case
-takes that branch. `tests/runtime-test.c` exercises both outcomes and all three
-refusals.
-
-`runtime/runtime-wasm.c` does not provide it, and does not need to: the
-freestanding wasm profile has no strings at all (WP8), and the bracket is only
-ever emitted around a call that returns one.
+A function that returns a string has `returnsAllocation` set, so it gets no
+scope. Its caller brackets the call instead:
+`nish_arena_mark()` after the arguments, then
+`nish_arena_keep(mark, s)`, which moves the string down onto the mark and
+releases everything the callee bumped beneath it. The bracket is emitted when
+the callee returns a plain `string`, allocates, and has neither `allocEscapes`
+nor `usesArenaControl`. Only a `string` qualifies, because it is one flat block
+with no interior pointers. An array, a struct, a `Result` or a `T | null` names
+other memory, or may be null, and cannot be moved. `allocEscapes` asks
+whether the caller can reach an allocation other than through the return
+value. It does not count an assignment to a frame local, so it implies
+`allocLeaks` and never the reverse, and the §2 scopes are unchanged.
+`nish_arena_keep` refuses whenever it is uncertain (`p` is not in the current
+chunk, the mark is stale or `0`, or the mark is newer than `p`). Refusing only
+reclaims less. The bracket is independent of `--no-stack-alloc`
+(`mem_reclaim_no_stack_alloc`). `mem_reclaim_guards` covers the refused shapes,
+and `runtime-wasm.c` does not provide `nish_arena_keep` because the
+freestanding wasm profile has no strings. The rule, its soundness argument and
+the measurements are in
+[wp9-optimisation.md](wp9-optimisation.md#the-call-site-reclaim).
 
 ## 2b. The tail call: the marker, and the release ahead of it
 
-Section 2's scope releases before every `ret`, which puts an instruction
-*after* the last call a function makes:
+A `return g(a1, …, an)` is emitted as a `tail call` when every argument is a
+scalar, `g` has exactly `n` parameters (which refuses a method, whose receiver
+is a pointer the argument list does not carry), `g` does not return a packed
+`Result`, and the call has no reclaim bracket. In a function with a scope,
+`nish_arena_release` moves ahead of that call, provided `g` does not read the
+bump position (`readsArenaState`: `Arena.mark` / `Arena.used`).
 
-```llvm
-  %9 = call i32 @sum(i32 %3, i32 %8)
-  call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %9
-```
+Why it is sound: the language has no address-of operator, and a stack site
+never flows anywhere but `local`, so with only scalar arguments the callee
+cannot reach this frame's memory. That is the claim the `tail` marker makes.
+The release is safe because the call is the whole of the `return` and its
+arguments are not arena memory. `readsArenaState` is a separate fact from
+`usesArenaControl` because reading the position invalidates nothing and must
+not cost a function its scope.
 
-That order costs more than it looks. `sum` is not a tail call there — something
-happens after it — so nothing downstream can turn the recursion into a loop,
-and each level holds its own temporaries until the whole recursion unwinds. A
-`return` of a call is the one place where the release has somewhere else to go.
-
-Moving it is only half of what the same proof buys. Once the call is last, it
-can also carry LLVM's `tail` marker, which is a claim about the *callee*: that
-it cannot access the caller's stack frame, so the frame may be popped before
-the jump. That is the half `-O0` needs, because no pass runs there to notice
-that the call is in tail position.
-
-### Rule
-
-In any function, a `return g(a1, …, an)` emits
-
-```llvm
-  %9 = tail call i32 @g(…)
-  ret i32 %9
-```
-
-when every `ai` is a scalar (a number, a `boolean` or an `enum`), `g`'s
-signature has exactly `n` parameters, `g` does not answer a packed `Result`,
-and the call carries no call-site reclaim. In a function with an automatic
-scope the release moves with it, after the arguments and before the call:
-
-```llvm
-  call void @nish_arena_release(i64 %arena.mark)
-  %9 = tail call i32 @g(…)
-  ret i32 %9
-```
-
-and that half asks for one thing more — that `g` does not read the bump
-position. The `return` then emits no release of its own; every other `ret` in
-the function keeps the one it had.
-
-### Why it is sound
-
-Two claims are being made, and they rest on the same facts.
-
-**The `tail` marker.** LLVM reads it as: nothing the callee does touches this
-frame's stack slots. A function's stack slots are its locals' `alloca`s and
-the WP6 stack sites (§1), and neither can be reached from a callee:
-
-- **Nothing is handed over.** Every argument is a scalar, so the callee is
-  given no pointer at all.
-- **A signature with more parameters than arguments is one whose first
-  argument was never looked at.** That is a method: its receiver is a
-  parameter the argument list does not carry, and it is a pointer by
-  construction. Comparing the two counts refuses it — which is also what keeps
-  a method's *release* where it belongs, since `emitCall` is not the emitter a
-  method call goes through.
-- **Nothing leaks out the side.** A local's slot address is never materialised
-  as a value — the language has no address-of — and a stack site exists only
-  for an allocation whose flow is `local` (§1), so it is never stored into a
-  field, a global or an array, never captured by a callee, and never returned.
-  A callee therefore has no path to this frame's memory other than the
-  arguments it was passed.
-
-**The release ahead of the call.** It reclaims everything this function bumped
-after its mark, so what matters is who can still name that memory:
-
-- **The callee.** As above: every argument is a scalar. This is what refuses
-  the shape that looks most like it should qualify — `return step(n - 1, acc +
-  piece)` with a `string` accumulator — because that argument *is* memory above
-  the mark.
-- **This frame.** The call is the whole of a `return`, so no local is read
-  after it; the value it answers is the callee's own, allocated above the mark
-  the release restored.
-- **A measurement.** `Arena.mark()` and `Arena.used()` report the bump
-  position, and a callee that reads one would answer a smaller number than it
-  does today. `readsArenaState` is that fact (attributes.ts), propagated over
-  the call graph exactly as `usesArenaControl` is, and it is what makes this
-  invisible to a program rather than merely harmless. It is deliberately a
-  *second* fact: reading the position invalidates nothing, so it must not cost
-  a function its scope the way `Arena.release` does. It is asked only of the
-  release: a function with no scope reclaims nothing, so there is nothing for
-  a callee's reading to disagree with, and the marker goes on regardless.
-
-`usesArenaControl` covers the rest of §3 already, because `arenaScope` requires
-it to be false — of this function and, by the fixpoint, of everything it calls.
-
-### Interactions
-
-| With | What happens |
-| --- | --- |
-| the call-site reclaim (§2a) | Cannot co-occur. A bracketed call is handed to `nish_arena_keep` afterwards, which is work after the call, and `marksTailCall` excludes it by name rather than by argument. |
-| a packed `Result` return (WP17) | Excluded the same way: the word is unpacked into an object after the call. |
-| a scope in the *callee* | Nested LIFO as always. The callee's mark is taken above ours, which the release has just lowered — that is the point, not a hazard. |
-| `--profile debug` | The marker is in the IR, so the backend reuses the frame even at `-O0`: constant stack with no optimiser at all. This is what it is for. |
-| `-O1` and above | LLVM's own pass has already rewritten a self-recursion as a loop before the marker matters. The marker changes nothing there, and the release still has to move for the pass to see a tail call in the first place. |
-| a method call | Refused, both halves. The receiver is a pointer and is not in the argument list. `tests/cases/mem_scope_tail_call_guards` has it. |
-| a call that is not in tail position | Untouched. `return f(n - 1) + 1` has work after the call whatever this rule does. |
-
-### Measured
-
-`tests/link/tail_call_depth` recurses a million levels. Without the release
-moving it segfaults on the default 8 MB stack; with it, it prints its answer.
-It lives in `tests/link/` rather than beside its golden because every program
-in `tests/cases/` is also run under Node (WP13), and a million levels is past
-V8's stack whatever the native build does; `tests/cases/mem_scope_tail_call` is
-the same shape a thousand levels deep and is what pins the instruction order.
-
-The same program taking its depth from `argv`, built `--profile speed`, has a
-peak resident set of **10,164 KB at a thousand levels and 10,152 KB at ten
-million** — flat — against **13,088 KB at a hundred thousand** before the
-release moved.
-
-`--profile debug` is what the marker adds, and there the whole range is new.
-The same two programs at `-O0`, peak RSS by `wait4`'s `ru_maxrss`:
-
-| Program, `--profile debug` | 1,000 | 1,000,000 | 100,000,000 |
-| --- | --- | --- | --- |
-| scope + string temporary, `tail` | 1,816 KB | 1,840 KB | 1,836 KB |
-| the same, marker removed by hand | — | **SIGSEGV** | **SIGSEGV** |
-| plain numeric recursion, `tail` | 1,836 KB | 1,840 KB | 1,840 KB |
-| the same, marker removed by hand | — | **SIGSEGV** | **SIGSEGV** |
-
-The second pair is the reason the marker is not gated on `arenaScope`: a
-recursion with no arena temporaries has no release to move, so §2b's first half
-never applied to it, and at `-O0` it overflowed exactly as before. Both shapes
-still overflow around 170,000 levels without the marker.
-
-`tests/link/tail_call_depth_debug` is the first row, checked in: a million
-levels at `--profile debug`, which is a segfault the moment the marker comes
-off.
+The marker is what makes `--profile debug` (`-O0`, where no pass finds tail
+calls) run deep recursion in constant stack. `tests/link/tail_call_depth`
+(a million levels with the release moved) and `tail_call_depth_debug` (a
+million levels at `-O0`) both segfault without it. At `-O0`, peak RSS stayed at
+about 1,840 KB from 1,000 to 100,000,000 levels, while the unmarked build
+overflowed at about 170,000. `mem_scope_tail_call` and
+`mem_scope_tail_call_guards` pin the instruction order and the refusals.
 
 ## 2c. Scopes earned through callees
 
-The rule of §2 asks for a *direct* allocation that flows `local`. A function
-that only calls allocating functions and drops their results therefore never
-reclaimed anything, and the Are We Fast Yet ports showed what that costs.
-`List.benchmark` builds three lists through `makeList` and keeps one `i32`.
-`Storage.benchmark`, once its hand-written `Arena.mark()` / `Arena.release(m)`
-is taken out, builds a tree through a recursive `buildTreeDepth` and keeps a
-count, and its one allocation of its own, `new Random()`, is a stack slot. In
-both, every byte the callees allocated lived until the harness released its own
-mark.
+A function that allocates nothing of its own, but calls functions that do,
+used to reclaim nothing. It now gets the scope when all four of these hold:
 
-### Rule
+- it is **contained**;
+- it returns a number, `boolean`, `enum` or `void`;
+- no arena control is reachable from it;
+- some callee **net-allocates**: it allocates and has no scope of its own.
 
-A function also gets the scope when
+Containment has two proofs:
 
-- it is **contained**: everything allocated while it runs, by it or anything
-  it calls, is unreachable once it returns except through its return value;
-- its return type is a number, a `boolean`, an `enum` or `void`;
-- neither it nor a callee calls `Arena.reset` / `Arena.release`;
-- some callee **net-allocates**: it allocates, itself or through its own
-  callees, and has no scope of its own.
-
-Containment (`FunctionFacts.contained`) has two proofs, and either will do:
-
-- `!allocEscapes`, the fact §2a introduced, already propagated over every
-  callee. The escape analysis follows values rather than memory, so it counts
-  *any* store of an allocation into memory as an escape, a store into another
-  fresh object included. That conservatism is what makes it sound here: with
-  no allocation ever stored, no pointer read back out of memory can be one
-  allocated during the call.
+- `!allocEscapes`, which counts *any* store of an allocation as an escape;
 - `rootsHoldNoPointer`: every parameter, `this` included, is a scalar, a
-  string, or an object whose fields are all numbers, booleans and enums. The
-  language has no mutable global, the runtime keeps no pointer it was handed
-  beyond the call, and no Nish pointer crosses the C boundary, so memory older
-  than the call is reachable only through the parameters, and none of it has
-  a slot a pointer fits in. This needs nothing from the callees, which is how
-  `List.benchmark` qualifies: `tail` returns one of its arguments, and the
-  escape analysis has to count that as a capture.
+  string, or an object with only scalar fields. With no mutable globals, older
+  memory is then reachable only through slots that cannot hold a pointer.
 
-The first version of this rule made containment a fixpoint of its own, falling
-from "contained" over the callees and stopping at a function whose parameters
-hold no pointer. That is unsound. Such a callee is contained on its own terms
-however it nests allocations inside the object it returns, and its caller can
-read one back out and store it through its own parameter: `k.f = mk(n).x`.
-The read is not an allocation site, so nothing follows it.
-`tests/cases/mem_callee_scope_nested` is that program, and it is refused because
-`allocEscapes` keeps rising through `mk` (the `Holder` constructor keeps its
-argument).
+A first version made containment its own fixpoint over callees. That was
+unsound: `k.f = mk(n).x` reads a nested allocation back out and stores it, and
+`mem_callee_scope_nested` pins the refusal. `settleCalleeScopes` settles
+callees depth first. On a cycle it can only over-state net-allocation, which
+costs an unneeded scope, never a missing one.
 
-Net-allocation is profit, not proof: a callee with a scope of its own gives its
-memory back before it returns, and a second bracket around it would reclaim
-nothing. It depends on which functions got scopes, which depends on it, so
-`settleCalleeScopes` settles callees first, depth first over the call graph. A
-recursion back to a function still being settled reads the answer computed
-with the §2 scopes alone, which can only over-state it, so the cost of a cycle
-is a scope nobody needed rather than a missing one.
+The arena-loop warning **NL9011** names whatever refused a scope to a call in a
+loop that drops its result. It runs after the fixpoint (`arenaLoopFindings`),
+and its count over `src/` is pinned in `tests/perf-baseline.json`.
 
-### The warning
-
-`NL9011` reports a call inside a loop to a function that leaves memory behind
-and lets none of it escape, whose result dies with the pass, in a function that
-returns a scalar and still gets no scope. It names what refused the scope: the
-line of an allocation stored into memory, a callee that stores one, or a callee
-that releases or resets the arena. It is silent in a function that calls
-`Arena.mark`, `Arena.release` or `Arena.reset` itself, and in one that returns
-a pointer. §2d widens it to every function and narrows it to the loops a pass
-scope does not reclaim either.
-
-Both halves are whole-program facts, so it is found after the attribute
-fixpoint (`arenaLoopFindings`, `src/escape.ts`) and reported by
-`Compilation.check` into the same sink as the checker's warnings, before the
-driver prints them. The emitter still reports nothing. As first written it
-also fired in pointer-returning functions and on callees that store what they
-allocate, and over `src/compile.ts` that was 514 warnings, most of them loops
-that were building a table on purpose, plus one in `std/json.ts`. Narrowed to
-the two conditions above it is 51 over `src/` and none in `std/` or
-`examples/`; the 51 are recorded in `tests/perf-baseline.json`.
-
-### Measured
-
-The Are We Fast Yet ports, `--profile speed`, median of the last 20 of 30
-iterations, 0.10.0 against this change, one 4-core container, back to back. The
-"removed" column is `Storage.benchmark` with its manual `Arena.mark()` /
-`Arena.release(m)` deleted.
-
-| | 0.10.0 | 0.10.0, removed | this change | this change, removed |
-| --- | ---: | ---: | ---: | ---: |
-| Permute 1000 | 36.2 ms | 36.2 | 36.7 | 36.4 |
-| Queens 1000 | 21.7 | 21.9 | 21.6 | 22.5 |
-| Towers 600 | 23.4 | 23.3 | 23.6 | 23.4 |
-| List 1500 | 28.0 | 25.4 | 26.0 | 26.4 |
-| Bounce 1500 | 25.5 | 25.1 | 25.2 | 30.4 |
-| Mandelbrot 500 | 58.3 | 57.6 | 57.9 | 57.8 |
-| Storage 1000 | 165.0 | **373.1** | 168.2 | **166.6** |
-
-Peak resident set (`getrusage`, `ru_maxrss`):
-
-| | 0.10.0 | this change |
-| --- | ---: | ---: |
-| `Storage 1 1000`, manual calls kept | 10,180 KB | 10,172 KB |
-| `Storage 1 1000`, manual calls removed | **390,064 KB** | **10,180 KB** |
-| `List 1 10` | 10,180 KB | 10,344 KB |
-| `List 1 100000` | **49,840 KB** | **10,168 KB** |
-
-Bounce in the last column is code placement, not the scope. With the manual
-calls gone nothing under the harness's `innerBenchmarkLoop` releases the arena,
-so it gets a scope too (Permute and Towers net-allocate beneath it). Bounce's
-functions are identical after `opt -O3` either way, and relinking the same
-modules with `-Wl,-mllvm,-align-loops=64` turns 25.6 ms without that scope
-into 22.0 ms with it.
+Measured (0.11.0, Are We Fast Yet ports, `--profile speed`): with its manual
+`Arena.mark`/`release` removed, `Storage` went from 373.1 ms and 390,064 KB
+peak RSS to 166.6 ms and 10,180 KB. `List 1 100000` went from 49,840 KB to
+10,168 KB.
 
 ## 2d. Scopes around a loop's pass (#216)
 
-A function that returns a pointer gets no scope of its own, so a loop in it
-that builds and drops a temporary on every pass keeps every pass's temporary
-until its caller releases: #216's `summarise(rounds): Box`, calling an
-allocating `build(i)` and keeping only `.length`, peaked at 85 MB at 4000
-rounds. And a scalar function's scope only reclaims when it returns, so a long
-loop in one still grows by every pass until then. This brackets the pass.
+A pointer-returning function has no scope, and a scalar function's scope
+releases only at its return, so a loop that builds and drops a temporary on
+every pass kept them all. #216's `summarise` peaked at 85 MB at 4,000 rounds.
+`decideLoopScopes` now brackets the body when the pass allocates (directly, by
+a `push`, by printing a number, or through a net-allocating callee) and nothing
+allocated during it outlives the pass except as a scalar. Each clause closes
+one way out of the pass:
 
-### Rule
+- **memory**: no site in the body escapes, and no callee has `allocEscapes`;
+- **outer locals**: a pointer-typed outer local is assigned only values that
+  `isOld` proves predate the pass, and `x op= e` is refused;
+- **growth**: `push` only onto an array the body itself declared fresh;
+- **return**: only an old pointer may be returned, and `orReturn` is refused;
+- **control**: no arena control is reachable from the function.
 
-A loop's body is bracketed when nothing it allocates, itself or through a
-callee, is reachable once the pass is over except through a number, a
-`boolean` or an `enum` (`decideLoopScopes`, `src/escape.ts`, after
-`settleCalleeScopes`), and it allocates something (profit, not proof: a direct
-arena site in the body, a `push`, a printed number, or a callee that leaves
-memory behind). The clauses, one per way out of a pass:
+An inline element (`xs[i]` over inline structs) is followed as its array
+(`yieldsInteriorPointer`). Before that fix, `mem_loop_scope_interior` printed
+`8 16` instead of `49 98`.
 
-- **memory**: no allocation site in the body escapes, and no callee has
-  `allocEscapes`. As in §2c this means no allocation of the pass is stored
-  anywhere, so a pointer read out of memory during the pass predates it;
-- **outer locals**: a local declared outside the body, of a type that can hold
-  a pointer, is assigned only a value `isOld` proves predates the pass (a
-  literal, `this`, an outer local, a field or element read, the `const`
-  variable of a nested `for...of` over an old array, a call to a function that
-  allocates nothing, a choice between two of those); `x op= e` on
-  such a local is refused, which is `s = s + x`'s sibling;
-- **growth**: `push` only onto a `const` the body declared with a fresh array
-  literal or `new Array`;
-- **return**: a pointer `return`ed from the body is `isOld`, and `orReturn` is
-  refused;
-- **control**: the function calls no `Arena.mark` / `release` / `reset`
-  itself, and reaches no callee that releases or resets.
+The mark is read inline from `@nish_arena` (`buf`, `off`) rather than by
+calling the runtime. An unchanged `buf` means rewinding `off` is the whole
+release, and otherwise the code calls `nish_arena_release(buf + off)`. Calling
+the runtime both times doubled the cost of the worst-case loop. The fall-through,
+`continue` and `break` each release their pass; `return` releases the outermost
+open scope; a scalar tail call sinks that release as §2b does.
 
-An inline element (`xs[i]` where `xs` holds an interface nothing implements) is
-the address of a slot in `xs`, not a pointer loaded out of it. `classifyUse` and
-the escape flow used to treat it as a read of `xs`, which let a function store
-`xs[n - 1]` into its parameter's object, count as contained under §2c and
-release the block it pointed into; `mem_loop_scope_interior` printed `8 16`
-instead of `49 98`. Both now follow such an element as the array itself
-(`yieldsInteriorPointer`, `src/attributes.ts`), `isOld` asks for an inline
-element's array, and a `for...of` over an inline array flows into its variable.
-
-### Lowering
-
-```llvm
-for.body:
-  %2 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %3 = load i8*, i8** %2, align 8                  ; the mark: buf ...
-  %4 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  %5 = load i64, i64* %4, align 8                  ; ... and off
-  ...                                              ; the pass
-  %20 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %21 = load i8*, i8** %20, align 8
-  %22 = icmp eq i8* %21, %3
-  br i1 %22, label %pass.rewind, label %pass.free
-
-pass.rewind:                                       ; no chunk of the pass survives
-  %23 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %5, i64* %23, align 8
-  br label %pass.done
-
-pass.free:                                         ; the pass pushed a chunk
-  %24 = ptrtoint i8* %3 to i64
-  %25 = add i64 %24, %5
-  call void @nish_arena_release(i64 %25)
-  br label %pass.done
-```
-
-The mark is read inline rather than through `nish_arena_mark`. The first
-version called both runtime functions and cost the adversarial loop below
-twice its time; `nish_arena_grow` only ever pushes a chunk in front of the
-others and moves `buf` to it, so an unchanged `buf` means rewinding `off` is
-the whole release, and otherwise `nish_arena_release(buf + off)` is exactly
-the runtime's own mark and release (`0` for an arena with no chunk yet, which
-releases everything). `runtime-wasm.c` rewinds `off` the same way.
-
-The mark is the first instruction of the body, so it dominates every release.
-The body falling through releases before the back-edge; `continue` and `break`
-release the pass of the loop they leave (a `switch`'s `break` stays in it); a
-`return` releases the outermost open scope, the function's own if it has one,
-which rewinds past every inner pass at once; a scalar tail call sinks that
-release ahead of itself as §2b does, refused for a callee that reads the bump
-position. A `for` loop's condition and update run outside the bracket.
-
-### Measured
-
-Micro-benchmarks, `--profile speed`, `taskset -c 2`, best of five, this
-container. `small`: a scalar function looping 10⁸ times over a callee that
-returns a two-element array; `ptr`: the same loop in a function returning a
-`Box`; `none`: the loop allocating nothing, which takes no scope; `short`:
-10⁶ calls of a 100-pass loop in a function that has a §2 scope already, so
-main keeps at most 100 arrays live and never faults a page — the loop the
-rule costs most on.
-
-| | main | this change |
-| --- | ---: | ---: |
-| `small` 10⁸ passes | 1.6–16.4 s, 3,127,848 KB | 0.23 s, 1,448 KB |
-| `ptr` 10⁸ passes | 1.5–5.4 s, 3,127,848 KB | 0.26 s, 1,448 KB |
-| `none` 10⁸ passes | 0.020 s | 0.020 s |
-| `short` 10⁶ × 100 passes | 0.168 s | 0.203 s (0.34 s with runtime calls) |
-
-#216's probe, peak resident set (`bench/rss.c`), for the shape of
-`tests/cases/mem_loop_scope` (`build` pushes 64 to 70 numbers) and a heavier
-`build` pushing 2000:
-
-| rounds | main | this change | main, heavy | this change, heavy |
-| ---: | ---: | ---: | ---: | ---: |
-| 100 | 1,576 KB | 1,448 KB | 2,984 KB | 1,448 KB |
-| 1000 | 2,344 KB | 1,448 KB | 17,704 KB | 1,448 KB |
-| 4000 | 5,160 KB | 1,448 KB | 66,600 KB | 1,448 KB |
-
-`tests/run.js` holds the same property on `mem_loop_scope_chunk`, whose pass
-pushes a chunk every time: the peak at 2000 passes is the peak at 20 (165,672 KB
-against 2,984 KB before this change).
-
-`short` is the price: about a third of a nanosecond, a load, a compare and a
-store, per pass of a loop whose body is two stores and an add. It is taken
-because the rule cannot tell `short` from `small` without the trip count, and
-the same loop run 10⁸ times in one call is `small`. None of the seven Are We
-Fast Yet ports or the seven `bench/` programs has a loop the rule scopes: their
-IR is byte-identical before and after.
-
-### The warning, again
-
-`NL9011` now fires in a function of any return type, where neither a pass
-scope nor a function scope reclaims the call's memory, and names what refused
-each. It stays silent in a loop whose pass can `return` what it allocated,
-since no bracket, written or automatic, could release that pass (`std/json.ts`'s
-`jsonField` is that loop). Over `src/compile.ts` that is 82 warnings, from 51.
-
-### Left out
-
-- A callee that stores what it allocates into the object it returns (`words`
-  pushing fresh strings into the array it returns) has `allocEscapes`, so no
-  loop that calls it is scoped: the escape analysis follows values, not
-  memory, and a pointer read back out of that object is not an allocation
-  site. Lifting it needs a "stored only into fresh memory" fact *and* reads
-  that follow a pointer out of fresh memory, together.
-- A `return` of a fresh value from the pass (`return new Box(i)`) refuses the
-  scope, although the release could run first when the value's inputs are
-  scalars.
+Measured: 10⁸ passes of a scalar loop went from 1.6–16.4 s and 3,127,848 KB to
+0.23 s and 1,448 KB. #216's probe stays at 1,448 KB at every round count. The
+cost is about a third of a nanosecond per pass on a loop that never faults a
+page. No benchmark loop was affected: their IR is byte-identical.
 
 ## 3. Explicit control
 
-| Builtin | Lowering | Notes |
-| --- | --- | --- |
-| `Arena.reset(): void` | `nish_reset_arena` | statement position only |
-| `Arena.mark(): i64` | `nish_arena_mark` | |
-| `Arena.release(m: i64): void` | `nish_arena_release` | statement position only; an integer literal argument is typed `i64` by context |
-| `Arena.used(): i64` | `nish_arena_used` | bytes in the current chunk |
-
-All four are registered in `builtinCalls` next to `console.log`, with effect
-`write` (`mark` and `used` only read the arena, but a `readonly` caller could
-be hoisted across an allocation, so they are kept conservative).
-
-**Safety rule.** Releasing or resetting while any object, array or string
-allocated after the mark is still referenced is undefined behaviour: the
-memory is reused by the next allocation. The automatic scopes never do that,
-because a scope is only emitted when every allocation made during the call
-is provably unreachable afterwards. A function that calls `Arena.reset` or
-`Arena.release` itself (or through a callee) never gets an automatic scope,
-so the compiler's marks are never invalidated by user resets. Marks taken
-before a user `Arena.release` and released after it are fine; a mark taken
-*after* a point the user later releases past is stale.
+`Arena.mark(): i64` (`nish_arena_mark`) and `Arena.used(): i64`
+(`nish_arena_used`, bytes in the current chunk) are unchanged. `Arena.release(m)`
+and `Arena.reset()` still compile and run, but since #428 every call prints the
+NL7001 deprecation warning. They are the one way ordinary code can reach
+undefined behaviour in the arena: releasing while anything allocated after the
+mark is still referenced. Their replacement, `using a = arena()` (#420), makes
+the same release on every exit of its block and *refuses* (NL2418–NL2427) any
+value that would outlive the block, holding the block to §2d's rules
+(`mem_using_arena*`, `reject_using_arena_*`). A function that reaches
+`Arena.release` or `Arena.reset` gets no automatic scope (`usesArenaControl`),
+so a user reset never invalidates a compiler mark. All four builtins have
+effect `write`, which is conservative so that a `readonly` caller is never
+hoisted across an allocation.
 
 ## 4. `T | null`
 
-`T | null` is accepted for `T` a class, interface, array, or string (the
-validator already allowed only this union shape; `number | null` is rejected
-with a message). It is the same LLVM pointer type as `T`; `null` is the
-constant `null`, so a store of `null` is `store %struct.Node* null, ...` and
-a test is `icmp eq %struct.Node* %p, null`.
-
-Operations:
-
-- `p === null`, `p !== null`, `null === p`: pointer comparison. Two nullable
-  values cannot be compared with each other (for strings that would be
-  pointer identity, not `===`): narrow both first.
-- Assignment, initialization, `return`, arguments, fields, object literal
-  properties, `push`, element stores accept a `T` where `T | null` is
-  expected (`assignable` in `types.ts`). The reverse is an error, and so is
-  `null` with no contextual type (`let p = null`).
-- `new Array<T | null>(n)` is allowed: the zero fill *is* `null`.
-- A field `next: Node | null = null` may use `null` as its literal
-  initializer.
-- `c ? p : null` has type `T | null`.
-
-Narrowing (stage0's `src/checker/nullable.ts`): inside the region a condition guards,
-the nullable *variable* (a local or parameter, never a property path) reads
-as `T`:
-
-| Form | Where `p` is `T` |
-| --- | --- |
-| `if (p !== null) A else B` | in `A`; and after the `if` when `B` cannot fall through |
-| `if (p === null) A else B` | in `B`; and after the `if` when `A` cannot fall through (`return`, `throw`, `break`, `continue`, `process.exit`) |
-| `while (p !== null) A`, `for (...; p !== null; ...) A` | in `A`, on every iteration |
-| `p !== null && e`, `p === null \|\| e` | in `e` |
-| `p !== null ? a : b` | in `a` (and `b` for `=== null`) |
-| `!cond`, `(cond)`, `a && b`, `a \|\| b` | composed as expected |
-
-A narrowing ends at any assignment to the variable (`cur = cur.next` reads
-the narrowed `cur` on the right and then drops it), and before a loop whose
-body, condition or update assigns the variable, because the second iteration
-sees the assigned value before the statements that precede the assignment
-textually. Constants and parameters are never assigned, so their narrowings
-last for the whole region. `tests/cases/reject_null_narrowing_leaks.ts` and
-`reject_null_narrowing_assigned.ts` pin the two ends.
-
-Attributes: a nullable parameter or return loses `nonnull` and
-`dereferenceable`; `align 8` (null is aligned), `readonly` and `nocapture`
-follow the usual rules, e.g. from `mem_nullable.ll`:
-
-```llvm
-define noundef i32 @valueOr(%struct.Node* noundef readonly align 8 nocapture %n, i32 noundef %fallback) #2
-define noundef align 8 %struct.Node* @find(%struct.Node* noundef align 8 %head, i32 noundef %want) #1
-```
-
-## Goldens that changed
-
-Every existing golden that changed did so for one of two reasons, both
-verified by the unchanged `.out` round trips:
-
-- An allocation moved to the stack (`alloca %struct.C` / `alloca
-  %struct.nish_array` + `alloca [n x T]` replacing `nish_alloc_struct` calls),
-  and when no arena allocation was left the arena prelude (type, global,
-  `nish_arena_grow`, the inline allocator and its attribute groups)
-  disappeared from the module: `cls_point` (both `Point`s), `cls_nested`
-  (the `Segment`; its `Point`s are stored by the constructor and stay in
-  the arena), `cls_this_method_call`, `cls_field_write`,
-  `cls_compound_field`, `cls_initializers`, `cls_readonly_ok`,
-  `cls_interface_literal` (`t`; `p` is stored into `t.pair`, the inner
-  `pair` literal is a property of `t`), `cls_vector` (the loop temporary in
-  `centroid` and the argument of `dot`; `acc` and `scaled`'s result are
-  returned), `arr_literal`, `arr_length`, `arr_for_of`, `arr_f64`,
-  `arr_index_read_write`, `arr_bounds_panic`, `arr_sort`, `arr_strings`,
-  `arr_push` (header only; the growth is arena), `arr_nested` (the outer
-  literals; inner literals and pushed rows are elements), `arr_new_zeroed`
-  (`new Array<boolean>(2)`; `new Array<number>(n)` with `const n = 4` stays
-  dynamic).
-- An automatic arena scope was added to a function whose temporaries all
-  die with it: `arr_sum` and `arr_new_zeroed` (dynamic arrays), `str_concat`,
-  `str_template`, `str_console_log`, `str_escape`, `str_f64_mode`,
-  `conversions`, `i64_basic`, `io_files`, `math_i32`, `math_intrinsics`,
-  `math_random` (string temporaries from concatenation or from printing
-  numbers), and `main` in most class/array cases for the same reason.
-
-`tests/layout/structs.ts` is unaffected: its `make<X>` functions return the
-object, so the `nish_alloc_struct(i64 N)` the layout test reads is still there.
+`T | null` is accepted where `T` is a class, interface, array or string, and
+rejected for scalars (`reject_nullable_scalar`). It is the same LLVM pointer
+type, with `null` as the constant. `T` is assignable to `T | null`, but the
+reverse is an error, as is `null` with no contextual type.
+`new Array<T | null>(n)` is allowed because the zero fill is `null`. Narrowing
+applies to locals and parameters only, never to property paths. It holds under
+`!==` / `===` guards, in `while` and `for` conditions, in `&&` / `||` / `?:`,
+and after an `if` whose other arm cannot fall through. An assignment ends it,
+and so does entering a loop that assigns the variable
+(`reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`). A nullable
+parameter or return loses `nonnull` and `dereferenceable` and keeps `align 8`
+(`mem_nullable`).
 
 ## Left out
 
-- Reference counting (optional per-class RC from the master plan): not
-  started, to keep this package to proven-safe transformations.
-- `llvm.lifetime.start/end` markers on the hoisted allocas: a `start` alone
-  is easy but gives LLVM little; precise `end`s need scope exits through
-  `break` / `continue` / `return`, which the emitter does not track yet.
-- Objects stored into fields or arrays never move to the stack or get
-  reclaimed by a scope, even when the container is local; a constructor
-  that stores a parameter into `this` makes every caller's argument a leak.
-  A "captured only into `this`" fact would lift this.
-- Narrowing of property paths (`if (n.next !== null) n.next.x`): copy into a
-  local first.
-- `new Array<T>(n)` with a `const n = 4` is not stackable: only a literal
+- **Reference counting**: not started, so that this package kept to
+  transformations proved safe.
+- **`llvm.lifetime.start/end`** on the hoisted allocas: precise `end`s need
+  scope exits that the emitter does not track.
+- **Objects stored into a local container** never move to the stack. A
+  constructor that stores a parameter into `this` makes the argument a leak,
+  and a "captured only into `this`" fact would lift that.
+- **Narrowing of property paths**: copy the value into a local first.
+- **`new Array<T>(n)` with `const n = 4`** is not stackable; only a literal
   length is.
-- A loop's pass is scoped only under §2d's rule; a pass that keeps anything
-  in an outer local or older memory keeps every pass's temporaries until the
-  function returns (write the loop body as a function to get per-call release).
-- A function that loses its scope to a **branch-assigned local** retains its
-  memory and the compiler says nothing about it, unless it earns the §2c
-  scope instead (a scalar result, parameters that hold no pointer, and a
-  callee that leaves memory behind, as `perf_arena_quiet`'s `test` does). `let what = "unbound"` and
-  three arms that each assign a template is one allocation, not a dropped one,
-  so the WP15 §8 rule that reports a dropped allocation (`NL9003`) is silent
-  by design — but `allocLeaks` is on all the same, the scope is not emitted,
-  and everything the body allocated lives until `main` returns. The rule stays
-  silent because a warning has to name a rewrite and there is none here:
-  assigning a local in a branch is how a language without a match expression
-  computes a value. Closing the gap properly means one of two things, and
-  both are larger than a warning:
-  - a **"captured only into one binding" fact**, which would let the scope
-    survive an assignment whose value never leaves the frame — the escape
-    analysis already computes `escapes` separately from `allocLeaks` for the
-    call-site reclaim (§2a), so the fact exists; what is missing is a stack
-    rule that does not need a fixed binding;
-  - an **opt-in audit flag** (`--report-arena`), printing every allocation
-    site with its placement — stack, scoped, reclaimed, or retained — and the
-    fact that decided it. That reports without warning, which is the right
-    shape for something a reader cannot act on line by line.
+- **§2d's gaps**: a callee that stores fresh values into the object it returns
+  has `allocEscapes`, so loops calling it are not scoped. Fixing that needs a
+  "stored only into fresh memory" fact and reads that follow it. A pass that
+  `return`s a fresh value is refused, even with scalar inputs.
+- **A branch-assigned local** (`let what = …` assigned in each arm) sets
+  `allocLeaks`, so the function loses its scope silently unless §2c's rule
+  rescues it. No warning is given, because no rewrite could be named. It can be
+  closed in one of two ways: a stack rule that does not need a fixed binding
+  (the "captured only into one binding" fact, which `allocEscapes` already
+  approximates), or an opt-in `--report-arena` audit listing each site's
+  placement. Neither is built.
