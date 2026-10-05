@@ -144,7 +144,7 @@ collected in §7.
 
 | Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
-| `number` is `i32` by default: `+ - *` wrap (or are UB without `--wrapping`), `/` truncates | LANGUAGE.md | C | `(a + b) \| 0`, `Math.imul(a, b)`, `idiv(a, b)` | Keep. The translation is one token per operator, and the way in must default to f64 (wp28 §5.3), so ingested code never silently truncates. |
+| `number` is `i32` by default: signed `+ - *` overflow panics (and wraps under the deprecated `--wrapping`), `/` truncates | LANGUAGE.md | C | `(a + b) \| 0`, `Math.imul(a, b)`, `idiv(a, b)` | Keep. The translation is one token per operator, and the way in must default to f64 (wp28 §5.3), so ingested code never silently truncates. |
 | `u8` / `u16` / `u32` wrap | LANGUAGE.md | C | `& 0xff`, `& 0xffff`, `>>> 0` | Keep. |
 | `i64` / `u64` are native 64-bit | the prelude throws at the first mixed arithmetic | C | `bigint`, `BigInt.asIntN(64, …)` / `asUintN` | Keep. The type becomes `bigint`, which is also the honest TS type. |
 | `i32 >>> n` reads back signed | `-1 >>> 0` is `-1` | C | `(a >>> n) \| 0` | Keep. It is the documented wart that `u32` exists for. |

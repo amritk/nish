@@ -115,51 +115,16 @@ written once, in `src/`.
 
 ### T0 — A thread-safe runtime, with no language surface — **done**
 
-T0 changes one declaration line in the IR and one storage class in the C:
-
-```llvm
-@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
-```
-
-The allocator's body is the same text with or without the flag. `initialexec`
-is named so that the `-fPIC` napi profile does not lower an allocation to
-`__tls_get_addr`. `runtime.c`, `nish.h` and `runtime-wasm.c` share a `NISH_TLS`
-macro that is empty without `-DNISH_THREADS`. ELF refuses a non-TLS reference
-to a TLS definition in an executable, and `tests/run.js` pins the mismatched
-link as a failure.
-
-Measured when it landed (best of seven, interleaved):
-
-| | without `--threads` | with |
-| --- | ---: | ---: |
-| an allocation-bound loop (4M scopes × 64 escaping objects) | 451 ms | 667 ms (**1.48x**) |
-| `bench/strbuild` at 4M pieces | 829 ms | 824 ms (noise) |
-| `bench/nbody` | 974 ms | 1,006 ms (noise) |
-
-With the flag off, nothing moved: no golden `.ll`, no runtime byte, and
-`examples/hello.ts` was byte-identical. The thread pointer costs about half
-again on a loop that does nothing but bump, and nothing measurable on real
-programs. Tests: `tests/cases/mem_threads_arena`, the `-DNISH_THREADS` half of
-`tests/runtime-test.c`, and the `--threads` link checks in `tests/run.js`.
-
-### T1 — Structured spawn and join
-
-Superseded by wp29 §4.2. The three rules this stage proposed survive there in
-another form: the entry is a named top-level function, every task is joined on
-every path, and a handle cannot be stored.
-
-### T2 — The shareable-type rule: `Send`/`Sync` without traits
-
-Superseded by wp29 §4.1 and §4.2, as the table above records.
-
-### T3 — Channels and mutexes
-
-Proposed as wp29 P3. The original gate, monomorphisation, is open: generics
-landed with WP18.
-
-### T4 — Data parallelism, which is the point
-
-Built as wp29 P1. §8 is why it went first.
+T0 is one declaration line in the IR,
+`@nish_arena = external thread_local(initialexec) global %struct.nish_arena`,
+and one storage class (`NISH_TLS`, empty without `-DNISH_THREADS`) in the C.
+The allocator's body is unchanged. `initialexec` is named so that the `-fPIC`
+napi profile does not lower an allocation to `__tls_get_addr`. With the flag
+off, nothing moved: no golden, no runtime byte, no `hello` byte. With it, a
+loop that does nothing but bump paid **1.48x**, and `bench/strbuild` and
+`bench/nbody` paid nothing measurable. Tests: `tests/cases/mem_threads_arena`,
+the `-DNISH_THREADS` half of `tests/runtime-test.c`, and the `--threads` link
+checks in `tests/run.js`.
 
 ## 5. Diagnostics
 

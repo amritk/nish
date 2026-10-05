@@ -2767,7 +2767,7 @@ end.** That is the trade the feature is: the whole-program fact fixpoint is the
 performance thesis, and a foreign call is a hole in it.
 
 **And it is outside the differential oracle by construction.** The oracle
-runs a program's JavaScript rewrite against `runtime/shim.mjs`, on the
+runs a program's frozen JavaScript rewrite against `runtime/shim.mjs`, on the
 premise that the same source means the same thing in both worlds; that premise
 does not hold for a source whose meaning is "whatever this C function does"
 ([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the

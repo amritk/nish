@@ -316,18 +316,17 @@ that are *not* this package.
   mode pays nothing for it, because `toI32` on an `i32` is identity.
   `tests/link/std_text_f64` is what keeps this from being prose;
   [`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §4 is the reasoning.
-- **Name the private helpers as though they were exported.** A function name is
-  unique across the whole program whether or not it is exported, because the
-  whole-program attribute analysis is keyed by symbol name — and a `std/` module
-  is compiled *into* the program that imports it, so its private helpers are not
-  private to the namespace. A helper called `isBlank` would stop any program that
-  declares its own `isBlank` from compiling (`` Function `isBlank` is also
-  defined in main.ts ``), which is why `text.ts` calls it `isTextBlankByte`. Keep
-  the helpers few and their names distinctive; a module whose internals want
-  `compare`, `next` or `parse` is asking for package-scoped symbols, which do not
-  exist yet ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3e). Module
-  constants are exempt — `NEWLINE` and `SPACE` fold at their uses, so a program
-  may declare those names itself.
+- **Name the private helpers as though they were exported.** A `std/` module
+  belongs to package `nish`, so its symbols no longer collide with the
+  importing program's (`tests/link/std_package_scope`), but every `std/` module
+  shares that one package's flat namespace: a function name is unique across
+  the package whether or not it is exported, because the whole-program
+  attribute analysis is keyed by symbol name. A helper called `isBlank` in one
+  module would stop another `std/` module that declares its own `isBlank` from
+  compiling, which is why `text.ts` calls it `isTextBlankByte`. Keep the
+  helpers few and their names distinctive
+  ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3e). Module constants are
+  exempt — `NEWLINE` and `SPACE` fold at their uses.
 - **It is an Nish program**, so the constraints are the language's: a function is
   an arrow bound to a module-level `const`, a function is never a value, there
   is no `try` / `catch`, and there are no optional or default parameters. Those
