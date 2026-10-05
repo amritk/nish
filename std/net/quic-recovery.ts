@@ -53,8 +53,6 @@
  */
 import { QUIC_MAX_VARINT } from "nish/net/quic-packet"
 
-/** How many packet number spaces a connection has: Initial, Handshake and Application Data, indexed by their TLS level. */
-export const QUIC_RECOVERY_SPACES: i32 = 3
 /** The Initial space's index, which is `TLS_LEVEL_INITIAL`. */
 export const QUIC_RECOVERY_INITIAL: i32 = 0
 /** The Handshake space's index. */
@@ -293,23 +291,23 @@ export class QuicRecovery {
   /** latest_rtt (§5.1): the last sample, in milliseconds. */
   latestRtt: i64 = 0
   /** smoothed_rtt (§5.3): kInitialRtt until the first sample. */
-  smoothedRtt: i64 = 333
+  smoothedRtt: i64 = 0
   /** rttvar (§5.3): kInitialRtt / 2 until the first sample. */
-  rttVar: i64 = 166
+  rttVar: i64 = 0
   /** min_rtt (§5.2): 0 until the first sample. */
   minRtt: i64 = 0
   /** When the first RTT sample was taken, or -1 before it: persistent congestion counts only packets sent since (§7.6.2). */
   firstSampleTime: i64 = -1
   /** The peer's max_ack_delay in milliseconds (RFC 9000 §18.2), which the caller sets once it has read it. */
-  maxAckDelay: i64 = 25
+  maxAckDelay: i64 = 0
   /** congestion_window (B.2), in bytes. */
-  congestionWindow: i64 = 12000
+  congestionWindow: i64 = 0
   /** ssthresh (B.2): unbounded (2^62 − 1) until the first congestion event. */
   ssthresh: i64 = 0
   /** congestion_recovery_start_time (B.2), or -1 outside recovery. */
   recoveryStart: i64 = -1
   /** The pacer's credit in bytes (§7.7), and the time it was last topped up, or -1. */
-  pacerBudget: i64 = 12000
+  pacerBudget: i64 = 0
   pacerTime: i64 = -1
   /** pto_count (A.3): how many probe timeouts fired since the last acknowledgement. */
   ptoCount: i32 = 0
@@ -327,6 +325,11 @@ export class QuicRecovery {
       new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),
       new QuicSentPackets(QUIC_RECOVERY_APPLICATION_CAPACITY),
     ]
+    this.smoothedRtt = QUIC_RECOVERY_INITIAL_RTT
+    this.rttVar = QUIC_RECOVERY_INITIAL_RTT / 2
+    this.maxAckDelay = QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY
+    this.congestionWindow = QUIC_RECOVERY_INITIAL_WINDOW
+    this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
     this.ssthresh = QUIC_MAX_VARINT
   }
 
@@ -345,16 +348,6 @@ export class QuicRecovery {
       total = total + sp.bytesInFlight
     }
     return total
-  }
-
-  /** Whether any space has an ack-eliciting packet in flight. */
-  elicitingInFlight(): boolean {
-    for (const sp of this.spaces) {
-      if (sp.inFlight > 0) {
-        return true
-      }
-    }
-    return false
   }
 
   /**
@@ -423,6 +416,10 @@ export class QuicRecovery {
     let sampleAt: i32 = -1
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
+      // The ring is in packet-number order, so nothing past the largest acknowledged is.
+      if (sp.pnAt(s) > largest) {
+        break
+      }
       if (sp.stateAt(s) === QUIC_RECOVERY_SENT && quicRecoveryInRanges(ranges, count, sp.pnAt(s))) {
         sp.settle(s, QUIC_RECOVERY_ACKED)
         if (sp.ackedCount < toI32(sp.acked.length)) {
@@ -498,7 +495,10 @@ export class QuicRecovery {
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
       const pn: i64 = sp.pnAt(s)
-      if (sp.stateAt(s) !== QUIC_RECOVERY_SENT || pn > sp.largestAcked) {
+      if (pn > sp.largestAcked) {
+        break
+      }
+      if (sp.stateAt(s) !== QUIC_RECOVERY_SENT) {
         continue
       }
       if (sp.timeAt(s) <= lostSendTime || sp.largestAcked >= pn + QUIC_RECOVERY_PACKET_THRESHOLD) {
@@ -547,9 +547,7 @@ export class QuicRecovery {
     if (this.firstSampleTime < 0) {
       return false
     }
-    const span: i64 =
-      (this.smoothedRtt + quicRecoveryMax(4 * this.rttVar, QUIC_RECOVERY_GRANULARITY) + this.maxAckDelay) *
-      QUIC_RECOVERY_PERSISTENT_THRESHOLD
+    const span: i64 = (this.ptoBase() + this.maxAckDelay) * QUIC_RECOVERY_PERSISTENT_THRESHOLD
     let first: i64 = -1
     let fresh: boolean = false
     for (let k: i32 = 0; k < sp.count; k += 1) {
@@ -617,8 +615,13 @@ export class QuicRecovery {
    * for and what the idle timeout is at least three of.
    */
   probeTimeout(): i64 {
-    const base: i64 = this.smoothedRtt + quicRecoveryMax(4 * this.rttVar, QUIC_RECOVERY_GRANULARITY)
+    const base: i64 = this.ptoBase()
     return this.handshakeConfirmed ? base + this.maxAckDelay : base
+  }
+
+  /** smoothed_rtt + max(4 × rttvar, kGranularity): every probe timeout's period before max_ack_delay and the backoff. */
+  ptoBase(): i64 {
+    return this.smoothedRtt + quicRecoveryMax(4 * this.rttVar, QUIC_RECOVERY_GRANULARITY)
   }
 
   /**
@@ -643,7 +646,7 @@ export class QuicRecovery {
       return -1
     }
     const backoff: i64 = toI64(1) << toI64(this.ptoCount)
-    let duration: i64 = this.smoothedRtt + quicRecoveryMax(4 * this.rttVar, QUIC_RECOVERY_GRANULARITY)
+    let duration: i64 = this.ptoBase()
     if (space === QUIC_RECOVERY_APPLICATION) {
       duration = duration + this.maxAckDelay
     }
@@ -733,8 +736,8 @@ export class QuicRecovery {
   }
 
   /**
-   * Gives up the oldest packet still in flight in space `space`, listing it
-   * in `lost` without a congestion event, so that a probe can be recorded
+   * Gives up the oldest packet still in flight in space `space`, taking it
+   * out of flight without a congestion event, so that a probe can be recorded
    * when the ring is full. The caller has already queued what the space had
    * in flight again, which is what a probe sends. Answers the slot, or -1
    * when nothing is in flight there.
@@ -745,12 +748,10 @@ export class QuicRecovery {
       return -1
     }
     sp.compact()
-    sp.clearResults()
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
       if (sp.stateAt(s) === QUIC_RECOVERY_SENT) {
-        sp.markLost(s)
-        sp.setState(s, QUIC_RECOVERY_LOST)
+        sp.settle(s, QUIC_RECOVERY_LOST)
         return s
       }
     }

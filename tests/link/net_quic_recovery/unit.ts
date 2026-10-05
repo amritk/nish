@@ -292,7 +292,7 @@ const rcRefusalChecks = (t: Suite): void => {
   const events: i32 = ring.congestionEvents;
   const evicted: i32 = ring.evictOldest(QUIC_RECOVERY_INITIAL);
   t.eqI64("evicting gives up the oldest still in flight, packet 1", initial.pnAt(evicted), n64(1));
-  t.ok("listed as lost, out of flight, with no congestion event", initial.lostCount === n32(1) && initial.inFlight === n32(15) && ring.congestionEvents === events);
+  t.ok("out of flight, with no congestion event", initial.inFlight === n32(15) && ring.congestionEvents === events);
 };
 
 /** Every check of the module on its own. */

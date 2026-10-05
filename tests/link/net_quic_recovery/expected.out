@@ -94,7 +94,7 @@ PASS  and is then full
 PASS  so a 17th is refused
 PASS  an ACK of the oldest frees its slot for the next
 PASS  evicting gives up the oldest still in flight, packet 1
-PASS  listed as lost, out of flight, with no congestion event
+PASS  out of flight, with no congestion event
 PASS  the server's first flight goes out, and the network loses it
 PASS  with no RTT sample, its probe timeout is 333 + 4 × 166 ms after it
 PASS  there is room under the amplification limit for a probe
@@ -139,12 +139,9 @@ PASS  the client's ACK opens the window, and the next data goes
 PASS  128 small packets fill the Application Data space's record
 PASS  the next waits, though the window has room
 PASS  a probe timeout gives up the oldest record for the probe, which goes out
-PASS  a packet numbered below what recovery last recorded still goes out
-PASS  but is not sent again
-PASS  and its stream does not wait on it
 PASS  with nothing due the pacer lets nothing out
 PASS  ten full datagrams go at once: the initial window's burst
 PASS  the next waits 4 ms
 PASS  not a millisecond less
 PASS  and then goes
-quic recovery: 149 passed, 0 failed, 0 skipped
+quic recovery: 146 passed, 0 failed, 0 skipped

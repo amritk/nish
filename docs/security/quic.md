@@ -181,8 +181,7 @@ replays of Q2 (`net_quic_conn_replay`, `net_quic_lifecycle_replay` and their
 - **The window and the record hold sending back, never acknowledging.**
   With the window full an ACK still goes, and with the Application Data
   record full new data waits while a probe still gets out, by giving up the
-  oldest record. A packet recovery refused to record goes out once,
-  untracked, rather than being queued again for ever.
+  oldest record.
 - **The pacer** lets a burst of at most the initial window go, then one
   datagram as its credit allows, and time handed in backwards earns it
   nothing.

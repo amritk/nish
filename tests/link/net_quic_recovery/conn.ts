@@ -12,17 +12,16 @@ import {
   QUIC_FRAME_PATH_CHALLENGE,
   QUIC_FRAME_PING,
   QUIC_FRAME_RETIRE_CONNECTION_ID,
-  QUIC_FRAME_STOP_SENDING,
   QUIC_FRAME_STREAM,
   QuicFrame,
   quicParseFrame,
   quicPushAck,
   quicPushNewConnectionId,
   quicPushPathData,
+  quicPushStreamError,
   quicPushValue,
 } from "nish/net/quic-frame";
-import { quicVarintPush } from "nish/net/quic-packet";
-import { QUIC_RECOVERY_APPLICATION, QUIC_RECOVERY_APPLICATION_CAPACITY } from "nish/net/quic-recovery";
+import { QUIC_RECOVERY_APPLICATION_CAPACITY } from "nish/net/quic-recovery";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_STATE_CONNECTED, QUIC_STATE_TIMED_OUT, QuicConnection } from "nish/net/quic";
 import { quicListenerPaceTime, quicListenerTakePaced } from "nish/net/quic-listener";
@@ -309,9 +308,7 @@ const rcResentFrames = (t: Suite): void => {
   stop.writeStream(n64(0), bytesOf("unwanted"), false);
   rcLose(stop, s.now);
   const frame: u8[] = [];
-  quicVarintPush(frame, toI64(QUIC_FRAME_STOP_SENDING));
-  quicVarintPush(frame, n64(0));
-  quicVarintPush(frame, n64(7));
+  quicPushStreamError(frame, n64(0), n64(7), n64(-1));
   stop.receive(qcShort(s, frame), s.now);
   qcDrain(stop, s);
   s.now = stop.deadline();
@@ -395,18 +392,6 @@ const rcFullRecord = (t: Suite): void => {
   t.ok("a probe timeout gives up the oldest record for the probe, which goes out", conn.takeDatagram(c.now) !== null);
 };
 
-/** A packet loss recovery refuses goes out untracked, once: nothing loops sending it again. */
-const rcUntracked = (t: Suite): void => {
-  const conn: QuicConnection = qcServer(qcDefaultConfig());
-  const c: QcClient = rcOpened(conn);
-  conn.recovery.onPacketSent(QUIC_RECOVERY_APPLICATION, n64(1000000), n32(1200), c.now);
-  conn.writeStream(n64(0), bytesOf("once"), false);
-  t.ok("a packet numbered below what recovery last recorded still goes out", conn.takeDatagram(c.now) !== null);
-  t.ok("but is not sent again", conn.takeDatagram(c.now) === null);
-  const stream = conn.findStream(n64(0));
-  t.ok("and its stream does not wait on it", stream !== null && stream.outstanding === n32(0) && toI32(stream.send.length) === n32(0));
-};
-
 /** The listener's pacer: a burst of the initial window, then one datagram at a time (RFC 9002 §7.7). */
 const rcPacing = (t: Suite): void => {
   const conn: QuicConnection = qcServer(qcDefaultConfig());
@@ -440,6 +425,5 @@ export const recoveryConnChecks = (t: Suite): void => {
   rcResentFrames(t);
   rcWindow(t);
   rcFullRecord(t);
-  rcUntracked(t);
   rcPacing(t);
 };

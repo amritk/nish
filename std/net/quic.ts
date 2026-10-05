@@ -765,7 +765,19 @@ class QuicConnStream {
 
   /** Whether a frame is owed: queued bytes, a FIN not yet sent, or bytes to send again. */
   wantsToSend(): boolean {
-    return (!this.finSent && (this.unsent() > 0 || this.sendFin)) || (!this.stopped && this.resendLow >= 0)
+    return (!this.finSent && (this.unsent() > 0 || this.sendFin)) || this.resendLow >= 0
+  }
+
+  /** Ends the sending side for the client's STOP_SENDING: what is queued or lost is dropped, and nothing lost later is sent again. */
+  stopSending(): void {
+    this.finSent = true
+    this.stopped = true
+    this.send = []
+    this.sendHead = 0
+    this.sendBase = this.sendOffset
+    this.resendLow = -1
+    this.resendHigh = -1
+    this.resendFin = false
   }
 
   /** Queues the chunk `[offset, offset + length)` of a lost packet to be sent again, with the FIN when it carried it. */
@@ -1513,14 +1525,7 @@ export class QuicConnection {
         // of it is sent again.
         const stream: QuicConnStream | null = this.streamFor(frame.streamId, type)
         if (stream !== null) {
-          stream.finSent = true
-          stream.stopped = true
-          stream.send = []
-          stream.sendHead = 0
-          stream.sendBase = stream.sendOffset
-          stream.resendLow = -1
-          stream.resendHigh = -1
-          stream.resendFin = false
+          stream.stopSending()
         }
         break
       }
@@ -2495,7 +2500,7 @@ export class QuicConnection {
    * in the stream's buffer until no packet in flight carries them.
    */
   buildStream(space: QuicConnSpace, out: u8[], room: i32, stream: QuicConnStream): void {
-    if (!stream.stopped && stream.resendLow >= 0) {
+    if (stream.resendLow >= 0) {
       this.buildResend(space, out, room, stream)
       return
     }
@@ -2601,10 +2606,9 @@ export class QuicConnection {
    * Hands an ack-eliciting packet just sealed to loss recovery (RFC 9002
    * §A.5), with what it carried copied from the staging row to its slot. A
    * packet that elicits nothing (an ACK, a CONNECTION_CLOSE) is not
-   * recorded. Nor is one recovery refuses, which `takeDatagram` rules out
-   * (the space's record is not full, and packet numbers only grow): its
-   * streams stop counting it rather than queue it again, which would send
-   * the same frames for ever.
+   * recorded. Recovery cannot refuse one: `takeDatagram` builds nothing
+   * ack-eliciting into a space whose record is full, and packet numbers
+   * only grow.
    */
   recordSent(space: QuicConnSpace, pn: i64, size: i32): void {
     if (!space.stagedEliciting) {
@@ -2614,13 +2618,11 @@ export class QuicConnection {
     if (slot >= 0) {
       space.commitStaged(slot)
       space.probe = false
-    } else {
-      this.untrack(space, space.staging)
     }
     space.clearStaged()
   }
 
-  /** The STREAM chunks of row `row` leave their streams' count of packets in flight, without being sent again. */
+  /** An acknowledged packet in row `row`: its STREAM chunks leave their streams' count of packets in flight, which may let the bytes go. */
   untrack(space: QuicConnSpace, row: i32): void {
     const streams: i32 = space.streamCount(row)
     for (let j: i32 = 0; j < streams; j += 1) {
