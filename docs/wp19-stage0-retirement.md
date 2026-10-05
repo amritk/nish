@@ -7,12 +7,11 @@ retirement was done. The full plan, the review history and every intermediate
 measurement are in git history: `git log -- docs/wp19-stage0-retirement.md`,
 and `git show c78e4aa0:docs/wp19-stage0-retirement.md` is the last long form.
 
-**How the names read.** "stage0" was the second implementation of Nish, in
-TypeScript, built by `tsc` into `dist/` and run on Node. It lived in the
-repository's `src/` while the self-hosted compiler lived in `self/`. #256
-(2026-09-26, 0.13.0) moved the self-hosted compiler to `src/`, so in this file
-`src/` means the compiler that is left and "stage0's `src/`" means the deleted
-one. At the `ddc-*` tags (G6) the self-hosted compiler is still in `self/`.
+**Names.** stage0 was the second implementation of Nish, in TypeScript,
+built by `tsc` into `dist/`. It lived in `src/` while the self-hosted compiler
+lived in `self/`, until #256 (0.13.0) moved the self-hosted compiler to `src/`.
+Here `src/` means the compiler that is left, and "stage0's `src/`" the deleted
+one.
 
 [`.claude/selfhost.md`](../.claude/selfhost.md) and [`AGENTS.md`](../AGENTS.md)
 hold the rules for the one compiler that is left.
@@ -44,14 +43,11 @@ hold the rules for the one compiler that is left.
 
 ## 1. The shape we are moving to, and whose it is
 
-A self-hosted compiler needs something to compile it the first time. rustc
-and Go answer with the previous release, downloaded as a binary. GCC
-bootstraps from any C++ compiler and compares stage2 with stage3. Zig and
-OCaml keep a checked-in blob. Nish had a fifth arrangement: a second,
-independently written implementation that was compared against `src/` at every
-phase. That bought `IR(stage0, src/) == IR(stage1, src/)`, the second half of
-Wheeler's diverse double-compiling. The cost was a second implementation of
-every construct.
+rustc and Go are seeded by their previous release, GCC by any C++ compiler,
+and Zig and OCaml by a checked-in blob. Nish had a fifth arrangement: a second,
+independent implementation compared against `src/` at every phase. That bought
+`IR(stage0, src/) == IR(stage1, src/)`, the second half of Wheeler's diverse
+double-compiling, at the price of writing every construct twice.
 
 **The target was Rust's and Go's shape**: `src/` is the compiler and the seed
 is the previous released `nish`. Two things retirement was never meant to be:
@@ -163,18 +159,15 @@ variation list that somebody had written down.
 
 ### B. The oracles
 
-Twelve comparisons kept the two implementations honest. The **survivors** are
-`lexer-oracle.js` and `parser-oracle.js` (they compare against the `typescript`
-package, not stage0), `reject-oracle.js` (checked-in `.err` fragments), the
-`tests/cases/*.ll` goldens, `bootstrap.js`'s fixed-point equalities, and
-`support-oracle.js`, less its two stage0 families. The **dead** ones are the six
-in the table at the top, `fuzz.js --stage1` in its stage0 form, and
-`bootstrap.js`'s first equality. The WP13 differential harness survives only
-because its reference was frozen: `rewrite.js` typed its JavaScript with
-stage0's `Compilation`. The successor property is Go's: compare the seed
-release with HEAD. It is weaker, because it catches regressions rather than
-disagreements and cannot see a bug both versions share. It is also the only
-property available with one implementation.
+**Survived:** `lexer-oracle.js` and `parser-oracle.js` (against the
+`typescript` package), `reject-oracle.js`, the `tests/cases/*.ll` goldens,
+`bootstrap.js`'s fixed point, and `support-oracle.js` less its stage0 half.
+The WP13 differential harness survived only by freezing its reference, because
+`rewrite.js` typed its JavaScript with stage0's `Compilation`. **Died:** the
+six oracles in the table at the top, `fuzz.js --stage1` in its stage0 form, and
+`bootstrap.js`'s first equality. Their successor property, seed release against
+HEAD, catches regressions rather than disagreements and cannot see a bug both
+versions share. With one implementation it is the only property available.
 
 #### What each dying oracle covered, and what covers it now
 
@@ -219,16 +212,18 @@ There were six gates, and each one had a check that `npm test` or CI could run.
 **Asked:** `src/` compiles everything stage0 compiles and answers every flag
 stage0 answers, with identical output and exit codes. **Check:**
 `node tests/run.js --parity`: the two `--help` flag sets diffed inside
-`npm test`, and the corpus × `VARIATIONS` cross product nightly, failing on any
-difference no narrow declaration covered. **Closed:** 0 undeclared differences over 986 programs on 2026-09-22
-(§A6–A9). The mode was deleted with stage0.
+`npm test`, and the corpus × `VARIATIONS` cross product nightly, failing on
+any difference no narrow declaration covered. **Closed:** 0 undeclared
+differences over 986 programs on 2026-09-22 (§A6–A9). The mode went with
+stage0.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
 1. **`nish-cmp`**, a required `ci.yml` job. A difference must be in
    `DECLARED`, which requires its words in `CHANGELOG.md`. First green run,
-   2026-09-21, against the 0.5.0 seed: `437/437 programs agree (3582 files, 3253862 IR lines)
-   … 4 equal after each compiler's own root, 0 undeclared difference(s)`.
+   2026-09-21, against the 0.5.0 seed: `437/437 programs agree (3582 files,
+   3253862 IR lines) … 4 equal after each compiler's own root, 0 undeclared
+   difference(s)`.
 2. **`fuzz.js --stage1`**, repointed to the seed against HEAD.
 3. **The surviving oracles** build their stage1 with the seed, through
    `tests/self/seed.js`.
@@ -369,8 +364,8 @@ stage0's and none importing `typescript`. #150 removed 33,365 lines
 
 ### 5a. What R6 is waiting on
 
-Resolved. The sign-off of the R6 plan (#144) said go, on two conditions:
-v0.6.0 released and `nish-cmp` green on `main`. These were the items it waited on:
+Resolved. The sign-off of the R6 plan (#144) said go once v0.6.0 was released
+and `nish-cmp` was green on `main`. The items R6 waited on:
 
 1. **`nish-cmp` in CI.** Its first real run found that the releases from
    0.1.1 to 0.4.0 shipped without `std/`, and `tests/run.js` now checks the
@@ -400,9 +395,10 @@ v0.6.0 released and `nish-cmp` green on `main`. These were the items it waited o
 #### Which release R6 can land in, and why it is not 0.5.0
 
 `nish-cmp` compares against the last release, and no seed before 0.5.0 could
-compile the corpus. Deleting `ir_oracle.js` and `interop_oracle.js` inside 0.5.0
-would have removed them while their successor had no row at all. R6 therefore
-landed after 0.6.0, once `nish-cmp` had green runs against a real seed. Lowering
+compile the corpus. Deleting `ir_oracle.js` and `interop_oracle.js` in 0.5.0
+would have removed them while their successor had no row at all. R6 landed
+after 0.6.0 instead, once `nish-cmp` had run green against the 0.5.0 seed and
+had rows against the 0.6.0 seed on `main`. Lowering
 `cmpSince` and declaring the difference was not possible either, because
 `DECLARED` needs words in `CHANGELOG.md`, and `[Unreleased]` is empty between
 releases.

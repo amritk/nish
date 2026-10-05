@@ -407,8 +407,9 @@ LLVM, so the check runs there on every push.
 
   The field shape is `knownAtMost` in [src/bounds.ts](../src/bounds.ts) — the
   file header says why — so the distance between it and the other two is what
-  candidate 2 of [docs/wp15-performance.md](../docs/wp15-performance.md) §2c has
-  to recover.
+  candidate 2 of [docs/wp15-performance.md](../docs/wp15-performance.md) §2c had
+  to recover, and did: the emitter hoist (#104) and property-path length facts
+  (#179) took it from 577 ms to 242 ms.
 
   **The baseline, measured at `7f6e833`, before the hoist exists.** x86-64,
   four-core Intel Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3

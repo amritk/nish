@@ -264,7 +264,7 @@ A `std/` module is its own package (`nish`), so its symbols are scoped and a
 program may declare a function one of these modules also exports
 (`tests/link/std_package_scope`, `docs/wp21-packages.md` §5a). The package is
 decided by the `nish/` specifier rather than by the directory the file is found
-in — read off the path it would be `nish` from `node_modules/nish/std/` and the
+in — read off the path it would be `nish` from `node_modules/@amritk/nish/std/` and the
 root package from a checkout, and the same program would compile against an
 installed compiler and be refused by a checkout of it.
 
