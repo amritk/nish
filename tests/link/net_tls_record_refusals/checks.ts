@@ -507,8 +507,8 @@ export const refusalChecks = (): i32 => {
   );
 
   // A client may ask for KeyUpdates, each answered, up to
-  // TLS_RECORD_MAX_KEY_UPDATES; each key install leaves its derivation's
-  // temporaries in the arena, so the cap is what bounds them (TLS-3).
+  // TLS_RECORD_MAX_KEY_UPDATES; each AES key install leaves the schedule
+  // `aesKey` answers in the arena, so the cap is what bounds them (TLS-3).
   const spam = traceOpen();
   const spamWriter = clientWriter();
   let spamSecret: u8[] = rfc8448ClientApplicationTraffic();
@@ -555,8 +555,8 @@ export const refusalChecks = (): i32 => {
     answered === TLS_RECORD_MAX_KEY_UPDATES && spam.state === TLS_RECORD_STATE_OPEN && sink[0] === toU8(107)
   );
   t.ok(
-    `every answered KeyUpdate, all ${TLS_RECORD_MAX_KEY_UPDATES} measured, leaves at most 12 KB in the arena, a ceiling over the 10,496 bytes TLS-3 records`,
-    crossed === 0 && filled > 0 && most > toI64(0) && most <= toI64(12288)
+    `every answered KeyUpdate, all ${TLS_RECORD_MAX_KEY_UPDATES} measured, leaves at most 4 KB in the arena, a ceiling over the 2,272 bytes of aesKey's two AES-128 schedules TLS-3 records`,
+    crossed === 0 && filled > 0 && most > toI64(0) && most <= toI64(4096)
   );
   if (Arena.used() > toI64(49152)) {
     const filler: u8[] = new Array<u8>(16384);

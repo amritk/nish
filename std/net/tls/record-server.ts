@@ -36,14 +36,17 @@
  * application data waiting for the caller each live in an array allocated
  * once, in the constructor, so a connection that has finished its handshake
  * allocates nothing that outlives a record, and a slot can be handed the
- * next connection with `start`. A KeyUpdate does leave memory: deriving the
- * next keys leaves about 5 KB per direction behind, so a connection takes at
- * most `TLS_RECORD_MAX_KEY_UPDATES` from its client. When the caller leaves
- * application data unread for long enough to fill its buffer, records stay in the reader and
+ * next connection with `start`. The handshake's messages are sealed straight
+ * out of `TlsServer`'s own buffers, and the application secrets are copied
+ * into arrays of this slot's, so a slot that hands its `TlsServer` the next
+ * connection with `restart` runs every handshake after the first without
+ * moving the arena. The one thing a key install leaves is the schedule
+ * `aesKey` answers for an AES suite — 1,136 bytes for AES-128, 1,456 for
+ * AES-256, nothing for ChaCha20 — so a connection takes at most
+ * `TLS_RECORD_MAX_KEY_UPDATES` KeyUpdates from its client (TLS-3 in
+ * `docs/security/tls.md`). When the caller leaves application data unread
+ * for long enough to fill its buffer, records stay in the reader and
  * `interest` stops asking for reads, which is how the peer is made to wait.
- * The handshake is the exception: `TlsServer` allocates what it keeps, about
- * 52 KB per handshake, and that stays until the arena is reset (TLS-3 in
- * `docs/security/tls.md`).
  *
  * **Secrets.** Each traffic secret is copied out of `TlsServer` as it is
  * installed and the server's copy is wiped with `secureZero`, as are the
@@ -67,6 +70,8 @@ import {
   TLS_STATE_WAIT_SIGNATURE,
   TlsServer,
 } from "nish/net/tls"
+import { SHA256_SIZE } from "nish/crypto/sha256"
+import { SHA384_SIZE } from "nish/crypto/sha512"
 import {
   TLS_ALERT_DECODE_ERROR,
   TLS_ALERT_ILLEGAL_PARAMETER,
@@ -149,9 +154,10 @@ export const TLS_RECORD_IDLE_LIMIT: i32 = 16
 
 /**
  * How many KeyUpdates one connection takes from its client before refusing
- * the next with `unexpected_message`. Each costs a key derivation whose
- * temporaries stay in the arena (5,248 bytes, twice that when the server
- * answers), so the cap is what bounds that memory (TLS-3). A client that
+ * the next with `unexpected_message`. Under an AES suite each costs a key
+ * install whose AES schedule stays in the arena (1,136 bytes for AES-128,
+ * twice that when the server answers), so the cap is what bounds that memory
+ * (TLS-3). A client that
  * updates when RFC 8446 §5.5 asks, once per 2^24 records, reaches it after
  * 2^30 records; §4.6.3 itself sets no limit, so one that updates on a clock of
  * its own is cut off at the sixty-fifth, a trade-off TLS-3 records.
@@ -161,23 +167,22 @@ export const TLS_RECORD_MAX_KEY_UPDATES: i32 = 64
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_RECORD_SERVER_FROM: i32 = 0
 
-/** A fresh copy of a traffic secret, so `TlsServer`'s own can be wiped while this one lives on. */
-const tlsCopySecret = (secret: u8[] | null): u8[] => {
+/**
+ * Copies a traffic secret out of `TlsServer` into `long` when it is that
+ * array's length and into `short` otherwise, so the server's own can be wiped
+ * while this one lives on, and answers the array; `none` when there is no
+ * secret.
+ */
+const tlsKeepSecret = (secret: u8[] | null, short: u8[], long: u8[], none: u8[]): u8[] => {
   if (secret === null) {
-    return []
+    return none
   }
-  const out: u8[] = new Array<u8>(secret.length)
-  for (let k: i32 = 0; k < toI32(out.length) && k < toI32(secret.length); k++) {
+  const length: i32 = toI32(secret.length)
+  const out: u8[] = length === toI32(long.length) ? long : short
+  for (let k: i32 = 0; k < toI32(out.length) && k < length; k++) {
     out[k] = secret[k]
   }
   return out
-}
-
-/** Appends `bytes` to `queue`, which a `TlsRecordServer` seals as records once there is room. */
-const tlsQueueBytes = (queue: u8[], bytes: u8[]): void => {
-  for (const b of bytes) {
-    queue.push(b)
-  }
 }
 
 /**
@@ -203,13 +208,15 @@ export class TlsRecordServer {
   /** Application data the caller has not read is `plain[plainStart .. plainEnd)`. */
   plain: u8[]
   scratch: u8[]
-  /** Handshake bytes written at the Initial level and not yet in a record. */
-  pendingInitial: u8[]
-  /** Handshake bytes written at the Handshake level and not yet in a record. */
-  pendingHandshake: u8[]
   /** The client's and the server's current application traffic secrets, for KeyUpdate. */
   readSecret: u8[]
   writeSecret: u8[]
+  /** The arrays those two point into, one of each hash's length, and the empty one they point at before. */
+  readSecret256: u8[]
+  readSecret384: u8[]
+  writeSecret256: u8[]
+  writeSecret384: u8[]
+  none: u8[]
   /** A post-handshake message the client has sent part of. */
   postHandshake: u8[]
   state: i32 = 0
@@ -224,8 +231,12 @@ export class TlsRecordServer {
   outputEnd: i32 = 0
   plainStart: i32 = 0
   plainEnd: i32 = 0
+  /** How much of `TlsServer`'s Initial-level output is already in records. */
   pendingInitialAt: i32 = 0
+  /** How much of `TlsServer`'s Handshake-level output is already in records. */
   pendingHandshakeAt: i32 = 0
+  /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
+  flightReady: boolean = false
   postHandshakeLength: i32 = 0
   /** Records in a row that carried nothing for the caller, against `TLS_RECORD_IDLE_LIMIT`. */
   idleRecords: i32 = 0
@@ -253,16 +264,20 @@ export class TlsRecordServer {
     this.output = new Array<u8>(TLS_RECORD_OUTPUT_SIZE)
     this.plain = new Array<u8>(TLS_RECORD_PLAIN_SIZE)
     this.scratch = new Array<u8>(TLS_RECORD_SCRATCH_SIZE)
-    this.pendingInitial = []
-    this.pendingHandshake = []
-    this.readSecret = []
-    this.writeSecret = []
+    this.none = []
+    this.readSecret256 = new Array<u8>(SHA256_SIZE)
+    this.readSecret384 = new Array<u8>(SHA384_SIZE)
+    this.writeSecret256 = new Array<u8>(SHA256_SIZE)
+    this.writeSecret384 = new Array<u8>(SHA384_SIZE)
+    this.readSecret = this.none
+    this.writeSecret = this.none
     this.postHandshake = new Array<u8>(TLS_KEY_UPDATE_SIZE)
     this.start(tls)
   }
 
   /**
-   * Starts a new connection in this slot with `tls`, which should be fresh:
+   * Starts a new connection in this slot with `tls`, which should be fresh
+   * or just restarted (`TlsServer.restart`, which reuses its buffers):
    * every buffer is emptied and the keys of the last connection are wiped;
    * the buffers are reused, and only the empty handshake queues are new. A
    * `tls` that has already failed — a configuration
@@ -274,8 +289,8 @@ export class TlsRecordServer {
     // was used, when it failed or when its slot was closed, and is not
     // touched here: the array may already hold the next connection's.
     this.wipeTraffic()
-    this.readSecret = []
-    this.writeSecret = []
+    this.readSecret = this.none
+    this.writeSecret = this.none
     this.tls = tls
     this.state = TLS_RECORD_STATE_HANDSHAKE
     this.alert = 0
@@ -313,6 +328,10 @@ export class TlsRecordServer {
   wipeTraffic(): void {
     secureZero(this.readSecret)
     secureZero(this.writeSecret)
+    secureZero(this.readSecret256)
+    secureZero(this.readSecret384)
+    secureZero(this.writeSecret256)
+    secureZero(this.writeSecret384)
     this.readProtection.clear()
     this.writeProtection.clear()
   }
@@ -403,10 +422,11 @@ export class TlsRecordServer {
 
   /** Forgets what is owed but not yet sealed: the handshake queues, the compatibility record, a KeyUpdate and a close. */
   dropPending(): void {
-    this.pendingInitial = []
+    this.tls.clearOutput(TLS_LEVEL_INITIAL)
+    this.tls.clearOutput(TLS_LEVEL_HANDSHAKE)
     this.pendingInitialAt = 0
-    this.pendingHandshake = []
     this.pendingHandshakeAt = 0
+    this.flightReady = false
     this.ccsDue = false
     this.keyUpdateDue = false
     this.closeDue = false
@@ -495,7 +515,7 @@ export class TlsRecordServer {
         return this.handleHandshake(length)
       case TLS_CONTENT_ALERT:
         // §5.1: an alert may not fall between the records of one handshake message.
-        return toI32(this.tls.input.length) > 0 ? TLS_ALERT_UNEXPECTED_MESSAGE : this.handleAlert(length)
+        return this.tls.inputLength > 0 ? TLS_ALERT_UNEXPECTED_MESSAGE : this.handleAlert(length)
       default:
         // Application data before the client's Finished, a protected
         // change_cipher_spec (§5), or a type nobody defined.
@@ -513,7 +533,7 @@ export class TlsRecordServer {
     if (length !== 1 || toI32(buf[off + TLS_RECORD_HEADER_SIZE]) !== 1) {
       return TLS_ALERT_UNEXPECTED_MESSAGE
     }
-    if (!this.started || this.readLevel === TLS_LEVEL_APPLICATION || toI32(this.tls.input.length) > 0) {
+    if (!this.started || this.readLevel === TLS_LEVEL_APPLICATION || this.tls.inputLength > 0) {
       return TLS_ALERT_UNEXPECTED_MESSAGE
     }
     return this.idle()
@@ -673,17 +693,15 @@ export class TlsRecordServer {
    */
   advance(): void {
     const tls: TlsServer = this.tls
-    const initial: u8[] = tls.takeOutput(TLS_LEVEL_INITIAL)
-    if (toI32(initial.length) > 0) {
+    if (tls.outputInitialLength > 0 && !this.firstMessageSeen) {
       // §D.4: in compatibility mode, which a client asks for with a session
       // id, the server's first handshake message is followed by a
       // change_cipher_spec. The server echoes the id, so its own message says.
-      if (!this.firstMessageSeen) {
-        this.firstMessageSeen = true
-        this.ccsDue =
-          toI32(initial.length) > TLS_SESSION_ID_ECHO_AT && toI32(initial[TLS_SESSION_ID_ECHO_AT]) > 0
-      }
-      tlsQueueBytes(this.pendingInitial, initial)
+      this.firstMessageSeen = true
+      this.ccsDue =
+        tls.outputInitialLength > TLS_SESSION_ID_ECHO_AT &&
+        TLS_SESSION_ID_ECHO_AT < toI32(tls.outputInitial.length) &&
+        toI32(tls.outputInitial[TLS_SESSION_ID_ECHO_AT]) > 0
     }
     if (this.readLevel === TLS_LEVEL_INITIAL) {
       const handshake: u8[] | null = tls.readSecret(TLS_LEVEL_HANDSHAKE)
@@ -697,7 +715,7 @@ export class TlsRecordServer {
       secureZero(tls.ephemeralPrivate)
     }
     if (tls.state === TLS_STATE_WAIT_FINISHED || tls.state === TLS_STATE_CONNECTED) {
-      tlsQueueBytes(this.pendingHandshake, tls.takeOutput(TLS_LEVEL_HANDSHAKE))
+      this.flightReady = true
       // The flight is signed and finished: the handshake secret and the
       // client's handshake secret have done their work in `TlsServer`, and
       // the read keys made from the latter are installed.
@@ -705,7 +723,12 @@ export class TlsRecordServer {
       secureZero(tls.clientHandshakeSecret)
     }
     if (tls.state === TLS_STATE_CONNECTED && this.readLevel === TLS_LEVEL_HANDSHAKE) {
-      this.readSecret = tlsCopySecret(tls.readSecret(TLS_LEVEL_APPLICATION))
+      this.readSecret = tlsKeepSecret(
+        tls.readSecret(TLS_LEVEL_APPLICATION),
+        this.readSecret256,
+        this.readSecret384,
+        this.none
+      )
       secureZero(tls.clientApplicationSecret)
       // A direction whose keys did not install would read in the clear.
       if (!this.readProtection.install(tls.suite, this.readSecret)) {
@@ -785,13 +808,12 @@ export class TlsRecordServer {
   }
 
   /**
-   * Seals as much of `queue[at ..)` as fits, in records of at most
+   * Seals as much of `queue[at .. length)` as fits, in records of at most
    * `maxChunk()` bytes, and answers where it stopped. A padding that leaves
    * no room for content fails the connection with `internal_error`.
    */
-  sealQueue(queue: u8[], at: i32): i32 {
+  sealQueue(queue: u8[], at: i32, length: i32): i32 {
     let next: i32 = at
-    const length: i32 = toI32(queue.length)
     const most: i32 = this.maxChunk()
     if (most < 1 && next < length) {
       this.fail(TLS_ALERT_INTERNAL_ERROR)
@@ -828,14 +850,18 @@ export class TlsRecordServer {
       return
     }
     const tls: TlsServer = this.tls
-    // Each queue is replaced only once it has emptied, so a connection past
-    // its handshake allocates nothing here.
-    if (toI32(this.pendingInitial.length) > 0) {
-      this.pendingInitialAt = this.sealQueue(this.pendingInitial, this.pendingInitialAt)
-      if (this.pendingInitialAt < toI32(this.pendingInitial.length)) {
+    // The handshake's messages are sealed straight out of `TlsServer`'s
+    // buffers, which are emptied once every byte is in a record.
+    if (tls.outputInitialLength > 0) {
+      this.pendingInitialAt = this.sealQueue(
+        tls.outputInitial,
+        this.pendingInitialAt,
+        tls.outputInitialLength
+      )
+      if (this.pendingInitialAt < tls.outputInitialLength) {
         return
       }
-      this.pendingInitial = []
+      tls.clearOutput(TLS_LEVEL_INITIAL)
       this.pendingInitialAt = 0
     }
     if (this.ccsDue) {
@@ -859,19 +885,28 @@ export class TlsRecordServer {
       }
       this.writeLevel = TLS_LEVEL_HANDSHAKE
     }
-    if (toI32(this.pendingHandshake.length) > 0) {
-      this.pendingHandshakeAt = this.sealQueue(this.pendingHandshake, this.pendingHandshakeAt)
-      if (this.pendingHandshakeAt < toI32(this.pendingHandshake.length)) {
+    if (this.flightReady && tls.outputHandshakeLength > 0) {
+      this.pendingHandshakeAt = this.sealQueue(
+        tls.outputHandshake,
+        this.pendingHandshakeAt,
+        tls.outputHandshakeLength
+      )
+      if (this.pendingHandshakeAt < tls.outputHandshakeLength) {
         return
       }
-      this.pendingHandshake = []
+      tls.clearOutput(TLS_LEVEL_HANDSHAKE)
       this.pendingHandshakeAt = 0
     }
     if (
       this.writeLevel === TLS_LEVEL_HANDSHAKE &&
       (tls.state === TLS_STATE_WAIT_FINISHED || tls.state === TLS_STATE_CONNECTED)
     ) {
-      this.writeSecret = tlsCopySecret(tls.writeSecret(TLS_LEVEL_APPLICATION))
+      this.writeSecret = tlsKeepSecret(
+        tls.writeSecret(TLS_LEVEL_APPLICATION),
+        this.writeSecret256,
+        this.writeSecret384,
+        this.none
+      )
       secureZero(tls.serverApplicationSecret)
       secureZero(tls.serverHandshakeSecret)
       // A direction whose keys did not install would write in the clear.

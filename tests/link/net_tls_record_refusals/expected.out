@@ -114,7 +114,7 @@ PASS  keyUpdate(true) sends one asking the client back
 PASS  whose request byte is 1
 PASS  after recordLimit records the writer sends a KeyUpdate of its own before the next
 PASS  the 64th KeyUpdate asking for one back, like each before it, is answered and its data read
-PASS  every answered KeyUpdate, all 64 measured, leaves at most 12 KB in the arena, a ceiling over the 10,496 bytes TLS-3 records
+PASS  every answered KeyUpdate, all 64 measured, leaves at most 4 KB in the arena, a ceiling over the 2,272 bytes of aesKey's two AES-128 schedules TLS-3 records
 PASS  the 65th is unexpected_message and fails the connection, deriving no key
 PASS  seventeen KeyUpdates, empty data records or user_canceled warnings in a row are unexpected_message
 PASS  and so are seventeen change_cipher_specs

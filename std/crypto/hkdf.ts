@@ -44,10 +44,37 @@
  * bytes (the struct's 7 to 255 less the prefix), a context longer than 255
  * bytes, and a secret shorter than HashLen.
  *
+ * **Caller-owned scratch.** The functions above make their HMAC objects and
+ * their output fresh on every call, which stores allocations no arena scope
+ * may release around them. `hkdfExtractInto`, `hkdfExpandInto` and
+ * `hkdfExpandLabelInto` compute the same bytes in an `HkdfScratch` the caller
+ * allocates once, over the hash `hashLength` names (32 for SHA-256, 48 for
+ * SHA-384), and write them into the caller's array, so that a loop of key
+ * derivations inside one `using a = arena()` block leaves the arena where it
+ * was. Each wipes the scratch before it returns, its last block and both
+ * keyed hashers, so no key material outlives the call there:
+ *
+ *     const kdf = new HkdfScratch();                         // once
+ *     hkdfExtractInto(kdf, 32, salt, ikm, prk, 0);           // 32 bytes at prk[0]
+ *     hkdfExpandLabelInto(kdf, 32, prk, "key", context, 0, 0, key, 0, 16);
+ *
+ * They refuse what the functions above refuse, the same way: `hkdfExpandInto`
+ * answers `false` where `hkdfExpandSha256` answers `null`, and
+ * `hkdfExpandLabelInto` panics where `hkdfExpandLabelSha256` does. A hash
+ * length other than 32 or 48, or an output window outside its array, is the
+ * caller's bug and panics.
+ *
  * Written from RFC 5869 and RFC 8446 §7.1, not ported from another
  * implementation.
  */
-import { HmacSha256, HmacSha384, hmacSha256, hmacSha384 } from "nish/crypto/hmac"
+import {
+  HmacSha256,
+  HmacSha256Scratch,
+  HmacSha384,
+  HmacSha384Scratch,
+  hmacSha256,
+  hmacSha384,
+} from "nish/crypto/hmac"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
 
@@ -223,4 +250,236 @@ export const hkdfExpandLabelSha384 = (secret: u8[], label: string, context: u8[]
     panic("hkdfExpandLabelSha384: a secret shorter than 48 bytes")
   }
   return okm
+}
+
+// ---- Caller-owned scratch ----------------------------------------------------
+
+/** The longest `HkdfLabel`: two length bytes, `label<7..255>` and `context<0..255>`, each with its length byte. */
+const HKDF_LABEL_MAX: i32 = 514
+
+/**
+ * What the `*Into` functions compute in: an HMAC scratch for each hash, the
+ * previous output block T(i - 1), and the `HkdfLabel` HKDF-Expand-Label
+ * builds. Allocate one per long-lived owner — a connection slot, say — and
+ * hand it to every derivation; it carries nothing from one call to the next.
+ */
+export class HkdfScratch {
+  sha256: HmacSha256Scratch
+  sha384: HmacSha384Scratch
+  /** T(i - 1), HashLen bytes of it; wiped before every function returns. */
+  previous: u8[]
+  /** The one-byte block counter `i`. */
+  counter: u8[]
+  /** HKDF-Expand-Label's `info`, built here: public, so it is not wiped. */
+  label: u8[]
+
+  constructor() {
+    this.sha256 = new HmacSha256Scratch()
+    this.sha384 = new HmacSha384Scratch()
+    this.previous = new Array<u8>(SHA384_SIZE)
+    this.counter = new Array<u8>(1)
+    this.label = new Array<u8>(HKDF_LABEL_MAX)
+  }
+
+  /** Zeroes the key material the last derivation left: T(i - 1) and both keyed hashers. */
+  wipe(): void {
+    secureZero(this.previous)
+    this.sha256.wipe()
+    this.sha384.wipe()
+  }
+}
+
+/** Panics unless `hashLength` is 32 or 48, the two hashes HKDF runs over here. */
+const hkdfCheckHash = (caller: string, hashLength: i32): void => {
+  if (hashLength !== SHA256_SIZE && hashLength !== SHA384_SIZE) {
+    panic(`${caller}: a hash length of ${hashLength}, not 32 or 48`)
+  }
+}
+
+/** Panics unless `out[at .. at + length)` is a window inside `out`. */
+const hkdfCheckOutput = (caller: string, out: u8[], at: i32, length: i32): void => {
+  if (at < 0 || length < 0 || at > toI32(out.length) - length) {
+    panic(`${caller}: the output window is outside its array`)
+  }
+}
+
+/** Keys the scratch's HMAC for `hashLength` with `key[off .. off + len)`. */
+const hkdfMacBegin = (s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len: i32): void => {
+  if (hashLength === SHA384_SIZE) {
+    s.sha384.begin(key, off, len)
+  } else {
+    s.sha256.begin(key, off, len)
+  }
+}
+
+/** Feeds `data[off .. off + len)` to the scratch's HMAC for `hashLength`. */
+const hkdfMacUpdate = (s: HkdfScratch, hashLength: i32, data: u8[], off: i32, len: i32): void => {
+  if (hashLength === SHA384_SIZE) {
+    s.sha384.update(data, off, len)
+  } else {
+    s.sha256.update(data, off, len)
+  }
+}
+
+/** Writes the HMAC for `hashLength`'s tag at `out[at]`. */
+const hkdfMacFinish = (s: HkdfScratch, hashLength: i32, out: u8[], at: i32): void => {
+  if (hashLength === SHA384_SIZE) {
+    s.sha384.finishInto(out, at)
+  } else {
+    s.sha256.finishInto(out, at)
+  }
+}
+
+/**
+ * HKDF-Extract (RFC 5869 §2.2) over the hash `hashLength` names, the PRK's
+ * HashLen bytes written at `out[at]`. An empty `salt` keys HMAC with no bytes,
+ * which HMAC pads to the block with zeros, exactly as the HashLen zeros §2.2
+ * asks for would be. An `ikm` longer than 2^31 - 1 bytes panics, as
+ * `hmacSha256` does.
+ */
+export const hkdfExtractInto = (
+  s: HkdfScratch,
+  hashLength: i32,
+  salt: u8[],
+  ikm: u8[],
+  out: u8[],
+  at: i32
+): void => {
+  hkdfCheckHash("hkdfExtractInto", hashLength)
+  hkdfCheckOutput("hkdfExtractInto", out, at, hashLength)
+  if (ikm.length > 2147483647) {
+    panic("hkdfExtractInto: input keying material longer than 2^31 - 1 bytes")
+  }
+  hkdfMacBegin(s, hashLength, salt, HKDF_FROM, toI32(salt.length))
+  hkdfMacUpdate(s, hashLength, ikm, HKDF_FROM, toI32(ikm.length))
+  hkdfMacFinish(s, hashLength, out, at)
+  s.wipe()
+}
+
+/**
+ * The T(1) | T(2) | … loop of RFC 5869 §2.3, `length` bytes of it at
+ * `out[at]`, with `info` the window `info[infoOff .. infoOff + infoLen)`.
+ * The callers have checked every bound.
+ */
+const hkdfExpandWindow = (
+  s: HkdfScratch,
+  hashLength: i32,
+  prk: u8[],
+  info: u8[],
+  infoOff: i32,
+  infoLen: i32,
+  out: u8[],
+  at: i32,
+  length: i32
+): void => {
+  const counterLength: i32 = 1
+  let done: i32 = 0
+  let i: i32 = 1
+  while (done < length) {
+    hkdfMacBegin(s, hashLength, prk, HKDF_FROM, toI32(prk.length))
+    if (i > 1) {
+      hkdfMacUpdate(s, hashLength, s.previous, HKDF_FROM, hashLength)
+    }
+    hkdfMacUpdate(s, hashLength, info, infoOff, infoLen)
+    s.counter[0] = toU8(i)
+    hkdfMacUpdate(s, hashLength, s.counter, HKDF_FROM, counterLength)
+    hkdfMacFinish(s, hashLength, s.previous, HKDF_FROM)
+    for (let k: i32 = 0; k < hashLength && done < length && k < toI32(s.previous.length); k += 1) {
+      out[at + done] = s.previous[k]
+      done += 1
+    }
+    i += 1
+  }
+  s.wipe()
+}
+
+/**
+ * HKDF-Expand (RFC 5869 §2.3) over the hash `hashLength` names: `length`
+ * bytes from `prk` and `info`, written at `out[at]`. `false`, writing nothing,
+ * where `hkdfExpandSha256` answers `null`: a `length` negative or past
+ * 255 × HashLen, an `info` longer than 2^31 - 1 bytes, or a `prk` shorter than
+ * HashLen.
+ */
+export const hkdfExpandInto = (
+  s: HkdfScratch,
+  hashLength: i32,
+  prk: u8[],
+  info: u8[],
+  out: u8[],
+  at: i32,
+  length: i32
+): boolean => {
+  hkdfCheckHash("hkdfExpandInto", hashLength)
+  if (
+    length < 0 ||
+    length > HKDF_MAX_BLOCKS * hashLength ||
+    info.length > 2147483647 ||
+    toI32(prk.length) < hashLength
+  ) {
+    return false
+  }
+  hkdfCheckOutput("hkdfExpandInto", out, at, length)
+  hkdfExpandWindow(s, hashLength, prk, info, HKDF_FROM, toI32(info.length), out, at, length)
+  return true
+}
+
+/**
+ * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
+ * bytes from `secret`, `"tls13 " + label` and the context
+ * `context[contextOff .. contextOff + contextLen)`, written at `out[at]`. It
+ * panics where `hkdfExpandLabelSha256` does — a length outside 0 to 255, a
+ * label empty or past 249 bytes, a context past 255, a secret shorter than
+ * HashLen — and on a context window outside its array.
+ */
+export const hkdfExpandLabelInto = (
+  s: HkdfScratch,
+  hashLength: i32,
+  secret: u8[],
+  label: string,
+  context: u8[],
+  contextOff: i32,
+  contextLen: i32,
+  out: u8[],
+  at: i32,
+  length: i32
+): void => {
+  hkdfCheckHash("hkdfExpandLabelInto", hashLength)
+  if (length < 0 || length > 255) {
+    panic(`hkdfExpandLabelInto: a length of ${length} bytes, outside 0 to 255`)
+  }
+  if (label.length === 0 || label.length > 249) {
+    panic(`hkdfExpandLabelInto: a label of ${toI32(label.length)} bytes, outside 1 to 249`)
+  }
+  if (
+    contextOff < 0 ||
+    contextLen < 0 ||
+    contextOff > toI32(context.length) - contextLen ||
+    contextLen > 255
+  ) {
+    panic("hkdfExpandLabelInto: the context window is outside its array or longer than 255 bytes")
+  }
+  if (toI32(secret.length) < hashLength) {
+    panic("hkdfExpandLabelInto: a secret shorter than HashLen")
+  }
+  hkdfCheckOutput("hkdfExpandLabelInto", out, at, length)
+  // The `HkdfLabel` struct, as `hkdfLabel` builds it, into the scratch.
+  const prefixLength: i32 = toI32(HKDF_LABEL_PREFIX.length)
+  const labelLength: i32 = toI32(label.length)
+  const fullLength: i32 = prefixLength + labelLength
+  const info: u8[] = s.label
+  info[0] = toU8(length >> 8)
+  info[1] = toU8(length & 0xff)
+  info[2] = toU8(fullLength)
+  for (let k: i32 = 0; k < prefixLength && 3 + k < toI32(info.length); k += 1) {
+    info[3 + k] = toU8(toI32(HKDF_LABEL_PREFIX.charCodeAt(k)))
+  }
+  for (let k: i32 = 0; k < labelLength && 3 + prefixLength + k < toI32(info.length); k += 1) {
+    info[3 + prefixLength + k] = toU8(toI32(label.charCodeAt(k)))
+  }
+  const contextAt: i32 = 3 + fullLength
+  info[contextAt] = toU8(contextLen)
+  for (let k: i32 = 0; k < contextLen && contextAt + 1 + k < toI32(info.length); k += 1) {
+    info[contextAt + 1 + k] = context[contextOff + k]
+  }
+  hkdfExpandWindow(s, hashLength, secret, info, HKDF_FROM, contextAt + 1 + contextLen, out, at, length)
 }

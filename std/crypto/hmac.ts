@@ -24,6 +24,12 @@
  * which HMAC does not keep secret; a received tag is compared with
  * `timingSafeEqual`, never `===`.
  *
+ * `HmacSha256Scratch` and `HmacSha384Scratch` are the same computation in
+ * hashers the caller allocates once: `begin` keys them again in place and
+ * `finishInto` writes the tag into the caller's array, so a loop of them
+ * stores nothing of its own and an arena scope around it releases all it
+ * allocated (see "Caller-owned scratch" below).
+ *
  * Written from RFC 2104, not ported from another implementation.
  */
 import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
@@ -40,25 +46,33 @@ const HMAC_OPAD: i32 = 0x5c
 const HMAC_FROM: i32 = 0
 
 /**
- * `key XOR pad` over a whole block of `blockSize` bytes, with `key` already no
- * longer than a block: the key's bytes XOR `pad`, then `pad` alone where the
- * zero padding of RFC 2104 §2 step (1) would be.
+ * `key[off .. off + len) XOR pad` over a whole block, `out`, with the key
+ * already no longer than the block: the key's bytes XOR `pad`, then `pad`
+ * alone where the zero padding of RFC 2104 §2 step (1) would be.
  */
-const hmacPadBlock = (key: u8[], blockSize: i32, pad: i32): u8[] => {
+const hmacPadInto = (out: u8[], key: u8[], off: i32, len: i32, pad: i32): void => {
   const padByte: u8 = toU8(pad)
-  const out: u8[] = new Array<u8>(blockSize)
   const outLength: i32 = toI32(out.length)
   const keyLength: i32 = toI32(key.length)
   // Bounded by both lengths, so both indices are proved in range.
   let i: i32 = 0
-  while (i < keyLength && i < outLength) {
-    out[i] = key[i] ^ padByte
+  while (i < len && i < outLength && off + i >= 0 && off + i < keyLength) {
+    out[i] = key[off + i] ^ padByte
     i += 1
   }
   while (i < outLength) {
     out[i] = padByte
     i += 1
   }
+}
+
+/**
+ * `key XOR pad` over a whole block of `blockSize` bytes, in a fresh array, with
+ * `key` already no longer than a block (`hmacPadInto`).
+ */
+const hmacPadBlock = (key: u8[], blockSize: i32, pad: i32): u8[] => {
+  const out: u8[] = new Array<u8>(blockSize)
+  hmacPadInto(out, key, HMAC_FROM, toI32(key.length), pad)
   return out
 }
 
@@ -169,3 +183,289 @@ export const hmacSha256Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
 /** Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as `hmacSha256Verify` does. */
 export const hmacSha384Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
   timingSafeEqual(hmacSha384(key, data), tag)
+
+// ---- Caller-owned scratch --------------------------------------------------
+//
+// `HmacSha256` makes its two hashers in its constructor, and the one-shot
+// functions above make an `HmacSha256` and a fresh tag on every call, so all
+// of them store allocations of their own: memory no automatic arena scope and
+// no `using a = arena()` block may release around them (docs/LANGUAGE.md,
+// "`using a = arena()`", NL2424). The scratch below is the same computation in
+// hashers the caller allocates once and keeps: `begin` keys it again by
+// rewriting their state in place, and `finishInto` writes the tag into the
+// caller's array. What it allocates on the way — the two digests a hasher
+// answers — dies with the call that made it, so a caller may run it a
+// thousand times inside one arena scope and leave the arena where it was.
+
+/**
+ * Makes `to` the hasher `from` is — the same point in the same message, as
+ * `Sha256.copy` makes it — in a hasher the caller already holds, so that
+ * nothing is allocated. Copying from a hasher nothing has been fed starts `to`
+ * again. It is here rather than beside `Sha256` because the scratch below and
+ * the TLS transcript are what need it, and HMAC is the module both sit on.
+ */
+export const hmacCopySha256 = (from: Sha256, to: Sha256): void => {
+  const fromState: u32[] = from.state
+  const toState: u32[] = to.state
+  for (let i: i32 = 0; i < toI32(fromState.length) && i < toI32(toState.length); i += 1) {
+    toState[i] = fromState[i]
+  }
+  const fromBlock: u8[] = from.block
+  const toBlock: u8[] = to.block
+  for (let i: i32 = 0; i < from.fill && i < toI32(fromBlock.length) && i < toI32(toBlock.length); i += 1) {
+    toBlock[i] = fromBlock[i]
+  }
+  to.fill = from.fill
+  to.total = from.total
+  to.finished = from.finished
+}
+
+/** `hmacCopySha256` for SHA-384: `to` made the hasher `from` is, in place. */
+export const hmacCopySha384 = (from: Sha384, to: Sha384): void => {
+  const fromState: u64[] = from.engine.state
+  const toState: u64[] = to.engine.state
+  for (let i: i32 = 0; i < toI32(fromState.length) && i < toI32(toState.length); i += 1) {
+    toState[i] = fromState[i]
+  }
+  const fromBlock: u8[] = from.engine.block
+  const toBlock: u8[] = to.engine.block
+  for (
+    let i: i32 = 0;
+    i < from.engine.filled && i < toI32(fromBlock.length) && i < toI32(toBlock.length);
+    i += 1
+  ) {
+    toBlock[i] = fromBlock[i]
+  }
+  to.engine.filled = from.engine.filled
+  to.engine.count = from.engine.count
+  to.engine.finished = from.engine.finished
+}
+
+/**
+ * Zeroes everything `h` holds of the message it was fed: the pending block
+ * with `secureZero`, and the hash value and message schedule, which are words
+ * `secureZero` does not take, with ordinary stores. Those stand because the
+ * hasher stays reachable for the next `begin`. The hasher is left finished, so
+ * that feeding it before it is started again panics.
+ */
+const hmacWipeSha256 = (h: Sha256): void => {
+  secureZero(h.block)
+  const state: u32[] = h.state
+  for (let i: i32 = 0; i < toI32(state.length); i += 1) {
+    state[i] = toU32(0)
+  }
+  const schedule: u32[] = h.schedule
+  for (let i: i32 = 0; i < toI32(schedule.length); i += 1) {
+    schedule[i] = toU32(0)
+  }
+  h.fill = 0
+  h.total = 0
+  h.finished = true
+}
+
+/** `hmacWipeSha256` for SHA-384. */
+const hmacWipeSha384 = (h: Sha384): void => {
+  secureZero(h.engine.block)
+  const state: u64[] = h.engine.state
+  for (let i: i32 = 0; i < toI32(state.length); i += 1) {
+    state[i] = toU64(0)
+  }
+  const schedule: u64[] = h.engine.schedule
+  for (let i: i32 = 0; i < toI32(schedule.length); i += 1) {
+    schedule[i] = toU64(0)
+  }
+  h.engine.filled = 0
+  h.engine.count = toU64(0)
+  h.engine.finished = true
+}
+
+/** Whether `[off, off + len)` is a window inside an array of `length` elements. */
+const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
+  off >= 0 && len >= 0 && off <= length - len
+
+/**
+ * HMAC-SHA-256 over hashers the caller owns: allocate one, then for each tag
+ * `begin` with the key, `update` with the message, and `finishInto` the
+ * caller's array. The tag is the one `hmacSha256` answers.
+ *
+ *     const mac = new HmacSha256Scratch();          // once, outside the loop
+ *     mac.begin(key, 0, key.length);
+ *     mac.update(message, 0, message.length);
+ *     mac.finishInto(tag, 0);                       // 32 bytes at tag[0]
+ *
+ * The key block is wiped with `secureZero` once both hashers have absorbed
+ * it, and so is every digest on the way; `wipe` zeroes the hashers too, for a
+ * caller done with the key. A key or tag window outside its array panics, as
+ * a message window does in `Sha256.update`.
+ */
+export class HmacSha256Scratch {
+  /** H(K XOR ipad, …): keyed by `begin`, fed the message by `update`. */
+  inner: Sha256
+  /** H(K XOR opad, …): keyed by `begin`, fed the inner digest by `finishInto`. */
+  outer: Sha256
+  /** A hasher nothing is ever fed: the initial hash value `begin` copies from. */
+  fresh: Sha256
+  /** One key block XOR a pad, wiped as soon as it is absorbed. */
+  pad: u8[]
+  /** The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. */
+  keyHash: u8[]
+
+  constructor() {
+    this.inner = new Sha256()
+    this.outer = new Sha256()
+    this.fresh = new Sha256()
+    this.pad = new Array<u8>(SHA256_BLOCK)
+    this.keyHash = new Array<u8>(SHA256_SIZE)
+  }
+
+  /** Keys a new computation with `key[off .. off + len)`, a key longer than 64 bytes by its SHA-256 (RFC 2104 §2). */
+  begin(key: u8[], off: i32, len: i32): void {
+    if (!hmacWindowFits(toI32(key.length), off, len)) {
+      panic("HmacSha256Scratch: the key window is outside its array")
+    }
+    if (len <= SHA256_BLOCK) {
+      this.keyBlocks(key, off, len)
+      return
+    }
+    hmacCopySha256(this.fresh, this.inner)
+    this.inner.update(key, off, len)
+    const digest: u8[] = this.inner.digest()
+    for (let i: i32 = 0; i < toI32(digest.length) && i < toI32(this.keyHash.length); i += 1) {
+      this.keyHash[i] = digest[i]
+    }
+    secureZero(digest)
+    this.keyBlocks(this.keyHash, HMAC_FROM, SHA256_SIZE)
+    secureZero(this.keyHash)
+  }
+
+  /**
+   * Absorbs `key[off .. off + len)`, no longer than a block, XOR ipad into the
+   * inner hasher and XOR opad into the outer one, each started again, and
+   * wipes the block. A method of its own so that `begin` never keeps the
+   * caller's key in a local it reassigns, which would make the key look
+   * stored to the arena analysis.
+   */
+  keyBlocks(key: u8[], off: i32, len: i32): void {
+    hmacPadInto(this.pad, key, off, len, HMAC_IPAD)
+    hmacCopySha256(this.fresh, this.inner)
+    this.inner.update(this.pad, HMAC_FROM, SHA256_BLOCK)
+    hmacPadInto(this.pad, key, off, len, HMAC_OPAD)
+    hmacCopySha256(this.fresh, this.outer)
+    this.outer.update(this.pad, HMAC_FROM, SHA256_BLOCK)
+    secureZero(this.pad)
+  }
+
+  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. */
+  update(data: u8[], off: i32, len: i32): void {
+    this.inner.update(data, off, len)
+  }
+
+  /** Writes the 32-byte tag at `out[at]` and ends the computation; a window outside `out` panics. */
+  finishInto(out: u8[], at: i32): void {
+    if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
+      panic("HmacSha256Scratch: the tag window is outside its array")
+    }
+    const innerDigest: u8[] = this.inner.digest()
+    this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
+    secureZero(innerDigest)
+    const tag: u8[] = this.outer.digest()
+    for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
+      out[at + i] = tag[i]
+    }
+    secureZero(tag)
+  }
+
+  /** Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. */
+  wipe(): void {
+    hmacWipeSha256(this.inner)
+    hmacWipeSha256(this.outer)
+  }
+}
+
+/**
+ * HMAC-SHA-384 over hashers the caller owns, with `HmacSha256Scratch`'s
+ * methods. The block is 128 bytes and the tag 48.
+ */
+export class HmacSha384Scratch {
+  /** H(K XOR ipad, …): keyed by `begin`, fed the message by `update`. */
+  inner: Sha384
+  /** H(K XOR opad, …): keyed by `begin`, fed the inner digest by `finishInto`. */
+  outer: Sha384
+  /** A hasher nothing is ever fed: the initial hash value `begin` copies from. */
+  fresh: Sha384
+  /** One key block XOR a pad, wiped as soon as it is absorbed. */
+  pad: u8[]
+  /** The SHA-384 of a key longer than a block; wiped once used. */
+  keyHash: u8[]
+
+  constructor() {
+    this.inner = new Sha384()
+    this.outer = new Sha384()
+    this.fresh = new Sha384()
+    this.pad = new Array<u8>(SHA512_BLOCK)
+    this.keyHash = new Array<u8>(SHA384_SIZE)
+  }
+
+  /** Keys a new computation with `key[off .. off + len)`, a key longer than 128 bytes by its SHA-384 (RFC 2104 §2). */
+  begin(key: u8[], off: i32, len: i32): void {
+    if (!hmacWindowFits(toI32(key.length), off, len)) {
+      panic("HmacSha384Scratch: the key window is outside its array")
+    }
+    if (len <= SHA512_BLOCK) {
+      this.keyBlocks(key, off, len)
+      return
+    }
+    hmacCopySha384(this.fresh, this.inner)
+    this.inner.update(key, off, len)
+    const digest: u8[] = this.inner.digest()
+    for (let i: i32 = 0; i < toI32(digest.length) && i < toI32(this.keyHash.length); i += 1) {
+      this.keyHash[i] = digest[i]
+    }
+    secureZero(digest)
+    this.keyBlocks(this.keyHash, HMAC_FROM, SHA384_SIZE)
+    secureZero(this.keyHash)
+  }
+
+  /**
+   * Absorbs `key[off .. off + len)`, no longer than a block, XOR ipad into the
+   * inner hasher and XOR opad into the outer one, each started again, and
+   * wipes the block. A method of its own so that `begin` never keeps the
+   * caller's key in a local it reassigns, which would make the key look
+   * stored to the arena analysis.
+   */
+  keyBlocks(key: u8[], off: i32, len: i32): void {
+    hmacPadInto(this.pad, key, off, len, HMAC_IPAD)
+    hmacCopySha384(this.fresh, this.inner)
+    this.inner.update(this.pad, HMAC_FROM, SHA512_BLOCK)
+    hmacPadInto(this.pad, key, off, len, HMAC_OPAD)
+    hmacCopySha384(this.fresh, this.outer)
+    this.outer.update(this.pad, HMAC_FROM, SHA512_BLOCK)
+    secureZero(this.pad)
+  }
+
+  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in the hasher. */
+  update(data: u8[], off: i32, len: i32): void {
+    this.inner.update(data, off, len)
+  }
+
+  /** Writes the 48-byte tag at `out[at]` and ends the computation; a window outside `out` panics. */
+  finishInto(out: u8[], at: i32): void {
+    if (!hmacWindowFits(toI32(out.length), at, SHA384_SIZE)) {
+      panic("HmacSha384Scratch: the tag window is outside its array")
+    }
+    const innerDigest: u8[] = this.inner.digest()
+    this.outer.update(innerDigest, HMAC_FROM, SHA384_SIZE)
+    secureZero(innerDigest)
+    const tag: u8[] = this.outer.digest()
+    for (let i: i32 = 0; i < SHA384_SIZE && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
+      out[at + i] = tag[i]
+    }
+    secureZero(tag)
+  }
+
+  /** Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. */
+  wipe(): void {
+    hmacWipeSha384(this.inner)
+    hmacWipeSha384(this.outer)
+  }
+}

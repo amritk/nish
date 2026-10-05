@@ -31,10 +31,12 @@
  * each direction — and `accept` hands the next connection a free slot and
  * reuses it once the program `close`s it (WP34 N9). When every slot is busy
  * a new connection is accepted and closed at once, so the listener does not
- * stay readable; the program sees `TLS_TCP_POOL_FULL`. Application data
- * allocates nothing that outlives a record. The handshake does allocate what
- * `TlsServer` keeps, which stays until the arena is reset (TLS-3 in
- * `docs/security/tls.md`).
+ * stay readable; the program sees `TLS_TCP_POOL_FULL`. Each slot keeps its
+ * own `TlsServer`, which `accept` restarts for the connection, so neither the
+ * handshake nor application data allocates anything that outlives a call:
+ * a thousand connections through one slot leave `Arena.mark()` where the
+ * first left it, but for the schedule `aesKey` leaves per key install under
+ * an AES suite (TLS-3 in `docs/security/tls.md`, `tests/link/net_tls_memory`).
  *
  * **Randomness is the caller's.** `accept` takes the 32-byte server random and
  * the 32-byte x25519 private key the handshake uses, as `TlsServer` does, so a
@@ -127,12 +129,12 @@ export class TlsTcpServer {
     this.keys = []
     this.randoms = []
     const none: u8[] = []
-    // A placeholder handshake, refused by `TlsServer` for its empty
-    // randomness, so each slot starts out failed until `accept` gives it one.
-    const idle: TlsServer = new TlsServer(config, none, none)
     const slots: i32 = size < 1 ? 1 : size
     for (let k: i32 = 0; k < slots; k++) {
-      this.connections.push(new TlsRecordServer(idle))
+      // Each slot's own handshake, refused by `TlsServer` for its empty
+      // randomness, so the slot starts out failed until `accept` restarts it
+      // for a connection; every later connection reuses its buffers.
+      this.connections.push(new TlsRecordServer(new TlsServer(config, none, none)))
       this.fds.push(TLS_TCP_FREE)
       this.keys.push(new Array<u8>(TLS_TCP_KEY_SIZE))
       this.randoms.push(new Array<u8>(TLS_TCP_KEY_SIZE))
@@ -229,7 +231,9 @@ export class TlsTcpServer {
       key[k] = ephemeralPrivate[k]
     }
     secureZero(ephemeralPrivate)
-    this.connections[slot].start(new TlsServer(this.config, random, key))
+    const conn: TlsRecordServer = this.connections[slot]
+    conn.tls.restart(random, key)
+    conn.start(conn.tls)
     return slot
   }
 
