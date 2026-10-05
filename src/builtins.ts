@@ -1026,9 +1026,18 @@ const checkBuffer = (
  * Whether an expression statement ends the path: `process.exit(n)` and
  * `panic(m)` do, exactly as `return` does, which is what lets a non-`void`
  * function end with one.
+ *
+ * Only the builtins count, and the call is asked how the checker resolved
+ * it rather than how it is spelled: `nodeCallees` is `null` only for a
+ * builtin, so `process.exit(3)` on a parameter `process: Proc`, or `panic(3)`
+ * through a function parameter called `panic`, is the user call it is and
+ * falls through. The bounds proof drops a check behind a path this answers
+ * `true` for, so a spelling match here would be an out-of-bounds read
+ * (`tests/cases/bounds_guard_shadowed_exit`, `bounds_guard_shadowed_panic`).
+ * Every caller asks after the expression has been checked.
  */
 export const terminatesControlFlow = (ctx: CheckContext, expr: Node): boolean => {
-  if (expr.kind !== N_CALL) {
+  if (expr.kind !== N_CALL || ctx.program.nodeCallees[expr.id] !== null) {
     return false
   }
   const callee = expr.children[0]

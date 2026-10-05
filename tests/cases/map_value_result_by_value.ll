@@ -1564,34 +1564,24 @@ if.end:
   %8 = getelementptr inbounds %struct.Map$i32$res.i32.i32, %struct.Map$i32$res.i32.i32* %this, i32 0, i32 5
   %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !26
   %10 = sext i32 %index to i64
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %13 = icmp ult i64 %10, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %10, i64 %12)
-  unreachable
-
-bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %16 = bitcast i8* %15 to %struct.nish_result.i32.i32**
-  %17 = getelementptr inbounds %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %16, i64 %10
-  %18 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %17, align 8, !alias.scope !4, !noalias !3, !tbaa !14
-  %19 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %18, i32 0, i32 0
-  %20 = load i1, i1* %19, align 1
-  %21 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %18, i32 0, i32 2
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %13 = bitcast i8* %12 to %struct.nish_result.i32.i32**
+  %14 = getelementptr inbounds %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %13, i64 %10
+  %15 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %14, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %16 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %15, i32 0, i32 0
+  %17 = load i1, i1* %16, align 1
+  %18 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %15, i32 0, i32 2
+  %19 = load i32, i32* %18, align 4
+  %20 = zext i32 %19 to i64
+  %21 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %15, i32 0, i32 1
   %22 = load i32, i32* %21, align 4
   %23 = zext i32 %22 to i64
-  %24 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %18, i32 0, i32 1
-  %25 = load i32, i32* %24, align 4
-  %26 = zext i32 %25 to i64
-  %27 = select i1 %20, i64 %26, i64 %23
-  %28 = shl i64 %27, 32
-  %29 = zext i1 %20 to i64
-  %30 = or i64 %28, %29
-  ret i64 %30
+  %24 = select i1 %17, i64 %23, i64 %20
+  %25 = shl i64 %24, 32
+  %26 = zext i1 %17 to i64
+  %27 = or i64 %25, %26
+  ret i64 %27
 }
 
 define internal void @nish.Map$i32$res.i32.i32.setValueAt(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i64 noundef %value) #0 {

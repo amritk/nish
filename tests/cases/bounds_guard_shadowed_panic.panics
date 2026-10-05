@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"ignore","symbol":"ignore","module":"tests/cases/bounds_guard_shadowed_panic.ts","line":5,"panics":[{"kind":"oom","line":6,"column":15,"allowed":true}]},
+{"name":"test","symbol":"test","module":"tests/cases/bounds_guard_shadowed_panic.ts","line":16,"panics":[{"kind":"call","line":16,"column":35,"callee":"pick<ignore>","via":"index"}]},
+{"name":"pick<ignore>","symbol":"pick$fn.6.ignore","module":"tests/cases/bounds_guard_shadowed_panic.ts","line":9,"panics":[{"kind":"index","line":13,"column":10,"proven":false}]}
+]}

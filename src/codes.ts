@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 582
+export const RULE_COUNT: i32 = 583
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1248,6 +1248,8 @@ const performanceRules = (): string[] => [
 const deprecationRules = (): string[] => [
   "is undefined behaviour the compiler does not check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it",
   "NL7001",
+  " is unchecked only because of --unchecked-indexing, which is deprecated: ",
+  "NL7002",
 ]
 
 /** The code of the first fragment of one table that `text` contains, or `UNCODED`. */

@@ -67,6 +67,7 @@ import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
+import { reportUncheckedIndexSites } from "./unsafe-migrate"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import {
   allCapabilities,
@@ -1176,6 +1177,7 @@ export class Compilation {
     proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     this.reportArenaLoops()
     this.reportDeprecatedFlags()
+    this.reportUncheckedIndexSites(programs)
     this.checkParallel()
     this.keyEnumsBySymbol()
     if (this.sink.hasErrors()) {
@@ -1692,7 +1694,7 @@ export class Compilation {
         entry,
         0,
         0,
-        `--unchecked-indexing ${reach} \`uncheckedGet\` and \`uncheckedSet\` from \`${unsafeModule()}\` where an index is meant to go unchecked`
+        `--unchecked-indexing ${reach} \`uncheckedGet\` and \`uncheckedSet\` from \`${unsafeModule()}\` where an index is meant to go unchecked: \`${CLI} --fix\` rewrites each site; then drop the flag`
       )
     }
     if (this.opts.wrapping) {
@@ -1702,6 +1704,20 @@ export class Compilation {
         0,
         `--wrapping ${reach} \`wrappingAdd\`, \`wrappingSub\` and \`wrappingMul\` from \`${unsafeModule()}\` where an operation is meant to wrap`
       )
+    }
+  }
+
+  /**
+   * NL7002: each site `--unchecked-indexing` leaves unchecked, as a
+   * deprecation of its own with the `nish:unsafe` rewrite that states the
+   * same decision there (`src/unsafe-migrate.ts`). NL9014 says the flag is
+   * deprecated once; these say where it still decides something, at the place
+   * a fix can edit. Read here, beside it, because the per-site proofs are
+   * final once `proveCallSiteRanges` has run.
+   */
+  reportUncheckedIndexSites(programs: CheckedProgram[]): void {
+    if (this.opts.uncheckedIndexing) {
+      reportUncheckedIndexSites(programs, this.table, this.sink)
     }
   }
 

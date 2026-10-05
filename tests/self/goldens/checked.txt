@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 915 programs, 62654 dump lines.
+# 920 programs, 62750 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3374,6 +3374,107 @@ function test(): i32 -> @test [exported]
   callee 18:28 shiftRight -> @shiftRight
   callee 18:49 shiftRightUnsigned -> @shiftRightUnsigned
   callee 18:78 shiftLeft -> @shiftLeft
+program tests/cases/bounds_exit_guard.ts
+module tests/cases/bounds_exit_guard.ts (entry)
+function sumAt(xs: i32[], at: i32[]): i32 -> @sumAt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  calls: nish_exit nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer at: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 4:7 total: i32 (let)
+  local 5:12 k: i32 (let)
+  local 6:11 i: i32 (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sumAt
+  calls: sumAt
+  stackSites=2 stackLocals=0
+  callee 15:35 sumAt -> @sumAt
+program tests/cases/bounds_guard_not_exit.ts
+module tests/cases/bounds_guard_not_exit.ts (entry)
+function sumAt(xs: i32[], at: i32[]): i32 -> @sumAt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_panic_index nish_panic_overflow nish_print
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer at: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 5:7 total: i32 (let)
+  local 6:12 k: i32 (let)
+  local 7:11 i: i32 (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sumAt
+  calls: sumAt
+  stackSites=2 stackLocals=0
+  callee 16:35 sumAt -> @sumAt
+program tests/cases/bounds_guard_shadowed_exit.ts
+module tests/cases/bounds_guard_shadowed_exit.ts (entry)
+struct Proc (class) size=4 align=4
+  field calls: i32 index=0 offset=0 initialized
+  method exit -> @Proc.exit
+function Proc.exit(this: Proc, code: i32): void -> @Proc.exit [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 8:5
+  calls: nish_panic_overflow
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pick(process: Proc, xs: i32[], i: i32): i32 -> @pick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Proc.exit
+  escaping: i
+  calls: Proc.exit nish_panic_index
+  pointer process: size=4 writesThrough=true captured=false passedTo=Proc.exit#0
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 14:5 Proc.exit -> @Proc.exit
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pick
+  calls: pick
+  stackSites=2 stackLocals=0
+  callee 19:35 pick -> @pick
+program tests/cases/bounds_guard_shadowed_panic.ts
+module tests/cases/bounds_guard_shadowed_panic.ts (entry)
+function ignore(code: i32): void -> @ignore
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pick$fn.6.ignore
+  calls: pick$fn.6.ignore
+  stackSites=1 stackLocals=0
+  callee 16:35 pick<ignore> -> @pick$fn.6.ignore
+function pick<ignore>(panic: void, xs: i32[], i: i32): i32 -> @pick$fn.6.ignore [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ignore
+  escaping: i
+  calls: ignore nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 11:5 ignore -> @ignore
+program tests/cases/bounds_panic_guard.ts
+module tests/cases/bounds_panic_guard.ts (entry)
+function sumAt(xs: i32[], at: i32[]): i32 -> @sumAt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_panic_overflow nish_write
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer at: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 5:7 total: i32 (let)
+  local 6:12 k: i32 (let)
+  local 7:11 i: i32 (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sumAt
+  calls: sumAt
+  stackSites=2 stackLocals=0
+  callee 16:35 sumAt -> @sumAt
 program tests/cases/bytes_fill.ts --number-mode f64
 module tests/cases/bytes_fill.ts (entry)
 function show(xs: u8[]): string -> @show
@@ -12202,14 +12303,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -12527,14 +12628,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -15262,14 +15363,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -15393,7 +15494,7 @@ function Set<i32>.keyAt(this: Set<i32>, index: i32): i32 -> @nish.Set$i32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.insertAt(this: Set<i32>, absent: i64, key: i32): void -> @nish.Set$i32.insertAt [exported method instance]
@@ -15733,14 +15834,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -16057,7 +16158,7 @@ function Set<i32>.keyAt(this: Set<i32>, index: i32): i32 -> @nish.Set$i32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.insertAt(this: Set<i32>, absent: i64, key: i32): void -> @nish.Set$i32.insertAt [exported method instance]
@@ -16331,7 +16432,7 @@ function Set<i32>.keyAt(this: Set<i32>, index: i32): i32 -> @nish.Set$i32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.insertAt(this: Set<i32>, absent: i64, key: i32): void -> @nish.Set$i32.insertAt [exported method instance]
@@ -16627,14 +16728,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -17019,14 +17120,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -17153,14 +17254,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -17536,14 +17637,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -17898,14 +17999,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -18236,14 +18337,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -18577,14 +18678,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -18995,14 +19096,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -19129,14 +19230,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -19261,7 +19362,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -19605,14 +19706,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -19946,14 +20047,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -20284,14 +20385,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -20625,14 +20726,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -20966,14 +21067,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -21310,14 +21411,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -21651,14 +21752,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -21992,14 +22093,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -22335,14 +22436,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -22680,14 +22781,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -23014,7 +23115,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -23310,14 +23411,14 @@ function Map<string, string>.keyAt(this: Map<string, string>, index: i32): strin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, string>.valueAt(this: Map<string, string>, index: i32): string -> @nish.Map$str$str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, string>.setValueAt(this: Map<string, string>, index: i32, value: string): void -> @nish.Map$str$str.setValueAt [exported method instance]
@@ -23634,14 +23735,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -23969,7 +24070,7 @@ function Set<i32>.keyAt(this: Set<i32>, index: i32): i32 -> @nish.Set$i32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.insertAt(this: Set<i32>, absent: i64, key: i32): void -> @nish.Set$i32.insertAt [exported method instance]
@@ -24302,14 +24403,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -24434,7 +24535,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -24749,14 +24850,14 @@ function Map<i32, f64>.keyAt(this: Map<i32, f64>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, f64>.valueAt(this: Map<i32, f64>, index: i32): f64 -> @nish.Map$i32$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, f64>.setValueAt(this: Map<i32, f64>, index: i32, value: f64): void -> @nish.Map$i32$f64.setValueAt [exported method instance]
@@ -25113,14 +25214,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -25245,7 +25346,7 @@ function Set<f64>.keyAt(this: Set<f64>, index: i32): f64 -> @nish.Set$f64.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<f64>.insertAt(this: Set<f64>, absent: i64, key: f64): void -> @nish.Set$f64.insertAt [exported method instance]
@@ -25542,14 +25643,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -25903,14 +26004,14 @@ function Map<string, Node>.keyAt(this: Map<string, Node>, index: i32): string ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node>.valueAt(this: Map<string, Node>, index: i32): Node -> @nish.Map$str$$Node.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node>.setValueAt(this: Map<string, Node>, index: i32, value: Node): void -> @nish.Map$str$$Node.setValueAt [exported method instance]
@@ -26258,14 +26359,14 @@ function Map<string, Square>.keyAt(this: Map<string, Square>, index: i32): strin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Square>.valueAt(this: Map<string, Square>, index: i32): Square -> @nish.Map$str$$Square.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Square>.setValueAt(this: Map<string, Square>, index: i32, value: Square): void -> @nish.Map$str$$Square.setValueAt [exported method instance]
@@ -26609,14 +26710,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -26939,14 +27040,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -27274,14 +27375,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -27654,14 +27755,14 @@ function Map<string, Node>.keyAt(this: Map<string, Node>, index: i32): string ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node>.valueAt(this: Map<string, Node>, index: i32): Node -> @nish.Map$str$$Node.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node>.setValueAt(this: Map<string, Node>, index: i32, value: Node): void -> @nish.Map$str$$Node.setValueAt [exported method instance]
@@ -27791,14 +27892,14 @@ function Map<string, Node | null>.keyAt(this: Map<string, Node | null>, index: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node | null>.valueAt(this: Map<string, Node | null>, index: i32): Node | null -> @nish.Map$str$opt.$Node.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Node | null>.setValueAt(this: Map<string, Node | null>, index: i32, value: Node | null): void -> @nish.Map$str$opt.$Node.setValueAt [exported method instance]
@@ -28165,14 +28266,14 @@ function Map<string, boolean>.keyAt(this: Map<string, boolean>, index: i32): str
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, boolean>.valueAt(this: Map<string, boolean>, index: i32): boolean -> @nish.Map$str$bool.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, boolean>.setValueAt(this: Map<string, boolean>, index: i32, value: boolean): void -> @nish.Map$str$bool.setValueAt [exported method instance]
@@ -28498,14 +28599,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -28827,14 +28928,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -29135,14 +29236,14 @@ function Map<i32, string>.keyAt(this: Map<i32, string>, index: i32): i32 -> @nis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, string>.valueAt(this: Map<i32, string>, index: i32): string -> @nish.Map$i32$str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, string>.setValueAt(this: Map<i32, string>, index: i32, value: string): void -> @nish.Map$i32$str.setValueAt [exported method instance]
@@ -29543,14 +29644,14 @@ function Map<string, Color>.keyAt(this: Map<string, Color>, index: i32): string 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Color>.valueAt(this: Map<string, Color>, index: i32): Color -> @nish.Map$str$en$Color.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Color>.setValueAt(this: Map<string, Color>, index: i32, value: Color): void -> @nish.Map$str$en$Color.setValueAt [exported method instance]
@@ -29676,14 +29777,14 @@ function Map<i32, i64>.keyAt(this: Map<i32, i64>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i64>.valueAt(this: Map<i32, i64>, index: i32): i64 -> @nish.Map$i32$i64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i64>.setValueAt(this: Map<i32, i64>, index: i32, value: i64): void -> @nish.Map$i32$i64.setValueAt [exported method instance]
@@ -29809,14 +29910,14 @@ function Map<i32, u64>.keyAt(this: Map<i32, u64>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, u64>.valueAt(this: Map<i32, u64>, index: i32): u64 -> @nish.Map$i32$u64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, u64>.setValueAt(this: Map<i32, u64>, index: i32, value: u64): void -> @nish.Map$i32$u64.setValueAt [exported method instance]
@@ -29942,14 +30043,14 @@ function Map<i32, f32>.keyAt(this: Map<i32, f32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, f32>.valueAt(this: Map<i32, f32>, index: i32): f32 -> @nish.Map$i32$f32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, f32>.setValueAt(this: Map<i32, f32>, index: i32, value: f32): void -> @nish.Map$i32$f32.setValueAt [exported method instance]
@@ -30359,14 +30460,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -30702,14 +30803,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -31043,14 +31144,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -31363,14 +31464,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -31711,14 +31812,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -32028,14 +32129,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -32346,14 +32447,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -32762,14 +32863,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -32896,14 +32997,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -33337,7 +33438,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -33445,14 +33546,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -33577,7 +33678,7 @@ function Set<f64>.keyAt(this: Set<f64>, index: i32): f64 -> @nish.Set$f64.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<f64>.insertAt(this: Set<f64>, absent: i64, key: f64): void -> @nish.Set$f64.insertAt [exported method instance]
@@ -33912,14 +34013,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -34231,14 +34332,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -34581,14 +34682,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -34923,14 +35024,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -35266,14 +35367,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -35584,14 +35685,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -35916,14 +36017,14 @@ function Map<string, f64>.keyAt(this: Map<string, f64>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.valueAt(this: Map<string, f64>, index: i32): f64 -> @nish.Map$str$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, f64>.setValueAt(this: Map<string, f64>, index: i32, value: f64): void -> @nish.Map$str$f64.setValueAt [exported method instance]
@@ -36251,14 +36352,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -36566,14 +36667,14 @@ function Map<boolean, string>.keyAt(this: Map<boolean, string>, index: i32): boo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<boolean, string>.valueAt(this: Map<boolean, string>, index: i32): string -> @nish.Map$bool$str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<boolean, string>.setValueAt(this: Map<boolean, string>, index: i32, value: string): void -> @nish.Map$bool$str.setValueAt [exported method instance]
@@ -36907,14 +37008,14 @@ function Map<Point, string>.keyAt(this: Map<Point, string>, index: i32): Point -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<Point, string>.valueAt(this: Map<Point, string>, index: i32): string -> @nish.Map$$Point$str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<Point, string>.setValueAt(this: Map<Point, string>, index: i32, value: string): void -> @nish.Map$$Point$str.setValueAt [exported method instance]
@@ -37237,14 +37338,14 @@ function Map<Fruit, i32>.keyAt(this: Map<Fruit, i32>, index: i32): Fruit -> @nis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<Fruit, i32>.valueAt(this: Map<Fruit, i32>, index: i32): i32 -> @nish.Map$en$Fruit$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<Fruit, i32>.setValueAt(this: Map<Fruit, i32>, index: i32, value: i32): void -> @nish.Map$en$Fruit$i32.setValueAt [exported method instance]
@@ -37568,14 +37669,14 @@ function Map<f32, i32>.keyAt(this: Map<f32, i32>, index: i32): f32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f32, i32>.valueAt(this: Map<f32, i32>, index: i32): i32 -> @nish.Map$f32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f32, i32>.setValueAt(this: Map<f32, i32>, index: i32, value: i32): void -> @nish.Map$f32$i32.setValueAt [exported method instance]
@@ -37983,14 +38084,14 @@ function Map<f32, i32>.keyAt(this: Map<f32, i32>, index: i32): f32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f32, i32>.valueAt(this: Map<f32, i32>, index: i32): i32 -> @nish.Map$f32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f32, i32>.setValueAt(this: Map<f32, i32>, index: i32, value: i32): void -> @nish.Map$f32$i32.setValueAt [exported method instance]
@@ -38114,7 +38215,7 @@ function Set<f32>.keyAt(this: Set<f32>, index: i32): f32 -> @nish.Set$f32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<f32>.insertAt(this: Set<f32>, absent: i64, key: f32): void -> @nish.Set$f32.insertAt [exported method instance]
@@ -38428,14 +38529,14 @@ function Map<f64, string>.keyAt(this: Map<f64, string>, index: i32): f64 -> @nis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, string>.valueAt(this: Map<f64, string>, index: i32): string -> @nish.Map$f64$str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, string>.setValueAt(this: Map<f64, string>, index: i32, value: string): void -> @nish.Map$f64$str.setValueAt [exported method instance]
@@ -38773,14 +38874,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -39099,14 +39200,14 @@ function Map<i64, i32>.keyAt(this: Map<i64, i32>, index: i32): i64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i64, i32>.valueAt(this: Map<i64, i32>, index: i32): i32 -> @nish.Map$i64$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i64, i32>.setValueAt(this: Map<i64, i32>, index: i32, value: i32): void -> @nish.Map$i64$i32.setValueAt [exported method instance]
@@ -39559,14 +39660,14 @@ function Map<f64, f64>.keyAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.valueAt(this: Map<f64, f64>, index: i32): f64 -> @nish.Map$f64$f64.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, f64>.setValueAt(this: Map<f64, f64>, index: i32, value: f64): void -> @nish.Map$f64$f64.setValueAt [exported method instance]
@@ -39691,7 +39792,7 @@ function Set<f64>.keyAt(this: Set<f64>, index: i32): f64 -> @nish.Set$f64.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<f64>.insertAt(this: Set<f64>, absent: i64, key: f64): void -> @nish.Set$f64.insertAt [exported method instance]
@@ -39799,14 +39900,14 @@ function Map<f64, string>.keyAt(this: Map<f64, string>, index: i32): f64 -> @nis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, string>.valueAt(this: Map<f64, string>, index: i32): string -> @nish.Map$f64$str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<f64, string>.setValueAt(this: Map<f64, string>, index: i32, value: string): void -> @nish.Map$f64$str.setValueAt [exported method instance]
@@ -40136,14 +40237,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -40478,14 +40579,14 @@ function Map<u16, i32>.keyAt(this: Map<u16, i32>, index: i32): u16 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u16, i32>.valueAt(this: Map<u16, i32>, index: i32): i32 -> @nish.Map$u16$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u16, i32>.setValueAt(this: Map<u16, i32>, index: i32, value: i32): void -> @nish.Map$u16$i32.setValueAt [exported method instance]
@@ -40819,14 +40920,14 @@ function Map<u32, i32>.keyAt(this: Map<u32, i32>, index: i32): u32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u32, i32>.valueAt(this: Map<u32, i32>, index: i32): i32 -> @nish.Map$u32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u32, i32>.setValueAt(this: Map<u32, i32>, index: i32, value: i32): void -> @nish.Map$u32$i32.setValueAt [exported method instance]
@@ -41155,14 +41256,14 @@ function Map<u64, i32>.keyAt(this: Map<u64, i32>, index: i32): u64 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u64, i32>.valueAt(this: Map<u64, i32>, index: i32): i32 -> @nish.Map$u64$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u64, i32>.setValueAt(this: Map<u64, i32>, index: i32, value: i32): void -> @nish.Map$u64$i32.setValueAt [exported method instance]
@@ -41496,14 +41597,14 @@ function Map<u8, i32>.keyAt(this: Map<u8, i32>, index: i32): u8 -> @nish.Map$u8$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u8, i32>.valueAt(this: Map<u8, i32>, index: i32): i32 -> @nish.Map$u8$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<u8, i32>.setValueAt(this: Map<u8, i32>, index: i32, value: i32): void -> @nish.Map$u8$i32.setValueAt [exported method instance]
@@ -41870,14 +41971,14 @@ function Map<string, Result<i32, string>>.keyAt(this: Map<string, Result<i32, st
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Result<i32, string>>.valueAt(this: Map<string, Result<i32, string>>, index: i32): Result<i32, string> -> @nish.Map$str$res.i32.str.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, Result<i32, string>>.setValueAt(this: Map<string, Result<i32, string>>, index: i32, value: Result<i32, string>): void -> @nish.Map$str$res.i32.str.setValueAt [exported method instance]
@@ -42240,14 +42341,14 @@ function Map<i32, Result<i32, i32>>.keyAt(this: Map<i32, Result<i32, i32>>, inde
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, Result<i32, i32>>.valueAt(this: Map<i32, Result<i32, i32>>, index: i32): Result<i32, i32> -> @nish.Map$i32$res.i32.i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=12
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, Result<i32, i32>>.setValueAt(this: Map<i32, Result<i32, i32>>, index: i32, value: Result<i32, i32>): void -> @nish.Map$i32$res.i32.i32.setValueAt [exported method instance]
@@ -48563,7 +48664,7 @@ function Set<i32>.keyAt(this: Set<i32>, index: i32): i32 -> @nish.Set$i32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.insertAt(this: Set<i32>, absent: i64, key: i32): void -> @nish.Set$i32.insertAt [exported method instance]
@@ -48845,7 +48946,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -49129,7 +49230,7 @@ function Set<f64>.keyAt(this: Set<f64>, index: i32): f64 -> @nish.Set$f64.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<f64>.insertAt(this: Set<f64>, absent: i64, key: f64): void -> @nish.Set$f64.insertAt [exported method instance]
@@ -49412,7 +49513,7 @@ function Set<f64>.keyAt(this: Set<f64>, index: i32): f64 -> @nish.Set$f64.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_panic_index nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<f64>.insertAt(this: Set<f64>, absent: i64, key: f64): void -> @nish.Set$f64.insertAt [exported method instance]
@@ -49697,7 +49798,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -50204,14 +50305,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -51166,7 +51267,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -51274,14 +51375,14 @@ function Map<string, boolean>.keyAt(this: Map<string, boolean>, index: i32): str
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, boolean>.valueAt(this: Map<string, boolean>, index: i32): boolean -> @nish.Map$str$bool.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, boolean>.setValueAt(this: Map<string, boolean>, index: i32, value: boolean): void -> @nish.Map$str$bool.setValueAt [exported method instance]
@@ -51820,14 +51921,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -53363,14 +53464,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -53713,14 +53814,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -53844,7 +53945,7 @@ function Set<string>.keyAt(this: Set<string>, index: i32): string -> @nish.Set$s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<string>.insertAt(this: Set<string>, absent: i64, key: string): void -> @nish.Set$str.insertAt [exported method instance]
@@ -54148,14 +54249,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -54461,7 +54562,7 @@ function Set<i32>.keyAt(this: Set<i32>, index: i32): i32 -> @nish.Set$i32.keyAt 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Set<i32>.insertAt(this: Set<i32>, absent: i64, key: i32): void -> @nish.Set$i32.insertAt [exported method instance]
@@ -54740,14 +54841,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -56795,14 +56896,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -56928,14 +57029,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -59395,14 +59496,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -59528,14 +59629,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]
@@ -60061,14 +60162,14 @@ function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
@@ -60194,14 +60295,14 @@ function Map<i32, i32>.keyAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.valueAt(this: Map<i32, i32>, index: i32): i32 -> @nish.Map$i32$i32.valueAt [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: index
-  calls: nish_exit nish_panic_index nish_write
+  calls: nish_exit nish_write
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Map<i32, i32>.setValueAt(this: Map<i32, i32>, index: i32, value: i32): void -> @nish.Map$i32$i32.setValueAt [exported method instance]

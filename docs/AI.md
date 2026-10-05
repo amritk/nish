@@ -86,7 +86,10 @@ changes or five rounds pass; then it reports what is left exactly as a plain
 run would, `--json` included, and exits with that run's code. It writes no IR,
 so it refuses `-o` and `--link`. It rewrites your files in place, with no
 backup, so run it on a committed or backed-up tree. Run it first, then read
-what remains.
+what remains. A warning can carry a fix too, and `--fix` applies it only when the program
+compiles and the warning would be printed: `NL9007`'s inserts the guard that
+proves an index in range (not under `--no-warn-performance`), and `NL7002`'s
+migrates a site off `--unchecked-indexing` (below).
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -172,6 +175,7 @@ rejects. This table is the highest-value part of the page.
 | `export default f` | `` `export default` / `export =` are not supported; use a named `export function` `` | `export const f = …` |
 | `export { f }`, `export * from "./m"`, `export default function f` | `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself `` / `` `export default` is not supported; use a named `export function` `` | `export` on the declaration itself |
 | `import d from "./m"`, `import * as m from "./m"`, `import "./m"`, `import type { T } from "./m"` | `` Default imports are not supported; use `import { d } from "./m"` `` / `` Namespace imports (`import * as m`) are not supported; import functions by name `` / `` Side-effect imports (`import "./m"`) are not supported; modules have no top-level code `` / `Type-only imports are not supported` | `import { d, T } from "./m"`, naming what you use |
+| `total += xs[i]` in a loop, with `i` from somewhere the compiler cannot bound | it compiles, with an `NL9007` performance warning: `` `i` is not proven to be in range for `xs` here, so this access keeps its bounds check `` | a guard before the statement, `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`, which proves both ends in either number mode; `nish --fix` inserts it where it changes nothing the program does |
 | `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
 | `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
@@ -222,7 +226,12 @@ numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
 Calling one without the import is NL2456. `--unchecked-indexing` and
 `--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
-never a dependency or `nish/`.
+never a dependency or `nish/`. To migrate off `--unchecked-indexing`, run
+`nish --unchecked-indexing --fix` on your files: each index the flag leaves
+unchecked is a `deprecation` warning of its own (NL7002), and where the site
+is a number array with an `i32` index its `fix` rewrites it to `uncheckedGet`
+or `uncheckedSet` and adds the import. A site with no rewrite keeps its
+warning; dropping the flag gives it back its bounds check.
 
 ```ts nish:ok
 import { uncheckedGet, wrappingAdd, wrappingMul } from "nish:unsafe";
