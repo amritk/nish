@@ -230,7 +230,7 @@ is its plan. [README.md](README.md) indexes them.
 | 19 | Stage0 retirement | landed (M6) | [wp19](wp19-stage0-retirement.md) |
 | 20 | Threads: the runtime half | T0 and the partitioner built; the surface moved to WP29 | [wp20](wp20-threads.md) |
 | 21 | Packages | S1, S2 and half of S3 landed; the rest open | [wp21](wp21-packages.md) |
-| 22 | Arrow functions as the declaration form | A and B landed; stage D is an open question | [wp22](wp22-arrow-functions.md) |
+| 22 | Arrow functions as the declaration form | A and B landed, C done but for the test corpus; stage D is an open question | [wp22](wp22-arrow-functions.md) |
 | 23 | The language surface a corpus review asked for | settled row by row | [wp23](wp23-language-surface.md) |
 | 24 | `async`/`await` | declined; `--emit-napi-async` built | [wp24](wp24-async.md) |
 | 25 | Remove inheritance, widen `implements` | landed | [wp25](wp25-inheritance.md) |
