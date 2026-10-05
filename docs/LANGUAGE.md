@@ -6034,9 +6034,13 @@ by the caller.
   `--json` stream and is a contract rather than a presentation detail. Within a
   file it is **not** the order the analysis finds them in: a generic's body is
   checked when one of its instantiations is finished, and the padding rule below
-  is decided a whole pass earlier than the other ten
+  is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  Eleven warnings exist today, and each names the rewrite:
+  The twelve below each name the rewrite; the class also holds NL9012, a
+  `parallelMapInto` body that allocates per element
+  ([Data parallelism](#data-parallelism-nishthreads)), and NL9014 and NL9015,
+  the deprecated `--unchecked-indexing` and `--wrapping`
+  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)):
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -6136,6 +6140,14 @@ by the caller.
     whatever took the proof away — with an unsigned index named beside it,
     since half the proof then comes off the declaration
     (`tests/cases/perf_bounds_loop`). Reported on the index, once per access.
+    Where the index is an `i32` or an `i32`-based ranged integer and nothing
+    between the start of its statement and the access branches, loops,
+    calls, allocates or assigns (the README below lists the rest of the
+    conditions), the warning carries a fix: `nish --fix`
+    inserts `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
+    at the start of that statement, a guard the proof credits, so an index in
+    range runs as before and one out of range still exits 1, at the guard
+    (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
     Silent outside a loop, where one check is not a cost anybody is paying;
     silent under `--unchecked-indexing`, where no check survives to report;
     and silent unless the receiver and the index are both plain locals, which
