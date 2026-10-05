@@ -1,25 +1,23 @@
 # WP21: Packages
 
-**Stages S1 and S2 have landed, and S3's resolution half; everything after them
-is proposed, and rough.** Package-scoped symbols exist (§5a, and §9 for what
-exactly was built), and so does the resolution that gives them something to
-scope: a bare specifier resolves through `node_modules` and the `nish` export
-condition (§5b, and §10 for S2 as built), and each way that can fail names its
-cause (§11). Nothing after that does.
+**Status: in progress.** S1, package-scoped symbols, shipped in 0.2.0
+([#57](https://github.com/amritk/nish/pull/57)); S2, bare specifiers and the
+`nish` export condition, in 0.3.0; S3's resolution diagnostics in 0.9.0
+([#178](https://github.com/amritk/nish/pull/178)) and its package identity in
+0.10.0 ([#202](https://github.com/amritk/nish/pull/202)). Open: S3's last two
+items — a builtin the target has no runtime for, and a compile error attributed
+to a dependency — then S4, the build cache, and S5, prebuilt distribution (§8).
+The rules that shipped are normative in
+[LANGUAGE.md](LANGUAGE.md#export-and-import); where this note and
+LANGUAGE.md disagree, LANGUAGE.md wins.
 
-It is the plan of record for two questions that arrived together —
-"what would an extra `exports` condition alongside `cjs` and `esm` look like",
-and "how should an Nish package depend on another Nish package" —
-and the first thing it decides is that they are *different* questions with
-different answers. Sections 5 and 6 are firm because they follow from
-decisions already made; sections 7 and 8 are sketches and are expected to move.
-The normative rules would land in [LANGUAGE.md](LANGUAGE.md) as each stage
-does; where this note and LANGUAGE.md ever disagree, LANGUAGE.md wins.
-
-Read [wp5-modules.md](wp5-modules.md) first — whole-program compilation and
-the linkage table are what force §3 — and [wp8-interop.md](wp8-interop.md)
-second, because the artifacts §2 hands to a foreign consumer are the ones WP8
-already generates.
+The note answers two questions that arrived together — "what would an extra
+`exports` condition alongside `cjs` and `esm` look like", and "how should a Nish
+package depend on another Nish package" — and its first decision is that they
+are *different* questions with different answers. Read
+[wp5-modules.md](wp5-modules.md) first (whole-program compilation and the
+linkage table are what force §3) and [wp8-interop.md](wp8-interop.md) second
+(the artifacts §2 hands a foreign consumer are the ones WP8 generates).
 
 ## 1. The two consumers
 
@@ -28,28 +26,25 @@ already generates.
 | **A foreign host** — JavaScript on Node, JavaScript in a browser, C | a built artifact it can load and call | the C ABI, or the N-API / wasm bridges over it ([wp8-interop.md](wp8-interop.md)) |
 | **Another Nish program** | the package's *functions*, checked and optimised as if they were its own | nothing: there is no boundary to cross |
 
-Giving both the same answer is the mistake this note exists to avoid. A
-foreign host is calling across a wire whose type vocabulary is narrow by
-construction — numbers, `boolean`, bigint, `string`, four typed arrays, and
-nothing else (WP8's table). An Nish consumer is not calling across
-anything; it is compiling one program that happens to have been written by two
-people.
+A foreign host calls across a wire whose type vocabulary is narrow by
+construction (WP8's table). A Nish consumer calls across nothing; it compiles
+one program that happens to have been written by two people. Giving both the
+same answer is the mistake this note exists to avoid.
 
 ## 2. The decision
 
-**Source is the distribution format for Nish. Built artifacts are for
-foreign hosts, and — for an Nish consumer — a cache, never a package
-format.**
+**Source is the distribution format for Nish. Built artifacts are for foreign
+hosts, and — for a Nish consumer — a cache, never a package format.**
 
-An `exports` map states both, because Node's resolution algorithm is worth
-reusing and the condition mechanism is exactly the right shape for "which of
-these five things did you come here for":
+One `exports` map states both, because Node's resolution algorithm is worth
+reusing and conditions are exactly the shape of "which of these did you come
+here for":
 
 ```jsonc
 {
   "exports": {
     ".": {
-      "nish":   "./src/index.ts",      // an Nish consumer: source
+      "nish":    "./src/index.ts",      // a Nish consumer: source
       "node":    "./build/index.node",  // JS on Node: the N-API addon
       "browser": "./build/index.mjs",   // JS in a browser: the wasm loader
       "import":  "./dist/index.js",     // plain tsc output
@@ -59,198 +54,112 @@ these five things did you come here for":
 }
 ```
 
-Conditions match in declaration order, so `nish` leads and `node` precedes
-`import`. Only `nish` ever asks for the `nish` condition, so a bundler, a
-type-checker and Node each keep resolving the package exactly as they do
-today. The last three rows are what WP8's `--emit-napi`, `--emit-dts` and
-`tsc` already produce; the first row is a path, not an artifact, and building
-it is the whole of this note.
-
-The `nish` row also carries the number mode, by spelling — `nish-f64`,
-`nish-i32`, or plain `nish` for a package correct under either. §6 says why
-that is the right place for it and why nothing else needs a manifest, and §10a
-says why those two are the one pair this compiler ranks itself rather than
-leaving to the order the manifest wrote them in.
-
-`"nish"` is what it ended up being, and it is a spelling of the project's name,
-so it lives in stage0's `src/branding.ts` and `src/branding.ts` with the rest of them
-(orientation rule 5) as `PACKAGE_CONDITION` — where both compilers read it, which
-is what makes them agree about which file a package offers.
+Only `nish` asks for the `nish` condition, so a bundler, a type-checker and
+Node keep resolving the package exactly as before. The artifact rows are what
+WP8's `--emit-napi`, `--emit-dts` and `tsc` already produce. The `nish` row
+also carries the number mode, by spelling — `nish-f64`, `nish-i32`, or plain
+`nish` for a package correct under either (§6). The spelling is a form of the
+project's name, so it lives in `src/branding.ts` as `PACKAGE_CONDITION`, with
+`packageConditionFor` spelling the mode-qualified forms.
 
 ## 3. Why source, and not a compiled library
 
-Four reasons. None of them is a preference; each is a consequence of something
-the project already decided.
+Each reason is a consequence of something the project had already decided.
 
 ### 3a. Whole-program facts are the performance thesis
 
-`analyzeFunctions` runs over every module at once, keyed by LLVM symbol, so
-purity, loop and escape facts are program-wide — and an imported function's
-`declare` in the importer carries *exactly* the exporter's parameter
-attributes, return attributes and function attribute set
+`analyzeFunctions` runs over every module at once, keyed by LLVM symbol, and an
+imported function's `declare` carries exactly the exporter's attributes
 ([wp5-modules.md](wp5-modules.md), "Imported functions in IR"). That is what
-lets the optimiser working on the caller fold, hoist or drop a call into
-another module as if it were local. Non-exported functions get `internal`
-linkage for the same reason: it is what lets LLVM inline, specialise or drop
-them (WP15 §3).
-
-A prebuilt library severs all of it. The consumer gets an opaque symbol with
-no facts attached, and every proof the fixpoint would have found about the
-package's internals is gone. This is not a modest regression at the boundary;
-it is giving up the mechanism that WP9 and WP15 were spent buying.
+lets the optimiser fold, hoist or drop a call into another module as if it were
+local, and why non-exported functions get `internal` linkage (WP15 §3). A
+prebuilt library severs all of it: the consumer gets an opaque symbol with no
+facts, which gives up the mechanism WP9 and WP15 were spent buying.
 
 ### 3b. A generic has no code until somebody instantiates it
 
-WP18 lowers generics by monomorphisation: one `define` per (template,
-type-argument tuple), and the instantiation set is discovered from *call
-sites* ([wp18-generics.md](wp18-generics.md) §3a). A package exporting
-`function sum<T>(xs: T[]): T` has nothing to compile until a consumer asks for
-`sum<i32>`. Any binary format would have to ship the template as source
-anyway, which is the problem `rustc` solves by putting MIR inside an `.rlib` —
-shipping source wearing a hat.
+Generics are monomorphised from call sites
+([wp18-generics.md](wp18-generics.md) §3a), so `sum<T>` has nothing to compile
+until a consumer asks for `sum<i32>`. Any binary format would ship the template
+as source anyway.
 
 ### 3c. `number` is a compile-time ABI
 
-`--number-mode i32|f64` decides what `number` *is*. A package built in i32
-mode cannot be called from an f64 program: same source, two ABIs, no
-conversion. Prebuilding therefore means prebuilding the cross product:
-
-```
-{i32, f64} × {x86_64, aarch64, wasm32} × {speed, size, debug}
-```
-
-and the wasm column is not even the same runtime (`runtime-wasm.c` is
-freestanding: no strings, no I/O). Eighteen artifacts per release, for a
-language whose source is sitting right there and compiles in milliseconds.
+`--number-mode i32|f64` decides what `number` *is*, so a package built in one
+mode cannot be called from the other. Prebuilding means the cross product
+`{i32, f64} × {x86_64, aarch64, wasm32} × {speed, size, debug}` — eighteen
+artifacts per release for source that compiles in milliseconds.
 
 ### 3d. Source gets dead-code elimination that a library cannot
 
-If the consumer compiles the package's source, everything it never calls is
-`internal` and LLVM drops it. A prebuilt object can only be dropped whole.
-Tree-shaking, and the real kind rather than the syntactic approximation a JS
-bundler performs.
+Everything a consumer never calls is `internal` and LLVM drops it; a prebuilt
+object can only be dropped whole.
 
 ### The cost, stated honestly
 
-Compile time now grows with the transitive dependency tree, which is the C++
-and Rust cost and it is real. §8 S4 is the mitigation and it is a cache, not a
-change of format.
+Compile time grows with the transitive dependency tree, the C++ and Rust cost.
+S4 is the mitigation, and it is a cache, not a change of format.
 
 ## 4. What a source package may contain
 
-A package's public surface is whatever `export` accepts today — `export
-function`, `export class`, `export interface`, and nothing else
-([wp5-modules.md](wp5-modules.md); `export const`, `export {f}`,
-`export default` and `export *` are all rejected by name). Two further rules
-fall out of the existing design:
+A package's public surface is whatever `export` accepts
+([wp5-modules.md](wp5-modules.md)). A library package must not declare
+`export function main`, because a package is never the entry. Internals are
+unrestricted: a package consumed as source may take and return classes,
+`T | null`, `string[]`, `Result<T, E>` — the narrowness of §1 constrains the
+artifact rows, not the `nish` row. The package a JS host sees through
+`--emit-napi` is a narrowed projection of the one a Nish consumer sees.
 
-- **A library package must not declare `export function main`.** Only the
-  entry module may, and a package is never the entry.
-- **Internals are unrestricted.** The ABI narrowness of §1 constrains the
-  three *artifact* rows of the exports map, not the `nish` row. A package
-  consumed as source may take and return classes, `T | null`, `string[]`,
-  `Result<T, E>` — anything the language has — because nothing is crossing a
-  boundary.
+## 5. What blocked this
 
-That second point is the payoff, and it is worth being loud about: the
-package a JS host sees through `--emit-napi` is a narrowed projection of the
-package an Nish consumer sees.
-
-## 5. What blocks this today
-
-Three things blocked it, all in the compiler rather than in packaging. The
-first two are closed; §9 and §10 are the account of how.
+Three things, all in the compiler rather than in packaging. All three are
+closed or mostly closed; §9–§11 say how.
 
 ### 5a. The symbol namespace was flat (**closed by S1**)
 
-Two modules exporting the same name was an error, and — worse — two modules
-defining the same *non-exported* name was an error too, in either linkage mode.
-The reason was never the linker: `analyzeFunctions` keys the whole-program fact
-fixpoint by symbol name, so a duplicate would hand each function the other's
-attributes, which is a miscompile rather than a link failure
-(`tests/link/duplicate_internal`, and the rule deliberately does not consult
-`--no-strict-exports`).
-
-In an ecosystem that is fatal at the first `npm install`. Two unrelated
-packages that both have a private `helper()` would fail to compile together,
-and two that both export `hash` certainly would. So symbols became
-package-scoped, and §9 is what that turned out to mean.
+Two modules defining the same name — exported or not — was an error, because
+`analyzeFunctions` keys the whole-program fact fixpoint by symbol, so a
+duplicate would hand each function the other's attributes: a miscompile, not a
+link failure (`tests/link/duplicate_internal`). Two unrelated packages that
+both kept a private `helper()` could not have compiled together. Symbols became
+package-scoped (§9).
 
 ### 5b. `import` has no bare specifiers
 
-**Closed by S2**, and it was closed in two steps. First the compiler's own
-package became a legal bare form, then every package did; what follows is the
-section as it read before S2, with the amendment it already carried, because the
-narrowing in it is still the rule for `nish/` itself.
-
-Two bare forms were legal before S2, and neither is the general case this
-section is about:
-
-- `nish:fs` / `nish:process` / `nish:io` name *builtins*. They resolve to no
-  file at all — the import renames a builtin the checker already has — so no
-  resolution is involved and none of this section applies to them.
-- `nish/<module>` names a standard-library module, resolved to `std/<module>.ts`
-  beside the running compiler.
-
-The second is the one that touches this section, and it is a deliberate
-narrowing rather than an exception: for the compiler's *own* package there is
-exactly one right answer — the `std/` that shipped with this binary, versioned
-with it, unskewable against it — and that answer is also the one Node gives,
-because `package.json` declares `"./*": "./std/*.ts"` and `nish/text` is
-therefore a package self-reference. The compiler short-circuits to it instead
-of walking `node_modules` to arrive at the same file.
-
-The general case — `import { blake3 } from "@scope/hash"` — is what remained,
-and S2 built it: resolution through Node's own algorithm with the `nish`
-condition, deliberately *not* inventing a resolver, a lockfile or a registry,
-all of which npm already has and none of which this project should own. §10 is
-what that turned out to mean.
+**Closed by S2.** `nish:fs`-style specifiers name builtins and resolve to no
+file. `nish/<module>` names a standard-library module and is short-circuited to
+the `std/` beside the running compiler — a deliberate narrowing, since
+`package.json`'s `"./*": "./std/*.ts"` makes it a package self-reference and the
+`std/` that shipped with this binary is the one right answer. The general case,
+`import { blake3 } from "@scope/hash"`, resolves through Node's own algorithm
+with the `nish` condition, deliberately *not* inventing a resolver, lockfile or
+registry, all of which npm already has (§10).
 
 ### 5c. Compatibility has to be a diagnostic, not a miscompile
 
-A package declares the number modes and targets it supports; an i32 consumer
-pulling an f64-only package gets an error naming both sides and the field that
-said so. The same check covers a package that requires a newer compiler than
-the one compiling it.
+A package states the number modes it supports and the compiler it needs; a
+consumer that does not match gets an error naming both sides and the field that
+said so (§11).
 
 ## 6. How a package says it is Nish
 
-The `nish` condition is the whole answer, and the first draft of this section
-was wrong to reach for a manifest beside it. Its presence is the claim, its
-value is the entry module, and its *absence* is what lets a bare import of an
-ordinary npm package fail with "package `lodash` has no Nish entry
-point" (a new `NL3xxx` code) rather than a module-not-found that reads like
-the consumer's own mistake.
+The `nish` condition is the whole answer. Its presence is the claim, its value
+is the entry module, and its *absence* is what lets a bare import of an ordinary
+npm package fail with "has no Nish entry point" rather than a module-not-found
+that reads like the consumer's own mistake (`tests/link/package_not_nish`).
 
 ### The number mode goes in the condition
 
 The mode is the one semantic flag a package can be wrong about without saying
-so. The consumer picks it — one `--number-mode` for the whole program — but
-they picked it for *their* code, and it tells them nothing about whether a
-dependency was written under the other one. The demonstration is in this
-repository, in a benchmark that has been checked in since WP9.
-`bench/strbuild.ts` divides once:
-
-```ts
-const step = (count + 31) / 32; // ceil(count / 32)
-```
-
-That comment is true in i32 mode, where `/` truncates, and false in f64 mode,
-where `step` is fractional, `piece(i)` then formats numbers like `1.5,`, and
-the built string comes out three times too long. Compiled both ways the
-program builds, links, runs, exits 0 — and prints a different answer:
-**806394** in i32 mode, **2410293** in f64. Nothing in the source announces
-which mode it is for except the comment.
-
-Most f64-flavoured code is not so quiet. `Math.sqrt` on a `number` in i32 mode
-is `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or
-toF64(x)) ``, a `1.5` literal is `Non-integer literal`, and `bench/result.ts`
-does not compile in f64 mode at all because `&` needs two integer operands.
-So the silent window is narrow — division, and what is built on it — but
-inside it the failure is a wrong answer rather than a diagnostic, which is
-exactly the case a package boundary should catch.
+so. `bench/strbuild.ts` divides once — `const step = (count + 31) / 32; //
+ceil(count / 32)` — which is true in i32 mode, where `/` truncates, and false in
+f64 mode. Compiled both ways the program builds, runs and exits 0, printing
+**806394** in i32 mode and **2410293** in f64. Most f64 code fails loudly in i32
+mode (`Math.sqrt` on an i32, a `1.5` literal), so the silent window is narrow —
+division and what is built on it — but inside it the failure is a wrong answer,
+which is exactly what a package boundary should catch.
 [wp9-optimisation.md](wp9-optimisation.md#what-the-number-mode-costs) has the
-rest of the mode comparison, including what i32 buys to be worth the split.
+rest of the mode comparison.
 
 So the mode rides in the condition rather than in metadata:
 
@@ -259,567 +168,252 @@ So the mode rides in the condition rather than in metadata:
 "exports": { ".": { "nish":     "./src/index.ts" } }   // correct under either
 ```
 
-`nish --number-mode f64` asks for `["nish-f64", "nish"]` and `--number-mode
-i32` for `["nish-i32", "nish"]`, so a both-modes package matches either, a
-single-mode package matches one, and a mismatch is a *resolution* failure at
-the package boundary — before a byte of the dependency is checked, and with no
-new file format, sidecar or manifest key to keep in sync. A package that needs
-genuinely different source per mode gets that for free by listing both.
-
-That list is asked for **in that order, whichever order the manifest declares
-the two conditions in**, and it is the one place the reader departs from Node's
-condition matching (§10a, `tests/link/package_mode_order`). Node takes the
-first key of the object the consumer asked for, which is right when the
-conditions are rivals — `node` before `import` is a package choosing — and
-wrong here, because `nish-f64` is not a rival of `nish` but `nish` refined by
-the mode. Under declaration order a package writing `nish` above `nish-f64`
-would ship f64 source that is never compiled and get no diagnostic saying so,
-which is the silent failure this whole section is arguing against.
-
-One implementation note: `nish`'s resolver has to read the `exports` object
-itself rather than delegating blindly, because the good message —
-"`@scope/hash` supports Nish in f64 mode only; this program is
-compiling in i32" — needs to know which conditions the package *does* offer.
-A plain resolver would only be able to say "unresolved".
+`--number-mode f64` asks for `["nish-f64", "nish"]` and i32 for
+`["nish-i32", "nish"]`, so a mismatch is a *resolution* failure, before a byte
+of the dependency is checked, with no sidecar to keep in sync. That list is
+asked **in that order, whichever order the manifest declares the two in** — the
+one place the reader departs from Node (`tests/link/package_mode_order`,
+`package_mode_order_f64`). Declaration order is right for rival conditions;
+`nish-f64` is not a rival of `nish` but `nish` refined by the mode, and under
+declaration order a package writing `nish` above `nish-f64` would ship f64
+source that is never compiled, with nothing said. The resolver reads the
+`exports` object itself rather than delegating, because the good message
+("supports Nish in f64 mode only; this program is compiling in i32") needs to
+know which conditions the package *does* offer.
 
 ### The other two need no declaration either
 
-- **Runtime capabilities** — strings, the arena, file I/O, `spawnSync`,
-  `getenv` — are not the package's to declare, because the compiler already
-  knows both halves: the target, and which builtins the whole program touches
-  (the same fact that decides whether the runtime ABI prelude is emitted
-  without `--runtime-decls`). "`@scope/hash` calls `readFileSync`, which the
-  freestanding wasm profile has no runtime for" is a whole-program diagnostic,
-  not a manifest field.
-- **A compiler version floor** goes in `"engines": { "nish": ">=x" }`, the
-  slot npm already has for exactly this.
+- **Runtime capabilities** are not the package's to declare: the compiler
+  knows the target and which builtins the whole program touches, so "`@scope/hash`
+  calls `readFileSync`, which the freestanding wasm profile has no runtime for"
+  is a whole-program diagnostic, not a manifest field.
+- **A compiler version floor** goes in `"engines": { "nish": ">=x" }`, the slot
+  npm already has.
 
-Which leaves an `--emit-manifest` sidecar with nothing left to carry, and it
-should not be built. The general rule the draft violated: **a fact the
-compiler can recompute is not metadata.** Package metadata earns its place
-only where resolution has to happen *before* the compiler can look, which is
-true of the mode (it selects the file) and false of everything else here.
+The `--emit-manifest` sidecar of the first draft was therefore not built. The
+rule: **a fact the compiler can recompute is not metadata.** Package metadata
+earns its place only where resolution must happen *before* the compiler can
+look — true of the mode, false of everything else here.
+
+The root package's `"nish"` field (`noPanic`, `capabilities`;
+[wp36-capability-policy.md](wp36-capability-policy.md#3-the-manifest)) does not
+break that rule: it is a policy the program's owner chooses, not a fact about
+the code, and it is read from the root manifest only, never a dependency's.
 
 ### Why none of this is a trust boundary
 
-Unlike "is this package really ESM", Nish-safety needs no trust,
-because the consumer's own build re-establishes it from source every time and
-the compiler is the verifier. A package whose condition lies, or whose source
-has drifted, is caught on the first compile that uses it. Everything above is
-therefore an *error-quality* feature — fail at the package boundary, early,
-naming the package — and not a correctness or security boundary. That is also
-why nothing here needs a signature or a registry: they would protect a
-property that is recomputed anyway.
+The consumer's build re-establishes Nish-safety from source every time, and the
+compiler is the verifier, so a package whose condition lies is caught on the
+first compile that uses it. Everything above is an *error-quality* feature, not
+a correctness or security boundary, which is also why nothing here needs a
+signature or a registry.
 
-One diagnostic obligation follows. When a dependency's source does fail to
-compile, the message must say so — the location is in `node_modules/<pkg>/…`
-and the reader's next move is an upstream bug report, not a hunt through their
-own code. A compile error inside a dependency and one in your own program
-should not look alike.
+One diagnostic obligation follows: when a dependency's source fails to compile,
+the message must say so, because the reader's next move is an upstream bug
+report, not a hunt through their own code. That obligation is still open (§8).
 
 ## 7. What this note does not decide
 
-- **Diamond dependencies.** If A wants `hash@1` and B wants `hash@2`,
-  package-scoped symbols could let both link — but a `Point` from `hash@1` is a
-  different `%struct` from `hash@2`'s and they are not interchangeable. What
-  is decided is the diagnostic: a package is its real directory, a program
-  compiles one copy of it, and one name at two real directories is refused in
-  those words — `` Package `hash` is at two places, <dir> (1.0.0) and <dir>
-  (2.0.0) `` (`NL3029`, §11, `tests/link/package_two_dirs`) — rather than as
-  a clash between two identically-named functions, which is how it was
-  refused before. Linking both copies, or merging two copies of one version
-  by their manifests, would each turn that refusal into an acceptance, so
-  either stays open without breaking a program that compiles today.
-- **Whether the compiler or a separate tool resolves.** §5b assumes the
-  compiler reads `node_modules`. A thin resolver that hands `nish` a flat
-  list of files is the alternative and is less coupled.
-- **Prebuilt closed-source distribution.** If it is ever needed, the shape is
-  the `.d.nish.json` sidecar that MASTER_PLAN §5 WP5 specified and
-  [wp5-modules.md](wp5-modules.md) set aside as unnecessary ("separate
-  compilation of a library against a sidecar can be added when a use case
-  needs it") — signatures *plus* the proven attributes, so the importer's
-  `declare` keeps its facts. It costs generics, pins the mode and the target,
-  and should not be built until somebody asks for it by name.
-- **The trust boundary.** Source packages mean the compiler compiles
-  third-party code, which is what every TypeScript project already does; the
-  thing worth noticing is that it removes the `postinstall` step that native
-  npm packages need, so the supply-chain surface gets *smaller*, not larger.
+- **Diamond dependencies.** If A wants `hash@1` and B wants `hash@2`, a `Point`
+  from each is a different type. What is decided is the diagnostic: a package is
+  its real directory, a program compiles one copy, and one name at two real
+  directories is refused in those words (`NL3029`,
+  `tests/link/package_two_dirs`). Linking both copies, or merging two copies of
+  one version by their manifests, would each turn a refusal into an acceptance,
+  so either stays open without breaking a program.
+- **Whether the compiler or a separate tool resolves.** The compiler reads
+  `node_modules`; a thin resolver handing `nish` a flat file list is the
+  less-coupled alternative.
+- **Prebuilt closed-source distribution** (S5). If ever needed, the shape is a
+  `.d.nish.json` sidecar of signatures *plus* proven attributes, so the
+  importer's `declare` keeps its facts. It costs generics and pins the mode and
+  target, and should not be built until somebody asks for it by name.
+- **Supply chain.** Source packages mean compiling third-party code, as every
+  TypeScript project does; they also remove the `postinstall` step native npm
+  packages need, so the surface gets *smaller*.
 
 ## 8. Stages
 
-| | Stage | Depends on | Notes |
-| ---: | --- | --- | --- |
-| S1 | Package-scoped symbols | — | **done**, §9. §5a. No language surface, and the diff turned out small rather than large: the root package's prefix is empty, so not one golden `.ll` moved. |
-| S2 | Bare specifiers and the `nish` condition | S1 | **done**, §10. §5b. The condition name landed in `branding.ts` on both sides. |
-| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact. **The resolution half is done**, §11: a mode-mismatched, missing or malformed `nish` condition and an `engines.nish` floor each have their own `NL3xxx` code. **The identity half is done** too: a package is its real directory, one name at two directories is `NL3029`, §10d and §11. **Left**: a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
-| S4 | The build cache | S2 | Content-addressed by (package version, number mode, target, profile, compiler version). Invisible to the package author; a pure compile-time optimisation, and the answer to §3's stated cost. |
-| S5 | Prebuilt distribution | S4 | §7. Deferred, possibly permanently. |
+| | Stage | Status |
+| ---: | --- | --- |
+| S1 | Package-scoped symbols (§5a) | **Shipped**, 0.2.0, #57. §9. |
+| S2 | Bare specifiers and the `nish` condition (§5b) | **Shipped**, 0.3.0. §10. |
+| S3 | The boundary diagnostics (§5c, §6) | **Resolution half shipped**, 0.9.0, #178; **identity half**, 0.10.0, #202. §11. Two items open, below. |
+| S4 | The build cache | Open. Content-addressed by (package version, number mode, target, profile, compiler version); invisible to the package author, and the answer to §3's stated cost. `nish run`'s cache is not it: that keeps the linked binary of a whole program and recompiles every run. |
+| S5 | Prebuilt distribution | Deferred, possibly permanently (§7). |
 
-S1 was the only one with no design questions left open, which is why it went
-first, and it is done; S2 followed it and is done too. **S3 is the one to resist
-over-building**: §6 already talked one manifest out of existence, and everything
-left in it is a message rather than a file. Its resolution half split S2's single
-"has no Nish entry point" diagnostic into the causes §5c and §6 name (§11), and
-its identity half decided what a package is (§10d). What remains of it is two
-things, neither of them a resolution failure:
+**S3 is the stage to resist over-building**: §6 already talked one manifest out
+of existence, and everything left in it is a message rather than a file. What
+remains:
 
-- **A builtin with no runtime on the target**: "`@scope/hash` calls
-  `readFileSync`, which the freestanding wasm profile has no runtime for" is a
-  whole-program diagnostic (§6), decided after every module is checked rather
-  than at the import.
-- **A compile error attributed to the dependency** (§6's "one diagnostic
-  obligation"): an error whose location is in `node_modules/<pkg>/…` should say
-  it is the dependency's, because the reader's next move is an upstream report.
+- **A builtin with no runtime on the target.** A whole-program diagnostic,
+  decided after every module is checked rather than at the import, naming the
+  package that reached the builtin. WP34 N3 has since covered part of the
+  ground at the call site: the host builtins (`Date.now`,
+  `crypto.getRandomValues`, `statMtimeSync`, the ownership checks) and
+  `nish:net` are refused on `--target wasm32` with "reaches the operating
+  system, and a wasm32 build has none to reach" (NL2404), but that message
+  names the call, not the package, and the `nish:fs` builtins such as
+  `readFileSync` are not refused there at all.
+- **A compile error attributed to the dependency** (§6's obligation): an error
+  located in `node_modules/<pkg>/…` should say it is the dependency's.
 
-The third, **package identity**, is done: a package is its real directory, so
-a symlinked package is one package (`tests/link/package_symlink` compiles), and
-one name at two real directories is refused with its own code, `NL3029`
-(`tests/link/package_two_dirs`). The `TODO(WP21 S3)` in `src/compilation.ts`
-is gone, replaced by the rule it asked for, and §10d says why the real directory
-rather than the manifest.
-
-Nothing here is on the M4 critical path and none of it should delay the freeze.
+Each is a diagnostic for a program that already fails, so neither withdraws
+anything, and neither is on any release's critical path.
 
 ## 9. S1 as built: package-scoped symbols
 
-### 9a. The scheme, and the one it replaced
+**The root package's prefix is empty.** Qualifying every symbol (as
+`pkg@version.symbol` or a content hash) would have moved every golden `.ll`, the
+`--emit-header` asm labels and the interop sidecars to buy nothing for
+single-package programs. Instead, a module under `node_modules/<name>/` (or
+`@scope/<name>/`) belongs to that package, and each function, method and
+constructor it declares is emitted as `<mangled package name>.<name>` — the `.`
+`Point.shifted` already uses, so `--emit-header` declares it with an asm label
+as it always declared a method. A one-package program emits byte for byte the IR
+it always did; a prefix appears only where a second package does.
 
-§5a offered two spellings — `pkg@version.symbol` or a content hash — and both
-of them move *every* symbol in *every* program, because both qualify the
-program's own code as readily as a dependency's. That is a rewrite of every
-golden `.ll` in `tests/cases/`, of the link goldens, of the `--emit-header` asm
-labels, and of the three interop sidecars, to buy nothing at all for the
-single-package programs that are the only programs that exist today. It was
-rejected for that reason.
+The qualification happens in one place, `Checker.qualifySymbols` at the end of
+pass 1, so a free function, a method and a constructor are scoped by the same
+line and `analyzeFunctions` did not change: the key it used stopped being a bare
+name. Generic instantiations are minted after that walk, so their symbols carry
+the prefix from the moment they are minted — the *template's* package, not the
+instantiating module's, since importing a generic was allowed in 0.4.0
+([#111](https://github.com/amritk/nish/pull/111);
+`tests/link/package_generic`, `package_generic_class`,
+`package_generic_import`).
 
-What landed instead is the same idea with one asymmetry: **the root package's
-prefix is empty.**
-
-- A module belongs to exactly one package. The *root package* is the program
-  being compiled; a module under `<...>/node_modules/<name>/` (or
-  `.../@scope/<name>/`) belongs to that package instead.
-- Every function, method and constructor a module declares is emitted under
-  `<prefix><name>`, where the prefix is `""` for the root package and
-  `<mangled package name>.` otherwise — the `.` that `Point.shifted` already
-  uses, so `--emit-header` declares such a symbol exactly as it has always
-  declared a method, as `hash_helper` with an asm label.
-- The whole-program fact table is keyed by that symbol. `analyzeFunctions` did
-  not have to change at all, which is the point: the key it was already using
-  stopped being a bare name.
-
-So a program of one package — which is every program that could be compiled
-before this landed — emits byte for byte the IR it always did, and the
-`docs/IR_COOKBOOK.md` entries, the goldens and the C ABI of every exported
-function are untouched. A prefix appears only where a second package does,
-which is a program that did not compile at all until now.
-
-The qualification happens in one place per compiler, at the end of pass 1
-(`Checker.qualifySymbols` in stage0's `src/checker/index.ts` and `src/checker.ts`),
-after every signature exists — so a free function, a method and a constructor
-are scoped by the same line of code and nothing added later can forget to be.
-
-That single place is also what makes the scheme compose with
-[wp18-generics.md](wp18-generics.md). A monomorphised instantiation's symbol is
-built from its template's symbol, and the template's symbol is package-scoped
-before any instantiation exists, so `sum<i32>` from two packages is two symbols
-without the generic mangling needing to know that packages are a thing.
-
-### 9b. How a module says which package it is in
-
-It does not; its path says it. There is no manifest, no resolver, no flag and
-no language surface, which is what lets S1 land years before S2: the identity
-is read off the module name the compiler already carries, and that name is the
-*same string in both compilers* (WP19 §A3), so stage0 and stage1 put a module
-in the same package without either of them needing a working directory.
-
-The entry's own package directory is what *is* the root package, rather than
-"no `node_modules` on the path". Comparing directories rather than names is
-what stops a compiler invoked on a file that itself lives inside
-`node_modules/<pkg>` from deciding that its own entry is one of its
-dependencies.
-
-This is a placeholder and is labelled as one in both files. S2 resolves bare
-specifiers through Node's algorithm with the `nish` condition, and the package
-a module belongs to becomes something the resolver *states*; when that lands,
-only the mangling below it survives.
+A module's package is read off its path, and the entry's own package directory
+*is* the root package — comparing directories rather than looking for
+`node_modules` in the path is what stops an entry that itself lives inside
+`node_modules/<pkg>` from being taken for a dependency. Since S2 a module
+reached by a bare specifier is in the package whose manifest the resolver read;
+the path rule still answers relative imports into `node_modules` and a
+dependency's own relative imports (`src/packages.ts`).
 
 ### 9c. Where S1 deliberately stops
 
-- **Struct names are still program-wide.** `%struct.<name>` is a module-level
-  LLVM type and `StaticType` equality compares names, so two packages that both
-  declared `Node` would silently be treated as declaring one type. Rather than
-  half-scope that, the Compilation now *reports* it — naming both packages, in
-  the words §7 uses — so the hole is a diagnostic instead of a miscompile.
-  Scoping the layouts, and saying what a `Point` from two versions of one
-  package means, is §7's question and not this stage's.
-  The same hole was open *inside* one package — two of its modules declaring
-  `Base` merged into one type exactly as two packages would have — and #193
-  closed it the same way: the second declaration is refused, naming the first
-  module (NL3028, `tests/link/class_clash_fields`), even when a third package
-  declared the name before either (`tests/link/class_clash_after_package`),
-  and the same holds for two templates whose instantiations share a name
-  (`tests/link/generic_class_clash_after_package`). A struct name is therefore
-  unique across the whole program, one package or several.
-- **Versions are not in the identity.** §5a floated `pkg@version.symbol`;
-  reading a version means reading a manifest, which §6 spent a section
-  refusing. Two copies of one package name in one build therefore still
-  collide, and they collide *loudly*, through the same clash check.
-- **The mangling is not injective.** `@scope/hash` and `scope_hash` reduce to
-  one prefix. They do not have to be distinguishable, because the clash check
-  runs over the *qualified* symbols: two packages that reduce to one prefix are
-  refused with a name in the message rather than silently sharing a fact table.
+- **Struct names are program-wide.** `%struct.<name>` is a module-level LLVM
+  type and `StaticType` equality compares names, so two packages declaring
+  `Node` would silently share one type. Rather than half-scope that, the
+  compiler refuses it, naming both packages (`tests/link/two_packages_struct`).
+  [#197](https://github.com/amritk/nish/pull/197) closed the same hole inside
+  one package (NL3028, `tests/link/class_clash_fields`,
+  `class_clash_after_package`), and an instantiated generic's name is held to
+  the same rule (`tests/link/package_generic_class_clash`,
+  `generic_class_clash_after_package`). Scoping the layouts is §7's question.
+- **Versions are not in the identity**: reading one means reading a manifest,
+  which §6 refused.
+- **The mangling is not injective** (`@scope/hash` and `scope_hash` share a
+  prefix), which is harmless because the clash check runs over the *qualified*
+  symbols and refuses by name.
 
-### 9d. What proves it
-
-`tests/link/two_packages/` is the case §5a names: two packages, each with a
-private `helper()` and an exported `scale()`, and a program that keeps a
-private `helper()` of its own. Three functions called `helper`, two called
-`scale`, one program; every `helper` computes something different, so the exit
-code is right only if each call reached its own package's. It compiles, it
-links, `llvm-as` and `opt -passes=verify` accept every module, each importer's
-`declare` matches its exporter's `define` attribute for attribute, and the
-binary exits 7.
-
-`tests/link/duplicate_internal` is the same rule inside one package and is
-unchanged: a name still has to be unique within the package that declares it,
-and `internal` linkage still buys inlining rather than a second namespace.
-`tests/link/two_packages_struct` is the negative for where S1 stops — two
-packages, a private `Node` in each, refused by name with both packages in the
-message.
-
-Everything else is the proof that nothing moved: every golden `.ll` in
-`tests/cases/` and `tests/link/` is byte-identical, `tests/self/goldens/` needed
-no regeneration, and `tests/self/ir_oracle.js` — which compiles the corpus with
-*both* compilers and diffs the IR byte for byte, `tests/link/two_packages`
-included — is what says the two implementations scope symbols the same way.
+`tests/link/two_packages/` is the proof: two packages and the root each keep a
+private `helper()`, two export `scale()`, every `helper` computes something
+different, and the binary exits 7 only if each call reached its own.
 
 ## 10. S2 as built: bare specifiers and the `nish` condition
 
 ### 10a. What resolves, and what it resolves to
 
-`import { blake3 } from "@scope/hash/blake3"` now compiles. The specifier is
-split into a package name and an `exports` subpath (`@scope/hash` and
-`./blake3`), `node_modules/<name>` is looked for in the importing file's
-directory and in every directory above it — Node's algorithm, including its rule
-that a directory already called `node_modules` is stepped over wherever the
-module's own name spells one — and the file compiled is the one that package's
-`exports` map offers for the `nish` condition.
+A specifier is split into a package name and an `exports` subpath
+(`@scope/hash/blake3` is `@scope/hash` and `./blake3`). `node_modules/<name>` is
+looked for in the importing file's directory and every directory above it, and
+the file compiled is the one the `exports` map offers for the condition list of
+§6, mode-qualified first whatever the declaration order. Downstream of
+resolution the module is compiled like any other — §3 in one sentence.
 
-Two constants landed in `branding.ts` on both sides, which is where §2 asked for
-them: `PACKAGE_CONDITION` (`nish`) and `packageConditionFor`, which spells the
-mode-qualified `nish-i32` / `nish-f64`. The compiler asks the whole condition
-map for its own mode and only then for the plain one. A package correct under
-either mode declares `nish` and matches both; one that needs different source
-per mode declares both and gets two entry points for free, **in either order**.
+**The walk is spelled, not computed.** The compiler has no `process.cwd()`
+(module identity is the path as written, WP19 §A3), so above the entry's
+directory it climbs as `..`, `../..`, and lets the operating system resolve
+those (`parentDirectory` in `src/compilation.ts`). It cannot recognise the
+filesystem root (`/..` is `/`), so a limit of 256 levels ends it; that keeps a
+failed resolution near 10 ms, where probing PATH_MAX's worth of levels cost
+1.8 s of kernel time. `tests/link/package_above` is the ordinary npm layout
+compiled from the subdirectory.
 
-That last clause is the one thing here Node would do differently, and it was the
-other way round until the review of this stage: the reader matched the two
-conditions in one walk, so the manifest's declaration order decided, as it does
-in Node. It made `{"nish": "./any.ts", "nish-f64": "./f64.ts"}` compile
-`any.ts` for an f64 program and leave `f64.ts` dead with nothing said — a
-package author's ordinary mistake turning into precisely the silent wrong answer
-§6 introduced the mode-qualified condition to prevent. Declaration order is
-right for *rival* conditions, where the package is choosing between artifacts it
-built; these two are not rivals, since `nish-f64` is `nish` refined by the mode,
-and the refinement is not the package's to rank. So the rank is the compiler's,
-it is written down in both `manifest.ts` headers, and
-`tests/link/package_mode_order` and `tests/link/package_mode_order_f64` are two
-packages that declare the plain condition first and whose exit code is right
-only if the mode-qualified file is the one compiled.
+**Node steps over a directory already called `node_modules`**, and the compiler
+does so wherever the module's *name* spells one, including every dependency's
+own imports. Above the name's own root it cannot tell that `..` is a
+`node_modules` (there is no `getcwd`, and `nish:fs` has no `statSync`), so it
+searches it. That changes an answer only where `node_modules/node_modules/<pkg>`
+exists, which npm does not produce (`tests/link/package_doubled`: found from
+inside, refused from the root).
 
-Nothing about the module downstream of resolution is special. The file is
-compiled, checked, analysed and emitted like any other module, which is §3 in
-one sentence: for an Nish consumer the distribution format is source, so there
-is no boundary to cross and no second code path to maintain.
+### 10b. The manifest reader
 
-**"Every directory above it" is the whole climb in both compilers, and it took
-three goes to be.** stage0 used to resolve the entry to an absolute path and
-climb to `/`. stage1 has no `process.cwd()` to build one from — WP19 §A3 keeps
-that builtin out, and module identity is the path as written — so its walk ran
-out where `dirname` does, which for the usual relative entry is `.`: the working
-directory. That made `proj/node_modules` beside `proj/src/main.ts`, compiled as
-`nish main.ts` from `proj/src`, resolve under stage0 and fail under stage1 with
-`` Cannot find package `pkg` ``, and that layout is the one npm produces rather
-than an exotic one. Above `.` the walk is now *spelled* — `..`, `../..`, one
-level per step — and the operating system resolves those against the working
-directory `process.cwd()` would have answered, so the two compilers search the
-same directories. One thing follows from spelling it rather than computing it
-and is written at `parentDirectory` in both files: the walk cannot recognise the
-filesystem root (`/..` is `/`), so a limit ends it rather than the root does —
-256 levels, which is two orders of magnitude past any directory a compiler is
-run in and keeps a failed resolution at about 10 ms, where probing PATH_MAX's
-worth of levels cost 1.8 s of kernel time.
-`tests/link/package_above` is that layout, compiled from the subdirectory by
-both compilers and compared byte for byte (§10e).
-
-**The third go was the `node_modules` ancestor, and it is what decided whose
-walk the other one copies.** Node steps over a directory already called
-`node_modules` instead of searching it, so `node_modules/node_modules/<pkg>` is
-a package Node never finds. stage0 could apply that rule the whole way up,
-because an absolute path names every ancestor; stage1 cannot, because above the
-name's own root it has only `..`, which names a directory without naming it.
-Learning the name from below would take `getcwd` or an inode to compare — the
-classic `pwd(1)` algorithm — and the language has neither, by two separate
-decisions (WP19 §A3, and `nish:fs` has no `statSync`). So `nish main.ts` run in
-`R/node_modules/app` with `R/node_modules/node_modules/zed` installed was
-`` Cannot find package `zed` `` from stage0 and a clean compile from stage1: a
-program that compiles with one compiler and not the other, which is the one
-outcome this project will not ship.
-
-It was closed by driving **both** walks from the importing module's *name* —
-the string both compilers hold for it (WP19 §A3) — rather than one of them from
-the working directory. stage0's `src/compilation.ts` grew the same `parentDirectory` and
-the same 256-level limit, and the two now visit the same directories in the same
-order because they are given the same input and take the same steps, which is a
-stronger statement than "they agree about the tests". What it gives up is Node's
-rule *above the name's own root*: neither compiler can tell that `..` is a
-`node_modules`, so neither steps over it. That changes an answer only where a
-`node_modules/node_modules/<pkg>` actually exists — the rule is unobservable
-otherwise, since the directory it declines to search has to be there for the
-declining to matter — and npm does not produce one. Everywhere the name spells
-the ancestor, including every dependency's own imports, the rule holds exactly
-as Node states it. `tests/link/package_doubled` is that tree, compiled both
-ways by both compilers: found from inside, refused from the root, the same
-answer from each (§10e).
-
-### 10b. The manifest reader, and why stage0 does not use `JSON.parse`
-
-stage0's `src/manifest.ts` and `src/manifest.ts` are the same narrow scan rather than a
-parser and a hand-rolled twin. That is the one design decision in this stage
-worth arguing about, so it is written down: stage1 has no `JSON.parse`, the two
-compilers must select the *same file* for the same manifest, and a program that
-resolved under stage0 and not under stage1 would be a program that compiles with
-one compiler and not the other. Delegating on one side and scanning on the other
-would have made that a question about malformed input rather than a fact.
-
-What the narrowing costs is stated in both module headers rather than left to be
-discovered: only the `nish` conditions are honoured (`default`, `import` and
-`node` are skipped, not matched — a `default` target is JavaScript and this
-compiler cannot compile it), a subpath is an exact key rather than a `"./*"`
-pattern, a target is a string beginning with `./` with no `..` segment and
-no backslash escape, and the mode-qualified condition outranks the plain one
-whatever order the manifest declares them in (§10a). Node's one-entry shorthand
-— an `exports` object with no
-`.`-prefixed key is the condition map for `.` — is read, because a one-export
-package is the common case and writing it that way is not a mistake.
-
-### 10c. Where the package identity now comes from
-
-§9b called the path rule a placeholder for the one the resolver would state, and
-S2 stated it: a module reached by a bare specifier is in the package whose
-manifest the resolver just read. What the path rule still answers is every
-module the resolver is never asked about — a relative import that points into
-`node_modules` (`tests/link/two_packages`, unchanged), and a dependency's own
-relative imports, which stay in their dependency. The two rules agree wherever
-both apply, which is what §9b predicted, so the placeholder shrank rather than
-disappeared and `packages.ts` says so.
+`src/manifest.ts` is a narrow scan, not a JSON parser — the compiler compiles
+itself and has no `JSON.parse`, and the scan's limits are written down rather
+than left to be discovered: only the `nish` conditions are honoured (`default`,
+`import` and `node` are JavaScript), a subpath is an exact key rather than a
+`"./*"` pattern, a target is a string beginning with `./` with no `..` segment
+and no escape, and Node's one-entry shorthand (a condition map with no
+`.`-prefixed key) is read. The scan answers with what it found before the first
+thing it cannot read past; only when that is nothing does a second, complete
+walk of the same grammar decide whether the manifest is malformed (§11). The
+root package's `"nish"` policy field is read strictly and separately (#458).
 
 ### 10d. What S2 deliberately stops short of
 
-- **One diagnostic, not four.** Every failure to find a Nish entry point — no
-  `exports`, no such subpath, no `nish` condition, a shape the reader does not
-  understand — was `` Package `X` has no Nish entry point ``. S3 split it
-  (§11), and what is left of the one message is the residue: no `exports`, no
-  such subpath, or a shape the reader does not follow.
+- **Package identity is the real directory** ([#202](https://github.com/amritk/nish/pull/202)),
+  as Node and `tsc` (`preserveSymlinks: false`) decide it. A module is the file
+  `realpathSync` names, so a symlinked package — pnpm's layout, and npm's when
+  it cannot hoist — is one package (`tests/link/package_symlink`), and a
+  workspace package's relative imports stay in it
+  (`tests/link/package_workspace`). A directory no link leads through keeps the
+  spelling the walk found it by, so programs without links name every module as
+  before. One name at two real directories is `NL3029`, naming both directories
+  and versions; that covers npm's duplicate copies and §7's diamond alike.
+  Identity by manifest (`name@version`) is left for later on purpose: it would
+  only turn that refusal into an acceptance for two copies of one version.
+  What stays lexical is a relative specifier: `./x` is joined to its importer's
+  *name*, not its real directory.
+- **No cache** (S4).
+- **A target that names a directory is a missing module**, at the specifier
+  (`tests/link/package_dir_target`); a `package.json` that is a directory is
+  stepped past (`tests/link/package_dir_manifest`). The second needed a runtime
+  fix: `nish_read_file_or_null` now guards with `S_ISREG`, since `open` accepts
+  a directory and `lseek` answers `LONG_MAX`.
+- **A dependency's exports are not the program's C ABI.** `--emit-header`,
+  `--emit-dts` and `--emit-napi` declare the root package's functions (§4); a
+  dependency's function reaches a host through a re-export from the root
+  package, which waits on `export { f } from "pkg"` — refused today by
+  [LANGUAGE.md](LANGUAGE.md) — rather than on a stage here.
 
-  One message does not license a false one, and the second clause of this one
-  was: it said the package's `exports` `` declares no `nish` condition ``, which
-  the ranking above can make untrue — a manifest whose `nish-i32` names
-  something that is not a file never reaches its perfectly good `nish` row, and
-  the author who checks that row finds it correct and is no further forward. It
-  reports what this compiler came away with instead — `` its `exports` gave this
-  compiler no file to compile for `.` `` — which holds for every shape that
-  reaches it. The registry calls that `NL3014`; the spelling it replaced never
-  reached a release, so there is no number reserved for it.
-- **No `engines.nish` floor** at S2: it is a message rather than a file, and S3
-  added it (§11).
-- **No `realpath` at S2, so a symlinked package was a second package.** Node's
-  resolver realpaths what it finds, which is how one package reached both as
-  `node_modules/shared` and as `node_modules/app2/node_modules/shared` — a
-  symlink to the first, and the layout pnpm always produces and npm produces
-  whenever it cannot hoist — is one module there. Under S2 it was two, and the
-  S1 clash check refused the program: `` Exported function `val` is also
-  defined in … ``. The language had no `realpath` builtin then, so neither
-  compiler could resolve one, and the case was declared rather than fixed.
+## 11. S3 as built
 
-  The builtin arrived on 2026-09-20 (`realpathSync`, WP19 §5a item 4), which
-  left the *decision*: resolving a package's directory makes two copies of one
-  version into two packages as well as two versions, while deciding identity
-  from the manifest would merge the copies and answer §7's diamond by accident.
-  **It is decided now, for the real directory**, as Node and `tsc`
-  (`preserveSymlinks: false`) decide it (#198):
-
-  - A module is the file `realpathSync` names, whatever spelling reached it,
-    and a package is its real directory. `tests/link/package_symlink` compiles:
-    `shared` loads once, and `app2`'s own dependencies are looked for beside
-    where `app2` really is, which is where pnpm puts them.
-  - A package directory no link leads through keeps the spelling the walk
-    found it by, so every program without links names every module as before;
-    one a link leads through is named by its real directory, spelled relative
-    to the working directory when the walk was relative, so no name carries
-    where the checkout sits. A module named under a package's real directory
-    is in that package even with no `node_modules/<name>` in its path, which
-    is what keeps a workspace package's own relative imports out of the root
-    package (`tests/link/package_workspace`).
-  - One package name at two real directories is refused in words, naming both
-    directories and both manifest versions (`NL3029`,
-    `tests/link/package_two_dirs`, and `package_two_dirs_unversioned` for a
-    manifest with no `version`). That covers npm's duplicate copies of one
-    version and §7's diamond alike, which used to be refused by accident as a
-    symbol clash.
-  - Identity by manifest (`name@version`) is left for later on purpose: it
-    would only turn that refusal into an acceptance for two copies of one
-    version, so it can come after 1.0 without breaking a program.
-  - What is still lexical is an import specifier: `./x` is joined to its
-    importer's *name*, not to the importer's real directory, so a relative
-    import out of a module named through a link and a `..` resolves by the
-    spelling. No module a package specifier reaches has such a name.
-
-- **No cache.** §3's stated cost — compile time grows with the dependency tree —
-  is unpaid, and S4 is the payment.
-- **Struct names are still program-wide**, exactly as §9c left them.
-- **A generic template cannot cross a package boundary**, so WP18's rule for
-  naming an instantiation and this note's rule for naming a dependency never
-  meet. `sum<i32>`'s symbols are minted with the *instantiating* module's
-  package prefix ([wp18-generics.md](wp18-generics.md), `TODO(WP18 G7)`), which
-  would be the consumer's package rather than the template's — and the checker
-  refuses `import { Box }` for a generic class, interface or function before any
-  of that can happen, whatever module or package it came from. So no program
-  either stage compiles can ask whose prefix wins. It becomes a real question
-  the day G7 lifts that refusal, and the two notes say the same thing about it
-  from their own sides.
-- **A target that names a directory is a missing module, not a package error.**
-  `"nish": "./src"` passes the reader — it begins with `./`, climbs nowhere,
-  carries no escape — and the resolver is then sent at something that opens and
-  is not a file, which is one of exactly two shapes a tree can steer either
-  compiler at. Both answer `` Cannot find module `X` (looked for …) `` at the
-  specifier (`tests/link/package_dir_target`), and a `package.json` that is
-  itself a directory is the other: the walk reads rather than `stat`s, so it
-  carries on past the candidate and both end at `` Cannot find package ``
-  (`tests/link/package_dir_manifest`). The second of those took a runtime fix:
-  `open(O_RDONLY)` accepts a directory and `lseek` then answers `LONG_MAX`, so
-  `nish_read_file_or_null` asked the arena for that and stage1 died with
-  `out of memory` where stage0 reported a module. It guards with `S_ISREG` now
-  (`runtime/runtime-os.c`, 61 bytes, inside the same ceiling).
-- **A dependency's exports are not the program's C ABI**, and no stage of this
-  note makes them one. `--emit-header`, `--emit-dts` and `--emit-napi` declare
-  the *root package's* functions (§4: a package's artifact rows are the
-  embedding program's to choose), so the way a dependency's function should
-  reach a host is a re-export from the root package — `export { f } from "pkg"`,
-  which the language does not have and which `docs/LANGUAGE.md` rejects by name.
-  It waits on that construct rather than on a stage here, and
-  stage0's `src/interop/abi.ts` and `src/interop-abi.ts` say so at the line that
-  skips a dependency's module.
-
-### 10e. What proves it
-
-`tests/link/package_bare/` is the positive: a program importing `pkg_bare`, the
-`./util` subpath of that same package, and the scoped `@scope/hash`, whose
-manifest declares `nish-i32` before `nish` so that the i32 compile picks a
-different file from the one an f64 compile would. Each package keeps a private
-`helper()` and so does the program, so the exit code is 7 only if every call
-reached the file the condition selected and the symbol its package's prefix.
-
-`tests/link/package_mode_order/` and `tests/link/package_mode_order_f64/` are
-that fixture's other half, and the half the first review of this stage found
-missing: the same two conditions declared the other way round, plain `nish`
-above the mode-qualified one, one package per mode. Under declaration-order
-matching each compiles the mode-agnostic file and exits 164; each exits 7 only
-because the compiler ranks the two conditions itself (§10a). A fixture in the
-order that already worked is what let the wrong rule survive a round of review,
-so both orders are pinned now.
-
-`tests/link/package_above/` is the walk: the manifest beside stage0's `src/` rather than
-inside it, compiled as `nish main.ts` from stage0's `src/`, which is the ordinary npm
-layout compiled the ordinary way and the case that tells a walk that stops at
-the working directory from one that climbs past it. `tests/run.js` compiles it
-with **both** compilers from that subdirectory and compares every byte of every
-module, because a program stage0 resolves and stage1 does not is exactly the
-divergence `tests/self/` exists to prevent. The other fixtures cannot see this:
-the harness spawns the compiler with the repository root as the working
-directory and names the entry by path, so their walk never leaves the fixture.
-
-`tests/link/package_doubled/` is the `node_modules` ancestor, and it is
-compiled twice because the answer is supposed to depend on how the entry is
-named. From inside `node_modules/app`, where the ancestor is `..` and no name
-says what it is, both compilers search it and both compile the program; named
-from the fixture root as `node_modules/app/main.ts`, where the ancestor is
-spelled, both step over it and both refuse with `` Cannot find package `zed` ``.
-Each run is made with both compilers and compared — every byte of every module
-for the first, the exit status and the whole of stderr for the second — because
-what is being pinned is not which answer they give but that it is the same one
-(§10a).
-
-`tests/link/package_not_nish/` is the negative §6 asks for by name: an ordinary
-npm package, with `import`, `require` and `default` rows and no `nish` one.
-`tests/cases/reject_bare_package` is the package that is not installed at all,
-and `tests/cases/reject_bare_import` is a specifier that is neither relative nor
-a package name. `docs/cookbook/mod-package.ts` is the lowering, and it shows the
-only thing a package changes about the IR: the prefix on the imported symbol.
-
-## 11. S3 as built: the resolution diagnostics
-
-S2 answered every failure to find a Nish entry point with one sentence (§10d).
-S3's resolution half gives each cause §5c and §6 name its own message and its
-own `--json` code, so that a tool keyed on the code can tell them apart without
-reading the prose — which was the point of a code in the first place.
+S2 answered every failure to find a Nish entry point with one sentence. S3
+gives each cause its own message and its own `--json` code, so a tool can tell
+them apart without reading prose:
 
 | Code | Cause | Case |
 | --- | --- | --- |
-| `NL3017` | The entry offers only the other mode's condition: `nish-f64` and neither `nish-i32` nor `nish`, compiled in i32, or the reverse. Named with both modes, in §6's sentence. | `tests/link/package_other_mode`, `package_other_mode_f64` |
-| `NL3018` | `engines.nish` is a floor above this compiler, named with the floor and this compiler's version. | `tests/link/package_engines_floor` |
+| `NL3017` | The entry offers only the other mode's condition, named with both modes. | `tests/link/package_other_mode`, `package_other_mode_f64` |
+| `NL3018` | `engines.nish` is a floor above this compiler, named with both versions. | `tests/link/package_engines_floor` |
 | `NL3019` | `engines.nish` is not a range this compiler reads. | `tests/link/package_engines_range` |
-| `NL3020` | The entry declares no Nish condition in any spelling — §6's `lodash` case. | `tests/link/package_not_nish`, `package_no_condition` |
-| `NL3021` | The manifest is not well-formed JSON, *and* no entry point could be read out of it. Named with the manifest's path, line and column. | `tests/link/package_malformed` |
-| `NL3029` | One package name at two real directories — npm's duplicate copies, or §7's diamond. Named with both directories and both manifest versions, at the import that reached the second. | `tests/link/package_two_dirs`, `package_two_dirs_unversioned` |
-| `NL3014` | Anything else: no `exports`, no key for the subpath, a value the reader does not follow — a nested condition object included, since the `nish` row may be inside it. | `tests/link/package_no_subpath`, `package_nested_condition` |
+| `NL3020` | No Nish condition in any spelling — §6's `lodash` case. | `tests/link/package_not_nish`, `package_no_condition` |
+| `NL3021` | The manifest is not well-formed JSON *and* no entry could be read from it; named with path, line and column. | `tests/link/package_malformed` |
+| `NL3029` | One package name at two real directories (§10d). | `tests/link/package_two_dirs`, `package_two_dirs_unversioned` |
+| `NL3014` | Anything else: no `exports`, no such subpath, a shape the reader does not follow (a nested condition object included). | `tests/link/package_no_subpath`, `package_nested_condition` |
 
-`tests/nish/cli.ts` compiles each case with `--json` and holds its code, and
-`tests/link/package_engines_met` is the floor that is met and compiles. The
-boundary itself is tested at this compiler's own version rather than at a
-number written down: `cli.ts` reads `VERSION` from `src/branding.ts`, writes
-one package whose floor is that version, which must compile, and one whose
-floor is a patch above it, which must be refused as `NL3018` naming both the
-floor and the version — so the test still sits on the boundary after the next
-release moves it.
+The reasoning that still governs the code:
 
-**The order they are asked in is part of the rule.** The floor is read first
-and whether or not an entry point resolves: a package that names a newer
-compiler has said this one should not be trusted with its source, and a file
-that happens to resolve does not change that. Then the entry point; and only
-when there is none, whether the manifest is JSON at all — because the narrow
-reader (§10b) stops at the first break, so every other answer about a broken
-manifest is a guess about text it never read. A manifest the reader got a file
-out of before a break still compiles, exactly as under S2, which is why the
-well-formedness walk is only paid on the way to a failure.
-
-**`NL3020` keeps S2's sentence and adds the reason**, so
-`tests/link/package_not_nish`'s expectation, written for S2, still matches: the
-message says what the compiler came away with, then why. `NL3014`'s own wording
-is unchanged, and it is what the residue gets.
-
-**The floor is `>=X.Y.Z` or `>=X.Y` and nothing else.** npm's `engines` slot
-takes any semver range; this reader takes the one shape a *floor* needs, with
-blanks around the version allowed, and refuses every other one — a caret, a
-tilde, an upper bound, a `||`, a bare version, a value that is not a string —
-rather than read it as met. A floor the compiler cannot read is one it cannot
-claim to meet, and treating an unreadable one as satisfied is the silent
-acceptance §5c exists to prevent. The version it compares against is
-`VERSION` in `src/branding.ts`, the constant `--version` prints, with any
-prerelease tag on it ignored.
-
-**The mode mismatch is recognised by the other mode's condition alone.** The
-reader asks for this mode's condition, then plain `nish`, and only when both
-are absent does it ask whether the entry names the other mode's — so a
-package offering `nish` beside `nish-f64` is not a mismatch for an i32
-program, it is a package that compiles.
-
-**Why the malformed case names a position.** The reader has to find the break
-to decide that the manifest is broken, and the break is exactly what the
-package's author needs: `package.json:4:3` is where the missing comma is felt.
-The walk is a second, complete reader of the same narrow grammar rather than a
-JSON parser, for the reason §10b gives; it follows every value, nests at most
-256 deep, and reads a scalar as `true`, `false`, `null` or something that
-begins like a number.
+- **The order is part of the rule.** The floor is read first, whether or not an
+  entry resolves — a package that names a newer compiler has said this one
+  should not be trusted with its source. Then the entry; and only when there is
+  none, whether the manifest is JSON at all, because the narrow reader stops at
+  the first break and any other answer about a broken manifest is a guess.
+- **The floor is `>=X.Y.Z` or `>=X.Y` and nothing else.** A caret, a tilde, an
+  upper bound, a `||` or a bare version is refused rather than read as met: a
+  floor the compiler cannot read is one it cannot claim to meet. It is compared
+  with `VERSION` in `src/branding.ts`, prerelease tag ignored, and
+  `tests/nish/cli.ts` tests the boundary at the compiler's own version so the
+  test moves with each release.
+- **A mode mismatch is recognised by the other mode's condition alone**, after
+  this mode's and plain `nish` are both absent — so `nish` beside `nish-f64`
+  compiles in i32.
+- **NL3014's wording is what the compiler came away with** — "its `exports`
+  gave this compiler no file to compile for `.`" — rather than "declares no
+  `nish` condition", which the mode ranking can make false.
 
 What S3 still owes is in §8.

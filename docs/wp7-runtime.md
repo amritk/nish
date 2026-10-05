@@ -1,1033 +1,282 @@
 # WP7: Runtime and intrinsics
 
-Math builtins as LLVM intrinsics, the `i64` type with explicit numeric
-conversions, `process.exit` and synchronous file I/O, JavaScript-accurate
-number formatting in the runtime, and (second round) `process.argv`,
-string-to-number parsing (`parseInt`, `parseFloat`, `Number`), and the
-`wasi` build profile. For every builtin: its TypeScript signature, the exact
-lowering, the attributes on the callee, and its memory effect (what it does
-to the purity of the function that calls it). Test cases are
-`tests/cases/math_*.ts`, `i64_basic.ts`, `conversions.ts`, `io_files.ts`,
-`process_exit.ts`, `argv_echo.ts`, `parse_numbers.ts`, plus the `reject_*`
-cases listed at the end.
+**Status: complete** (0.1.0). It added the `Math.*` intrinsics, the `i64` type
+and explicit conversions, `process.exit`, synchronous file I/O, JavaScript
+number formatting, `process.argv`, `parseInt` / `parseFloat` / `Number` on
+strings, and the `wasi` build profile. Later work superseded several parts:
 
-## Where the code lives
+- signed overflow, `i64` included, is a checked panic by default (#426);
+- the shortest-digits search was replaced by a port of Ryu;
+- the runtime grew from one translation unit to six, each with its own measured
+  budget (below).
 
-| Piece | Checker | Emitter |
-| --- | --- | --- |
-| Shared plumbing (`dottedName`, arity checks, `BuiltinCall` shape) | stage0's `src/checker/builtins.ts` | stage0's `src/codegen/emit/builtins.ts` |
-| `Math.*`, `toI32/toI64/toF64`, `parseInt/parseFloat/Number`, literal typing | stage0's `src/checker/math.ts` | stage0's `src/codegen/emit/math.ts` |
-| `process.exit`, `process.argv`, `readFileSync`, `writeFileSync`, `appendFileSync` | stage0's `src/checker/io.ts` | stage0's `src/codegen/emit/io.ts` |
-| The `@main` wrapper (`nish_argv_init` call), `@nish_argv` in the `--runtime-decls` prelude | stage0's `src/compilation.ts` (`usesArgv`, `hasEntryMain`) | stage0's `src/codegen/emitter.ts` |
-| The `wasi` profile and the runtime's `__wasi__` guards | `scripts/build.sh` | `runtime/runtime.c` |
+The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
+"Numeric conversions", "Files", the `nish:process` module). This note keeps the
+decisions behind them and the runtime size budget, which `tests/run.js`
+enforces.
 
-Dotted callees (`Math.sqrt`, `process.exit`) are spread into the existing
-`builtinCalls` / `builtinCallEmitters` tables next to `console.log`. Plain
-identifier callees (`toI32`, `readFileSync`) go through a second pair of
-tables, `builtinFunctions` (checker) and `builtinFunctionEmitters` (emitter),
-consulted only when no user function of that name is in scope, so a user
-`function toI32(...)` shadows the builtin. Declarations of runtime symbols
-and intrinsics come from stage0's `src/codegen/runtime.ts`; a module declares exactly
-the ones it uses (intrinsics are never part of the `--runtime-decls` prelude,
-which documents the C ABI).
+Each builtin is declared once in `src/builtins.ts` and `src/runtime.ts`, with
+its signature, its lowering, the attributes on its callee, and the
+`MemoryEffect` it contributes to the purity fixpoint in `src/attributes.ts`.
+Identifier builtins (`toI32`, `readFileSync`) are consulted only when no user
+function of that name is in scope, so a user's function shadows the builtin. A
+module declares only the runtime symbols and intrinsics it uses.
 
 ## Builtins
 
-Effects are the `MemoryEffect` fed to the purity fixpoint in
-stage0's `src/codegen/attributes.ts`: `none` keeps the caller `readnone`, `read` makes
-it at most `readonly`, `write` clears both.
+**Math.** `sqrt`, `floor`, `ceil`, `trunc`, `sin`, `cos`, `exp`, `log` and
+`pow` are `llvm.*.f64` intrinsics, declared `nounwind willreturn readnone`, a
+subset of what LLVM itself attaches. A function made of arithmetic and these
+intrinsics stays `readnone`. They take `f64`, so `Math.sqrt(n)` on an i32
+`number` is rejected (`` `Math.sqrt` requires an f64 argument, got i32 (use
+--number-mode f64 or toF64(x)) ``). A literal argument is typed `f64` by
+context. `sin`, `cos`, `exp`, `log` and `pow` become libm calls, so every
+native profile links `-lm`.
 
-### Math (f64 only)
+- **`Math.round`** is `floor`, then `x - floor(x) >= 0.5`, then `select`. This
+  matches JavaScript's round-half-up, which `llvm.round` (half away from zero)
+  does not, and is exact where `floor(x + 0.5)` is not:
+  `0.49999999999999994` rounds to `0`. The one difference from JavaScript is
+  that `Math.round(-0.3)` is `+0` here and `-0` there; both print `0`.
+- **`Math.abs` / `min` / `max`** accept any numeric type. Integers lower to
+  `llvm.abs` (with `i1 false`, so the minimum value wraps to itself rather
+  than becoming poison) and `smin` / `smax`. Floats lower to `fabs` and
+  `minnum` / `maxnum`. `minnum` returns the non-NaN operand where JavaScript
+  returns NaN, and may return either zero for `min(0, -0)`. That is
+  documented rather than patched, because the intrinsic is a single
+  instruction on every target. The differential corpus keeps it as a known
+  failure (`f64_minmax_nan`, and `f64_round_negzero` for the rounding case).
+- **`Math.random`** is xorshift64\* over one state word, seeded lazily from
+  the time and the pid (the monotonic clock under WASI, which has no
+  `getpid`). Its effect is `write`, so two calls are never merged.
 
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `Math.sqrt(x: f64): f64` | `call double @llvm.sqrt.f64(double x)` | `nounwind willreturn readnone` | none |
-| `Math.floor(x: f64): f64` | `@llvm.floor.f64` | same | none |
-| `Math.ceil(x: f64): f64` | `@llvm.ceil.f64` | same | none |
-| `Math.trunc(x: f64): f64` | `@llvm.trunc.f64` | same | none |
-| `Math.round(x: f64): f64` | `floor` + compare + `select`, see below | `@llvm.floor.f64` as above | none |
-| `Math.sin(x: f64): f64` | `@llvm.sin.f64` | same | none |
-| `Math.cos(x: f64): f64` | `@llvm.cos.f64` | same | none |
-| `Math.exp(x: f64): f64` | `@llvm.exp.f64` | same | none |
-| `Math.log(x: f64): f64` | `@llvm.log.f64` | same | none |
-| `Math.pow(x: f64, y: f64): f64` | `call double @llvm.pow.f64(double x, double y)` | same | none |
-| `Math.PI: f64`, `Math.E: f64` | the constant (`0x400921FB54442D18`, `0x4005BF0A8B145769`) | n/a | none |
+**Conversions.** `toI32`, `toI64` and `toF64` emit nothing when the type is
+already right. Integer narrowing wraps (`toI32(5000000000)` is `705032704`).
+The f64-to-integer direction uses `llvm.fptosi.sat`, so NaN becomes `0` and
+out-of-range values clamp (`toI32(5e10)` is `2147483647`), as Rust's `as`
+does. JavaScript's modulo-2³² `ToInt32` is not followed, and a plain `fptosi`
+would be poison for the same inputs.
 
-The argument must be `f64`. In the default i32 mode `number` is an `i32`, so
-`Math.sqrt(n)` on a `number` is rejected with
-`` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``.
-A numeric literal argument is typed `f64` by context (`Math.sqrt(2)` works in
-either mode, see "Numeric literals" below). `Math.PI` and `Math.E` are `f64`
-in both modes; `const tau: f64 = Math.PI * 2` is fine under i32 mode.
+**`process.exit(code)`** calls `nish_exit`, which is `noreturn` and calls libc
+`exit`, and is followed by `unreachable`. The checker treats it as a
+terminator for definite-return analysis. `FunctionFacts.callsNoReturn`
+propagates over the call graph and removes `willreturn` from every function
+that can reach it. A fatal runtime error (out of memory, an I/O failure) is
+the exception: it also exits, but callers keep `willreturn`. That convention
+dates from WP3, and only an *intended* non-return clears the attribute.
 
-**`Math.round`.** JavaScript rounds half toward +infinity: `Math.round(2.5)`
-is `3` and `Math.round(-2.5)` is `-2`. That is neither `llvm.round.f64`
-(half away from zero, gives `-3`) nor `llvm.roundeven.f64`, and
-`floor(x + 0.5)` is wrong too: `0.49999999999999994 + 0.5` rounds up to `1.0`
-in double arithmetic while JavaScript returns `0`. The emitted sequence is
+**Files.** `readFileSync`, `writeFileSync` and `appendFileSync` are globals,
+not `fs` imports. Their string parameters are `nocapture readonly`, so passing
+a parameter to one of them does not make it escape. A failure prints
+`nish: cannot read <path>` and exits 1. All three now live in
+`runtime-os.c`, and the security audit later added NUL refusal and
+`O_NOFOLLOW` ([security/runtime.md](security/runtime.md)).
 
-```llvm
-  %f = call double @llvm.floor.f64(double %x)
-  %d = fsub double %x, %f
-  %up = fcmp oge double %d, 0x3FE0000000000000     ; 0.5
-  %f1 = fadd double %f, 0x3FF0000000000000         ; 1.0
-  %r = select i1 %up, double %f1, double %f
-```
+**`process.argv`** is a load of `@nish_argv`, which `nish_argv_init` fills from
+`@main`'s `argc` / `argv` before any user code runs. It is a `string[]`, so
+every array operation applies. It is built with `malloc` rather than in the
+arena, so `Arena.reset()` cannot invalidate it. Index 0 is the program path.
+The checker enforces three rules:
 
-`x - floor(x)` is exact for every finite double, so the comparison is exact.
-NaN and both infinities pass through unchanged (the compare is false and
-`floor` is the identity on them). The only observable difference from
-JavaScript is the sign of a zero result: `Math.round(-0.3)` is `-0` there and
-`+0` here; both print as `0`.
-
-### Math (any numeric type)
-
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `Math.abs(x: i32): i32` | `call i32 @llvm.abs.i32(i32 x, i1 false)` | `nounwind willreturn readnone` | none |
-| `Math.abs(x: i64): i64` | `@llvm.abs.i64(i64 x, i1 false)` | same | none |
-| `Math.abs(x: f64): f64` | `@llvm.fabs.f64` | same | none |
-| `Math.min(a: T, b: T): T` | i32/i64: `@llvm.smin.<T>`; f64: `@llvm.minnum.f64` | same | none |
-| `Math.max(a: T, b: T): T` | i32/i64: `@llvm.smax.<T>`; f64: `@llvm.maxnum.f64` | same | none |
-
-`Math.abs` returns the type of its argument. The `i1 false` operand of
-`llvm.abs` makes `Math.abs(-2147483648)` wrap to itself instead of being
-poison. `Math.min`/`Math.max` take exactly two operands of one numeric type
-(`Math.min(1)` and `Math.min(x, 1.5)` with an `i32` `x` are errors). On
-`f64` they use `minnum`/`maxnum`, which return the non-NaN operand when the
-other is NaN (JavaScript returns NaN) and may return either zero for
-`min(0, -0)`; this is documented rather than patched because the intrinsics
-are single instructions on every target.
-
-### Math.random
-
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `Math.random(): f64` | `call double @nish_random()` | `nounwind willreturn` | write |
-
-`nish_random` is xorshift64\* over one global state word, seeded lazily from
-`time(0)`, `getpid()`, and a constant, returning the top 53 bits scaled into
-`[0, 1)`. It mutates the state, hence `write`: a function that draws random
-numbers is never `readnone`/`readonly`, which is exactly right (two calls must
-not be merged).
-
-### Numeric conversions
-
-| Signature | Lowering (by argument type) | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `toI32(x)` | i64: `trunc i64 to i32`; f64: `call i32 @llvm.fptosi.sat.i32.f64(double)`; i32: nothing | intrinsic: `nounwind willreturn readnone` | none |
-| `toI64(x)` | i32: `sext i32 to i64`; f64: `@llvm.fptosi.sat.i64.f64`; i64: nothing | same | none |
-| `toF64(x)` | i32/i64: `sitofp <T> to double`; f64: nothing | n/a | none |
-
-The argument must be `i32`, `i64`, or `f64` (`toI32("x")` is rejected). The
-f64-to-integer direction uses the *saturating* intrinsics so it is defined for
-every input: NaN becomes `0`, values beyond the range clamp to the nearest
-bound (`toI32(5e10)` is `2147483647`). This is the behaviour of a Rust `as`
-cast, not JavaScript's modulo-2^32 `ToInt32`; a plain `fptosi` would be poison
-for the same inputs. Integer-to-integer conversions wrap (`toI32(5000000000)`
-is `705032704`). Same-type calls emit nothing.
-
-### Process
-
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `process.exit(code: i32): void` | `call void @nish_exit(i32 code)` then `unreachable` | `noreturn nounwind` | write, `noreturn` |
-
-Statement position only. The checker treats `process.exit(n);` as a
-terminator for definite-return analysis, so a `number`-returning function may
-end with it and nothing may follow it in the same block (`Unreachable code
-after return`, the same diagnostic as after `return`). The emitter closes the
-block with `unreachable` after the `noreturn` call. `nish_exit` calls libc
-`exit`, so `atexit` handlers and stdio buffers of any C code in the binary are
-flushed; the arena is simply abandoned to the OS.
-
-`willreturn` promises that a call comes back, so every function that can
-reach `nish_exit`, directly or through callees, loses it. `FunctionFacts` gained
-`callsNoReturn`, propagated over the call graph in the same fixpoint as the
-memory effects (`RuntimeFunction.noreturn` seeds it). In `process_exit.ts`
-both `finish` (calls it) and `main` (calls `finish`) are emitted with just
-`nounwind`.
-
-### Files
-
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `readFileSync(path: string): string` | `call i8* @nish_read_file(i8* path)` | `nounwind`; param `nonnull readonly align 8 nocapture`; result `noalias nonnull align 8` | write |
-| `writeFileSync(path: string, data: string): void` | `call void @nish_write_file(i8* path, i8* data)` | `nounwind`; params as above | write |
-| `appendFileSync(path: string, data: string): void` | `call void @nish_append_file(i8* path, i8* data)` | same | write |
-
-These are globals, not `import { readFileSync } from "fs"`: Nish has no
-package resolution and rejects bare specifiers. Paths are relative to the
-working directory. `nish_read_file` opens the file, sizes it with `lseek`,
-allocates one arena string, and fills it with `pread`; the writers open with
-`O_CREAT | O_TRUNC` (or `O_APPEND`) and mode `0644` and loop over `write`.
-No stdio. A failure (missing file, permission denied, short write) prints
-`nish: cannot read <path>` / `cannot write <path>` to stderr and exits
-with status 1; there are no exceptions to throw. The string parameters are
-`nocapture` in the declaration, so passing a parameter to them does not make
-it escape (it keeps `nocapture` in the caller's signature).
-
-`readFileSync` allocates in the arena and the writers do I/O, so all three
-are `write`. Note on `willreturn`: like every allocating runtime call (which
-can hit the out-of-memory `_exit` in `nish_arena_grow`), the file functions
-can terminate the process on a fatal error and callers still keep
-`willreturn`. That is the convention this compiler has used since WP3 for
-fatal runtime errors; only the *intended* non-return of `process.exit` clears
-the attribute.
-
-### process.argv
-
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `process.argv: string[]` | `load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8` | n/a (a global, `@nish_argv = external global %struct.nish_array*, align 8`) | read |
-| (entry wrapper) | `call void @nish_argv_init(i32 %argc, i8** %argv)` as the first statement of `@main` | `nounwind willreturn`; the `i8**` is `nocapture readonly` | write |
-
-`process.argv` is a namespace property (`namespaceProperties["process.argv"]`
-next to `Math.PI`) typed `string[]`, so everything an array supports applies
-to it and lowers through the array emitters unchanged: `.length`, `a[i]`
-with the bounds check, `for...of`, passing it to a function whose parameter
-is `string[]`. The checker records `usesArgv` on the module; the Compilation
-copies it onto the entry module so `emitEntryWrapper` inserts the
-`nish_argv_init` call, which is why `tests/link/argv_import` (only the
-imported module reads it) still gets the call in `main.ll`. Programs that
-never read it keep the wrapper they had.
-
-The runtime builds the array once, with `malloc` rather than the arena:
-`nish_argv_init` allocates the 24-byte header plus one `nish_str *` per
-argument, then each string as its own `{ len, bytes, 0 }` block, so
-`Arena.reset()` / `nish_arena_release` can never invalidate it. Index 0 is
-`argv[0]` as C sees it, the program path (Node's `process.argv[1]`-style
-convention shifted by one, since there is no interpreter in front); the
-differential shim maps it to `process.argv.slice(1)` for the same shape.
-
-Three rules, all in `checkProcessArgv` (stage0's `src/checker/io.ts`):
-
-- **It needs an entry point.** Only the `@main` wrapper has `argc`/`argv`,
-  so a program without `export function main` (a wasm or N-API library, a
-  file compiled for a C driver) rejects every use with
-  `` `process.argv` requires a `main` entry point ``, in any module: the
-  Compilation tells every checker whether the entry has `main`
-  (`hasEntryMain`) before bodies are checked (`reject_argv_no_main`,
-  `tests/link/argv_no_main`).
-- **It is read-only.** `process.argv[i] = s`, `op=`, `++`/`--` on an element
-  and `process.argv.push(s)` are `` `process.argv` is read-only ``
-  (`mutatesArgv` walks up from the property access through parentheses to
-  the consuming construct; `reject_argv_assign`, `reject_argv_push`).
-  Aliasing it (`const args = process.argv`) and then storing through the
-  alias is not caught; the array is a real `nish_array` with `cap == len`, so
-  such a store works and a `push` would copy the data into the arena, which
-  is the documented behaviour of any array.
-- **It is a memory read.** `factCollectors` marks the load, so a function
-  reading it is at most `readonly` (`count()` in `argv_echo.ll` is
-  `nounwind willreturn readonly`); `nish_argv` is written exactly once,
-  before any user code runs, so LLVM may still hoist and CSE the load.
+- it needs an entry `main` (`reject_argv_no_main`);
+- it is read-only (`reject_argv_assign`, `reject_argv_push`), although a store
+  through an alias is not caught;
+- reading it is a memory read, so a reader is at most `readonly`.
 
 ### String to number
 
-| Signature | Lowering | Callee attributes | Effect |
-| --- | --- | --- | --- |
-| `parseFloat(s: string): f64` | `call double @nish_parse_number(i8* s, i32 0)` | `nounwind willreturn`; param `nonnull readonly align 8 nocapture` | write |
-| `Number(s: string): f64` | `call double @nish_parse_number(i8* s, i32 1)` | same | write |
-| `Number(x: i32 \| i64): f64` | `sitofp <T> x to double` | n/a | none |
-| `Number(b: boolean): f64` | `uitofp i1 b to double` | n/a | none |
-| `Number(x: f64): f64` | nothing | n/a | none |
-| `parseInt(s: string): i32` | `%d = call double @nish_parse_number(i8* s, i32 2)` then `call i32 @llvm.fptosi.sat.i32.f64(double %d)` | as above; the intrinsic `nounwind willreturn readnone` | write |
+`parseFloat`, `Number(s)` and `parseInt` are one runtime symbol,
+`nish_parse_number(s, mode)`, because every extra function costs an unwind
+entry against the budget. Its effect is `write`, because `strtod` and `strtoll`
+set `errno`. The string parameter stays `readonly nocapture`. `Number` on a
+number or a `boolean` is a plain conversion with no callee.
 
-One runtime symbol with a mode instead of three, because every function in
-`runtime.c` costs an unwind-table entry against the size budget (below).
-The semantics, implemented in `nish_parse_number`:
+- Whitespace is ASCII only (`strspn`), not JavaScript's Unicode set.
+- **`parseFloat`** reads the longest decimal literal or `Infinity`, using
+  `strtod` once spellings JavaScript rejects (`inf`, `nan`) are ruled out.
+  `strtod` still reads `0x1A` as `26` where JavaScript gives `0`. Guarding
+  that would have cost about 25 bytes, so it is a documented deviation.
+- **`Number`** requires the literal to be the whole string, apart from
+  surrounding whitespace. A blank string is `0`. Hex agrees with JavaScript,
+  but `0b` / `0o` give `NaN`.
+- **`parseInt`** is `strtoll(s, 0, 10)`, saturated into `i32` by
+  `llvm.fptosi.sat`. No digits gives `0`, since an `i32` has no `NaN`, and the
+  automatic hex prefix is not reproduced.
 
-- **Whitespace** is ASCII only (`" \t\n\v\f\r"`, skipped with `strspn`),
-  not the Unicode `StrWhiteSpaceChar` set JavaScript trims.
-- **`parseFloat` (mode 0):** after the whitespace, the longest
-  `StrDecimalLiteral` (`[+-] digits [. digits] [e [+-] digits]`,
-  `[+-] . digits [exponent]`, or `[+-] Infinity`), `NaN` when there is none
-  (`""`, `"abc"`, `"."`, `"+"`, `"inf"`, `"nan"`). The conversion itself is
-  `strtod`, which is correctly rounded and already linked for
-  `nish_str_from_f64`; it accepts a superset of the JavaScript grammar, so the
-  function first rules out the spellings JavaScript rejects (a first
-  character that is neither a digit nor `.` must start exactly `Infinity`,
-  checked with `strncmp`, which also excludes `inf`, `infinity`, `nan`) and
-  then lets `strtod` find the end (`"1e"` is `1`, `"1.5e+"` is `1.5`,
-  `"1e400"` is `Infinity`, `"-0"` is `-0`). The one superset left is the
-  `0x` prefix: `strtod` reads `"0x1A"` as `26` (and hex floats such as
-  `0x1p3`) where JavaScript's `parseFloat` stops at the `x` and gives `0`.
-  Guarding it costs about 25 bytes that the budget does not have; it is
-  documented in LANGUAGE.md and mirrored by the shim.
-- **`Number` (mode 1):** the same literal must be the whole string bar
-  surrounding whitespace, and a blank string is `0` (`Number("")`,
-  `Number("   ")`); anything left over (`"12px"`, `"1e"`, `"Infinityx"`,
-  `"1 2"`, an embedded NUL, since the check is against `len`, not the
-  terminator) is `NaN`. Here the hex prefix agrees with JavaScript
-  (`Number("0x1A")` is `26`); the `0b`/`0o` prefixes are `NaN` where
-  JavaScript reads them.
-- **`parseInt` (mode 2):** `strtoll(s, 0, 10)`, whose grammar is exactly
-  JavaScript's base-10 `parseInt` (whitespace, sign, digits, stop at
-  anything else, including `.`, `e`, and `x`), returned as a double. There is
-  no `NaN` in an `i32`, so no digits give `0`; the compiler then applies
-  `llvm.fptosi.sat.i32.f64`, the same saturating conversion `toI32` uses, so
-  `"99999999999"` is `2147483647` and `"-99999999999"` is `-2147483648`
-  (`strtoll` itself saturates at 2^63). JavaScript's automatic hex
-  (`parseInt("0x10")` is `16`) is not reproduced: `0`. The result is `i32`
-  in both number modes; `Number(s)` is the `f64` parser.
-
-Effect: `strtod`/`strtoll` store `errno` on overflow, a write to memory the
-caller can see, so the runtime function is neither `readonly` nor
-`memory(argmem: read)` and a function that parses is at most `write`; the
-string parameter is still `readonly nocapture`, so passing a parameter to a
-parser keeps `nocapture` on it (`show` in `parse_numbers.ll`).
-
-The unit test in `tests/runtime-test.c` checks 45 inputs against
-`node -p "String(x)"` (plus the documented deviations), and
-`tests/differential/corpus/parse_strings.ts` / `parse_argv_sum.ts` run the
-same forms through the differential harness, whose shim (`runtime/shim.mjs`)
-implements the runtime's grammar rather than JavaScript's built-ins.
-
-### Strings and console.log with i64
-
-`console.log(x)` and template holes accept `i64` (`isStringifiable` covers
-every numeric type) and lower through `nish_str_from_i64(i64)` (`nounwind`,
-effect write), which is also what `nish_str_from_i32` now delegates to.
+`runtime/shim.mjs` implements the runtime's grammar rather than JavaScript's,
+so the differential harness agrees with the native build (`parse_numbers`,
+`parse_strings`, `parse_argv_sum`).
 
 ## The `i64` type
 
-| Nish | LLVM | Align |
-| --- | --- | --- |
-| `i64` | `i64` | 8 |
+`i64` is a first-class integer (`alloca i64, align 8`, `noundef`), never the
+lowering of `number`. Its arithmetic follows the same overflow rule as `i32`:
+a checked panic unless the compiler proves the result fits (#426). Wrapping is
+available through `wrapping*` from `nish:unsafe`, or under the deprecated
+`--wrapping` flag. There is no implicit widening, so write `x + toI64(n)`.
+`console.log` and template holes accept it through `nish_str_from_i64`.
 
-`i64` is a first-class integer type: arithmetic `+ - * / %` (`add`, `sub`,
-`mul`, `sdiv`, `srem`, overflowing like `i32` — a checked panic by default
-unless proven to fit, wrapping through `wrapping*` from `nish:unsafe` or under
-`--wrapping`), unary `-` (`sub i64 0, x` where it cannot overflow), comparisons (`icmp`),
-parameters and returns (`noundef` like every scalar),
-locals (`alloca i64, align 8`), `===`/`!==`. It is never the lowering of
-`number`; `--number-mode` chooses between `i32` and `f64` only. There is no
-implicit widening: `x + n` with `x: i64` and `n: number` is rejected with the
-usual same-type message; write `x + toI64(n)`.
+**Numeric literals are typed by context.** A literal takes the type its
+immediate context demands:
 
-```ts
-function square(x: i64): i64 { return x * x; }
-const big: i64 = 3000000000;   // does not fit i32; fine as an i64 literal
-console.log(square(big));      // 9000000000000000000
-console.log(square(big) * 2);  // -446744073709551616 with --wrapping; overflow is UB without it
-```
+- an annotated initializer;
+- a `return`;
+- a user-call argument;
+- the other operand of a binary operator, or of `Math.min` / `max`;
+- `f64` for the f64-only `Math` functions and `toF64`;
+- `i32` for `process.exit`.
 
-```llvm
-define noundef i64 @square(i64 noundef %x) #0 {
-entry:
-  %0 = mul i64 %x, %x
-  ret i64 %0
-}
-attributes #0 = { nounwind willreturn readnone }
-```
-
-### Numeric literals are typed by context
-
-A numeric literal has the mode's default type (`i32`, or `f64` under
-`--number-mode f64`) *unless its immediate context demands another numeric
-type*, in which case it takes that type. The contexts, in
-`contextualLiteralType` (stage0's `src/checker/math.ts`):
-
-| Context | Example | Literal type |
-| --- | --- | --- |
-| annotated initializer | `let x: i64 = 5` | `i64` |
-| return | `return 5` in a function returning `i64` | `i64` |
-| user call argument | `square(5)` with `x: i64` | `i64` |
-| binary operator, other operand typed | `x * 2`, `2 * x`, `x < 5`, `x = 5` | the other operand's type |
-| `Math.min` / `Math.max` | `Math.max(x, 0)` | the other operand's type |
-| f64-only Math functions, `toF64` | `Math.sqrt(2)`, `Math.pow(x, 0.5)`, `toF64(3)` | `f64` |
-| `process.exit` | `process.exit(1)` in f64 mode | `i32` |
-
-`-5` and `(5)` count as the literal. "Other operand typed" means its type is
-cheap to see without checking it: an already-checked left operand, a
-variable, or a call to a user function or to `toI32/toI64/toF64`. Anything
-else (`5 + s.length`, say) keeps the default type, which is the right answer
-in every case that exists today because `.length` and every other construct
-yield `number`. A literal in an integer context must be an integer; in an
-`i64` context it must also satisfy |n| <= 2^53, because TypeScript's parser
-has already rounded larger literals to a double (`9223372036854775807` reads
-back as `9223372036854776000`); build larger values arithmetically. The rule
-also makes `let x: i32 = 5` legal under f64 mode and `let x: f64 = 5` under
-i32 mode, which previously needed `5.0`-style workarounds that i32 mode
-rejects anyway.
-
-Emission: an `i64` literal is printed as a plain integer (`store i64
-3000000000`), exact because of the 2^53 bound.
+Anywhere else it takes the mode's default type. In an `i64` context the
+literal must satisfy |n| ≤ 2⁵³, because a larger one has already been rounded
+to a double by the parser.
 
 ## JavaScript number formatting
 
-`nish_str_from_f64` now produces exactly what `Number.prototype.toString`
-produces (WP3 used `%.17g`, which printed `0.1` as `0.10000000000000001`).
-The algorithm, in `runtime/runtime.c`:
+`nish_str_from_f64` prints exactly what `Number.prototype.toString` prints:
 
-1. Special cases: NaN -> `NaN`, +/-0 -> `0`, +/-Infinity -> `Infinity` /
-   `-Infinity`; a leading `-` for negatives.
-2. Shortest round-trip digits: for precision 1..17, `snprintf("%.*e")` and
-   `strtod` back; the first precision that reproduces the value wins (17
-   always does). This yields the shortest correctly rounded digit string,
-   which is what ECMA-262 specifies (fewest digits; ties by closeness, and
-   the correctly rounded string of a given length is the closest).
-3. Layout per ECMA-262 `Number::toString` with `k` digits and exponent `n`
-   (value = 0.digits x 10^n): plain integer digits padded with zeros when
-   `k <= n <= 21`; a decimal point inside the digits when `0 < n <= 21`;
-   `0.000ddd` when `-6 < n <= 0`; otherwise `d.ddde+X` / `de-X` with the
-   JavaScript exponent syntax (sign always present, no zero padding).
+- `NaN`, `0` for both zeros, `±Infinity`;
+- otherwise the shortest round-trip digits, laid out by ECMA-262's
+  `Number::toString` (plain digits up to 10²¹, `0.000ddd` down to 10⁻⁶,
+  otherwise `d.ddde±X`).
 
-Checked against Node in `tests/runtime-test.c` (expected strings are
-`node -p "String(x)"`):
-
-| Value | Node | `nish_str_from_f64` |
-| --- | --- | --- |
-| `0.1` | `0.1` | `0.1` |
-| `1/3` | `0.3333333333333333` | `0.3333333333333333` |
-| `1e21` | `1e+21` | `1e+21` |
-| `1e-7` | `1e-7` | `1e-7` |
-| `0.000001` | `0.000001` | `0.000001` |
-| `123456789012` | `123456789012` | `123456789012` |
-| `-0.0` | `0` | `0` |
-| `NaN` | `NaN` | `NaN` |
-| `Infinity` | `Infinity` | `Infinity` |
-| `-Infinity` | `-Infinity` | `-Infinity` |
-| `5e-324` | `5e-324` | `5e-324` |
-| `1.7976931348623157e308` | `1.7976931348623157e+308` | `1.7976931348623157e+308` |
-| `100` | `100` | `100` |
-| `1.5` | `1.5` | `1.5` |
-| `-2.5` | `-2.5` | `-2.5` |
-| `1e20` | `100000000000000000000` | `100000000000000000000` |
-| `1.5e300` | `1.5e+300` | `1.5e+300` |
-| `2.5e-7` | `2.5e-7` | `2.5e-7` |
-| `4.35` | `4.35` | `4.35` |
-| `123e-20` | `1.23e-18` | `1.23e-18` |
-
-Beyond the unit test, the formatter was compared with Node on 5,000
-pseudo-random doubles (random bit patterns, decimal fractions, large
-integers, tiny magnitudes) with zero differences. The cost is a handful of
-`snprintf`/`strtod` calls per conversion, acceptable for a function that is
-never on a hot path (`console.log`, template holes); a Ryu port would be
-faster but does not fit the runtime budget.
+WP7 found the digits by trying `snprintf("%.*e")` and `strtod` at each
+precision from 1 to 17. That is now a port of Ryu (`runtime/LICENSE-ryu`,
+`THIRD_PARTY_NOTICES.md`). The search was slow, and it was also *wrong* for
+values like `7.120236347223045e-307`, where the correctly rounded k-digit
+string is not the shortest one that round-trips. Ryu's two power-of-five
+tables are about 9.9 KB of `.rodata`, which only a binary that formats a
+double links. `tests/runtime-test.c` checks the formatter against
+`node -p "String(x)"`.
 
 ## Runtime additions and budget
 
-`runtime/runtime.c` gained `nish_str_from_i64`, the new `nish_str_from_f64`,
-`nish_random`, `nish_exit`, `nish_read_file`, `nish_write_file`, and
-`nish_append_file`, and defines `_POSIX_C_SOURCE` for `pread`; the second
-round added `nish_argv` / `nish_argv_init` and `nish_parse_number`; the
-2026-09-12 column adds `nish_readdir`, `nish_spawn_to`,
-`nish_monotonic_nanos` and the shared `nish_spawn_impl` that `nish_spawn`
-delegates to; the last column is the same runtime after those three moved out
-of `runtime.c` into `runtime/runtime-os.c`, which is why it reads as a sum.
-Measured with `clang -Oz -c runtime/runtime.c && size -A runtime.o`, per
-section, and from the split onwards `clang -Oz -c runtime/runtime-os.c` as
-well; the `text` column of plain `size` is the same code plus the read-only
-constants and the `.eh_frame` unwind entries that the `size` build profile
-strips:
+**The metric** is the sum of every `.text*` section of `clang -Oz -c <file>`,
+as `size -A` reports it, with clang 18.1.3 on linux-x64. It covers every
+`.text*` section and not just `.text`, because cold code goes into
+`.text.unlikely.` and a linked binary pays for that too. Source bytes and the
+`text` column of plain `size` are not limits: they count comments, `.eh_frame`
+and the Ryu tables. **The gate is `tests/run.js`** (`node tests/run.js
+budget`). Each failure names its file, the measurement, the budget and the
+constant to raise. The gate is a counted skip off linux-x64 or without `size`,
+because a byte-exact ceiling is a fact about one target and one compiler.
 
-| | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | 2026-09-12 | 2026-09-12, split (core + os) | Budget |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 12,707 | 61,725 | 52,029 + 12,759 | — (was 8,192; exceeded since WP4, comments) |
-| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | 16,844 | 14,908 + 1,960 | — (was 4,096; counts `.eh_frame` and the Ryu tables) |
-| `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,604 | 3,449 + 1,155 | — (was 4,096; the row below replaced it) |
-| every `.text*` section, summed | | | | | 4,670 (4,154 before the three) | **3,480 + 1,190** | **3,584** core, **1,280** os (one budget of 4,864 until the split) |
+**The rule.** Each ceiling is set at the next 256-byte boundary above a fresh
+measurement. A raise lands in the commit that needs it, with its measurement
+recorded here. A new surface gets its own translation unit and its own ceiling
+rather than borrowing room from an existing one. `-ffunction-sections
+-Wl,--gc-sections` drops every function a program does not call, so each
+file's cost is paid only by programs that use it: `examples/hello.ts` at the
+`size` profile was 4,680 bytes, byte-identical, before and after each split.
 
-The WP14 column is measured on the tree of that milestone, where the work
-between WP7 and it had already brought `.text` back down to 2,287; the 2,583
-beside it is the WP7 figure and is not the number D4 grew. The 2026-09-12
-column is clang 18.1.3 on linux-x64.
+| File | Subject | Budget (constant) | Measured 2026-10-05 |
+| --- | --- | ---: | ---: |
+| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,606 (`RUNTIME_TEXT_BUDGET`) | 3,606 |
+| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`) | 3,840 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,731 |
+| `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses, `getenv`, the clock, `realpath`, platform | 1,536 (`RUNTIME_OS_TEXT_BUDGET`) | 1,530 |
+| `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 320 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 286 |
+| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner and a scope's tasks | 1,024 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 905 |
+| `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
+| `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
 
-The budget is the compiled code, and the two rows above it are history rather
-than limits (`docs/MASTER_PLAN.md` §2): what a linked binary pays is
-instructions, while those two measure comments, unwind tables, and — since the
-Ryu formatter replaced the `snprintf` round trip — the 9,888 bytes of
-power-of-five tables that `size` counts as text and that are constants rather
-than code. WP14 D4's `nish_mkdir` and `nish_spawn` cost 257 bytes of it, and
-cost a program that calls neither exactly nothing — `examples/hello.ts` at the
-`size` profile is 4,696 bytes with them and 4,696 without, because
-`-ffunction-sections -Wl,--gc-sections` drops both.
+**How the ceilings moved.**
 
-### 2026-09-12: 4,864 bytes, enforced by the suite
+| Date | Change | Ceiling |
+| --- | --- | --- |
+| WP7 | one file, `.text` alone; 2,583 bytes after argv and parsing | 4,096 |
+| 2026-09-12 | `.text*` sum; the tree had drifted to 4,154 unmeasured, plus `readdir`, `spawnSyncTo`, `monotonicNanos` = 4,670 | 4,864 |
+| 2026-09-12 | split by subject: core 3,480, os 1,190 (sum unchanged) | 3,584 + 1,280 |
+| 2026-09-12 | the threads build measured separately (3,605, above the core's ceiling) | 3,840 |
+| 2026-09-18 | `runtime-parallel.c` (49 / 482) | 256 / 512 |
+| 2026-09-20 | `nish_realpath` (157 bytes) | os 1,536 |
+| 2026-09-27 | wp29 P2's scope tasks (286 / 901) | 320 / 1,024 |
+| 2026-09-29 | `runtime-host.c` (571); `runtime-net.c` (853) | 768; 1,024 |
+| 2026-09-30 | UDP (1,782), then the readiness loop (2,071) | net 2,048, then 2,304 |
+| 2026-10-02 | security audit (length limits, `nish_cpath`, `O_NOFOLLOW`, RT-9, one cold `nish_oom`) | none moved |
+| 2026-10-03 | `nish_wipe` (#385): 3,583 → 3,604 | core 3,605 |
+| after 0.16.0 | `nish_panic_overflow` (#426): 3,606 | core 3,606 |
 
-Two things moved at once. The metric is now the **sum of every `.text*`
-section** rather than the single `.text` line the rows above quote: `clang -Oz`
-puts cold code in `.text.unlikely.` (66 bytes today), a linked binary pays for
-that section as well, and a ceiling on `.text` alone can be satisfied by moving
-code into another section instead of by making it smaller.
+**Why the split by subject.** The criterion is whether a function wraps a
+system call, whether the operating system is its subject, because that same
+question decides whether a builtin has to be C at all. It is also the surface
+that grows as the language reaches further. The core is a closed set: its
+ceiling should come down and never go up, and its last two raises were each
+the exact measured size of what was added. Three placements could have gone
+the other way:
 
-And the number is now **4,864**. `nish_readdir` (294 bytes), `nish_spawn_impl`
-(319, against the 172 the old `nish_spawn` body cost), `nish_monotonic_nanos`
-(36), `nish_spawn_to` (33) and the 6 bytes `nish_spawn` is reduced to add 516
-bytes of `.text` and 232 of `.eh_frame`, taking the `.text*` sum from 4,154 to
-4,670. Most of the overshoot against the old 4,096 is older than these
-functions, though: while the budget was a row in this document and a reviewer's
-memory, the tree drifted from WP14 D4's 2,544 bytes to 4,088 with nobody
-measuring. So the budget is the next 256-byte boundary above what was actually
-measured, which leaves 194 bytes of headroom — enough that a small fix (one
-more error path, an extra bounds check) does not need a commit that raises the
-budget with it, and little enough that anything larger has to be a deliberate
-decision with its own measurement in this section.
+- `nish_random` stayed in the core, because its time-and-pid seed is used
+  once;
+- `nish_argv_init` stayed in the core, because it makes no system call;
+- `nish_platform` / `nish_arch` moved, because their subject is the host.
 
-**The gate is `tests/run.js`, not a reviewer.** `RUNTIME_TEXT_BUDGET` there
-compiles `runtime/runtime.c` with `clang -Oz`, sums every `.text*` row of
-`size -A`, and fails with the measured number, the budget and the overshoot, so
-whoever breaks it reads the size rather than a red line. It skips — through
-`skip(reason)`, so the run counts it — when `clang` or `size` is missing, and
-on any host that is not linux-x64, because a byte-exact ceiling is a fact about
-one target and one compiler version rather than about the source.
-`node tests/run.js budget` is the filter that selects it.
+The threads build is a separate ceiling rather than a raised shared one, so
+that the default build is not handed room it has no use for. The default
+build of `runtime-parallel.c` is gated too, so that nothing but a fallback is
+linked by a program that never spawns.
 
-The `--gc-sections` claim holds for the three new functions too, and this is
-the check that says so: `examples/hello.ts` at the `size` profile is 4,680
-bytes against this runtime and 4,680 bytes against the one before it — the two
-binaries are byte-identical, because a program that calls none of the three
-drops all three.
+**What the split costs a program.** `nish_readdir` now calls the arena across a
+translation-unit boundary. With `-flto`, which both the `speed` and `size`
+profiles use, the binaries are byte-identical. Without LTO, at `-O2`,
+`io_readdir`'s `.text*` *fell* from 9,373 to 8,584 bytes. 4,000
+`readdirSync` calls took 41 ms either way. `scripts/build.sh` pairs the other
+files with any `runtime.c` it is handed, and `runtime.c` never calls into
+them, so a link line that names only `runtime.c` still builds a program that
+uses none of them. The freestanding `runtime/runtime-wasm.c` is a separate
+file and has no budget.
 
-The 595 bytes of the second round are `nish_argv_init` (162 bytes),
-`nish_parse_number` (249), their two unwind entries and the constants
-(`" \t\n\v\f\r"`, `"Infinity"`, NaN). Getting there from a first draft of
-about 1,000 bytes: `strtoll` and `strtod` replace hand-written digit loops
-(a hand-written double parser cannot be correctly rounded in that budget
-anyway), `strspn` replaces four whitespace loops, the three parsers are one
-symbol with a mode (each extra function is 30 to 60 bytes of `.eh_frame`),
-`argv` strings are copied with `strcpy` after a `strlen` instead of a
-length-carrying `memcpy`, and the `0x` guard in `parseFloat` was dropped
-(documented deviation). Three bytes of headroom remain; the next runtime
-feature has to pay for itself.
+### Checked arithmetic
 
-`tests/runtime-test.c` covers the integer and double formatting cases above,
-1,000 draws of `nish_random` in `[0, 1)`, a write/append/read/truncate cycle
-on `build/test/runtime_test.txt`, `nish_argv_init` (an empty argument, a UTF-8
-one, survival of `nish_reset_arena`, `argc == 0`), and the 45 parsing inputs.
-
-### Checked arithmetic: 3,606 bytes
-
-Signed `+ - *`, negation and the steps panic on overflow rather than wrap or
-carry an unproven `nsw` (docs/LANGUAGE.md, "Semantics decisions"), so the core
-gained `nish_panic_overflow(op)`: "attempt to add with overflow" and its three
-siblings, exit 1, the division panic's shape. It cannot live anywhere but the
-core, because every program with an unproven `+` can call it.
-
-Measured with clang 18.1.3 on linux-x64, every `.text*` section summed, on top
-of `nish_wipe` (#385), which had just taken the ceiling to 3,605:
-
-| | `runtime.c` | `-DNISH_THREADS=1` |
-| --- | ---: | ---: |
-| before | 3,604 | 3,729 |
-| one table of six messages for both panics, `nish_panic_div` a call into it | **3,606** | **3,731** |
-
-A second function beside `nish_panic_div` with its own four strings, the
-first shape tried, measured 23 bytes over the base before the wipe landed;
-sharing the table costs 2. The core was one byte under its ceiling
-before the change, so even 2 bytes did not fit. Splitting the panic into a
-unit of its own would cost every link line a file for 22 bytes of code, so the
-ceiling moved instead, by the one byte that was missing, as the wipe's did:
-the core is a closed set, and the room it should have is almost none. The
-threaded ceiling, 3,840, still has 109 bytes.
-
-### 2026-09-12: two files, two budgets
-
-The budget above moved for the wrong reason. `readdirSync`, `spawnSyncTo` and
-`monotonicNanos` are syscall wrappers, so they have to be C, and they took the
-ceiling from 4,096 to 4,864 — a number that a reader reasonably reads as "what
-the runtime costs" and that had just grown by 516 bytes of code no program is
-obliged to call. Section GC already said as much: `examples/hello.ts` at the
-`size` profile was byte-identical against the runtime before those three and
-after. The *measurement* was the thing that had not caught up, because one
-translation unit can only have one ceiling.
-
-So the operating-system half is now its own translation unit,
-`runtime/runtime-os.c`, with its own measured ceiling. **The criterion is
-whether the function wraps a system call** — whether the operating system is its
-subject, rather than memory this process already owns — because that is the same
-criterion that decides whether a builtin has to be written in C at all, and it
-is exactly the surface that grows as the language reaches further out:
-
-| Moved to `runtime-os.c` | Stayed in `runtime.c` |
-| --- | --- |
-| `nish_exit`, `nish_io_fail` | the arena: `nish_arena_grow`, `nish_alloc_struct`, `nish_reset_arena`, `nish_free_arena`, `nish_arena_mark` / `release` / `used` / `keep` |
-| `nish_read_file`, `nish_read_file_or_null`, `nish_put_file`, `nish_write_file`, `nish_append_file` | the strings: `nish_str_new`, `nish_str_concat`, `nish_str_eq`, `nish_str_len`, `nish_str_at`, `nish_str_index_of`, `nish_write`, `nish_print` |
-| `nish_is_dir`, `nish_mkdir` | number formatting: `str_from_digits`, `nish_str_from_i32` / `i64` / `u64`, Ryu and `nish_str_from_f64`, `nish_parse_number` |
-| `nish_spawn_impl`, `nish_spawn`, `nish_spawn_to` | the arrays: `nish_alloc_array`, `nish_array_grow` |
-| `nish_readdir` | `nish_random`, `nish_argv` / `nish_argv_init` |
-| `nish_monotonic_nanos` | the panics: `nish_die`, `nish_panic_index`, `nish_panic_div` |
-| `nish_getenv` | the `__wasi__` entry bridge (`__main_argc_argv`) |
-| `nish_platform`, `nish_arch` | |
-
-The file I/O went with them, and by the same reasoning rather than by
-association: `open`, `pread` and `write` on a path are the operating system
-answering about something outside this process, and `readFileSync` is the
-builtin most likely to grow a sibling (a `statSync`, a `readFileSyncAt`) that
-would then be measured against the arena.
-
-Three of the decisions are worth their reasons, because each could have gone the
-other way:
-
-- **`nish_random` stays.** Its subject is a pseudo-random sequence over one
-  static word; `time(0)` and `getpid()` are a one-time seed, not the answer, and
-  `Math.random` grows with nothing in the list above.
-- **`nish_argv` / `nish_argv_init` stay.** They make no system call at all: the
-  entry point is *handed* `argc` and `argv`, and turning them into an array is
-  `malloc`, `strlen` and `strcpy` over memory this process already has. So does
-  the `__wasi__` bridge that forwards them, which every wasi program needs
-  whether or not it reads `process.argv`, which is the second reason it belongs
-  in the file every profile compiles.
-- **`nish_platform` / `nish_arch` move**, although they make no system call
-  either — they are two addresses in constant data, settled when the runtime was
-  compiled. They are `process.platform` and `process.arch`: their subject is the
-  host, and the branch list is what grows when a new one is supported.
-
-**The two ceilings.** `clang -Oz -c <file>` and `size -A`, every `.text*`
-section summed, clang 18.1.3 on linux-x64:
-
-| File | `.text` | `.text.unlikely.` | Total | Budget | Headroom |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `runtime/runtime.c` | 3,484 | 31 (`nish_die`) | **3,515** | **3,584** | 69 |
-| `runtime/runtime-os.c` | 1,216 | 35 (`nish_io_fail`) | **1,251** | **1,280** | 29 |
-| both | 4,700 | 66 | 4,766 | 4,864 | 98 |
-| `runtime.c -DNISH_THREADS=1` | 3,609 | 31 | **3,640** | **3,840** | 200 |
-
-`runtime-os.c` was 1,190 until WP21 S2 put an `fstat`/`S_ISDIR` guard in
-`nish_read_file_or_null`, which is 61 bytes and buys the answer `null` for a
-directory: `open(O_RDONLY)` accepts one, `lseek` then answers `LONG_MAX`, and
-the arena was asked for that many bytes. The ceiling did not move for it — 29
-bytes of headroom is what the surface costs now, and the next syscall wrapper
-is the one that has to argue for a raise. `runtime.c` has drifted 3,480 → 3,484
-over the same span, from work that had nothing to do with this table; the rows
-above are all freshly measured, so the `both` row is their sum and not the sum
-of an older pair.
-
-The split itself is what the numbers were taken to check, and it cost nothing:
-at the time it was made, 3,480 + 1,190 was exactly the 4,670 that one file
-measured, and every moved function was byte for byte the size it was
-(`nish_readdir` 294, `nish_spawn_impl` 319, `nish_monotonic_nanos` 36,
-`nish_spawn_to` 33, `nish_getenv` 80). It cost nothing to measure and nothing
-to link.
-
-Each budget is the next 256-byte boundary above its measurement, which is the
-rule the 4,864 was set by. The consequences of the two numbers are deliberately
-different:
-
-- **3,584 for the core.** The core is a closed set — nothing in the language
-  roadmap adds an arena or a second string representation — so this number
-  should come down over time and never up. 104 bytes of headroom is tight on
-  purpose: a commit that needs the room grew something that was not supposed to
-  grow, and should have to say so.
-- **1,280 for the operating-system half.** 90 bytes is less than one syscall
-  wrapper (`nish_readdir` alone is 294), so the next builtin that reaches into
-  the operating system *will* raise this number, in the commit that adds it,
-  with its measurement — which is the whole point. It can no longer borrow room
-  from the arena to hide in, and raising it says what it says: the OS-facing
-  surface grew, and the core did not.
-
-  **That happened on 2026-09-20, and it is recorded here because the paragraph
-  above predicted it exactly.** `nish_realpath` (WP19 §5a item 4) is **157**
-  bytes, the file measures **1,347** (`.text` 1,312 plus `.text.unlikely.` 35),
-  and the ceiling moves to the next 256-byte boundary above that: **1,536**,
-  leaving 189. The core's 3,480 did not move, which is the distinction the
-  split was made to preserve.
-
-  8 of those 157 bytes are a portability choice, and they are worth their own
-  number because the cheaper spelling is the wrong one. `realpath(p, NULL)`
-  measures 1,339 and lets libc size the buffer, which is POSIX 2008 — but on
-  Darwin it is the `__DARWIN_EXTSN` variant that implements that, and which of
-  the two same-named symbols a translation unit binds depends on its
-  feature-macro level. A caller-supplied `PATH_MAX` buffer is defined under
-  both, so it is the spelling that cannot depend on which one a given build
-  gets, and 8 bytes is what that costs. The declaration needs `_XOPEN_SOURCE
-  700` beside the file's existing `_POSIX_C_SOURCE 200809L`: `realpath` is XSI
-  rather than POSIX base, and measured on glibc 2.39 the POSIX macro alone
-  leaves it undeclared.
-
-That the two sum to 4,864, the single budget they replace, is a coincidence of
-where the 256-byte boundaries fall and not a constraint on either.
-
-### 2026-09-18: a third file, for the same reason as the second
-
-`runtime/runtime-parallel.c` — the half that divides a range of work across
-threads (WP20 T1, the stage under
-[wp29-thread-surface.md](wp29-thread-surface.md)'s surface) — is a third
-translation unit with a ceiling of its own, and it is a third file for exactly
-the reason the second one exists.
-
-`runtime-os.c` had **29 bytes** of its 1,280-byte ceiling left. The partitioner
-is **482**: `pthread_create` and `pthread_join`, the chunk arithmetic, the
-worker trampoline that frees its own arena, the thread-local nesting guard, and
-the cached CPU count.
-Putting it there would have meant raising the syscall half's ceiling past 1,536
-to hold something whose subject is not a system call in the sense that section
-means — and moving the number a reader sees for "the operating-system surface"
-for a reason that has nothing to do with the operating system. That is the
-mistake the 2026-09-12 split was made to stop making.
-
-Two budgets, because the file compiles in two configurations and they are not
-the same file:
-
-| `clang -Oz -c runtime/runtime-parallel.c` | measured | budget |
-| --- | ---: | ---: |
-| default — the sequential fallback, and WASI, where there are no threads | **49** | **256** |
-| `-DNISH_THREADS=1` — the build `--threads` links | **482** | **512** |
-
-Measured on 2026-09-18 with clang 18.1.3 on linux-x64. The 207 bytes of slack
-in the first row are not room to spend: gating the default build is what says
-that nothing but a fallback belongs on the path a program which never spawns
-still links, so a commit that needs that room has put code there.
-
-And what it costs a program that does not use it is the same answer this
-document has given twice before, measured the same way: **nothing, byte for
-byte.** `examples/hello.ts` at the `size` profile is 4,680 bytes with the file
-linked and 4,680 without, and `cmp` says the two binaries are identical —
-`-ffunction-sections -Wl,--gc-sections` drops every function no program calls,
-whichever translation unit defined it. `scripts/build.sh` pairs the file with
-the `runtime.c` a caller names, as it already pairs `runtime-os.c`, so there is
-no link line anywhere that has to learn about it.
-
-
-### 2026-09-29: a fifth file, for sockets
-
-`runtime/runtime-net.c` holds the sockets of `nish:net` (WP34 N5), with a
-ceiling of its own, `NET_TEXT_BUDGET`. The first slice is addresses and
-non-blocking TCP, and it measured **853 bytes**, all `.text`, with clang 18.1.3
-on linux-x64 at `-Oz`:
-
-| function | bytes |
-| --- | ---: |
-| `nish_tcp_listen` (the `sockaddr` inlined, the `::` fallback, `SO_REUSEADDR`, `IPV6_V6ONLY`, `bind`, `listen`) | 360 |
-| `nish_tcp_accept` (and writing the peer's 18-byte form) | 113 |
-| `nish_net_address` | 86 |
-| `nish_net_parse` (two `inet_pton`s, and a `strlen` that refuses a NUL inside the host) | 99 |
-| `nish_net_local_port` | 53 |
-| `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |
-| `nish_net_fail`, `nish_net_socket` | 14, 12 |
-
-The ceiling is **1,024**, the next 256-byte boundary above the measurement, as
-every ceiling here was set. It is a file of its own rather than more of
-`runtime-host.c` (571 of 768) because it would not have fitted, and because its
-surface is the one that grows: UDP with GSO, GRO and ECN, and then the readiness
-loop over `epoll` and `kqueue`, are the next two slices of N5, and each raises
-this ceiling alone with a fresh measurement here. The four ceilings before it do
-not move.
-
-What it costs a program that calls none of it is, again, nothing: the `net_`
-block of `tests/run.js` links a program that calls no `nish:net` function with
-`-ffunction-sections -Wl,--gc-sections` and finds no `nish_net_` or `nish_tcp_`
-symbol in it, against nine without `--gc-sections`, and links `net_tcp_echo`
-the same way as the control that shows the count would see them.
-
-
-### 2026-09-30: UDP, and the net ceiling raised to 2,048
-
-The second slice of N5 adds `udpBind`, `udpSendTo` and `udpRecvFrom`, with
-`SO_REUSEPORT`, `UDP_SEGMENT` (GSO), `UDP_GRO` and the ECN control messages.
-`runtime-net.c` measured **1,782 bytes**, all `.text`, with clang 18.1.3 on
-linux-x64 at `-Oz`:
-
-| function | bytes |
-| --- | ---: |
-| `nish_net_bound` (what `nish_tcp_listen` was, now shared with `udpBind`: the `sockaddr` inlined, the `::` fallback, `IPV6_V6ONLY`, `SO_REUSEADDR` for a stream, `SO_REUSEPORT`, `UDP_GRO`, `IP_RECVTOS` and `IPV6_RECVTCLASS` for a datagram socket, `bind`, `listen`) | 527 |
-| `nish_udp_send_to` (the address, the `UDP_SEGMENT` and `IP_TOS` / `IPV6_TCLASS` control messages on the stack, `sendmsg`) | 403 |
-| `nish_udp_recv_from` (`recvmsg`, the `UDP_GRO` and TOS / traffic-class control messages, writing `meta` and the sender's 18-byte form) | 332 |
-| `nish_tcp_accept` | 113 |
-| `nish_net_parse`, `nish_net_address`, `nish_net_local_port` | 99, 86, 53 |
-| `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |
-| `nish_udp_bind`, `nish_net_fail`, `nish_net_socket`, `nish_tcp_listen` | 19, 14, 13, 7 |
-
-The ceiling goes from 1,024 to **2,048**, the next 256-byte boundary above the
-measurement; the owner approved raising it at the plan's sign-off, and it is the
-one ceiling that moves. `runtime.c`, `runtime-os.c`, `runtime-parallel.c` and
-`runtime-host.c` are unchanged, and so are their ceilings. The Darwin branch
-(`-95` for a segment, an ECN mark or the GRO flag) is not in this number,
-because the budget is measured on linux-x64. Section GC still leaves all of it
-out of a program that calls none: the `net_` block's check now names the three
-UDP symbols among the ones a quiet program drops.
-
-### 2026-09-30: the readiness loop, and the net ceiling raised to 2,304
-
-The third slice of N5 adds `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`
-and `pollWait`: epoll on Linux, kqueue on Darwin. `runtime-net.c` measured
-**2,071 bytes**, all `.text`, with clang 18.1.3 on linux-x64 at `-Oz`. The
-per-function sizes are `llvm-nm --print-size` of that object, and they sum to
-the total:
-
-| function | bytes |
-| --- | ---: |
-| `nish_net_bound` | 527 |
-| `nish_udp_send_to` | 403 |
-| `nish_udp_recv_from` | 332 |
-| `nish_poll_wait` (`epoll_wait` into 64 `epoll_event`s on the stack, `EINTR` answered as 0, and the token and event pairs written into `ready`) | 159 |
-| `nish_tcp_accept` | 113 |
-| `nish_net_parse`, `nish_net_address`, `nish_poll_ctl` (the events checked and mapped, then one `epoll_ctl` for add, modify or remove), `nish_net_local_port` | 99, 86, 71, 53 |
-| `nish_net_write`, `nish_net_shutdown`, `nish_net_read`, `nish_poll_create`, `nish_net_close` | 34, 31, 31, 23, 20 |
-| `nish_udp_bind`, `nish_net_fail`, `nish_net_socket`, `nish_poll_add`, `nish_poll_modify`, `nish_poll_remove`, `nish_tcp_listen` | 19, 14, 13, 12, 12, 12, 7 |
-
-The loop is 289 of those bytes, which put the unit 23 over its ceiling of 2,048,
-so the ceiling goes to **2,304**, the next 256-byte boundary above the
-measurement, and it is the one ceiling that moves. The five entry points share
-one `nish_poll_ctl`, whose operation is epoll's own constant rather than an
-index into a table, and leave nothing else to fold. `runtime.c`, `runtime-os.c`,
-`runtime-parallel.c` and `runtime-host.c` are unchanged, and so are their
-ceilings. The kqueue branch is not in this number, because the budget is
-measured on linux-x64. Section GC still leaves all of it out of a program that
-calls none: the `net_` block's check names the five `nish_poll_` symbols among
-the ones a quiet program drops.
-
-
-### 2026-10-02: the security audit, no ceiling moved
-
-The runtime stage of the security audit ([docs/security/runtime.md](security/runtime.md))
-added length limits, NUL refusal through `nish_cpath`, `O_NOFOLLOW` on the
-writes and three ownership primitives in `runtime-host.c` (RT-9). Every unit
-stayed under the ceiling it had, measured with the suite's own check (clang
-18.1.3, linux-x64, `-Oz`, every `.text*` section summed):
-
-| File | Today | Budget |
-| --- | ---: | ---: |
-| `runtime/runtime.c` | 3,562 | 3,584 |
-| `runtime.c -DNISH_THREADS=1` | 3,687 | 3,840 |
-| `runtime/runtime-os.c` | 1,495 | 1,536 |
-| `runtime/runtime-host.c` | 700 | 768 |
-| `runtime/runtime-net.c` | 2,087 | 2,304 |
-| `runtime/runtime-parallel.c` | 286 | 320 |
-| `runtime-parallel.c -DNISH_THREADS=1` | 905 | 1,024 |
-
-Every out-of-memory exit in `runtime.c` goes through one cold function,
-`nish_oom`. The tables above
-this section are the history of each figure and are left as they were measured.
+When signed `+ - *`, negation and the loop steps became checked panics (#426),
+the core gained `nish_panic_overflow(op)` ("attempt to add with overflow" and
+its siblings, exit 1). It has to be in the core, because any program with an
+unproven `+` can call it. The first shape tried was a second function with its
+own four strings, which cost 23 bytes. Sharing one table of six messages with
+`nish_panic_div` cost 2 bytes (3,604 → 3,606, and 3,729 → 3,731 threaded). The
+core was one byte under its ceiling, so the ceiling moved by exactly the one
+missing byte. A unit of its own would have added a file to every link line for
+22 bytes of code.
 
 ### What FFI does and does not do to the budget
 
-WP27 lets a program declare and call a C function of its own, and
-[wp27-ffi.md](wp27-ffi.md) §6 raises the objection that this makes the C in this
-project an *open* set, so describing the runtime as closed would be keeping two
-stories. Recorded here as a decision rather than left as an inference:
-
-**The budgets measure what ships in every binary, and a foreign call does not.**
-The two numbers above are the `.text*` of `runtime/runtime.c` and
-`runtime/runtime-os.c` — the two translation units `scripts/build.sh` compiles
-into every program whether or not the program uses a byte of them. A
-`declare function` adds a `declare` line to one program's IR and a symbol to one
-program's link line; it adds nothing to either translation unit, and a program
-that declares none is byte for byte the size it was. So the core stays a closed
-set and the OS half stays the surface that grows with the language's own reach,
-and both sentences above are still true as written.
-
-What the objection is right about is the half the budget never covered. FFI does
-open the set of C a *program* can reach, and the thing that used to bound it was
-not this budget but `docs/LANGUAGE.md`, by having no way to name a foreign
-function at all. That bound is the one WP27 removed, deliberately, and the cost
-is paid in the attribute fixpoint rather than in bytes: a program that calls C
-is no longer one the compiler can reason about end to end (wp27 §2).
-
-**What the split costs a program.** `nish_readdir` allocates through
-`nish_alloc_struct` and `nish_str_new`, which are now in another translation
-unit, so the inlined arena bump inside it is a real call without LTO. Measured
-on the same host, `examples/hello.ts` and `tests/cases/io_readdir.ts` (which
-creates a directory, writes three files and lists it twice), against the runtime
-before the split and after:
-
-| Program | Profile | Before | After |
-| --- | --- | ---: | ---: |
-| `examples/hello.ts` | `size` | 4,680 | 4,680 (byte-identical) |
-| `examples/hello.ts` | `speed` | 4,680 | 4,680 (byte-identical) |
-| `io_readdir.ts` | `size` | 9,456 | 9,456 |
-| `io_readdir.ts` | `speed` | 9,696 | 9,696 |
-
-Both profiles use `-flto`, so the two translation units are one module by the
-time the inliner runs and nothing was lost: the `io_readdir` binaries are the
-same size to the byte and the `hello` binaries are the same *bytes*, the
-`--gc-sections` claim above holding as it did. Without LTO — the `debug`
-profile, or a hand-written `clang -O2` line — the calls are real, and the answer
-is still not a regression: at `-O2` the linked `io_readdir` binary's `.text*`
-*falls* from 9,373 bytes to 8,584, because `nish_readdir` stops carrying an
-inlined copy of the allocator (1,653 bytes of it down to 839), while the file
-grows 32 bytes on section padding. The unoptimised `debug` profile, which
-inlines nothing either way and strips nothing, grows 10 bytes of `.text*`.
-
-And the calls do not cost time on the workload they are on. A loop of 4,000
-`readdirSync` calls over a 37-entry directory (152,000 entries and as many
-arena strings), best of nine runs:
-
-| Build | Before | After |
-| --- | ---: | ---: |
-| `--profile speed` (LTO) | 41 ms | 41 ms |
-| `clang -O2`, no LTO | 42 ms | 42 ms |
-
-Which is what a cold path means: the time is in `getdents` and in the `strcmp`
-of the insertion sort, not in the bump allocator, and a runtime call per entry
-does not show above the noise (±4 ms between repetitions of either binary).
-
-**Where the link lines are.** `scripts/build.sh` compiles `runtime-os.c` beside
-any `runtime.c` it is handed, so every caller that names the runtime through it
-is already correct: `nish --link` (stage0's `src/index.ts`), stage1's `--link`
-(`src/compile.ts`), `scripts/size-report.sh`, the `napi`, `wasi` and `size`
-profile builds in `tests/run.js`, `tests/differential/lib.js` (through
-`--link`), and every `--profile` recipe in these documents and in the README. A
-caller that already names both is left alone, since naming one object twice is a
-duplicate-symbol error. Direct `clang` lines name both: `tests/run.js`
-(`RUNTIME_C` there, used by the golden round trips, the panic cases, the layout
-driver and the runtime unit test) and `tests/nish/run.ts`. Nothing in
-`runtime.c` calls into `runtime-os.c`, so an older line naming `runtime.c` alone
-still links a program that touches no files, directories, subprocesses,
-environment or clock — which is most of `tests/cases` and every example except
-`argv`.
-
-**The freestanding and wasi profiles.** `runtime/runtime-wasm.c` is untouched: it
-defines none of the moved functions and the `wasm` profile never names
-`runtime.c`. The `wasi` profile compiles `runtime.c` and therefore
-`runtime-os.c` too; both files compile clean under `-std=c11 -Wall -Wextra
--Werror` with the `__wasi__` branches taken (`nish_readdir` answers NULL,
-`nish_spawn_impl` answers -1, `spawn.h` and `wait.h` are not included, and the
-entry bridge stayed in `runtime.c`). The end-to-end wasi check still needs a
-WASI sysroot and still skips, counted, without one.
-
-**The gate.** `tests/run.js` holds `RUNTIME_TEXT_BUDGET` (3,584),
-`RUNTIME_OS_TEXT_BUDGET` (1,280) and `RUNTIME_THREADS_TEXT_BUDGET` (3,840), and
-measures all three configurations in one block, with the same skip behaviour as
-before — a counted `skip(reason)` off linux-x64 or without `clang` or `size`,
-because a byte-exact ceiling is a fact about one target and one compiler version.
-Each failure names its own configuration, its own measurement, its own budget and
-the constant to raise. `node tests/run.js budget` selects them.
-
-The third row is the fourth line of the table above, and it exists because the
-first two cannot see it. `-DNISH_THREADS=1` is the build `--threads` links (WP20
-T0), where the arena and the RNG seed are `_Thread_local`, and at 3,605 bytes it
-is 21 *above* the core's own ceiling — so for as long as only the default build
-was measured, the code size of a configuration a user asks for by flag was
-ungated, and `_Thread_local` storage is the kind of thing that grows quietly. It
-is a separate number rather than a raised shared one on purpose: covering both
-with 3,840 would hand the default build 360 bytes it has no business having, and
-the whole point of splitting the budget was that a number should mean one thing.
-
-## Attributes
-
-- Every intrinsic is declared with `nounwind willreturn readnone`. These are
-  a subset of what LLVM itself attaches to them (`nocallback nofree nosync
-  nounwind speculatable willreturn memory(none)`), so they are facts, and
-  `llvm-as`/`opt -passes=verify` accept them. A function whose body is
-  arithmetic plus Math intrinsics is `readnone willreturn` (`hypot`, `trig`,
-  `clamp`, `square` in the goldens).
-- `nish_random`, `nish_exit`, and the file functions are `write`; `nish_exit`
-  is additionally `noreturn`, and `callsNoReturn` removes `willreturn` from
-  every function that can reach it.
-- `Math.PI`/`Math.E` are constants: no memory read, `readnone` preserved.
-- Identifier builtins are not user callees, so `noteEscape` in
-  `attributes.ts` does not run for their arguments; that is correct because
-  every runtime function they lower to declares its string parameters
-  `nocapture` (`nish_parse_number` included). `collectBuiltinFacts` (in
-  `emit/expressions.ts`) reports their callees to the fixpoint; dotted
-  builtins are already covered by `collectStringFacts` through
-  `builtinCallEmitters`.
-- `nish_parse_number` is `write` (errno, see above), never `readonly`; a
-  function whose only impurity is parsing loses `readonly`, which is the
-  honest attribute. `Number` on a numeric or boolean argument reports no
-  callee and keeps the caller `readnone`.
-- `process.argv` is a load of a global: `readsMemory`, hence `readonly` at
-  best; the `@main` wrapper that calls `nish_argv_init` stays `nounwind`
-  only, as before.
+WP27's `declare function` lets a program call its own C, and
+[wp27-ffi.md](wp27-ffi.md) §6 asks whether that makes the runtime an open set.
+It does not, because the budgets measure what ships in every binary. A foreign
+declaration adds a `declare` line and a link symbol to one program, and
+nothing to any runtime file. What FFI *does* open is the set of C that a
+*program* can reach. `docs/LANGUAGE.md` used to bound that set by having no
+way to name a foreign function. WP27 removed that bound deliberately, and the
+cost is paid in the attribute fixpoint rather than in bytes (wp27 §2).
 
 ## Linking
 
-`llvm.sin/cos/exp/log/pow.f64` become calls to libm's `sin`, `cos`, `exp`,
-`log`, `pow` when the argument is not a compile-time constant (`sqrt`,
-`floor`, `ceil`, `trunc`, `fabs`, `minnum`, `smin`, ... are instructions).
-`tests/run.js` links the native round trips with `-lm`.
-
-Every native profile of `scripts/build.sh` links `-lm`.
-
 ### WASI target
 
-`--target wasm32-wasi` only pins the data layout; running a string program
-under wasm needs the runtime compiled against a libc, which the freestanding
-`wasm` profile (`-nostdlib`, no runtime) cannot do. The `wasi` profile of
-`scripts/build.sh` builds a command module:
+`--target wasm32-wasi` only pins the data layout. The `wasi` profile of
+`scripts/build.sh` compiles the runtime against wasi-libc and links a command
+module (`node examples/wasi-host.mjs` or `wasmtime` runs it):
 
-```
-nish examples/argv.ts --link build/argv.wasm --profile wasi
-node examples/wasi-host.mjs build/argv.wasm 3 4 five      # or wasmtime build/argv.wasm 3 4 five
-```
+- **Sysroot.** It looks in `WASI_SYSROOT`, `/usr/lib/wasi-sysroot`,
+  `/opt/wasi-sdk/share/wasi-sysroot` and `/usr/share/wasi-sysroot`. Without
+  one the script exits 2 and `tests/run.js` records a counted skip.
+- **Builtins.** `strtoll` needs compiler-rt's `__multi3`. When clang has no
+  wasm32 `libclang_rt.builtins` of its own, the script finds wasi-sdk's
+  tarball, or uses `WASI_BUILTINS`, and links `-nodefaultlibs -lc` explicitly.
+- **Entry.** wasi-libc's `_start` calls `__main_argc_argv`. `runtime.c`
+  bridges it to the compiler's `@main` under `#ifdef __wasi__`, with a weak
+  declaration so that a reactor build without an entry would still link.
 
-- **Sysroot.** `clang --target=wasm32-wasi --sysroot=<wasi-sysroot>` with
-  the sysroot from `WASI_SYSROOT`, `/usr/lib/wasi-sysroot` (Debian's
-  `wasi-libc` package), `/opt/wasi-sdk/share/wasi-sysroot`, or
-  `/usr/share/wasi-sysroot`; without one the script prints
-  `the wasi profile needs a WASI sysroot ...` and exits 2, and `tests/run.js`
-  prints `SKIP  skipped: no WASI sysroot ...` instead of failing. With one
-  (the CI image has none; set `WASI_SYSROOT` to run it), the test builds
-  `argv_echo.ts` and checks that Node's `node:wasi` produces the native
-  output for the same arguments.
-- **Builtins.** wasi-libc's `strtoll` needs compiler-rt's `__multi3`.
-  wasi-sdk and Debian's `libclang-rt-18-dev-wasm32` put
-  `libclang_rt.builtins-wasm32.a` in clang's resource directory, where the
-  driver links it by default; a bare distro clang has none and the link
-  fails with `cannot open .../lib/wasi/libclang_rt.builtins-wasm32.a`, so
-  the script then looks for wasi-sdk's separate builtins tarball unpacked
-  next to the sysroot (or `WASI_BUILTINS=<file>`), passes it explicitly, and
-  names libc itself (`-nodefaultlibs -lc`; wasi-libc's `libc.a` includes
-  libm). Flags otherwise: `-Oz -DNDEBUG -ffunction-sections
-  -fdata-sections -Wl,--gc-sections -Wl,--strip-all`. `examples/argv.ts`
-  is 42,228 bytes this way, most of it wasi-libc's `printf`/`strtod`
-  machinery behind `nish_str_from_f64`.
-- **Entry.** wasi-libc's `_start` calls `__main_void`, which calls
-  `__main_argc_argv`, the name clang gives a C `main(int, char **)`. The
-  compiler's wrapper is a plain `@main`, so `runtime.c` bridges the two
-  under `#ifdef __wasi__` with a weak asm-labelled declaration
-  (`int nish_c_main(int, char **) __asm__("main")`) and a two-line
-  `__main_argc_argv`; weak so that a reactor build without an entry still
-  links. `process.argv` then comes from `args_get`: index 0 is whatever the
-  host names the module (`examples/wasi-host.mjs` passes the file path, like
-  the native `argv[0]`).
-- **What the runtime needed.** Only `getpid`, which WASI lacks (wasi-libc
-  marks it deprecated, `-Werror` fails): the `Math.random` seed uses the
-  monotonic clock's nanoseconds instead. `write`, `open`, `lseek`, `pread`,
-  `close`, `_exit`, `malloc`, `snprintf`, `strtod`, `strtoll`, `strspn`
-  all exist in wasi-libc, and `runtime.c` compiles clean with
-  `--target=wasm32-wasi -std=c11 -Wall -Wextra -Werror`. Files resolve
-  against the host's preopened directories (`.` in the Node host).
-- **Host.** `examples/wasi-host.mjs` (Node 20+, `node:wasi`, preview1) runs
-  the module with `args`, stdout and the exit status wired through; any
-  other WASI runtime (`wasmtime`, `wasmer`) works the same.
-
-## Tests
-
-Positive (`tests/cases/`, each with a golden `.ll`, an `llvm-as` pass, and a
-native `.out` round trip):
-
-| Case | Shows |
-| --- | --- |
-| `math_intrinsics` (`--number-mode f64`) | every f64 intrinsic, the `Math.round` sequence, `Math.PI`/`Math.E`; pure callers stay `readnone` |
-| `math_i32` | `llvm.abs/smin/smax.i32`, `Math.PI` under i32 mode |
-| `math_random` | 1,000 draws in `[0, 1)` without loops (fixed-arity unrolling), two draws differ |
-| `i64_basic` | 64-bit multiply overflowing i32, wrap, template and `console.log` with i64, contextual literals |
-| `conversions` | every `toI32/toI64/toF64` direction, saturation and wrapping |
-| `io_files` | write, append, read back, `.length` |
-| `process_exit` | `noreturn` + `unreachable`, terminator analysis, `willreturn` dropped transitively |
-| `argv_echo` (run with `argv_echo.argv`) | the `@nish_argv` load, the `nish_argv_init` call in `@main`, a `readonly` reader, indexing, `for...of`, byte lengths of a UTF-8 argument, `parseInt` over the arguments |
-| `parse_numbers` | every `parseInt` / `parseFloat` / `Number` form above including the deviations, `Number` on `i32`/`i64`/`f64`/`boolean` |
-| `link/argv_import` | the import reads `process.argv`, the entry gets the init call (`expected.ir`), runs with no arguments |
-
-`tests/run.js` passes the whitespace-separated words of `<name>.argv` to a
-case's binary; the differential harness does the same for
-`tests/differential/corpus/<name>.argv` on both the native and the Node
-side, and `scripts/smoke.sh` honours `// smoke: argv <args>`
-(`examples/argv.ts`). The wasi profile is exercised by the pipeline block of
-`tests/run.js` when a sysroot is installed.
-
-Negative (`.err`): `reject_math_i32` (`Math.sqrt` on an i32 `number`),
-`reject_math_min_arity`, `reject_toi32_string`, `reject_readfile_number`,
-`reject_unknown_builtin` (`Math.foo`), `reject_i64_literal_float`,
-`reject_i64_mixed`, `reject_exit_unreachable`, `reject_argv_no_main`,
-`reject_argv_assign`, `reject_argv_push`, `reject_parseint_number`,
-`reject_number_array`, `tests/link/argv_no_main`.
+`runtime.c` and `runtime-os.c` compile with `-Werror` under `__wasi__`, where
+`nish_readdir` answers NULL and `nish_spawn_impl` answers -1. The freestanding
+`wasm` profile does not use them; it uses `runtime/runtime-wasm.c`.
 
 ## Not in this package
 
-- `toString(x)`: template literals and `console.log` already convert; an
-  explicit function can come with string methods.
-- `Math.min`/`Math.max` with more than two arguments, and `Math.round`
-  returning `-0`.
-- `parseInt(s, radix)`, JavaScript's automatic hex in `parseInt`, the `0b` /
-  `0o` prefixes in `Number`, Unicode whitespace in the parsers, and a `0x`
-  guard in `parseFloat`: each is a few bytes of runtime that the budget
-  cannot absorb; all are documented deviations mirrored by the shim.
-- `process.env`, `process.stdin`: the wrapper has no `envp`, and stdin
-  needs a reading primitive first.
-- A WASI reactor profile (a library module with `_initialize` instead of
-  `_start`) for calling exported functions from a wasm host with the runtime
-  linked in; the `__main_argc_argv` bridge is already weak so it would link.
+- **`toString(x)`**: templates and `console.log` already convert.
+- **`Math.min` / `max` with more than two operands, and a `-0` from
+  `Math.round`.**
+- **Parser deviations**: `parseInt(s, radix)`, automatic hex, `0b` / `0o` in
+  `Number`, Unicode whitespace, and a `0x` guard in `parseFloat`. Each is a
+  documented deviation, mirrored by the shim.
+- **`process.env`**: still not provided. It later arrived as the `getenv(name)`
+  call (WP19 R1), deliberately a call rather than member access
+  (LANGUAGE.md).
+- **A WASI reactor profile** (`_initialize` instead of `_start`). Not built.

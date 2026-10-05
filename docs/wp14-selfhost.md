@@ -101,10 +101,11 @@ the language of the day. Every row shipped with the full
   (`StringBuilder`, byte-wise `compareStrings`, `jsonQuote`, the LLVM `c"..."`
   escape, hex float formatting), `src/map.ts` and `src/paths.ts`, plus a
   stable merge sort for the golden-compared diagnostic order. Two shape
-  decisions remain load-bearing: `StringMap` iterates in **insertion order**,
-  because a hash order would make a golden-compared dump depend on the table
-  size; and `src/paths.ts` matches `node:path` **exactly, quirks included**,
-  because D3's failure mode is a `..` normalised differently. The test is
+  decisions remain load-bearing: in `StringMap`, **iteration is insertion
+  order, which is what a golden-compared dump needs** (a hash order would make
+  the output depend on the table size); and `src/paths.ts` matches
+  `node:path` **exactly, quirks included**, because D3's failure mode is a
+  `..` normalised differently. The test is
   `tests/self/support-oracle.js`, which compares against `node:path`,
   `JSON.stringify` and the other implementations each function mirrors.
 
@@ -150,8 +151,9 @@ script linked. That was right for the proof, which compares IR, and for the
 order of the work. It was reversed at the end, with the bill in §7a.
 
 **D5. Measure peak memory before S5, not after.** `src/` allocates everything
-from a bump arena it never releases while the AST lives. Measured at S5, below:
-it does not matter at this size.
+from a bump arena it never releases while the AST lives. Measured at S5
+(§4): **86 MB of peak RSS and 91 ms** for the whole compiler, against stage0's
+178 MB and 786 ms, so it does not matter at this size.
 
 ## 4. Milestones
 
@@ -242,7 +244,9 @@ In addition to `docs/MASTER_PLAN.md` §7.
 3. **Each phase is tested against an independent implementation, not a
    golden written by hand.** Until R6 that was stage0 (the S1–S4 oracles of
    §4); since then it is the scanner and parser oracles, `node:path` and the
-   rest for the support library, and goldens regenerated and read.
+   rest for the support library, and goldens regenerated and read. A skip is
+   counted and named, never silent: a file quietly dropped from a comparison
+   is how an oracle stops checking while still passing.
 4. **The runtime budget still holds.** Lower inline rather than growing
    `runtime.c` past `docs/MASTER_PLAN.md` §2.
 5. **Nish-0 does not grow quietly.** Adding a construct to the subset in §2 is
@@ -262,8 +266,8 @@ S5 proved the fixed point inside the harness and left no compiler behind.
 sooner; `--verify` checks the equalities with `cmp`. Since WP19 the seed is a
 parameter (`NISH_BOOTSTRAP`, or the last release in `build/seed/`).
 
-Until §7a a 195-line `scripts/nish.sh` wrapper supplied what D4 kept out of
-stage1 — `-o <dir>/`, `--link`, `--profile` and the directories — mirroring
+Until §7a a short `bash` wrapper, `scripts/nish.sh`, supplied what D4 kept
+out of stage1 — `-o <dir>/`, `--link`, `--profile` and the directories — mirroring
 stage0's file layout exactly. The interop sidecars (`--emit-header`,
 `--emit-dts`, `--emit-napi`) were ported to `src/interop-*.ts` module for
 module at no runtime cost; the N-API shim's records of closures became records

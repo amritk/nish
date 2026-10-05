@@ -162,10 +162,10 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`, `for...of` | [Arrays](docs/LANGUAGE.md#array-literals) |
 | Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout | [Classes](docs/LANGUAGE.md#classes) |
 | Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
-| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `Arena.reset/mark/release/used` for explicit control | [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
+| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `using a = arena()` frees a batch the compiler has checked nothing outlives, and `Arena.mark`/`Arena.used` read the arena (`Arena.reset` and `Arena.release` are deprecated) | [`using a = arena()`](docs/LANGUAGE.md#using-a--arena), [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
 | `T \| null` | for class, interface, array and string types; `=== null`, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
-| Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io`, which is the same builtin under a name nothing can shadow | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
+| Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io` / `nish:net`, which is the same builtin under a name nothing can shadow; `nish:unsafe` (unchecked access, defined wrapping) and `nish:secret` (`Secret<T>`, key material the checker keeps in and wipes) are reached only by import | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
 | Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic type aliases, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 Semantics that differ from JavaScript on purpose: signed integer overflow
 panics unless the compiler proves the operation fits (`wrappingAdd`,
@@ -186,7 +186,11 @@ itself and answer an exit code with no Node in the picture,
 inline — the language has no `split`, `trim` or regular expression, because each
 of those allocates and some need a character table the runtime has no room for —
 and [`std/json`](std/json.ts), the value of one field of one flat JSON object,
-which is the shape the compiler's own `--json` diagnostics have.
+which is the shape the compiler's own `--json` diagnostics have. Beside them,
+`nish/crypto/*` holds the primitives under TLS 1.3 (SHA-2, HMAC, HKDF,
+ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509) and `nish/net/*` the
+protocols written on them (TLS 1.3, QUIC, HPACK, HTTP/1.1, WebSocket); the
+[`std/` README](std/README.md) lists every module.
 
 ```ts
 import { Suite } from "nish/testing";
@@ -217,9 +221,8 @@ at the compiler's own promises rather than at its output: `--help` on stdout wit
 exit 0 against the same text on stderr with exit 2, one flat `--json` object per
 diagnostic with a stable code, and each documented exit-code band. It reads those
 objects with `std/json` and takes the version it expects out of `package.json`, so
-a release cannot leave the expectation behind — and it passes against the
-self-hosted compiler as well as against the one written in TypeScript
-(`npm run test:cli`).
+a release cannot leave the expectation behind (`npm run test:cli` runs it
+against `build/nish`).
 
 ---
 
@@ -286,7 +289,9 @@ weaker: one global arena, per-function granularity, no region polymorphism.
   doing either while anything allocated after the mark is still referenced is
   undefined behaviour. The compiler protects its own marks — a function that
   touches either, directly or through a callee, never gets an automatic
-  scope — and not yours ([`Arena`](docs/LANGUAGE.md#arena)).
+  scope — and not yours. Both are deprecated (NL7001) in favour of
+  `using a = arena()`, the same release with the compiler refusing anything
+  that would outlive it ([`Arena`](docs/LANGUAGE.md#arena)).
 - **`uncheckedGet` and `uncheckedSet`** from `nish:unsafe` read and write an
   element with no bounds check, after which an out-of-range index at that site
   is undefined behaviour. A module reaches them only through the import, so
@@ -318,7 +323,10 @@ nish run [options] <file.ts> [args ...]
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
                              (entry module must declare `export const main`)
-  --profile speed|size|debug build profile for --link (default: speed)
+  --profile speed|size|debug|wasi
+                             build profile for --link (default: speed; wasi: a wasm32-wasi module)
+  --fix                      apply every machine-applicable fix to the named files, then report
+                             what is left (writes no IR)
   --no-strict-exports        every function is an external symbol (default: non-exported
                              functions get `internal` linkage)
   --number-mode i32|f64      lowering of `number` (default: i32)
@@ -328,6 +336,15 @@ nish run [options] <file.ts> [args ...]
   --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus
                              <file>.mjs, a loader that marshals typed arrays
   --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)
+  --emit-napi-async <shim.c> the same shim plus a promise-returning form of each export, run off
+                             the event loop
+  --emit-panics <file.json>  also write every panic site, per function, proven or not
+  --deny-panics              refuse every panic site of the entry package a proof does not remove
+  --emit-capabilities <file.json>
+                             also write the capabilities (fs, net, clock, ...) each function reaches
+  --capabilities             print the program's capabilities in one line on stderr
+  --allow <cap>[,<cap>...]   refuse a program whose entry reaches a capability not listed
+  --deny <cap>[,<cap>...]    refuse a program whose entry reaches a listed capability
   --unchecked-indexing       deprecated: drop the bounds checks of the entry package's modules
                              (use uncheckedGet/uncheckedSet from nish:unsafe)
   --target <triple>|host     emit `target datalayout`/`target triple` for that machine
@@ -338,8 +355,7 @@ nish run [options] <file.ts> [args ...]
                              overflow; use wrappingAdd/wrappingSub/wrappingMul from nish:unsafe)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
   --threads                  give every thread its own arena and random seed; the runtime is
-                             built to match by --link (no language surface: nothing in the
-                             language spawns a thread yet)
+                             built to match by --link (importing nish/threads turns it on)
   --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
                              print on stderr, and never change the exit code)
   --warn-portability         report the `portability` diagnostics: where the program's TypeScript
@@ -349,6 +365,7 @@ nish run [options] <file.ts> [args ...]
   --emit-ast                 print the syntax tree of every module to stdout instead of IR
   --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR
   -v, --version              print the nish version and exit
+  -h, --help                 print the usage on stdout and exit 0
 ```
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
@@ -386,7 +403,9 @@ errors there, and performance warnings are not printed, because stderr belongs
 to the program.
 
 Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-os.c -o app`
-(the `overriding the module target triple` warning is harmless: the IR is
+(a program that uses threads, the host calls or `nish:net` also names
+`runtime/runtime-parallel.c`, `runtime-host.c` or `runtime-net.c`; the
+`overriding the module target triple` warning is harmless: the IR is
 target-neutral unless you pass `--target`; `-Wno-override-module` silences
 it), or step by step with `llvm-as`, `llc -O2 -filetype=obj`, and
 `opt -S -O2` to watch `mem2reg` turn the `alloca` locals into registers.
@@ -402,8 +421,8 @@ with `--target aarch64-unknown-linux-gnu` / `wasm32-wasi` plus
 
 Rust-class output is the goal: no GC, no embedded engine, aliasing and
 purity facts handed to LLVM up front, and a link step that strips everything
-unused. `examples/add.ts` + `examples/main.c` + the two runtime translation units
-(`runtime/runtime.c` and `runtime/runtime-os.c`), x86_64 Linux, glibc
+unused. `examples/add.ts` + `examples/main.c` + the runtime
+(`runtime/runtime.c`, which `scripts/build.sh` pairs with the other four units), x86_64 Linux, glibc
 dynamically linked (`npm run size-report`):
 
 | Profile | Bytes | What it does |
@@ -414,15 +433,18 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,696 bytes. The whole runtime is under 5 KB of
-machine code, in two translation units with a measured ceiling each so that the
-core does not grow every time the language reaches further into the operating
-system: `runtime.c` is the 3,480 bytes every program touches (one chunked bump
-arena with O(1) reset and mark/release, strings, JavaScript-exact number
-formatting, string parsing, `Math.random`, `process.argv`, array growth, the
-panic paths), and `runtime-os.c` the 1,190 bytes that wrap a system call (exit,
-files, directories, subprocesses, the environment, the clock) — see
-[docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for both
+`hello.ts` with `--link` is 4,696 bytes. The runtime is five translation units
+with a measured ceiling each, so that the core does not grow every time the
+language reaches further into the operating system, and section GC drops
+whatever a program does not call: `runtime.c` is the 3,606 bytes every program
+touches (one chunked bump arena with O(1) reset and mark/release, strings,
+JavaScript-exact number formatting, string parsing, `Math.random`,
+`process.argv`, array growth, the panic paths), `runtime-os.c` the 1,530 bytes
+that wrap a system call (exit, files, directories, subprocesses, the
+environment, the clock), and `runtime-parallel.c`, `runtime-host.c` and
+`runtime-net.c` hold threads, the host calls (wall clock, entropy, signals) and
+`nish:net`'s sockets — see
+[docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
 stay `readnone`.
 
@@ -553,7 +575,7 @@ to are all still free to change.
 |:---|:---|:---|
 | M1 "Programs" | pipeline prep, validator, control flow, strings, modules, CI | done |
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
-| M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw`/PGO, differential testing against Node | done |
+| M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw` (since removed)/PGO, differential testing against Node | done |
 | M4 "1.0" | frozen language reference, tagged release | next |
 | M5 "Self-hosting" | `src/`: the compiler, written in Nish, compiling itself | done |
 

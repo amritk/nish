@@ -2518,7 +2518,8 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). `throw` and a panic end the process and join nothing.
+  another). A panic, or `process.exit`, ends the process and joins nothing
+  (`throw` is refused by Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope or an
   [`arena()`](#using-a--arena).** A scope bound any other way is
   `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
