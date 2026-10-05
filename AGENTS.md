@@ -287,8 +287,10 @@ what is blocking and what you need — and keep watching.
 - **`npm test` must be green**, and every new construct ships with a golden
   `.ll`, an `llvm-as` pass, a native round trip with expected stdout, at least
   one negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
-  `CHANGELOG.md` line. There is no changesets flow here; the changelog is the
-  record.
+  conventional commit message. There is no changesets flow here: the commit
+  subject and body are the changelog entry, and `scripts/changelog-gen.mjs`
+  writes `CHANGELOG.md` from them when a release is cut, so the file is never
+  edited by hand.
 - **A construct is implemented once, in `src/`.** There is no second
   implementation to compare it with since WP19 R6
   ([wp19](./docs/wp19-stage0-retirement.md)), so its golden `.ll`, its native

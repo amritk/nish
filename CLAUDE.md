@@ -31,7 +31,8 @@ Developer guidelines live in the `.claude/` directory:
 `tests/nish/` against `runtime/nish.d.ts`) and an undegraded `npm test` green.
 A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
 trip with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
-rule and cookbook entry, and a line in `CHANGELOG.md` — see
+rule and cookbook entry, and a conventional commit whose subject and body are
+its changelog entry (`CHANGELOG.md` is generated from them; see below) — see
 `docs/MASTER_PLAN.md` §7 and the checklist in `docs/ARCHITECTURE.md`. Show the
 exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
 ported or adapted from elsewhere keeps its upstream notice and is listed in
