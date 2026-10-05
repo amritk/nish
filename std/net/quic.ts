@@ -264,10 +264,11 @@ export const QUIC_CONN_IDLE_FLOOR: i64 = 3000
 export const QUIC_CONN_PACKET_STREAMS: i32 = 4
 /**
  * The most NEW_CONNECTION_ID and RETIRE_CONNECTION_ID frames one packet
- * carries, for the same reason. The client can owe at most eight
- * retirements and the server announces at most three new IDs at once.
+ * carries, for the same reason: the three new IDs the server announces once
+ * the handshake is done fit one packet, and a burst of retirements the
+ * client asks for goes over the next few.
  */
-export const QUIC_CONN_PACKET_CONTROL: i32 = 8
+export const QUIC_CONN_PACKET_CONTROL: i32 = 4
 /**
  * How many key updates a connection takes from its client (RFC 9001 §6).
  * Each costs two key derivations whose temporaries stay in the arena, so the
@@ -1624,11 +1625,15 @@ export class QuicConnection {
     }
     const sent: QuicSentPackets | null = this.recovery.space(space.level)
     const delay: i64 = this.ackDelayOf(frame.ackDelay)
-    if (sent === null || this.recovery.onAck(space.level, frame.ackRanges, frame.ackRangeCount, delay, this.now) <= 0) {
+    if (
+      sent === null ||
+      this.recovery.onAck(space.level, frame.ackRanges, frame.ackRangeCount, delay, this.now) <= 0
+    ) {
       return
     }
+    // An acknowledged packet's streams may let go of the bytes it carried.
     for (let k: i32 = 0; k < sent.ackedCount; k += 1) {
-      this.packetAcked(space, sent.ackedSlot(k))
+      this.untrack(space, sent.ackedSlot(k))
     }
     this.packetsLost(space, sent)
   }
@@ -1647,21 +1652,6 @@ export class QuicConnection {
     const ceiling: i64 = 1099511627776
     const value: i64 = field > ceiling || field < 0 ? ceiling : field
     return (value << exponent) / 1000
-  }
-
-  /** A packet of `space` the client acknowledged, in recovery slot `row`: its streams may let go of the bytes it carried. */
-  packetAcked(space: QuicConnSpace, row: i32): void {
-    const streams: i32 = space.streamCount(row)
-    for (let j: i32 = 0; j < streams; j += 1) {
-      const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
-      if (at >= 0 && at < toI32(space.sentStreamId.length)) {
-        const stream: QuicConnStream | null = this.findStream(space.sentStreamId[at])
-        if (stream !== null) {
-          stream.outstanding = stream.outstanding - 1
-          stream.trim()
-        }
-      }
-    }
   }
 
   /** Every packet of `space` that loss recovery's last call declared lost: what each carried is queued again. */
@@ -1699,7 +1689,11 @@ export class QuicConnection {
           if (settled) {
             stream.outstanding = stream.outstanding - 1
           }
-          stream.resend(space.sentStreamOffset[at], space.sentStreamLength[at], toI32(space.sentStreamFin[at]) !== 0)
+          stream.resend(
+            space.sentStreamOffset[at],
+            space.sentStreamLength[at],
+            toI32(space.sentStreamFin[at]) !== 0
+          )
         }
       }
     }
@@ -2610,22 +2604,39 @@ export class QuicConnection {
   /**
    * Hands an ack-eliciting packet just sealed to loss recovery (RFC 9002
    * §A.5), with what it carried copied from the staging row to its slot. A
-   * packet recovery could not record has its frames queued again at once,
-   * so nothing it carried goes untracked. A packet that elicits nothing (an
-   * ACK, a CONNECTION_CLOSE) is not recorded.
+   * packet that elicits nothing (an ACK, a CONNECTION_CLOSE) is not
+   * recorded. Nor is one recovery refuses, which `takeDatagram` rules out
+   * (the space's record is not full, and packet numbers only grow): its
+   * streams stop counting it rather than queue it again, which would send
+   * the same frames for ever.
    */
   recordSent(space: QuicConnSpace, pn: i64, size: i32): void {
     if (!space.stagedEliciting) {
       return
     }
     const slot: i32 = this.recovery.onPacketSent(space.level, pn, size, this.now)
-    if (slot < 0) {
-      this.requeue(space, space.staging, true)
-    } else {
+    if (slot >= 0) {
       space.commitStaged(slot)
       space.probe = false
+    } else {
+      this.untrack(space, space.staging)
     }
     space.clearStaged()
+  }
+
+  /** The STREAM chunks of row `row` leave their streams' count of packets in flight, without being sent again. */
+  untrack(space: QuicConnSpace, row: i32): void {
+    const streams: i32 = space.streamCount(row)
+    for (let j: i32 = 0; j < streams; j += 1) {
+      const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+      if (at >= 0 && at < toI32(space.sentStreamId.length)) {
+        const stream: QuicConnStream | null = this.findStream(space.sentStreamId[at])
+        if (stream !== null) {
+          stream.outstanding = stream.outstanding - 1
+          stream.trim()
+        }
+      }
+    }
   }
 
   /**

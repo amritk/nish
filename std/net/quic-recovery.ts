@@ -65,17 +65,17 @@ export const QUIC_RECOVERY_APPLICATION: i32 = 2
  * How many packets the Initial and the Handshake space each keep in flight.
  * A server's handshake flight is a few datagrams, and the anti-amplification
  * limit holds it to three times what the client sent until its address is
- * validated, so 32 is far more than it ever needs.
+ * validated, so 16 leaves room for several probes on top.
  */
-export const QUIC_RECOVERY_HANDSHAKE_CAPACITY: i32 = 32
+export const QUIC_RECOVERY_HANDSHAKE_CAPACITY: i32 = 16
 /**
- * How many packets the Application Data space keeps in flight: 256
- * full-sized datagrams is 300 KiB in flight, which a loopback or a
- * continental path fills. When the ring is full the space sends nothing
- * that would elicit an acknowledgement until one arrives, as if the
- * congestion window were full.
+ * How many packets the Application Data space keeps in flight: 128
+ * full-sized datagrams is 150 KiB in flight, a 12 Mbit/s path at a 100 ms
+ * round trip, against what the record costs every connection from the
+ * start. When the ring is full the space sends nothing that would elicit an
+ * acknowledgement until one arrives, as if the congestion window were full.
  */
-export const QUIC_RECOVERY_APPLICATION_CAPACITY: i32 = 256
+export const QUIC_RECOVERY_APPLICATION_CAPACITY: i32 = 128
 /** kPacketThreshold (§6.1.1): a packet three numbers below one acknowledged is lost. */
 export const QUIC_RECOVERY_PACKET_THRESHOLD: i64 = 3
 /** kGranularity (§6.1.2), in milliseconds: the timer resolution, and the least any loss delay or variance term is. */
