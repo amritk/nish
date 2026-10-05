@@ -1260,7 +1260,7 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
   }
   lines.push(
     "",
-    "Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String building used to hold every intermediate string until exit, because each `join` returns its result and the automatic arena scopes (WP6) cannot reclaim an escaping value; the call-site reclaim (`docs/wp9-optimisation.md`, \"The call-site reclaim\") now frees a returned string's intermediates at the call.",
+    "Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String building used to hold every intermediate string until exit, because each `join` returns its result and the automatic arena scopes (WP6) cannot reclaim an escaping value; the call-site reclaim in `docs/wp9-optimisation.md` now frees a returned string's intermediates at the call.",
     ""
   )
 }

@@ -54,7 +54,7 @@ Nish binaries link `runtime/runtime.c` statically and glibc dynamically; the Rus
 | vec3 | 1,256 |  | 1,900 | 1,684 | 2,120 | 2,172 |
 | result | 1,244 | 1,244 | 1,824 | 1,812 | 2,164 | 2,152 |
 
-Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String building used to hold every intermediate string until exit, because each `join` returns its result and the automatic arena scopes (WP6) cannot reclaim an escaping value; the call-site reclaim (`docs/wp9-optimisation.md`, "The call-site reclaim") now frees a returned string's intermediates at the call.
+Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String building used to hold every intermediate string until exit, because each `join` returns its result and the automatic arena scopes (WP6) cannot reclaim an escaping value; the call-site reclaim in `docs/wp9-optimisation.md` now frees a returned string's intermediates at the call.
 
 ## Data parallelism (ms, min / median)
 
