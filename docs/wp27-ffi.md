@@ -114,9 +114,10 @@ by name.
 
 ## 5. What FFI costs the test strategy
 
-The differential oracle ([wp13-differential.md](wp13-differential.md)) runs a
-program's JavaScript rewrite against a shim, on the premise that the same
-source means the same thing in both worlds. That premise does not hold for a
+The differential oracle ([wp13-differential.md](wp13-differential.md), now run
+from its frozen rewrites) and the unmodified-Node run beside it compare a native
+build with the same program under Node, on the premise that the same source
+means the same thing in both worlds. That premise does not hold for a
 source whose meaning is "whatever this C function does", so **every FFI program
 is outside the differential oracle by construction**. The evidence is arranged
 the other way round: a golden `.ll`, an `llvm-as` pass, a native round trip

@@ -1,9 +1,10 @@
 # Nish Master Plan
 
-The single source of truth for what Nish is, what exists, what remains,
-and how the remaining work is cut into packages that independent agents can
-build in parallel. Every work package (WP) below is self-contained: goal,
-scope, files, dependencies, acceptance tests, and a ready-to-use agent brief.
+What Nish is, what exists, what remains, and how the work is cut into
+packages. The packages that have landed are a table in §5 with a link to the
+note that records each one; the open work is under [What remains](#what-remains).
+`docs/LANGUAGE.md` is normative for the language; where this plan or a
+`wp*.md` note disagrees with it, LANGUAGE.md wins.
 
 Repo: `amritk/nish`, default branch `main`.
 
@@ -41,7 +42,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 └───────────────────────────────┬──────────────────────────────────┘
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ 2. Compiler frontend (this repo, src/, written in Nish)         │
+│ 2. Compiler frontend (this repo, src/, written in Nish)          │
 │    Phase A  lexer.ts, parser.ts   one Node tree, dense ids       │
 │    Phase 0  validator.ts   forbidden-syntax sweep, hard fail     │
 │    Phase B  checker.ts + families   types, scopes, side tables   │
@@ -52,96 +53,87 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    Phase C  attributes.ts   purity / escape / loop facts         │
 │             emit*.ts        AST -> LLVM IR text                  │
 │             runtime.ts      runtime ABI, inline allocator        │
-│    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
-│    runtime/runtime-os.c            files, spawn, env (C, 1.5 KB) │
-│    runtime/runtime-host.c          clock, rng, signals (C, 0.5 KB)│
-│    runtime/runtime-net.c           sockets (C, 2.1 KB)           │
-│    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
+│    runtime/runtime.c            arena + strings (C, 3.6 KB)      │
+│    runtime/runtime-os.c         files, spawn, env (C, 1.5 KB)    │
+│    runtime/runtime-host.c       clock, rng, signals (C, 0.8 KB)  │
+│    runtime/runtime-net.c        sockets (C, 2.3 KB)              │
+│    runtime/runtime-parallel.c   range partitioner (C, 0.3 KB)    │
+│    scripts/build.sh             clang -O3/-Oz, LTO, gc-sections  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 Design rules that every WP must respect:
 
 - **Checker records, emitter reads.** The checker writes types and bindings
-  into side tables (`CheckedProgram.nodeTypes/nodeLocals/nodeCallees`). The
-  emitter contains no user-facing error handling; any node it sees is valid.
+  into side tables (`src/program.ts`). The emitter contains no user-facing
+  error handling; any node it sees is valid, and an unexpected one is exit 70.
 - **Attributes are guarantees.** An LLVM attribute is emitted only when the
   checker has proved it. A wrong attribute is undefined behaviour.
 - **ABI is a contract.** Struct layouts in `src/runtime.ts` and
-  `runtime/runtime.c` must match byte for byte, and a test must prove it
-  (see `tests/ir/alloc-smoke.ll`).
+  `runtime/runtime.c` / `runtime/nish.h` must match byte for byte, and
+  `tests/run.js` fails when they disagree.
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
-- **Runtime stays tiny.** Two budgets, one per translation unit: `runtime.c`,
-  the core every program touches, under 3,584 bytes of compiled code, and
-  `runtime-os.c`, the half whose subject is the operating system, under 1,280 —
-  counted as every `.text*` section summed
-  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`, and the same for
-  `runtime-os.c`). No stdio on hot paths. The split is what makes the core's
-  ceiling mean something: it can come down over time and never up, because
-  nothing in the language roadmap adds an arena or a second string
-  representation, while the OS-facing half is exactly the surface that grows as
-  the language reaches further out, and it can no longer borrow room from the
-  arena to hide in. The two figures the byte count replaces were the *source*
-  bytes, over budget since WP4 and left there because comments are not code,
-  and the `text` column of `size`, which counts the `.eh_frame` unwind entries
-  the `size` build profile strips — measuring the bytes that never ship. The
-  sum rather than the `.text` line alone is what a linked binary pays:
-  `clang -Oz` puts cold code in `.text.unlikely.`, so a ceiling on `.text` by
-  itself can be met by moving code into another section instead of by making it
-  smaller. And `-ffunction-sections -Wl,--gc-sections` means a binary pays only
-  for the functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
-  `examples/hello.ts` at 4,696 bytes, the same number to the byte. Today:
-  3,480 of 3,584 and 1,190 of 1,280, both measured by `tests/run.js` rather
-  than by a reviewer (`node tests/run.js budget`); `docs/wp7-runtime.md`
-  §"Runtime additions and budget" records each measurement, why the single
-  4,864-byte ceiling became two, and what the split costs a program.
-  **Since then** the operating-system half's ceiling rose once, to 1,536 for
-  `nish_realpath`, and two more translation units arrived on the same rule,
-  each with a ceiling of its own rather than room borrowed from another:
-  `runtime-parallel.c` (WP20/wp29) and `runtime-host.c`, the wall clock,
-  entropy, file times and signals (WP34 N3). Measured 2026-09-29 with clang 18
-  on linux-x64, every `.text*` section summed at `-Oz`: `runtime.c` 3,515 of
-  3,584 (3,640 of 3,840 with `-DNISH_THREADS=1`), `runtime-os.c` 1,393 of 1,536,
-  `runtime-parallel.c` 286 of 320 (901 of 1,024 threaded) and `runtime-host.c`
-  571 of 768. N3's four builtins measured 571 bytes against the 143
-  `runtime-os.c` had left, which is why they are a file of their own, and
-  `runtime-os.c` itself is unchanged by them. A fifth, `runtime-net.c`, holds
-  the sockets of `nish:net` (WP34 N5): 853 of 1,024 for addresses and
-  non-blocking TCP, measured the same day the same way, and 1,782 of 2,048
-  once UDP, its segmentation offload and its ECN marks joined them, and 2,071
-  of 2,304 with the readiness loop (2026-09-30).
+- **Runtime stays tiny.** Each translation unit has its own ceiling on every
+  `.text*` section summed at `clang -Oz`, measured by `tests/run.js` on every
+  run (`node tests/run.js budget`) rather than by a reviewer. The core,
+  `runtime.c`, is a closed set whose ceiling should only come down; the
+  OS-facing units grow with the surface, and an addition that does not fit
+  becomes a unit of its own rather than borrowing room. Measured 2026-10-05
+  with clang 18 on linux-x64:
+
+  | Unit | Today | Ceiling |
+  | --- | ---: | ---: |
+  | `runtime.c` | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
+  | `runtime-os.c` | 1,530 | 1,536 |
+  | `runtime-parallel.c` | 286 (905 threaded) | 320 (1,024) |
+  | `runtime-host.c` | 764 | 768 |
+  | `runtime-net.c` | 2,303 | 2,304 |
+
+  `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
+  functions it calls. [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)
+  records each measurement, why the single ceiling became one per unit, and
+  every time a ceiling moved.
 
 ## 3. Consolidated language specification (Nish)
+
+A summary. [LANGUAGE.md](LANGUAGE.md) is the normative statement of every
+rule here.
 
 ### 3.1 Types
 
 | Nish | LLVM | Notes |
 | --- | --- | --- |
-| `number` | `i32` (default) or `double` (`--number-mode f64`) | Wrapping integer arithmetic, no `nsw`. |
-| `i32`, `f64` | `i32`, `double` | Explicit, always available. |
-| `i64` | `i64` | WP7. |
+| `number` | `i32` (default) or `double` (`--number-mode f64`) | Signed overflow is a checked panic (#426). |
+| `i32`, `f64`, `i64` | `i32`, `double`, `i64` | Explicit, always available. |
+| `u8`, `u16`, `u32`, `u64` | `i8` … `i64` | Unsigned; overflow wraps (WP15 item 4). |
+| `integer<Lo, Hi>` | `i32` | A ranged integer; entry into the range is checked (WP31). |
 | `boolean` | `i1` | `zeroext` at ABI boundaries. |
-| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | Immutable, 8-aligned, arena or constant. |
+| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | Immutable, UTF-8, 8-aligned, arena or constant. |
 | `void` | `void` | |
 | `class` / `interface` | `%struct.Name = type { ... }` | Fixed fields, declared order, natural alignment. WP2. |
-| `T[]` | `%array.T = type { i64 len, T* data }` | Fixed element type, bounds-checked. WP4. |
+| `T[]` | `%array.T = type { i64 len, T* data }` | Fixed element type, bounds-checked; an `interface` element is stored inline (WP15 item 7). WP4. |
 | `T \| null` | nullable pointer | WP6, pointer types only. |
+| `Result<T, E>` | a struct, or one `i64` when both arms are small scalars | WP16, WP17. |
+| `Map<K, V>`, `Set<T>` | generic classes written in Nish (`std/collections.ts`) | Insertion-ordered, as JavaScript's. WP32. |
+| generic functions, classes, interfaces, methods | one instantiation per type argument list | WP18. |
 
 ### 3.2 Forbidden (Phase 0 validator, hard compile error)
 
-`any`, `unknown`, `never` in value positions, `eval`, `Function`, `Proxy`,
-`Reflect`, `with`, `delete`, `typeof`/`instanceof` on values, `in`,
-element access `obj[key]` except on arrays with numeric index, computed
-property names, spread of objects, prototype access (`__proto__`,
-`.prototype`), `Object.assign`/`defineProperty`, adding properties not
-declared on the class, `var`, loose `==`/`!=`, `arguments`, `this` outside
-methods, generators, `async`/`await`, decorators, enums with computed
-values, namespaces, `declare global`, dynamic `import()`, optional chaining
-and nullish coalescing on non-nullable types, union types other than
-`T | null`, type parameters on a type alias or a constructor (a generic
-function, class, interface or method is monomorphised, WP18), `symbol`,
-`bigint`, regex literals, `try`/`catch` and `throw` (no unwinding; a failure is a `Result<T, E>`, WP16).
+Everything dynamic is refused before the checker runs, each with a message
+and a `reject_*` case: `any`, `unknown`, `symbol`, `bigint`, `undefined` as a
+type or value, union types other than `T | null`, `eval`, `Function`, `Proxy`,
+`Reflect`, `Symbol`, `globalThis`, `arguments`, `with`, `delete`, `typeof`,
+`instanceof`, `in`, `for...in`, `==`/`!=`, comma expressions, `void expr`,
+`var`, `try`/`catch`/`finally` and `throw` (a failure is a `Result<T, E>`,
+WP16), labelled statements, generators and `yield`, `async`/`await` (WP24),
+decorators, enum members that are not numeric literals, namespaces and
+`declare global`, computed property names, object spread, prototype access,
+`Object.assign` and its relatives, string-keyed element access, `?.`, `??`
+except on a `Map.get` result, regex literals, dynamic `import()`,
+`import.meta`, and type parameters on a type alias or a constructor.
+[LANGUAGE.md](LANGUAGE.md#forbidden-constructs-phase-0-validator) has the
+table with each message and the idiom to write instead.
 
 ### 3.3 Semantics decisions already made
 
@@ -149,529 +141,119 @@ function, class, interface or method is monomorphised, WP18), `symbol`,
   cannot prove fits is `llvm.s*.with.overflow` and a branch to
   `nish_panic_overflow`, and one it can is `nsw` (#426). `wrappingAdd`,
   `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap at one site, and the
-  deprecated `--wrapping` makes the entry package's operators wrap. Unsigned
-  overflow is defined as wrapping in both modes. Was "overflow wraps" until
-  WP15 §3 made it `nsw` undefined behaviour, and that until #426 made it
-  checked; see docs/LANGUAGE.md.
+  deprecated `--wrapping` makes the entry package's operators wrap. `--nsw` is
+  refused. Unsigned overflow wraps. Was "overflow wraps" until WP15 §3 made it
+  `nsw` undefined behaviour, and that until #426 made it checked.
 - Strings are immutable and shared by pointer; equality is by content.
-- Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)` prints and exits 1.
+- Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)`
+  prints and exits 1. `--deny-panics` and the manifest's `noPanic` refuse every
+  panic site the checker cannot prove away (#443).
 - Parameters are immutable (`const` semantics) and used as SSA values.
 - Locals use `alloca`/`load`/`store` with natural alignment; `opt -mem2reg`
   promotes them, so this is free.
 - Only `export`ed functions carry the C ABI; every other top-level function is
   `internal`, so LLVM may inline, specialise or drop it. `--no-strict-exports`
   makes them all external again (WP15 §3).
+- An out-of-range index panics. `uncheckedGet` and `uncheckedSet` from
+  `nish:unsafe` opt one site out; `--unchecked-indexing` is deprecated
+  (NL9014), and `nish --fix` migrates it (#459).
 
-### 3.4 Open decisions (need an owner, do not block Wave 1)
+### 3.4 Open decisions
 
 | Question | Options | Recommendation |
 | --- | --- | --- |
-| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. |
+| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. |
 | Overflow | wrap / trap / `nsw` UB | **Decided (#426): trap — a checked panic by default, `nsw` only where proven, `wrapping*` from `nish:unsafe` to opt out at one site.** WP15 §3 had chosen `nsw` UB. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
-| Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
+| Object lifetime | arena only / arena + RC / escape-analysed stack | **Decided:** arena + escape-analysed `alloca` (WP6), with `using a = arena()` as the explicit bracket (#420). Reference counting is not built. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
 
 ## 4. What exists today
 
 There is **one compiler**, and it is written in the language it compiles:
-`src/`, 64 modules (`ls src/*.ts | wc -l`) and 35,601 lines of Nish
-(`cat src/*.ts | wc -l`). Until R6 it had a twin, stage0
-(the same compiler in TypeScript on Node), and the two agreed byte for
-byte on the IR of every program in the corpus, which is what WP14 below means
-by self-hosting. R6 deleted stage0 (§9, M6); `src/` is now built by the last
-released `nish`, the seed. `.claude/orientation.md` is the
-ninety-second map; the table below is the inventory.
+`src/`, 83 modules (`ls src/*.ts | wc -l`) and 72,739 lines of Nish
+(`cat src/*.ts | wc -l`), built by the last released `nish`, the seed (M6).
+`.claude/orientation.md` is the ninety-second map, and
+[ARCHITECTURE.md](ARCHITECTURE.md)'s pipeline table maps each stage to its
+modules; the table below is the inventory.
 
-| Area | State | Files |
+| Area | State | Where |
 | --- | --- | --- |
-| CLI and driver: `-o <file>` / `-o <dir>/`, `--link`, `--profile`, `--number-mode`, `--target`, `--nsw`, `--strict-exports`, `--unchecked-indexing`, `--no-stack-alloc`, `-g`, `--json`, the dumps, `--version`, exit codes 0/1/2/3/70 | done (WP5, WP9, WP10, WP12) | `src/compile.ts`, `src/compilation.ts`, `src/ice.ts`, `src/branding.ts` |
-| Phase A parse and Phase 0 validate: the forbidden-syntax sweep, with the message and the `reject_*` case for every rule | done (WP0) | `src/lexer.ts`, `src/parser.ts`, `src/validator.ts` |
-| Checker, pass 1 signatures / pass 1b imports / pass 2 bodies, one `switch` on the node kind per category, side tables indexed by node id in `program.ts` | done | `src/checker.ts` and its families (`declarations`, `structs`, `statements`, `expressions`, `members`, `arrays`, `builtins`, `result`, `generics`, `bounds`, ...) |
-| Emitter: SSA temps, hoisted allocas, control flow, structs, arrays, strings, `Result`, builtins, one module per source file | done | `src/emit.ts`, `ir.ts`, `emit-*.ts` |
-| Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `src/attributes.ts`, `escape.ts` |
-| Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `src/debug.ts` |
-| Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `src/interop_{abi,header,dts,wasm,napi}.ts` |
-| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (1,138 lines) and `runtime/runtime-os.c` (290 lines, the system-call half), `runtime-wasm.c`, `nish.h`, `shim.mjs` |
-| Inline `alwaysinline` bump allocator in IR, the runtime ABI table the compiler and the C runtime agree on | done | `src/runtime.ts` |
-| Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, the PGO recipe, the size report | done (WP9) | `scripts/build.sh`, `scripts/size-report.sh` |
-| The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` — built from the released seed | done (WP14, WP19) | `src/`, `scripts/bootstrap.sh`, `scripts/fetch-seed.sh` |
-| Tests: 382 golden cases (229 of them `reject_*`), 24 `tests/link/` programs, `llvm-as`, native round trips, runtime unit tests, IR/C layout smoke, size and wasm builds, interop, exit codes, packaging, bench checksums | done | `tests/run.js` and `tests/cases/`, `link/`, `ir/`, `layout/` |
-| Differential testing against Node: 50 corpus programs plus `tests/cases`, each run natively and as its frozen JavaScript rewrite, and a fuzzer that prints its seed | done (WP13) | `tests/differential/`, `runtime/shim.mjs` |
-| The compiler's own tests: the bootstrap from the seed, the goldens that succeeded the stage0 oracles, the lexer, parser, support and rejection oracles, and the comparison with the last release | done (WP14, WP19) | `tests/self/`, `tests/lexer-oracle.js`, `tests/parser-oracle.js`, `tests/nish-cmp.js` |
-| Benchmarks: seven programs in Nish, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
-| Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
+| CLI and driver: `-o`, `--link`, `nish run`, `--profile`, `--number-mode`, `--target`, `-g`, `--json`, `--fix`, the dumps, the interop sidecars, `--emit-panics`, `--deny-panics`, `--emit-capabilities`, `--allow`/`--deny`, `--version`, exit codes 0/1/2/3/70 | done | `src/compile.ts`, `compilation.ts`, `fix.ts`, `ice.ts`, `branding.ts` |
+| Parse and Phase 0 validate | done (WP0) | `src/lexer.ts`, `parser.ts`, `validator.ts` |
+| Checker: pass 1 signatures, pass 1b imports, pass 2 bodies; generics, `Result`, ranged integers, bounds facts, panic sites, capabilities | done | `src/checker.ts` and its families |
+| Emitter, attributes and escape analysis | done (WP1–WP9, WP15) | `src/emit*.ts`, `attributes.ts`, `escape.ts`, `bounds.ts` |
+| Debug info | done (WP10, WP17) | `src/debug.ts` |
+| Interop: C header, `.d.ts` and loader, N-API (sync and async), wasm, C calls through `declare function` | done (WP8, WP17, WP24, WP27, WP30) | `src/interop-*.ts` |
+| Packages: `package.json` `exports`, bare specifiers, real-path identity, the manifest's `nish` field | S1–S2 and half of S3 (WP21) | `src/manifest.ts`, `paths.ts` |
+| Runtime: five translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
+| Threads: `parallelMapInto`, `parallelReduce`, `using s = scope()` | P1, P2 (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
+| Standard library: testing, text, json, pair, collections, secret, threads, `nish/crypto/*`, `nish/net/*` | growing (WP26, WP34) | `std/`, [std/README.md](../std/README.md) |
+| Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, PGO | done (WP9) | `scripts/build.sh` |
+| Tests: 1,621 golden cases (946 of them `reject_*`), 335 `tests/link/` programs, `llvm-as`, native round trips, layout, runtime budgets, interop, packaging, `tests/fix/` | done | `tests/run.js`, `tests/cases/`, `link/`, `fix/` |
+| Differential testing against Node and against the last release | done (WP13, WP19) | `tests/differential/`, `tests/nish-cmp.js` |
+| The bootstrap and the goldens that succeeded the stage0 oracles | done (WP14, WP19) | `scripts/bootstrap.sh`, `tests/self/` |
+| Benchmarks in Nish, C, Go and Rust | done (WP9) | `bench/`, [BENCHMARKS.md](BENCHMARKS.md) |
 
-Measured today: `examples/hello.ts` links to 4,680 bytes at the `size` profile
-and the runtime costs 4,670 bytes of `.text*` across its two translation units
-— 3,480 of `runtime.c`'s 3,584-byte budget and 1,190 of `runtime-os.c`'s 1,280
-(`docs/wp7-runtime.md` §"Runtime additions and budget") — beside 9,920
-bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
-a double links (WP15 §7a)
-(`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
-14.5 KB for the C twins and 349-377 KB for the Rust ones
-([BENCHMARKS.md](BENCHMARKS.md)). While both existed, stage1 compiled the same
-programs about eight times faster than stage0 (`docs/wp14-selfhost.md` §4, D5).
+Measured 2026-10-05: `examples/hello.ts` links to 4,712 bytes at the `size`
+profile on linux-x64.
 
 ## 5. Work packages
 
-Sizes: S = under a day of agent work, M = one to two days, L = several days.
-"Parallel-safe" means the WP mostly adds files rather than editing the shared
-`checker.ts`/`emitter.ts` hot spots (see WP-P).
-
-WP-P through WP11 are the original cut and have all landed. The one piece that
-was outstanding, WP2b's virtual dispatch, is no longer pending but withdrawn:
-inheritance has been removed and dispatch stays static
-([wp25-inheritance.md](wp25-inheritance.md), §6). WP12 through WP17 were cut afterwards, as the work turned up,
-and are recorded here in the same form so that this section says what happened
-rather than only what was planned: five of them have landed, and WP15 is the
-roadmap the project is on now. Each entry carries its state in its heading.
-
-The file paths in the packages up to WP17 are where the work was done at the
-time, which for most of them was stage0's `src/`, the TypeScript compiler R6 deleted
-(§9, M6). Each piece now lives in `src/`; [ARCHITECTURE.md](ARCHITECTURE.md)'s
-pipeline table is the map.
-
-### WP-P: Pipeline prep for parallel work (S) — do first
-
-Goal: make `checker.ts` and `emitter.ts` extensible by adding files, so
-Wave 1 agents do not all edit the same two functions.
-
-- `checkStatement`/`checkExpression` and `emitStatement`/`emitExpression`
-  were split into dispatch tables keyed by `ts.SyntaxKind`, with one module per
-  construct family: stage0's `src/checker/{statements,expressions,declarations}.ts`,
-  stage0's `src/codegen/emit/{statements,expressions}.ts`.
-- Introduce a golden-test harness: `tests/cases/<name>.ts` + `<name>.ll` +
-  optional `<name>.out` (expected stdout when linked with `tests/driver.c`
-  that calls `main`) and `<name>.err` for negative cases. `tests/run.js`
-  discovers them.
-- Add `npm run check` (tsc --noEmit) and `npm run lint` (Biome, WP0 wires it).
-
-Acceptance: `npm test` unchanged and green; existing goldens byte-identical.
-
-### WP0: Phase 0 AST validator + Biome for DX (S, parallel-safe)
-
-Goal: a dedicated, un-bypassable forbidden-syntax sweep that runs before the
-checker, plus Biome configured purely as a formatter/linter for humans.
-
-- stage0's `src/validator.ts`: `validateNish(sourceFile)` walked the whole tree
-  with `ts.forEachChild` and threw `CompileError` for everything in §3.2.
-  It had to catch things the checker never reaches (e.g. `any` nested in a
-  type argument, `delete` inside an unreachable branch).
-- It was wired into stage0's `src/compiler.ts` as Phase 0, and the checker kept its own
-  checks: the validator is defence in depth, not a replacement. Its successor
-  is `src/validator.ts`.
-- `biome.json` with format + recommended lint for the compiler's own source
-  and `examples/`. `npm run lint`, `npm run format`. Biome output is never
-  consulted by the compiler.
-- Tests: one `tests/cases/reject_*.ts` per forbidden construct (at least 25)
-  with the expected message fragment in `.err`.
-
-Acceptance: every §3.2 item has a rejecting test; `npm run lint` passes on
-the repo; validator runs in under 5 ms on a 1,000-line file.
-
-### WP1: Control flow (M, edits emitter core)
-
-Goal: `if`/`else`, `while`, `do`/`while`, `for`, `break`/`continue`,
-ternary `?:`, short-circuit `&&`/`||`, compound assignment `+= -= *= /= %=`,
-`++`/`--`, `throw` (abort).
-
-- Lowering: named blocks (`if.then`, `if.else`, `if.end`, `while.cond`,
-  `while.body`, `while.end`), `br i1`, `phi` for ternary and short-circuit,
-  alloca-based mutation for loop variables (mem2reg cleans it up).
-- Block naming must be unique per function (`if.then.1`, ...). Unnamed temp
-  numbering rules from `ir.ts` still hold.
-- Checker: definite-return analysis through branches; unreachable-code
-  detection after `break`/`continue`/`return`; `break` outside loop is an
-  error; condition must be `boolean` (no truthiness coercion).
-- Attributes: `hasLoops` already exists; a loop with a compile-time bounded
-  trip count (`for (let i = 0; i < n; i++)` with `n` unmodified in body)
-  may keep `willreturn`; otherwise drop it. Add `mustprogress` never (JS
-  allows infinite loops).
-- Runtime: `nish_abort(msg)` for `throw`.
-
-Acceptance: goldens for each construct; native round trips for fib, gcd,
-collatz, nested loops; `opt -O2` output vectorises a simple sum loop
-(check for `<4 x i32>` in `opt -O2 -S`); Rust/C comparison benchmark for
-fib(35) within 10 % (WP9 formalises the harness, a quick `hyperfine` run is
-enough here).
-
-### WP2: Classes, interfaces, structs (L, depends on WP1 for methods with loops)
-
-Goal: `class` and `interface` as LLVM struct types with fixed fields.
-
-- `%struct.User = type { i32, double }`; field order as declared; natural
-  alignment; `align 8` on allocations.
-- `new User(...)` lowers to the inline `nish_alloc_struct` (size from
-  datalayout-independent constant computed by the compiler) then a
-  constructor call. Constructors and methods become functions with `this`
-  as the first parameter: `@User.greet(%struct.User* noalias nonnull align 8 %this, ...)`.
-- Field access via `getelementptr inbounds`, `load`/`store` with alignment.
-- Interfaces: structural type with the same layout rules; a class
-  `implements` an interface only if fields match exactly in order and type
-  (no vtables in this WP).
-- Object literals typed by an interface allocate in the arena.
-- Forbidden and validated: adding undeclared fields, optional fields,
-  index signatures, getters/setters (defer), `static` (allowed as free
-  functions), inheritance (defer to WP2b).
-- Attributes: `noalias` on `this` and struct params only when the checker
-  proves no other pointer to the same object is live in the call (start
-  conservative: `noalias` only on `this` for constructors, since the object
-  is fresh). `readonly` on struct params never written through.
-- WP2b (follow-on): single inheritance via struct prefix + `bitcast`,
-  `super()`; still no virtual dispatch.
-
-Acceptance: goldens for class decl, `new`, method call, field read/write;
-C driver reads fields directly through a matching C struct; layout test
-comparing `sizeof` from C against the compiler's computed size for ten
-mixed structs.
-
-### WP3: Strings (M, parallel-safe after WP-P)
-
-Goal: string literals, `+` concatenation, `===`/`!==`, `.length`, template
-literals, `console.log`, number-to-string.
-
-- Literals: `@.str.N = private unnamed_addr constant { i64, [N x i8] } { i64 len, c"...\00" }, align 8`,
-  referenced as `i8*` via `getelementptr`. Deduplicate identical literals.
-  UTF-8 bytes, escaped for LLVM (`\XX` hex).
-- `a + b` on strings lowers to `nish_str_concat`; `a === b` to `nish_str_eq`;
-  `s.length` to a direct `load i64` from the header (no call).
-- Template literals: fold constant parts, `nish_str_from_i32/f64` for holes,
-  chain concat (or a `nish_str_concat_n` runtime addition).
-- `console.log(x)` accepts string, number, boolean; lowers to `nish_print`.
-- Number to string: `nish_str_from_f64` must match JS `Number.prototype.toString`
-  (shortest round-trip). Port Ryu or Grisu-style shortest formatting to
-  `runtime.c` within budget, or accept `%.17g` and document until WP7.
-- Mark functions that only call `nish_str_len` as `readonly` (already
-  handled by the effect fixpoint; verify with a test).
-
-Acceptance: goldens; native round trip printing concatenations and
-template literals; identical literal emitted once; `runtime.c` stays under
-budget.
-
-### WP4: Arrays (M, depends on WP1 and WP2 layout rules)
-
-Goal: `number[]`, `string[]`, `User[]` with fixed element type.
-
-- Layout `%array.i32 = type { i64, i32* }` (header + data pointer) or
-  inline `{ i64 len, [0 x T] }`; pick one and document. Recommendation:
-  header + pointer so slices are cheap later.
-- Array literals allocate in the arena; `new Array<T>(n)` zero-initialises.
-- `a[i]` with numeric index only; bounds check emits `br` to a cold
-  `nish_abort("index out of range")` block; `--unchecked-indexing` flag
-  removes it for benchmarks.
-- `.length`, `for (const x of arr)`, `for` with index; `push` deferred
-  (needs growth strategy; arena realloc doubling is fine).
-- Typed views for interop: `Int32Array`/`Float64Array` map to the same
-  layout so Node can pass buffers (WP8).
-
-Acceptance: goldens; native round trip summing an array and sorting one
-(insertion sort in Nish); bounds failure exits non-zero with message;
-`opt -O2` vectorises the sum loop with checks hoisted or removed.
-
-### WP5: Modules, entry point, linkage (M, parallel-safe)
-
-Goal: multi-file programs and runnable binaries without a hand-written C driver.
-
-- `export function` keeps external linkage; non-exported functions become
-  `internal` under `--strict-exports`, which WP15 §3 later made the default
-  (`--no-strict-exports` is now the opt-out).
-- `import { f } from "./other"`: compile each file to its own `.ll`, emit
-  `declare` for imported symbols with the same attributes the exporter
-  computed (write a `.d.nish.json` sidecar with signatures and attributes),
-  link them with `build.sh`. Cycles are allowed at link time.
-- `export function main(): number` becomes the process entry: emit
-  `@main` wrapper that initialises nothing (arena is lazy), calls user
-  `main`, calls `nish_free_arena`, returns the code. Process args exposed
-  later (WP7).
-- CLI: `nish a.ts b.ts -o out/` and `nish --link a.ts b.ts -o app`
-  which shells out to `scripts/build.sh`.
-
-Acceptance: two-file example builds and runs with `nish --link`;
-attributes on imported declarations match the exporter's definitions
-(test compares the sidecar with the `.ll`).
-
-### WP6: Memory strategy (L, depends on WP2 and WP4)
-
-Goal: make the zero-GC model ergonomic and fast.
-
-- Escape analysis: a `new` whose result never escapes the function (not
-  returned, stored into another object, or passed to a capturing callee)
-  becomes an `alloca` in the entry block instead of an arena allocation.
-  Reuse the escape machinery from `attributes.ts`.
-- Arena scopes in the language: `arena.scope(() => { ... })` or a block
-  pragma; compiles to save-offset / restore-offset around the block, so
-  temporary objects are reclaimed without a full reset. Runtime gets
-  `nish_arena_mark()` / `nish_arena_release(mark)`.
-- Optional reference counting per class (`@refcounted` decorator or
-  `class X extends Rc`): 8-byte header, `nish_rc_retain/release`, release
-  on scope exit, no cycles collection (documented). Only for objects that
-  must outlive resets. Off by default.
-- `T | null` for pointer types with `null` checks required before use
-  (checker enforces narrowing via `if (p !== null)`).
-
-Acceptance: goldens showing `alloca` for non-escaping objects; benchmark
-allocating 10 M small objects in a loop with scope reclaim stays flat in
-RSS; RC round trip test in C confirms counts.
-
-### WP7: Runtime and intrinsics expansion (M, parallel-safe)
-
-- `Math.sqrt/abs/floor/ceil/min/max/pow/sin/cos` to `llvm.*` intrinsics
-  with `readnone`; `Math.random` via xorshift in runtime.
-- `i64` type; `number`-to-`i64` explicit conversion functions; `Number()`
-  / `parseInt` on strings.
-- I/O: `process.argv`, `readFileSync`/`writeFileSync` (thin `read`/`write`
-  wrappers), `process.exit`. Keep stdio out; use syscalls via libc.
-- JS-accurate float formatting (shortest round-trip) if WP3 deferred it.
-- WASI variant of the runtime (`--target wasm32-wasi`) so string programs
-  run under wasm too.
-
-Acceptance: runtime budget respected; each intrinsic has a golden and a
-native check against libm; a CLI sample (word count) builds under 20 KB
-with the `size` profile.
-
-### WP8: Interop: wasm, N-API, headers (M, depends on WP5)
-
-- `nish --emit-header` writes a C header for exported functions and
-  structs from the same signature data the emitter uses.
-- `nish --emit-dts` writes `.d.ts` for the wasm exports (scalars now,
-  arrays via `Int32Array` views over wasm memory after WP4).
-- `scripts/build.sh --profile napi` builds a `.node` addon: generated C
-  shim registers each exported scalar function; `examples/node-addon.mjs`
-  loads it.
-- Guidance and examples for batching: pass a buffer once, process
-  natively, return once. Benchmark showing per-call FFI cost versus batched.
-
-Acceptance: `node` loads both the `.wasm` and the `.node` build of the
-same module and gets identical results; header compiles with `-Wall
--Werror` against the IR-built object.
-
-### WP9: Optimisation and benchmarking (M, after WP1/WP2/WP4)
-
-- Benchmark suite `bench/`: fib, nbody, spectral-norm, string building,
-  struct-heavy loop; each in Nish, C, and Rust; `hyperfine` runner and
-  a table in `docs/BENCHMARKS.md`. Target: within 10 % of Rust `-O3` for
-  loop/math, sizes within the Rust range.
-- Attribute phase 2: `nsw` under an opt-in flag; `noalias` on struct
-  params under a documented aliasing rule; `nocapture` with stores
-  tracked; `dereferenceable(N)` on struct pointers (size known); `nonnull`
-  everywhere pointers are non-nullable; `unnamed_addr` on constants;
-  `dso_local` when not building PIC.
-- Emit `target datalayout` and `target triple` when `--target` is given so
-  `opt` runs with the right layout; keep target-neutral by default.
-- PGO recipe (`-fprofile-generate`/`-fprofile-use`) in `build.sh`.
-
-Acceptance: `docs/BENCHMARKS.md` with reproducible numbers; no attribute
-added without a test proving the precondition.
-
-### WP10: Tooling, CI, diagnostics (S, parallel-safe)
-
-- GitHub Actions: install LLVM 18 + lld, `npm ci`, `npm test`, size report
-  as a job summary; matrix Linux + macOS.
-- Diagnostics: multi-error reporting (collect, do not throw on first),
-  source excerpt with caret, `--json` output for editors.
-- `--emit-ast` and `--emit-checked` debug dumps.
-- Debug info: `!dbg` metadata for functions and lines (`-g` flag) so
-  `gdb`/`lldb` step through `.ts` lines.
-
-Acceptance: CI green on both OSes; a file with three errors reports all
-three; `lldb` shows a `.ts` line on a breakpoint in the fib example.
-
-### WP11: Documentation (S, continuous)
-
-- `docs/LANGUAGE.md`: the normative Nish reference (from §3, kept in
-  sync by every WP that adds a construct).
-- `docs/IR_COOKBOOK.md`: for each construct, the `.ts` and the exact `.ll`.
-- README stays the tour; deep material moves to `docs/`.
-
-### WP12: Release engineering and production hardening (S, after WP10) — landed
-
-Goal: make the compiler something a stranger can install, and make its
-refusals legible.
-
-- `package.json#files` whitelists what `npm pack` ships; stage0's `src/index.ts`
-  resolved `scripts/build.sh` and `runtime/runtime.c` from the package root
-  (`PKG_ROOT`), never from the working directory, so `npm install -g` worked
-  from anywhere. `src/compile.ts` does the same from its own binary's path.
-- Exit codes 0, 1, 2, 3 and 70, each with a documented message shape. The
-  toolchain probe runs *before* compilation, so a missing clang is reported
-  without writing any IR.
-- `--version` read from `package.json` at runtime, `prepublishOnly` re-running
-  check/build/test, `scripts/smoke.sh` building and running every example, and
-  a tag-driven release workflow that refuses a tag disagreeing with
-  `package.json#version`.
-
-Dependencies: WP10 (the release workflow calls CI).
-
-Acceptance (met): the packaging block of `tests/run.js` runs `npm pack`,
-installs the tarball into a temporary prefix and links a hello-world from an
-unrelated directory with the installed `nish`; every exit code above has its
-own check, including the internal-error path through a test hook.
-[wp12-release.md](wp12-release.md) is the note, and it carries the one decision
-this package left open: *which* compiler the package should ship.
-
-### WP13: Differential testing against Node (M, after WP5 and WP7) — landed
-
-Goal: prove that a compiled program behaves exactly like the same TypeScript
-run under Node, up to the handful of semantic decisions this compiler
-documents.
-
-- `tests/differential/rewrite.js` rewrote a whole program to JavaScript *from
-  the checker's own types*, so what is compared is the language's semantics
-  rather than a hand translation; `runtime/shim.mjs` is the Node side of the
-  runtime. The rewriter drove stage0's checker, so the rewrites were frozen in
-  `tests/differential/goldens/` before R6 deleted it.
-- 50 corpus programs plus every whole program in `tests/cases`, built
-  natively and run, compared byte for byte on stdout, exit status and
-  terminating signal.
-- A random-program generator that prints its seed, so any failure reproduces
-  with `--seed <s> --count 1`.
-- `known-failures.txt`: a divergence that is by design is listed with the
-  paragraph that explains it; anything else is a bug.
-
-Dependencies: WP5, WP7.
-
-Acceptance (met): `npm run test:diff` green over the corpus, and `npm test`
-runs the quick corpus plus a fixed-seed fuzz batch. No wrong instruction
-sequence was found; three semantic gaps were, all since closed or documented
-(ECMAScript `Math.pow`, and checked integer division for `x / 0` and
-`INT_MIN / -1`). The generator has since gained a second customer in WP14,
-where `--stage1` compared the two compilers' IR instead of Node; since R6 it
-compares the last release's IR with HEAD's.
-[wp13-differential.md](wp13-differential.md).
-
-### WP14: Self-hosting (L, after WP8) — landed
-
-Goal: the compiler compiles itself. `src/` is stage0 — the TypeScript compiler, deleted in R6 — rewritten in Nish,
-and the claim is an equality rather than a demo:
-`IR(stage1, src/) == IR(stage2, src/)` byte for byte, with stage3 identical
-to stage2.
-
-- **Nish-0**, the subset `src/` is written in — no generics, closures,
-  nested functions, `type` aliases, `static` members, `try`/`catch` or
-  downcasts — and what it forces: one `Node` class with a `kind` discriminant,
-  interned integer types, `StringMap` over parallel arrays, error-value
-  threading instead of exceptions, side tables as arrays indexed by node id.
-- The language gap measured first and closed construct by construct, each one
-  entering stage0's `src/` with its golden, round trip, negatives, LANGUAGE.md rule and
-  cookbook entry before it entered `src/`.
-- An oracle per phase (lexer, parser, support, types, diagnostics, symbols,
-  the checked dump, the rejections, the IR, the interop sidecars), each
-  comparing stage1 against stage0 over the whole corpus rather than against a
-  hand-written golden. R6 retired them with stage0; §9's M6 row says what
-  replaced each.
-- `scripts/bootstrap.sh` builds the chain from the seed and leaves
-  `build/nish` behind; `--verify` asserts `IR(stage1) == IR(stage2)` and
-  stage3 == stage2 with `cmp`, and reports `IR(seed) == IR(stage1)` without
-  asserting it. That third equality was diverse double-compiling only while
-  the seed was stage0, the second implementation
-  (`docs/wp19-stage0-retirement.md` G3); against a released seed it asks
-  whether the codegen has changed since that release.
-- §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
-  so stage1 plans its own output, makes its own directories and runs
-  `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
-
-Dependencies: WP0 through WP8; WP16 and WP17 were implemented on both sides
-for the same reason.
-
-Acceptance (met): `tests/self/bootstrap.js` proved the three equalities on
-every run of `npm test`, and the IR oracle required stage1 to compile every
-program in the corpus with no exemption list. What was still stage0's when the
-package closed is listed in full in [wp14-selfhost.md](wp14-selfhost.md) §7a: `--emit-ast`,
-`--target host`, exit 70 for an internal error, and `-o <dir>` without a
-trailing slash.
-
-### WP15: Performance first (L, continuous) — the live roadmap
-
-Goal: the fastest binary this compiler can emit, with binary size second. The
-rule is that when a language decision has two defensible answers the faster
-lowering wins, and that "faster" means measured rather than assumed.
-
-Scope, eight items in dependency order: fast defaults (`--strict-exports` and
-`--nsw` on, with the honest re-pointing of every test and document that
-depends on wrapping — **done**); the `performance` diagnostic class, a third
-severity that fires when the compiler had to take a slow path and a faster one
-existed;
-slice iterators, so `for (const c of s)` lowers to pointer advancement;
-unsigned types; the fast slice beside JavaScript's `substring`; the range
-analysis that makes a proven index emit no bounds check;
-contiguous *record* arrays with the checker rule that makes the dangling
-interior pointer a compile error (**done** for an `interface` nobody
-implements, 2.27x where allocation order and traversal order differ; a class
-has identity and keeps its pointer slot **by decision** — §2a costs the
-migration against `src/` and closes it rather than deferring it); and generics
-by monomorphisation with discriminated unions. §9 has the
-order with the reason for each position, and
-[wp15-performance.md](wp15-performance.md) has the design.
-
-Dependencies: WP9 (it is what the numbers are measured against). Items 1 and 7
-change the ABI and the documented overflow guarantee, so each ships with the
-re-pointing rather than after it.
-
-Acceptance: each row ships with the full construct checklist of
-`docs/ARCHITECTURE.md`, and the row that claims a speed-up cites the
-before/after in [BENCHMARKS.md](BENCHMARKS.md).
-
-### WP16: `Result<T, E>` and the end of `throw` (L, after WP6) — landed
-
-Goal: a function that can fail says so in its return type, and the caller
-cannot reach the success value without first deciding what happens to the
-failure.
-
-- Three checker rules, each a hard error: a `Result` cannot be dropped;
-  `r.value` is legal only where `isOk()` was proved and `r.error` only where
-  `isErr()` was; `r.orReturn()` — Rust's `?` — is legal only inside a function
-  that returns a compatible `Result`.
-- `throw` removed in the same package, because leaving it in would have left a
-  second, invisible way to report a failure. It never unwound: it was an abort
-  wearing the syntax of error handling. `panic(message)` is the replacement for
-  a broken invariant.
-- One monomorphised `%struct.nish_result.<T>.<E>` per payload pair, laid out
-  as a `class` is, without needing user generics (which WP18 added later): the
-  checker instantiates the pair it sees.
-- The ambient declarations in `runtime/nish.d.ts` keep an Nish program
-  type-checkable by `tsc`.
-
-Dependencies: WP6 (the escape analysis and the narrowing engine `T | null`
-already had).
-
-Acceptance (met): six `res_*` cases, ten `reject_result_*` messages matching
-character for character, the `result_import` link test, and both compilers
-agreeing byte for byte through the S3/S4 oracles.
-[wp16-results.md](wp16-results.md).
-
-### WP17: `Result` across the ABI (M, after WP16) — landed
-
-Goal: close the three things WP16 left in the source: return small `Result`s
-by value, let a `Result` cross the host boundary, and describe one in DWARF.
-
-- A `Result` whose two payloads are each a scalar of at most four bytes travels
-  packed into a single `i64` — returned *and* passed — with the discriminant in
-  the low half and the live arm in the high half. Everything else keeps WP16's
-  pointer. Eight bytes is not a tuning knob: `i64` is the only return width
-  whose C-ABI lowering is the same LLVM type on all six supported triples.
-- `--emit-header` writes the encoding as a C type with a `_Static_assert` on
-  its size, so the header is the same declaration clang produces rather than a
-  description of it; `--emit-dts` and `--emit-napi` hand JavaScript the object
-  it already models.
-- `-g` describes the fields.
-
-Dependencies: WP16, WP8 (the sidecar generators), WP9 (`target.ts`).
-
-Acceptance (met): 3.5× on the inlined path, measured on two real binaries, and
-2.09× against WP16's pointer where the call is not inlined away, measured on
-hand-written IR that mimics each lowering because (c) was never built; a
-`-Wall -Wextra -Werror -pedantic` C driver calling by-value, by-pointer and
-by-parameter `Result`s through the generated header; and the oracles agreeing
-byte for byte before the bootstrap was allowed to close.
-[wp17-result-abi.md](wp17-result-abi.md). What it did *not* close is
-`bench/result`, which was 2.59x behind Rust because the two arms never become
-separate SSA values inside one word — the fix is a private ABI for internal
-functions, which needs WP15's item 1. It shipped as WP15 §7b, in two steps
-(the discriminant out of the word, then one payload slot per arm), and the row
-is 1.00x.
+Sizes, where a package was given one: S = under a day of agent work, M = one
+to two days, L = several days. Each package has a note, `docs/wpN-*.md`; a
+landed package's note is a summary of what shipped and why, and an open one's
+is its plan. [README.md](README.md) indexes them.
+
+| WP | Package | State | Note |
+| --- | --- | --- | --- |
+| P | Pipeline prep: dispatch tables, the golden harness, `npm run check` | landed | — |
+| 0 | Phase 0 validator, Biome | landed | [wp0](wp0-validator.md) |
+| 1 | Control flow | landed | [wp1](wp1-control-flow.md) |
+| 2 | Classes, interfaces, structs | landed; WP2b's inheritance later removed (WP25) | [wp2](wp2-classes.md) |
+| 3 | Strings | landed | [wp3](wp3-strings.md) |
+| 4 | Arrays | landed | [wp4](wp4-arrays.md) |
+| 5 | Modules, entry point, linkage | landed | [wp5](wp5-modules.md) |
+| 6 | Memory: escape-analysed stack, arena scopes, `T \| null` | landed | [wp6](wp6-memory.md) |
+| 7 | Runtime and intrinsics | landed | [wp7](wp7-runtime.md) |
+| 8 | Interop: wasm, N-API, headers | landed | [wp8](wp8-interop.md) |
+| 9 | Optimisation and benchmarks | landed | [wp9](wp9-optimisation.md) |
+| 10 | CI, diagnostics, the code registry | landed | [wp10](wp10-ci.md) |
+| 11 | Documentation | continuous, folded into every package | — |
+| 12 | Release engineering | landed | [wp12](wp12-release.md) |
+| 13 | Differential testing against Node | landed | [wp13](wp13-differential.md) |
+| 14 | Self-hosting | landed (M5) | [wp14](wp14-selfhost.md) |
+| 15 | Performance first | closed: every item done, closed by measurement or closed by decision | [wp15](wp15-performance.md) |
+| 16 | `Result<T, E>` and the end of `throw` | landed | [wp16](wp16-results.md) |
+| 17 | `Result` across the ABI | landed | [wp17](wp17-result-abi.md) |
+| 18 | Generics by monomorphisation | landed; §16 lists what stays deferred | [wp18](wp18-generics.md) |
+| 19 | Stage0 retirement | landed (M6) | [wp19](wp19-stage0-retirement.md) |
+| 20 | Threads: the runtime half | T0 and the partitioner built; the surface moved to WP29 | [wp20](wp20-threads.md) |
+| 21 | Packages | S1, S2 and half of S3 landed; the rest open | [wp21](wp21-packages.md) |
+| 22 | Arrow functions as the declaration form | A and B landed; stage D is an open question | [wp22](wp22-arrow-functions.md) |
+| 23 | The language surface a corpus review asked for | settled row by row | [wp23](wp23-language-surface.md) |
+| 24 | `async`/`await` | declined; `--emit-napi-async` built | [wp24](wp24-async.md) |
+| 25 | Remove inheritance, widen `implements` | landed | [wp25](wp25-inheritance.md) |
+| 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
+| 27 | Calling C | S1 and S2 built | [wp27](wp27-ffi.md) |
+| 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
+| 29 | The thread surface | P1 and P2 built; P3 proposed | [wp29](wp29-thread-surface.md) |
+| 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
+| 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
+| 32 | `Map` and `Set` | landed in 0.11.0 | [wp32](wp32-map.md) |
+| 33 | The round trip to TypeScript | R0–R2 built, R5's exact half built; R3, R4 open | [wp33](wp33-round-trip.md) |
+| 34 | Hosting cs: the network stack | in progress | [wp34](wp34-hosting-cs.md) |
+| 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
+| 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
+| 37 | The OS sandbox | proposed; no note yet | — |
+
+A package's plan said where its work would be done, which for everything up
+to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
+piece now lives in `src/`.
 
 ## 6. Dependency graph and waves
+
+The original cut forked like this, and every wave of it has landed:
 
 ```
 WP-P ─┬─► WP0 ─────────────────────────────────────────┐
@@ -684,29 +266,17 @@ WP-P ─┬─► WP0 ───────────────────�
       └─► WP11 (continuous) ◄───────────────────────────┘
 ```
 
-| Wave | Packages | Parallelism | State |
-| --- | --- | --- | --- |
-| 0 | WP-P | one agent, lands first | done |
-| 1 | WP0, WP1, WP3, WP5, WP7, WP10 | six agents, disjoint files after WP-P | done |
-| 2 | WP2, WP4 (WP4 starts once WP2 fixes layout rules), WP8 | three agents | done |
-| 3 | WP6, WP9, WP2b | three agents | done. WP2b's inheritance landed and has since been **removed** ([wp25-inheritance.md](wp25-inheritance.md)); the field-prefix half it was good for survives as a widened `implements`, and virtual dispatch was never built |
-| 4 | WP12, WP13 | two agents, both additive | done |
-| 5 | WP14, then WP16 and WP17 on both compilers | one agent at a time: `src/` is the whole tree | done |
-| 6 | WP15, in the order of §9 | one agent per numbered item; items 1 and 7 move the ABI, so they do not overlap | **open** |
-| always | WP11 | folded into each WP's definition of done | done |
-
-Merge order inside a wave: smallest diff first (WP0, WP10), then WP3/WP5/WP7,
-then WP1. Each agent rebases on the branch head before pushing.
-
-Waves 4 to 6 are not in the diagram above because they do not fork: WP12 and
-WP13 depend on a working compiler rather than on a construct, WP14 depends on
-all of it, and every WP15 item is measured against the baseline the one before
-it left. What the diagram would show for them is a line.
+Everything after it was cut as the work turned up and did not fork:
+WP12 and WP13 need a working compiler rather than a construct, WP14 needs all
+of it, WP16 to WP19 followed in order, and since then a package is one agent
+at a time on whichever part of `src/` it touches. `src/` is the whole tree, so
+two packages that edit the checker do not run in parallel.
 
 ## 7. Conventions for every agent
 
-1. Work on a sub-branch of `main` named `wp<N>/<short-name>`; open a PR into
-   `main`.
+1. Work on a branch off `main` and open a pull request into it.
+   [AGENTS.md](../AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it)
+   says what a pull request must be and who merges it.
 2. `npm run check` and an undegraded `npm test` must be green, and every new
    construct needs: a golden `.ll`, an `llvm-as` pass, a native round trip
    with expected stdout, and at least one negative test. Run
@@ -722,18 +292,19 @@ it left. What the diagram would show for them is a line.
    code.
 3. Do not emit an attribute you cannot cite a checker proof for. Write the
    reason in `src/attributes.ts` alongside the code.
-4. Any change to a struct layout touches `src/runtime.ts` and `runtime.c` in
-   the same commit and adds/extends a layout smoke test.
-5. Keep `runtime.c` and `runtime-os.c` within their budgets (§2). Report the
-   size of whichever you changed in the PR.
-6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added, and add a
-   line to `CHANGELOG.md`. The cookbook is regenerated by
-   `docs/cookbook/regen.sh` against `build/nish`, so its entry lands with the
-   construct.
-7. Commit messages: imperative subject, body explaining the lowering.
-   No model names in commits, code, or PR text.
-8. Never widen scope into another WP's files; leave a TODO referencing the
-   WP number instead.
+4. Any change to a struct layout touches `src/runtime.ts` and the C runtime in
+   the same commit and adds or extends a layout smoke test.
+5. Keep every runtime translation unit within its ceiling (§2). Report the
+   size of whichever you changed in the pull request.
+6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added. The
+   cookbook is regenerated by `docs/cookbook/regen.sh` against `build/nish`,
+   so its entry lands with the construct.
+7. Commit messages follow the convention in `CLAUDE.md`: a conventional
+   subject and a body in prose, because `scripts/changelog-gen.mjs` writes
+   `CHANGELOG.md` from them and nothing edits it by hand. No model names in
+   commits, code, or pull request text.
+8. Never widen scope into another package's files; leave a TODO referencing
+   the WP number instead.
 
 ## 8. Agent brief template
 
@@ -741,22 +312,21 @@ it left. What the diagram would show for them is a line.
 You are implementing <WP-N: title> for Nish, a TypeScript-to-LLVM-IR AOT
 compiler. The compiler is src/, written in Nish and built by the last
 released nish (the seed): `npm run build` leaves build/nish. Read
-docs/MASTER_PLAN.md (§2 design rules, §3 spec, §5 your WP, §7 conventions),
-docs/ARCHITECTURE.md and README.md first. Run `npm test` before changing
-anything.
+.claude/orientation.md, .claude/selfhost.md, docs/MASTER_PLAN.md (§2 design
+rules, §7 conventions), docs/ARCHITECTURE.md and the package's note
+docs/wp<N>-*.md first. Run `npm test` before changing anything.
 
-Scope: <paste the WP bullet list>.
-Out of scope: <neighbouring WPs>.
-Files you own: <list>. Files you may read but not edit: <list>.
+Scope: <the note's stage being built>.
+Out of scope: <neighbouring packages>.
 
 Definition of done:
-- <acceptance criteria from §5>
+- <acceptance criteria from the note>
 - `npm run check` and an undegraded `npm test` green, new goldens under
   tests/cases/, docs updated.
 - src/ does not use the new construct in its own source until the next
   release (the rolling freeze).
-- Push to branch wp<N>/<name> and open a PR into `main` with the IR for each
-  new construct shown in the PR body.
+- A pull request into `main` with the IR for each new construct shown in its
+  body.
 
 Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 ```
@@ -767,13 +337,10 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | --- | --- | --- | --- |
 | M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
-| M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x, which the run's own analysis reads as spread rather than the program ([BENCHMARKS.md](BENCHMARKS.md), [wp9-optimisation.md](wp9-optimisation.md#summary)). The other three closed: the causes were named rather than guessed, and each section below the gap table says what the measurement was before the change |
-| M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **not scheduled.** The project stays on 0.x until its owner declares 1.0. The rule that will apply then is already written at the head of [LANGUAGE.md](LANGUAGE.md) — see [What remains](#what-remains). WP2b left the milestone rather than being finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)) |
-| M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `src/` compiles `src/`: `IR(stage1, src/) == IR(stage2, src/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
-| M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** — R6 ([wp19 §5](wp19-stage0-retirement.md#5-order)) deleted stage0's `src/`, the TypeScript compiler that `tsc` built into `dist/`, and with it the `typescript` runtime dependency (it stays a devDependency, for `npm run check` and the lexer and parser oracles), the six oracles that compared stage1 with stage0 (types, diagnostics, symbols, checked, IR, interop), the parity mode and its workflows, and the stage1-only register, which had nothing left to register once every case was stage1's. Each oracle has a successor that runs without stage0: the types, diagnostics, symbols and checked dumps are held to the goldens in `tests/self/goldens/` (`tests/self/goldens.js`), which were written from stage0 while it still existed; the IR and the interop sidecars are held to the `tests/cases/*.ll` goldens and to `tests/nish-cmp.js`, which compares HEAD with the last released compiler. The seed is that release, fetched by `scripts/fetch-seed.sh`, and `src/` is the only compiler. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under stage0's `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `src/` to TypeScript: with the `@ts-expect-error` at `src/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
-
-WP12, WP13, WP16 and WP17 landed between M3 and M5 without a milestone of
-their own; releasing what they built is part of M4.
+| M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; [BENCHMARKS.md](BENCHMARKS.md) has the current table and [wp9-optimisation.md](wp9-optimisation.md#summary) the analysis of every gap |
+| M4 "1.0" | stabilised spec | tagged release, language reference frozen. | **not scheduled.** The project stays on 0.x until its owner declares 1.0 — see [What remains](#what-remains) |
+| M5 "Self-hosting" | WP14 | `src/` compiles `src/`, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
+| M6 "One compiler" | WP19 | stage0 deleted rather than frozen, after the six gates of [wp19 §3](wp19-stage0-retirement.md) closed: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | **done** in #150 ([wp19 §5](wp19-stage0-retirement.md#5-order)), first released in 0.7.0. Each stage0 oracle has a successor that runs without it: `tests/self/goldens/`, the `.ll` goldens, and `tests/nish-cmp.js` against the last release. |
 
 ### What remains
 
@@ -783,52 +350,28 @@ for after 1.0 is written at the head of [LANGUAGE.md](LANGUAGE.md) so that it
 is not invented under pressure: a minor may add a rule or turn a refusal into
 an acceptance, and withdrawing or narrowing an accepted construct, or changing
 what one means, needs a major. The changelog generator never computes 1.0.0 on
-its own, because before 1.0 a break moves the minor. When 1.0 is declared it is
-chosen with a `Release-As:` trailer ([#200](https://github.com/amritk/nish/pull/200)
-adds the trailer and is parked until then) on a commit, followed by the Release
-PR, which a human merges.
+its own; when 1.0 is declared it is chosen with a `Release-As:` trailer
+([#200](https://github.com/amritk/nish/pull/200) adds the trailer and is parked
+until then), followed by the Release PR, which a human merges.
 
-Two breaking changes shipped in 0.10.0. Each would have cost a major after
-1.0, so both were taken while a break is still a minor:
+Breaking changes taken while a break is still a minor: the reserved name
+`integer` (0.10.0, [#201](https://github.com/amritk/nish/pull/201)), which let
+ranged integers land in 0.13.0 without breaking anything; a module is its
+real path and a package its real directory (0.10.0,
+[#202](https://github.com/amritk/nish/pull/202)); `Secret<T>`
+([#418](https://github.com/amritk/nish/pull/418)); and signed overflow as a
+checked panic ([#426](https://github.com/amritk/nish/pull/426)).
 
-- **The name `integer` is reserved** ([#201](https://github.com/amritk/nish/pull/201)).
-  A class, interface or function called `integer` is `NL2332`, an alias or
-  enum of that name is refused as `type Result = …` is, and `integer` written
-  as a type is `NL2333`, so that ranged integers ([wp31-ranged-integers.md](wp31-ranged-integers.md))
-  could land by turning `NL2333` into the type and break nothing, which is
-  how they landed in 0.13.0 ([#261](https://github.com/amritk/nish/pull/261)).
-- **A module is its real path and a package its real directory**
-  ([#202](https://github.com/amritk/nish/pull/202)), as in Node and in `tsc`.
-  That closes [#198](https://github.com/amritk/nish/issues/198) and the identity
-  half of WP21 S3: a symlinked package is one package, and one name at two real
-  directories is `NL3029`, a refusal that identity by manifest could later turn
-  into an acceptance ([wp21-packages.md](wp21-packages.md) §10d).
-
-**The WP15 list is closed.** It was the road to a stable reference because
-items 5, 6 and 8 each added a rule to it; all three have landed. What is
-left on it is item 1b's hoist in the emitter, which changes IR and not the
-language. The table stays as the record of what each item was and what it was
-worth; [wp15-performance.md](wp15-performance.md) §9 is the full version, and
+**The WP15 list is closed.** Every item landed, was closed by measurement
+(item 3, slice iterators: a `for...of` loop and the checked indexed loop
+already compile to identical binaries) or was closed by decision (item 7's
+class elements: an array of classes is one pointer per slot, and the
+contiguous shape is spelled `interface`). Item 1b, the invariant array header,
+shipped as an emitter hoist (#104) and property-path length facts (#179) after
+`!invariant.load` was refuted as a miscompile.
+[wp15-performance.md](wp15-performance.md) §9 is the record, and
 [BENCHMARKS.md](BENCHMARKS.md), regenerated by `node bench/run.mjs`, is the only
 place the numbers are current.
-
-| | Item | Why in this position |
-| ---: | --- | --- |
-| 1 | Fast defaults: `--strict-exports` and `--nsw` on by default — **done** | small, and it moves the baseline everything after it is measured against. It is also what a private two-scalar ABI for `Result` needs (WP17 §4) |
-| 1a | Array alias domains — **done** | the array header and the element buffer are separate alias domains, so LICM may hoist `len` and `data` out of a loop that writes elements. Worth 1.58x when it landed and, re-measured, 1.63x to 3.96x depending on where the array is held ([wp15-performance.md](wp15-performance.md) §2b, §2c) |
-| 1b | An invariant array header — **candidate 1 refuted; open for candidate 2** | marking the header `!invariant.load` off `readonly T[]` is a miscompile, not a hoist: the whole of `src/` marked that way (7,068 header loads over 60 modules, against an unmarked build of 988,296 bytes) comes out as a 22,048-byte compiler — 2.2% of it — that cannot parse its own argv. The deletion is what reproduces; its severity is not, and earlier heads on the same box did not link at all. What is not refuted is the win — a loop over two array *parameters* has it banked, and the same loop with the array in a **class field**, which is how `src/` is written, is **2.48x** behind and recovers all of it from a hoist written by hand in the source. The item is re-scoped to that hoist done in the emitter, with the field-shape program of [wp15-performance.md](wp15-performance.md) §2c as its acceptance program, its criterion **one length value feeding the loop condition and the bounds check both** (a hoist that leaves two measures 761 ms against 756), and `src/bounds.ts` as the real code with the shape. It needs the whole-program "does not grow an array" fact `attributes.ts` does not have yet |
-| 2 | The `performance` diagnostic class — **done** | the framework — `--no-warn-performance` in `src/compile.ts`, the performance warnings in `src/diagnostics.ts` and `src/checker.ts` — plus the two warnings that needed no new analysis, quadratic string building and allocation in a loop, ruled in `docs/LANGUAGE.md` and tested by `tests/cases/perf_*`. **All ten of WP15 §8's rules ship now**: the surviving-bounds-check warning `NL9007` arrived with item 6, `NL9008` and `NL9009` with the flag and the clamp fold they report on, and the struct-padding rule `NL9010` last — a floor accumulator on the layout walk the checker already made, plus the report order the warning list needed before a pass-1 rule could join it, which was written down as its own change first because the order of `--json` is a contract. [wp15-performance.md](wp15-performance.md) §9 item 2 has what measuring those four taught; `docs/LANGUAGE.md` is normative for all ten |
-| 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
-| 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
-| 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
-| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` waited on item 8's generics and shipped after them, in 0.13.0 ([wp31-ranged-integers.md](wp31-ranged-integers.md)), and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
-| 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `src/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `src/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
-| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | **done**: generic functions, classes, interfaces and methods, constraints, the whole-program rule and the peripheries (`-g`, the interop sidecars, the fuzzer) have all landed — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 what stays deferred, each with its trigger. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
-
-An explicit bounds-check opt-out stays unbuilt: seventeen checks survive item 6
-in a loop across the whole of `src/`, each with a rewrite the warning names,
-which is not a language feature's worth of them
-([wp15-performance.md](wp15-performance.md) §2.4).
 
 **One language question is open: WP22 stage D.**
 [wp22-arrow-functions.md](wp22-arrow-functions.md) made arrows the declaration
@@ -838,44 +381,31 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next
 
-1. **WP34 wave 1, hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)):
-   the port of a browser game and its servers, starting with its Rust relay on
-   a Nish network stack (HTTP/1.1, HTTP/2, HTTP/3, WebTransport) that is
-   standard library, `nish/crypto/*` and `nish/net/*`. Of the compiler's
-   phase-one items, exported enums and aliases (N1), byte plumbing (N2), the
-   clock, entropy, file times and signals (N3) and the constant-time builtins
-   (N6) are built; **N5**, the `nish:net` sockets and the loop a program
-   owns, is next. Of the stack's first lanes, K1 (SHA-2, HMAC, HKDF,
-   base64url) and K4 (X25519) are built, and **K2, K3, K5 and K6** —
-   ChaCha20-Poly1305, AES-GCM, P-256 ECDSA and X.509 — are next. The port's
-   order is in the game's repository.
-2. **WP33 R2 to R4, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
-   R1's portability half is built, the `portability` class behind
-   `--warn-portability`. Next are R2, closing the rows that are free to close
-   (the typed-array names lose `push` and `pop`); R3, the runtime split by
-   host; and R4, `--emit ts` with its live differential. Its rule binds now:
-   every construct states its TypeScript reading, and no stage moves a `.ll`
-   golden or raises `bench/instructions.json`.
+1. **WP34, hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)): the port
+   of a browser game and its servers, starting with its Rust relay on a Nish
+   network stack. Built: the compiler items N1, N2, N3, N5 and N6, every
+   cryptography lane K1 to K6, TLS 1.3 (T1, T2) and QUIC (Q1, Q2); HTTP/1.1
+   and WebSocket parsing (H1) and HPACK (H2) are half built. Next are the
+   HTTP/1.1 server, HTTP/2 frames and streams, QUIC Q3 and Q4, HTTP/3 and
+   WebTransport, and moving the key-holding structs onto `nish:secret`
+   ([#430](https://github.com/amritk/nish/issues/430)). §5 of the note has the
+   lane table and the order.
+2. **WP33 R3 and R4, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
+   R1 (the `portability` class behind `--warn-portability`) and R2 (the
+   typed-array names lose `push` and `pop`) are built, and so is R5's exact
+   half, `nish --fix`. Next are R3, the runtime split by host, and R4,
+   `--emit ts` with its live differential. Its rule binds now: every construct
+   states its TypeScript reading, and no stage moves a `.ll` golden or raises
+   `bench/instructions.json`.
 3. **Threads P3, a lock that owns its data** ([wp29-thread-surface.md](wp29-thread-surface.md)
-   §4.3), proposed. P1 and P2 are built.
+   §4.3), proposed. P1 (`parallelMapInto`, `parallelReduce`, 0.11.0) and P2
+   (`using s = scope()`, 0.13.0) are built.
 4. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
    the process with Landlock and seccomp to the capabilities the compiler
    computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. WP35, the
    capability report ([wp35-capabilities.md](wp35-capabilities.md)), and
-   WP36, the compile-time policy that refuses what `--allow`, `--deny` or the
-   root `package.json` does not grant
+   WP36, the compile-time policy
    ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.
-
-Shipped from the earlier list: the data-parallel call, threads P1
-(`parallelMapInto` and `parallelReduce`, 0.11.0,
-[#219](https://github.com/amritk/nish/pull/219)), and the scope, P2
-(`using s = scope()`, 0.13.0, [#262](https://github.com/amritk/nish/pull/262)),
-from [wp29-thread-surface.md](wp29-thread-surface.md); the global `Map` and
-`Set` (0.11.0, [#229](https://github.com/amritk/nish/pull/229)), from
-[wp32-map.md](wp32-map.md); and ranged integers, W1 to W4 in 0.13.0
-([#261](https://github.com/amritk/nish/pull/261) to
-[#274](https://github.com/amritk/nish/pull/274)), from
-[wp31-ranged-integers.md](wp31-ranged-integers.md).
 
 #### Additive and unscheduled
 
@@ -887,6 +417,8 @@ from [wp29-thread-surface.md](wp29-thread-surface.md); the global `Map` and
 - **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
+- **WP27's later stages**, calling C beyond scalars and opaque pointers
+  ([wp27-ffi.md](wp27-ffi.md)).
 
 #### Settled, with the note that settles it
 
