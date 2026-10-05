@@ -131,7 +131,8 @@ no prelude can reach it. They are language decisions
 
 - **i32 mode entirely.** `number` is a 32-bit integer whose signed overflow
   panics; `/` truncates and panics on a zero divisor; `>>>` keeps the signed
-  reading. Every arithmetic operator would have to change, which is what the rewriter is for.
+  reading. Every arithmetic operator would have to change, which is what the
+  rewriter is for.
 - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and so is
   every offset `charCodeAt`, `substring` and `indexOf` take or return. ASCII
   agrees; `"héllo".length` is `5` under Node and `6` natively.

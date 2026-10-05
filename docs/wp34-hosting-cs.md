@@ -1,10 +1,18 @@
 # WP34: Hosting cs — the network stack first
 
-**Proposed, and partly built. Lanes K1 and K4 of §5 have landed (§5a), and
-so have N1, N2, N3, N5 and N6 of §4 (each section's State line names its pull
-requests); everything else here is not built.** This note covers the
-compiler's half of a
-plan whose other half lives in the program being ported,
+**Status: in progress.** Built: every compiler and runtime item phase one
+needs (N1, N2, N3, N5, N6 of §4); every crypto lane, K1 to K6; the TLS 1.3
+server handshake and its TCP carrier, T1 (#407) and T2 (#437); H1's HTTP/1.1
+parser and WebSocket framing (#399); H2's HPACK (#406); and QUIC packets and
+connections, Q1 (#404) and Q2 (#441, #444). §5a has each lane's pull requests
+and what it left. **Open:** the HTTP/1.1 and HTTP/2 servers (the rest of H1
+and H2), QUIC loss recovery and streams (Q3, Q4), HTTP/3 and WebTransport (R1,
+R2), the relay itself (A1) with N9's soak, the loopback suite, and the interop
+job of decision S2. 0.16.0 carries N1–N6 and K1–K6; everything from T1 on is
+on `main` and not yet released, so cs cannot use it until a release does (§7).
+
+This note covers the compiler's half of a plan whose other half lives in the
+program being ported,
 [`amritk/cs` → `docs/nish-port.md`](https://github.com/amritk/cs/blob/main/docs/nish-port.md).
 
 On 2026-09-28 the owner set the order: **the port starts with the Rust part of
@@ -124,163 +132,90 @@ whole body.
 
 ## 4. What the compiler and the runtime owe phase one
 
-Every item follows the MASTER_PLAN §5 sizes: S is under a day of agent work, M
-is one to two days, L is several. Each item also:
-
-- ships with the construct checklist of [ARCHITECTURE.md](ARCHITECTURE.md);
-- lands **in a release before anything above it may use it**. The Release PR
-  stays a human's merge.
-
-Items in the checker lane (N1) do not overlap each other.
+Every item followed the MASTER_PLAN §5 sizes (S under a day of agent work, M
+one to two days, L several), shipped with the construct checklist of
+[ARCHITECTURE.md](ARCHITECTURE.md), and had to land **in a release before
+anything above it could use it**. All five items below N9 are built and in
+0.16.0. N9 is a discipline the stack keeps, and its acceptance soak belongs to
+A1. LANGUAGE.md has the rule for each built item.
 
 ### N1. Exported enums and type aliases (S–M, checker lane)
 
-A protocol stack is enums crossing module boundaries: frame types, error codes,
-stream states and settings identifiers. Before N1 an enum or an alias could not be
-exported (LANGUAGE.md §Enums, §Type aliases).
-
-**Acceptance.** An exported enum is used in a second module as a field type, a
-parameter type, a `switch` discriminant and a `Map` key. An exported alias is
-used the same way for a class, an array and a `T | null`. The rules that stay
-keep their negative tests: no string enum, no `const enum`, no default export.
-
-**State.** Done in #296 (enums) and #300 (aliases). An exported enum is
-imported and used as all four (`tests/link/enum_export_uses`), and
-LANGUAGE.md §Enums has the rule. An exported alias is imported and resolves
-to the class, array or `T | null` it names (`tests/link/alias_export_class`,
-`alias_export_array`, `alias_export_nullable`), its right-hand side resolved
-in the module that wrote it, so it may name a class that module imported
-(`alias_export_imported_class`); LANGUAGE.md §Type aliases has the rule. Both
-are bound by the same pre-pass: every module's enums and aliases declared, and
-its imported ones bound, before any signature.
+A protocol stack is enums crossing module boundaries: frame types, error
+codes, stream states and settings identifiers. **Built** in #296 (enums)
+and #300 (aliases): an exported enum is used in a second module as a field type, a
+parameter type, a `switch` discriminant and a `Map` key
+(`tests/link/enum_export_uses`), and an exported alias resolves, in the module
+that wrote it, to the class, array or `T | null` it names
+(`tests/link/alias_export_*`). One pre-pass binds every module's enums and
+aliases before any signature. String enums, `const enum` and default exports
+stay refused.
 
 ### N2. Byte plumbing (S–M, builtins lane)
 
-A packet is parsed and forwarded through `u8[]`, and the language has no bulk
-operation on one. N2 adds three:
+**Built** in #295: `dst.set(src, offset)` with `TypedArray.prototype.set`'s
+meaning, a `memmove`, and a `memcpy` where the checker proves the two buffers
+distinct; `fill`, a `memset` on a `u8[]`; and `readFileBytesSync(path): u8[] |
+null` in `nish:fs`, because a DER key is binary. `set` is WP33 class A under
+`runtime/nish.mjs` and class C without it.
 
-- **`dst.set(src, offset)`**, with `TypedArray.prototype.set`'s meaning. It
-  lowers to `memmove` when source and destination alias, and to `memcpy` when
-  the checker proves they do not.
-- **`fill`**.
-- **`readFileBytesSync(path): u8[] | null`**, because a DER key is binary.
-
-A window into a buffer is spelled `(buf, off, len)` by convention, not by a new
-view type. A view would be a second array layout that every array path in the
-emitter has to handle, which is a much larger change than the plumbing needs.
-
-**Acceptance.** Each builtin is tested against Node on overlapping and
-non-overlapping ranges. `set` is WP33 class A: identical in both readings.
-
-**State.** Done in #295. `dst.set(src, offset)` is a `memmove`, and a `memcpy`
-where the checker proves the two buffers distinct; `fill` is a `memset` on a
-`u8[]`; `readFileBytesSync` is in `nish:fs` and the globals. LANGUAGE.md
-§"Bulk writes: `set` and `fill`" and the File I/O table have the rules. `set` is
-class A under `runtime/nish.mjs` and class C without it.
+A window into a buffer is spelled `(buf, off, len)` by convention, not by a
+new view type. A view would be a second array layout that every array path in
+the emitter has to handle, which is a much larger change than the plumbing
+needs.
 
 ### N3. A wall clock, entropy, file times and signals (S, runtime-os lane)
 
-Each piece is required by something the relay does today:
-
-- **`Date.now(): f64`.** A certificate's validity and a grant's expiry are wall
-  time.
-- **`crypto.getRandomValues(bytes: u8[])`**, backed by `getrandom`. It supplies
-  handshake randoms, connection ids and stateless-reset tokens.
-- **`statMtimeSync(path): f64`.** It is how the relay notices a renewed
-  certificate.
-- **A way to learn that `SIGTERM` or `SIGINT` arrived.** The loop has to be
-  able to wake on it, so it is a file descriptor for N5's loop (`signalfd` on
-  Linux), not a handler, which would need a function value.
-
-`runtime-os.c` holds 1,190 of its 1,280 bytes (MASTER_PLAN §2). Measure these
-four before deciding where they go. If they do not fit, the precedent is the
-split that created `runtime-os.c`, not a higher ceiling.
-
-**State.** Done in #312. They measured 571 bytes of `.text*`
-against the 143 `runtime-os.c` had left of its (by then 1,536-byte) ceiling, so
-they are a fourth translation unit, `runtime/runtime-host.c`, with a ceiling of
-its own of 768; `runtime-os.c`'s is unchanged. `Date.now()` answers whole
-milliseconds, and every other `Date` member is refused by one rule.
-`crypto.getRandomValues` fills a `u8[]` only, at most 65,536 bytes a call, and
-panics rather than return weak bytes. `statMtimeSync` answers NaN, not `null`,
-for a path it cannot stat, because an `f64` has no `null`. The signal
-descriptor is `signalFd()` and `readSignal(fd)` in `nish:process` and the
-globals: a pipe written from a `sigaction` handler on every platform, not the
-`signalfd` this note proposed, because a `signalfd` hears only a signal
-blocked in every thread and a running `scope()` task keeps its own mask. LANGUAGE.md §"The host" has the rules; the signal pair is WP33 class
-C with no synchronous shim, and the ledger says why.
+**Built** in #312: `Date.now()` in whole milliseconds (every other `Date`
+member is refused by one rule); `crypto.getRandomValues` on a `u8[]` only, at
+most 65,536 bytes a call, panicking rather than returning weak bytes;
+`statMtimeSync`, which answers NaN for a path it cannot stat, because an `f64`
+has no `null`; and `signalFd()` / `readSignal(fd)` in `nish:process`. They
+measured 571 bytes of `.text*` against the 143 `runtime-os.c` had left, so
+they are a translation unit of their own, `runtime/runtime-host.c`, with a
+ceiling of 768. The signal descriptor is a pipe written from a `sigaction`
+handler on every platform, not the `signalfd` this note proposed: a `signalfd`
+hears only a signal blocked in every thread, and a running `scope()` task
+keeps its own mask. The signal pair is WP33 class C with no synchronous shim.
 
 ### N5. Sockets and the loop a program owns (L, runtime lane)
 
-[wp24](wp24-async.md) §2 found nothing in either runtime to wait for, and named
-"a real server" as the trigger for revisiting. This is one. Its refusal of
-`async` stands anyway. A server that owns its loop and blocks in `epoll` until
-the next deadline or the next readable socket needs no colour in the language.
-That loop is exactly what tokio runs underneath the relay today.
+[wp24](wp24-async.md) §2 named "a real server" as the trigger for revisiting
+`async`; this is one, and the refusal stands anyway. A server that owns its
+loop and blocks in `epoll` until the next deadline or the next readable socket
+needs no colour in the language, and that loop is what tokio runs underneath
+the relay today.
 
-The primitives form a builtin module, `nish:net`, beside `nish:fs` and
-`nish:io`, with a handle as an `i32` descriptor:
-
-- **UDP.** `bind` (dual-stack IPv6), `sendTo`, and `recvFrom` into a caller's
-  `u8[]` at an offset. `UDP_SEGMENT` on send and `UDP_GRO` on receive, with the
-  segment size handed back. ECN bits are read and written, because QUIC's
-  congestion controller can use them. `SO_REUSEPORT`.
-- **TCP.** `listen`, `accept`, `read` and `write` at an offset, `shutdown` and
-  `close`, all non-blocking.
-- **The loop.** `epoll` create, add, modify and wait with a millisecond
-  timeout, plus N3's signal descriptor.
-
-These go in a new `runtime-net.c` with its own measured ceiling, following the
-`runtime-os.c` precedent. `wasm` is out of scope, because a browser reaches the
-network through the host.
-
-**Acceptance.**
-
-- A UDP echo and a TCP echo written in Nish, driven from Node in `tests/`.
-- A two-socket loop that wakes on whichever socket is readable first.
-- GSO and GRO observed from the Nish side: one `send` leaves as many
-  datagrams, and one `recv` returns several, with the segment size.
-
-**State.** Done in #341, #343 and #349. `nish:net` is sixteen calls on `i32`
-descriptors, each a global too: addresses and non-blocking TCP (#341), UDP with
-`SO_REUSEPORT`, `UDP_SEGMENT`, `UDP_GRO` and the ECN bits (#343), and a
-level-triggered readiness loop, `pollCreate`, `pollAdd`, `pollModify`,
-`pollRemove` and `pollWait` with a millisecond timeout, over epoll on Linux and kqueue on Darwin (#349). Every
-socket is non-blocking and close-on-exec, a failure is a negative errno in
-Linux's numbering on every platform, an address is 18 bytes of the caller's
-`u8[]`, and nothing allocates. N3's `signalFd()` goes into the loop like any
-other descriptor: `net_loop_two` wakes on whichever of two sockets Node writes
-to first, in both orders, and then on SIGTERM, with the arena flat. Both echoes
-are Nish, driven from Node. One finding changed the GSO/GRO acceptance: on
+**Built** as the builtin module `nish:net`, each call a global too, on `i32`
+descriptors: addresses and non-blocking TCP (#341); UDP with `SO_REUSEPORT`,
+`UDP_SEGMENT`, `UDP_GRO` and the ECN bits (#343); a level-triggered readiness
+loop, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove` and `pollWait`, over
+epoll on Linux and kqueue on Darwin (#349); the dual-stack `"::"` path
+exercised over both families (#402); and the client half of TCP, `tcpConnect`
+and `connectResult` (#411). Every socket is non-blocking and close-on-exec, a
+failure is a negative errno in Linux's numbering on every platform, an address
+is 18 bytes of the caller's `u8[]`, and nothing allocates. N3's `signalFd()`
+goes into the loop like any other descriptor (`net_loop_two`). The C is
+`runtime/runtime-net.c`, 2,071 bytes of `.text*` when the loop landed, against
+a ceiling of its own of 2,304. One finding changed the GSO/GRO acceptance: on
 loopback, GRO keeps a GSO super-packet whole but does not merge datagrams sent
-one by one, so the observation pairs a Nish GSO sender with a Nish GRO
-receiver: one receive returns 4,800 bytes with a segment size of 1,200, while
-Node counts the four datagrams the one send became. The Darwin branch (kqueue,
-and `-95` for GSO, GRO and ECN) is compiled by CI's Darwin rows and run by
-nothing. The C is a fifth runtime unit, `runtime/runtime-net.c`, of 2,071 bytes
-of `.text*` against a ceiling of its own of 2,304; the other four units did not
-move. LANGUAGE.md §"`nish:net`" has the rules, and the module is WP33 class C
-with no synchronous shim ([wp33](wp33-round-trip.md) §3.5).
+one by one, so the test pairs a Nish GSO sender with a Nish GRO receiver. The
+Darwin branch is compiled by CI's Darwin rows and run by nothing. `wasm` is out
+of scope, because a browser reaches the network through the host.
 
 ### N6. Constant time (S–M, builtins lane)
 
 Crypto code must not branch or index on a secret, and LLVM promises nothing
-about that. A `select` it can see through may become a branch. N6 adds
-`ctSelect(mask, a, b)` and `ctEq(a, b)` over `u32` and `u64`, lowered behind an
-optimisation barrier. It also adds a test that compiles the primitives of §5 and
-refuses a conditional branch or a secret-indexed load in their `.s` output:
-
-- a disassembly check in CI, which is cheap;
-- plus a dudect-style timing run on the MAC comparison and the field
-  arithmetic, which is slow and so runs weekly.
-
-Wide multiplication is not needed. §5's K4 and K5 are written in limbs whose
-products fit in `i64` and `u64`.
-
-**State.** Done in #310, without the weekly timing run. `ctSelect` and `ctEq`
-are globals over `u32` and `u64`, lowered behind an empty inline `asm` barrier,
-and `tests/ct-asm.js` reads their `-O2` assembly for x86-64 and aarch64 on every
-`npm test`. LANGUAGE.md §"Constant time" has the rule.
+about that. **Built** in #310: `ctSelect(mask, a, b)` and `ctEq(a, b)` over
+`u32` and `u64`, lowered behind an empty inline `asm` barrier, and
+`tests/ct-asm.js`, which reads the `-O2` assembly of every function a
+`tests/cases/ct_asm_*` fixture names, for x86-64 and aarch64, on every
+`npm test`, and refuses a conditional branch or a secret-indexed access. The
+weekly dudect-style timing run over the same functions landed in #339
+(`.github/workflows/ct-timing.yml`, not a pull-request check).
+[docs/security/ct-verification.md](security/ct-verification.md) records what
+the check models. Wide multiplication was not needed: K4 and K5 are written in
+limbs whose products fit in `i64` and `u64`.
 
 ### N9. Programs that do not exit — phase one needs the discipline, not the note
 
@@ -295,6 +230,16 @@ rules:
 - **Nothing allocates per packet.** The loop's body is a pass scope
   (LANGUAGE.md §Memory model). Anything a handshake allocates dies with that
   pass, or is copied into its slot.
+
+The record layer and `TlsTcpServer` keep both rules (a record and a slot's
+reuse allocate nothing). The handshakes and the QUIC connection do not yet:
+TLS-3 measures about 52 KB of arena per TLS handshake, and QUIC-3 records that
+a connection allocates per packet ([docs/security/tls.md](security/tls.md),
+[docs/security/quic.md](security/quic.md)). `using a = arena()` (#420) is
+refused around them while HKDF and HMAC store allocations of their own, and
+`Arena.release` is deprecated (#428). QUIC-3 is to close with Q3 and Q4, and
+TLS-3 with a handshake that keeps its state in the slot or an arena per
+connection; A1's soak cannot pass before both have.
 
 The note that the game server needs (regions, a scoped arena, or reference
 counting; §8) is still to be written. The relay does not wait for it.
@@ -319,76 +264,82 @@ have more than one segment (LANGUAGE.md §Modules). The sockets and the loop are
 N5's builtin module, `nish:net`, beside `nish:fs` and `nish:io`. The relay
 itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 
-| Lane | What | Proved by | Needs |
-| --- | --- | --- | --- |
-| **K1** | SHA-256, SHA-384, HMAC, HKDF, constant-time compare, base64url | FIPS 180-4 and RFC 4231, RFC 5869 vectors | N1 |
-| **K2** | ChaCha20-Poly1305, and ChaCha20 as QUIC header protection | RFC 8439 §2 vectors; RFC 9001 A.5 | N1, N6 |
-| **K3** | AES-128 and AES-256 with GCM, bitsliced so that it runs in constant time; AES-ECB as QUIC header protection | NIST SP 800-38D vectors, Wycheproof `aes_gcm` | N1, N6 |
-| **K4** | X25519, with 25.5-bit limbs in `i64` | RFC 7748 §5.2 and the iterated vector, Wycheproof `x25519` | N6 |
-| **K5** | P-256 ECDSA sign and verify, ported from fiat-crypto's 32-bit output (MIT/Apache/BSD; [licensing](../.claude/licensing.md) rules apply), with RFC 6979 nonces | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256` | N6 |
-| **K6** | DER, PEM and X.509: parse a key and a chain; mint the self-signed ECDSA P-256 certificate, at most fourteen days; its SHA-256 for `serverCertificateHashes` | `openssl x509 -text` reads what it mints; a golden DER; Chrome accepts the hash (A1's gate) | K1, K5, N3 |
-| **T1** | TLS 1.3 **server** handshake, carrier-agnostic. The key schedule, and ClientHello through Finished, with ALPN, SNI, the QUIC transport-parameters extension and HelloRetryRequest. No 0-RTT and no client authentication | RFC 8448 §3's full trace reproduced byte for byte for the key schedule and every server message | K1–K5 |
-| **T2** | TLS records over TCP | `openssl s_client`, `curl`, Chrome; a record-boundary fuzz | T1, N5 |
-| **H1** | HTTP/1.1 server: an incremental parser, keep-alive, chunked bodies both ways, `Upgrade`; WebSocket framing (RFC 6455) | a corpus of split-at-every-byte requests, `curl`, and the Autobahn suite's server cases | N1, N2 |
-| **H2** | HTTP/2: frames, HPACK with Huffman, the stream state machine, flow control, SETTINGS and GOAWAY, and extended CONNECT for WebSocket (RFC 8441) | RFC 7541 Appendix C for HPACK; `h2spec` for the rest; `curl --http2`, Chrome | N1, N2 |
-| **Q1** | QUIC packets: varints, long and short headers, Initial secrets, header protection, packet-number recovery, Retry integrity tag | RFC 9001 Appendix A reproduced byte for byte (A.2 client Initial, A.3 server Initial, A.4 Retry, A.5 ChaCha20 short header) | K1–K3 |
-| **Q2** | QUIC connections: the handshake over T1 at three levels, transport parameters, ACK generation, connection-id management, address validation and Retry, version negotiation, stateless reset, idle timeout, key update | the quic-interop-runner's server test cases (handshake, transfer, retry, chacha20, multiplexing, keyupdate) against at least two client implementations | Q1, T1, N5 |
-| **Q3** | Loss detection, PTO and NewReno with pacing (RFC 9002) | the interop runner's lossy and congested cases; the relay's own RTT-to-ack trace under `tc netem` | Q2 |
-| **Q4** | Streams (bidirectional and unidirectional, with flow control) and DATAGRAM frames (RFC 9221); send batching through GSO | the interop runner's transfer cases; a datagram round trip at the MTU edge | Q2 |
-| **R1** | HTTP/3 and QPACK, with a static table and dynamic capacity 0 | RFC 9204 static-table encodings; the interop runner's `http3` case; `curl --http3` where available | Q4, H2's header model |
-| **R2** | Extended CONNECT (RFC 9220), HTTP datagrams (RFC 9297) and **WebTransport over HTTP/3**: sessions, datagrams, unidirectional and bidirectional streams, and close. It is pinned to the draft Chrome negotiates today; that draft's SETTINGS and headers are recorded once from a `wtransport` 0.7 exchange and held as a golden | Chrome through Playwright; a `wtransport` (Rust) client against the Nish server, which is the cross-implementation test | R1, Q4 |
-| **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 |
+| Lane | What | Proved by | Needs | State |
+| --- | --- | --- | --- | --- |
+| **K1** | SHA-256, SHA-384, HMAC, HKDF, constant-time compare, base64url | FIPS 180-4 and RFC 4231, RFC 5869 vectors | N1 | built |
+| **K2** | ChaCha20-Poly1305, and ChaCha20 as QUIC header protection | RFC 8439 §2 vectors; RFC 9001 A.5 | N1, N6 | built |
+| **K3** | AES-128 and AES-256 with GCM, bitsliced so that it runs in constant time; AES-ECB as QUIC header protection | NIST SP 800-38D vectors, Wycheproof `aes_gcm` | N1, N6 | built |
+| **K4** | X25519, with 25.5-bit limbs in `i64` | RFC 7748 §5.2 and the iterated vector, Wycheproof `x25519` | N6 | built |
+| **K5** | P-256 ECDSA sign and verify, ported from fiat-crypto's 32-bit output (MIT/Apache/BSD; [licensing](../.claude/licensing.md) rules apply), with RFC 6979 nonces | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256` | N6 | built |
+| **K6** | DER, PEM and X.509: parse a key and a chain; mint the self-signed ECDSA P-256 certificate, at most fourteen days; its SHA-256 for `serverCertificateHashes` | `openssl x509 -text` reads what it mints; a golden DER; Chrome accepts the hash (A1's gate) | K1, K5, N3 | built, but for Chrome |
+| **T1** | TLS 1.3 **server** handshake, carrier-agnostic. The key schedule, and ClientHello through Finished, with ALPN, SNI, the QUIC transport-parameters extension and HelloRetryRequest. No 0-RTT and no client authentication | RFC 8448 §3's full trace reproduced byte for byte for the key schedule and every server message | K1–K5 | built |
+| **T2** | TLS records over TCP | `openssl s_client`, `curl`, Chrome; a record-boundary fuzz | T1, N5 | built, but for Chrome |
+| **H1** | HTTP/1.1 server: an incremental parser, keep-alive, chunked bodies both ways, `Upgrade`; WebSocket framing (RFC 6455) | a corpus of split-at-every-byte requests, `curl`, and the Autobahn suite's server cases | N1, N2 | parser and framing built; **server open** |
+| **H2** | HTTP/2: frames, HPACK with Huffman, the stream state machine, flow control, SETTINGS and GOAWAY, and extended CONNECT for WebSocket (RFC 8441) | RFC 7541 Appendix C for HPACK; `h2spec` for the rest; `curl --http2`, Chrome | N1, N2 | HPACK built; **the rest open** |
+| **Q1** | QUIC packets: varints, long and short headers, Initial secrets, header protection, packet-number recovery, Retry integrity tag | RFC 9001 Appendix A reproduced byte for byte (A.2 client Initial, A.3 server Initial, A.4 Retry, A.5 ChaCha20 short header) | K1–K3 | built |
+| **Q2** | QUIC connections: the handshake over T1 at three levels, transport parameters, ACK generation, connection-id management, address validation and Retry, version negotiation, stateless reset, idle timeout, key update | the quic-interop-runner's server test cases (handshake, transfer, retry, chacha20, multiplexing, keyupdate) against at least two client implementations | Q1, T1, N5 | built against aioquic; **the interop runner open** |
+| **Q3** | Loss detection, PTO and NewReno with pacing (RFC 9002) | the interop runner's lossy and congested cases; the relay's own RTT-to-ack trace under `tc netem` | Q2 | **open** |
+| **Q4** | Streams (bidirectional and unidirectional, with flow control) and DATAGRAM frames (RFC 9221); send batching through GSO | the interop runner's transfer cases; a datagram round trip at the MTU edge | Q2 | **open** |
+| **R1** | HTTP/3 and QPACK, with a static table and dynamic capacity 0 | RFC 9204 static-table encodings; the interop runner's `http3` case; `curl --http3` where available | Q4, H2's header model | **open** |
+| **R2** | Extended CONNECT (RFC 9220), HTTP datagrams (RFC 9297) and **WebTransport over HTTP/3**: sessions, datagrams, unidirectional and bidirectional streams, and close. It is pinned to the draft Chrome negotiates today; that draft's SETTINGS and headers are recorded once from a `wtransport` 0.7 exchange and held as a golden | Chrome through Playwright; a `wtransport` (Rust) client against the Nish server, which is the cross-implementation test | R1, Q4 | **open** |
+| **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 | **open** |
 
-The first wave is eleven lanes, all runnable at once: N1, N2, N3, N5 and N6 in
-the compiler, and K1–K6 in the stack. H1's parser, H2's HPACK, Q1 and R1's
-QPACK tables can start in the same wave, because each is a pure function with
-published answers. Only T2, the servers of H1 and H2, Q2 and its successors,
-and A1 need a socket.
+**What is left, in order.** A1 waits on the chain Q3 → Q4 → R1 → R2, which is
+the critical path; R1's QPACK static table is a pure function and can start
+beside Q3. The HTTP/1.1 and HTTP/2 servers (the rest of H1 and H2) are off
+that path: S5 needs them only once the relay is live. Three items cut across
+lanes: the loopback suite below, now writable since T2 and Q2 exist; S2's
+interop job (the quic-interop-runner, `h2spec`, Chrome through Playwright),
+which no lane has yet; and #430, which moves the TLS and QUIC key-holding
+structs onto `nish:secret` so the wipes TLS-1, TLS-2 and QUIC-1, QUIC-2 and
+QUIC-5 record can close.
 
 ### 5a. Landed
 
-| Lane | Pull requests | Modules | What is left |
-| --- | --- | --- | --- |
-| **K1** | #287 (the `std/` walker nested modules needed), #288, #291, #294, #298 | `nish/crypto/sha256`, `nish/crypto/sha512` (SHA-512 and SHA-384), `nish/crypto/hmac`, `nish/crypto/hkdf`, `nish/crypto/ct`, `nish/crypto/base64url` | Wycheproof's HMAC and HKDF vectors, a third-party file with its own notice. N6's disassembly check over every K1 module, and its weekly timing run over the MAC comparison |
-| **K4** | #289 | `nish/crypto/x25519` | Wycheproof `x25519`, as for K1. N6's disassembly check over the field arithmetic and the ladder, and its weekly timing run |
-| **K2** | #332 | `nish/crypto/chacha20poly1305` (ChaCha20, Poly1305, the AEAD, and RFC 9001 §5.4.4's header-protection mask) | The ChaCha20 rounds and the loops around both halves by disassembly: the check refuses a loop's own back-edge, so today it reads the Poly1305 block, its final reduction and the tag compare (`ct_asm_chacha20poly1305`). Its weekly timing run |
-| **K3** | #340 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | The key schedule, packing and the block loops by disassembly: `ct_asm_aes` reads one round, one GHASH multiply and the tag compare. AES-NI and PCLMUL as builtins, per §6 S1, when a profile asks for them. AES-192 is out of scope |
-| **H1** (the parser) | #399 | `nish/net/http1` (the incremental request parser and the response writer), `nish/net/websocket` (RFC 6455 framing and the handshake), and `nish/crypto/sha1` for the accept key alone | The server on `nish:net`, and `curl` and the Autobahn suite's server cases against it |
-| **K5** | #336 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | fiat's field multiply and the window's doubling and addition by disassembly: `ct_asm_p256` reads the field square, the scalar multiply, the conditional move and one table entry, and the multiply waits on the aarch64 model's reading of an `stp` spill (#334). A 64-bit or fixed-base-table P-256, when a profile of signing asks for one |
-| **T1** | #407 | `nish/net/tls` (the server state machine), `nish/net/tls/codec` (the handshake messages), `nish/net/tls/schedule` (the key schedule and transcript hash) | Reproduces RFC 8448 §3 byte for byte and §5's transcript ([`std/README.md`](../std/README.md#nishnet--the-protocol-stack), [`docs/security/tls.md`](security/tls.md)). Left: the record layer and the carriers (T2, Q2); groups other than x25519; NewSessionTicket, 0-RTT and client authentication (§5 keeps them out); the secret wipe of #385 (TLS-1) |
-| **T2** | #437 | `nish/net/tls/record` (framing, protection, KeyUpdate's secret), `nish/net/tls/record-server` (TLS over a byte stream, sans-IO), `nish/net/tls-tcp` (the TCP carrier: a slot pool on `nish:net`) | Reproduces RFC 8448 §3's records byte for byte and over loopback, with a record-boundary fuzz; openssl s_client and curl interoperate from `tests/run.js` ([`std/README.md`](../std/README.md#nishnet--the-protocol-stack), [`docs/security/tls.md`](security/tls.md)). Left: Chrome; the handshake's memory per connection (TLS-3); an idle timeout (TLS-4); `record_size_limit`; the TLS client role (N13) |
-| **Q1** | #404 | `nish/net/quic-packet` (varints, long and short headers, packet-number encoding and recovery, Initial secrets, AEAD packet protection for AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305, header protection, the key-update secret, the Retry integrity tag) | A wipe of the traffic secrets and keys it holds, once #385 ships the primitive (`docs/security/quic.md`, QUIC-1). An AES-256-GCM packet checked against a published vector: RFC 9001 prints none, so `tests/link/net_quic_packet` checks one against Python's `cryptography`. Interop, which is Q2's, against the quic-interop-runner |
-| **Q2a** | #441 | `nish/net/quic` (the server connection: the TLS handshake over CRYPTO at three levels, transport parameters, ACK generation, connection IDs, the stream data path), `nish/net/quic-frame` (every RFC 9000 §19 frame), `nish/net/quic-conn-params`, `nish/net/quic-conn-ack`, `nish/net/quic-conn-cid` | A handshake and stream echo against aioquic, replayed byte for byte from a Nish UDP client inside `npm test` ([`std/README.md`](../std/README.md#nishnet--the-protocol-stack), [`docs/security/quic.md`](security/quic.md)). Left: Retry, Version Negotiation, stateless reset, the idle timer and key update (Q2b); loss recovery (Q3); full streams with flow control (Q4); the wipes QUIC-2 records (#430) and the per-packet allocation of QUIC-3; the quic-interop-runner |
-| **Q2b** | #444 | `nish/net/quic-listener` (Version Negotiation; Retry with an HMAC'd, time-boxed address-validation token; stateless resets from a static key, shorter than what they answer and rate limited), and in `nish/net/quic` the idle timeout and key update both ways, with the time the caller's | Version Negotiation, Retry, key update both ways, the idle timeout and a stateless reset against aioquic, each replayed byte for byte from a Nish UDP client inside `npm test` ([`std/README.md`](../std/README.md#nishnet--the-protocol-stack), [`docs/security/quic.md`](security/quic.md)). Left: loss recovery (Q3), whose probe timeout the idle floor and the key-retention period stand in for; full streams with flow control (Q4); RFC 9001 §6.6's AEAD limits (QUIC-6); the arena share of each key update, bounded by a cap (QUIC-4); the wipes QUIC-2 and QUIC-5 record (#430); the quic-interop-runner |
-| **H2** (HPACK, first part) | #406 | `nish/net/hpack` (RFC 7541: the §5.1 integer, the §5.2 string with Appendix B's Huffman code, the static and dynamic tables, all four representations, an encoder and a decoder; RFC 7541 Appendix C reproduced, with the dynamic table after every step) | The rest of H2: frames, the stream state machine, flow control, SETTINGS and GOAWAY, extended CONNECT (RFC 8441), and `h2spec` in S2's interop job |
-
 Each module reproduces its specification's published vectors in a
-`tests/link/crypto_*` program: FIPS 180-4 and the NIST examples, RFC 4231,
-RFC 5869 Appendix A, RFC 4648 §10, RFC 7748 §5.2 (the iterated vector to
-1,000) and §6.1, RFC 8439 §2 and Appendix A, RFC 9001 Appendix A, FIPS 197 and the GCM
-test cases, and RFC 6979 A.2.5. K3 and K5 also run Wycheproof's `aes_gcm` and
-`ecdsa_secp256r1_sha256` (`tests/link/crypto_wycheproof`, with its own
-notice). K1 and K4 did not wait for their **Needs** column: the modules
-export functions, classes and constants and no enum or alias, so N1 was not
-needed, and they are written branch-free on secrets by masking, so N6 is what
-*verifies* them rather than what they are written with. N6 has landed (#310),
-and its assembly check (`tests/ct-asm.js`, on x86-64 and aarch64) reads only
-golden fixtures, one module each, so a module is verified through a copy of
-its constant-time cores that a `tests/link/` case holds to the original. K2,
-K3 and K5 have such fixtures (`ct_asm_chacha20poly1305`, `ct_asm_aes`,
-`ct_asm_p256`); K1 and K4 have only `ct_asm_mac`, the two loop shapes their
-comparisons are built from. What no fixture holds is each module's
-discipline, stated in its header, and not a checked fact. K3's GHASH multiply
+`tests/link/crypto_*` or `tests/link/net_*` program, and each has a security
+record under [`docs/security/`](security/README.md) (`crypto-k1.md`,
+`crypto-aead.md`, `crypto-ecc.md`, `crypto-x509.md`, `tls.md`, `quic.md`)
+whose findings are what the "Left" column cites.
+[`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
+lists what each module exports and what is verified, and
+[its protocol-stack section](../std/README.md#nishnet--the-protocol-stack) the
+`nish/net` modules.
+
+| Lane | Pull requests | Modules | Left |
+| --- | --- | --- | --- |
+| **K1** | #287 (the `std/` walker nested modules needed), #288, #291, #294, #298; HKDF-Expand-Label #398; audit #375 | `nish/crypto/sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`, `ct`, `base64url` | Wycheproof's HMAC and HKDF vectors. HMAC and HKDF wiping their own state, and taking keys as `Secret`s |
+| **K2** | #332; Wycheproof (all 325 cases) and audit #372 | `nish/crypto/chacha20poly1305` (ChaCha20, Poly1305, the AEAD, RFC 9001 §5.4.4's header-protection mask) | The ChaCha20 rounds and the loops around both halves by disassembly: `ct_asm_chacha20poly1305` reads the Poly1305 block, its final reduction and the tag compare |
+| **K3** | #340, with Wycheproof `aes_gcm`; audit #372 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | The key schedule, packing and the block loops by disassembly (`ct_asm_aes` reads one round, one GHASH multiply and the tag compare). AES-NI and PCLMUL as builtins, per S1, when a profile asks. AES-192 is out of scope |
+| **K4** | #289; ladder by disassembly #339; Wycheproof and audit #373 | `nish/crypto/x25519` | The 255-step ladder loop, the inversion and the encodings remain discipline (`ct_asm_x25519` reads the field operations, the swap and one ladder step) |
+| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | The 64-window loop, the table build, the inversions and the nonce derivation remain discipline (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations and one window step). A 64-bit or fixed-base-table P-256, when a profile of signing asks |
+| **K6** | #346; audit #376 | `nish/crypto/x509` (DER, PEM, a P-256 key from SEC1 or PKCS#8, a chain parsed, an ECDSA signature verified, the self-signed 1-to-14-day certificate minted, its SHA-256) | Chrome accepting the hash, which is A1's gate. It parses and does not validate: no path validation and no extensions read, which the relay's own `--cert` needs no more than |
+| **T1** | #407 | `nish/net/tls` (the server state machine), `nish/net/tls/codec`, `nish/net/tls/schedule` | Groups other than x25519; NewSessionTicket, 0-RTT and client authentication (§3 keeps them out); the wipes TLS-1 records (#430) |
+| **T2** | #437 | `nish/net/tls/record`, `nish/net/tls/record-server` (TLS over a byte stream, sans-IO), `nish/net/tls-tcp` (the TCP carrier: a slot pool on `nish:net`) | Chrome; the handshake's memory per connection (TLS-3); a carrier idle timeout (TLS-4); `record_size_limit`; the client role (N13) |
+| **H1** (parser) | #399 | `nish/net/http1` (the incremental request parser and the response writer), `nish/net/websocket` (RFC 6455 framing and the handshake), and `nish/crypto/sha1` for the accept key alone | The server on `nish:net`, and `curl` and the Autobahn suite's server cases against it |
+| **H2** (HPACK) | #406 | `nish/net/hpack` (RFC 7541 with Appendix B's Huffman code; Appendix C reproduced, with the dynamic table after every step) | Frames, the stream state machine, flow control, SETTINGS and GOAWAY, extended CONNECT (RFC 8441), and `h2spec` in S2's interop job |
+| **Q1** | #404 | `nish/net/quic-packet` (varints, headers, packet numbers, Initial secrets, packet and header protection for the three suites, the key-update secret, the Retry integrity tag) | The wipes QUIC-1 records (#430). RFC 9001 prints no AES-256-GCM packet, so `net_quic_packet` checks one against Python's `cryptography` |
+| **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, not yet by the quic-interop-runner. Loss recovery (Q3); full streams with flow control (Q4); the AEAD limits (QUIC-6); per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); the wipes QUIC-2 and QUIC-5 record (#430) |
+
+K1 and K4 did not wait for their **Needs** column: they export no enum or
+alias, so N1 was not needed, and they are written branch-free on secrets by
+masking, so N6 *verifies* them rather than being what they are written with.
+The assembly check reads golden fixtures, one or more per module
+(`ct_asm_k1_ct`, `ct_asm_k1_base64url`, `ct_asm_mac`, `ct_asm_x25519`,
+`ct_asm_chacha20poly1305`, `ct_asm_aes`, `ct_asm_p256`), each a copy of the
+module's constant-time cores that a `tests/link/` case holds to the original;
+what no fixture holds is each module's discipline, stated in its header. Private
+keys are `Secret`s in `p256`, `x25519` and `x509` (`nish:secret`, #418, ECC-2
+and X509-7); the other modules take keys as plain arrays. K3's GHASH multiply
 is adapted from BearSSL and K5's field and scalar arithmetic is ported from
 fiat-crypto; both keep their notice, and their licence texts ship beside them
 and are named in every presence gate of `release.yml`.
-[`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
-lists what each module exports, what is verified, and the rules they share.
 
 **One test suite belongs to no single lane:** a Nish server and a Nish client
 over loopback, for every carrier. It is what catches two lanes that each pass
-their own vectors but disagree with each other. It is written in wave 2, when
-T2 and Q2 exist.
+their own vectors but disagree with each other. T2 and Q2 exist, so it can be
+written now; RFC 8448 over loopback from a Nish client (`net_tls_record_tcp`)
+and the Nish UDP client that replays aioquic's exchanges are its first pieces.
 
 ## 6. Decisions for the owner
 
@@ -402,18 +353,19 @@ T2 and Q2 exist.
 
 ## 7. Waves
 
-| Wave | Compiler and runtime | The stack, in `std/` | cs |
-| --- | --- | --- | --- |
-| 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) |
-| 1 | a release carrying N1–N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — |
-| 2 | — | Q3, Q4, R1; the loopback suite | — |
-| 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust |
-| 4 | — | S5's reverse proxy | the Rust relay retired |
+| Wave | Compiler and runtime | The stack, in `std/` | cs | State |
+| --- | --- | --- | --- | --- |
+| 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) | done but for the QPACK tables |
+| 1 | a release carrying N1–N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — | 0.16.0 carries N1–N6 and K1–K6; T1, T2 and Q2 are on `main`; the H1 server and the rest of H2 are open |
+| 2 | — | Q3, Q4, R1; the loopback suite | — | open |
+| 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust | open |
+| 4 | — | S5's reverse proxy | the Rust relay retired | open |
 
-The first release worth cutting is the one carrying N1–N6: the stack's lanes
-past the pure ones wait on it. Because the stack is `std/`, cs can use each
-lane only once a release carries it, so a release is worth cutting whenever a
-lane A1 depends on has landed.
+Because the stack is `std/`, cs can use a lane only once a release carries it,
+so a release is worth cutting whenever a lane A1 depends on has landed. The
+first such release, the one carrying N1–N6, was 0.16.0. The next one worth
+cutting carries T1, T2, Q1 and Q2, H1's parser and HPACK, which are on
+`main` now.
 
 ## 8. After phase one
 

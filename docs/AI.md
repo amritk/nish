@@ -256,8 +256,9 @@ it is never a silent wrap and never undefined. The compiler drops the check
 where it can prove the result fits — a loop counter under `i < n`, a byte
 widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
 that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
-which always wrap and are never checked; convert back with `toI32` (free).
-`--wrapping` makes every signed operation wrap instead, for a whole build.
+which always wrap and are never checked; convert back with `toI32` (free), or
+call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site. The deprecated
+`--wrapping` makes every signed operation of your own package wrap instead.
 
 ```ts nish:ok
 // FNV-1a: the multiply overflows on purpose, so the state is a `u32`.
@@ -1703,7 +1704,8 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
 10. Must it never panic? Compile with `--deny-panics` (or list the module in
    `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
-   `pop`, range entry, `expect` and exiting call it cannot prove is an error
+   signed `+ - *`, `pop`, range entry, `expect` and exiting call it cannot
+   prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
    `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
 11. If you are adding to this repository: `npm run check` and `npm test` green,

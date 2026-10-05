@@ -514,8 +514,8 @@ itself refuses as syntax — numeric separators where they cannot stand, octal
 and leading-zero literals, `#!` after the first line, a `\u{…}` escape out of
 range, `??` mixed with `&&` or `||` — and the entries left in
 `tests/self/parser-refusals.txt`. It was built in six stages: #292
-statements, #311 expressions, #313 declarations, #314 functions and bindings,
-#315 classes, interfaces and enums, and #337 imports and exports.
+statements, #311 expressions, #313 declarations, #314 functions and
+bindings, #315 classes, interfaces and enums, and #337 imports and exports.
 
 **R2 is built.** The typed-array row of §3.3 is class A for every receiver
 [LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop) lists: a

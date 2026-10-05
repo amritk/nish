@@ -100,6 +100,13 @@ That is why the rule does not consult the flag
 (`tests/link/duplicate_internal`; the check used to be skipped under an
 explicit `--strict-exports`).
 
+## Output files
+
+Two modules never share an output file: one module goes to `-o file.ll` (or
+`<input>.ll`), several need `-o <dir>/` and get one `.ll` each, with
+same-named modules told apart by their path from the entry. The current rule
+is in [LANGUAGE.md](LANGUAGE.md#export-and-import).
+
 ## Not built
 
 - **`.d.nish.json` sidecars.** The master plan specified them, but they are
