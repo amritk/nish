@@ -215,4 +215,7 @@ and a string share in the IR, and wrong for §7a's reason: a debugger told
 `char *` would print an arbitrary foreign address as text. Before
 `tests/cases/dbg_cptr` the debug-info lookup had no entry for `CPtr` and failed
 under `-g`; only the `--parity` run, which compiles the corpus under every flag,
-saw it. `tests/cases/dbg_cptr_shadow` pins the debug-cache entry #90 added.
+saw it. `tests/cases/dbg_cptr_shadow` is #90's case: a program may also declare
+a `class CPtr`, and the debug cache was keyed by type name, so whichever was
+described first answered for the other; the foreign pointer is now memoised
+apart from that cache.

@@ -13,8 +13,8 @@ workflow's comments point at.
 (scoped to `main` so a branch with an open pull request is not tested twice),
 and through `workflow_call` from `release.yml`. A pull request's superseded
 runs are cancelled; a push to `main` never is, because each one is a merge and
-its run is the only record of whether `main` was green after it (#396 and
-#397 ended cancelled before that rule).
+its run is the only record of whether `main` was green after it (the runs of #396
+and #397 ended cancelled before that rule).
 
 | Job | Runner | What it does |
 | --- | --- | --- |
@@ -174,7 +174,7 @@ if `llvm@18` ever stops bundling `wasm-ld`. The `Test` step sets
 `WASI_SYSROOT=/usr`, because Debian's wasi-libc lives under
 `/usr/lib/wasm32-wasi`; with it the wasi checks run instead of being counted as
 skips, and a sysroot that is found and cannot link is a failure (the guard
-#396 lacked). `node tests/run.js wasi` runs those checks alone.
+that #396 lacked). `node tests/run.js wasi` runs those checks alone.
 `NODE_COMPILE_CACHE` is set for every job; it can only save Node start-up time,
 never change an answer.
 

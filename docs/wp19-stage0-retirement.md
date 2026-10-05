@@ -65,15 +65,12 @@ is the previous released `nish`. Two things retirement was never meant to be:
 
 ### 1a. The doubling ends before R6
 
-The gates were about deleting stage0. They did not require every new construct
-to be written twice, and the last three constructs before this change cost
-125, 354 and 371 lines of stage0 each. Two mechanical things forced a
-construct into stage0. `tests/run.js` compiled the golden cases with stage0,
-and the oracles skipped any case stage0 refused. From then on,
-`tests/self/stage1_only.txt` named cases whose implementation was `src/`'s
-alone. `tests/run.js` compiled those cases with a stage1, and each oracle
-counted or skipped them by name. The `stage1_probe` fixture kept that path
-exercised. R6 deleted the register, because every case is now stage1's.
+The gates did not require writing every construct twice, which had cost
+125, 354 and 371 lines of stage0 for the last three. Only the harness did:
+`tests/run.js` compiled goldens with stage0, and the oracles skipped what
+stage0 refused. From then on `tests/self/stage1_only.txt` named cases that
+were `src/`'s alone, compiled by a stage1 and counted by name, with the
+`stage1_probe` fixture keeping the path exercised. R6 deleted the register.
 
 ---
 
@@ -98,35 +95,25 @@ Seven gaps, all of them closed before R6:
 
 ### A2. What `--parity` found on its first run
 
-`tests/self/parity.js` ran 172 programs under 14 flag variations, 2,408 runs
-in all, and found 206 undeclared differences from five root causes. No oracle
-could have seen them, because each oracle compiles a program only with the
-flags that program already carries. One of the five was a miscompile in the
-shipped compiler: a stack array sized from an IR operand
-(`tests/cases/arr_stack_f64`). Most of the others came from one design
-difference. stage1 threads one contextual type `want` down the tree, while
-stage0 walked up from a literal through three enumerated lists of positions.
-The `reject_struct_field_*`, `reject_res_ok_f64` and `reject_cf_compound_*`
-cases pin the fixes.
+172 programs under 14 flag variations (2,408 runs) gave 206 undeclared
+differences from five causes, invisible to every oracle because an oracle
+compiles a program only with the flags it already carries. One was a miscompile
+in the shipped compiler, a stack array sized from an IR operand
+(`arr_stack_f64`). Most of the rest were one design difference: stage1
+threads a contextual type down, and stage0 walked up through enumerated
+positions (`reject_struct_field_*`, `reject_res_ok_f64`).
 
 ### A3. What `--parity` says over the whole corpus
 
-The full corpus was 593 programs and 8,302 runs, with 13,800 undeclared
-differences in five classes, none of them wrong code. The classes were:
-
-- **A path inside the IR.** stage0 changed to name an imported module relative
-  to its importer, which needs no working directory.
-- **Error recovery.** stage1 changed: `errored` in `src/context.ts` stands in
-  for stage0's throw.
-- **`--emit-ast` on a refused program.** stage1 changed
-  (`tests/cases/dump_ast_reject`).
-- **The wording for unary `+`.** stage0 changed (`reject_unary_plus`).
-- **The parser refusing a forbidden construct before Phase 0 could name the
-  rule.** This was declared rather than fixed. WP33 R1 later closed it in 0.14.0
-  and 0.15.0 ([wp33 §5.0](wp33-round-trip.md#50-every-refusal-names-its-rule)).
-
-"stage0 is the oracle" decided who settled a disagreement. It never meant
-stage0 was right, and twice stage0 was the side that moved.
+593 programs and 8,302 runs gave 13,800 undeclared differences in five
+classes, none of them wrong code. stage0 moved twice: a path inside the IR
+(modules are named relative to the importer, needing no working directory)
+and the unary `+` wording. stage1 moved twice: error recovery (`errored` in
+`src/context.ts` stands in for a throw) and `--emit-ast` on a refused program.
+The parser refusing a forbidden construct before Phase 0 named the rule was
+declared, and WP33 R1 closed it in 0.14.0 and 0.15.0
+([wp33 §5.0](wp33-round-trip.md#50-every-refusal-names-its-rule)). "stage0 is
+the oracle" said who settled a disagreement, not that stage0 was right.
 
 ### A4. The gate, green
 
@@ -156,8 +143,8 @@ run was not green.
 
 ### A6–A9. Four more ways the gate lied
 
-- **A6, a cached binary.** `build()` reused a stale stage1, which could report
-  green against a compiler nobody had rebuilt. It now links fresh on every run.
+- **A6, a cached binary.** The mode reused a stale stage1, so it could
+  report green against a compiler nobody had rebuilt.
 - **A7, a corpus that grew under the measurement.** `main` added 53 programs
   in a day. The undeclared count went 37 → 0 → 18, and the 18 included a
   `CPtr` internal compiler error under `-g`. The cause of the 37 was

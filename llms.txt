@@ -26,8 +26,8 @@ the compiler.
 - [Rules card](https://raw.githubusercontent.com/amritk/nish/main/docs/AI.md): the whole language as rules, sized for one read — the traps first, then types, `Result`, nullables, declarations, statements, the complete builtin inventory, and recipes for what is missing. Ships in the npm package as `docs/AI.md`.
 - [Language reference](https://raw.githubusercontent.com/amritk/nish/main/docs/LANGUAGE.md): normative and exhaustive. Every rule cites the test that pins it and quotes the exact rejection message. Settles any disagreement with the rules card.
 - [Ambient declarations](https://raw.githubusercontent.com/amritk/nish/main/runtime/nish.d.ts): reference this from `tsconfig.json` and `tsc --strict`, your editor and your language server accept `Result<T, E>`, `i32` and the rest. `nish` is still the authority — `tsc` cannot see the flow rules.
-- [Standard library](https://raw.githubusercontent.com/amritk/nish/main/std/README.md): `std/testing`, a suite a program drives to check itself and answer an exit code; `std/text`, the `split` / `trim` / `replace` the language does not have; `std/json`, the value of one field of one flat JSON object — enough to read this compiler's own `--json` output; `nish/crypto`, SHA-256, SHA-384 and SHA-512, HMAC, HKDF, a constant-time compare, base64url, X25519, ChaCha20-Poly1305, AES-GCM, P-256 ECDSA and X.509 certificates, one module each (`nish/crypto/sha256` and so on). Source rather than a built library, imported as `nish/<module>`, and shipped in the npm package under `std/`.
-- [FAQ](https://raw.githubusercontent.com/amritk/nish/main/docs/FAQ.md): why no `any`, why `i32`, how to get JavaScript numbers, why no GC, overflow and `--wrapping`, what errors look like.
+- [Standard library](https://raw.githubusercontent.com/amritk/nish/main/std/README.md): `std/testing`, a suite a program drives to check itself and answer an exit code; `std/text`, the `split` / `trim` / `replace` the language does not have; `std/json`, the value of one field of one flat JSON object — enough to read this compiler's own `--json` output; `nish/crypto`, SHA-256, SHA-384 and SHA-512, HMAC, HKDF, a constant-time compare, base64url, X25519, ChaCha20-Poly1305, AES-GCM, P-256 ECDSA and X.509 certificates, one module each (`nish/crypto/sha256` and so on), plus SHA-1 for WebSocket's handshake only; `nish/net`, the protocols written on them — the TLS 1.3 server handshake and record layer, TLS over TCP, QUIC, HPACK, the HTTP/1.1 parser and WebSocket framing; `nish/threads`, a parallel map and reduce. Source rather than a built library, imported as `nish/<module>`, and shipped in the npm package under `std/`.
+- [FAQ](https://raw.githubusercontent.com/amritk/nish/main/docs/FAQ.md): why no `any`, why `i32`, how to get JavaScript numbers, why no GC, why signed overflow panics and how to wrap on purpose, what errors look like.
 - [Install](https://raw.githubusercontent.com/amritk/nish/main/docs/INSTALL.md): prerequisites per OS, hello world, exit codes, troubleshooting.
 
 ## How it compiles
@@ -39,11 +39,11 @@ the compiler.
 ## Working on the compiler
 
 - [Agent guide](https://raw.githubusercontent.com/amritk/nish/main/AGENTS.md): the repository's rules for AI agents — the machine-readable surfaces, how to trust a test run, the house rules.
-- [Orientation](https://raw.githubusercontent.com/amritk/nish/main/.claude/orientation.md): the two compilers, the code map, the commands, the seven things that are always true.
+- [Orientation](https://raw.githubusercontent.com/amritk/nish/main/.claude/orientation.md): the one compiler and the seed that builds it, the code map, the commands, the seven things that are always true.
 - [Documentation index](https://raw.githubusercontent.com/amritk/nish/main/docs/README.md): every reference and design note, one line each.
 
 ## Optional
 
 - [Master plan](https://raw.githubusercontent.com/amritk/nish/main/docs/MASTER_PLAN.md): vision, design rules, work packages, contributor conventions.
-- [Self-hosting](https://raw.githubusercontent.com/amritk/nish/main/docs/wp14-selfhost.md): the compiler written in its own language, and the oracles that keep the two in step.
+- [Self-hosting](https://raw.githubusercontent.com/amritk/nish/main/docs/wp14-selfhost.md): the compiler written in its own language, and how it builds itself to a fixed point.
 - [Changelog](https://raw.githubusercontent.com/amritk/nish/main/CHANGELOG.md): generated from the commits; what changed in each release.

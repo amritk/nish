@@ -1,8 +1,8 @@
 # `std/` — the standard library
 
 Nish modules written in Nish, for Nish programs to import. There is no magic
-here and — with three exceptions, `threads.ts`, `collections.ts` and `map.ts` —
-nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
+here and — with four exceptions, `threads.ts`, `collections.ts`, `map.ts` and
+`secret.ts` — nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
 whatever program imports it, and subject to the same rules as `examples/` or
 `src/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
 
@@ -341,7 +341,7 @@ that are *not* this package.
   multi-module program is exercised end to end, and it is also what puts the
   module into the corpus the stage1 oracles read
   ([`.claude/selfhost.md`](../.claude/selfhost.md)): a `std/` module with no
-  importer in `tests/link/` is compiled by neither compiler on any run.
+  importer in `tests/link/` is compiled on no run.
   `testing.ts` has two, one per outcome — `tests/link/std_testing` (exit 0) and
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
   message) — and `text.ts` and `json.ts` have `tests/link/std_text` and
