@@ -158,7 +158,12 @@ export const QPACK_REASON_ACKNOWLEDGMENT: i32 = 11
 /** An Insert Count Increment (§4.4.3). */
 export const QPACK_REASON_INCREMENT: i32 = 12
 
-/** 2^62 - 1, the largest integer §4.1.1 requires. Spelled as a product: an `i64` literal past 2^53 is refused. */
+/**
+ * 2^62 - 1, the largest integer §4.1.1 requires. Spelled as a product: an
+ * `i64` literal past 2^53 is refused. It is `QUIC_MAX_VARINT`'s value, kept
+ * here rather than imported so that QPACK does not pull in QUIC's packet
+ * protection for one constant.
+ */
 const QPACK_MAX_INTEGER: i64 = 1073741824 * 4294967296 - 1
 
 /** What `qpackReadInteger` answers for bytes that end inside the integer. */
@@ -170,8 +175,8 @@ const QPACK_INTEGER_OVERFLOW: i64 = -2
 /**
  * Appendix A's names, by index. A `switch` rather than a table because a
  * module constant cannot be an array
- * ([LANGUAGE.md](../../docs/LANGUAGE.md#module-constants)); LLVM turns a
- * `switch` whose arms each return a constant into a lookup.
+ * ([LANGUAGE.md](../../docs/LANGUAGE.md#module-constants)). Entries that
+ * share a name share an arm.
  */
 const qpackStaticName = (index: i32): string => {
   switch (index) {
@@ -206,35 +211,32 @@ const qpackStaticName = (index: i32): string => {
     case 14:
       return "set-cookie"
     case 15:
-      return ":method"
     case 16:
-      return ":method"
     case 17:
-      return ":method"
     case 18:
-      return ":method"
     case 19:
-      return ":method"
     case 20:
-      return ":method"
     case 21:
       return ":method"
     case 22:
-      return ":scheme"
     case 23:
       return ":scheme"
     case 24:
-      return ":status"
     case 25:
-      return ":status"
     case 26:
-      return ":status"
     case 27:
-      return ":status"
     case 28:
+    case 63:
+    case 64:
+    case 65:
+    case 66:
+    case 67:
+    case 68:
+    case 69:
+    case 70:
+    case 71:
       return ":status"
     case 29:
-      return "accept"
     case 30:
       return "accept"
     case 31:
@@ -242,95 +244,53 @@ const qpackStaticName = (index: i32): string => {
     case 32:
       return "accept-ranges"
     case 33:
-      return "access-control-allow-headers"
     case 34:
+    case 75:
       return "access-control-allow-headers"
     case 35:
       return "access-control-allow-origin"
     case 36:
-      return "cache-control"
     case 37:
-      return "cache-control"
     case 38:
-      return "cache-control"
     case 39:
-      return "cache-control"
     case 40:
-      return "cache-control"
     case 41:
       return "cache-control"
     case 42:
-      return "content-encoding"
     case 43:
       return "content-encoding"
     case 44:
-      return "content-type"
     case 45:
-      return "content-type"
     case 46:
-      return "content-type"
     case 47:
-      return "content-type"
     case 48:
-      return "content-type"
     case 49:
-      return "content-type"
     case 50:
-      return "content-type"
     case 51:
-      return "content-type"
     case 52:
-      return "content-type"
     case 53:
-      return "content-type"
     case 54:
       return "content-type"
     case 55:
       return "range"
     case 56:
-      return "strict-transport-security"
     case 57:
-      return "strict-transport-security"
     case 58:
       return "strict-transport-security"
     case 59:
-      return "vary"
     case 60:
       return "vary"
     case 61:
       return "x-content-type-options"
     case 62:
       return "x-xss-protection"
-    case 63:
-      return ":status"
-    case 64:
-      return ":status"
-    case 65:
-      return ":status"
-    case 66:
-      return ":status"
-    case 67:
-      return ":status"
-    case 68:
-      return ":status"
-    case 69:
-      return ":status"
-    case 70:
-      return ":status"
-    case 71:
-      return ":status"
     case 72:
       return "accept-language"
     case 73:
-      return "access-control-allow-credentials"
     case 74:
       return "access-control-allow-credentials"
-    case 75:
-      return "access-control-allow-headers"
     case 76:
-      return "access-control-allow-methods"
     case 77:
-      return "access-control-allow-methods"
     case 78:
       return "access-control-allow-methods"
     case 79:
@@ -338,7 +298,6 @@ const qpackStaticName = (index: i32): string => {
     case 80:
       return "access-control-request-headers"
     case 81:
-      return "access-control-request-method"
     case 82:
       return "access-control-request-method"
     case 83:
@@ -369,13 +328,12 @@ const qpackStaticName = (index: i32): string => {
       return "user-agent"
     case 96:
       return "x-forwarded-for"
-    case 97:
-      return "x-frame-options"
     default:
       return "x-frame-options"
   }
 }
 
+/** Appendix A's values, by index; the entries with none answer the empty string. */
 const qpackStaticValue = (index: i32): string => {
   switch (index) {
     case 1:
@@ -567,9 +525,13 @@ const qpackPushText = (out: u8[], text: string): void => {
   }
 }
 
-/** What static entry `index` counts towards a field section's size. */
-const qpackStaticSize = (index: i32): i64 =>
-  toI64(qpackStaticName(index).length) + toI64(qpackStaticValue(index).length) + toI64(QPACK_FIELD_OVERHEAD)
+/** Appends `src[off, off + len)` to `out`. */
+const qpackPushBytes = (out: u8[], src: u8[], off: i32, len: i32): void => {
+  const end: i32 = off + len
+  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
+    out.push(src[i])
+  }
+}
 
 /**
  * Appends `value` as a §4.1.1 integer with a `prefixBits`-bit prefix, the first
@@ -619,10 +581,7 @@ const qpackPushString = (
     return
   }
   qpackPushInteger(out, flags, lengthBits, toI64(len))
-  const end: i32 = off + len
-  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
-    out.push(src[i])
-  }
+  qpackPushBytes(out, src, off, len)
 }
 
 /**
@@ -634,6 +593,14 @@ export const qpackPushStreamCancellation = (out: u8[], streamId: i64): void => {
   qpackPushInteger(out, 64, 6, streamId)
 }
 
+/** Whether the section being decoded has a byte left at `d.at`. */
+const qpackHasByte = (d: QpackDecoder, src: u8[]): boolean =>
+  d.at >= 0 && d.at < d.end && d.at < toI32(src.length)
+
+/** The `QPACK_REASON_*` for a negative `qpackReadInteger` answer. */
+const qpackIntegerReason = (status: i64): i32 =>
+  status === QPACK_INTEGER_TRUNCATED ? QPACK_REASON_TRUNCATED : QPACK_REASON_INTEGER
+
 /**
  * Reads a §4.1.1 integer whose prefix is the low `prefixBits` bits of the
  * byte at `d.at`, and answers it, or `QPACK_INTEGER_TRUNCATED` or
@@ -641,7 +608,7 @@ export const qpackPushStreamCancellation = (out: u8[], streamId: i64): void => {
  * tenth is refused even when its bits are zero.
  */
 const qpackReadInteger = (d: QpackDecoder, src: u8[], prefixBits: i32): i64 => {
-  if (d.at < 0 || d.at >= d.end || d.at >= toI32(src.length)) {
+  if (!qpackHasByte(d, src)) {
     return QPACK_INTEGER_TRUNCATED
   }
   const max: i32 = (1 << prefixBits) - 1
@@ -652,7 +619,7 @@ const qpackReadInteger = (d: QpackDecoder, src: u8[], prefixBits: i32): i64 => {
   }
   let value: i64 = toI64(max)
   for (let shift: i32 = 0; shift <= 56; shift += 7) {
-    if (d.at < 0 || d.at >= d.end || d.at >= toI32(src.length)) {
+    if (!qpackHasByte(d, src)) {
       return QPACK_INTEGER_TRUNCATED
     }
     const b: i32 = toI32(src[d.at])
@@ -677,14 +644,14 @@ const qpackReadInteger = (d: QpackDecoder, src: u8[], prefixBits: i32): i64 => {
  * bytes the section spent on it.
  */
 const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
-  if (d.at < 0 || d.at >= d.end || d.at >= toI32(src.length)) {
+  if (!qpackHasByte(d, src)) {
     return QPACK_REASON_TRUNCATED
   }
   const lengthBits: i32 = prefixBits - 1
   const huffman: boolean = (toI32(src[d.at]) & (1 << lengthBits)) !== 0
   const n: i64 = qpackReadInteger(d, src, lengthBits)
   if (n < 0) {
-    return n === QPACK_INTEGER_TRUNCATED ? QPACK_REASON_TRUNCATED : QPACK_REASON_INTEGER
+    return qpackIntegerReason(n)
   }
   if (n > toI64(d.end - d.at)) {
     return QPACK_REASON_TRUNCATED
@@ -697,9 +664,7 @@ const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
       ? QPACK_REASON_NONE
       : QPACK_REASON_HUFFMAN
   }
-  for (let i: i32 = start; i >= 0 && i < end && i < toI32(src.length); i += 1) {
-    d.bytes.push(src[i])
-  }
+  qpackPushBytes(d.bytes, src, start, end - start)
   return QPACK_REASON_NONE
 }
 
@@ -843,7 +808,7 @@ export class QpackDecoder {
 
   /** The refusal for a negative `qpackReadInteger` answer. */
   refuseInteger(status: i64): i64 {
-    return this.refuse(status === QPACK_INTEGER_TRUNCATED ? QPACK_REASON_TRUNCATED : QPACK_REASON_INTEGER)
+    return this.refuse(qpackIntegerReason(status))
   }
 
   /** Records a field whose name and value end where `bytes` ends now. */
@@ -868,7 +833,7 @@ export class QpackDecoder {
     if (insertCount !== toI64(0)) {
       return this.refuse(QPACK_REASON_INSERT_COUNT)
     }
-    if (this.at < 0 || this.at >= this.end || this.at >= toI32(src.length)) {
+    if (!qpackHasByte(this, src)) {
       return this.refuse(QPACK_REASON_TRUNCATED)
     }
     // With a Required Insert Count of 0, a Sign bit of 1 makes the Base
@@ -883,10 +848,13 @@ export class QpackDecoder {
       return this.refuse(QPACK_REASON_BASE)
     }
     let size: i64 = 0
-    while (this.at >= 0 && this.at < this.end && this.at < toI32(src.length)) {
+    while (qpackHasByte(this, src)) {
       const b: i32 = toI32(src[this.at])
       let neverIndexed: boolean = false
       const nameStart: i32 = toI32(this.bytes.length)
+      // Where the value starts once it is in `bytes`; -1 while it is still to
+      // be read as a string literal, which every form but the indexed one has.
+      let valueStart: i32 = -1
       if ((b & 128) !== 0) {
         // Indexed Field Line (§4.5.2): `1 T index(6+)`.
         if ((b & 64) === 0) {
@@ -899,18 +867,10 @@ export class QpackDecoder {
         if (index >= toI64(QPACK_STATIC_LENGTH)) {
           return this.refuse(QPACK_REASON_STATIC_INDEX)
         }
-        const i: i32 = toI32(index)
-        size += qpackStaticSize(i)
-        if (size > toI64(this.maxFieldSectionSize)) {
-          return QPACK_SECTION_TOO_LARGE
-        }
-        qpackPushText(this.bytes, qpackStaticName(i))
-        const valueStart: i32 = toI32(this.bytes.length)
-        qpackPushText(this.bytes, qpackStaticValue(i))
-        this.addField(nameStart, valueStart, false)
-        continue
-      }
-      if ((b & 64) !== 0) {
+        qpackPushText(this.bytes, qpackStaticName(toI32(index)))
+        valueStart = toI32(this.bytes.length)
+        qpackPushText(this.bytes, qpackStaticValue(toI32(index)))
+      } else if ((b & 64) !== 0) {
         // Literal Field Line with Name Reference (§4.5.4): `01 N T index(4+)`.
         if ((b & 16) === 0) {
           return this.refuse(QPACK_REASON_DYNAMIC)
@@ -937,10 +897,12 @@ export class QpackDecoder {
         // both name the dynamic table.
         return this.refuse(QPACK_REASON_DYNAMIC)
       }
-      const valueStart: i32 = toI32(this.bytes.length)
-      const status: i32 = qpackReadString(this, src, 8)
-      if (status !== QPACK_REASON_NONE) {
-        return this.refuse(status)
+      if (valueStart < 0) {
+        valueStart = toI32(this.bytes.length)
+        const status: i32 = qpackReadString(this, src, 8)
+        if (status !== QPACK_REASON_NONE) {
+          return this.refuse(status)
+        }
       }
       size += toI64(this.bytes.length) - toI64(nameStart) + toI64(QPACK_FIELD_OVERHEAD)
       if (size > toI64(this.maxFieldSectionSize)) {
@@ -1026,6 +988,11 @@ export class QpackEncoder {
         }
         if (nameIndex < 0) {
           nameIndex = i
+        }
+        if (neverIndexed) {
+          // A never-indexed field is a literal whatever the table holds, so
+          // the lowest index with its name is all there is to find.
+          break
         }
       }
     }

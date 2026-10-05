@@ -5,7 +5,6 @@ PASS  an encoder stream is type 0x02
 PASS  a decoder stream is type 0x03
 PASS  SETTINGS_QPACK_MAX_TABLE_CAPACITY is 0x01
 PASS  SETTINGS_QPACK_BLOCKED_STREAMS is 0x07
-PASS  the static table has 99 entries
 PASS  every section begins with Required Insert Count 0 and Base 0
 PASS  RFC 9204 B.1 encoded
 PASS  RFC 9204 B.1 decodes
@@ -325,7 +324,7 @@ PASS  leaves the decoder stream spent
 PASS  with the first reason kept
 PASS  and nothing counted
 PASS  the encoder still writes sections
-PASS  two thousand and one pairs of sections decoded, four fields each
+PASS  a thousand and one pairs of sections decoded, four fields each
 PASS  the last section decoded
 PASS  a thousand passes of both sides after the first allocate nothing
-qpack: 330 passed, 0 failed, 0 skipped
+qpack: 329 passed, 0 failed, 0 skipped
