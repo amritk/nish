@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_no_panic_not_array/package.json","line":5,"column":16,"endLine":5,"endColumn":27,"severity":"error","code":"NL3036","message":"`noPanic` is not an array: the root package's `nish` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once"}

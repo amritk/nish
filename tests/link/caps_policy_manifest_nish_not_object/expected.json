@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_policy_manifest_nish_not_object/package.json","line":4,"column":11,"endLine":4,"endColumn":52,"severity":"error","code":"NL3036","message":"`nish` is not an object: the root package's `nish` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once"}

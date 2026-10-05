@@ -1663,7 +1663,9 @@ export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
 
 A package that must not touch the network says so in `package.json`,
 `"nish": { "capabilities": { "deny": ["net"] } }`, and `--deny net` or an
-allowlist such as `--allow fs.read,exit` says the same on the command line. A
+allowlist such as `--allow fs.read,exit` says the same on the command line.
+The `"nish"` field holds `noPanic` and `capabilities` and nothing else, each
+written once; anything more is refused (NL3036) rather than skipped. A
 program whose `main` — or, in a library or a header build, any export —
 reaches more is refused (NL2459), spanned at the first call and naming the
 whole chain to the builtin; nothing changes in a program

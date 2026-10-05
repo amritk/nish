@@ -126,9 +126,11 @@ import {
   manifestEngineRange,
   manifestMalformedAt,
   manifestCapabilities,
+  manifestNish,
   manifestNoPanic,
   manifestVersion,
   ManifestList,
+  NishManifest,
   nishExportEntry,
 } from "./manifest"
 import {
@@ -1080,8 +1082,9 @@ export class Compilation {
     }
     // Before anything records: a `noPanic` list turns the recording on.
     const manifest = this.rootManifest()
-    this.readNoPanic(manifest)
-    this.readCapabilityPolicy(manifest)
+    const nish = this.readRootNish(manifest)
+    this.readNoPanic(manifest, nish)
+    this.readCapabilityPolicy(manifest, nish)
     this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
       return false
@@ -1208,16 +1211,16 @@ export class Compilation {
    * refused where it is written (NL3031): a typo would otherwise leave the
    * module it meant outside the scope, and the build would say nothing.
    */
-  readNoPanic(source: SourceFile | null): void {
+  readNoPanic(source: SourceFile | null, nish: NishManifest | null): void {
     this.panicScope = []
     for (const unit of this.modules) {
       this.panicScope.push(this.opts.denyPanics && unit.packageName === ROOT_PACKAGE)
     }
-    if (source === null) {
+    if (source === null || nish === null) {
       return
     }
     const dir = dirname(source.path)
-    const list = manifestNoPanic(source.text, PACKAGE_CONDITION)
+    const list = manifestNoPanic(source.text, nish.noPanicAt)
     let k = 0
     while (k < list.entries.length) {
       const entry = list.entries[k]
@@ -1229,7 +1232,7 @@ export class Compilation {
         this.sink.report(
           source,
           list.offsets[k],
-          list.offsets[k] + entry.length + 2,
+          k < list.ends.length ? list.ends[k] : list.offsets[k] + 1,
           `\`noPanic\` names \`${entry}\`, which is no module of this program: an entry is the path of a ` +
             "module the program compiles, relative to the `package.json` that lists it, and one that names " +
             "nothing would leave the module it meant outside the scope without a word"
@@ -1258,6 +1261,30 @@ export class Compilation {
   }
 
   /**
+   * The root package's `"nish"` field, read strictly (`manifestNish`), or null
+   * when there is no manifest or the field is refused: it is one object,
+   * written once, whose only keys are `noPanic` and `capabilities`, and
+   * anything else is NL3036 where `package.json` writes it, so that nothing
+   * the reader cannot vouch for is honoured, a policy least of all.
+   */
+  readRootNish(source: SourceFile | null): NishManifest | null {
+    if (source === null) {
+      return null
+    }
+    const nish = manifestNish(source.text, PACKAGE_CONDITION)
+    if (nish.problem.length === 0) {
+      return nish
+    }
+    this.sink.report(
+      source,
+      nish.problemStart,
+      nish.problemEnd,
+      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\` and \`capabilities\`, each written once`
+    )
+    return null
+  }
+
+  /**
    * WP36: the root package's `"nish": { "capabilities": { "allow", "deny" } }`
    * (docs/wp36-capability-policy.md §3), as `manifestAllow` and
    * `manifestDeny`. Everything it cannot honour is refused where
@@ -1265,11 +1292,11 @@ export class Compilation {
    * the wrong shape (NL3032), a name that is no capability (NL3033), `unsafe`
    * under `allow` (NL3034), and a capability under both (NL3035).
    */
-  readCapabilityPolicy(source: SourceFile | null): void {
-    if (source === null) {
+  readCapabilityPolicy(source: SourceFile | null, nish: NishManifest | null): void {
+    if (source === null || nish === null) {
       return
     }
-    const policy = manifestCapabilities(source.text, PACKAGE_CONDITION)
+    const policy = manifestCapabilities(source.text, nish.capabilitiesAt)
     if (policy.problem.length > 0) {
       this.sink.report(
         source,

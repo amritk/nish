@@ -1,0 +1,7 @@
+{
+  "name": "caps-policy-manifest-escaped-entry",
+  "private": true,
+  "nish": {
+    "capabilities": { "deny": ["n\u0065t"] }
+  }
+}

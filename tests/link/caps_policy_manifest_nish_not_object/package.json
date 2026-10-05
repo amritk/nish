@@ -1,0 +1,5 @@
+{
+  "name": "caps-policy-manifest-nish-not-object",
+  "private": true,
+  "nish": [{ "capabilities": { "deny": ["net"] } }]
+}

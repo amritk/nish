@@ -100,18 +100,27 @@ without the policy.
 
 The policy is read from the root package's manifest only — the
 `package.json` nearest above the entry, the one `noPanic` is read from — and
-sits beside `noPanic` in the same `"nish"` object
-(`manifestCapabilities` in `src/manifest.ts`, through the `manifestFieldAt`
-reader #443 added). `allow` and `deny` are both optional. An `allow` that is
-present but empty allows nothing; an absent one allows everything.
+sits beside `noPanic` in the same `"nish"` object. `allow` and `deny` are both
+optional. An `allow` that is present but empty allows nothing; an absent one
+allows everything.
 
-A policy the compiler cannot honour is refused where `package.json` writes it,
+The `"nish"` field is read strictly (`manifestNish` and `manifestCapabilities`
+in `src/manifest.ts`): every key and every string entry is decoded as
+`JSON.parse` decodes it, so `"ni\u0073h"` is `"nish"` and `"n\u0065t"` is
+`net`, and the policy behind an escape is honoured
+(`caps_policy_manifest_escaped_nish`, `caps_policy_manifest_escaped_policy`,
+`caps_policy_manifest_escaped_entry`). An escape that stands for a character
+outside ASCII decodes to DEL, which no name contains, so it can only make a
+key unknown or an entry no capability, never match one by accident.
+
+What the compiler cannot honour is refused where `package.json` writes it,
 because a typo that quietly widened a policy would be the worst outcome there
 is:
 
 | Code | Refused |
 | --- | --- |
-| NL3032 | `capabilities` is not an object, `allow` or `deny` is not an array or is written twice (reading both would union them and widen the policy), a second `capabilities` key in `"nish"` or a second top-level `"nish"` in a manifest that carries a policy (the reader takes the first, and would drop the other's policy in silence), or a `"nish"` or `capabilities` key written with a JSON escape (the reader does not decode escapes, so the policy behind one would be invisible; an escaped key that cannot decode to either is read as it always was). Every top-level `"nish"` is walked for these, whether or not the plain word `capabilities` appears, and a second `"nish"` that holds a `capabilities` of its own is refused too, a key other than those two, or a manifest that mentions `"capabilities"` and stops being JSON before the reader reaches it |
+| NL3036 | a `"nish"` field that is not one object, written once, whose keys are `noPanic` and `capabilities`, each written once: a second top-level `"nish"` whatever either holds (reading one would drop the other in silence), a `"nish"` that is not an object, a key other than those two (a misspelt `capabilites` included), either key written twice, a `noPanic` that is not an array, or a manifest that mentions `nish` or carries a `\u` escape and stops being JSON |
+| NL3032 | `capabilities` is not an object, a key in it other than `allow` and `deny`, or `allow` or `deny` that is not an array or is written twice (reading both would union them and widen the policy) |
 | NL3033 | an entry that is no capability, a non-string entry included |
 | NL3034 | `"unsafe"` under `allow` |
 | NL3035 | a capability under both `allow` and `deny` |

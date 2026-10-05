@@ -1,0 +1,8 @@
+{
+  "name": "caps-policy-manifest-no-panic-not-array",
+  "private": true,
+  "nish": {
+    "noPanic": "client.ts",
+    "capabilities": { "deny": ["net"] }
+  }
+}
