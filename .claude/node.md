@@ -66,8 +66,8 @@ failure, not for measuring one: a filtered count means nothing until
 `rm -rf build/test`, and fifteen `fs.existsSync` guards drop checks with no
 `SKIP` line to say so (see `.claude/testing.md`). `scripts/ci-profile.mjs`
 measures from outside the process instead, so neither trap applies, and
-`docs/wp10-ci.md` has the table it produced for `npm test` plus the job
-durations it explains.
+`docs/wp10-ci.md` ("Where the wall clock goes") keeps an excerpt of what it
+measured and the job durations it explains.
 
 **`NODE_COMPILE_CACHE` is set for every CI job**, and is worth exporting
 locally too. It is Node's own on-disk cache of V8's module compilation, not a

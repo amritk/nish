@@ -125,13 +125,11 @@ result did not stay true (§A5).
 
 ### A5. The gate reopened, and the correction §A4 needed
 
-On `main` at 045c8f8, `--parity` was red again on two `-g` defects, both
-stage0's. stage0 placed an arrow-declared function at its parameter list rather
-than its declaration (fixed with `FunctionSig.declSite`, pinned by
-`tests/cases/dbg_arrow`). It also counted `DILocation` columns in UTF-16 code
-units where DWARF wants bytes (`dbg_utf8`). Diagnostic columns stay code units,
-because an editor reads those (`reject_diag_utf8`). Three lessons carried
-forward:
+On `main` at 045c8f8 `--parity` was red on two stage0 `-g` defects: an
+arrow-declared function placed at its parameter list (`FunctionSig.declSite`,
+`dbg_arrow`), and `DILocation` columns in UTF-16 units where DWARF wants bytes
+(`dbg_utf8`). Diagnostic columns stay code units, for editors
+(`reject_diag_utf8`). The lessons:
 
 1. An empty difference set is a fact about the corpus, not about the language.
 2. A gate outside `npm test` records the last day somebody ran it.
@@ -190,27 +188,25 @@ property available with one implementation.
 
 #### The wording gap, and what closing it turned up
 
-The goldens closed none of the wording gap: diagnostic wordings had been proved
-by comparison and by nothing else. `tests/diagnostic-coverage.js` measures the
-gap from the registry in `src/codes.ts`. The fix was `tests/wordings/`, one
-program per code with its whole message in an `.err` file, and the tool
-refuses to pass while any code is neither provoked by a case nor listed with a
-reason in `unreachable.txt`. On 2026-09-21, asked of stage1, the tool reported
-264 of 410 codes provoked, 66 unreachable, and 80 provoked only under stage0
-because stage1's parser refuses those programs first. WP33 R1 later moved
-those refusals to the phase that owns each rule. The corpus also turned up 43 cases
-where the two compilers disagreed. The largest was the `--json` gap that §A8
-closed.
+Diagnostic wordings were proved by comparison and nothing else, and the
+goldens did not change that. `tests/wordings/` did: one program per code with
+its whole message in an `.err` file. `tests/diagnostic-coverage.js` reads the
+registry from `src/codes.ts` and fails while any code is neither provoked nor
+listed with a reason in `unreachable.txt`. Asked of stage1 on 2026-09-21, it
+reported 264 of 410 codes provoked, 66 unreachable, and 80 reached only under
+stage0 because stage1's parser refused those programs first (WP33 R1 later
+moved those refusals to the phase that owns each rule). Writing the cases also
+found 43 programs the compilers answered differently, the largest being §A8's
+`--json` gap.
 
 ### C. Distribution
 
-The npm package shipped `dist/`, so the compiler was a Node program. G5 is the
-gate for this.
+The npm package shipped `dist/`, a Node program (G5).
 
 ### D. Provenance
 
-`IR(stage0, src/) == IR(stage1, src/)` held over every module. It could not be
-re-established without writing a second compiler, so G6 tagged it.
+`IR(stage0, src/) == IR(stage1, src/)` cannot be re-established without a
+second compiler, so G6 tagged it.
 
 ---
 
@@ -222,18 +218,16 @@ There were six gates, and each one had a check that `npm test` or CI could run.
 
 **Asked:** `src/` compiles everything stage0 compiles and answers every flag
 stage0 answers, with identical output and exit codes. **Check:**
-`node tests/run.js --parity`. One half diffed the two compilers' `--help` flag
-sets inside `npm test`. The other half ran the corpus × `VARIATIONS` cross
-product nightly, and any difference failed unless a narrow declaration covered
-it. **Closed:** 0 undeclared differences over 986 programs on 2026-09-22
+`node tests/run.js --parity`: the two `--help` flag sets diffed inside
+`npm test`, and the corpus × `VARIATIONS` cross product nightly, failing on any
+difference no narrow declaration covered. **Closed:** 0 undeclared differences over 986 programs on 2026-09-22
 (§A6–A9). The mode was deleted with stage0.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
-1. **`nish-cmp`**, the last release against HEAD over the corpus. A difference
-   has to be named in `DECLARED`, which requires the words in `CHANGELOG.md`.
-   It is a required `ci.yml` job. Its first green run, on 2026-09-21 against
-   the 0.5.0 seed, was `437/437 programs agree (3582 files, 3253862 IR lines)
+1. **`nish-cmp`**, a required `ci.yml` job. A difference must be in
+   `DECLARED`, which requires its words in `CHANGELOG.md`. First green run,
+   2026-09-21, against the 0.5.0 seed: `437/437 programs agree (3582 files, 3253862 IR lines)
    … 4 equal after each compiler's own root, 0 undeclared difference(s)`.
 2. **`fuzz.js --stage1`**, repointed to the seed against HEAD.
 3. **The surviving oracles** build their stage1 with the seed, through
@@ -299,30 +293,23 @@ case and was built by stage0.
 install that keeps working, a `--version` that does not read `package.json`,
 and `INSTALL.md` rewritten. **Closed:**
 
-- `release.yml` builds each binary from the seed on a runner of its own
-  architecture. Nothing is cross-compiled, so every binary that ships has
-  passed `--verify` and a smoke test on its own hardware.
-- The package is `@amritk/nish` and the command is `nish`
-  ([wp12-release.md](wp12-release.md#the-npm-name)).
-- `bin/nish` is a launcher. The compiler arrives as one `@amritk/nish-<asset>`
-  `optionalDependencies` package per platform, so nothing is compiled on a
-  user's machine.
-- `--version` reads `VERSION` in `src/branding.ts`, which `tests/run.js` pins
-  against `package.json`.
-- v0.4.0 was the first release to attach all four seed tarballs.
-
-The `node tests/run.js wp12` round trip packs the package, installs it and
-links a program through a real platform package.
+- `release.yml` builds each binary from the seed on its own architecture, so
+  every shipped binary passed `--verify` and a smoke test on its hardware.
+  v0.4.0 was the first release to attach all four.
+- The package is `@amritk/nish`, the command `nish`
+  ([wp12-release.md](wp12-release.md#the-npm-name)). `bin/nish` is a launcher,
+  and the compiler arrives as one `@amritk/nish-<asset>` optional dependency
+  per platform, so nothing is compiled on a user's machine.
+  `node tests/run.js wp12` packs, installs and links through it.
+- `--version` reads `VERSION` in `src/branding.ts`.
 
 ### G6 — The provenance is recorded before it is lost
 
-A commit where both `IR(stage0, src/) == IR(stage1, src/)` and the fixed point
-held is tagged `ddc-<version>`. From #116 until R6, `release.yml` cut the tag
-after the jobs that prove the equalities and before `gh release create`. The
-tags are `ddc-0.4.0`, `ddc-0.5.0` and `ddc-0.6.0`, and the last of them is the
-0.6.0 release commit `37acb707`. They are never moved or deleted. No later
-release cuts one, because there is no second implementation left to agree
-with.
+From #116 until R6, `release.yml` tagged `ddc-<version>` on each release
+commit, after the jobs proving `IR(stage0, src/) == IR(stage1, src/)` and the
+fixed point and before `gh release create`. The tags are `ddc-0.4.0`,
+`ddc-0.5.0` and `ddc-0.6.0` (the 0.6.0 release commit, `37acb707`), and they
+are never moved or deleted.
 
 **Re-verifying the property.** You need Node 22.18 or newer and an LLVM 18
 `clang` on `PATH`.
@@ -364,7 +351,7 @@ on purpose, because only a harness needs them and the harness stays on Node.
 | --- | --- | --- |
 | **R1** | Parity | G1 green over the whole corpus, 2026-09-22, `1e95aac` (§A6–A9) |
 | **R2** | The seed protocol | `NISH_BOOTSTRAP`, the `seeds` and `bootstrap` jobs, the policy sentence, and darwin seed rows from 0.4.0 (G3, G4) |
-| **R3** | Oracle succession | `nish-cmp`, the repointed fuzzer, the goldens, and the wording gap at zero. `tests/self/parser-refusals.txt` puts a ceiling on the parser-refusal bucket, and `reject-oracle.js` compares the run against it in both directions (G2) |
+| **R3** | Oracle succession | `nish-cmp`, the fuzzer, the goldens and the wording gap (G2). `reject-oracle.js` holds its parser bucket to `tests/self/parser-refusals.txt` in both directions |
 | **R4** | Distribution | Four native binaries, the launcher and the platform packages (G5) |
 | **R5** | Provenance | `ddc-*` tags cut by `release.yml` (#116, G6) |
 | **R6** | The deletion | Five pull requests under #144, after v0.6.0. #146 (fetch a released seed), #145 (goldens compiled by stage1) and #147 (surviving tools off stage0) moved every consumer onto stage1 while stage0 still existed. #150 deleted stage0, and #148 then rewrote the rules and the live documents |
@@ -398,9 +385,9 @@ v0.6.0 released and `nish-cmp` green on `main`. These were the items it waited o
 4. **`packageRoot()` and `argv[0]`.** A bare `nish` found on `$PATH`, and any
    symlinked install (npm's `.bin` among them), resolved `scripts/build.sh` and
    `std/` against the wrong directory. The `$PATH` half was fixed on
-   2026-09-20. The symlink half was fixed on 2026-09-21 with the
-   `realpathSync` builtin (`nish_realpath` in `runtime-os.c`), and the call
-   site used it one release later, as the rolling freeze requires.
+   2026-09-20 and the symlink half on 2026-09-21: the `realpathSync` builtin
+   landed first and the call site used it a release later, as the rolling
+   freeze requires.
 5. **`outputStems` under `-o <dir>/`.** Two modules whose paths differ only by
    a climb or a link shared one output stem, and one module overwrote the
    other. Since #198 (2026-09-24) the later module gets `<stem>_<n>`. Taking a
@@ -424,16 +411,12 @@ releases.
 
 ## 6. What retirement costs, stated plainly
 
-1. **Diverse double-compiling ends.** A wrong lowering that the compiler
-   itself depends on can now survive a release. G6 archives the last point
-   where it could not, and does not extend it.
-2. **The diagnostics lose their oracle.** Goldens are strictly weaker than
-   two implementations agreeing.
-3. **The bug-finding direction reverses.** stage0 found six attribute-level
-   bugs during S3 and S4, which is the class of bug a golden `.ll` is worst at
-   catching. That mechanism has stopped.
-4. **One implementation is one bus factor.** The language is whatever `src/`
-   does.
+1. **Diverse double-compiling ends.** A wrong lowering the compiler depends
+   on can survive a release. G6 archives the last point where it could not.
+2. **The diagnostics lose their oracle.** Goldens are weaker than agreement.
+3. **The bug-finding direction reverses.** stage0 found six wrong-attribute
+   bugs in S3 and S4, the class a golden `.ll` catches worst.
+4. **One implementation is one bus factor.** The language is what `src/` does.
 5. **musl, FreeBSD and every 32-bit platform lose their `npm install`.**
    `dist/` was their fallback. The launcher now names the four platforms with
    a binary, writes an `NL0002` object under `--json`, and exits 3.
@@ -450,11 +433,11 @@ another project's parser.
 
 ## 7. When not to do this
 
-The trigger was meant to be a release cycle in which stage0 "found nothing,
-changed nothing, and shipped nothing except itself". When it was measured on
-2026-09-19, the answer was *not yet*: that week stage0 had found §A8's `--json`
-gap. The decision was nonetheless taken at the sign-off of #144: go, gated on
-v0.6.0 and on `nish-cmp` being green. The costs in §6 were accepted as stated.
+The intended trigger was a release cycle in which stage0 "found nothing,
+changed nothing, and shipped nothing except itself". Measured on 2026-09-19 the
+answer was *not yet*, since stage0 had just found §A8's `--json` gap. The
+sign-off of #144 decided to go anyway, gated on v0.6.0 and a green `nish-cmp`,
+with §6's costs accepted as stated.
 
 ## What was deliberately not done
 
