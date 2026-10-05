@@ -135,9 +135,10 @@ whole body.
 Every item followed the MASTER_PLAN §5 sizes (S under a day of agent work, M
 one to two days, L several), shipped with the construct checklist of
 [ARCHITECTURE.md](ARCHITECTURE.md), and had to land **in a release before
-anything above it could use it**. All five items below N9 are built and in
-0.16.0. N9 is a discipline the stack keeps, and its acceptance soak belongs to
-A1. LANGUAGE.md has the rule for each built item.
+anything above it could use it**. N1, N2, N3, N5 and N6 are built and in
+0.16.0, except N5's `tcpConnect` (#411), which is on `main`. N9 is a
+discipline the stack keeps, and its acceptance soak belongs to A1.
+LANGUAGE.md has the rule for each built item.
 
 ### N1. Exported enums and type aliases (S–M, checker lane)
 

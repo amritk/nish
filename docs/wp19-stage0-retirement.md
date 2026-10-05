@@ -23,20 +23,18 @@ hold the rules for the one compiler that is left.
 
 | stage0's job | Its successor |
 | --- | --- |
-| The seed that builds `src/` | The last released `nish`. `scripts/fetch-seed.sh` unpacks it into `build/seed/`, and `NISH_BOOTSTRAP=<path>` names another binary. `scripts/bootstrap.sh` has no fallback when neither is present (G3) |
-| The seed policy | `nish` 0.N is built by the last patch release of 0.(N−1) ([wp12-release.md](wp12-release.md#the-bootstrap-seed), G4) |
-| The permanent Nish-0 freeze | The rolling freeze: `src/` may use only what the last release compiles, so a construct added in 0.N reaches `src/` in 0.(N+1). CI's `seeds` and `bootstrap` jobs check it on every platform a release carries a seed for (G3) |
+| The seed that builds `src/` | The last released `nish`, which `scripts/fetch-seed.sh` puts in `build/seed/`. `NISH_BOOTSTRAP=<path>` names another binary (G3). The policy is that 0.N is built by the last patch release of 0.(N−1) (G4) |
+| The permanent Nish-0 freeze | The rolling freeze: a construct added in 0.N reaches `src/` in 0.(N+1). CI's `seeds` and `bootstrap` jobs check it (G3) |
 | `IR(stage0, src/) == IR(stage1, src/)` in `tests/self/bootstrap.js` | `IR(stage1) == IR(stage2)` and stage3 == stage2, built from the seed. Diverse double-compiling has no successor (§6 item 1). The `ddc-*` tags record where it last held (G6) |
-| `ir_oracle.js`, `interop_oracle.js` | `tests/nish-cmp.js` compares the last release with HEAD over the corpus, IR and sidecars, byte for byte (G2.1, Go's `toolstash -cmp`). It runs as `ci.yml`'s `nish-cmp` job, which takes its rows from `cmpSince` in `.github/seed-targets.json`. The `tests/cases/*.ll` goldens also cover this |
+| `ir_oracle.js`, `interop_oracle.js` | `tests/nish-cmp.js`, the last release against HEAD over the corpus, byte for byte (G2.1). It is `ci.yml`'s `nish-cmp` job, gated by `cmpSince` in `.github/seed-targets.json`. The `tests/cases/*.ll` goldens also cover this |
 | `types_oracle.js`, `diagnostics_oracle.js`, `symbols_oracle.js`, `checked_oracle.js` | Checked-in goldens in `tests/self/goldens/`, written while both compilers agreed and compared by `tests/self/goldens.js` (G2.4) |
 | The stage0 half of `support-oracle.js` | `tests/self/goldens/support.txt` |
 | `fuzz.js --stage1` (stage0 against stage1) | `fuzz.js --stage1` (the seed release against HEAD, G2.2) |
 | The WP13 rewriter's reference JavaScript | Frozen in `tests/differential/goldens/rewrites.txt`, with `unfrozen.txt` naming the programs that have no frozen rewrite (§6 item 6) |
 | The compiler behind `tests/run.js` | A stage1 that the seed builds at the start of `npm test` |
 | The generated diagnostic-code registry | `src/codes.ts`, kept by hand. `scripts/gen-diagnostic-codes.mjs --check` validates its format and uniqueness |
-| Diagnostic wordings proved by agreement | `tests/wordings/` (one case per code) and `tests/diagnostic-coverage.js --require-coverage`. `tests/wordings/stage0_only.txt` was folded into `unreachable.txt`, and the parser-refusal pins now hold stage1's sentence |
-| `--parity`, `parity.yml`, `parity-select` / `parity-changed` / `batch-parity` | Nothing: parity needs two compilers |
-| The stage1-only register (§1a) | Nothing: every case is stage1's |
+| Diagnostic wordings proved by agreement | `tests/wordings/` and `tests/diagnostic-coverage.js --require-coverage`. `stage0_only.txt` was folded into `unreachable.txt` |
+| `--parity` and its workflows, and the stage1-only register (§1a) | Nothing: both need two compilers |
 | The `dist/` fallback in the npm package | The launcher refuses on a platform with no binary and exits 3 (§6 item 5) |
 | The provenance property | The `ddc-0.4.0`, `ddc-0.5.0` and `ddc-0.6.0` tags and the procedure in G6. `.github/ddc-tag.sh` and the `ddc` job were deleted with stage0 |
 | Ported guards (runtime declarations against `nish.h`, the allocating builtins, the seed targets, the exit-70 path through `NISH_SIMULATE_ICE`) | The same checks, run against stage1 |
@@ -284,13 +282,12 @@ versions are compared, and `.github/seed-matrix.sh` is the step body, which
 `tests/run.js` drives against a stand-in for `gh`. The field is a version
 rather than a boolean because a published release cannot gain an asset. The
 boolean deadlocked the release that was meant to carry the asset.
-`aarch64-linux` joined at 0.4.0, as did the darwin pair. The darwin pair's
-`attachedSince` is 0.4.0 because its rows first had to be run on their own
-hardware. That run settled the Mach-O `stage3 == stage2` failure (#114):
-`bootstrap.sh` linked the two stages at different output paths, so ld64 gave
-them different `LC_UUID`s. Linked at one path, the two stages are identical
-under a raw `cmp`. The macOS `test` row stays out of `ci.yml` for six named
-checks, none of them a compiler bug ([wp10-ci.md](wp10-ci.md#ci-matrix)).
+`aarch64-linux` joined at 0.4.0, and the darwin pair's `attachedSince` is
+0.4.0 because its rows first had to run on their own hardware. That run settled
+Mach-O's `stage3 == stage2` (#114): `bootstrap.sh` had linked the two stages at
+different paths, so ld64 gave them different `LC_UUID`s. The macOS `test` row
+stays out for six named checks, none a compiler bug
+([wp10-ci.md](wp10-ci.md#ci-matrix)).
 
 #### What the seeded run proves, and what it does not
 
@@ -353,8 +350,7 @@ with.
    module and line that differ and exits 1.
 
 A pass demonstrates diverse double-compiling again at that commit. On a
-failure, check the environment first: the tree at the tag is fixed, and
-everything around it is not.
+failure, check the environment first, because only the tree is fixed.
 
 ---
 
@@ -386,12 +382,8 @@ on purpose, because only a harness needs them and the harness stays on Node.
 | **R5** | Provenance | `ddc-*` tags cut by `release.yml` (#116, G6) |
 | **R6** | The deletion | Five pull requests under #144, after v0.6.0. #146 (fetch a released seed), #145 (goldens compiled by stage1) and #147 (surviving tools off stage0) moved every consumer onto stage1 while stage0 still existed. #150 deleted stage0, and #148 then rewrote the rules and the live documents |
 
-R1–R5 were reversible. R6 was not, so it came last and stood alone. R6 deleted
-stage0's `src/` and `dist/`, the `typescript` runtime dependency, the six
-oracles, `--parity` and its workflows, the stage1-only register, the batched
-stage0 compile of the goldens, the live WP13 rewriter and `arrow-parity.js`,
-the generator half of `gen-diagnostic-codes.mjs`, `ddc-tag.sh` and the `ddc`
-job, and every rule that sent work to stage0.
+R1–R5 were reversible. R6 was not, so it came last and stood alone. What it
+removed, and what replaced each part, is the table at the top of this file.
 
 **Measured:** on 2026-09-23, on `main` at `ad02409`,
 `bash scripts/fetch-seed.sh && npm ci && npm run check &&
@@ -406,16 +398,12 @@ stage0's and none importing `typescript`. #150 removed 33,365 lines
 Resolved. The sign-off of the R6 plan (#144) said go, on two conditions:
 v0.6.0 released and `nish-cmp` green on `main`. These were the items it waited on:
 
-1. **`nish-cmp` in CI.** On its first real run it found that every release
-   from 0.1.1 to 0.4.0 shipped without `std/`. The staging copied `runtime`
-   but not `std`, and the smoke programs imported nothing. `tests/run.js` now
-   checks all four places that let this through. `cmpSince` waits for a seed
-   that can compile the corpus rather than allowlisting the difference. It
-   reads 0.6.0 because WP30 deliberately changed output relative to 0.5.0.
-   `withoutOwnRoot` removes each compiler's own install root before comparing,
-   and the summary line reports how many files that affected. Between the
-   first green run and R6 there were twelve `nish-cmp` rows on `main` and none
-   were red.
+1. **`nish-cmp` in CI.** Its first real run found that the releases from
+   0.1.1 to 0.4.0 shipped without `std/`, and `tests/run.js` now checks the
+   staging for it. `cmpSince` waits for a seed that can compile the corpus
+   rather than allowlisting the difference. `withoutOwnRoot` strips each
+   compiler's install root, and the summary line counts the files it touched.
+   Twelve `nish-cmp` rows ran on `main` before R6, and none were red.
 2. **The thin installer.** Done on 2026-09-20 (G5).
 3. **The macOS `test` row.** Three checks were ported. Six remain red, each
    because the check reads an ELF fact from a linked binary, and they are
@@ -460,17 +448,14 @@ releases.
 4. **One implementation is one bus factor.** The language is whatever `src/`
    does.
 5. **musl, FreeBSD and every 32-bit platform lose their `npm install`.**
-   `dist/` was the fallback for a platform without a prebuilt binary. The
-   launcher now names the four platforms that have a binary, writes an
-   `NL0002` object under `--json`, and exits 3. [INSTALL.md](INSTALL.md) lists
-   the unsupported routes that remain: bootstrapping on a glibc host, or
-   `--profile wasi` under Node.
+   `dist/` was their fallback. The launcher now names the four platforms with
+   a binary, writes an `NL0002` object under `--json`, and exits 3.
+   [INSTALL.md](INSTALL.md) lists the unsupported routes that remain.
 6. **The WP13 differential oracle can no longer make its own reference.** The
-   rewrite of the 176 programs is frozen and guarded by SHA-256 hashes of each
-   program's sources. Three things are lost: the fuzz comparison against Node,
-   `arrow-parity.js`, and the store's fidelity check. A corpus program added
-   after R6 gets no differential coverage. Porting the rewriter onto stage1's
-   `--emit-checked` is the way back, and it is a project of its own.
+   rewrite of the 176 programs is frozen, with a hash of each program's
+   sources. Lost: the fuzz comparison against Node, `arrow-parity.js`, the
+   store's fidelity check, and differential coverage for any corpus program
+   added after R6. Porting the rewriter onto `--emit-checked` is the way back.
 
 In return, every construct is written once, `src/` lags one release instead
 of being frozen for good, and the compiler depends neither on Node nor on
@@ -493,9 +478,8 @@ v0.6.0 and on `nish-cmp` being green. The costs in §6 were accepted as stated.
   own tree.
 - **No second `panic` builtin for exit 70.** The language did not grow for the
   compiler's own reporting policy.
-- **No allowlisting in `nish-cmp`.** `cmpSince` leaves a row absent instead.
-  An absent row says that no comparison happened. A row that is green because
-  of an allowlist would claim that one did.
+- **No allowlisting in `nish-cmp`.** An absent row says no comparison
+  happened, and an allowlisted green row would say one did.
 - **No cross-compiled release binaries,** and no dry-run path in `release.yml`.
 - **No `dist/` fallback** for platforms without a binary.
 - **No assertion of `IR(seed) == IR(stage1)`** against a released seed.

@@ -1238,6 +1238,8 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 `u64` only, every operand one type. The mask sits behind an optimisation
 barrier, so neither ever becomes a branch; select and compare on a secret with
 these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
+`secureZero(bytes)` sets every byte of a `u8[]` to zero in stores the optimiser
+may not drop, as a statement: how a key in a plain array is cleared once used.
 
 **Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
 array or a record of integer fields). It is opaque: no printing, interpolating,
@@ -1307,7 +1309,11 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),
-`monotonicNanos()` (`i64`; elapsed time only).
+`monotonicNanos()` (`i64`; elapsed time only), and, for checking a path before
+trusting it, `lstatOwnerModeSync(path)` (an `i64`: the owner's uid in the high
+32 bits, `st_mode` in the low 32, `-1` when it does not resolve; a symbolic
+link answers for itself), `geteuid()` (`i64`) and `isExecutableSync(path)`
+(`boolean`).
 
 **The host.** `Date.now()` (an `f64` of whole milliseconds, the wall clock —
 **the only `Date` there is**: `new Date()`, `Date.parse` and the rest are

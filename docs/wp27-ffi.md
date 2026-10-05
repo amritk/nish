@@ -1,22 +1,23 @@
 # WP27 — Calling C from Nish
 
-**Status:** S1 and S2 are built. S1 landed scalar-only `declare function` in
-both compilers (#62, `tests/cases/ffi_scalar`); S2 landed the opaque pointer
-§3's table calls for (`CPtr`, `tests/cases/ffi_pointer`, and §7 for what it
-turned out to mean). S3 onward is proposal, and §3's last paragraph — whether
-S2–S5 should happen at all is a language question — still stands over every one
-of them.
+**Status:** S1 and S2 are built; S3 to S5 are proposed and unbuilt. S1,
+scalar-only `declare function`, shipped in 0.2.0
+([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
+the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
+debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
+Since then a call to a `declare function` is the `ffi` capability in
+`--emit-capabilities` (`tests/cases/caps_ffi`), so `--deny ffi` refuses a
+program that reaches C
+([wp36-capability-policy.md](wp36-capability-policy.md)). Whether S3 to S5
+should happen at all is a language question (§3). The rules are normative in
+[LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
+[IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
-Every builtin in this language bottoms out in a C function. `print` reaches
-`nish_print_str`, `readFileSync` reaches `nish_read_file`, and WP26's
-`readdirSync` reaches `nish_readdir`. That is not an implementation detail a
-reader can ignore, because it is also the *only* way the language reaches the
-operating system: a Nish program cannot name a foreign function, so a capability
-that needs a syscall can only be added by someone editing `runtime/runtime-os.c`
-and the compiler together.
-
-This note is about removing that restriction, and about being honest that doing
-so points a loaded weapon at the thing that makes this compiler fast.
+Before this package every builtin bottomed out in a C function, and that was
+the *only* way the language reached the operating system: a capability that
+needed a syscall could be added only by editing `runtime/` and the compiler
+together. This package removes that restriction, and is honest that doing so
+points a loaded weapon at the thing that makes the compiler fast.
 
 ## 1. The decision
 
@@ -32,346 +33,186 @@ export function main(): i32 {
 }
 ```
 
-```llvm
-declare i32 @getpid()
-...
-  %0 = call i32 @getpid()
-```
-
-Three things recommend this spelling over inventing one:
-
-- **It is already valid TypeScript, and it already means this.** `declare`
-  in TypeScript means "this exists, somewhere I cannot show you". The parser
-  this compiler uses accepts it today; stage0's `src/validator.ts` is what refuses it.
-- **It needs no name mangling.** The symbol is the identifier, which is the
-  same promise `--emit-header` makes in the other direction: "there is no
-  hidden context argument, no return-slot pointer, no name mangling".
-- **The type mapping is already written down.** stage0's `src/interop/abi.ts` pins the
-  C ABI of every Nish type for `--emit-header`. Inbound FFI is that table read
-  right to left, so there is one ABI in this compiler rather than two.
+The spelling is already valid TypeScript and already means "this exists,
+somewhere I cannot show you"; the symbol is the identifier, with no mangling,
+which is the promise `--emit-header` makes in the other direction; and the type
+mapping is `src/interop-abi.ts`'s table for `--emit-header` read right to left,
+so there is one ABI in the compiler rather than two.
 
 ## 2. Why this is not merely plumbing
 
-The machinery to emit a foreign call already exists and runs on every compile:
-stage0's `src/codegen/runtime.ts` holds a `declare` line per runtime symbol and
-`ctx.useRuntime(name)` emits it. Mechanically, S1 exposes that to user code.
-
-What does *not* already exist is an answer to this:
-
-> The performance thesis of this compiler is that it sees all of the code.
-
-stage0's `src/codegen/attributes.ts` runs a whole-program fixpoint over purity, escape
-and loop facts, and only emits an attribute the fixpoint justifies. Escape
-analysis is what grants a function an automatic arena scope — the memory model
-in `docs/LANGUAGE.md` is built on it. A foreign function is a hole in that
-fixpoint: the compiler cannot know whether it stores a pointer it was handed,
-whether it frees one, whether it returns memory it owns, or whether it returns
-at all.
-
-So a foreign call must be assumed to do the worst of each:
+The compiler's performance thesis is that it sees all of the code. The
+whole-program fixpoint in `src/attributes.ts` emits only attributes it can
+justify, and escape analysis is what grants a function its automatic arena
+scope. A foreign function is a hole in that fixpoint, so a foreign call is
+assumed to do the worst of each:
 
 | Fact | What a foreign call forces |
 | --- | --- |
 | memory effect | `write` — the caller loses `readnone` and `readonly` |
-| escape | every pointer argument escapes; the arena cannot be released around the call |
+| escape | every pointer argument escapes |
 | `willreturn` | not provable — the callee may `exit` or loop forever |
 | `nounwind` | *decided, not proved* — see below |
 | allocation | a returned pointer is **not** arena memory and has unknown lifetime |
 
-The declaration therefore carries **no attributes at all**. That is the rule
-"no attribute without a proof" applied honestly rather than a conservative
-mood.
+The declaration carries **no attributes at all** — "no attribute without a
+proof", applied honestly. A function that calls C loses `readnone` and
+`willreturn`, and so does everything above it in the call graph.
 
-`nounwind` on the *caller* is the one row that cannot be settled by being
-conservative, because stage0's `src/codegen/attributes.ts` puts `nounwind` on every
-function unconditionally, justified by "the language has no exceptions". A
-foreign callee could unwind through that frame, so the justification stops being
-a proof the moment FFI exists. Dropping the attribute from every caller of a
-foreign function is the conservative move and it buys nothing: a language with no
-`throw`, no landing pad and no way to spell a handler cannot do anything with an
-unwind it admits to. So S1 **decides** instead: *unwinding out of a foreign call
-is undefined in this language*, which is the position clang already takes
-compiling C. The decision is written next to the attribute, because an inherited
-assumption that quietly stopped being true is the defect this project keeps
-finding.
+`nounwind` is the one row being conservative cannot settle: every function
+carries it, justified by "the language has no exceptions", and a foreign callee
+could unwind through the frame. Dropping it buys nothing in a language with no
+`throw` and no landing pad, so S1 **decides** that unwinding out of a foreign
+call is undefined — the position clang takes compiling C — and the decision is
+written next to the attribute.
 
-**This is the same shape as the bug that shipped in 0.1.0.** `getenv` returned a
-pointer the escape analysis did not know was allocated, the arena was released
-before the `ret`, and a program printed freed memory. WP26 fixed it and added a
-guard that derives the allocating-builtin set instead of restating it. FFI
-re-opens that class *in user code*, where no guard of ours can see it — which is
-why the conservatism above is the feature, and why S1 is deliberately small.
+The bug that shipped in 0.1.0 has this shape: `getenv` returned a pointer the
+escape analysis did not know was allocated, the arena was released before the
+`ret`, and a program printed freed memory. FFI reopens that class *in user
+code*, where no guard of the compiler's can see it, which is why the
+conservatism is the feature and the stages are small.
 
-## 3. What S1 does and does not buy
+## 3. Stages
 
-**S1 is scalars only**: `i32`, `i64`, `f64`, `boolean`, `void`, and the integer
-widths `u8`–`u64` that already have an ABI row. No pointers, no `string`, no
-arrays, no structs.
+| | Deliverable | Status |
+| --- | --- | --- |
+| S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
+| S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
+| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | proposed |
+| S4 | C structs by layout declaration | proposed |
+| S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
 
-That is enough to call a great deal of libc — `getpid`, `abs`, `isatty`,
-`sysconf` — and it is enough to prove the mechanism, the attribute story and
-the stage0/stage1 equality.
+S1 calls a great deal of libc (`getpid`, `abs`, `isatty`, `sysconf`). It is not
+enough to write `readdirSync` in Nish, the motivating request, and neither is
+S2: `readdir` returns a `struct dirent *`, and reading `d_name` needs a struct
+layout the compiler did not lay out (S4) and a conversion from C's
+NUL-terminated `char *` to the length-prefixed `nish_str *` (S3). Each open
+stage is a real decision rather than a missing line:
 
-**It is not enough to write `readdirSync` in Nish, and that was the motivating
-request.** `opendir` returns a `DIR *`, `readdir` returns a `struct dirent *`,
-and reading `d_name` out of it needs a pointer type, a struct layout the
-compiler did not lay out itself, and a conversion between C's NUL-terminated
-`char *` and this language's length-prefixed `nish_str *`. Each is a real
-decision, not a missing line:
+- **S3, `string` marshalling.** Converting at the boundary means allocating,
+  which means the arena, which means the escape question of §2 in its hardest
+  form: a pointer the compiler allocated would cross into C, and "the arena
+  cannot be released around the call" would start to bind.
+- **S4, struct layout.** The first layout in the language the compiler did not
+  choose, and so the first whose size and alignment it would be told rather
+  than know.
+- **S5, `errno`.** A thread-local the runtime does not model.
 
-- **A pointer type.** Nish has no pointer. Introducing one introduces the first
-  value in the language whose dereference the compiler cannot prove safe.
-- **`string` marshalling.** `string` is `nish_str *` — a length and bytes. C
-  wants `char *`. Converting on the boundary means allocating, which means the
-  arena, which means the escape question above in its hardest form.
-- **`errno`.** A thread-local the runtime does not model.
+Whether S2–S5 should happen at all is a language question, not a schedule: a
+language whose selling point is that every value has one known layout may
+decide that the OS is reached through builtins on purpose.
+[wp34-hosting-cs.md](wp34-hosting-cs.md) weighed C crypto through FFI against
+pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 
-So the staging is not padding: S1 is the part that can be made sound without
-answering any of those.
+## 4. What S1 refuses
 
-| | Deliverable |
-| --- | --- |
-| S1 | scalar-only `declare function`, no attributes, both compilers, byte-identical IR — **done** |
-| S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic — **done**, §7 |
-| S3 | `string` ↔ `char *` marshalling, and who owns the bytes |
-| S4 | C structs by layout declaration |
-| S5 | `errno`, and whether it is a builtin or a declared foreign global |
-
-Whether S2–S5 should happen at all is a language question, not a schedule. A
-language whose whole selling point is that every value has one known layout may
-decide that a raw pointer is not welcome in it, and that the OS is reached
-through builtins on purpose. This note does not decide that; it decides S1.
-
-## 4. What has to change
-
-Following the nine-step checklist in `docs/ARCHITECTURE.md`:
-
-- **Validator.** `declare function` is refused today; the rule becomes
-  conditional — a declared function with a body, a declared `class`,
-  `namespace` or `var`, and a non-scalar signature stay refused, each with its
-  own diagnostic code.
-- **Checker.** A new declaration family records the signature as a
-  `FunctionSig` marked foreign; calls type-check exactly as any other call.
-- **Emitter.** A foreign symbol is declared through the same path runtime
-  symbols use, with an empty attribute group.
-- **Attributes.** `factCollectors` learns that a foreign call has
-  `effect: "write"`, defeats `willreturn`, and that every pointer argument
-  escapes.
-- **`src/`.** The same in `src/validator.ts`, `src/parser.ts`,
-  `src/nodes.ts`, `src/checker.ts` and `src/emit.ts`, because a construct
-  enters stage0's `src/` and `src/` together — `#54` touched 23 files under `src/`.
-- **Tests.** A golden `.ll`, an `llvm-as` pass, a native round trip that
-  actually calls libc, and `reject_*` cases for each refusal above.
-- **Docs.** A `docs/LANGUAGE.md` rule citing the case, a cookbook entry, and
-  the note that a program using FFI is no longer one the compiler can reason
-  about end to end.
+A declared function with a body (`reject_ffi_body`), an exported one
+(`reject_ffi_export`, since `export` offers a function this module defines), a
+generic one (`reject_ffi_generic`), and a `string` parameter or return
+(`reject_ffi_string_param`, `reject_ffi_string_return`, S3's) are each refused
+by name.
 
 ## 5. What FFI costs the test strategy
 
-The differential oracle (`docs/wp13-differential.md`) rewrites a Nish program to
-JavaScript and runs it against `runtime/shim.mjs`, and its premise is that the
-same source means the same thing in both worlds. That premise does not hold for a
-source whose meaning is "whatever this C function does": `tests/cases/ffi_scalar`
-calls `abs`, the shim has no `abs`, and no amount of shimming fixes the class —
-the next program declares a different symbol.
-
-So **every FFI program is outside the differential oracle by construction**, and
-that is a cost rather than an oversight. It is why S1's evidence is arranged the
-other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
-real libc, and the attribute assertions — a caller of C keeps only `nounwind`,
-one that calls no C keeps `willreturn readnone` — which the differential oracle
-could never have made anyway.
+The differential oracle ([wp13-differential.md](wp13-differential.md)) runs a
+program's JavaScript rewrite against a shim, on the premise that the same
+source means the same thing in both worlds. That premise does not hold for a
+source whose meaning is "whatever this C function does", so **every FFI program
+is outside the differential oracle by construction**. The evidence is arranged
+the other way round: a golden `.ll`, an `llvm-as` pass, a native round trip
+against real libc, and the attribute assertions — a caller of C keeps only
+`nounwind`, one that calls no C keeps `willreturn readnone`.
 
 ## 6. The thing a reviewer should push back on
 
 The runtime budget exists because C in this project is meant to be a closed,
-shrinking set (`docs/wp7-runtime.md`). FFI makes that set *open* — not in
-`runtime/`, but in any program. A reader could reasonably conclude that the
-honest consequence is to stop describing the runtime as closed, rather than to
-keep two stories.
-
-The counter-argument is that the budget was always about what *ships in every
-binary*, and a foreign call ships in the program that makes it. That is
-probably right, but it should be written down in `wp7-runtime.md` as a decision
-rather than left as an inference.
-
-**It is written down now**, in `wp7-runtime.md` under "What FFI does and does
-not do to the budget": the budgets measure `runtime/runtime.c` and
-`runtime/runtime-os.c`, the two translation units linked into *every* binary,
-and a `declare function` adds a `declare` to one program's IR and a symbol to
-one program's link line. So the closed set stayed closed and the sentence that
-describes it gained the clause it was missing. The honest half of the reviewer's
-objection survives the answer and is recorded there too: what FFI opens is the
-*language's* reach into C, and the budget was never the thing that bounded that
-— `docs/LANGUAGE.md` was, by having no way to name a foreign function, and that
-is the bound this package removed.
+shrinking set, and FFI makes C reachable from any program. The answer is
+written in [wp7-runtime.md](wp7-runtime.md#what-ffi-does-and-does-not-do-to-the-budget):
+the budgets measure the translation units linked into *every* binary, and a
+`declare function` adds a symbol to one program's link line. The honest half of
+the objection survives and is recorded there too: what FFI opens is the
+*language's* reach into C, which the budget never bounded — LANGUAGE.md did, by
+having no way to name a foreign function.
 
 ## 7. S2 as built: `CPtr`
 
 ### 7a. What it is, and the four words that bound it
 
-`CPtr` is an address a C function handed back. It is `i8*` in the IR and eight
-bytes wide, and **that is the whole of what the compiler knows about it**: not
-arena memory, not a `%struct.<name>`, not a `nish_str *`. §3's row asked for
-"an opaque pointer type, `null` only from a foreign call, no arithmetic", and
-each clause of it is a rule with a case behind it:
+`CPtr` is an address a C function handed back: `i8*` in the IR, eight bytes
+wide, and **that is all the compiler knows about it** — not arena memory, not a
+struct, not a `nish_str *`.
 
-- **Opaque.** No dereference, no index, no member, no arithmetic. The operations
-  are `=== null`, `!== null`, comparing two `CPtr`s, assignment, and passing one
+- **Opaque.** No dereference, index, member or arithmetic. What is left is
+  `=== null`, `!== null`, comparing two `CPtr`s, assignment, and passing one
   back to a foreign function.
 - **`null` only from a foreign call.** A `declare function` may *return*
   `CPtr | null` and may not *take* one, so a pointer is narrowed with
-  `!== null` before it goes back. Without that asymmetry a program could hand C
-  a null it never got from C, which is exactly what the narrowing was there to
-  stop (`tests/cases/reject_ffi_pointer_nullable_param`).
+  `!== null` before it goes back (`reject_ffi_pointer_nullable_param`).
 - **Nowhere but a foreign signature and a local.** A field, an array element, a
-  `Result` arm, a type argument, and the parameters and return type of a
-  function this program defines are all refused with one message
+  `Result` arm, a type argument, and the parameters and return of a function
+  this program defines are refused with one message
   (`reject_ffi_pointer_field`, `_array`, `_param`, `_return`,
-  `_type_argument_fn`). §7b is why.
+  `_type_argument_fn`). The type-argument clause is checked where a generic
+  *function* is instantiated; a generic *class* at `CPtr` is refused by
+  whichever member rule the monomorphised class trips
+  (`reject_ffi_pointer_type_argument`).
 
-  The type-argument clause is stated where a *function* template is
-  instantiated, in `instantiate`, and that is the only position that reaches it.
-  A generic *class* monomorphises through `instantiateStruct`, which carries no
-  such check in either compiler, so `Box<CPtr>` is refused by the member rule
-  the instantiated class trips — the field rule for
-  `reject_ffi_pointer_type_argument`, the array-element rule for a `T[]` field,
-  the parameter rule for a method that takes a `T`. That covers every shape
-  that lays `T` out or puts it across an exported boundary, which is the whole
-  of what §7b's argument needs.
+  **Known gap:** a template that never mentions `T` in a member
+  (`class Empty<T> { n: i32 = 0; }`) compiles `new Empty<CPtr>()`, because no
+  member rule is reached (`src/generics.ts` says so at the line). Nothing
+  unsound follows — no `CPtr` is laid out, stored or exported — but the rule as
+  written says a `CPtr` cannot be a type argument. Closing it is a short loop
+  in the struct instantiation plus a case.
 
-  **TODO (known gap).** It does not cover a template that never mentions `T` in
-  a member: `class Empty<T> { n: i32 = 0; }` compiles `new Empty<CPtr>()` in
-  both compilers, because no member rule is reached and `instantiateStruct` has
-  nothing of its own to say. Nothing unsound follows — no `CPtr` is laid out,
-  stored or exported, and `Empty$cptr` is a struct of one `i32` — but the rule
-  as written says a `CPtr` cannot be a type argument, and here it can. Closing
-  it is the same three-line loop in `instantiateStruct` on both sides plus a
-  case for the shape, and it is deliberately not in S2.
-
-The name is PascalCase where every other type the language has is lower case,
-and that is deliberate: `i32` and `string` are this language's types and `CPtr`
-is not — it is C's, borrowed for the length of a call, and the `C` is the
-reminder that its lifetime belongs to whoever allocated it.
+The name is PascalCase where the language's own types are lower case on
+purpose: `CPtr` is C's, borrowed for the length of a call, and its lifetime
+belongs to whoever allocated it.
 
 ### 7b. Why the placement rule is the soundness argument
 
-§2's table is the reason S1 was small, and S2 does not weaken a single row of
-it. The declaration still carries no attributes; the caller still loses
-`readnone` and `willreturn`; `nounwind` is still a decision rather than a proof.
-What S2 adds is a *value* coming back, and the question that value raises is not
-"what attributes does the callee get" but **"can this compiler mistake a foreign
-address for one of its own?"**
+S2 weakens no row of §2's table. The question a returned value raises is
+**"can this compiler mistake a foreign address for one of its own?"**, and the
+answer is no by construction in two places:
 
-The answer is no, and it is no by construction in two places rather than by a
-check somebody remembered to write:
-
-1. **`isPointerParam` is an allow-list.** `codegen/attributes.ts` grants pointer
-   facts — `dereferenceable`, `nonnull`, `align`, `nocapture`, `readonly` — to
-   `struct`, `array` and a non-packed `Result`, and to nothing else. Every one
-   of those facts is a claim about memory this compiler laid out: it knows the
-   size because it chose it and the alignment because it emitted it. A `CPtr`
-   falls out of that list without being named in it. Had the predicate listed
-   exclusions instead, the next pointer-shaped type would have been admitted by
-   omission, and a wrong attribute is undefined behaviour rather than a missed
-   optimisation.
+1. **`isPointerParam` is an allow-list.** It grants `dereferenceable`,
+   `nonnull`, `align`, `nocapture` and `readonly` to structs, arrays and a
+   non-packed `Result` — memory this compiler laid out — and to nothing else, so
+   `CPtr` falls out without being named. A deny-list would have admitted the
+   next pointer-shaped type by omission, and a wrong attribute is undefined
+   behaviour.
 2. **The placement rule keeps it out of everything else that walks memory.** A
-   field or an array element would put a foreign address inside a value the
-   arena owns and `codegen/escape.ts` walks; a parameter or return type of a
-   function this program defines would put one across a boundary
-   `--emit-header`, `--emit-dts` and `--emit-napi` each render. Rather than
-   teach five passes and three generators to recognise and skip a type, the type
-   is refused where it would reach them. That is one rule and one message
-   instead of five silent special cases, and it is the difference between a
-   thing that is sound and a thing that is sound today.
+   field or element would put a foreign address inside a value the arena owns
+   and `src/escape.ts` walks; a parameter or return of a program function would
+   put one across a boundary `--emit-header`, `--emit-dts` and `--emit-napi`
+   render. Refusing the type where it would reach them is one rule instead of
+   five silent special cases.
 
-**And the arena is untouched.** `tests/cases/ffi_pointer` allocates a string
-through `console.log` in the same function that calls `calloc`, `realloc` and
-`free`, and the golden shows `nish_arena_mark` / `nish_arena_release` bracketing
-all of it exactly as they would without the foreign calls. That is safe for the
-same reason S1 was: **no pointer this compiler allocated crosses the boundary in
-either direction**, so there is nothing for C to be holding when the scope
-releases. §2's "the arena cannot be released around the call" is a rule about a
-boundary that passes Nish-owned memory, which is S3's, not this one's.
+The arena is untouched: `tests/cases/ffi_pointer` allocates a string in the
+function that calls `calloc`, `realloc` and `free`, and `nish_arena_mark` /
+`nish_arena_release` bracket it exactly as without the foreign calls. That is
+safe because **no pointer this compiler allocated crosses the boundary in
+either direction** — which is precisely what S3 would change.
 
-### 7c. What S2 deliberately does not buy
-
-It still is not enough to write `readdirSync` in Nish, and §3 predicted exactly
-that: `readdir` returns a `struct dirent *` and reading `d_name` out of it needs
-a struct layout the compiler did not lay out itself (S4) and a conversion from
-`char *` to `nish_str *` (S3). What S2 buys is the shape underneath both — a
-handle that comes out of C, is proved non-null, is held, and goes back in —
-which is `opendir`/`closedir`, `fopen`/`fclose`, `dlopen`/`dlsym`,
-`malloc`/`free`, and every other C API whose type is a cookie.
-
-`errno` is still S5's and is still a thread-local the runtime does not model.
-
-### 7d. What proves it
-
-`tests/cases/ffi_pointer` is the positive: `calloc` and `realloc` both return
-`CPtr | null`, both are narrowed, the narrowed pointer goes back into `realloc`
-and then `free`, and a neighbour that calls no C keeps `willreturn readnone`
-while `main` keeps only `nounwind`. It is a link test against real libc, so a
-pointer that did not round-trip would abort rather than merely differ.
-
-Nine `reject_ffi_pointer_*` cases pin the refusals,
-`docs/cookbook/decl-ffi-pointer.ts` pins the lowering, and
-`tests/cases/dbg_cptr` pins what `-g` says about it (§7e). Both compilers implement
-it: `tests/self/ir_oracle.js` compares the emitted IR byte for byte and
-`tests/self/reject-oracle.js` compares every refusal's wording, which is the
-strongest thing this repository can say about a lowering.
-
-A wording is not a span, though, and the reject oracle compares only wordings:
-it asks that stage1 exit non-zero and that its output contain each `.err`
-fragment. `reject_ffi_pointer_array` was refused by both compilers with the same
-code and the same sentence while stage0 spanned it on `CPtr[]` and stage1 on
-`CPtr`, and nothing in the suite could see it. Two things see it now, and
-neither of them changed the oracle:
-
-- The `.err` fragments for `reject_ffi_pointer_array` and
-  `reject_ffi_pointer_type_argument_fn` include the excerpt's caret run, which
-  fixes the **start** column in whichever compiler the oracle is pointed at and
-  outlives stage0's `src/`. It cannot fix the end column, because the match is a
-  substring and `^~~~~~` contains `^~~~` — which is exactly the direction stage0
-  was wrong in, so this half is necessary and not sufficient.
-- `tests/run.js` compares those two cases' `--json` objects between the two
-  compilers byte for byte, `endColumn` included, as it already did for
-  `reject_multi_error`. That is the half that sees a widening, and it is the
-  half that dies with stage0; a span golden that outlives both is WP19's to
-  settle, with the rest of §2B's wording coverage.
-
-The differential oracle is still out of the picture, for §5's reason and not a
-new one.
+What S2 buys is a handle that comes out of C, is proved non-null, is held, and
+goes back in: `opendir`/`closedir`, `fopen`/`fclose`, `dlopen`/`dlsym`,
+`malloc`/`free`, and every C API whose type is a cookie. It is proved by
+`tests/cases/ffi_pointer` (a link test against real libc), nine
+`reject_ffi_pointer_*` cases, and `docs/cookbook/decl-ffi-pointer.ts`.
 
 ### 7e. What `-g` says about a type with no structure
 
-§7b's argument is that a `CPtr` is kept out of every pass that would have to
-know something about it. Debug info is the one place that rule does not reach:
-`-g` has to name the type of every local, and a local may hold a `CPtr`. The
-rule it follows is the same one §7a states — **the compiler says the width and
-nothing more**:
+Debug info is the one place the placement rule does not reach: `-g` names the
+type of every local, and a local may hold a `CPtr`. The rule is §7a's — **the
+compiler says the width and nothing more**:
 
 ```
 !12 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)
 ```
 
-A `baseType` of `null` is DWARF for a pointer whose pointee is not described,
-and it is what `clang -g` writes for `void *`. The tempting alternative is a
-pointer to `char`, because that is the shape a `CPtr` and a string share in the
-IR — and it is wrong for exactly §7a's reason: the pointee is the one thing this
-compiler has no claim to make, and a debugger told `char *` would print an
-arbitrary foreign address as text. A `DW_TAG_member` never asks the question,
-because §7a's placement rule keeps a `CPtr` out of every field, element and
-`Result` arm.
-
-Neither compiler said that before `tests/cases/dbg_cptr`, and each was wrong in
-its own way, which is the thing to take from it. stage0's `src/codegen/debug.ts` looked
-the type up in an allow-list table and wrote the miss out as `!N = undefined`,
-invalid IR that `llvm-as` rejects; `src/debug.ts` ran the same lookup through a
-`switch` whose `default` is an internal error, so it exited 70. Both are the
-allow-list shape §7b argues for and both are right to refuse a type they were
-not taught — the defect was that nobody taught this one, and nothing looked:
-`ffi_pointer` is not compiled with `-g` by the suite and no `dbg_*` case named a
-`CPtr`, so the gap was visible only to `node tests/run.js --parity`, which
-compiles the whole corpus under every flag variation and saw stage1 exit 70
-where stage0 exited 0. `tests/cases/dbg_cptr` is the case that asks it directly.
+A `null` `baseType` is DWARF for an undescribed pointee, what `clang -g` writes
+for `void *`. A pointer to `char` is tempting, since that is the shape a `CPtr`
+and a string share in the IR, and wrong for §7a's reason: a debugger told
+`char *` would print an arbitrary foreign address as text. Before
+`tests/cases/dbg_cptr` the debug-info lookup had no entry for `CPtr` and failed
+under `-g`; only the `--parity` run, which compiles the corpus under every flag,
+saw it. `tests/cases/dbg_cptr_shadow` pins the debug-cache entry #90 added.

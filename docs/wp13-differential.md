@@ -103,7 +103,7 @@ says otherwise:
   them into `U+FFFD` or a two-byte character where the native side prints them
   raw, so the corpus keeps those cuts on character boundaries. String
   comparison and sorting are by bytes, which agrees with JavaScript's UTF-16
-  order for ASCII only.
+  order for ASCII and can differ beyond it.
 - `s.slice` panics on a range `substring` would clamp; `charCodeAt` and
   `a[i]` bounds-check and exit 1.
 - An array of records holds them by value, so a corpus program must not rely
