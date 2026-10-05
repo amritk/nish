@@ -185,6 +185,22 @@ export const tlsChecks = (): i32 => {
   t.eqStr("but the slot is shut down with close_notify, before any HTTP/2 byte", `${b.awaitFrames(toI32(1))}|${b.alerts.join(",")}`, "|1 0");
   t.ok("and closed", lb.awaitClosed(toI32(2)) && lb.server.busy() === 0);
 
+  // --- 3b. A client that sends its requests and closes its side at once ------------------------
+  const h = new H2Client(lb);
+  t.ok("a client that will close at once completes the handshake", h.handshake([H2_ALPN]));
+  h.prefaces();
+  h.wire.headers(toI32(1), getOf("/one"), H2_FLAG_END_STREAM);
+  h.wire.headers(toI32(3), getOf("/two"), H2_FLAG_END_STREAM);
+  const requests: u8[] = h.wire.take();
+  h.lb.send(h.index, join([sealOne(h.write, TLS_CONTENT_APPLICATION_DATA, requests, ZERO), sealOne(h.write, TLS_CONTENT_ALERT, [toU8(1), toU8(0)], ZERO)]));
+  t.eqStr(
+    "its requests and its close_notify in one write: both requests are still answered",
+    h.awaitFrames(toI32(7)),
+    'SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 content-type=text/plain; DATA 1 26 "hello from nish/net/http2\n" end; HEADERS 3 :status=200 content-type=text/plain; DATA 3 26 "hello from nish/net/http2\n" end'
+  );
+  h.awaitFrames(toI32(1));
+  t.ok("and only then does the server close its side", h.alerts.join(",") === "1 0" && lb.awaitClosed(toI32(3)));
+
   // --- 4. The pool ---------------------------------------------------------------------------------
   const c = new H2Client(lb);
   const d = new H2Client(lb);
@@ -194,7 +210,7 @@ export const tlsChecks = (): i32 => {
   t.ok("a third is accepted and shed", lb.awaitEnd(e.index) && lb.refused === 1);
   lb.hangUp(c.index);
   lb.hangUp(d.index);
-  t.ok("two clients that hang up are closed", lb.awaitClosed(toI32(4)) && lb.server.busy() === 0);
+  t.ok("two clients that hang up are closed", lb.awaitClosed(toI32(5)) && lb.server.busy() === 0);
   t.ok(
     "a free slot answers H2_ERROR to next and done to the rest",
     lb.server.next(ZERO) === H2_ERROR && (lb.server.flush(ZERO) & TLS_RECORD_DONE) !== 0 && lb.server.fd(ZERO) === -1 && !lb.server.holds(toI32(9))

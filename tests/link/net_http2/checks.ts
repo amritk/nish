@@ -270,11 +270,13 @@ export const http2Checks = (): i32 => {
   q.takeEvents();
   q.conn.goaway();
   q.conn.goaway();
-  q.wire.headers(toI32(3), getOf("/late"), H2_FLAG_END_STREAM);
+  q.wire.headers(toI32(3), postOf("/late", toI32(4)), ZERO);
+  q.wire.data(toI32(3), "late", ZERO);
+  q.wire.headers(toI32(3), ["x-t", "1"], H2_FLAG_END_STREAM);
   q.wire.ping("0000000000000001");
   q.send();
   t.eqStr("the server's GOAWAY names the last stream it opened, once", q.takeFrames(), "GOAWAY 1 0; PING ack 0000000000000001");
-  t.eqStr("a stream opened after it is ignored", q.takeEvents(), "");
+  t.eqStr("a stream opened after it is ignored, and so are its DATA and trailers, without a RST_STREAM (§6.8)", q.takeEvents(), "");
   q.conn.respond(toI32(1), toI32(200), namesOf(none()), valuesOf(none()), true);
   q.drain();
   t.ok("the streams before it finish, and then the connection is done", q.takeFrames() === "HEADERS 1 end :status=200" && q.conn.isDone());
@@ -332,6 +334,20 @@ export const http2Checks = (): i32 => {
   s.takeEvents();
   t.eqI32("a response head past the peer's frame size", s.conn.respond(toI32(5), toI32(200), namesOf(huge), valuesOf(huge), true), ZERO);
   t.eqStr("goes out as HEADERS and a CONTINUATION", s.takeFrames(), "(fragment 5); HEADERS 5 end +1 :status=200 x-long=(40000 bytes)");
+  const carets: string[] = [];
+  for (let k: i32 = 0; k < 4000; k++) {
+    carets.push("^^^^^^^^^^");
+  }
+  const rare: string[] = [carets.join(""), "aaaa"];
+  s.wire.headers(toI32(7), getOf("/rare"), H2_FLAG_END_STREAM);
+  s.send();
+  s.takeEvents();
+  t.eqI32("a name Huffman would lengthen, beside a value it shortens", s.conn.respond(toI32(7), toI32(200), namesOf(rare), valuesOf(rare), true), ZERO);
+  t.eqStr(
+    "goes out raw, so the head is no longer than the room checked for it, whole",
+    s.takeFrames(),
+    "(fragment 7); (fragment 7); HEADERS 7 end +2 :status=200 (40000 bytes)=aaaa"
+  );
 
   const capped = new Http2Config();
   capped.maxHeaderListSize = 200;
@@ -361,6 +377,7 @@ export const http2Checks = (): i32 => {
   t.eqI32("so do trailers", w.conn.writeTrailers(toI32(7), namesOf(none()), valuesOf(none())), H2_CLOSED);
   t.eqI32("writeData before the response head: H2_CLOSED", w.conn.writeData(toI32(1), h2Bytes("x"), ZERO, toI32(1), false), H2_CLOSED);
   t.eqI32("writeTrailers before it: H2_INVALID", w.conn.writeTrailers(toI32(1), namesOf(none()), valuesOf(none())), H2_INVALID);
+  t.eqI32("a 101, which HTTP/2 does not have (§8.6): H2_INVALID", w.conn.respond(toI32(1), toI32(101), namesOf(none()), valuesOf(none()), false), H2_INVALID);
   t.eqI32("a status of 99: H2_INVALID", w.conn.respond(toI32(1), toI32(99), namesOf(none()), valuesOf(none()), false), H2_INVALID);
   t.eqI32("a 1xx that ends the stream: H2_INVALID", w.conn.respond(toI32(1), toI32(100), namesOf(none()), valuesOf(none()), true), H2_INVALID);
   t.eqI32("an uppercase field name: H2_INVALID", w.conn.respond(toI32(1), toI32(200), namesOf(["Content-Type", "x"]), valuesOf(["Content-Type", "x"]), false), H2_INVALID);
@@ -413,6 +430,59 @@ export const http2Checks = (): i32 => {
   t.eqI32("a head when the output has no room for it: H2_AGAIN", full.conn.writeTrailers(toI32(1), namesOf(["x", "y"]), valuesOf(["x", "y"])), H2_AGAIN);
   t.eqI32("so is an empty DATA that would end the stream", full.conn.writeData(toI32(1), fill, ZERO, ZERO, true), H2_AGAIN);
   t.eqI32("feed takes no more than the input buffer has room for", full.conn.feed(filler(20000), ZERO, toI32(20000)), toI32(16384 + 9));
+
+  const busy = new Client(defaults());
+  busy.open();
+  for (let id: i32 = 1; id <= 25; id += 2) {
+    busy.wire.headers(id, postOf("/", toI32(9)), ZERO);
+  }
+  busy.wire.windowUpdate(ZERO, toI32(1000000));
+  busy.send();
+  busy.takeEvents();
+  busy.conn.respond(toI32(1), toI32(200), namesOf(none()), valuesOf(none()), false);
+  busy.wire.windowUpdate(toI32(1), toI32(1000000));
+  busy.send();
+  busy.reading = false;
+  while (busy.conn.writeData(toI32(1), fill, ZERO, toI32(16384), false) > 0 && writes < 20) {
+    writes = writes + 1;
+  }
+  let resets: i32 = 0;
+  let answer: i32 = 0;
+  for (let id: i32 = 3; id <= 25 && answer === 0; id += 2) {
+    answer = busy.conn.reset(id, H2_CANCEL);
+    resets = resets + (answer === 0 ? 1 : 0);
+  }
+  t.ok(
+    `the program's RST_STREAMs use the control reserve, ${resets} of them, then answer H2_AGAIN and leave the stream open`,
+    resets >= 9 && answer === H2_AGAIN && busy.conn.find(resets * 2 + 3) !== null
+  );
+  t.eqI32("so does its GOAWAY", busy.conn.goaway(), H2_AGAIN);
+  busy.reading = true;
+  busy.drain();
+  t.ok("which goes once the output has drained", busy.conn.goaway() === 0 && busy.conn.goawaySent);
+
+  const many = new Client(defaults());
+  many.open();
+  for (let id: i32 = 1; id <= 39; id += 2) {
+    many.wire.headers(id, postOf("/", toI32(1)), ZERO);
+  }
+  many.send();
+  many.takeEvents();
+  for (let id: i32 = 1; id <= 39; id += 2) {
+    many.conn.reset(id, H2_CANCEL);
+  }
+  many.takeFrames();
+  for (let id: i32 = 1; id <= 39; id += 2) {
+    many.wire.data(id, "x", ZERO);
+    many.wire.headers(id, ["x-t", "1"], H2_FLAG_END_STREAM);
+  }
+  many.wire.ping("0000000000000003");
+  many.send();
+  t.eqStr(
+    "twenty streams the program resets at once: what the peer had in flight on each, DATA and trailers, is ignored",
+    `${many.takeEvents()}|${many.takeFrames()}`,
+    "|PING ack 0000000000000003"
+  );
 
   // --- 9. The arena ---------------------------------------------------------------------------------------
   const r = new Client(defaults());

@@ -44,8 +44,8 @@
  *   `:path` or one that starts with neither `/` nor is OPTIONS's `*`, an
  *   `:authority` with userinfo, a `:status` that is not three digits from
  *   100 to 599 (`HTTP_FIELDS_BAD_PSEUDO_VALUE`);
- * - a `host` field that names another authority than `:authority`
- *   (`HTTP_FIELDS_AUTHORITY_MISMATCH`);
+ * - a `host` field that names another authority than `:authority`, letters
+ *   compared without case (`HTTP_FIELDS_AUTHORITY_MISMATCH`);
  * - a `content-length` that is not one run of at most eighteen digits, or two
  *   that disagree (`HTTP_FIELDS_BAD_CONTENT_LENGTH`). Matching it against
  *   the body is the version's job, since only it sees the body.
@@ -253,14 +253,20 @@ export const httpFieldSensitive = (name: u8[]): boolean =>
   httpFieldIs(name, "cookie") ||
   httpFieldIs(name, "set-cookie")
 
-/** Whether `bytes` and `other` hold the same octets. */
-const httpFieldsSame = (bytes: u8[], other: u8[]): boolean => {
+/** An ASCII letter in lowercase, any other octet as it is. */
+const httpFieldsLower = (c: i32): i32 => (c >= 65 && c <= 90 ? c + 32 : c)
+
+/**
+ * Whether `bytes` and `other` hold the same octets, ASCII letters compared
+ * without case, as a host name is (RFC 3986 §3.2.2).
+ */
+const httpFieldsSameHost = (bytes: u8[], other: u8[]): boolean => {
   const n: i32 = toI32(bytes.length)
   if (n !== toI32(other.length)) {
     return false
   }
   for (let k: i32 = 0; k < n && k < toI32(bytes.length) && k < toI32(other.length); k++) {
-    if (bytes[k] !== other[k]) {
+    if (httpFieldsLower(toI32(bytes[k])) !== httpFieldsLower(toI32(other[k]))) {
       return false
     }
   }
@@ -383,7 +389,9 @@ export const httpFieldsCheckOutgoing = (names: u8[][], values: u8[][]): i32 => {
  * regular fields in order. `readRequest`, `readResponse` and `readTrailers`
  * each clear it and fill it from a decoded section, and answer
  * `HTTP_FIELDS_OK` or the first refusal; after a refusal what it holds is
- * partial and not to be used.
+ * partial and not to be used. Every read empties and refills the same two
+ * lists rather than making new ones, so a caller that keeps a section past
+ * the next read copies it.
  */
 export class HttpFields {
   /** `:method`, empty in a response or a trailer section. */
@@ -583,7 +591,7 @@ export class HttpFields {
       }
     }
     const host: u8[] | null = this.get("host")
-    if (host !== null && (seen & HTTP_FIELDS_AUTHORITY) !== 0 && !httpFieldsSame(host, this.authority)) {
+    if (host !== null && (seen & HTTP_FIELDS_AUTHORITY) !== 0 && !httpFieldsSameHost(host, this.authority)) {
       return HTTP_FIELDS_AUTHORITY_MISMATCH
     }
     return HTTP_FIELDS_OK

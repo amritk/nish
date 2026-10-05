@@ -207,7 +207,12 @@ export class Http2TlsServer {
       }
       conn.consume(n)
     }
-    if (conn.isDone() || (this.ended[slot] && !conn.wantsWrite())) {
+    // A peer whose stream has ended sends nothing more, but the requests it
+    // sent before are still answered: TLS is shut down once nothing is left
+    // to read, to answer or to send.
+    const finished: boolean =
+      this.ended[slot] && !conn.wantsWrite() && conn.active === 0 && conn.inputEnd === conn.inputStart
+    if (conn.isDone() || finished) {
       return this.tls.shutdown(slot)
     }
     const wants: i32 = this.tls.interest(slot)

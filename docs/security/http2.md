@@ -54,7 +54,7 @@ not mean.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | H2-1 | Medium | `std/net/http2.ts` (`endBlock`, `trailers`), through `std/net/hpack.ts` (`HpackDecoder.decode`) | Each header block leaves memory in the arena until the program resets it. `HpackDecoder.decode` answers every field as fresh arrays, and three fresh lists, on every call; the connection reads them (keeping references, not copies) and nothing frees them. Measured by resident memory over a connection restarted and fed the same thousand GETs of four fields (`:path /index.html`) each round: 664 bytes a request, 66.9 MB after 100,000 requests and 715.7 MB after 1,100,000. A client that sends requests in a loop drives it — denial of service on attacker input, the shape of TLS-3. One request's share is bounded by `maxHeaderBlock` and `maxHeaderListSize`; what is not bounded is the count. `HttpFields` reusing its own two lists, rather than making new ones per read, took the figure from 712 bytes. Everything else a request costs is in the connection's slot, made once. | **Open.** The way out is an HPACK decoder that decodes into storage the caller owns (a fixed field buffer per connection) — `nish/net/hpack`'s change, outside this lane. Until then a program serving untrusted clients resets the arena while no connection is open, on a schedule of its own, as TLS-3 already requires of it. |
-| H2-2 | Low | `std/net/http2.ts` (`next`, `handlePriority`, `handleData`, `handleWindowUpdate`) | Frames that need no answer cost only CPU and are not counted: PRIORITY, an empty DATA without END_STREAM, a WINDOW_UPDATE, a frame of an unknown type, and an empty CONTINUATION up to `H2_MAX_FRAGMENTS` (64) a block. Each allocates nothing and is read once, so the work is in proportion to the bytes the client sends, as it is for any traffic; CVE-2019-9518's "empty frames" flood costs the server no memory here. Frames that do need an answer (PING, SETTINGS) are read only while the output has room for it, so a client that never reads its acknowledgements stops being read (CVE-2019-9512, -9515). | **Accepted.** A budget per frame type would refuse conforming clients that send PRIORITY or WINDOW_UPDATE in bursts; the program owns the loop and may close a connection that sends much and asks little. |
+| H2-2 | Low | `std/net/http2.ts` (`next`, `handlePriority`, `handleData`, `handleWindowUpdate`) | Frames that need no answer cost only CPU and are not counted: PRIORITY, an empty DATA without END_STREAM, a WINDOW_UPDATE, a frame of an unknown type, and an empty CONTINUATION up to `H2_MAX_FRAGMENTS` (64) a block. Each allocates nothing and is read once, so the work is in proportion to the bytes the client sends, as it is for any traffic; CVE-2019-9518's "empty frames" flood costs the server no memory here. Frames that do need an answer (PING, SETTINGS) are read only while the output has room for it, so a client that never reads its acknowledgements stops being read (CVE-2019-9512, -9515). What a frame costs to find its stream grows with `maxStreams`: the slots are scanned, and a frame for a stream the connection does not hold also scans the memory of reset and closed streams (`maxStreams` + 16 each). At the default 100 that is a few hundred comparisons a frame. | **Accepted.** A budget per frame type would refuse conforming clients that send PRIORITY or WINDOW_UPDATE in bursts; the program owns the loop and may close a connection that sends much and asks little. A program that raises `maxStreams` far past the default buys the scan with it; an index from stream to slot is the follow-up if one needs to. |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | Neither has a clock. A client that never acknowledges the server's SETTINGS is never sent SETTINGS_TIMEOUT (§6.5.3), and one that holds a connection idle, or a stream half-open, keeps its slot; when every slot is held new connections are shed at once (TLS-4). Memory stays bounded, since nothing grows with time. | **Open, the program's to decide.** The program owns `pollWait`'s timeout and closes slots that have gone quiet; a timeout in the connection needs a clock argument the API does not take yet, as TLS-4 says for the carrier. |
 
 ## Properties verified
@@ -107,7 +107,13 @@ the wrong length; a stream past `maxStreams` (REFUSED_STREAM). Each sends
 RST_STREAM once, tells the program with H2_RESET when it held the stream, and
 leaves the connection answering. A header block whose stream is reset is
 still decoded, so HPACK stays in step with the peer (§4.3). Frames still in
-flight for a stream the server reset are ignored (§5.4.2).
+flight for a stream the server reset are ignored (§5.4.2), for as many as
+`maxStreams` + 16 of the most recent resets — the program may reset every
+stream at once (`net_http2`, twenty at once) — and so is anything on a stream
+opened after the server's GOAWAY, DATA and trailers alike (§6.8); a later
+connection error's GOAWAY never names a higher stream than the first did. An
+even stream identifier is idle for as long as the connection lives, since a
+server without push never opens one.
 
 **Malformed requests never reach the program** (`tests/link/net_http_fields`,
 `_f64`, and through the connection in `net_http2_errors`): an uppercase or
@@ -115,17 +121,20 @@ non-token name; NUL, CR or LF in a value, or whitespace at its ends; a
 connection-specific field, `te` but `trailers` included; a pseudo-header
 unknown, repeated, after a regular field, missing or where the shape forbids
 it; a `:method`, `:scheme`, `:path`, `:authority` or `:protocol` of the wrong
-syntax; a `host` naming another authority; a bad or disagreeing
-`content-length`. These are the shapes that let one request become two when
+syntax; a `host` naming another authority (letters compared without case, as
+a host name is); a bad or disagreeing `content-length`. These are the shapes that let one request become two when
 it is turned back into HTTP/1.1. `:protocol` is read only where
 SETTINGS_ENABLE_CONNECT_PROTOCOL was sent (RFC 8441 §4).
 
 **What the program writes is checked** (`net_http2`): a field name that is not
 a lowercase token, a value with CR, LF or NUL, a connection-specific field, a
-status outside 100 to 599, a second final head, a 1xx that ends a stream, a
-head no output could hold — each H2_INVALID, and nothing is sent. A head is
-encoded only once there is room for all of it, so the HPACK state never moves
-for a block that was not sent. `set-cookie`, `cookie`, `authorization` and
+status outside 100 to 599 or 101 (§8.6), a second final head, a 1xx that ends
+a stream, a head no output could hold — each H2_INVALID, and nothing is sent.
+A head is encoded only once there is room for all of it, so the HPACK state
+never moves for a block that was not sent; Huffman coding is used only where
+it lengthens neither the name nor the value, so the room checked is never
+less than what is written (a 40,000-byte name of `^`, which Huffman would
+nearly double, goes out raw and whole). `set-cookie`, `cookie`, `authorization` and
 `proxy-authorization` are sent as never-indexed literals (RFC 7541 §7.1.3), so
 no table here or downstream holds them; every other field is a literal
 without indexing, so the server's table stays empty.
@@ -163,7 +172,9 @@ one frame, so a connection the program has not drained stops reading TLS.
 
 **ALPN** (`net_http2_tls`): a handshake that chose `h2` serves HTTP/2; one that
 chose nothing is shut down with `close_notify` before any HTTP/2 byte is sent
-(RFC 9113 §3.2).
+(RFC 9113 §3.2). A client that sends its requests and its `close_notify` in
+one write still has every request answered before the server closes its own
+side.
 
 ## What is and is not wiped
 

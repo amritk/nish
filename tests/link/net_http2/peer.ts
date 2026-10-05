@@ -332,7 +332,9 @@ export class FrameLog {
           const value: u8[] = this.dec.values[k];
           const shown: string = toI32(value.length) > 40 ? `(${value.length} bytes)` : textAt(value, ZERO, toI32(value.length));
           const never: string = k < toI32(this.dec.neverIndexed.length) && this.dec.neverIndexed[k] ? " (never indexed)" : "";
-          fields.push(`${textAt(this.dec.names[k], ZERO, toI32(this.dec.names[k].length))}=${shown}${never}`);
+          const name: u8[] = this.dec.names[k];
+          const named: string = toI32(name.length) > 40 ? `(${name.length} bytes)` : textAt(name, ZERO, toI32(name.length));
+          fields.push(`${named}=${shown}${never}`);
         }
         const end: string = (this.blockFlags & H2_FLAG_END_STREAM) !== 0 ? " end" : "";
         const more: string = this.blockFrames > 1 ? ` +${this.blockFrames - 1}` : "";

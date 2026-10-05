@@ -19,6 +19,8 @@ PASS  an even stream identifier from a client: PROTOCOL_ERROR
 PASS  an identifier below one already opened, on a stream never seen: PROTOCOL_ERROR
 PASS  HEADERS on a stream that has closed: STREAM_CLOSED
 PASS  and on one the peer reset
+PASS  a connection error after the server's GOAWAY names the same last stream, never a higher one (§6.8)
+PASS  DATA on an even stream, which a server without push never opens, is on an idle stream: PROTOCOL_ERROR
 PASS  DATA on an idle stream: PROTOCOL_ERROR
 PASS  RST_STREAM on an idle stream: PROTOCOL_ERROR
 PASS  WINDOW_UPDATE on an idle stream: PROTOCOL_ERROR
@@ -56,4 +58,4 @@ PASS  and on an idle one, which it does not open
 PASS  a PRIORITY that makes a stream depend on itself: PROTOCOL_ERROR
 PASS  so does a HEADERS, whose block is decoded all the same
 PASS  and the next stream reads
-http2 refusals: 58 passed, 0 failed, 0 skipped
+http2 refusals: 60 passed, 0 failed, 0 skipped

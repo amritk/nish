@@ -160,6 +160,8 @@ export const fieldsChecks = (): i32 => {
   t.eqI32("an :authority with userinfo is refused", fields.readRequest(userinfo.names, userinfo.values, false), HTTP_FIELDS_BAD_PSEUDO_VALUE);
   const host: Section = get().add("host", "example.com");
   t.eqI32("a host that names :authority reads", fields.readRequest(host.names, host.values, false), HTTP_FIELDS_OK);
+  const casedHost: Section = get().add("host", "Example.COM");
+  t.eqI32("a host is compared without case, as a host name is", fields.readRequest(casedHost.names, casedHost.values, false), HTTP_FIELDS_OK);
   const otherHost: Section = get().add("host", "evil.example");
   t.eqI32("one that names another is refused", fields.readRequest(otherHost.names, otherHost.values, false), HTTP_FIELDS_AUTHORITY_MISMATCH);
   const hostOnly: Section = new Section().add(":method", "GET").add(":scheme", "https").add(":path", "/").add("host", "example.com");

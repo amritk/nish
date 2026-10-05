@@ -51,7 +51,7 @@ PASS  the peer's GOAWAY is an event, after the request before it
 PASS  the connection is not done while stream 3 is open
 PASS  and is once it closes and everything is sent
 PASS  the server's GOAWAY names the last stream it opened, once
-PASS  a stream opened after it is ignored
+PASS  a stream opened after it is ignored, and so are its DATA and trailers, without a RST_STREAM (§6.8)
 PASS  the streams before it finish, and then the connection is done
 PASS  SETTINGS_ENABLE_CONNECT_PROTOCOL is advertised where it is enabled
 PASS  an extended CONNECT is a request whose :protocol the program reads
@@ -66,6 +66,8 @@ PASS  which its decoder takes
 PASS  a set-cookie goes out never indexed (RFC 7541 §7.1.3), anything else without indexing
 PASS  a response head past the peer's frame size
 PASS  goes out as HEADERS and a CONTINUATION
+PASS  a name Huffman would lengthen, beside a value it shortens
+PASS  goes out raw, so the head is no longer than the room checked for it, whole
 PASS  a header list past SETTINGS_MAX_HEADER_LIST_SIZE never reaches the program
 PASS  it is answered with a 431, and a stream still open is then reset with NO_ERROR
 PASS  its DATA in flight is dropped, and the next request reads
@@ -73,6 +75,7 @@ PASS  respond on a stream that is not open: H2_CLOSED
 PASS  so do trailers
 PASS  writeData before the response head: H2_CLOSED
 PASS  writeTrailers before it: H2_INVALID
+PASS  a 101, which HTTP/2 does not have (§8.6): H2_INVALID
 PASS  a status of 99: H2_INVALID
 PASS  a 1xx that ends the stream: H2_INVALID
 PASS  an uppercase field name: H2_INVALID
@@ -92,9 +95,13 @@ PASS  DATA still in flight for a stream the server reset is ignored (§5.4.2)
 PASS  a head when the output has no room for it: H2_AGAIN
 PASS  so is an empty DATA that would end the stream
 PASS  feed takes no more than the input buffer has room for
+PASS  the program's RST_STREAMs use the control reserve, 9 of them, then answer H2_AGAIN and leave the stream open
+PASS  so does its GOAWAY
+PASS  which goes once the output has drained
+PASS  twenty streams the program resets at once: what the peer had in flight on each, DATA and trailers, is ignored
 PASS  a thousand DATA frames in, with WINDOW_UPDATEs, PINGs and a hundred DATA frames out
 PASS  move the arena not at all (0 bytes)
 PASS  a restart allocates nothing (0 bytes)
 PASS  and the connection starts again with its SETTINGS
 PASS  stream 1 is new again
-http2 connection: 99 passed, 0 failed, 0 skipped
+http2 connection: 106 passed, 0 failed, 0 skipped

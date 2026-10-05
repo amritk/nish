@@ -10,10 +10,13 @@ PASS  and its program closes the slot
 PASS  a client offering no ALPN completes the handshake
 PASS  but the slot is shut down with close_notify, before any HTTP/2 byte
 PASS  and closed
+PASS  a client that will close at once completes the handshake
+PASS  its requests and its close_notify in one write: both requests are still answered
+PASS  and only then does the server close its side
 PASS  two clients fill the pool
 PASS  a third is accepted and shed
 PASS  two clients that hang up are closed
 PASS  a free slot answers H2_ERROR to next and done to the rest
 PASS  a slot out of range names the first connection
 PASS  with nothing gone wrong in the loop
-http2 over tls: 18 passed, 0 failed, 0 skipped
+http2 over tls: 21 passed, 0 failed, 0 skipped
