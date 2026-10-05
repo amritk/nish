@@ -707,6 +707,10 @@ const tlsPutU16 = (out: u8[], at: i32, v: i32): i32 => tlsPutU8(out, tlsPutU8(ou
 
 /** `bytes[off .. off + len)`, at `out[at]`. */
 const tlsPutWindow = (out: u8[], at: i32, bytes: u8[], off: i32, len: i32): i32 => {
+  // Measuring over an empty array: nothing would land, so nothing is copied.
+  if (toI32(out.length) === 0) {
+    return at + len
+  }
   for (let k: i32 = 0; k < len && off + k >= 0 && off + k < toI32(bytes.length); k++) {
     tlsPutU8(out, at + k, toI32(bytes[off + k]))
   }

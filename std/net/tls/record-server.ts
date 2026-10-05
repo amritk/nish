@@ -279,7 +279,7 @@ export class TlsRecordServer {
    * Starts a new connection in this slot with `tls`, which should be fresh
    * or just restarted (`TlsServer.restart`, which reuses its buffers):
    * every buffer is emptied and the keys of the last connection are wiped;
-   * the buffers are reused, and only the empty handshake queues are new. A
+   * the buffers are reused, and nothing is allocated. A
    * `tls` that has already failed — a configuration
    * or randomness `TlsServer` refused — fails this connection at once, with
    * its alert queued in the clear.
@@ -326,8 +326,7 @@ export class TlsRecordServer {
 
   /** Wipes the two application traffic secrets and both directions' keys. */
   wipeTraffic(): void {
-    secureZero(this.readSecret)
-    secureZero(this.writeSecret)
+    // The two secret fields point into these four arrays, or at nothing.
     secureZero(this.readSecret256)
     secureZero(this.readSecret384)
     secureZero(this.writeSecret256)

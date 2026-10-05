@@ -27,6 +27,6 @@ PASS  zero bytes are an empty answer
 PASS  hkdfExpandLabelInto with a context window is hkdfExpandLabelSha256
 PASS  and with no context is hkdfExpandLabelSha384
 PASS  a hundred passes of every kind inside `using a = arena()` leave Arena.mark() where it was
-PASS  and HKDF wipes its last block and both keyed hashers before it returns
+PASS  and HKDF wipes its last block and the keyed hashers it used before it returns
 PASS  an HMAC scratch's wipe zeroes its hashers
 hkdf scratch: 31 passed, 0 failed, 0 skipped

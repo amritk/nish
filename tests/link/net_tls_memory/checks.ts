@@ -383,8 +383,7 @@ export const memoryChecks = (): i32 => {
     traceTls.restart(traceRandom, slotKey);
     traceConn.start(traceTls);
     feed(traceConn, traceHello);
-    const hello: boolean = sameWindow(traceConn.output, traceConn.outputStart, traceConn.outputEnd, traceServerHello);
-    traceConn.consume(traceConn.outputEnd - traceConn.outputStart);
+    const hello: boolean = sends(traceConn, traceServerHello);
     traceConn.sign(traceSignature);
     const flight: boolean = sends(traceConn, traceFlight);
     feed(traceConn, traceFinished);

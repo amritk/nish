@@ -280,7 +280,7 @@ export const hkdfScratchChecks = (): i32 => {
     hkdfExpandLabelInto(kdf, h384, prk2Sha384, "s ap traffic", context, zero, h384, out, zero, h384);
   }
   t.ok("a hundred passes of every kind inside `using a = arena()` leave Arena.mark() where it was", Arena.mark() === before);
-  t.ok("and HKDF wipes its last block and both keyed hashers before it returns", allZero(kdf.previous) && allZero(kdf.sha256.inner.block) && allZero(kdf.sha384.outer.engine.block));
+  t.ok("and HKDF wipes its last block and the keyed hashers it used before it returns", allZero(kdf.previous) && allZero(kdf.sha256.inner.block) && allZero(kdf.sha384.outer.engine.block));
   mac256.wipe();
   mac384.wipe();
   t.ok("an HMAC scratch's wipe zeroes its hashers", mac256.inner.state[0] === toU32(0) && mac384.outer.engine.state[7] === toU64(0) && mac384.inner.engine.finished);

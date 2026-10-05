@@ -357,6 +357,10 @@ const tlsSecretAt = (level: i32, handshake: u8[], application: u8[]): u8[] | nul
  * garbage when it returns, and the compiler gives it a scope of its own
  * (docs/LANGUAGE.md, "Memory model", item 2): `tlsExchange` takes only this.
  *
+ * Its fields must stay numbers: one that could hold a pointer would cost
+ * `tlsExchange` that scope without a word from the compiler, and only
+ * `tests/link/net_tls_memory` would notice.
+ *
  * The words hold secrets — the private key and the handshake secret — in
  * fields, where `secureZero` cannot reach, so each is zeroed by an ordinary
  * store as soon as it has been read, which stands because the words stay
@@ -722,7 +726,7 @@ export class TlsServer {
     if (need <= capacity) {
       return
     }
-    let size: i32 = capacity < 1 ? TLS_INPUT_START : capacity
+    let size: i32 = capacity
     while (size < need) {
       size = size * 2
     }

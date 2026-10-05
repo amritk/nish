@@ -61,7 +61,6 @@ import {
   TLS_LEGACY_VERSION,
 } from "nish/net/tls/codec"
 import { HkdfScratch, hkdfExpandLabelInto } from "nish/crypto/hkdf"
-import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
 import {
   TLS_CHACHA20_POLY1305_SHA256,
@@ -310,9 +309,8 @@ export class TlsRecordProtection {
   key32: u8[]
   aes128: AesKey
   aes256: AesKey
-  /** Where `advance` derives the next traffic secret, one of each hash's length. */
-  next256: u8[]
-  next384: u8[]
+  /** Where `advance` derives the next traffic secret: HashLen bytes of it. */
+  next: u8[]
   /** Where the keys are derived. */
   kdf: HkdfScratch
 
@@ -323,8 +321,7 @@ export class TlsRecordProtection {
     this.iv = new Array<u8>(TLS_IV_SIZE)
     this.aes128 = new AesKey(10, new Array<u64>(88))
     this.aes256 = new AesKey(14, new Array<u64>(120))
-    this.next256 = new Array<u8>(SHA256_SIZE)
-    this.next384 = new Array<u8>(SHA384_SIZE)
+    this.next = new Array<u8>(SHA384_SIZE)
     this.kdf = new HkdfScratch()
     this.recordLimit = TLS_KEY_UPDATE_RECORDS
   }
@@ -434,7 +431,7 @@ export class TlsRecordProtection {
     if (hashLength === 0) {
       return false
     }
-    const next: u8[] = hashLength === SHA384_SIZE ? this.next384 : this.next256
+    const next: u8[] = this.next
     {
       using _scope = arena()
       const none: u8[] = []
@@ -451,7 +448,7 @@ export class TlsRecordProtection {
         hashLength
       )
     }
-    for (let k: i32 = 0; k < toI32(secret.length) && k < toI32(next.length); k++) {
+    for (let k: i32 = 0; k < toI32(secret.length) && k < hashLength && k < toI32(next.length); k++) {
       secret[k] = next[k]
     }
     secureZero(next)

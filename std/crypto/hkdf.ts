@@ -51,8 +51,9 @@
  * allocates once, over the hash `hashLength` names (32 for SHA-256, 48 for
  * SHA-384), and write them into the caller's array, so that a loop of key
  * derivations inside one `using a = arena()` block leaves the arena where it
- * was. Each wipes the scratch before it returns, its last block and both
- * keyed hashers, so no key material outlives the call there:
+ * was. Each wipes the scratch before it returns, its last block and the
+ * keyed hashers of the hash it ran over, so no key material outlives the
+ * call there:
  *
  *     const kdf = new HkdfScratch();                         // once
  *     hkdfExtractInto(kdf, 32, salt, ikm, prk, 0);           // 32 bytes at prk[0]
@@ -303,6 +304,16 @@ const hkdfCheckOutput = (caller: string, out: u8[], at: i32, length: i32): void 
   }
 }
 
+/** Zeroes what the last derivation over `hashLength` left in `s`: T(i - 1) and that hash's keyed hashers. */
+const hkdfWipe = (s: HkdfScratch, hashLength: i32): void => {
+  secureZero(s.previous)
+  if (hashLength === SHA384_SIZE) {
+    s.sha384.wipe()
+  } else {
+    s.sha256.wipe()
+  }
+}
+
 /** Keys the scratch's HMAC for `hashLength` with `key[off .. off + len)`. */
 const hkdfMacBegin = (s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len: i32): void => {
   if (hashLength === SHA384_SIZE) {
@@ -353,12 +364,12 @@ export const hkdfExtractInto = (
   hkdfMacBegin(s, hashLength, salt, HKDF_FROM, toI32(salt.length))
   hkdfMacUpdate(s, hashLength, ikm, HKDF_FROM, toI32(ikm.length))
   hkdfMacFinish(s, hashLength, out, at)
-  s.wipe()
+  hkdfWipe(s, hashLength)
 }
 
 /**
  * The T(1) | T(2) | … loop of RFC 5869 §2.3, `length` bytes of it at
- * `out[at]`, with `info` the window `info[infoOff .. infoOff + infoLen)`.
+ * `out[at]`, with `info` the first `infoLen` bytes of `info`.
  * The callers have checked every bound.
  */
 const hkdfExpandWindow = (
@@ -366,7 +377,6 @@ const hkdfExpandWindow = (
   hashLength: i32,
   prk: u8[],
   info: u8[],
-  infoOff: i32,
   infoLen: i32,
   out: u8[],
   at: i32,
@@ -380,7 +390,7 @@ const hkdfExpandWindow = (
     if (i > 1) {
       hkdfMacUpdate(s, hashLength, s.previous, HKDF_FROM, hashLength)
     }
-    hkdfMacUpdate(s, hashLength, info, infoOff, infoLen)
+    hkdfMacUpdate(s, hashLength, info, HKDF_FROM, infoLen)
     s.counter[0] = toU8(i)
     hkdfMacUpdate(s, hashLength, s.counter, HKDF_FROM, counterLength)
     hkdfMacFinish(s, hashLength, s.previous, HKDF_FROM)
@@ -390,7 +400,7 @@ const hkdfExpandWindow = (
     }
     i += 1
   }
-  s.wipe()
+  hkdfWipe(s, hashLength)
 }
 
 /**
@@ -419,7 +429,7 @@ export const hkdfExpandInto = (
     return false
   }
   hkdfCheckOutput("hkdfExpandInto", out, at, length)
-  hkdfExpandWindow(s, hashLength, prk, info, HKDF_FROM, toI32(info.length), out, at, length)
+  hkdfExpandWindow(s, hashLength, prk, info, toI32(info.length), out, at, length)
   return true
 }
 
@@ -481,5 +491,5 @@ export const hkdfExpandLabelInto = (
   for (let k: i32 = 0; k < contextLen && contextAt + 1 + k < toI32(info.length); k += 1) {
     info[contextAt + 1 + k] = context[contextOff + k]
   }
-  hkdfExpandWindow(s, hashLength, secret, info, HKDF_FROM, contextAt + 1 + contextLen, out, at, length)
+  hkdfExpandWindow(s, hashLength, secret, info, contextAt + 1 + contextLen, out, at, length)
 }
