@@ -1,234 +1,117 @@
 # WP8: Interop: C headers, TypeScript declarations, N-API addons, wasm
 
-Nish never embeds a JavaScript engine. Interop runs the other way: a
-compiled module is *called from* C, from Node through a native addon, or
-from Node and browsers as WebAssembly. This package adds the host-side
-declarations for all three, generated from the same checked program the IR
-came from, and a build profile for the addon.
+**Status: complete** (0.1.0). It was extended later:
+
+- `--emit-napi-async` (WP24 A1, #67, 0.3.0);
+- the unsigned widths as typed arrays (WP30, #138, 0.6.0);
+- generic instantiations exported under valid, injective names (WP18 G8,
+  #165, 0.9.0);
+- ranged parameters at the boundary (WP31, #273, 0.13.0);
+- the by-value `Result` (WP17).
+
+The generators are `src/interop-*.ts`. The stage0 twins and the
+`interop_oracle.js` byte-for-byte comparison went with stage0 in WP19 R6. The
+living reference is [LANGUAGE.md "Interop"](LANGUAGE.md#interop). This note
+keeps the ABI, the boundary rules and the measurements behind them.
+
+Nish never embeds a JavaScript engine. A compiled module is *called from* C,
+from Node through a native addon, or from JavaScript as WebAssembly. All three
+sets of host declarations are generated from the same checked program the IR
+came from:
 
 ```
 nish x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
-                          C hosts          wasm hosts        Node addon
 ```
-
-Both compilers write them. The self-hosted compiler carries its own port of
-the generators (`src/interop-*.ts`, WP14 §7) and answers the same four flags
-with the same bytes; `tests/self/interop_oracle.js` is what says so.
 
 ## The C ABI
 
-An Nish function is an ordinary C function: parameters by value, in
-order, no hidden context, no name mangling. `runtime/nish.h` is the
-public header for the runtime side of that ABI, and `--emit-header` writes
-the user side.
+A Nish function is an ordinary C function: parameters by value, in order, with
+no hidden context and no name mangling. `runtime/nish.h` is the runtime half
+of the ABI. It declares `nish_str`, `nish_array`, `struct nish_arena`, every
+runtime prototype and `NISH_SYMBOL`, and is C11- and C++-clean under
+`-Wall -Wextra -Werror -pedantic`. `tests/run.js` fails if it and
+`src/runtime.ts` drift apart.
 
-| Nish | LLVM | C | N-API (JS) | wasm export (JS, through the generated loader) |
-| --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | `int32_t` | `number`, converted with ToInt32 (`x \| 0`) | `number` |
-| `number` (f64 mode), `f64` | `double` | `double` | `number` | `number` |
-| `i64` | `i64` | `int64_t` | `bigint` | `bigint` |
-| `u8`, `u16`, `u32` | `i8`, `i16`, `i32` | `uint8_t`, `uint16_t`, `uint32_t` | `number`; in through ToUint32 and then the width's own modulus, out through `napi_create_uint32` so a `u32` above 2^31 stays positive | `number`, put back in range by the loader: `& 0xff` / `& 0xffff` on a narrow argument, and `& 0xff` / `& 0xffff` / `>>> 0` on every result |
-| `u64` | `i64` | `uint64_t` | `bigint`, through `napi_get_value_bigint_uint64` / `napi_create_bigint_uint64` | `bigint`, read back with `BigInt.asUintN(64, x)` |
-| `f32` | `float` | `float` | `number`; rounded to nearest on the way in through `nish_napi_f32`, widened exactly on the way out | `number`, untouched: the call rounds an argument to f32 and every f32 is exact in the double a result arrives in |
-| `boolean` | `i1` (`zeroext`) | `bool` | `boolean` | in: `boolean`; out: `0 \| 1` |
-| `string` | `i8*` | `const nish_str *` in, `nish_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
-| `i32[]` / `Int32Array`, `f32[]` / `Float32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.nish_array*` | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
-| other arrays (`string[]`, `boolean[]`, `T[][]`, `C[]`), classes, `T \| null` | pointers | `nish_array *` for arrays; classes not declared | skipped | skipped |
-| `void` | `void` | `void` | `undefined` | `void` |
+| Nish | C | N-API (JS) | wasm, through the generated loader |
+| --- | --- | --- | --- |
+| `i32` (`number` in i32 mode) | `int32_t` | `number`, ToInt32 | `number` |
+| `f64` (`number` in f64 mode) | `double` | `number` | `number` |
+| `i64` / `u64` | `int64_t` / `uint64_t` | `bigint` | `bigint` (`u64` through `BigInt.asUintN(64, …)`) |
+| `u8`, `u16`, `u32` | `uint8_t`, `uint16_t`, `uint32_t` | `number`: ToUint32, then the width's modulus; out through `napi_create_uint32` | `number`, masked by the loader (see below) |
+| `f32` | `float` | `number`, rounded in by `nish_napi_f32` | `number`, untouched |
+| `boolean` | `bool` (`i1 zeroext`) | `boolean` | in `boolean`, out `0 \| 1` (`WasmBool`) |
+| `string` | `const nish_str *` in, `nish_str *` out | `string`, copied both ways | not available (no runtime strings in freestanding wasm) |
+| `i32[]`, `f32[]`, `f64[]`, `i64[]`, and since WP30 `u8[]`, `u16[]`, `u32[]`, `u64[]` | `const nish_array *` if never written through, else `nish_array *` | the matching typed array, borrowed in, copied out | the matching typed array, copied in and out |
+| a by-value `Result` over scalars | a one-word struct (WP17) | `{ ok, value }` / `{ ok, error }` | the same union |
+| classes, `T \| null`, `string[]`, `boolean[]`, nested arrays, `Map` | `struct X *` / `nish_array *` in the header | not bridged | not exported |
 
-`nish_str` is `{ uint64_t len; char data[]; }`: `len` is the UTF-8 byte
-length, `data` is NUL-terminated so it doubles as a C string. Strings are
-immutable and live in the arena: a string an Nish function returns stays
-valid until `nish_reset_arena()` or `nish_free_arena()`, and a host never frees
-one. Literals live in the module's constant data and outlive resets.
-
-`nish_array` is `{ uint64_t len; uint64_t cap; char *data; }`
-([wp4-arrays.md](wp4-arrays.md#layout-abi)): `data` holds `cap` elements of
-one fixed size (the header comment names the C element type). A C host
-passes its own buffer by building the header on the stack,
-`nish_array a = { n, n, (char *)buf };`, and reads a returned array's `len`
-elements out of `data` before recycling the arena. `nish_alloc_array(elemSize,
-len)` makes a fresh arena array for hosts that want the runtime to own the
-storage; it is what the wasm loader calls. A parameter is `const nish_array *`
-when the function provably never stores through it, the same whole-program
-proof that gives the IR parameter `readonly`, and `nish_array *` otherwise.
-
-`runtime/nish.h` also declares `struct nish_arena` with its global
-(the compiled fast path bumps it directly, so the layout is ABI) and every
-runtime function from stage0's `src/codegen/runtime.ts`; `tests/run.js` fails if the
-two drift apart. The header is C11 and C++ clean under `-Wall -Wextra
--Werror -pedantic`.
+`nish_str` is `{ uint64_t len; char data[]; }`: the UTF-8 byte length, then
+NUL-terminated bytes. `nish_array` is `{ uint64_t len; uint64_t cap; char *data; }`,
+so `len` is at offset 0, `cap` at 8 and `data` at 16
+([wp4-arrays.md](wp4-arrays.md#layout-abi)). Strings and arrays the module
+returns live in the arena until `nish_reset_arena()` or `nish_free_arena()`,
+and a host never frees one. A C host can pass its own buffer through a stack
+header, `nish_array a = { n, n, (char *)buf };`. Otherwise
+`nish_alloc_array(elemSize, len)` makes an arena-owned array.
 
 ### `--emit-header <file.h>`
 
-```bash
-node dist/index.js examples/add.ts -o build/add.ll --emit-header build/add.h
-```
-
-```c
-/* Generated by nish --emit-header from examples/add.ts; do not edit. */
-#ifndef NISH_ADD_H
-#define NISH_ADD_H
-
-#include <stdbool.h>
-#include <stdint.h>
-#include "nish.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* examples/add.ts */
-/* add(a: number, b: number): number */
-int32_t add(int32_t a, int32_t b);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* NISH_ADD_H */
-```
-
-- Which functions: every external symbol of the link, i.e. the exported
-  functions — plus, with `--no-strict-exports`, the non-exported ones too.
-  Modules imported by the entry appear under their own `/* file.ts */`
-  heading. The entry `export function main` is omitted: it is the process
-  entry (`@nish_main` behind the C `main` wrapper), not a library call, and a
-  C host owns `main`.
-- Keyword-named functions: `export function double(n: number)` is a fine
-  LLVM symbol but C cannot spell it. The header declares
-  `int32_t double_(int32_t n) NISH_SYMBOL("double");`, an asm label from
-  `nish.h` that binds the C name to the real symbol (`__USER_LABEL_PREFIX__`
-  supplies the `_` Mach-O prepends). Parameters named after C keywords or
-  `<stdbool.h>` macros get a trailing underscore; their names are documentation
-  only.
-- Arrays: `examples/arrays.ts` gives
-
-  ```c
-  /* sumF64(xs: number[]): number -- xs: double elements */
-  double sumF64(const nish_array *xs);
-  /* fill(xs: number[], v: number): void -- xs: int32_t elements */
-  void fill(nish_array *xs, int32_t v);
-  /* scale(xs: number[], k: number): number[] -- xs: double elements, returns double elements */
-  nish_array *scale(const nish_array *xs, double k);
-  ```
-
-  `tests/run.js` links a `-Werror` driver that hands `sumI32` and `fill` a
-  stack-built header over an `int32_t buf[4]` (the writes land in `buf`) and
-  reads `squares(4)->data`.
-- Classes and interfaces (WP2, WP2b): every one becomes a `struct <Name>`
-  with the compiled field layout (natural alignment; a derived class lists
-  its base's fields first, flattened, exactly as `%struct.<Name>` is laid
-  out), after forward declarations of all of them so fields may point at
-  structs defined later. A class without fields stays an incomplete type.
-  Field types are spelled `int32_t`, `int64_t`, `double`, `bool`,
-  `nish_str *`, `struct X *` (also for `X | null`, which may be NULL) and
-  `nish_array *` for `T[]` (with the element type in a comment). Functions
-  taking or returning objects are declared with `struct X *` parameters, and
-  methods and constructors are declared too, as
-  `void Point_constructor(struct Point *this_, int32_t x, int32_t y) NISH_SYMBOL("Point.constructor");`:
-  the object pointer first, bound to the dotted symbol by the same asm-label
-  mechanism. `tests/run.js` (`layout`) compiles the header for
-  `tests/layout/structs.ts` and static-asserts every struct's size against
-  the hand-written C twins.
-- Compile a host against it with the runtime directory on the include path:
-
-```bash
-clang -std=c11 -Wall -Wextra -Werror -Wno-override-module -Iruntime -Ibuild \
-      build/add.ll runtime/runtime.c runtime/runtime-os.c my_host.c -o my_host
-```
+- **What is declared.** Every external symbol of the link: the exports, or
+  every function under `--no-strict-exports`. Each imported module appears
+  under its own `/* file.ts */` heading. The entry `main` is omitted, because
+  the C host owns `main`.
+- **Names C cannot spell.** A keyword-named function such as
+  `export function double` is declared as
+  `double_(…) NISH_SYMBOL("double")`, an asm label bound to the real symbol
+  that also covers Mach-O's `_` prefix. Methods and constructors use the same
+  mechanism (`Point_constructor(struct Point *this_, …)
+  NISH_SYMBOL("Point.constructor")`).
+- **Classes and interfaces** become `struct <Name>` with the compiled layout:
+  base fields first, flattened. Forward declarations come first, so structs
+  may point at each other. The `layout` block of `tests/run.js`
+  static-asserts every size against hand-written C twins.
+- **Comments.** Every prototype carries its source signature and its array
+  element types in a comment. A ranged parameter's comment also says it
+  panics outside its range (WP31).
 
 ## `--emit-dts <file.d.ts>`: typings and a loader for the wasm build
 
-`scripts/build.sh --profile wasm` links a freestanding wasm32 module with
-`--export-all`, so JavaScript sees every external function directly, with
-the wasm C ABI: `i32` and `f64` are JS numbers, `i64` is a bigint; an `i1`
-result arrives as the number `0` or `1` (typed `WasmBool`), while
-`true`/`false` are fine as arguments because ToInt32 maps them to 1/0. An
-array is an `i32` pointer to an arena header, which is not a JS value, so
-`--emit-dts x.d.ts` writes two files: the declarations, whose signatures use
-`Int32Array` / `Float64Array` / `BigInt64Array`, and `x.mjs`, the loader that
-implements them. Strings need a WASI runtime, which the freestanding profile
-does not have, so functions that take or return a string are listed as
-comments:
+`scripts/build.sh --profile wasm` links a freestanding module with
+`--export-all`, against `runtime/runtime-wasm.c`. That file is an arena over
+linear memory, the array cold paths, and trapping panics. It has no strings
+and no I/O. An array argument is a pointer into linear memory, which is not
+a JS value, so `--emit-dts x.d.ts` writes two files: the declarations, which
+use typed arrays, and `x.mjs`, the loader that implements them. **Both come
+from one predicate**, `wasmSkipReason`, so that neither file can describe a
+function the other omits. They used to be two predicates, and they drifted:
+`port(p: u16)` was declared and then missing from `load()`, which surfaced as
+a `TypeError` with no diagnostic. A function that cannot cross is written as a
+comment naming the position and the type that stopped it.
 
-```ts
-// Generated by nish --emit-dts from examples/arrays.ts; do not edit.
-export type WasmBool = 0 | 1;
+A wrapped call such as `scale(xs, 2)` does four things:
 
-export interface Exports {
-  /** Linear memory of the instance (the arena and string constants live here). */
-  readonly memory: WebAssembly.Memory;
-  /** runtime-wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
-  nish_reset_arena(): void;
-  nish_free_arena(): void;
-  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs ...
-  /** examples/arrays.ts: scale(xs: number[], k: number): number[] */
-  scale(xs: Float64Array, k: number): Float64Array;
-  /** examples/arrays.ts: fill(xs: number[], v: number): void */
-  fill(xs: Int32Array, v: number): void;
-  /** examples/arrays.ts: sumI64(xs: i64[]): i64 */
-  sumI64(xs: BigInt64Array): bigint;
-}
+- It runs inside `scoped`, which takes `nish_arena_mark()` and calls
+  `nish_arena_release` in a `finally`, so the arena is recycled even when the
+  module traps.
+- `arrayIn` checks `instanceof` and throws a `TypeError` naming the function
+  and the parameter. It then copies the argument into a
+  `nish_alloc_array` (about 0.6 ns per element).
+- `arrayOut` returns `new TypedArray(memory.buffer, data, len).slice()`. The
+  copy is needed because the next `memory.grow` detaches a view, and the
+  release lets the module overwrite the data.
+- A parameter the function writes through is copied back, so the wasm and
+  N-API builds agree.
 
-export function load(bytes: BufferSource): Promise<Exports>;
-```
-
-The declarations and the loader are generated from **one** predicate,
-`wasmSkipReason` in stage0's `src/interop/wasm.ts`: a function is declared exactly when
-the loader has an entry for it, so neither file can describe a function the
-other omits. They used to be two predicates and they drifted — the declarations
-grew the unsigned widths while the loader's crossing test did not, so
-`--emit-dts` happily declared `port(p: u16)` and `load()` returned an object
-with no `port` on it, a `TypeError` at the call with no diagnostic anywhere.
-
-A function that cannot cross is a comment naming the position and the type that
-stopped it, which is more than the blanket sentence it used to be (and more than
-the N-API shim's own note, which names the function and then the whole set the
-shim accepts):
-
-```ts
-  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs the Nish runtime the freestanding wasm profile does not include
-  // spell(n: number): string  -- not exported to JS: the result is `string`, which needs the Nish runtime the freestanding wasm profile does not include
-```
-
-The loader (stage0's `src/interop/wasm.ts`) instantiates the module and returns the
-raw exports with every array-taking function wrapped. A scalar-only export is
-passed through untouched unless one of its types is narrower or wider than the
-wasm value type carrying it. A wrapped call, `scale(xs, 2)`:
-
-```js
-scale: (xs, k) => scoped(() => {
-  const xs$ = arrayIn(xs, Float64Array, 8, "scale: argument 1 (xs)");
-  return arrayOut(raw.scale(xs$, k), Float64Array);
-}),
-```
-
-1. `scoped` takes `nish_arena_mark()` first and calls `nish_arena_release(mark)`
-   in a `finally`, so every arena byte the call used is recycled even when
-   the module traps.
-2. `arrayIn` checks `xs instanceof Float64Array` (a `TypeError` naming the
-   function and parameter otherwise), asks the module for
-   `nish_alloc_array(8n, len)`, reads the header's `data` pointer (offset 16;
-   `len` is the `i64` at offset 0, `cap` at 8), and `.set(xs)` through a
-   `Float64Array` view on `memory.buffer`. The copy costs one `memcpy`
-   (`bench/ffi.mjs`: about 0.6 ns per element on top of the loop).
-3. `arrayOut` reads `len` and `data` from the returned header and returns
-   `new Float64Array(memory.buffer, data, len).slice()`: a copy, because the
-   next `memory.grow` would detach a view and the release in step 1 would
-   let the module overwrite it.
-4. A parameter the function writes through (`fill(xs, 7)`; the same fact
-   that makes it `nish_array *` in the header) is copied back into the
-   caller's typed array after the call, so the wasm and N-API builds agree
-   on what the caller observes.
+`memory.buffer` is re-read after every call. The profile passes
+`-mbulk-memory`, so that zero-fills and copies lower to `memory.fill` /
+`memory.copy`. A module without arrays links nothing extra (`add.wasm` is 279
+bytes).
 
 ### The unsigned widths
 
-The wasm ABI has four value types — `i32`, `i64`, `f32`, `f64` — so `u8`,
-`u16` and `u32` all travel in the same one as an `i32` and a `u64` in the same
-one as an `i64`. The loader is the only place their range can be restored, and
-`tests/self/interop-unsigned.ts` is the module the suite builds and calls to
-prove it does:
+The wasm ABI has four value types, so `u8`, `u16` and `u32` travel as `i32`,
+and `u64` as `i64`. The loader is the only place their range can be restored,
+and it uses the spellings `runtime/shim.mjs` uses:
 
 ```js
 idU8:  (x) => raw.idU8(x & 0xff) & 0xff,
@@ -237,432 +120,147 @@ idU32: (x) => raw.idU32(x) >>> 0,
 idU64: (x) => BigInt.asUintN(64, raw.idU64(x)),
 ```
 
-Those are the spellings `runtime/shim.mjs` already uses to hold an unsigned
-value in a JavaScript one, so the wasm build, the differential rewrite and the
-language agree on what a `u32` above 2^31 is. Each side of the boundary needs
-them for a different reason:
+- **Out.** A `u32` result arrives signed: `idU32(4294967295)` is `-1` without
+  the `>>> 0`. A `u8` or `u16` result needs its mask because the callee never
+  narrows the 32-bit register: `addU16(65535, 2)` answers 65537 where the
+  language says 1.
+- **In.** `u32` and `u64` need nothing, because ToInt32 and ToBigInt64 give
+  the right bits. `u8` and `u16` are masked because the emitted parameter is a
+  bare `i8` / `i16` with no `zeroext`. That makes zero-extension the caller's
+  obligation, and today's backend happens to mask inside the callee only by
+  luck. Masking also matches `new Uint8Array([300])[0]`, which is 44.
+- **`f32`** needs nothing: the call rounds the argument, and every f32 is exact
+  in a double.
+- **Arrays of the unsigned widths** need no masking at all. A `Uint8Array`
+  store truncates, and its view yields only 0–255 (WP30).
 
-- **Out.** A `u32` result is the full width but *signed* on the way out, so
-  `idU32(4294967295)` reaches JavaScript as `-1` without the `>>> 0` — the bug
-  a host actually hits — and a `u64` above 2^63 arrives as a negative bigint.
-  A `u8` or `u16` result needs its mask for a different reason again: the
-  callee never narrows it. `add i16` is congruent modulo 2^16, so the wasm
-  backend adds in a 32-bit register and returns the sum, and `addU16(65535, 2)`
-  answers 65537 where the language says 1.
-- **In.** `u32` and `u64` need nothing: ToInt32 and ToBigInt64 hand the call
-  the bits an unsigned value of that width has, wrapping exactly as the
-  language wraps. `u8` and `u16` are masked, and the reason is the emitted IR
-  rather than the observed behaviour. The emitter writes the parameter as a
-  bare `i8` with no `zeroext` — `define noundef i8 @idU8(i8 noundef %x)` — so
-  the wasm C ABI's rule that a narrow unsigned argument arrives already
-  zero-extended is the *caller's* obligation, and JavaScript is the caller.
-  Today's backend, having no `zeroext` to lean on, inserts the `i32.and`
-  itself wherever the narrow value is observable inside the callee (before an
-  `icmp ugt i8`, a `udiv i8`, a `zext i8 to i32`), so an unmasked argument
-  survives by luck; it is luck the day the emitter adds the `zeroext` the ABI
-  asks for would take away, silently. Masking here also makes the boundary
-  behave the way JavaScript already does for these widths: `idU8(300)` is 44
-  and `idU8(-1)` is 255, exactly as `new Uint8Array([300])[0]` and
-  `new Uint8Array([-1])[0]` are.
-
-`f32` needs nothing in either direction, which is a measurement rather than an
-assumption: the JS-to-wasm call rounds an argument to f32 (`scaleF32(0.1)`
-sees `Math.fround(0.1)`, which is what an `f32` parameter means) and every f32
-is exactly representable in the double a result comes back in.
-
-`memory.buffer` is re-read after every call into the module because
-`memory.grow` replaces the `ArrayBuffer`. The runtime the loader calls,
-`nish_alloc_array` / `nish_arena_mark` / `nish_arena_release`, comes from
-`runtime/runtime-wasm.c`, a freestanding subset of the runtime: linear
-memory past `__heap_base` is one arena chunk that grows with `memory.grow`,
-`nish_array_grow` and the panics are there (`nish_panic_index` is
-`unreachable`, which the host sees as a `RuntimeError`), and there are no
-strings or I/O. The wasm profile now passes `-mbulk-memory` so the
-`llvm.memset` of `new Array<T>(n)` and the `memcpy` of a `push` lower to
-`memory.fill` / `memory.copy` instead of libc calls. Link it whenever a
-function takes or returns an array:
-
-```bash
-node dist/index.js examples/arrays.ts -o build/arrays.ll --emit-dts build/arrays.d.ts
-scripts/build.sh build/arrays.ll runtime/runtime-wasm.c -o build/arrays.wasm --profile wasm
-node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(1, 2, 3, 2) = 2, 4, 6
-```
-
-```ts
-import { load } from "./arrays";                        // arrays.d.ts + arrays.mjs
-const m = await load(readFileSync("build/arrays.wasm"));
-m.sumF64(new Float64Array([0.5, 1.5, 2.5]));            // 4.5
-m.scale(new Float64Array([1, 2, 3]), 2);                // Float64Array [2, 4, 6], yours to keep
-```
-
-`examples/node-host.mjs` uses the companion loader when `<module>.mjs` sits
-next to the `.wasm` file (arguments spelled `i32:1,2,3`, `f64:...`,
-`i64:...` become typed arrays) and its plain four-line `load` otherwise.
-`add.wasm` stays 279 bytes: a module without arrays links nothing extra.
+`tests/self/interop-unsigned.ts` and `interop-unsigned-arrays.ts` are the
+fixtures.
 
 ## `--emit-napi <shim.c>` and `--profile napi`: a native Node addon
 
-Native addons give Node the full `-O3` machine code with the runtime linked
-in, through Node-API, Node's stable C ABI: the `.node` file keeps working
-across Node versions without a rebuild.
+The shim is generated per module. It gives Node `-O3` machine code with the
+runtime linked in, through Node-API, so the `.node` file works across Node
+versions without a rebuild. Each bridged export gets a `napi_callback` that:
 
-```bash
-node dist/index.js examples/add.ts -o build/add.ll --emit-napi build/add_napi.c
-scripts/build.sh build/add.ll runtime/runtime.c build/add_napi.c -o build/add.node --profile napi
-node examples/node-addon.mjs build/add.node
-# add(2, 3) = 5
-# add("2", 3) throws: add: argument 1 (a) must be a number
-```
+- checks the argument count and each argument's JS type, throwing a
+  `TypeError` that names the function and the parameter;
+- converts each argument;
+- calls the function through its C ABI;
+- boxes the result.
 
-The shim is generated per module. For every external function whose
-parameters and result are numbers of any width, booleans, `i64` / `u64`,
-strings or typed arrays it emits a `napi_callback` that reads the arguments,
-checks the count and the JS type of each (`napi_typeof`: a number for every
-numeric type, a boolean for `boolean`, a bigint for `i64` and `u64`, a string
-for `string`; `napi_is_typedarray` plus the element kind for an array;
-anything else throws a `TypeError` naming the function and the parameter),
-converts them (`napi_get_value_int32` in i32 mode, so `2.9` becomes `2` like
-`2.9 | 0`; `napi_get_value_double` in f64 mode; `napi_get_value_uint32` for
-the unsigned widths; `napi_get_value_bool`;
-`napi_get_value_bigint_{int,uint}64`), calls the Nish function through
-its C ABI, and boxes the result:
+`scripts/build.sh --profile napi` uses the `speed` flags plus `-shared -fPIC`,
+and `-Wl,-undefined,dynamic_lookup` on macOS. It finds `node_api.h` next to
+the running `node`, or at `NODE_INCLUDE`, and a missing header is a clear
+error. The `add.ts` addon is 8.5 KB. ESM loads it through `createRequire`.
 
-```c
-/* examples/add.ts: add(a: number, b: number): number */
-static napi_value nish_napi_add(napi_env env, napi_callback_info info) {
-  size_t argc = 2;
-  napi_value argv[2];
-  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)
-    return nish_napi_fail(env, "add: cannot read arguments");
-  if (argc < 2)
-    return nish_napi_fail(env, "add expects 2 arguments");
-  napi_valuetype type;
-  int32_t a;
-  if (napi_typeof(env, argv[0], &type) != napi_ok || type != napi_number)
-    return nish_napi_fail(env, "add: argument 1 (a) must be a number");
-  if (napi_get_value_int32(env, argv[0], &a) != napi_ok)
-    return nish_napi_fail(env, "add: argument 1 (a) could not be converted");
-  ...
-  napi_value out;
-  int32_t result = add(a, b);
-  if (napi_create_int32(env, result, &out) != napi_ok)
-    return nish_napi_fail(env, "add: cannot create the result");
-  return out;
-}
+**Numeric widths follow JavaScript's typed-array store rule:** convert, then
+take the width's modulus, and never throw. So `echoU8(300)` is 44 and
+`echoU32(-1)` is 4294967295, which is how `i32` already behaved under
+`x | 0`. Two decisions are deliberate:
 
-NAPI_MODULE_INIT() {
-  for (size_t i = 0; i < sizeof nish_napi_exports / sizeof nish_napi_exports[0]; i++) { ... }
-  return exports;
-}
-```
+- a `u32` result is boxed with `napi_create_uint32`, so it stays positive;
+- `nish_napi_f32` sends anything at or past `0x1.ffffffp127` to an infinity,
+  because C leaves an out-of-range double-to-float conversion undefined.
 
-### The numeric widths, and what an out-of-range JS number does
-
-A JavaScript `number` is the only numeric type the caller has, so every width
-narrower than it has to be given a rule. The shim's rule is **the one
-JavaScript already uses when a number is stored into a typed array**: convert,
-then take the width's modulus. Nothing throws.
-
-| Parameter | Read as | So `f(300)` gives | And `f(-1)` gives |
-| --- | --- | --- | --- |
-| `i32` | `napi_get_value_int32` (ToInt32) | 300 | -1 |
-| `u8` | `napi_get_value_uint32` (ToUint32), then `(uint8_t)` | 44 | 255 |
-| `u16` | `napi_get_value_uint32`, then `(uint16_t)` | 300 | 65535 |
-| `u32` | `napi_get_value_uint32` | 300 | 4294967295 |
-| `f32` | `napi_get_value_double`, then `nish_napi_f32` | 300 | -1 |
-| `i64`, `u64` | `napi_get_value_bigint_{int,uint}64` — a **bigint**, not a number | `TypeError` | `TypeError` |
-
-`a.echoU8(300) === new Uint8Array([300])[0]` and `a.echoU32(-1) === (-1 >>> 0)`,
-which is the point: the addon and the JavaScript beside it round-trip a value
-the same way. Truncating rather than throwing is also what the shim already did
-for `i32`, where `2^31` arrives as `-2^31` exactly as `x | 0` gives it; a
-bridge that refused 300 for a `u8` while quietly wrapping `2^31` for an `i32`
-would be the surprising one. A host that wants a range error checks before it
-calls.
-
-Two details are decisions rather than defaults:
-
-- **`u32` comes back positive.** A result is boxed with `napi_create_uint32`,
-  so `highBit()` returning `4294967295` is `4294967295` in JS and not `-1`.
-  `u8` and `u16` widen into the same constructor without changing value.
-- **`f32` never invokes undefined behaviour.** C leaves a double-to-float
-  conversion undefined when the value is out of the float range, so the shim
-  emits `nish_napi_f32`, which sends anything at or past `0x1.ffffffp127` —
-  the midpoint between `FLT_MAX` and 2^128, where round-to-nearest-even
-  stops being finite — to an infinity of that sign, and converts everything
-  else, NaN and the infinities included, directly. On the way out an `f32`
-  widens to a double exactly, so `a.echoF32(0.1)` is `Math.fround(0.1)`, the
-  value the module actually holds, rather than `0.1`.
-
-A `Result` passed or returned by value narrows its arms the same way: an
-`f32` value arm and a `u8` error arm each read into their own temporary and
-then into the union member the discriminant selects.
-`tests/self/interop-widths.ts` is the fixture, built into a real addon and
-called by the interop section of `tests/run.js`.
+`i64` / `u64` take a `bigint`, and a JS `number` there is a `TypeError`. A
+ranged parameter is read as a double and throws a `RangeError` outside
+`[Lo, Hi]`, before ToInt32 could wrap it into range (WP31).
+`tests/self/interop-widths.ts` is the fixture.
 
 ### Functions the shim cannot bridge say so
 
-A function whose signature the shim cannot carry is written into the file as a
-comment naming the position and the type that stopped it, under a heading that
-lists what does cross:
+Every external function is either wrapped or written into the shim as a
+comment naming the position and the type that stopped it, under a heading
+listing what does cross:
 
 ```c
-/* Not bridged, and why. This shim carries numbers (i32, u8, u16, u32, f32,
- * f64), booleans, i64 and u64 as bigints, strings, Int32Array /
- * Float32Array / Float64Array / BigInt64Array, and a `Result` passed or
- * returned by value over those; anything else needs a host that can follow
- * an arena pointer, which JavaScript is not. */
 /* app.ts: move(p: Point, dx: number): Point -- not bridged: parameter 1 (p) is Point */
-/* tests/cases/res_export.ts: openFile(path: string): Result<number, IoError> -- not bridged: it returns Result<number, IoError> */
 ```
 
-Every external function is either wrapped or named here. That is not
-decoration: the unsigned widths above were missing from every addon for as
-long as they were, because a reader table with no row for them dropped the
-function under a message that named no type.
+This is not decoration. The unsigned widths were missing from every addon for
+as long as the reader table had no row for them, because the function was
+dropped under a message that named no type.
 
 ### Arrays and strings across the boundary
 
-A typed-array argument is **borrowed, not copied**. The shim asks
-`napi_get_typedarray_info` for the element kind, length and data pointer,
-checks the kind against the parameter (`Float64Array` for `f64[]`,
-`Int32Array` for `i32[]`, `BigInt64Array` for `i64[]`), and builds the
-`nish_array` header on the C stack over the typed array's own bytes:
+**A typed-array argument is borrowed, not copied.** The shim checks the
+element kind and builds the `nish_array` header on the C stack over the typed
+array's own bytes. A million-element `Float64Array` therefore crosses in the
+time it takes to read one pointer, and `fill(xs, 7)` writes into the buffer
+the caller holds. The borrow has two consequences:
 
-```c
-/* examples/arrays.ts: fill(xs: number[], v: number): void */
-static napi_value nish_napi_fill(napi_env env, napi_callback_info info) {
-  ...
-  uint64_t mark = nish_arena_mark(); /* arena strings/arrays made for this call are released on return */
-  nish_array xs_hdr; /* borrowed: the Int32Array's own bytes, for this call only */
-  if (!nish_napi_array_arg(env, argv[0], napi_int32_array, &xs_hdr))
-    return nish_napi_fail_at(env, mark, "fill: argument 1 (xs) must be an Int32Array");
-  nish_array *xs = &xs_hdr;
-  ...
-  fill(xs, v);
-  ...
-  nish_arena_release(mark);
-  return out;
-}
-```
+- the callee must not retain the pointer, which only a returned alias could
+  do, and results are copied;
+- a `push` that grows a borrowed array moves it into the arena, invisibly to
+  JS.
 
-So a 1M-element `Float64Array` crosses in the time it takes to read one
-pointer, and a function that writes through its parameter (`fill`) writes
-into the JS buffer the caller still holds. Two rules follow from the borrow:
-the callee must not retain the pointer beyond the call, because the arena
-does not own the bytes (Nish has no module-level state, so only a
-returned alias could do that, and results are copied), and a `push` that
-grows a borrowed array moves it into the arena, invisibly to JS.
-
-A returned array is copied into a fresh typed array
-(`napi_create_arraybuffer`, `memcpy`, `napi_create_typedarray`), and a
-returned string into a JS string (`napi_create_string_utf8`), so no JS value
-ever aliases the arena. A string argument is measured and copied into an
-arena `nish_str` (`napi_get_value_string_utf8` twice: NUL-terminated, `len`
-the UTF-8 byte count, as `s.length` in Nish). Every function that
-touches the arena brackets the call with `nish_arena_mark` /
-`nish_arena_release`, on the failure paths too (`nish_napi_fail_at`), so the
-arena is back where it was when the wrapper returns and a host never has to
-reset it for bridged calls. Two housekeeping exports remain for hosts that
-call `nish_reset_arena()` between batches anyway, and `nish_free_arena()`
-releases the chunks. Functions with a class, `T | null`, nested-array,
-`string[]` or `boolean[]` parameter or result are skipped with a comment.
-
-```
-$ node examples/node-addon.mjs build/arrays.node
-sumF64([1,2,3]) = 6
-scale([1,2,3], 2) = 2,4,6 (Float64Array)
-squares(5) = 0,1,4,9,16
-fill(buf, 7) leaves buf = 7,7,7,7
-sumI64([1n << 40n, 2n]) = 1099511627778
-sumF64(new Int32Array(3)) throws: sumF64: argument 1 (xs) must be a Float64Array
-```
-
-`scripts/build.sh --profile napi` uses the `speed` flags (`-O3 -flto`,
-section GC, no unwind tables, stripped) plus `-shared -fPIC`, and on macOS
-`-Wl,-undefined,dynamic_lookup` because the `napi_*` symbols come from the
-`node` binary at load time. It finds the Node headers next to the running
-`node` (`<prefix>/include/node/node_api.h`, where nodejs.org tarballs, nvm,
-fnm and volta put them); distro packages need `libnode-dev` and
-`NODE_INCLUDE=/usr/include/node`. A missing `node_api.h` is a clear error,
-not a wall of clang output. The shim compiles clean under
-`-std=c11 -Wall -Wextra -Werror`. The `add.ts` addon is 8.5 KB.
-
-Loading it from ESM goes through `createRequire` (addons are CommonJS):
-
-```js
-import { createRequire } from "node:module";
-const addon = createRequire(import.meta.url)("./build/add.node");
-addon.add(2, 3); // 5
-```
+**A returned array or string is copied** into a fresh typed array or JS
+string, so no JS value ever aliases the arena. **A string argument** is copied
+into an arena `nish_str`. Every wrapper that touches the arena brackets the
+call with `nish_arena_mark` / `nish_arena_release`, including its failure
+paths (`nish_napi_fail_at`), so a host never needs to reset the arena for
+bridged calls.
 
 ### `--emit-napi-async <shim.c>`: the same exports, off the event loop
 
-The shim above runs the Nish function on whatever thread N-API handed it,
-which for a `require()`d addon is Node's main thread. A function that runs for
-200 ms blocks Node's event loop for 200 ms — every timer late, every socket
-unanswered, every frame dropped for as long as the call lasts. That is the
-defect [wp24-async.md](wp24-async.md) §5.1 names as A1, and it is the one
-thing that package recommended building.
+The synchronous shim runs on Node's main thread, so a 200 ms function blocks
+the event loop for 200 ms. That is the defect
+[wp24-async.md](wp24-async.md) §5.1 names A1. `--emit-napi-async` writes the
+same shim **plus** a promise-returning `<name>Async` for every export whose
+arguments and result are scalars. It uses `napi_create_async_work` on libuv's
+pool. There is no language surface: all of the asynchrony is generated C.
+Measured with `examples/node-addon-async.mjs`, the worst loop stall during a
+220 ms call fell from 218 ms to 0.36 ms.
 
-`--emit-napi-async` writes the same shim **plus** a promise-returning
-`<name>Async` for every export whose arguments and result are plain scalars:
-
-```bash
-node dist/index.js tests/self/interop-async.ts -o build/spin.ll \
-  --emit-napi-async build/spin_napi.c --threads
-scripts/build.sh build/spin.ll runtime/runtime.c build/spin_napi.c \
-  -o build/spin.node --profile napi --threads
-node examples/node-addon-async.mjs build/spin.node 120000
-# sync spin()        call   220 ms   worst loop stall   218.06 ms   over   8 ticks
-# async spinAsync()  call   220 ms   worst loop stall     0.36 ms   over  42 ticks
-```
-
-The call takes just as long either way — the work is identical and nothing got
-faster. What changed is who waits: `napi_create_async_work` runs it on libuv's
-thread pool and `napi_create_promise` / `napi_resolve_deferred` hand JavaScript
-a promise, so the loop keeps turning. **There is no language surface and no new
-syntax.** The compiled function is exactly as synchronous as it ever was and is
-still exported under its own name; all of the asynchrony is in the generated C,
-which is why this landed without a line of `docs/LANGUAGE.md` changing.
-
-Three properties are worth knowing before using it:
-
-- **`--threads` is required on both halves, and neither absence is silent.**
-  The worker allocates while the JS thread runs, so the arena has to be the
-  thread-local one (`wp20-threads.md` §4 T0) — in the generated C *and* in the
-  module's own IR. Without `-DNISH_THREADS` the arena is one process-wide bump
-  allocator that two threads would corrupt silently, so the shim opens with an
-  `#error`; and `nish --emit-napi-async` refuses to run without `--threads`
-  (exit 2), because a module that allocates inline reads `@nish_arena` as a
-  plain global otherwise and neither the shim's `#error` nor the link would
-  notice — a non-TLS reference links against the runtime's `_Thread_local`
-  definition without complaint in a `-shared -fPIC` build. The exec callback
-  brackets the call with `nish_arena_mark` / `nish_arena_release` on the
-  worker's own arena, which keeps a reused pool thread flat instead of growing
-  for the life of the process.
+- **`--threads` is required on both halves.** The worker allocates, so both
+  the shim and the module's IR need the thread-local arena. The shim
+  `#error`s without `-DNISH_THREADS`, and `nish` refuses the flag without
+  `--threads` (exit 2), because a non-TLS reference would link silently.
 - **`<name>Async` rejects; it never throws.** The promise is created before the
-  arguments are read, so a wrong argument comes back as a rejected `TypeError`
-  with the same message the synchronous wrapper throws. A promise-returning
-  function that threw synchronously would be the one failure a `.catch` cannot
-  reach.
-- **Scalars only, and the rest say why.** A string or typed-array parameter or
-  result keeps its synchronous wrapper alone, and the shim names it with the
-  reason. The arena is per-thread, so a mark taken on the JS thread cannot be
-  released on the worker; and a typed array is *borrowed* from the JS
-  `ArrayBuffer`, which N-API guarantees only for the duration of the callback
-  that read it — an asynchronous call outlives that callback by design.
+  arguments are read.
+- **Scalars only.** A string result lives in the worker's arena. A typed array
+  is borrowed only for the duration of the callback that read it, which an
+  asynchronous call outlives. A by-value `Result` parameter crosses, but a
+  `Result` result does not yet. Marshalling through a `malloc`ed copy would
+  lift these restrictions, and was left out deliberately.
 
-```c
-/* Not bridged asynchronously, and why. ... */
-/* tests/self/interop-async.ts: label(n: number): string -- no `labelAsync`: it returns string, which lives in the worker thread's arena */
-/* tests/self/interop-async.ts: total(xs: Int32Array): number -- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads */
-```
-
-A by-value `Result` *parameter* does cross, because it is scalars in a register
-and is read on the JS thread like any other argument; a `Result` *result* does
-not yet, because boxing one is several `napi_*` calls inside the completion
-callback. Marshalling a string or an array through a `malloc`ed copy is the
-shape that would lift the restriction, and it is deliberately not in this cut.
-
-Without the flag nothing changes: `--emit-napi` writes the byte-identical shim
-it always did, which is what lets an addon adopt this one call site at a time.
+Without the flag, `--emit-napi` writes a byte-identical shim.
 
 ## Batching: cross the boundary once per batch
 
-Every call from JS into native code costs more than the work a small
-function does. `bench/ffi.mjs` builds `bench/sum.ts` (f64 mode, so JS numbers
-cross unchanged) as an addon and as wasm and sums 1..1,000,000 four ways:
-one native call per element, one native call for the whole batch with no
-data (`sumTo(n)`), one native call with the data as a `Float64Array`
-(`sumArray(xs)`, a `for...of` over the buffer), and a JS loop for scale.
-Best of 5 on x86_64 Linux, Node 22, clang 18:
+`bench/ffi.mjs` sums 1..1,000,000 across each boundary (`bench/sum.ts`, f64
+mode; best of 5, x86_64 Linux, Node 22, clang 18):
 
-| Path | Time | Per element |
-| --- | ---: | ---: |
-| N-API: 1,000,000 calls to `add(acc, i)` | 29.9 ms | 29.9 ns |
-| N-API: one call to `sumTo(1000000)` | 0.3 us | 0.0003 ns |
-| N-API: one call to `sumArray(Float64Array)`, borrowed | 0.54 ms | 0.54 ns |
-| wasm: 1,000,000 calls to `add(acc, i)` | 2.3 ms | 2.3 ns |
-| wasm: one call to `sumTo(1000000)` | 0.1 us | 0.0001 ns |
-| wasm: one call to `sumArray(Float64Array)`, copied in | 1.13 ms | 1.13 ns |
-| JS loop, no boundary | 0.48 ms | 0.48 ns |
-| JS loop over the `Float64Array` | 0.96 ms | 0.96 ns |
+| Path | Per element |
+| --- | ---: |
+| N-API, one call per element | 29.9 ns |
+| wasm, one call per element | 2.3 ns |
+| N-API, one call over a borrowed `Float64Array` | 0.54 ns |
+| wasm, one call over a copied-in `Float64Array` | 1.13 ns |
+| JS loop / JS loop over the `Float64Array` | 0.48 / 0.96 ns |
+| one call to closed-form `sumTo(n)`, either build | under 1 µs in total |
 
-```
-$ node bench/ffi.mjs
-N-API: N calls to add(acc, i)               29.8553 ms      29.86 ns/element   result 500000500000
-N-API: one call to sumTo(N)                  0.0003 ms       0.00 ns/element   result 500000500000
-N-API: one call to sumArray(Float64Array)     0.5353 ms       0.54 ns/element   result 500000500000
-wasm: N calls to add(acc, i)                 2.2724 ms       2.27 ns/element   result 500000500000
-wasm: one call to sumTo(N)                   0.0001 ms       0.00 ns/element   result 500000500000
-wasm: one call to sumArray(Float64Array)     1.1254 ms       1.13 ns/element   result 500000500000
-JS loop (no boundary)                        0.4772 ms       0.48 ns/element   result 500000500000
-JS loop over the Float64Array                0.9560 ms       0.96 ns/element   result 500000500000
-```
-
-Rerun it for your machine; the ratios are what matter.
-
-What the table says:
-
-- An N-API crossing costs about 30 ns: argument boxing, the type checks,
-  `napi_get_value_*`, `napi_create_*`. For a function that does one add,
-  that is 60x the cost of doing the add in JS. Per-element calls into an
-  addon are never a win.
-- A wasm crossing is about 13x cheaper (V8 inlines the trampolines and
-  passes scalars in registers) but still 5x slower than the JS loop body.
-- One call that does the whole batch natively is measured in nanoseconds
-  in both builds. That is the design rule for every Nish boundary: pass
-  a whole array, string, or buffer in, process it in native memory, return
-  one result.
-- With the data in the call, the addon reads the JS buffer in place and its
-  `-O3` loop beats V8's loop over the same `Float64Array` (0.54 versus
-  0.96 ns per element, one crossing for a million elements). The wasm
-  path pays for the copy into the arena, `8 MB` here, about 0.6 ns per
-  element, and lands near the JS loop; it wins once the function does more
-  than one add per element, and the copy is what a WASI-less module can
-  offer (there is no way to alias a JS buffer from inside wasm memory).
-
-`sumTo` in
-`bench/sum.ts` is written in closed form, `(n * (n + 1)) / 2`. That is not a
-shortcut: at `-O3` LLVM's scalar evolution folds a `for` loop summing 1..n
-into this same expression, so the batched column is what the loop version
-will measure too. `sumArray` has to read every element, so it measures a
-real pass over the buffer on top of the crossing.
-
-## Files
-
-| File | Role |
-| --- | --- |
-| `runtime/nish.h` | Public C header: `nish_str`, `nish_array`, `struct nish_arena`, runtime prototypes (`nish_alloc_array` included), `NISH_SYMBOL`. |
-| `runtime/runtime-wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
-| stage0's `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
-| stage0's `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
-| stage0's `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async` (which requires `--threads`). |
-| `src/interop-abi.ts`, `interop-header.ts`, `interop-dts.ts`, `interop-wasm.ts`, `interop-napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `src/compile.ts` takes the same four flags and writes the same files. |
-| `tests/self/interop_oracle.js` | Both compilers over the corpus below, all five generated files compared byte for byte — the asynchronous shim among them. |
-| `tests/self/interop-payloads.ts`, `tests/self/interop-widths.ts`, `tests/self/interop-unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
-| `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
-| `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
-| `tests/self/interop-async.ts`, `examples/node-addon-async.mjs` | The WP24 A1 fixture — the shapes that get a `<name>Async` and the string and borrowed-array ones that do not — and the harness that calls both and measures what the loop was spared. |
-| `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
-| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `nish_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, the comment a skipped function leaves behind, and the WP24 A1 asynchronous exports — that `--emit-napi-async` is additive and inert when absent, that it is refused without `--threads`, that the generated C refuses to compile without `-DNISH_THREADS`, and that a built addon agrees with its synchronous twin while leaving the event loop responsive. |
+An N-API crossing costs about 30 ns, which is 60× a JS add, so per-element
+calls into an addon never pay. A wasm crossing is about 13× cheaper, but still
+5× slower than the JS loop body. **The design rule for every Nish boundary is
+to pass a whole array, string or buffer in, process it in native memory, and
+return one result.** With the data in the call, the addon's `-O3` loop beats
+V8 over the same buffer. Wasm pays for the copy, because a JS buffer cannot be
+aliased from linear memory. `sumTo` is written in closed form, which is what
+LLVM's scalar evolution makes of the loop anyway.
 
 ## Not in this package
 
-- Strings and I/O from wasm: `runtime-wasm.c` has no `nish_str_*`, `nish_print`
-  or files, so string functions stay commented out in the `.d.ts`; a WASI
-  build of `runtime.c` would lift that.
-- Zero-copy arrays in wasm: a JS buffer cannot be aliased from linear
-  memory, so the loader copies; a host that wants to skip the copy can keep
-  its data in `memory.buffer` and call the raw export with a header it
-  builds itself (`nish_alloc_array` is exported for that).
-- Classes, `T | null`, `string[]`, `boolean[]` and nested arrays across
-  either boundary: the generators report those functions as skipped rather
-  than silently omitting them, naming the argument or the result, and the
-  type, that stopped each one.
-- `--target` cross builds (ARM64, wasm32-wasi): linker work in `build.sh`
-  once a WASI runtime variant exists.
-- A `--link`-style one-shot flag for addons. Two commands (`--emit-napi`
-  then `build.sh --profile napi`) keep the CLI's `--link` contract (a program
-  with `main`) unchanged.
+- **Strings and I/O from wasm.** `runtime-wasm.c` has no strings, so string
+  functions stay comments in the `.d.ts`. The `wasi` profile
+  ([wp7-runtime.md](wp7-runtime.md#wasi-target)) runs whole programs, but it
+  does not generate a loader for library exports.
+- **Zero-copy arrays in wasm.** A host can build a header in `memory.buffer`
+  itself and call the raw export (`nish_alloc_array` is exported for that). A
+  caller-owned destination instead of `.slice()` is measured in
+  [wp30-bytes-interop.md](wp30-bytes-interop.md) and left to its own package.
+- **Classes, `T | null`, `string[]`, `boolean[]`, nested arrays and `Map`**
+  across either JS boundary. They are reported, never silently omitted.
+- **A one-shot `--link`-style flag for addons.** It would change `--link`'s
+  contract (a program with `main`), so building an addon stays two commands.

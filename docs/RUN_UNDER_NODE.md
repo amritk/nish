@@ -54,8 +54,9 @@ the same commit.
   `0` and appends `n` to a BigInt; both would be wrong.
 - `write`, `writeError`, `panic`
 - `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`,
-  `mkdirSync`, `isDirectorySync`, `spawnSync` — globals in Nish, not
-  imports from `node:fs`
+  `mkdirSync`, `isDirectorySync`, `readdirSync`, `spawnSync`, `spawnSyncTo`,
+  `monotonicNanos`, `lstatOwnerModeSync`, `geteuid`, `isExecutableSync` —
+  globals in Nish, not imports from `node:fs`
 - `readFileBytesSync` — `Array.from(fs.readFileSync(path))` in a `try`, a
   plain array of byte values or `null`, because a `u8[]` is a plain array here
 - `dst.set(src, offset)` — the one method a plain `Array` lacks, added to
@@ -75,14 +76,15 @@ the same commit.
   loop about a signal, and a blocking read never lets the loop run, so there is
   no synchronous answer to give ([wp33-round-trip.md](wp33-round-trip.md) §3.5)
 - `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`,
-  `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`,
+  `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`,
+  `udpBind`, `udpSendTo`,
   `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`,
   `pollWait` — installed only to **throw**, each
   naming itself: Node's sockets are ready only to its event loop, which a
   program that owns its loop never returns to
   ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A
-  `nish:net` import does not resolve under Node at all, as no `nish:` import
-  does; the globals are what the prelude can answer
+  `nish:net` import does not resolve under Node at all, nor does any other
+  `nish:` import but the two below; the globals are what the prelude can answer
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the
@@ -96,11 +98,21 @@ the same commit.
   arithmetic does. The answers agree with a native run; the timing does not,
   and nothing here claims it
   ([Constant time](LANGUAGE.md#constant-time-ctselect-and-cteq))
+- `secureZero` — fills the array with zeros, as the native wipe does
+- `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`
+  — as globals and as the `nish:unsafe` import, which the prelude resolves to
+  them: a plain read and write, and `| 0`, `Math.imul` or `BigInt.asIntN(64, …)`
+  for the wrap
+- `nish:secret` — resolved to `runtime/shim.mjs`, where a `Secret` is a plain
+  wrapper and `wipe` zero-fills what it holds; the checker's rules about a
+  `Secret` are not enforced under Node, and a zero-fill there promises nothing
+  about copies the engine made
 - `Ok`, `Err`
 - `parseInt`, `parseFloat` — Nish's, whose deviations from JavaScript are
   documented rules
 - `process.argv` — reindexed so `argv[0]` is the program on both sides
-- `Arena` — no-ops, `used()` answering zero
+- `Arena` — no-ops, `used()` answering zero; `arena()` answers a disposable
+  whose disposal does nothing
 - `nish/<module>` imports — resolved to `std/<module>.ts` beside the prelude,
   the way the compiler resolves them, so `import { parallelReduce } from
   "nish/threads"` runs as written. The standard library's bodies are the
@@ -117,9 +129,9 @@ Each of these lives below the globals, in an operator or in the object model, so
 no prelude can reach it. They are language decisions
 ([LANGUAGE.md](LANGUAGE.md#semantics-decisions)), not gaps to fill.
 
-- **i32 mode entirely.** `number` is a wrapping 32-bit integer; `/` truncates
-  and panics on a zero divisor; `>>>` keeps the signed reading. Every arithmetic
-  operator would have to change, which is what the rewriter is for.
+- **i32 mode entirely.** `number` is a 32-bit integer whose signed overflow
+  panics; `/` truncates and panics on a zero divisor; `>>>` keeps the signed
+  reading. Every arithmetic operator would have to change, which is what the rewriter is for.
 - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and so is
   every offset `charCodeAt`, `substring` and `indexOf` take or return. ASCII
   agrees; `"héllo".length` is `5` under Node and `6` natively.

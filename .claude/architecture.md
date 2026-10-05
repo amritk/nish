@@ -60,11 +60,11 @@ Compilation                                                            src/compi
 
   | Unit | What it holds | Today | Ceiling |
   | --- | --- | --- | --- |
-  | `runtime/runtime.c` | the core every program touches, a closed set | 3,515 (3,640 with `-DNISH_THREADS=1`) | 3,584 (3,840) |
-  | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,393 | 1,536 |
-  | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (901 threaded) | 320 (1,024) |
-  | `runtime/runtime-host.c` | the wall clock, entropy, file times, signals | 571 | 768 |
-  | `runtime/runtime-net.c` | the sockets of `nish:net`: addresses, non-blocking TCP and UDP, the readiness loop | 2,071 | 2,304 |
+  | `runtime/runtime.c` | the core every program touches, a closed set | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
+  | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,530 | 1,536 |
+  | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (905 threaded) | 320 (1,024) |
+  | `runtime/runtime-host.c` | the wall clock, entropy, file times, signals | 764 | 768 |
+  | `runtime/runtime-net.c` | the sockets of `nish:net`: addresses, non-blocking TCP and UDP, the readiness loop | 2,303 | 2,304 |
 
   They are apart so that a new builtin in one area cannot move another's
   number; the source bytes of any of them are history rather than a limit.

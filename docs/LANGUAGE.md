@@ -2518,8 +2518,8 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). A panic, or `process.exit`, ends the process and joins nothing
-  (`throw` is refused by Phase 0, `reject_throw`).
+  another). A panic ends the process and joins nothing (`throw` is refused by
+  Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope or an
   [`arena()`](#using-a--arena).** A scope bound any other way is
   `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
@@ -3192,7 +3192,7 @@ and both come from the program as written:
     gives.
   - **a guard that ends the path.** After `if (i < 0 || i >= w.length) { … }`
     the negation of the test holds for the rest of the block when the guarded
-    branch ends in `return`, `break`, `continue`, `throw`, or a call to the
+    branch ends in `return`, `break`, `continue`, or a call to the
     builtin `panic(…)` or `process.exit(…)` (`exit` from `nish:process` too).
     Only the builtins count: a parameter or local called `process`, or a
     function parameter called `panic`, is the call it resolves to and falls
@@ -5049,8 +5049,8 @@ const tally = (rows: string[]): i32 => {
   automatic scope releases before they do; a `return` releases only the
   outermost of them, whose mark is the lowest. A `return g(n)` whose
   arguments are all numbers is a tail call with the release moved ahead of
-  it, unless `g` reads the arena (`mem_using_arena_tail`). `throw` and a
-  panic end the process. Statements of the block before the declaration are
+  it, unless `g` reads the arena (`mem_using_arena_tail`). A panic ends
+  the process. Statements of the block before the declaration are
   outside it.
 - **Nothing allocated inside may outlive the block.** From the declaration to
   the end of the block, each of these is refused, naming the value and where

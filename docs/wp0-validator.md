@@ -12,10 +12,12 @@ Phase 0 runs on the raw syntax tree straight after parsing and before the
 checker, and reports the first construct Nish can never compile
 (`file:line:col: error: <message>`). Every rule is decided from syntax alone:
 no types, no scopes, no symbol resolution. The walk is one pre-order traversal
-dispatched on the node kind; in stage0 it measured about 2 ms on a 1,000-line,
-23,000-node file, and `tests/run.js` asserted under 50 ms until that check
-went with stage0's tests (#145). Each rule has at least one
-`tests/cases/reject_<construct>.ts` with the message fragment in its `.err`.
+dispatched on the node kind; in stage0 it measured about 2 ms on a
+1,000-line file, and `tests/run.js` asserted under 50 ms until that check went
+with stage0's tests (#145). Nearly every rule has a
+`tests/cases/reject_<construct>.ts` with the message fragment in its `.err`;
+the LANGUAGE.md table names the case, and marks the three rows that have none
+(`Function(...)`, and `Function` or `Proxy` as a value).
 
 **Defence in depth, not the only guard.** The checker still rejects what it
 does not understand, but it only looks where it has to. The validator sees
@@ -88,14 +90,10 @@ The reasoning that rule set rests on:
   `useConsistentArrayType` (`T[]`). `useOptionalChain` and
   `useExponentiationOperator` are turned *off* because they push code towards
   `?.` and `**`, which Nish rejects.
-- **House style**: kebab-case file names (`useFilenamingConvention`, with
-  `scripts/check-filenames.mjs` for files Biome does not read); `type` over
-  `interface` and a function as an arrow bound to a `const`
-  (`useArrowFunction`, `useShorthandFunctionType`, `useConsistentArrowReturn`,
-  `useConsistentTypeDefinitions`, `useConsistentMethodSignatures`, and the
-  `biome-plugins/no-function-declaration.grit` plugin, since Biome has no
-  built-in rule for declarations). `useImportType`, `useTemplate` and
-  `noNonNullAssertion` are off.
+- **House style** (kebab-case file names, `type` over `interface`, a function
+  as an arrow bound to a `const`) is a second group, listed in linting.md;
+  `biome-plugins/no-function-declaration.grit` exists because Biome has no
+  built-in rule against function declarations.
 - **Nish program directories** keep the arrow half (the language has arrows,
   [wp22-arrow-functions.md](wp22-arrow-functions.md)) but not the `type` half,
   because a struct is an `interface`; the unused-variable and numeric-literal
