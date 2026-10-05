@@ -11,7 +11,7 @@ import { netAddress, netClose, netLocalPort, netRead, netWrite, connectResult, p
 import { TlsServerConfig } from "nish/net/tls";
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server";
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp";
-import { httpFieldIs } from "nish/net/http-fields";
+import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
 import { H2_DATA, H2_ERROR, H2_NEED_MORE, H2_REQUEST, Http2Config, Http2Connection } from "nish/net/http2";
 import { Http2TlsServer } from "nish/net/http2-tls";
 import { leafPrivate, serverPrivate } from "../net_tls_common/server";
@@ -54,13 +54,9 @@ export class H2Loop {
     this.buf = new Array<u8>(20000);
     this.keyBuffer = new Array<u8>(32);
     this.randomBuffer = new Array<u8>(32);
-    this.names = [[toU8(99), toU8(111), toU8(110), toU8(116), toU8(101), toU8(110), toU8(116), toU8(45), toU8(116), toU8(121), toU8(112), toU8(101)]];
-    this.values = [[toU8(116), toU8(101), toU8(120), toU8(116), toU8(47), toU8(112), toU8(108), toU8(97), toU8(105), toU8(110)]];
-    this.body = [];
-    const text: string = "hello from nish/net/http2\n";
-    for (let k: i32 = 0; k < toI32(text.length); k++) {
-      this.body.push(toU8(text.charCodeAt(k)));
-    }
+    this.names = [httpFieldBytes("content-type")];
+    this.values = [httpFieldBytes("text/plain")];
+    this.body = httpFieldBytes("hello from nish/net/http2\n");
     this.loop = pollCreate();
     this.listener = tcpListen("127.0.0.1", 0, 16);
     this.port = netLocalPort(this.listener);

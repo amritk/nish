@@ -4,6 +4,7 @@
 // socket would, and renders what comes back — the events the program sees and
 // the frames the server sends — as text a check can compare.
 import { HPACK_INDEX_WITHOUT, HpackDecoder, HpackEncoder } from "nish/net/hpack";
+import { httpFieldBytes } from "nish/net/http-fields";
 import {
   H2_FLAG_ACK,
   H2_FLAG_END_HEADERS,
@@ -45,6 +46,7 @@ import {
   Http2Config,
   Http2Connection,
 } from "nish/net/http2";
+import { fromHex, toHex } from "../crypto_x509/hex";
 
 /** A typed zero for offsets: a bare literal is an `f64` under `--number-mode f64`. */
 export const ZERO: i32 = 0;
@@ -55,40 +57,6 @@ export const NO_PAD: i32 = -1;
 /** The client connection preface (RFC 9113 §3.4). */
 export const PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-const H2_HEX_DIGITS: string = "0123456789abcdef";
-
-/** The bytes of an ASCII string. */
-export const h2Bytes = (text: string): u8[] => {
-  const out: u8[] = [];
-  for (let k: i32 = 0; k < toI32(text.length); k++) {
-    out.push(toU8(text.charCodeAt(k)));
-  }
-  return out;
-};
-
-/** `bytes` as lowercase hex, two digits a byte. */
-export const h2Hex = (bytes: u8[]): string => {
-  const parts: string[] = [];
-  for (const b of bytes) {
-    const v: i32 = toI32(b);
-    parts.push(H2_HEX_DIGITS.substring(v >> 4, (v >> 4) + 1));
-    parts.push(H2_HEX_DIGITS.substring(v & 15, (v & 15) + 1));
-  }
-  return parts.join("");
-};
-
-/** The value of one lowercase hex digit. */
-const h2Nibble = (c: i32): i32 => (c >= 97 ? c - 87 : c - 48);
-
-/** The bytes a lowercase hex string spells, two digits a byte. */
-export const h2FromHex = (hex: string): u8[] => {
-  const out: u8[] = [];
-  for (let k: i32 = 0; k + 1 < toI32(hex.length); k += 2) {
-    out.push(toU8(h2Nibble(toI32(hex.charCodeAt(k))) * 16 + h2Nibble(toI32(hex.charCodeAt(k + 1)))));
-  }
-  return out;
-};
-
 /** `bytes[from .. from + n)` as text, one character a byte. */
 export const textAt = (bytes: u8[], from: i32, n: i32): string => {
   const parts: string[] = [];
@@ -97,6 +65,9 @@ export const textAt = (bytes: u8[], from: i32, n: i32): string => {
   }
   return parts.join("");
 };
+
+/** A name or value as text, or `(n bytes)` past forty. */
+const clip = (bytes: u8[]): string => (toI32(bytes.length) > 40 ? `(${bytes.length} bytes)` : textAt(bytes, ZERO, toI32(bytes.length)));
 
 /** `n` bytes of `x`. */
 export const filler = (n: i32): u8[] => {
@@ -111,7 +82,7 @@ export const filler = (n: i32): u8[] => {
 export const namesOf = (pairs: string[]): u8[][] => {
   const out: u8[][] = [];
   for (let k: i32 = 0; k + 1 < toI32(pairs.length); k += 2) {
-    out.push(h2Bytes(pairs[k]));
+    out.push(httpFieldBytes(pairs[k]));
   }
   return out;
 };
@@ -120,7 +91,7 @@ export const namesOf = (pairs: string[]): u8[][] => {
 export const valuesOf = (pairs: string[]): u8[][] => {
   const out: u8[][] = [];
   for (let k: i32 = 0; k + 1 < toI32(pairs.length); k += 2) {
-    out.push(h2Bytes(pairs[k + 1]));
+    out.push(httpFieldBytes(pairs[k + 1]));
   }
   return out;
 };
@@ -159,11 +130,11 @@ export class Wire {
 
   /** Appends the bytes `hex` spells. */
   hex(text: string): void {
-    this.raw(h2FromHex(text));
+    this.raw(fromHex(text));
   }
 
   preface(): void {
-    this.raw(h2Bytes(PREFACE));
+    this.raw(httpFieldBytes(PREFACE));
   }
 
   settings(ids: i32[], values: i64[]): void {
@@ -178,7 +149,7 @@ export class Wire {
   block(pairs: string[]): u8[] {
     const out: u8[] = [];
     for (let k: i32 = 0; k + 1 < toI32(pairs.length); k += 2) {
-      this.enc.encodeField(out, h2Bytes(pairs[k]), h2Bytes(pairs[k + 1]), HPACK_INDEX_WITHOUT, false);
+      this.enc.encodeField(out, httpFieldBytes(pairs[k]), httpFieldBytes(pairs[k + 1]), HPACK_INDEX_WITHOUT, false);
     }
     return out;
   }
@@ -211,7 +182,7 @@ export class Wire {
   }
 
   data(stream: i32, text: string, flags: i32): void {
-    const bytes: u8[] = h2Bytes(text);
+    const bytes: u8[] = httpFieldBytes(text);
     this.add(http2WriteData(this.scratch, ZERO, stream, bytes, ZERO, toI32(bytes.length), flags, NO_PAD));
   }
 
@@ -225,7 +196,7 @@ export class Wire {
   }
 
   ping(hex: string): void {
-    this.add(http2WritePing(this.scratch, ZERO, h2FromHex(hex), ZERO, false));
+    this.add(http2WritePing(this.scratch, ZERO, fromHex(hex), ZERO, false));
   }
 
   rst(stream: i32, code: i32): void {
@@ -330,11 +301,9 @@ export class FrameLog {
         const fields: string[] = [];
         for (let k: i32 = 0; k < toI32(this.dec.names.length) && k < toI32(this.dec.values.length); k++) {
           const value: u8[] = this.dec.values[k];
-          const shown: string = toI32(value.length) > 40 ? `(${value.length} bytes)` : textAt(value, ZERO, toI32(value.length));
+          const shown: string = clip(value);
           const never: string = k < toI32(this.dec.neverIndexed.length) && this.dec.neverIndexed[k] ? " (never indexed)" : "";
-          const name: u8[] = this.dec.names[k];
-          const named: string = toI32(name.length) > 40 ? `(${name.length} bytes)` : textAt(name, ZERO, toI32(name.length));
-          fields.push(`${named}=${shown}${never}`);
+          fields.push(`${clip(this.dec.names[k])}=${shown}${never}`);
         }
         const end: string = (this.blockFlags & H2_FLAG_END_STREAM) !== 0 ? " end" : "";
         const more: string = this.blockFrames > 1 ? ` +${this.blockFrames - 1}` : "";
@@ -350,7 +319,7 @@ export class FrameLog {
         for (let k: i32 = 0; k < 8 && f.contentStart + k < toI32(p.length); k++) {
           opaque.push(p[f.contentStart + k]);
         }
-        return `PING${f.has(H2_FLAG_ACK) ? " ack" : ""} ${h2Hex(opaque)}`;
+        return `PING${f.has(H2_FLAG_ACK) ? " ack" : ""} ${toHex(opaque)}`;
       }
       case H2_FRAME_GOAWAY:
         return `GOAWAY ${f.lastStreamId} ${f.errorCode}`;

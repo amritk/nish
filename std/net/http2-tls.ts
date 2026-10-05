@@ -45,7 +45,7 @@
  * Written from RFC 9113 §3 and §9.2, not ported from another implementation.
  */
 import { Secret } from "nish:secret"
-import { H2_ERROR, Http2Config, Http2Connection } from "nish/net/http2"
+import { H2_ERROR, H2_NEED_MORE, Http2Config, Http2Connection } from "nish/net/http2"
 import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_STATE_OPEN, TLS_RECORD_WANT_WRITE } from "nish/net/tls/record-server"
 import { TlsTcpServer } from "nish/net/tls-tcp"
@@ -62,12 +62,7 @@ export const H2_ALPN: string = "h2"
  */
 export class Http2TlsServer {
   tls: TlsTcpServer
-  config: Http2Config
   connections: Http2Connection[]
-  /** Where decrypted bytes are read before the connection takes them: one frame. */
-  scratch: u8[]
-  /** Whether each slot's TLS stream has ended, so its connection will get no more. */
-  ended: boolean[]
 
   /**
    * A pool of `size` slots, at least one, serving HTTP/2 under `config` over
@@ -76,14 +71,10 @@ export class Http2TlsServer {
    */
   constructor(tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32) {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
-    this.config = config
     this.connections = []
-    this.ended = []
     for (let k: i32 = 0; k < this.tls.size(); k++) {
       this.connections.push(new Http2Connection(config))
-      this.ended.push(false)
     }
-    this.scratch = new Array<u8>(config.maxFrameSize)
   }
 
   /** How many slots the pool has. */
@@ -127,7 +118,6 @@ export class Http2TlsServer {
     const slot: i32 = this.tls.accept(serverRandom, ephemeralPrivate)
     if (slot >= 0 && slot < toI32(this.connections.length)) {
       this.connections[slot].restart()
-      this.ended[slot] = false
     }
     return slot
   }
@@ -152,8 +142,7 @@ export class Http2TlsServer {
 
   /** Whether `slot`'s handshake is done and chose anything but `h2`. */
   refused(slot: i32): boolean {
-    const record = this.tls.connection(slot)
-    return record.state === TLS_RECORD_STATE_OPEN && record.tls.alpn !== H2_ALPN
+    return this.tls.connection(slot).state === TLS_RECORD_STATE_OPEN && this.alpn(slot) !== H2_ALPN
   }
 
   /**
@@ -166,23 +155,29 @@ export class Http2TlsServer {
       return H2_ERROR
     }
     const conn: Http2Connection = this.connections[slot]
-    while (!this.ended[slot]) {
-      const room: i32 = conn.inputRoom()
-      const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
-      if (want <= 0) {
+    // TLS decrypts straight into the connection's input, so a byte is
+    // copied once on its way in.
+    while (!conn.inputEnded) {
+      const room: i32 = conn.inputTail()
+      if (room <= 0) {
         break
       }
-      const n: i32 = this.tls.read(slot, this.scratch, H2_TLS_ZERO, want)
+      const n: i32 = this.tls.read(slot, conn.input, conn.inputEnd, room)
       if (n === 0) {
-        this.ended[slot] = true
+        conn.endInput()
       }
       if (n <= 0) {
         break
       }
-      conn.feed(this.scratch, H2_TLS_ZERO, n)
+      conn.received(n)
     }
     const event: i32 = conn.next()
-    this.flush(slot)
+    // What the program answers to one event and the next shares a record:
+    // the connection's output goes to TLS only once it stalls or ends, and
+    // the program's own `flush` after the loop.
+    if (event === H2_NEED_MORE || event === H2_ERROR) {
+      this.flush(slot)
+    }
     return event
   }
 
@@ -207,12 +202,7 @@ export class Http2TlsServer {
       }
       conn.consume(n)
     }
-    // A peer whose stream has ended sends nothing more, but the requests it
-    // sent before are still answered: TLS is shut down once nothing is left
-    // to read, to answer or to send.
-    const finished: boolean =
-      this.ended[slot] && !conn.wantsWrite() && conn.active === 0 && conn.inputEnd === conn.inputStart
-    if (conn.isDone() || finished) {
+    if (conn.isDone()) {
       return this.tls.shutdown(slot)
     }
     const wants: i32 = this.tls.interest(slot)

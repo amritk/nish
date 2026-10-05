@@ -18,7 +18,9 @@ import {
 } from "nish/net/http2-frame";
 import { H2_CLOSED, H2_ERROR, Http2Config } from "nish/net/http2";
 import { Suite } from "nish/testing";
-import { Client, ZERO, getOf, h2Bytes, h2Hex, postOf } from "../net_http2/peer";
+import { httpFieldBytes } from "nish/net/http-fields";
+import { toHex } from "../crypto_x509/hex";
+import { Client, ZERO, getOf, postOf } from "../net_http2/peer";
 
 /** A connection past both prefaces, under `config`. */
 const opened = (config: Http2Config): Client => {
@@ -50,7 +52,7 @@ const alive = (c: Client): boolean => {
 const frameHex = (length: i32, type: i32, flags: i32, stream: i32, hex: string): string => {
   const out: u8[] = new Array<u8>(9 + length);
   http2WriteHeader(out, ZERO, length, type, flags, stream);
-  return `${h2Hex(out).substring(0, 18)}${hex}`;
+  return `${toHex(out).substring(0, 18)}${hex}`;
 };
 
 /** Runs every check and answers the exit code. */
@@ -60,9 +62,9 @@ export const errorChecks = (): i32 => {
   // --- connection errors: the prefaces (§3.4) ----------------------------------------
   const a = new Client(new Http2Config());
   a.takeFrames();
-  a.wire.raw(h2Bytes("PRI * HTTP/1.1\r\n\r\nSM\r\n\r\n"));
+  a.wire.raw(httpFieldBytes("PRI * HTTP/1.1\r\n\r\nSM\r\n\r\n"));
   t.eqStr("a preface that is not HTTP/2's: PROTOCOL_ERROR", outcome(a), "error 1 | GOAWAY 0 1");
-  t.ok("the connection is spent: it takes and drops every byte, answers H2_ERROR again, and is done", a.conn.feed(h2Bytes("more"), ZERO, toI32(4)) === 4 && a.conn.next() === H2_ERROR && a.conn.isDone());
+  t.ok("the connection is spent: it takes and drops every byte, answers H2_ERROR again, and is done", a.conn.feed(httpFieldBytes("more"), ZERO, toI32(4)) === 4 && a.conn.next() === H2_ERROR && a.conn.isDone());
   const b = new Client(new Http2Config());
   b.takeFrames();
   b.wire.preface();

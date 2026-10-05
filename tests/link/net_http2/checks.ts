@@ -30,7 +30,8 @@ import {
 } from "nish/net/http2-frame";
 import { H2_AGAIN, H2_CLOSED, H2_INVALID, H2_NEED_MORE, Http2Config, Http2Stream } from "nish/net/http2";
 import { Suite } from "nish/testing";
-import { Client, ZERO, h2Bytes, filler, getOf, namesOf, postOf, valuesOf } from "./peer";
+import { httpFieldBytes } from "nish/net/http-fields";
+import { Client, ZERO, filler, getOf, namesOf, postOf, valuesOf } from "./peer";
 
 /** The connection's configuration with the defaults. */
 const defaults = (): Http2Config => new Http2Config();
@@ -64,8 +65,8 @@ export const http2Checks = (): i32 => {
   t.eqStr("a GET with END_STREAM is a request that has ended", a.takeEvents(), "request 1 GET /hello end");
   t.eqStr("its fields are the program's", `${a.conn.fields.scheme.length} ${a.conn.fields.authority.length} ${a.conn.fields.contentLength}`, "5 11 -1");
   t.eqI32("the response head", a.conn.respond(toI32(1), toI32(200), namesOf(["content-type", "text/plain"]), valuesOf(["content-type", "text/plain"]), false), ZERO);
-  t.eqI32("a first chunk", a.conn.writeData(toI32(1), h2Bytes("hello, "), ZERO, toI32(7), false), toI32(7));
-  t.eqI32("and the last", a.conn.writeData(toI32(1), h2Bytes("world"), ZERO, toI32(5), true), toI32(5));
+  t.eqI32("a first chunk", a.conn.writeData(toI32(1), httpFieldBytes("hello, "), ZERO, toI32(7), false), toI32(7));
+  t.eqI32("and the last", a.conn.writeData(toI32(1), httpFieldBytes("world"), ZERO, toI32(5), true), toI32(5));
   t.eqStr(
     "go out as HEADERS and two DATA frames, the last ending the stream",
     a.takeFrames(),
@@ -112,7 +113,7 @@ export const http2Checks = (): i32 => {
   t.eqStr("trailers end a request", d.takeEvents(), 'request 3 POST /trailers; data 3 "body"; trailers 3 1');
   t.eqI32("a 103 first", d.conn.respond(toI32(3), toI32(103), namesOf(["link", "</s.css>"]), valuesOf(["link", "</s.css>"]), false), ZERO);
   t.eqI32("then the 200", d.conn.respond(toI32(3), toI32(200), namesOf(none()), valuesOf(none()), false), ZERO);
-  d.conn.writeData(toI32(3), h2Bytes("ok"), ZERO, toI32(2), false);
+  d.conn.writeData(toI32(3), httpFieldBytes("ok"), ZERO, toI32(2), false);
   t.eqI32("and trailers after the body", d.conn.writeTrailers(toI32(3), namesOf(["grpc-status", "0"]), valuesOf(["grpc-status", "0"])), ZERO);
   t.eqStr(
     "go out in that order, the trailers ending the stream",
@@ -131,7 +132,7 @@ export const http2Checks = (): i32 => {
   e.send();
   e.takeEvents();
   e.conn.respond(toI32(1), toI32(200), namesOf(none()), valuesOf(none()), false);
-  const body: u8[] = h2Bytes("abcdefghijklmnopqrstuvwxy");
+  const body: u8[] = httpFieldBytes("abcdefghijklmnopqrstuvwxy");
   t.eqI32("a stream whose window is 10 takes 10 of 25 bytes", e.conn.writeData(toI32(1), body, ZERO, toI32(25), true), toI32(10));
   t.eqI32("then nothing: it is stalled", e.conn.writeData(toI32(1), body, toI32(10), toI32(15), true), H2_AGAIN);
   t.eqStr("and END_STREAM was held back with the rest", e.takeFrames(), 'HEADERS 1 :status=200; DATA 1 10 "abcdefghij"');
@@ -228,8 +229,8 @@ export const http2Checks = (): i32 => {
   m.conn.respond(toI32(5), toI32(204), namesOf(none()), valuesOf(none()), true);
   m.conn.respond(toI32(3), toI32(200), namesOf(none()), valuesOf(none()), false);
   m.conn.respond(toI32(1), toI32(200), namesOf(none()), valuesOf(none()), false);
-  m.conn.writeData(toI32(3), h2Bytes("three"), ZERO, toI32(5), true);
-  m.conn.writeData(toI32(1), h2Bytes("one"), ZERO, toI32(3), true);
+  m.conn.writeData(toI32(3), httpFieldBytes("three"), ZERO, toI32(5), true);
+  m.conn.writeData(toI32(1), httpFieldBytes("one"), ZERO, toI32(3), true);
   t.eqStr(
     "answered out of order",
     m.takeFrames(),
@@ -295,11 +296,11 @@ export const http2Checks = (): i32 => {
   x.wire.data(toI32(1), "frame two", ZERO);
   x.send();
   t.eqStr("DATA in the tunnel is the protocol's bytes", x.takeEvents(), 'data 1 "frame one"; data 1 "frame two"');
-  x.conn.writeData(toI32(1), h2Bytes("echo"), ZERO, toI32(4), false);
+  x.conn.writeData(toI32(1), httpFieldBytes("echo"), ZERO, toI32(4), false);
   x.wire.data(toI32(1), "", H2_FLAG_END_STREAM);
   x.send();
   t.eqStr("both ways, and the peer's END_STREAM closes its half", x.takeEvents(), 'data 1 "" end');
-  t.eqI32("an empty DATA with END_STREAM closes the server's", x.conn.writeData(toI32(1), h2Bytes(""), ZERO, ZERO, true), ZERO);
+  t.eqI32("an empty DATA with END_STREAM closes the server's", x.conn.writeData(toI32(1), httpFieldBytes(""), ZERO, ZERO, true), ZERO);
   t.ok("so the stream is closed", x.takeFrames() === 'HEADERS 1 :status=200; DATA 1 4 "echo"; DATA 1 0 "" end' && x.conn.active === 0);
   x.wire.headers(toI32(3), [":method", "CONNECT", ":authority", "example.com:443"], ZERO);
   x.send();
@@ -375,7 +376,7 @@ export const http2Checks = (): i32 => {
   w.takeEvents();
   t.eqI32("respond on a stream that is not open: H2_CLOSED", w.conn.respond(toI32(7), toI32(200), namesOf(none()), valuesOf(none()), false), H2_CLOSED);
   t.eqI32("so do trailers", w.conn.writeTrailers(toI32(7), namesOf(none()), valuesOf(none())), H2_CLOSED);
-  t.eqI32("writeData before the response head: H2_CLOSED", w.conn.writeData(toI32(1), h2Bytes("x"), ZERO, toI32(1), false), H2_CLOSED);
+  t.eqI32("writeData before the response head: H2_CLOSED", w.conn.writeData(toI32(1), httpFieldBytes("x"), ZERO, toI32(1), false), H2_CLOSED);
   t.eqI32("writeTrailers before it: H2_INVALID", w.conn.writeTrailers(toI32(1), namesOf(none()), valuesOf(none())), H2_INVALID);
   t.eqI32("a 101, which HTTP/2 does not have (§8.6): H2_INVALID", w.conn.respond(toI32(1), toI32(101), namesOf(none()), valuesOf(none()), false), H2_INVALID);
   t.eqI32("a status of 99: H2_INVALID", w.conn.respond(toI32(1), toI32(99), namesOf(none()), valuesOf(none()), false), H2_INVALID);

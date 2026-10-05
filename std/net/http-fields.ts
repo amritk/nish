@@ -141,16 +141,14 @@ const httpFieldsLowerTchar = (c: i32): boolean => {
   }
 }
 
-/** Whether `c` is a `tchar`, uppercase letters included: a method or a protocol may hold them. */
-const httpFieldsTchar = (c: i32): boolean => httpFieldsLowerTchar(c) || (c >= 65 && c <= 90)
-
-/** Whether `bytes` is a non-empty token. */
-const httpFieldsIsToken = (bytes: u8[]): boolean => {
+/** Whether `bytes` is a non-empty token, with uppercase letters in it only when `upper`. */
+const httpFieldsAllTchar = (bytes: u8[], upper: boolean): boolean => {
   if (toI32(bytes.length) === 0) {
     return false
   }
   for (const b of bytes) {
-    if (!httpFieldsTchar(toI32(b))) {
+    const c: i32 = toI32(b)
+    if (!httpFieldsLowerTchar(c) && !(upper && c >= 65 && c <= 90)) {
       return false
     }
   }
@@ -162,17 +160,7 @@ const httpFieldsIsToken = (bytes: u8[]): boolean => {
  * non-empty token in lowercase (RFC 9110 §5.1, RFC 9113 §8.2.1, RFC 9114
  * §4.2). A pseudo-header's name starts with a colon and is not one.
  */
-export const httpFieldNameValid = (name: u8[]): boolean => {
-  if (toI32(name.length) === 0) {
-    return false
-  }
-  for (const b of name) {
-    if (!httpFieldsLowerTchar(toI32(b))) {
-      return false
-    }
-  }
-  return true
-}
+export const httpFieldNameValid = (name: u8[]): boolean => httpFieldsAllTchar(name, false)
 
 /**
  * Whether `value` may be sent as a field value: no NUL, CR or LF, and no
@@ -412,6 +400,8 @@ export class HttpFields {
   values: u8[][]
   /** The `content-length`, or `HTTP_FIELDS_NO_LENGTH`. */
   contentLength: i64 = -1
+  /** The empty value an absent pseudo-header reads as, made once. */
+  none: u8[]
 
   constructor() {
     this.method = []
@@ -419,18 +409,18 @@ export class HttpFields {
     this.authority = []
     this.path = []
     this.protocol = []
+    this.none = []
     this.names = []
     this.values = []
   }
 
   /** Empties every field, so the next read starts from nothing. */
   clear(): void {
-    const none: u8[] = []
-    this.method = none
-    this.scheme = none
-    this.authority = none
-    this.path = none
-    this.protocol = none
+    this.method = this.none
+    this.scheme = this.none
+    this.authority = this.none
+    this.path = this.none
+    this.protocol = this.none
     this.status = 0
     while (toI32(this.names.length) > 0) {
       this.names.pop()
@@ -523,7 +513,7 @@ export class HttpFields {
     switch (pseudo) {
       case HTTP_FIELDS_METHOD:
         this.method = value
-        return httpFieldsIsToken(value) ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE
+        return httpFieldsAllTchar(value, true) ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE
       case HTTP_FIELDS_SCHEME:
         this.scheme = value
         return httpFieldsSchemeValid(value) ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE
@@ -535,7 +525,7 @@ export class HttpFields {
         return toI32(value.length) > 0 ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE
       case HTTP_FIELDS_PROTOCOL:
         this.protocol = value
-        return httpFieldsIsToken(value) ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE
+        return httpFieldsAllTchar(value, true) ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE
       default:
         this.status = httpFieldsStatusOf(value)
         return this.status > 0 ? HTTP_FIELDS_OK : HTTP_FIELDS_BAD_PSEUDO_VALUE

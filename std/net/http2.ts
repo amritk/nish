@@ -91,7 +91,13 @@ import {
   HpackEncoder,
   hpackHuffmanLength,
 } from "nish/net/hpack"
-import { HTTP_FIELDS_OK, HttpFields, httpFieldSensitive, httpFieldsCheckOutgoing } from "nish/net/http-fields"
+import {
+  HTTP_FIELDS_OK,
+  HttpFields,
+  httpFieldBytes,
+  httpFieldSensitive,
+  httpFieldsCheckOutgoing,
+} from "nish/net/http-fields"
 import {
   H2_COMPRESSION_ERROR,
   H2_DEFAULT_MAX_FRAME,
@@ -202,6 +208,9 @@ const H2_ZERO: i32 = 0
 /** The character `0`, typed, which a status digit is added to. */
 const H2_DIGIT_ZERO: i32 = 48
 
+/** 431 Request Header Fields Too Large (RFC 6585 §5), typed. */
+const H2_STATUS_TOO_LARGE: i32 = 431
+
 /** A typed -1, for no padding. */
 const H2_NO_PAD: i32 = -1
 
@@ -266,8 +275,25 @@ const http2IsPreface = (buf: u8[], off: i32): boolean => {
   return true
 }
 
-/** The smaller of two `i64`s. */
-const http2Min = (a: i64, b: i64): i64 => (a < b ? a : b)
+/** Moves `buf[start, end)` to the front of `buf` and answers where it now ends. */
+const http2Compact = (buf: u8[], start: i32, end: i32): i32 => {
+  const keep: i32 = end - start
+  if (start > 0) {
+    for (let k: i32 = 0; k < keep && k < toI32(buf.length) && start + k < toI32(buf.length); k++) {
+      buf[k] = buf[start + k]
+    }
+  }
+  return keep
+}
+
+/** Writes `id` at `at` in the ring `ring` and answers where the next one goes. */
+const http2Remember = (ring: i32[], at: i32, id: i32): i32 => {
+  const slot: i32 = at % toI32(ring.length)
+  if (slot >= 0 && slot < toI32(ring.length)) {
+    ring[slot] = id
+  }
+  return slot + 1
+}
 
 /** Panics unless `[off, off + len)` lies inside `buf`. */
 const http2CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
@@ -312,6 +338,8 @@ export class Http2Connection {
   /** The bytes of `:status` and of a three-digit status, reused for every response. */
   statusName: u8[]
   statusValue: u8[]
+  /** GOAWAY's debug data, which the server never sends: one empty array, made once. */
+  noDebug: u8[]
   /** The server's SETTINGS, made once and sent by every `restart`. */
   settingIds: i32[]
   settingValues: i64[]
@@ -367,6 +395,8 @@ export class Http2Connection {
   sendBlocked: boolean = false
   goawaySent: boolean = false
   goawayReceived: boolean = false
+  /** The peer's byte stream has ended (`endInput`). */
+  inputEnded: boolean = false
   /** Whether the last H2_REQUEST, H2_DATA or H2_TRAILERS ended its stream. */
   endStream: boolean = false
   /** Whether H2_RESET came from the peer's RST_STREAM rather than a rule its stream broke. */
@@ -403,7 +433,8 @@ export class Http2Connection {
     }
     this.resets = new Array<i32>(config.maxStreams + H2_RECENT_RESETS)
     this.closed = new Array<i32>(config.maxStreams + H2_RECENT_RESETS)
-    this.statusName = [58, 115, 116, 97, 116, 117, 115]
+    this.statusName = httpFieldBytes(":status")
+    this.noDebug = []
     this.statusValue = [48, 48, 48]
     this.data = this.input
     this.settingIds = [
@@ -471,6 +502,7 @@ export class Http2Connection {
     this.sendBlocked = false
     this.goawaySent = false
     this.goawayReceived = false
+    this.inputEnded = false
     this.stream = 0
     this.endStream = false
     this.dataStart = 0
@@ -509,25 +541,35 @@ export class Http2Connection {
     if (this.state === H2_STATE_FAILED) {
       return len
     }
-    if (this.inputStart > 0) {
-      const keep: i32 = this.inputEnd - this.inputStart
-      for (let k: i32 = 0; k < keep && this.inputStart + k < toI32(this.input.length); k++) {
-        this.input[k] = this.input[this.inputStart + k]
-      }
-      this.inputStart = 0
-      this.inputEnd = keep
-    }
-    const room: i32 = toI32(this.input.length) - this.inputEnd
+    const room: i32 = this.inputTail()
     const n: i32 = len < room ? len : room
-    for (
-      let k: i32 = 0;
-      k < n && off + k < toI32(buf.length) && this.inputEnd + k < toI32(this.input.length);
-      k++
-    ) {
+    for (let k: i32 = 0; k < n; k++) {
       this.input[this.inputEnd + k] = buf[off + k]
     }
     this.inputEnd = this.inputEnd + n
     return n
+  }
+
+  /**
+   * Moves the unread input to the front of its buffer, which ends the last
+   * H2_DATA's window, and answers the room after it: where a carrier may read
+   * straight into `input` from `inputEnd`, then `received` what it read.
+   */
+  inputTail(): i32 {
+    this.inputEnd = http2Compact(this.input, this.inputStart, this.inputEnd)
+    this.inputStart = 0
+    return toI32(this.input.length) - this.inputEnd
+  }
+
+  /** Takes `n` bytes a carrier read into `input` at `inputEnd`, after `inputTail` gave it the room. */
+  received(n: i32): void {
+    const room: i32 = toI32(this.input.length) - this.inputEnd
+    if (n < 0 || n > room) {
+      panic(`Http2Connection.received: ${n} bytes into ${room} of room`)
+    }
+    if (this.state !== H2_STATE_FAILED) {
+      this.inputEnd = this.inputEnd + n
+    }
   }
 
   /** Marks the first `n` bytes of the output sent. */
@@ -546,26 +588,31 @@ export class Http2Connection {
   }
 
   /**
-   * Whether the connection is over: everything is sent, and it failed, or a
-   * GOAWAY went either way and no stream is left.
+   * Whether the connection is over: everything is sent, and it failed, or no
+   * stream is left after a GOAWAY went either way or after the peer's byte
+   * stream ended (`endInput`) with nothing of it left unread.
    */
   isDone(): boolean {
     if (this.wantsWrite()) {
       return false
     }
-    return this.state === H2_STATE_FAILED || ((this.goawaySent || this.goawayReceived) && this.active === 0)
+    const unread: boolean = this.inputEnd > this.inputStart
+    const over: boolean = this.goawaySent || this.goawayReceived || (this.inputEnded && !unread)
+    return this.state === H2_STATE_FAILED || (over && this.active === 0)
+  }
+
+  /**
+   * The peer's byte stream has ended, so nothing more will be fed: once the
+   * requests it already sent are answered, the connection is done.
+   */
+  endInput(): void {
+    this.inputEnded = true
   }
 
   /** The room left at the end of the output, once what was sent is moved out of the way. */
   room(): i32 {
-    if (this.outputStart > 0) {
-      const keep: i32 = this.outputEnd - this.outputStart
-      for (let k: i32 = 0; k < keep && this.outputStart + k < toI32(this.output.length); k++) {
-        this.output[k] = this.output[this.outputStart + k]
-      }
-      this.outputStart = 0
-      this.outputEnd = keep
-    }
+    this.outputEnd = http2Compact(this.output, this.outputStart, this.outputEnd)
+    this.outputStart = 0
     return toI32(this.output.length) - this.outputEnd
   }
 
@@ -575,11 +622,12 @@ export class Http2Connection {
     return r > 0 ? r : 0
   }
 
-  /** Appends a frame a writer put at the end of the output, when it fit (`end >= 0`). */
-  wrote(end: i32): void {
+  /** Appends a frame a writer put at the end of the output, when it fit (`end >= 0`), and answers whether it did. */
+  wrote(end: i32): boolean {
     if (end >= 0) {
       this.outputEnd = end
     }
+    return end >= 0
   }
 
   // ---- Streams ------------------------------------------------------------------
@@ -621,11 +669,7 @@ export class Http2Connection {
   /** Frees the slot of a stream that is closed. */
   release(s: Http2Stream): void {
     if (s.id !== 0) {
-      const at: i32 = this.closedAt % toI32(this.closed.length)
-      if (at >= 0 && at < toI32(this.closed.length)) {
-        this.closed[at] = s.id
-      }
-      this.closedAt = at + 1
+      this.closedAt = http2Remember(this.closed, this.closedAt, s.id)
       s.id = 0
       this.active = this.active - 1
     }
@@ -665,18 +709,20 @@ export class Http2Connection {
     return id > 0 && this.closed.indexOf(id) >= 0
   }
 
-  /** Sends RST_STREAM for `id` with `code`, frees its slot if it has one, and remembers it. */
-  resetStream(id: i32, code: i32): void {
-    this.wrote(http2WriteRstStream(this.output, this.outputEnd, id, toI64(code)))
+  /**
+   * Sends RST_STREAM for `id` with `code`, frees its slot if it has one, and
+   * remembers it; answers false, changing nothing, when the frame did not fit.
+   */
+  resetStream(id: i32, code: i32): boolean {
+    if (!this.wrote(http2WriteRstStream(this.output, this.outputEnd, id, toI64(code)))) {
+      return false
+    }
     const s: Http2Stream | null = this.find(id)
     if (s !== null) {
       this.release(s)
     }
-    const at: i32 = this.resetAt % toI32(this.resets.length)
-    if (at >= 0 && at < toI32(this.resets.length)) {
-      this.resets[at] = id
-    }
-    this.resetAt = at + 1
+    this.resetAt = http2Remember(this.resets, this.resetAt, id)
+    return true
   }
 
   /** A stream error on `s`: resets it, and answers the H2_RESET that tells the program. */
@@ -689,15 +735,31 @@ export class Http2Connection {
     return H2_RESET
   }
 
+  /**
+   * Writes GOAWAY with `code`, naming the last stream the peer had opened when
+   * the server's first GOAWAY went: no later one may name a higher stream
+   * (§6.8). Answers whether it fit.
+   */
+  sendGoaway(code: i32): boolean {
+    const last: i32 = this.goawaySent ? this.sentLast : this.lastPeerStream
+    if (
+      !this.wrote(
+        http2WriteGoaway(this.output, this.outputEnd, last, toI64(code), this.noDebug, H2_ZERO, H2_ZERO)
+      )
+    ) {
+      return false
+    }
+    this.goawaySent = true
+    this.sentLast = last
+    return true
+  }
+
   /** A connection error: queues GOAWAY with `code` and answers H2_ERROR. */
   fail(code: i32): i32 {
     if (this.state !== H2_STATE_FAILED) {
       this.state = H2_STATE_FAILED
       this.errorCode = toI64(code)
-      const none: u8[] = []
-      const last: i32 = this.goawaySent ? this.sentLast : this.lastPeerStream
-      this.wrote(http2WriteGoaway(this.output, this.outputEnd, last, toI64(code), none, H2_ZERO, H2_ZERO))
-      this.goawaySent = true
+      this.sendGoaway(code)
       this.inputStart = 0
       this.inputEnd = 0
       this.blockStream = 0
@@ -824,9 +886,13 @@ export class Http2Connection {
     return id % 2 === 0 || id > this.lastPeerStream
   }
 
-  /** Whether stream `id` was opened after the server's GOAWAY, so it was never opened at all (§6.8). */
-  pastGoaway(id: i32): boolean {
-    return this.goawaySent && id > this.sentLast
+  /**
+   * Whether frames on stream `id`, which has no slot, are dropped without a
+   * word: the server reset it and these were in flight (§5.4.2), or it was
+   * opened after the server's GOAWAY and so never opened at all (§6.8).
+   */
+  discarded(id: i32): boolean {
+    return this.recentlyReset(id) || (this.goawaySent && id > this.sentLast)
   }
 
   /** DATA (§6.1): flow control first, on the whole payload, then the stream's state. */
@@ -843,29 +909,28 @@ export class Http2Connection {
     this.recvWindow = this.recvWindow - toI64(size)
     if (s === null) {
       this.credit(null, size)
-      // A stream past the server's GOAWAY was never opened, so what the peer
-      // sent on it before it read the GOAWAY is dropped without a word (§6.8).
-      if (!this.pastGoaway(id) && !this.recentlyReset(id)) {
+      if (!this.discarded(id)) {
         this.resetStream(id, H2_STREAM_CLOSED)
       }
       return H2_NEED_MORE
     }
+    const end: boolean = f.has(H2_FLAG_END_STREAM)
+    const received: i64 = s.received + toI64(f.contentLength)
+    const declared: boolean = s.contentLength >= toI64(0)
+    let error: i32 = H2_NO_ERROR
     if (s.remoteEnded) {
-      this.credit(null, size)
-      return this.streamError(s, H2_STREAM_CLOSED)
+      error = H2_STREAM_CLOSED
+    } else if (toI64(size) > s.recvWindow) {
+      error = H2_FLOW_CONTROL_ERROR
+    } else if (declared && (received > s.contentLength || (end && received !== s.contentLength))) {
+      error = H2_PROTOCOL_ERROR
     }
-    if (toI64(size) > s.recvWindow) {
+    if (error !== H2_NO_ERROR) {
       this.credit(null, size)
-      return this.streamError(s, H2_FLOW_CONTROL_ERROR)
+      return this.streamError(s, error)
     }
     s.recvWindow = s.recvWindow - toI64(size)
-    s.received = s.received + toI64(f.contentLength)
-    const end: boolean = f.has(H2_FLAG_END_STREAM)
-    const declared: boolean = s.contentLength >= toI64(0)
-    if (declared && (s.received > s.contentLength || (end && s.received !== s.contentLength))) {
-      this.credit(null, size)
-      return this.streamError(s, H2_PROTOCOL_ERROR)
-    }
+    s.received = received
     this.credit(end ? null : s, size)
     this.stream = id
     this.endStream = end
@@ -889,13 +954,7 @@ export class Http2Connection {
     ) {
       return false
     }
-    for (
-      let k: i32 = 0;
-      k < f.contentLength &&
-      this.blockLength + k < toI32(this.block.length) &&
-      f.contentStart + k < toI32(this.input.length);
-      k++
-    ) {
+    for (let k: i32 = 0; k < f.contentLength; k++) {
       this.block[this.blockLength + k] = this.input[f.contentStart + k]
     }
     this.blockLength = this.blockLength + f.contentLength
@@ -909,10 +968,7 @@ export class Http2Connection {
     this.blockError = f.streamError
     this.blockLength = 0
     this.blockFragments = 0
-    if (!this.gather(f)) {
-      return this.fail(H2_ENHANCE_YOUR_CALM)
-    }
-    return f.has(H2_FLAG_END_HEADERS) ? this.endBlock() : H2_NEED_MORE
+    return this.handleContinuation(f)
   }
 
   /** CONTINUATION (§6.10): only inside a header block, which `handleFrame` has checked it continues. */
@@ -943,7 +999,7 @@ export class Http2Connection {
       return this.trailers(s, decoded)
     }
     if (!this.isIdle(id)) {
-      if (this.recentlyReset(id) || this.pastGoaway(id)) {
+      if (this.discarded(id)) {
         return H2_NEED_MORE
       }
       return this.fail(this.recentlyClosed(id) ? H2_STREAM_CLOSED : H2_PROTOCOL_ERROR)
@@ -1014,13 +1070,7 @@ export class Http2Connection {
    * sending (§8.1), so the stream never reaches the program.
    */
   tooLarge(id: i32): void {
-    this.statusValue[0] = 52
-    this.statusValue[1] = 51
-    this.statusValue[2] = 49
-    while (toI32(this.encoded.length) > 0) {
-      this.encoded.pop()
-    }
-    this.encoder.encodeField(this.encoded, this.statusName, this.statusValue, HPACK_INDEX_WITHOUT, false)
+    this.encodeStatus(H2_STATUS_TOO_LARGE)
     const n: i32 = toI32(this.encoded.length)
     this.wrote(
       http2WriteHeaders(
@@ -1036,6 +1086,19 @@ export class Http2Connection {
     )
     if (!this.blockEndStream) {
       this.resetStream(id, H2_NO_ERROR)
+    }
+  }
+
+  /** Empties `encoded` and starts a block with `:status`, or with nothing for 0 (trailers). */
+  encodeStatus(status: i32): void {
+    while (toI32(this.encoded.length) > 0) {
+      this.encoded.pop()
+    }
+    if (status > 0) {
+      this.statusValue[0] = toU8(status / 100 + H2_DIGIT_ZERO)
+      this.statusValue[1] = toU8(((status / 10) % 10) + H2_DIGIT_ZERO)
+      this.statusValue[2] = toU8((status % 10) + H2_DIGIT_ZERO)
+      this.encoder.encodeField(this.encoded, this.statusName, this.statusValue, HPACK_INDEX_WITHOUT, false)
     }
   }
 
@@ -1103,7 +1166,7 @@ export class Http2Connection {
         return this.fail(error)
       }
       if (id === H2_SETTINGS_HEADER_TABLE_SIZE) {
-        const size: i32 = toI32(http2Min(value, toI64(HPACK_DEFAULT_TABLE_SIZE)))
+        const size: i32 = toI32(Math.min(value, toI64(HPACK_DEFAULT_TABLE_SIZE)))
         if (size !== this.encoder.table.maxSize) {
           this.encoder.setMaxTableSize(size)
         }
@@ -1201,21 +1264,11 @@ export class Http2Connection {
       bound = bound + toI64(names[k].length) + toI64(values[k].length) + toI64(11)
     }
     const frames: i64 = bound / toI64(this.peerMaxFrameSize) + toI64(1)
-    if (bound + frames * toI64(H2_FRAME_HEADER_SIZE) > toI64(this.bodyRoom())) {
-      return toI64(this.output.length) <
-        bound + frames * toI64(H2_FRAME_HEADER_SIZE) + toI64(H2_CONTROL_RESERVE)
-        ? H2_INVALID
-        : H2_AGAIN
+    const need: i64 = bound + frames * toI64(H2_FRAME_HEADER_SIZE)
+    if (need > toI64(this.bodyRoom())) {
+      return toI64(this.output.length) < need + toI64(H2_CONTROL_RESERVE) ? H2_INVALID : H2_AGAIN
     }
-    while (toI32(this.encoded.length) > 0) {
-      this.encoded.pop()
-    }
-    if (status > 0) {
-      this.statusValue[0] = toU8(status / 100 + H2_DIGIT_ZERO)
-      this.statusValue[1] = toU8(((status / 10) % 10) + H2_DIGIT_ZERO)
-      this.statusValue[2] = toU8((status % 10) + H2_DIGIT_ZERO)
-      this.encoder.encodeField(this.encoded, this.statusName, this.statusValue, HPACK_INDEX_WITHOUT, false)
-    }
+    this.encodeStatus(status)
     for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length); k++) {
       const value: u8[] = values[k]
       // One choice covers the name and the value, so Huffman is taken only
@@ -1306,9 +1359,9 @@ export class Http2Connection {
     let sent: i32 = 0
     while (sent < len) {
       const room: i32 = this.bodyRoom() - H2_FRAME_HEADER_SIZE
-      let chunk: i64 = http2Min(toI64(len - sent), toI64(this.peerMaxFrameSize))
-      chunk = http2Min(chunk, http2Min(s.sendWindow, this.sendWindow))
-      chunk = http2Min(chunk, toI64(room))
+      let chunk: i64 = Math.min(toI64(len - sent), toI64(this.peerMaxFrameSize))
+      chunk = Math.min(chunk, Math.min(s.sendWindow, this.sendWindow))
+      chunk = Math.min(chunk, toI64(room))
       if (chunk <= toI64(0)) {
         if (s.sendWindow <= toI64(0)) {
           s.blocked = true
@@ -1359,11 +1412,8 @@ export class Http2Connection {
     if (this.state === H2_STATE_FAILED || this.find(id) === null) {
       return H2_CLOSED
     }
-    if (this.room() < H2_FRAME_HEADER_SIZE + 4) {
-      return H2_AGAIN
-    }
-    this.resetStream(id, code)
-    return 0
+    this.room()
+    return this.resetStream(id, code) ? 0 : H2_AGAIN
   }
 
   /**
@@ -1377,23 +1427,7 @@ export class Http2Connection {
     if (this.state === H2_STATE_FAILED || this.goawaySent) {
       return 0
     }
-    if (this.room() < H2_FRAME_HEADER_SIZE + 8) {
-      return H2_AGAIN
-    }
-    this.goawaySent = true
-    this.sentLast = this.lastPeerStream
-    const none: u8[] = []
-    this.wrote(
-      http2WriteGoaway(
-        this.output,
-        this.outputEnd,
-        this.lastPeerStream,
-        toI64(H2_NO_ERROR),
-        none,
-        H2_ZERO,
-        H2_ZERO
-      )
-    )
-    return 0
+    this.room()
+    return this.sendGoaway(H2_NO_ERROR) ? 0 : H2_AGAIN
   }
 }

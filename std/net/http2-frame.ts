@@ -272,7 +272,7 @@ export const http2ParseFrame = (frame: Http2Frame, buf: u8[], off: i32, maxFrame
   frame.payload = off + H2_FRAME_HEADER_SIZE
   frame.contentStart = frame.payload
   frame.contentLength = frame.length
-  frame.padLength = -1
+  frame.padLength = H2_FRAME_NONE
   frame.hasPriority = false
   frame.exclusive = false
   frame.dependency = 0
@@ -433,17 +433,10 @@ export const http2WriteHeader = (
   return at + H2_FRAME_HEADER_SIZE
 }
 
-/** Copies `src[off, off + len)` to `out[at]`. */
+/** Copies `src[off, off + len)` to `out[at]`; the callers have checked both windows. */
 const http2FrameCopy = (out: u8[], at: i32, src: u8[], off: i32, len: i32): void => {
-  for (let k: i32 = 0; k < len && off + k < toI32(src.length) && at + k < toI32(out.length); k++) {
+  for (let k: i32 = 0; k < len; k++) {
     out[at + k] = src[off + k]
-  }
-}
-
-/** Writes `pad` zero bytes at `out[at]`. */
-const http2FrameZeros = (out: u8[], at: i32, pad: i32): void => {
-  for (let k: i32 = 0; k < pad && at + k < toI32(out.length); k++) {
-    out[at + k] = 0
   }
 }
 
@@ -488,7 +481,7 @@ const http2FrameWritePadded = (
   }
   const body: i32 = at2 + head
   http2FrameCopy(out, body, src, off, len)
-  http2FrameZeros(out, body + len, tail)
+  out.fill(0, body + len, body + len + tail)
   return body + len + tail
 }
 
@@ -737,7 +730,6 @@ export const http2WriteContinuation = (
   if (streamId === 0) {
     panic("http2WriteContinuation: CONTINUATION on stream 0")
   }
-  const none: i32 = -1
   return http2FrameWritePadded(
     out,
     at,
@@ -748,6 +740,6 @@ export const http2WriteContinuation = (
     src,
     off,
     len,
-    none
+    H2_FRAME_NONE
   )
 }
