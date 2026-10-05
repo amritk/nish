@@ -28,9 +28,23 @@
  * client's are parsed and checked (RFC 9000 §7.3, §7.4) before the server's
  * flight leaves.
  *
- * **What it is not, yet.** Loss recovery is WP34 Q3: nothing is
- * retransmitted, so a lost packet is lost, and the handshake completes only
- * where nothing is (loopback). Streams with flow-control updates are Q4: the
+ * **Loss recovery** (RFC 9002) is `nish/net/quic-recovery`'s: every
+ * ack-eliciting packet is recorded in its space's ring with what it carried
+ * (its CRYPTO range, its STREAM chunks, HANDSHAKE_DONE, NEW_CONNECTION_ID
+ * and RETIRE_CONNECTION_ID), the client's ACKs give the RTT estimate and
+ * show what was lost by packet or time threshold, and what a lost packet
+ * carried is sent again, from the CRYPTO bytes a level keeps until it is
+ * discarded and the stream bytes a stream keeps until they are
+ * acknowledged. When nothing is acknowledged for a probe timeout, with its
+ * backoff, everything in flight is queued again and a probe goes out in
+ * each space that has packets in flight, a PING if there is nothing to
+ * resend (§6.2.4). NewReno's window holds back everything ack-eliciting but
+ * a probe; an ACK always goes. PATH_RESPONSE is never sent again (RFC 9000
+ * §13.3). Pacing is the carrier's: `nish/net/quic-listener`'s
+ * `quicListenerTakePaced` takes a datagram only when the connection's pacer
+ * allows it.
+ *
+ * **What it is not, yet.** Streams with flow-control updates are Q4: the
  * credit the server advertises is never raised, so a stream carries at most
  * `maxStreamData` bytes each way and the connection `maxData`. The server
  * opens no stream of its own and accepts no unidirectional stream. What a
@@ -39,13 +53,15 @@
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
- * `deadline()` says when `handleTimer` is next due. Two things run on it.
+ * `deadline()` says when `handleTimer` is next due. Three things run on it.
  * The idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
- * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR`; once it passes with
- * nothing received, the connection closes silently (`QUIC_STATE_TIMED_OUT`)
- * and wipes its keys. And after a key update the previous read keys are kept
- * for `QUIC_CONN_PTO`, for packets the network reordered, before the next
- * generation's are derived (RFC 9001 §6.5).
+ * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR` or three probe
+ * timeouts; once it passes with nothing received, the connection closes
+ * silently (`QUIC_STATE_TIMED_OUT`) and wipes its keys. Loss recovery's
+ * timer declares packets lost by the time threshold or fires the probe
+ * timeout. And after a key update the previous read keys are kept for a
+ * probe timeout (`recovery.probeTimeout()`), for packets the network
+ * reordered, before the next generation's are derived (RFC 9001 §6.5).
  *
  * **Key update** (RFC 9001 §6), both ways. A 1-RTT packet whose Key Phase
  * bit differs from the current one is opened with the next generation's read
@@ -152,6 +168,7 @@ import {
   QUIC_FRAME_NEW_TOKEN,
   QUIC_FRAME_PATH_CHALLENGE,
   QUIC_FRAME_PATH_RESPONSE,
+  QUIC_FRAME_PING,
   QUIC_FRAME_RESET_STREAM,
   QUIC_FRAME_RETIRE_CONNECTION_ID,
   QUIC_FRAME_STOP_SENDING,
@@ -180,6 +197,14 @@ import {
   quicParseTransportParameters,
 } from "nish/net/quic-conn-params"
 import { QuicAckRanges } from "nish/net/quic-conn-ack"
+import {
+  QUIC_RECOVERY_APPLICATION_CAPACITY,
+  QUIC_RECOVERY_HANDSHAKE_CAPACITY,
+  QUIC_RECOVERY_TIMEOUT_LOSS,
+  QUIC_RECOVERY_TIMEOUT_PTO,
+  QuicRecovery,
+  QuicSentPackets,
+} from "nish/net/quic-recovery"
 import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid"
 import {
   TLS_LEVEL_APPLICATION,
@@ -224,24 +249,31 @@ export const QUIC_CONN_MAX_STREAMS: i64 = 1024
 /** The length of the configuration's static keys: the stateless reset key and the Retry token key. */
 export const QUIC_CONN_STATIC_KEY_SIZE: i32 = 32
 /**
- * The probe timeout, in milliseconds, this module times by. Measuring the
- * round trip is loss recovery's (WP34 Q3), so until then it is RFC 9002
- * §6.2.2's for a path with no sample yet: an initial RTT of 333 ms, which
- * gives about one second.
- */
-export const QUIC_CONN_PTO: i64 = 1000
-/**
- * The shortest idle timeout the server keeps, three times `QUIC_CONN_PTO`:
- * RFC 9000 §10.1 has an endpoint raise a smaller negotiated value to this, so
- * that several probes can be lost before the connection is given up.
+ * The shortest idle timeout the server keeps: three times the probe timeout
+ * of a path with no RTT sample yet (RFC 9002 §6.2.2, about a second), and
+ * never under three times the current one either. RFC 9000 §10.1 has an
+ * endpoint raise a smaller negotiated value to this, so that several probes
+ * can be lost before the connection is given up.
  */
 export const QUIC_CONN_IDLE_FLOOR: i64 = 3000
+/**
+ * The most STREAM frames one packet carries, which is how many chunks a
+ * packet's record keeps for retransmission; the rest of the streams go in
+ * the next packet.
+ */
+export const QUIC_CONN_PACKET_STREAMS: i32 = 4
+/**
+ * The most NEW_CONNECTION_ID and RETIRE_CONNECTION_ID frames one packet
+ * carries, for the same reason. The client can owe at most eight
+ * retirements and the server announces at most three new IDs at once.
+ */
+export const QUIC_CONN_PACKET_CONTROL: i32 = 8
 /**
  * How many key updates a connection takes from its client (RFC 9001 §6).
  * Each costs two key derivations whose temporaries stay in the arena, so the
  * cap bounds what a client can make the server derive (QUIC-4); the next one
  * closes the connection with KEY_UPDATE_ERROR. A client also has to wait
- * `QUIC_CONN_PTO` between two of them, so 64 is over a minute of updating.
+ * a probe timeout between two of them.
  */
 export const QUIC_CONN_MAX_KEY_UPDATES: i32 = 64
 
@@ -282,6 +314,11 @@ export const QUIC_STREAM_ERR_STATE: i32 = -4
 const QUIC_CONN_FROM: i32 = 0
 /** The same for the `i64` arguments of the methods below, where a literal is not given its parameter's type. */
 const QUIC_CONN_NONE: i64 = 0
+
+/** A packet's record: the bit that says it carried HANDSHAKE_DONE, and the kinds of control frame it keeps. */
+const QUIC_CONN_SENT_HANDSHAKE_DONE: i32 = 1
+const QUIC_CONN_CONTROL_NEW_CID: i32 = 1
+const QUIC_CONN_CONTROL_RETIRE: i32 = 2
 
 /**
  * What a QUIC server is configured with, the same for every connection. The
@@ -436,7 +473,17 @@ class QuicConnReassembly {
   }
 }
 
-/** One packet number space's state (RFC 9000 §12.3): its keys, its numbers, its CRYPTO stream. */
+/**
+ * One packet number space's state (RFC 9000 §12.3): its keys, its numbers,
+ * its CRYPTO stream, and what each of its packets in flight carried.
+ *
+ * The record of a packet is a row of the `sent*` arrays, indexed by the slot
+ * `nish/net/quic-recovery` gave it, so it is fixed when the connection is
+ * made. One row past the last slot, `staging`, is where `buildPayload`
+ * writes the packet being built; `sealInto` copies it to the packet's slot.
+ * Only the Application Data space has rows for STREAM chunks and control
+ * frames, since only a 1-RTT packet carries them.
+ */
 class QuicConnSpace {
   readKeys: QuicKeys | null = null
   writeKeys: QuicKeys | null = null
@@ -446,20 +493,222 @@ class QuicConnSpace {
   largestAcked: i64 = -1
   received: QuicAckRanges
   cryptoIn: QuicConnReassembly
-  /** CRYPTO bytes still to send, from `cryptoOutHead`, at stream offset `cryptoOutOffset`. */
+  /**
+   * Every CRYPTO byte TLS wrote at this level, from stream offset 0, kept
+   * until the level is discarded so that a lost range can be sent again;
+   * the bytes from `cryptoOutHead` (offset `cryptoOutOffset`) are not sent yet.
+   */
   cryptoOut: u8[]
   cryptoOutOffset: i64 = 0
+  /** CRYPTO bytes declared lost, to send before new ones: `[cryptoResendLow, cryptoResendHigh)`, or -1. */
+  cryptoResendLow: i64 = -1
+  cryptoResendHigh: i64 = -1
+  /** Each packet's CRYPTO frame (offset, and length 0 for none), and its `QUIC_CONN_SENT_*` bits. */
+  sentCryptoOffset: i64[]
+  sentCryptoLength: i32[]
+  sentFlags: u8[]
+  /** Each packet's STREAM chunks, `QUIC_CONN_PACKET_STREAMS` to a row: how many, then each one's stream, offset, length and FIN. */
+  sentStreamCount: i32[]
+  sentStreamId: i64[]
+  sentStreamOffset: i64[]
+  sentStreamLength: i32[]
+  sentStreamFin: u8[]
+  /** Each packet's NEW_CONNECTION_ID and RETIRE_CONNECTION_ID frames, `QUIC_CONN_PACKET_CONTROL` to a row: their kind and sequence number. */
+  sentControlCount: i32[]
+  sentControlKind: u8[]
+  sentControlValue: i64[]
   /** `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index. */
   level: i32 = 0
   cryptoOutHead: i32 = 0
+  /** The row the packet being built is written to: one past the last slot. */
+  staging: i32 = 0
   /** Whether the keys were discarded (RFC 9001 §4.9): nothing is sent or received here again. */
   discarded: boolean = false
+  /** Whether the packet being built elicits an acknowledgement, and so is recorded. */
+  stagedEliciting: boolean = false
+  /** Whether a probe timeout asked this space for an ack-eliciting packet, which the window does not hold back (RFC 9002 §6.2.4). */
+  probe: boolean = false
 
   constructor(level: i32) {
     this.level = level
     this.received = new QuicAckRanges()
     this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)
     this.cryptoOut = []
+    const capacity: i32 =
+      level === TLS_LEVEL_APPLICATION ? QUIC_RECOVERY_APPLICATION_CAPACITY : QUIC_RECOVERY_HANDSHAKE_CAPACITY
+    const rows: i32 = capacity + 1
+    // Only 1-RTT packets carry STREAM and control frames (RFC 9000 §12.4).
+    const chunkRows: i32 = level === TLS_LEVEL_APPLICATION ? rows : 0
+    this.staging = capacity
+    this.sentCryptoOffset = new Array<i64>(rows)
+    this.sentCryptoLength = new Array<i32>(rows)
+    this.sentFlags = new Array<u8>(rows)
+    this.sentStreamCount = new Array<i32>(rows)
+    this.sentStreamId = new Array<i64>(chunkRows * QUIC_CONN_PACKET_STREAMS)
+    this.sentStreamOffset = new Array<i64>(chunkRows * QUIC_CONN_PACKET_STREAMS)
+    this.sentStreamLength = new Array<i32>(chunkRows * QUIC_CONN_PACKET_STREAMS)
+    this.sentStreamFin = new Array<u8>(chunkRows * QUIC_CONN_PACKET_STREAMS)
+    this.sentControlCount = new Array<i32>(rows)
+    this.sentControlKind = new Array<u8>(chunkRows * QUIC_CONN_PACKET_CONTROL)
+    this.sentControlValue = new Array<i64>(chunkRows * QUIC_CONN_PACKET_CONTROL)
+  }
+
+  /** The number of STREAM chunks row `row` holds, or 0. */
+  streamCount(row: i32): i32 {
+    return row >= 0 && row < toI32(this.sentStreamCount.length) ? this.sentStreamCount[row] : 0
+  }
+
+  /** The number of control frames row `row` holds, or 0. */
+  controlCount(row: i32): i32 {
+    return row >= 0 && row < toI32(this.sentControlCount.length) ? this.sentControlCount[row] : 0
+  }
+
+  /** The CRYPTO frame's length in row `row`, or 0. */
+  cryptoLength(row: i32): i32 {
+    return row >= 0 && row < toI32(this.sentCryptoLength.length) ? this.sentCryptoLength[row] : 0
+  }
+
+  /** The CRYPTO frame's offset in row `row`, or 0. */
+  cryptoOffset(row: i32): i64 {
+    return row >= 0 && row < toI32(this.sentCryptoOffset.length) ? this.sentCryptoOffset[row] : 0
+  }
+
+  /** The `QUIC_CONN_SENT_*` bits of row `row`. */
+  flags(row: i32): i32 {
+    return row >= 0 && row < toI32(this.sentFlags.length) ? toI32(this.sentFlags[row]) : 0
+  }
+
+  /** Empties the staging row, for the next packet. */
+  clearStaged(): void {
+    this.stagedEliciting = false
+    this.setCrypto(this.staging, QUIC_CONN_NONE, QUIC_CONN_FROM)
+    this.setFlags(this.staging, QUIC_CONN_FROM)
+    this.setCounts(this.staging, QUIC_CONN_FROM, QUIC_CONN_FROM)
+  }
+
+  /** Sets row `row`'s CRYPTO frame. */
+  setCrypto(row: i32, offset: i64, length: i32): void {
+    if (row >= 0 && row < toI32(this.sentCryptoOffset.length) && row < toI32(this.sentCryptoLength.length)) {
+      this.sentCryptoOffset[row] = offset
+      this.sentCryptoLength[row] = length
+    }
+  }
+
+  /** Sets row `row`'s bits. */
+  setFlags(row: i32, flags: i32): void {
+    if (row >= 0 && row < toI32(this.sentFlags.length)) {
+      this.sentFlags[row] = toU8(flags)
+    }
+  }
+
+  /** Sets how many STREAM chunks and control frames row `row` holds. */
+  setCounts(row: i32, streams: i32, control: i32): void {
+    if (row >= 0 && row < toI32(this.sentStreamCount.length) && row < toI32(this.sentControlCount.length)) {
+      this.sentStreamCount[row] = streams
+      this.sentControlCount[row] = control
+    }
+  }
+
+  /** Sets STREAM chunk `j` of row `row`. */
+  setChunk(row: i32, j: i32, id: i64, offset: i64, length: i32, fin: boolean): void {
+    const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+    if (
+      at >= 0 &&
+      at < toI32(this.sentStreamId.length) &&
+      at < toI32(this.sentStreamOffset.length) &&
+      at < toI32(this.sentStreamLength.length) &&
+      at < toI32(this.sentStreamFin.length)
+    ) {
+      this.sentStreamId[at] = id
+      this.sentStreamOffset[at] = offset
+      this.sentStreamLength[at] = length
+      this.sentStreamFin[at] = toU8(fin ? 1 : 0)
+    }
+  }
+
+  /** Sets control frame `j` of row `row`. */
+  setControl(row: i32, j: i32, kind: i32, value: i64): void {
+    const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
+    if (at >= 0 && at < toI32(this.sentControlKind.length) && at < toI32(this.sentControlValue.length)) {
+      this.sentControlKind[at] = toU8(kind)
+      this.sentControlValue[at] = value
+    }
+  }
+
+  /** Stages a CRYPTO frame at `offset`, `length` bytes, in the packet being built. */
+  stageCrypto(offset: i64, length: i32): void {
+    this.setCrypto(this.staging, offset, length)
+    this.stagedEliciting = true
+  }
+
+  /** Stages a STREAM chunk in the packet being built; the caller keeps under `QUIC_CONN_PACKET_STREAMS`. */
+  stageChunk(id: i64, offset: i64, length: i32, fin: boolean): void {
+    const streams: i32 = this.streamCount(this.staging)
+    this.setChunk(this.staging, streams, id, offset, length, fin)
+    this.setCounts(this.staging, streams + 1, this.controlCount(this.staging))
+    this.stagedEliciting = true
+  }
+
+  /** Stages a control frame in the packet being built; the caller keeps under `QUIC_CONN_PACKET_CONTROL`. */
+  stageControl(kind: i32, value: i64): void {
+    const control: i32 = this.controlCount(this.staging)
+    this.setControl(this.staging, control, kind, value)
+    this.setCounts(this.staging, this.streamCount(this.staging), control + 1)
+    this.stagedEliciting = true
+  }
+
+  /** Copies the staging row to row `row`, the slot of the packet just sealed. */
+  commitStaged(row: i32): void {
+    const from: i32 = this.staging
+    this.setCrypto(row, this.cryptoOffset(from), this.cryptoLength(from))
+    this.setFlags(row, this.flags(from))
+    const streams: i32 = this.streamCount(from)
+    const control: i32 = this.controlCount(from)
+    this.setCounts(row, streams, control)
+    for (let j: i32 = 0; j < streams; j += 1) {
+      const at: i32 = from * QUIC_CONN_PACKET_STREAMS + j
+      if (
+        at >= 0 &&
+        at < toI32(this.sentStreamId.length) &&
+        at < toI32(this.sentStreamOffset.length) &&
+        at < toI32(this.sentStreamLength.length) &&
+        at < toI32(this.sentStreamFin.length)
+      ) {
+        this.setChunk(
+          row,
+          j,
+          this.sentStreamId[at],
+          this.sentStreamOffset[at],
+          this.sentStreamLength[at],
+          toI32(this.sentStreamFin[at]) !== 0
+        )
+      }
+    }
+    for (let j: i32 = 0; j < control; j += 1) {
+      const at: i32 = from * QUIC_CONN_PACKET_CONTROL + j
+      if (at >= 0 && at < toI32(this.sentControlKind.length) && at < toI32(this.sentControlValue.length)) {
+        this.setControl(row, j, toI32(this.sentControlKind[at]), this.sentControlValue[at])
+      }
+    }
+  }
+
+  /** Queues CRYPTO bytes `[offset, offset + length)` to be sent again, merged with what is queued already. */
+  resendCrypto(offset: i64, length: i32): void {
+    if (length <= 0 || this.discarded) {
+      return
+    }
+    const end: i64 = offset + toI64(length)
+    if (this.cryptoResendLow < 0) {
+      this.cryptoResendLow = offset
+      this.cryptoResendHigh = end
+      return
+    }
+    if (offset < this.cryptoResendLow) {
+      this.cryptoResendLow = offset
+    }
+    if (end > this.cryptoResendHigh) {
+      this.cryptoResendHigh = end
+    }
   }
 
   /** How many CRYPTO bytes are waiting to be sent. */
@@ -490,6 +739,16 @@ class QuicConnStream {
   sendFin: boolean = false
   /** Whether a frame carrying the FIN went out, or STOP_SENDING ended the side. */
   finSent: boolean = false
+  /** The stream offset of `send[0]`: the bytes before it were all acknowledged. */
+  sendBase: i64 = 0
+  /** Bytes declared lost, to send again before new ones: `[resendLow, resendHigh)`, or -1; `resendFin` when the FIN was among them. */
+  resendLow: i64 = -1
+  resendHigh: i64 = -1
+  /** How many packets in flight carry a chunk of this stream: its sent bytes are kept while any does. */
+  outstanding: i32 = 0
+  resendFin: boolean = false
+  /** Whether the client's STOP_SENDING ended the sending side: nothing lost is sent again. */
+  stopped: boolean = false
 
   constructor(id: i64, capacity: i32, sendLimit: i64) {
     this.id = id
@@ -503,9 +762,42 @@ class QuicConnStream {
     return toI32(this.send.length) - this.sendHead
   }
 
-  /** Whether a frame is owed: queued bytes, or a FIN not yet sent. */
+  /** Whether a frame is owed: queued bytes, a FIN not yet sent, or bytes to send again. */
   wantsToSend(): boolean {
-    return !this.finSent && (this.unsent() > 0 || this.sendFin)
+    return (!this.finSent && (this.unsent() > 0 || this.sendFin)) || (!this.stopped && this.resendLow >= 0)
+  }
+
+  /** Queues the chunk `[offset, offset + length)` of a lost packet to be sent again, with the FIN when it carried it. */
+  resend(offset: i64, length: i32, fin: boolean): void {
+    if (this.stopped) {
+      return
+    }
+    const end: i64 = offset + toI64(length)
+    if (this.resendLow < 0) {
+      this.resendLow = offset
+      this.resendHigh = end
+    } else {
+      if (offset < this.resendLow) {
+        this.resendLow = offset
+      }
+      if (end > this.resendHigh) {
+        this.resendHigh = end
+      }
+    }
+    this.resendFin = this.resendFin || fin
+  }
+
+  /**
+   * Drops the sent bytes once no packet in flight carries any of them and
+   * none are queued to go again: they have all been acknowledged.
+   */
+  trim(): void {
+    if (this.outstanding > 0 || this.resendLow >= 0 || this.sendHead === 0) {
+      return
+    }
+    this.send = quicConnSlice(this.send, this.sendHead, toI32(this.send.length) - this.sendHead)
+    this.sendBase = this.sendBase + toI64(this.sendHead)
+    this.sendHead = 0
   }
 }
 
@@ -621,6 +913,8 @@ export class QuicConnection {
   handshake: QuicConnSpace
   application: QuicConnSpace
   cids: QuicCidTable
+  /** Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). */
+  recovery: QuicRecovery
   /** The client's transport parameters, once the handshake has checked them. */
   peerParameters: QuicTransportParameters
   /** Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). */
@@ -651,7 +945,7 @@ export class QuicConnection {
   /**
    * The 1-RTT secrets of the current generation, the next generation's read
    * secret, and its read keys (RFC 9001 §6.1, §6.3). `otherReadKeys` holds
-   * the next generation's while `otherIsNext`, and for `QUIC_CONN_PTO` after
+   * the next generation's while `otherIsNext`, and for a probe timeout after
    * an update the previous one's, for reordered packets (§6.5).
    */
   appReadSecret: u8[]
@@ -711,6 +1005,7 @@ export class QuicConnection {
     this.handshake = new QuicConnSpace(TLS_LEVEL_HANDSHAKE)
     this.application = new QuicConnSpace(TLS_LEVEL_APPLICATION)
     this.cids = new QuicCidTable(config.activeConnectionIdLimit)
+    this.recovery = new QuicRecovery()
     this.peerParameters = new QuicTransportParameters()
     this.streams = []
     this.events = []
@@ -846,7 +1141,7 @@ export class QuicConnection {
    * idle timeout has passed by `now`, every datagram is ignored.
    */
   receive(datagram: u8[], now: i64): i64 {
-    this.handleTimer(now)
+    this.runClocks(now)
     if (this.closed()) {
       return this.error
     }
@@ -875,6 +1170,9 @@ export class QuicConnection {
     if (counted) {
       this.bytesReceived = this.bytesReceived + toI64(n)
     }
+    // Loss recovery's timer runs after the datagram, so an acknowledgement
+    // it carries settles what it acknowledges before a probe is owed.
+    this.runRecoveryTimer()
     return this.closed() ? this.error : QUIC_ERROR_NO_ERROR
   }
 
@@ -1077,7 +1375,7 @@ export class QuicConnection {
     this.readPhase = !this.readPhase
     this.readPhaseLowest = pn
     this.readPhaseHighest = pn
-    this.keyRetainUntil = this.now + QUIC_CONN_PTO
+    this.keyRetainUntil = this.now + this.recovery.probeTimeout()
     return true
   }
 
@@ -1114,7 +1412,7 @@ export class QuicConnection {
    * Derives the next generation's read secret and keys from the current
    * ones, into `otherReadKeys`, wiping the previous generation's key and IV
    * that sat there (RFC 9001 §6.3, §6.5). It runs when the 1-RTT keys are
-   * installed and `QUIC_CONN_PTO` after each update, never while a packet is
+   * installed and a probe timeout after each update, never while a packet is
    * being opened, so what a packet's Key Phase bit says shows in no timing.
    */
   prepareNextReadKeys(): void {
@@ -1212,12 +1510,18 @@ export class QuicConnection {
       }
       case QUIC_FRAME_STOP_SENDING: {
         // §3.5: the client wants no more data. A full stream would answer
-        // RESET_STREAM (Q4); here the sending side simply ends.
+        // RESET_STREAM (Q4); here the sending side simply ends, and nothing
+        // of it is sent again.
         const stream: QuicConnStream | null = this.streamFor(frame.streamId, type)
         if (stream !== null) {
           stream.finSent = true
+          stream.stopped = true
           stream.send = []
           stream.sendHead = 0
+          stream.sendBase = stream.sendOffset
+          stream.resendLow = -1
+          stream.resendHigh = -1
+          stream.resendFin = false
         }
         break
       }
@@ -1304,7 +1608,12 @@ export class QuicConnection {
     this.closeSent = true
   }
 
-  /** An ACK frame: acknowledging a packet number this space never sent is a PROTOCOL_VIOLATION (§13.1). */
+  /**
+   * An ACK frame: acknowledging a packet number this space never sent is a
+   * PROTOCOL_VIOLATION (§13.1). Otherwise loss recovery reads it (RFC 9002
+   * §5, §6.1, §7): each packet it newly acknowledges releases what it
+   * carried, and each it shows lost has its frames queued again.
+   */
   receiveAck(space: QuicConnSpace, frame: QuicFrame): void {
     if (frame.largest >= space.nextPn) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(frame.type))
@@ -1312,6 +1621,136 @@ export class QuicConnection {
     }
     if (frame.largest > space.largestAcked) {
       space.largestAcked = frame.largest
+    }
+    const sent: QuicSentPackets | null = this.recovery.space(space.level)
+    const delay: i64 = this.ackDelayOf(frame.ackDelay)
+    if (sent === null || this.recovery.onAck(space.level, frame.ackRanges, frame.ackRangeCount, delay, this.now) <= 0) {
+      return
+    }
+    for (let k: i32 = 0; k < sent.ackedCount; k += 1) {
+      this.packetAcked(space, sent.ackedSlot(k))
+    }
+    this.packetsLost(space, sent)
+  }
+
+  /**
+   * An ACK frame's ACK Delay in milliseconds: the field scaled by the
+   * client's `ack_delay_exponent` (RFC 9000 §19.3, §18.2). A value too large
+   * to scale is held at 2^40 microseconds first, which is still far past any
+   * `max_ack_delay` it is then bounded by (RFC 9002 §5.3).
+   */
+  ackDelayOf(field: i64): i64 {
+    let exponent: i64 = this.peerParameters.ackDelayExponent
+    if (exponent < 0 || exponent > 20) {
+      exponent = 3
+    }
+    const ceiling: i64 = 1099511627776
+    const value: i64 = field > ceiling || field < 0 ? ceiling : field
+    return (value << exponent) / 1000
+  }
+
+  /** A packet of `space` the client acknowledged, in recovery slot `row`: its streams may let go of the bytes it carried. */
+  packetAcked(space: QuicConnSpace, row: i32): void {
+    const streams: i32 = space.streamCount(row)
+    for (let j: i32 = 0; j < streams; j += 1) {
+      const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+      if (at >= 0 && at < toI32(space.sentStreamId.length)) {
+        const stream: QuicConnStream | null = this.findStream(space.sentStreamId[at])
+        if (stream !== null) {
+          stream.outstanding = stream.outstanding - 1
+          stream.trim()
+        }
+      }
+    }
+  }
+
+  /** Every packet of `space` that loss recovery's last call declared lost: what each carried is queued again. */
+  packetsLost(space: QuicConnSpace, sent: QuicSentPackets): void {
+    for (let k: i32 = 0; k < sent.lostCount; k += 1) {
+      this.requeue(space, sent.lostSlot(k), true)
+    }
+  }
+
+  /**
+   * Queues again what the packet in row `row` of `space` carried (RFC 9000
+   * §13.3): its CRYPTO range, its STREAM chunks with their FIN, HANDSHAKE_DONE,
+   * the NEW_CONNECTION_ID of an ID still active and the RETIRE_CONNECTION_ID
+   * of one not queued already. `settled` says the packet left flight, lost,
+   * rather than being sent again by a probe while still in flight, so its
+   * streams stop counting it.
+   */
+  requeue(space: QuicConnSpace, row: i32, settled: boolean): void {
+    space.resendCrypto(space.cryptoOffset(row), space.cryptoLength(row))
+    if ((space.flags(row) & QUIC_CONN_SENT_HANDSHAKE_DONE) !== 0) {
+      this.handshakeDonePending = true
+    }
+    const streams: i32 = space.streamCount(row)
+    for (let j: i32 = 0; j < streams; j += 1) {
+      const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
+      if (
+        at >= 0 &&
+        at < toI32(space.sentStreamId.length) &&
+        at < toI32(space.sentStreamOffset.length) &&
+        at < toI32(space.sentStreamLength.length) &&
+        at < toI32(space.sentStreamFin.length)
+      ) {
+        const stream: QuicConnStream | null = this.findStream(space.sentStreamId[at])
+        if (stream !== null) {
+          if (settled) {
+            stream.outstanding = stream.outstanding - 1
+          }
+          stream.resend(space.sentStreamOffset[at], space.sentStreamLength[at], toI32(space.sentStreamFin[at]) !== 0)
+        }
+      }
+    }
+    const control: i32 = space.controlCount(row)
+    for (let j: i32 = 0; j < control; j += 1) {
+      const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
+      if (at >= 0 && at < toI32(space.sentControlKind.length) && at < toI32(space.sentControlValue.length)) {
+        this.requeueControl(toI32(space.sentControlKind[at]), space.sentControlValue[at])
+      }
+    }
+  }
+
+  /** A lost NEW_CONNECTION_ID or RETIRE_CONNECTION_ID, sequence `value`, queued again unless it no longer matters. */
+  requeueControl(kind: i32, value: i64): void {
+    if (kind === QUIC_CONN_CONTROL_NEW_CID) {
+      for (const entry of this.cids.local) {
+        if (entry.sequence === value && !entry.retired) {
+          entry.announced = false
+        }
+      }
+      return
+    }
+    for (const queued of this.cids.retirePending) {
+      if (queued === value) {
+        return
+      }
+    }
+    this.cids.retirePending.push(value)
+  }
+
+  /**
+   * A probe timeout fired (RFC 9002 §6.2.4): in every space with packets in
+   * flight, everything they carry is queued again and the next packet is a
+   * probe, sent whatever the window says, with a PING if nothing is left to
+   * carry. During the handshake that resends the Initial and the Handshake
+   * flight together, which is what a client that lost both needs.
+   */
+  probe(): void {
+    for (let level: i32 = 0; level < 3; level += 1) {
+      const space: QuicConnSpace = this.spaceAt(level)
+      const sent: QuicSentPackets | null = this.recovery.space(level)
+      if (sent === null || space.discarded || sent.inFlight === 0) {
+        continue
+      }
+      for (let k: i32 = 0; k < sent.count; k += 1) {
+        const slot: i32 = sent.slot(k)
+        if (sent.inFlightAt(slot)) {
+          this.requeue(space, slot, false)
+        }
+      }
+      space.probe = true
     }
   }
 
@@ -1498,6 +1937,7 @@ export class QuicConnection {
     }
     if (tls.state === TLS_STATE_CONNECTED && !this.handshakeComplete) {
       this.handshakeComplete = true
+      this.recovery.handshakeConfirmed = true
       this.handshakeDonePending = true
       this.state = QUIC_STATE_CONNECTED
       this.discard(this.handshake)
@@ -1532,6 +1972,7 @@ export class QuicConnection {
     }
     this.peerParameters = p
     this.peerMaxData = p.initialMaxData
+    this.recovery.maxAckDelay = p.maxAckDelay
     return true
   }
 
@@ -1541,6 +1982,11 @@ export class QuicConnection {
       return
     }
     space.discarded = true
+    // RFC 9002 §6.4: the space's packets leave flight, uncounted.
+    this.recovery.discardSpace(space.level)
+    space.cryptoResendLow = -1
+    space.cryptoResendHigh = -1
+    space.probe = false
     quicConnWipeKeys(space.readKeys)
     quicConnWipeKeys(space.writeKeys)
     space.readKeys = null
@@ -1617,8 +2063,9 @@ export class QuicConnection {
   /**
    * The effective idle timeout in milliseconds (RFC 9000 §10.1): the smaller
    * of the two sides' `max_idle_timeout`, or the one that is not 0, raised to
-   * `QUIC_CONN_IDLE_FLOOR`; -1 when both are 0, for none. Until the client's
-   * transport parameters are read, the server's own alone.
+   * `QUIC_CONN_IDLE_FLOOR` and to three probe timeouts; -1 when both are 0,
+   * for none. Until the client's transport parameters are read, the server's
+   * own alone.
    */
   idleTimeout(): i64 {
     const local: i64 = this.config.maxIdleTimeout
@@ -1630,7 +2077,11 @@ export class QuicConnection {
     if (timeout === 0) {
       return -1
     }
-    return timeout < QUIC_CONN_IDLE_FLOOR ? QUIC_CONN_IDLE_FLOOR : timeout
+    let floor: i64 = this.recovery.probeTimeout() * 3
+    if (floor < QUIC_CONN_IDLE_FLOOR) {
+      floor = QUIC_CONN_IDLE_FLOOR
+    }
+    return timeout < floor ? floor : timeout
   }
 
   /** When the idle timeout passes, or -1 when there is none or the timer has not started. */
@@ -1641,32 +2092,56 @@ export class QuicConnection {
 
   /**
    * When `handleTimer` is next due, in the caller's milliseconds: the idle
-   * timeout, or the end of a key update's `QUIC_CONN_PTO`, whichever comes
+   * timeout, loss recovery's timer (a time-threshold loss or the probe
+   * timeout), or the end of a key update's probe timeout, whichever comes
    * first. -1 when nothing is timed: before the first packet, once the
-   * connection has closed, and with no idle timeout and no update pending.
+   * connection has closed, and with no idle timeout, nothing in flight and
+   * no update pending.
    */
   deadline(): i64 {
     if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
       return -1
     }
-    const idle: i64 = this.idleDeadline()
-    if (this.keyRetainUntil >= 0 && (idle < 0 || this.keyRetainUntil < idle)) {
-      return this.keyRetainUntil
+    let due: i64 = this.idleDeadline()
+    if (this.keyRetainUntil >= 0 && (due < 0 || this.keyRetainUntil < due)) {
+      due = this.keyRetainUntil
     }
-    return idle
+    const recovery: i64 = this.recovery.deadline(this.amplificationBlocked())
+    if (recovery >= 0 && (due < 0 || recovery < due)) {
+      due = recovery
+    }
+    return due
+  }
+
+  /**
+   * Whether the anti-amplification limit stops the server sending (RFC 9000
+   * §8.1): the client's address is not validated and three times what it
+   * sent leaves no room for a whole datagram.
+   */
+  amplificationBlocked(): boolean {
+    return !this.addressValidated && this.bytesReceived * 3 - this.bytesSent < toI64(QUIC_CONN_DATAGRAM_SIZE)
   }
 
   /**
    * Runs whatever is due by `now`, the caller's monotonic time in
    * milliseconds; call it at `deadline()`, or any time. Past the idle timeout
    * the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1):
-   * no CONNECTION_CLOSE, every key wiped. Past a key update's
-   * `QUIC_CONN_PTO` the previous read keys are wiped and the next
-   * generation's derived (RFC 9001 §6.5). `receive` and `takeDatagram` run
-   * it themselves. Time never runs backwards here: an earlier `now` than
-   * one already given counts as that one.
+   * no CONNECTION_CLOSE, every key wiped. Past a key update's probe timeout
+   * the previous read keys are wiped and the next generation's derived (RFC
+   * 9001 §6.5). Past loss recovery's timer, packets lost by the time
+   * threshold have their frames queued again, or a probe timeout queues
+   * every space's packets in flight and asks for a probe (RFC 9002 §6.1.2,
+   * §6.2.4): `takeDatagram` then sends it. `receive` and `takeDatagram` run
+   * it themselves. Time never runs backwards here: an earlier `now` than one
+   * already given counts as that one.
    */
   handleTimer(now: i64): void {
+    this.runClocks(now)
+    this.runRecoveryTimer()
+  }
+
+  /** `handleTimer`'s idle timeout and key retention, which `receive` runs before it reads a datagram. */
+  runClocks(now: i64): void {
     if (now > this.now) {
       this.now = now
     }
@@ -1686,13 +2161,30 @@ export class QuicConnection {
     }
   }
 
+  /** Loss recovery's timer, if it is due (RFC 9002 §6.2, A.9). */
+  runRecoveryTimer(): void {
+    if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
+      return
+    }
+    const kind: i32 = this.recovery.onTimeout(this.now, this.amplificationBlocked())
+    if (kind === QUIC_RECOVERY_TIMEOUT_LOSS) {
+      const level: i32 = this.recovery.timeoutSpace
+      const sent: QuicSentPackets | null = this.recovery.space(level)
+      if (sent !== null) {
+        this.packetsLost(this.spaceAt(level), sent)
+      }
+    } else if (kind === QUIC_RECOVERY_TIMEOUT_PTO) {
+      this.probe()
+    }
+  }
+
   /**
    * Starts a key update from the server (RFC 9001 §6.1): the write keys move
    * to the next generation and the Key Phase bit of every packet after
    * toggles; the client follows when it reads one. Answers whether it did.
    * It does not while it may not: before the handshake is confirmed, while
    * an update is still in flight (the client has not answered the last one,
-   * or answered it less than `QUIC_CONN_PTO` ago, so the next read keys are
+   * or answered it less than a probe timeout ago, so the next read keys are
    * not ready), and until the client has acknowledged a packet sent with the
    * current keys.
    */
@@ -1770,11 +2262,15 @@ export class QuicConnection {
    * and before the client's address is validated sends only while three
    * times what was received allows (§8.1). After a close it answers the
    * CONNECTION_CLOSE once, then `null`. While the handshake waits for a
-   * signature it answers `null`, so the server's flight leaves whole. `now`
-   * is the caller's time in milliseconds: a datagram that elicits an
+   * signature it answers `null`, so the server's flight leaves whole. Lost
+   * data goes before new data. While the congestion window is full (RFC
+   * 9002 §7), or a space's record of packets in flight is, a space sends
+   * only an ACK, unless a probe timeout asked it for a probe. `now` is the
+   * caller's time in milliseconds: a datagram that elicits an
    * acknowledgement restarts the idle timer when it is the first since the
    * client's last packet (RFC 9000 §10.1), and once the idle timeout has
-   * passed nothing goes out.
+   * passed nothing goes out. This is not paced: a carrier that paces calls
+   * `nish/net/quic-listener`'s `quicListenerTakePaced` instead.
    */
   takeDatagram(now: i64): u8[] | null {
     this.handleTimer(now)
@@ -1793,7 +2289,7 @@ export class QuicConnection {
       return null
     }
     // Unvalidated, a datagram goes only when a whole padded one fits the budget.
-    if (!this.addressValidated && this.bytesReceived * 3 - this.bytesSent < toI64(QUIC_CONN_DATAGRAM_SIZE)) {
+    if (this.amplificationBlocked()) {
       return null
     }
     const levels: i32[] = []
@@ -1801,22 +2297,31 @@ export class QuicConnection {
     let remaining: i32 = QUIC_CONN_DATAGRAM_SIZE
     let paddedInitial: boolean = false
     let eliciting: boolean = false
+    const open: boolean = this.recovery.canSend()
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
       const overhead: i32 = this.overhead(space)
-      if (overhead === 0 || remaining <= overhead + 8) {
+      const sent: QuicSentPackets | null = this.recovery.space(level)
+      if (sent === null || overhead === 0 || remaining <= overhead + 8) {
         continue
       }
-      const cryptoBefore: i64 = space.cryptoOutOffset
-      const payload: u8[] = this.buildPayload(space, remaining - overhead)
+      if (space.probe && sent.full()) {
+        // A probe has to be recorded: the oldest packet gives up its slot,
+        // and what it carried, already queued again by the probe, stays queued.
+        const slot: i32 = this.recovery.evictOldest(level)
+        if (slot >= 0) {
+          this.requeue(space, slot, true)
+        }
+      }
+      const elicit: boolean = space.probe || (open && !sent.full())
+      const payload: u8[] = this.buildPayload(space, remaining - overhead, elicit)
       if (toI32(payload.length) === 0) {
         continue
       }
-      eliciting = eliciting || toI32(payload.length) > this.ackLength
-      // An Initial carries only ACK and CRYPTO, so it elicits an
-      // acknowledgement exactly when it carries CRYPTO data.
+      eliciting = eliciting || space.stagedEliciting
+      // RFC 9000 §14.1: a datagram with an ack-eliciting Initial is padded.
       if (level === TLS_LEVEL_INITIAL) {
-        paddedInitial = space.cryptoOutOffset !== cryptoBefore
+        paddedInitial = space.stagedEliciting
       }
       levels.push(level)
       payloads.push(payload)
@@ -1868,15 +2373,18 @@ export class QuicConnection {
 
   /**
    * The frames of one packet of `space`, at most `room` bytes: an ACK when
-   * one is due, CRYPTO data, and at the application level HANDSHAKE_DONE,
-   * RETIRE_CONNECTION_ID, NEW_CONNECTION_ID, PATH_RESPONSE and stream data.
-   * Empty when nothing is due. Every frame but the ACK elicits an
-   * acknowledgement, so the payload does exactly when it is longer than
-   * `ackLength`, which this sets.
+   * one is due, and, when `elicit` allows frames that elicit an
+   * acknowledgement, CRYPTO data (lost bytes first), at the application
+   * level HANDSHAKE_DONE, RETIRE_CONNECTION_ID, NEW_CONNECTION_ID,
+   * PATH_RESPONSE and stream data, and for a probe with nothing else to
+   * carry a PING. Empty when nothing is due. What it carries is written to
+   * the space's staging row, and `stagedEliciting` says whether anything
+   * elicits an acknowledgement; `ackLength` is the ACK's length.
    */
-  buildPayload(space: QuicConnSpace, room: i32): u8[] {
+  buildPayload(space: QuicConnSpace, room: i32, elicit: boolean): u8[] {
     let out: u8[] = []
     this.ackLength = 0
+    space.clearStaged()
     if (space.received.ackPending) {
       // The ACK opens the payload, so its array becomes the payload; one too
       // large for the room is left out and stays due.
@@ -1890,40 +2398,85 @@ export class QuicConnection {
         }
       }
     }
+    if (!elicit) {
+      return out
+    }
+    this.buildCrypto(space, out, room)
+    if (space.level === TLS_LEVEL_APPLICATION) {
+      this.buildApplication(space, out, room)
+    }
+    if (space.probe && !space.stagedEliciting && toI32(out.length) < room) {
+      quicPushTypeOnly(out, QUIC_FRAME_PING)
+      space.stagedEliciting = true
+    }
+    return out
+  }
+
+  /**
+   * One CRYPTO frame into `out`, within `room`: the bytes lost first, from
+   * the level's kept stream, then those not sent yet. The level's CRYPTO
+   * stream is kept whole, so a byte's index in `cryptoOut` is its offset.
+   */
+  buildCrypto(space: QuicConnSpace, out: u8[], room: i32): void {
+    if (space.cryptoResendLow >= 0) {
+      const low: i64 = space.cryptoResendLow
+      const want: i32 = toI32(space.cryptoResendHigh - low)
+      const left: i32 = room - toI32(out.length) - quicCryptoOverhead(low, want)
+      const n: i32 = left < want ? left : want
+      if (n > 0 && quicPushCrypto(out, low, space.cryptoOut, toI32(low), n)) {
+        space.stageCrypto(low, n)
+        space.cryptoResendLow = low + toI64(n)
+        if (space.cryptoResendLow >= space.cryptoResendHigh) {
+          space.cryptoResendLow = -1
+          space.cryptoResendHigh = -1
+        }
+      }
+      return
+    }
     const unsent: i32 = space.cryptoUnsent()
     if (unsent > 0) {
       const left: i32 = room - toI32(out.length) - quicCryptoOverhead(space.cryptoOutOffset, unsent)
       const n: i32 = left < unsent ? left : unsent
       if (n > 0 && quicPushCrypto(out, space.cryptoOutOffset, space.cryptoOut, space.cryptoOutHead, n)) {
+        space.stageCrypto(space.cryptoOutOffset, n)
         space.cryptoOutHead = space.cryptoOutHead + n
         space.cryptoOutOffset = space.cryptoOutOffset + toI64(n)
-        if (space.cryptoOutHead === toI32(space.cryptoOut.length)) {
-          space.cryptoOut = []
-          space.cryptoOutHead = 0
-        }
       }
     }
-    if (space.level === TLS_LEVEL_APPLICATION) {
-      this.buildApplication(out, room)
-    }
-    return out
   }
 
-  /** The 1-RTT frames beyond ACK, as many as fit in `room` bytes of `out`. */
-  buildApplication(out: u8[], room: i32): void {
+  /**
+   * The 1-RTT frames beyond ACK, as many as fit in `room` bytes of `out`
+   * and in the packet's record: `QUIC_CONN_PACKET_CONTROL` connection-ID
+   * frames and `QUIC_CONN_PACKET_STREAMS` STREAM frames.
+   */
+  buildApplication(space: QuicConnSpace, out: u8[], room: i32): void {
     if (this.handshakeDonePending && toI32(out.length) < room) {
       quicPushTypeOnly(out, QUIC_FRAME_HANDSHAKE_DONE)
       this.handshakeDonePending = false
+      space.setFlags(space.staging, QUIC_CONN_SENT_HANDSHAKE_DONE)
+      space.stagedEliciting = true
     }
     // RETIRE_CONNECTION_ID is at most 9 bytes, NEW_CONNECTION_ID with an
     // 8-byte ID at most 42, PATH_RESPONSE 9.
-    while (toI32(this.cids.retirePending.length) > 0 && room - toI32(out.length) >= 9) {
-      quicPushValue(out, QUIC_FRAME_RETIRE_CONNECTION_ID, this.cids.takeRetire())
+    while (
+      toI32(this.cids.retirePending.length) > 0 &&
+      room - toI32(out.length) >= 9 &&
+      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
+    ) {
+      const sequence: i64 = this.cids.takeRetire()
+      quicPushValue(out, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence)
+      space.stageControl(QUIC_CONN_CONTROL_RETIRE, sequence)
     }
     let entry: QuicCidEntry | null = this.cids.nextUnannounced()
-    while (entry !== null && room - toI32(out.length) >= 42) {
+    while (
+      entry !== null &&
+      room - toI32(out.length) >= 42 &&
+      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
+    ) {
       quicPushNewConnectionId(out, entry.sequence, 0, entry.cid, entry.resetToken)
       entry.announced = true
+      space.stageControl(QUIC_CONN_CONTROL_NEW_CID, entry.sequence)
       entry = this.cids.nextUnannounced()
     }
     while (toI32(this.pathResponses.length) >= QUIC_PATH_DATA_SIZE && room - toI32(out.length) >= 9) {
@@ -1933,16 +2486,29 @@ export class QuicConnection {
         QUIC_PATH_DATA_SIZE,
         toI32(this.pathResponses.length) - QUIC_PATH_DATA_SIZE
       )
+      // Ack-eliciting, but never sent again (RFC 9000 §13.3).
+      space.stagedEliciting = true
     }
     for (const stream of this.streams) {
+      if (space.streamCount(space.staging) >= QUIC_CONN_PACKET_STREAMS) {
+        return
+      }
       if (stream.wantsToSend()) {
-        this.buildStream(out, room, stream)
+        this.buildStream(space, out, room, stream)
       }
     }
   }
 
-  /** One STREAM frame for `stream`, as much of its queue as fits, with the FIN when the rest fits too. */
-  buildStream(out: u8[], room: i32, stream: QuicConnStream): void {
+  /**
+   * One STREAM frame for `stream`: the bytes lost first, else as much of
+   * its queue as fits, with the FIN when the rest fits too. The bytes stay
+   * in the stream's buffer until no packet in flight carries them.
+   */
+  buildStream(space: QuicConnSpace, out: u8[], room: i32, stream: QuicConnStream): void {
+    if (!stream.stopped && stream.resendLow >= 0) {
+      this.buildResend(space, out, room, stream)
+      return
+    }
     const unsent: i32 = stream.unsent()
     const left: i32 = room - toI32(out.length) - quicStreamOverhead(stream.id, stream.sendOffset, unsent)
     if (left < 0 || (left === 0 && unsent > 0)) {
@@ -1953,14 +2519,36 @@ export class QuicConnection {
     if (!quicPushStream(out, stream.id, stream.sendOffset, stream.send, stream.sendHead, n, fin)) {
       return
     }
+    space.stageChunk(stream.id, stream.sendOffset, n, fin)
+    stream.outstanding = stream.outstanding + 1
     stream.sendHead = stream.sendHead + n
     stream.sendOffset = stream.sendOffset + toI64(n)
-    if (stream.sendHead === toI32(stream.send.length)) {
-      stream.send = []
-      stream.sendHead = 0
-    }
     if (fin) {
       stream.finSent = true
+    }
+  }
+
+  /** One STREAM frame of `stream`'s lost bytes, `[resendLow, resendHigh)`, with the FIN when it was lost and the rest fits. */
+  buildResend(space: QuicConnSpace, out: u8[], room: i32, stream: QuicConnStream): void {
+    const low: i64 = stream.resendLow
+    const want: i32 = toI32(stream.resendHigh - low)
+    const left: i32 = room - toI32(out.length) - quicStreamOverhead(stream.id, low, want)
+    if (left < 0 || (left === 0 && want > 0)) {
+      return
+    }
+    const n: i32 = left < want ? left : want
+    const fin: boolean = stream.resendFin && n === want
+    if (!quicPushStream(out, stream.id, low, stream.send, toI32(low - stream.sendBase), n, fin)) {
+      return
+    }
+    space.stageChunk(stream.id, low, n, fin)
+    stream.outstanding = stream.outstanding + 1
+    if (n === want) {
+      stream.resendLow = -1
+      stream.resendHigh = -1
+      stream.resendFin = false
+    } else {
+      stream.resendLow = low + toI64(n)
     }
   }
 
@@ -2015,7 +2603,29 @@ export class QuicConnection {
     }
     space.nextPn = pn + 1
     quicConnAppend(datagram, packet)
+    this.recordSent(space, pn, toI32(packet.length))
     return true
+  }
+
+  /**
+   * Hands an ack-eliciting packet just sealed to loss recovery (RFC 9002
+   * §A.5), with what it carried copied from the staging row to its slot. A
+   * packet recovery could not record has its frames queued again at once,
+   * so nothing it carried goes untracked. A packet that elicits nothing (an
+   * ACK, a CONNECTION_CLOSE) is not recorded.
+   */
+  recordSent(space: QuicConnSpace, pn: i64, size: i32): void {
+    if (!space.stagedEliciting) {
+      return
+    }
+    const slot: i32 = this.recovery.onPacketSent(space.level, pn, size, this.now)
+    if (slot < 0) {
+      this.requeue(space, space.staging, true)
+    } else {
+      space.commitStaged(slot)
+      space.probe = false
+    }
+    space.clearStaged()
   }
 
   /**
