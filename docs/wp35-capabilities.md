@@ -36,14 +36,54 @@ nobody signals is the same run every time.
 
 ## 2. The audit
 
-Every builtin the checker accepts has exactly one row in `builtinCapability`,
-keyed by its checker-facing name (a `nish:` export by the builtin it renames),
-answering a capability, the deliberate `CAP_NONE`, or `CAP_UNLABELLED`. Three
-rows were choices: `Math.random` is `entropy` (it is seeded from the time and
-the pid), `statMtimeSync` is `clock` (it answers a time), and `spawnSyncTo` is
-`process.spawn` alone. An unlabelled builtin is an internal compiler error
-(exit 70, `unlabelledBuiltinError`), and `tests/capabilities.js` fails
-`npm test` when any accepted name has no row, before a program calls it.
+Every builtin the checker accepts has exactly one row in `builtinCapability`
+(`src/capabilities.ts`): a capability, or a deliberate `none`. The key is the
+checker-facing name (`readFileSync`, `process.exit`, `netRead`), not the
+runtime symbol a call lowers to, because one runtime symbol can serve several
+builtins and the witness needs the call site anyway. A `nish:` export is keyed
+by the builtin it renames (`BuiltinExport.canonical`), so `exit` from
+`nish:process` is `process.exit`'s row, and the two spellings cannot be
+labelled apart.
+
+| label | builtins |
+| --- | --- |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` |
+| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` |
+| `net` | every `nish:net` export: `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` |
+| `env` | `getenv`, `geteuid` |
+| `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` |
+| `entropy` | `crypto.getRandomValues`, `Math.random` |
+| `signal` | `signalFd`, `readSignal` |
+| `exit` | `process.exit` (and `exit` from `nish:process`) |
+| `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
+| `unsafe` | the five `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`); wired by WP36 |
+| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
+
+Three rows deserve their reason:
+
+- **`Math.random` is `entropy`**, although it is a pseudo-random generator:
+  runtime.c's `nish_random` seeds it from `time(0)` and `getpid()` on first
+  use, so two runs answer differently.
+- **`statMtimeSync` is `clock`**, not `fs.read`. It reads the file system, but
+  what it answers is a time, and a builtin carries one label.
+- **`spawnSyncTo` is `process.spawn`**, not also `fs.write`, for the same
+  reason: the child it starts can write anything anyway, so `process.spawn`
+  already says more than `fs.write` would.
+
+**Unlabelled is a bug, and it is executable.** `builtinCapability` answers a
+capability's index, `CAP_NONE` (-1, the deliberate none) or `CAP_UNLABELLED`
+(-2). The walk in
+`src/attributes.ts` that meets a builtin call answering `CAP_UNLABELLED` is an
+internal compiler error (exit 70, `src/ice.ts`'s
+`unlabelledBuiltinError`, which names the builtin under `--json` too), and `tests/capabilities.js`
+enumerates every name the checker accepts — the plain callees of
+`isBuiltinFunction`, the conversions, the `nish:net` exports, the dotted list
+the checker's refusal names, the namespace properties, the `Result`
+constructors and every `nish:` export — and fails `npm test` when one has no
+row, or a row names no builtin, before any program calls it. The ICE itself is
+pinned through the suite's hook: `NISH_SIMULATE_ICE=unlabelled:<name>` compiles
+as usual but treats `<name>` as unlabelled.
 
 ## 3. Propagation and the witness
 

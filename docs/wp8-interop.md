@@ -67,7 +67,7 @@ header, `nish_array a = { n, n, (char *)buf };`. Otherwise
   mechanism (`Point_constructor(struct Point *this_, …)
   NISH_SYMBOL("Point.constructor")`).
 - **Classes and interfaces** become `struct <Name>` with the compiled layout:
-  base fields first, flattened. Forward declarations come first, so structs
+  an implemented interface's fields first, flattened. Forward declarations come first, so structs
   may point at each other. The `layout` block of `tests/run.js`
   static-asserts every size against hand-written C twins.
 - **Comments.** Every prototype carries its source signature and its array

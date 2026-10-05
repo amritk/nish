@@ -253,10 +253,17 @@ the walk sees what is inserted afterwards, as JavaScript's does.
 
 `for (const k of m.keys())` and `m.values()` walk the entries in index order,
 skip dead ones, and **re-read the entry count every pass**, so the semantics
-are JavaScript's exactly: a key set during the walk is appended past the cursor
-and visited; an existing key's value is written in place; a deleted unvisited
-key is skipped; delete-then-set appends and is visited again; growth moves
-buckets and not entries.
+are JavaScript's exactly, because an entry never moves while a loop is walking
+the table:
+
+| During the walk | JavaScript | Here |
+| --- | --- | --- |
+| `set` of a new key | visited later | appended past the cursor, so it is visited |
+| `set` of an existing key | the new value is seen if not yet visited | the value is written in place |
+| `delete` of a key not yet visited | skipped | its entry is dead, so it is skipped |
+| `delete`, then `set` of the same key | visited again, at the end | a new entry is appended |
+| `clear` | nothing more, then anything added after | every entry is dead and the count is kept (§6.1) |
+| growth | invisible | the buckets move and the entries do not |
 
 **Compaction is the one operation that moves entries**, so the table counts its
 live walks: incremented where a loop is entered, decremented on the

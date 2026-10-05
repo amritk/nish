@@ -8,7 +8,8 @@ IR) landed before 0.1.0. `tests/cases/fn_arrow` carries the golden, the
 and the playground first, then `src/` (0.3.0), then every other Nish program and
 the JavaScript tooling (0.13.0, [#253](https://github.com/amritk/nish/pull/253)).
 The Biome plugin `biome-plugins/no-function-declaration.grit` now makes a
-`function` declaration an error in every file Biome reads. What C has left is
+`function` declaration an error in every file its override in `biome.json`
+lists. What C has left is
 the test corpus, which Biome does not read (§7). A `function` definition is
 still accepted. Whether stage D ever rejects one is §10's open question, and
 [MASTER_PLAN](MASTER_PLAN.md#what-remains) lists it as the one open language
@@ -95,14 +96,19 @@ are not counted, and are not stage D's to take (§9). Counted on 2026-10-05 with
 
 | Surface | `function` definitions | Note |
 | --- | ---: | --- |
-| `src/`, `std/`, `examples/`, `bench/`, `tests/self/`, `tests/nish/`, the JavaScript tooling | **0** | done, and the Biome plugin keeps it that way |
+| `src/`, `std/`, `examples/`, `bench/`, `tests/self/`, `tests/nish/`, the JavaScript tooling the plugin lists | **0** | done, and the Biome plugin keeps it that way |
+| `runtime/shim.mjs`, `bin/launcher.js` (JavaScript, outside the plugin's list) | 90, 1 | not Nish programs; counted with the same pattern over `.mjs` and `.js` and not in the total below |
 | `docs/cookbook/` | 1 | `fn-add-function.ts`, which exists *to be* the `function` spelling and is excluded from the plugin in `biome.json` (§9a) |
 | `tests/cases/` | 715 | the goldens gate the rewrite. The count grows as new cases are written in the old spelling, and the corpus is outside Biome |
 | `tests/differential/corpus/` | 153 | also rewritten to JavaScript, so the arrow-parity guard (§8b) covers it |
 | `tests/link/` | 51 | whole multi-module programs |
 | `tests/parser/` | 32 | parser fixtures no checker accepts |
+| `tests/layout/` | 71 | all in `structs.ts`, the C-layout twins |
+| `tests/wordings/` | 5 | |
+| `tests/fix/` | 3 | `nish --fix` fixtures |
+| `tests/differential/arrow-parity/` | 3 | `declared.ts` |
 
-That is **952** definitions in all, against 1,664 when stage C's docs half was
+That is **1,034** definitions in all, against 1,664 when stage C's docs half was
 finished and `src/` had not been converted. §10 argues stage D from this
 number.
 
@@ -284,7 +290,7 @@ makes the spelling they name wrong.
   wrong.
 - **Whether stage D happens at all.** A, B and most of C are done, and new
   code outside the test corpus cannot use `function` (the Biome plugin). What
-  is left is 952 rewrites of test programs, for zero expressiveness (§7).
+  is left is 1,034 rewrites of test programs, for zero expressiveness (§7).
   The alternative is to leave D undone, convert a case when it is opened for
   another reason, and take D when the count is small. D withdraws an accepted
   construct. On 0.x that is a breaking minor, and after 1.0 it would need a

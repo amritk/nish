@@ -56,7 +56,8 @@ inheritance or downcasts. The current list, kept in step with this one, is in
 
 ### 2.1 One `Node` class, not a class hierarchy
 
-Nish has single inheritance but no downcast, and adding one would mean a
+Nish had single inheritance then (WP2b; WP25 has since removed it) and no
+downcast, and adding one would mean a
 runtime tag check, a `T | null` result and a checker rule for a cast that can
 fail. So `src/` uses **one `Node` class** with a `kind: i32` discriminant and
 the union of the fields any node needs (`src/nodes.ts`). Field access is

@@ -105,7 +105,8 @@ number or a `boolean` is a plain conversion with no callee.
 
 `runtime/shim.mjs` implements the runtime's grammar rather than JavaScript's,
 so the differential harness agrees with the native build (`parse_numbers`,
-`parse_strings`, `parse_argv_sum`).
+`parse_strings`; `parse_argv_sum` agreed too until #426, and is now a known
+failure because its sum overflows `i32`, which panics natively).
 
 ## The `i64` type
 

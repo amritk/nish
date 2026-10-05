@@ -104,7 +104,10 @@ positions (`reject_struct_field_*`, `reject_res_ok_f64`).
 593 programs and 8,302 runs gave 13,800 undeclared differences in five
 classes, none of them wrong code. stage0 moved twice: a path inside the IR
 (modules are named relative to the importer, needing no working directory)
-and the unary `+` wording. stage1 moved twice: error recovery (`errored` in
+and the unary `+` wording. No `cwd` builtin was added for the other direction:
+`runtime.c` had eight bytes of its 4 KB budget left then, and importer-relative
+names also keep the working directory out of the emitted IR, which is what
+makes a build reproducible. stage1 moved twice: error recovery (`errored` in
 `src/context.ts` stands in for a throw) and `--emit-ast` on a refused program.
 The parser refusing a forbidden construct before Phase 0 named the rule was
 declared, and WP33 R1 closed it in 0.14.0 and 0.15.0
@@ -142,11 +145,15 @@ nobody had rebuilt.
 
 ### A7. A corpus that grew under the measurement
 
-`main` added 53 programs in a day, and the undeclared count went 37 → 0 → 18;
-the 18 included a `CPtr` internal compiler error under `-g`. The 37 were
-`nish/<name>` modules named by absolute path. A module's name is now its
-package-relative specifier (`std/text.ts`), kept apart from its identity in
-`ModuleUnit.name`.
+- `main` added 53 programs in a day, and the undeclared count went
+  37 → 0 → 18.
+- The 18 included a `CPtr` internal compiler error under `-g`.
+- The 37 were `nish/<name>` modules named by absolute path. A module reached
+  by a package specifier is found through the compiler's own package root,
+  `<dir of argv[0]>/..`, so its path depended on how the compiler was invoked
+  (`./build/nish` and `/abs/build/nish` name one module two ways), not on the
+  program. A module's name is now its package-relative specifier
+  (`std/text.ts`), kept apart from its identity in `ModuleUnit.name`.
 
 ### A8. A surface missing from `VARIATIONS`
 
@@ -155,7 +162,8 @@ them one defect: stage1 wrote an empty stdout for a syntax error.
 
 ### A9. A directory missing from `CORPUS_DIRS`
 
-`tests/differential/corpus` (71 programs) had never been compiled by stage1.
+Formerly §A5's sixth entry. `tests/differential/corpus` (71 programs) had
+never been compiled by stage1.
 Two of them found a checker bug in `-1 / z` with `z: f64`, now fixed in
 `src/expressions.ts`.
 

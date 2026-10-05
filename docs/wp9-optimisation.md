@@ -49,12 +49,13 @@ private ABI with one slot per arm ([wp17-result-abi.md](wp17-result-abi.md)
 on one run was spread: interleaved re-runs gave 261 ms against Rust's 262).
 That stopped being true with #426, which made signed overflow a checked panic:
 on the 0.16.0 run in BENCHMARKS.md (2026-10-05) fib is 1.68x Rust by default
-and at parity under `--wrapping` (564 ms against 338), because every `+` in its
+and at parity under `--wrapping` (564 ms by default, 338 under `--wrapping`,
+Rust 336), because every `+` in its
 recursion now carries an overflow check the bounds walk cannot prove away.
 The other six are within 1.10x. On a shared VM the medians sit 15–20 % above the minima, and the
 ratios move by about that much between back-to-back runs. **A row near 1.10x
 needs several runs, or cachegrind, before it means anything.** Nish binaries
-are 5.5–21 KB, against 14.5 KB for C and 350–380 KB for Rust, and Nish is
+are 5.5–22 KB, against 14.5 KB for C and 340–370 KB for Rust, and Nish is
 ahead of the Go twins on all seven programs.
 
 ### nbody was alias information, not code generation
@@ -182,7 +183,7 @@ Not every program crosses modes:
 Binaries are a flat ~12.2 KB larger in f64 mode. The only difference is
 `nish_str_from_f64`: printing a double links the shortest-digits formatter and
 its tables. That is also why BENCHMARKS.md's nbody, spectral and vec3 binaries
-are about 18–21 KB while the rest are about 6 KB.
+are about 18–23 KB while the rest are about 6–8 KB.
 
 The three mechanisms behind the slowdown:
 

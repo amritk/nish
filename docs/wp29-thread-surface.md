@@ -209,7 +209,7 @@ margin this surface exists to buy.
 The arena is thread-local (wp20 T0), so the lifetime question becomes a
 question of *where* memory lives. A worker's allocations are freed when its
 thread exits, so a pointer into them dangles once the join returns. This is
-the same shape as WP15 §7's `NL2290`/`NL2291` interior-pointer rule. Hence:
+the same shape as WP15 §2a's `NL2290`/`NL2291` interior-pointer rule. Hence:
 
 - **A worker's result is a scalar** (a number, a `boolean` or an enum).
   `parallelMapInto` with a `string` or class `U` is refused, with a message

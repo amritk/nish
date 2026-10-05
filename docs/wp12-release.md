@@ -2,7 +2,8 @@
 
 **Status:** complete, and the process below is the one in use. Releases are cut
 by the train in `.github/workflows/release-pr.yml` and built and published by
-`.github/workflows/release.yml`; npm publishing has been automatic since 0.10.0.
+`.github/workflows/release.yml`; npm publishing has been automatic since 0.11.0 (#205); 0.10.0, the first version
+on the registry, was published by hand.
 User-facing install instructions are in [INSTALL.md](INSTALL.md).
 
 ## The package
@@ -25,7 +26,10 @@ diagnostic naming the four supported platforms and exit 3.
 
 The compiler finds `scripts/build.sh`, `runtime/` and `std/` from its package
 root (`packageRootCandidates` in `src/compile.ts`): the directory above the one
-`argv[0]` names, then the same for its real path, then the working directory.
+`argv[0]` names, then the same for its real path, and the working directory
+last, only when the compiler's own real path lies inside it (CLI-2,
+[docs/security/](security/README.md)), so `--link` never runs a stranger's
+`scripts/build.sh`.
 
 `install.sh` at the repository root is the second channel: it reads `uname`,
 downloads the release tarball for that platform and unpacks it into `~/.nish`,

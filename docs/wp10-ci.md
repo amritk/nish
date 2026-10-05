@@ -186,8 +186,8 @@ The last full measurement predates R6 (run 474 on `main`, `a89bee7`,
 `test` then was comparisons with stage0, each paying about 634 ms of Node and
 `typescript` start-up per spawned compiler for 1.5 ms of compiling; R6 removed
 both the comparisons and that cost. These numbers describe that tree, not this
-one, and want re-measuring before anyone cites them. The ten costliest checks
-were 70% of that run:
+one, and want re-measuring before anyone cites them. The five costliest checks
+of that run were:
 
 | Check (`a89bee7`, local run of 660.5 s) | Cost |
 | --- | --- |

@@ -151,7 +151,7 @@ gone, and no flag brings it back (`--nsw` is refused)
 ### How do I know the compiled program behaves like Node?
 
 `npm run test:diff` compiles every whole program in `tests/cases` and a
-50-program corpus, runs each binary, runs the same program's JavaScript
+71-program corpus, runs each binary, runs the same program's JavaScript
 rewrite under Node with `runtime/shim.mjs`, and compares stdout and exit
 status byte for byte. The rewrite was made from the compiler's own recorded
 types (`(a + b) | 0` for `i32`, `BigInt` for `i64`, a bounds-checked index

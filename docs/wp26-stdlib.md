@@ -1,7 +1,7 @@
 # WP26: The standard library
 
-**Status: landed.** `std/` arrived in 0.2.0 with `std/testing`
-([#47](https://github.com/amritk/nish/pull/47)), `std/text` and `std/json`
+**Status: landed.** `std/` arrived in 0.2.0 with `std/testing` and
+`std/text` ([#47](https://github.com/amritk/nish/pull/47)) and `std/json`
 ([#65](https://github.com/amritk/nish/pull/65)), and the two programs written
 on them, [`tests/nish/run.ts`](../tests/nish/run.ts) and
 [`tests/nish/cli.ts`](../tests/nish/cli.ts). It has since grown `std/pair`

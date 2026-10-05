@@ -47,8 +47,8 @@ fuzz programs. CI's `nish-cmp` job runs 200 fuzz programs.
    `__entry.mjs` that calls `main()` and passes its result to `process.exit`,
    which truncates as the OS does (`300` exits `44`, `-1` exits `255`).
 3. **Compare.** stdout byte for byte, exit status and signal. stderr is not a
-   language feature and is not compared. `throw` traps (`llvm.trap`, SIGILL)
-   and the shim raises SIGILL on itself.
+   language feature and is not compared. (Until WP16 removed `throw`, it
+   trapped with `llvm.trap`, SIGILL, and the shim raised SIGILL on itself.)
 
 **A stale record is the one outcome no list excuses.** A program whose source
 no longer hashes to what its rewrite was made from is reported `STALE` and
@@ -108,9 +108,10 @@ says otherwise:
   `a[i]` bounds-check and exit 1.
 - An array of records holds them by value, so a corpus program must not rely
   on a pushed record and its element being the same object.
-- Method calls dispatch on the receiver's declared type (WP2b), where Node
-  dispatches on the runtime object: `cases/cls_extends_override` is a known
-  failure.
+- Until WP25 removed inheritance, a method call dispatched on the receiver's
+  declared type (WP2b) where Node dispatches on the runtime object, and
+  `cls_extends_override` was a known failure. With no `extends`, every call
+  names one method, and the difference is gone.
 - Known failures by design: `Math.min`/`max` with NaN (`llvm.minnum`),
   `Math.round(-0.3)` is `+0`, and glibc's libm differs from V8's fdlibm by one
   ulp on some `sin`/`cos`/`log`/`pow` arguments (`f64_libm`: 5 of 127 values).

@@ -85,6 +85,13 @@ requires an exported `main`, and `nish_` is a reserved prefix.
 
 ## Linkage
 
+| Function | default | `--no-strict-exports` |
+| --- | --- | --- |
+| `export const f` | external (`define ... @f`) | external |
+| `const f` (not exported) | `define internal ... @f` | external |
+| entry `export const main` | external `@nish_main` + external `@main` wrapper | same |
+| inline arena allocator | `internal` | `internal` |
+
 WP5 made every function an external symbol by default, with
 `--strict-exports` as the opt-in that made non-exported functions `internal`.
 WP15 §3 swapped the default: `internal` is what lets LLVM inline, specialise

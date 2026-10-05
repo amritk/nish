@@ -9,8 +9,8 @@ change its ground without building any of it:
 
 - **`nish --fix`** ([#421](https://github.com/amritk/nish/pull/421),
   [#429](https://github.com/amritk/nish/pull/429),
-  [#431](https://github.com/amritk/nish/pull/431), and for the deprecated
-  flags #459 and #460) is the strict half of the same porting story, and the
+  [#431](https://github.com/amritk/nish/pull/431), for the deprecated
+  `--unchecked-indexing` #459, and for the NL9007 range guard #460) is the strict half of the same porting story, and the
   opposite mechanism: it adds no acceptance, it *rewrites* a refused construct
   into the strict spelling that means the same thing — `==` to `===`,
   `export default f` and export lists onto the declarations, `import type`
@@ -496,7 +496,7 @@ builds, which answers §4.2.
 1. **The frontend's own attributes, lost this way, cost nothing on these
    shapes** (490 ms against 489), because the callee was still in the LTO unit
    and LLVM re-derived what it needed. That does not make the fixpoint
-   worthless — WP15 §1a measured 1.63x to 3.96x from alias facts on array
+   worthless — WP15 §2b measured 1.63x to 3.96x from alias facts on array
    loops — only these two facts are not what a closure charges.
 2. **The call itself is worth 1.26x to 1.40x**, the honest price of a callback
    in a hot loop.
@@ -621,7 +621,7 @@ one of two targets chosen by `getenv`, so LTO cannot fold it back.
 
 **11d, the array shape.** 11a to 11c with the loop holding a 1,024-element
 `i32[]` and the callee taking one element per call, 400,000 rounds — the shape
-WP15 §1a's alias domains are about, since an unknown callee could store through
+WP15 §2b's alias domains are about, since an unknown callee could store through
 `xs` or grow it.
 
 **11e, the allocation shape.** `p` provably does not outlive `run`, so WP6
