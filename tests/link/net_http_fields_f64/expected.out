@@ -1,0 +1,69 @@
+PASS  a lowercase token is a field name
+PASS  an empty name is not
+PASS  an uppercase letter is not: HTTP/2 and HTTP/3 send names in lowercase
+PASS  nor a space, a colon, a slash or a DEL
+PASS  a value may be empty, hold inner spaces, tabs and obs-text
+PASS  but not a NUL, a CR or an LF anywhere
+PASS  nor a space or a tab at either end
+PASS  httpFieldIs compares octets, length first
+PASS  connection, proxy-connection, keep-alive, transfer-encoding and upgrade are connection-specific
+PASS  te is, unless its value is trailers
+PASS  an ordinary field is not
+PASS  authorization, proxy-authorization, cookie and set-cookie are sensitive, and nothing else is
+PASS  a GET with every pseudo-header reads
+PASS  and records them, the regular fields in order, and the length
+PASS  get answers null for a field the section does not have, and isConnect is false
+PASS  one without :authority reads too, with no content-length
+PASS  OPTIONS may ask for *
+PASS  no other method may
+PASS  a path must start with /
+PASS  an empty :path is refused
+PASS  a GET without :path misses one
+PASS  so does one without :method
+PASS  a pseudo-header twice is refused
+PASS  one after a regular field is refused
+PASS  an unknown pseudo-header is refused
+PASS  :status in a request is forbidden
+PASS  an uppercase field name is refused
+PASS  a value with an LF is refused
+PASS  so is a pseudo-header's value with a leading space
+PASS  a connection-specific field is refused
+PASS  te: trailers is not
+PASS  a :method that is not a token is refused
+PASS  a :scheme that does not start with a letter is refused
+PASS  so is one with a character RFC 3986 does not allow
+PASS  and an empty one
+PASS  an :authority with userinfo is refused
+PASS  a host that names :authority reads
+PASS  one that names another is refused
+PASS  host without :authority is left to the program
+PASS  two content-lengths that agree read
+PASS  two that disagree are refused
+PASS  so is one that is not all digits
+PASS  or longer than eighteen digits
+PASS  or empty
+PASS  a section with more names than values is refused
+PASS  a plain CONNECT has :authority alone
+PASS  a :path on one is forbidden
+PASS  and :authority is required
+PASS  an extended CONNECT reads where it is enabled
+PASS  and is refused where it is not
+PASS  :protocol with another method is forbidden
+PASS  an extended CONNECT needs :scheme and :path
+PASS  and a :protocol that is a token
+PASS  a response with :status reads
+PASS  one without is missing it
+PASS  a request pseudo-header in a response is forbidden
+PASS  a status that is not three digits from 100 to 599 is refused
+PASS  an interim 103 reads
+PASS  a trailer section of regular fields reads
+PASS  a pseudo-header in one is forbidden
+PASS  and its names follow the same rules
+PASS  an outgoing section of valid fields passes
+PASS  an uppercase name is refused
+PASS  so is a pseudo-header, which the version writes itself
+PASS  a value that would end a line once turned back into HTTP/1.1 is refused
+PASS  a connection-specific field is refused
+PASS  and two lists of different lengths
+PASS  clear empties every field
+http fields: 68 passed, 0 failed, 0 skipped
