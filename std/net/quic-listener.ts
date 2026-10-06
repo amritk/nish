@@ -63,6 +63,22 @@
  *     while (out !== null) { … send it … ; out = quicListenerTakePaced(conn, now); }
  *     … and wake at the earlier of conn.deadline() and quicListenerPaceTime(conn, now)
  *
+ * **GSO and GRO** (`nish:net`'s `UDP_SEGMENT` and `UDP_GRO`). A carrier that
+ * sends with segmentation offload takes a whole flight at once:
+ * `quicListenerTakeFlight` writes as many datagrams as the pacer has credit
+ * for back to back into one buffer, every one `QUIC_CONN_DATAGRAM_SIZE`
+ * bytes but the last, which is what one `udpSendTo` with that segment size
+ * cuts back into datagrams; each is written in place, so a flight allocates
+ * nothing. The flight is paced as a whole: it is as long as the pacer's
+ * credit, and charged to it datagram by datagram, so a burst is never more
+ * than the initial window however the carrier sends it. On the receiving
+ * side, `quicListenerReceiveSegments` hands a connection the datagrams of
+ * one GRO receive, segment by segment, in place.
+ *
+ *     const flight = new QuicFlight();
+ *     const n: i32 = quicListenerTakeFlight(conn, now, buf, 0, toI32(buf.length), flight);
+ *     if (n > 0) { udpSendTo(fd, buf, 0, n, peer, flight.count > 1 ? flight.segment : 0, 0); }
+ *
  * **Sans-IO and deterministic.** The caller gives the time, the client's
  * address and, once, `QUIC_LISTENER_ENTROPY_SIZE` random bytes: every
  * unpredictable byte the listener sends (a Retry's connection ID and unused
@@ -550,3 +566,88 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
  */
 export const quicListenerPaceTime = (conn: QuicConnection, now: i64): i64 =>
   now + conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE)
+
+/** The most datagrams one GSO send carries: Linux's `UDP_MAX_SEGMENTS`. */
+export const QUIC_LISTENER_FLIGHT_MAX: i32 = 64
+
+/** What `quicListenerTakeFlight` wrote: how many datagrams, and the segment size to send them with. */
+export class QuicFlight {
+  /** The datagrams in the flight. */
+  count: i32 = 0
+  /** Every datagram's size but the last's, which may be shorter: the `UDP_SEGMENT` to send with. */
+  segment: i32 = 0
+}
+
+/**
+ * Writes the next flight `conn` sends at `now` into `buf[at .. at + cap)`,
+ * datagram after datagram, for one GSO send, and answers its length in
+ * bytes (0 for none); `flight` says how many datagrams it holds and the
+ * segment size. Each datagram goes only when the pacer has credit for a full
+ * one (RFC 9002 §7.7) and is charged at its real size, as
+ * `quicListenerTakePaced` does, so the flight is the pacer's whole credit
+ * and no more. It stops at the first datagram shorter than
+ * `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last of a segmented send,
+ * at `QUIC_LISTENER_FLIGHT_MAX` datagrams, and when `cap` has no room for
+ * another.
+ */
+export const quicListenerTakeFlight = (
+  conn: QuicConnection,
+  now: i64,
+  buf: u8[],
+  at: i32,
+  cap: i32,
+  flight: QuicFlight
+): i32 => {
+  flight.count = 0
+  flight.segment = 0
+  let length: i32 = 0
+  while (
+    flight.count < QUIC_LISTENER_FLIGHT_MAX &&
+    length + QUIC_CONN_DATAGRAM_SIZE <= cap &&
+    conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE) <= 0
+  ) {
+    const n: i32 = conn.takeDatagramInto(buf, at + length, now)
+    if (n <= 0) {
+      return length
+    }
+    conn.recovery.onPaced(now, n)
+    if (flight.count === 0) {
+      flight.segment = n
+    }
+    flight.count = flight.count + 1
+    length = length + n
+    if (n < QUIC_CONN_DATAGRAM_SIZE) {
+      return length
+    }
+  }
+  return length
+}
+
+/**
+ * Hands `conn` the datagrams of one receive, `buf[off .. off + len)`, at
+ * `now`: one datagram when `segment` is 0, else a GRO receive cut every
+ * `segment` bytes (the last may be shorter). Each is read in place. Answers
+ * how many it handed over.
+ */
+export const quicListenerReceiveSegments = (
+  conn: QuicConnection,
+  buf: u8[],
+  off: i32,
+  len: i32,
+  segment: i32,
+  now: i64
+): i32 => {
+  if (segment <= 0) {
+    conn.receiveWindow(buf, off, len, now)
+    return 1
+  }
+  let count: i32 = 0
+  let at: i32 = 0
+  while (at < len) {
+    const n: i32 = len - at < segment ? len - at : segment
+    conn.receiveWindow(buf, off + at, n, now)
+    at = at + n
+    count += 1
+  }
+  return count
+}

@@ -234,7 +234,6 @@ import {
 } from "nish/net/quic-recovery"
 import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid"
 import {
-  QUIC_RECV_DATA_READ,
   QUIC_SEND_RESET_SENT,
   QUIC_STREAM_END,
   QUIC_STREAM_ERR_FINISHED,
@@ -968,8 +967,10 @@ export class QuicConnection {
   cids: QuicCidTable
   /** Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). */
   recovery: QuicRecovery
-  /** The client's transport parameters, once the handshake has checked them. */
+  /** The client's transport parameters, once the handshake has checked them; until then, every default. */
   peerParameters: QuicTransportParameters
+  /** The defaults `peerParameters` starts from, made once and set back by `reset`. */
+  defaultParameters: QuicTransportParameters
   /** Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). */
   bytesReceived: i64 = 0
   bytesSent: i64 = 0
@@ -1072,7 +1073,8 @@ export class QuicConnection {
     this.application = new QuicConnSpace(TLS_LEVEL_APPLICATION)
     this.cids = new QuicCidTable(quicConnClamp(config.activeConnectionIdLimit, 2, 8), QUIC_CONN_LOCAL_CIDS)
     this.recovery = new QuicRecovery()
-    this.peerParameters = new QuicTransportParameters()
+    this.defaultParameters = new QuicTransportParameters()
+    this.peerParameters = this.defaultParameters
     const streams: i64 = quicConnClamp(config.maxStreamsBidi, 0, QUIC_CONN_MAX_STREAMS)
     const uni: i64 = quicConnClamp(config.maxStreamsUni, 0, QUIC_CONN_MAX_STREAMS)
     const local: i64 = quicConnClamp(config.localStreams, 0, QUIC_CONN_MAX_STREAMS)
@@ -1122,7 +1124,7 @@ export class QuicConnection {
     this.datagramsOut.reset()
     this.datagramsIn.reset()
     this.cryptoIn.reset(TLS_LEVEL_INITIAL)
-    this.peerParameters = new QuicTransportParameters()
+    this.peerParameters = this.defaultParameters
     this.tls = null
     this.error = 0
     this.errorFrameType = 0
@@ -2505,7 +2507,10 @@ export class QuicConnection {
       const available: i64 = stream !== null ? stream.readable() : 0
       const data: u8[] = new Array<u8>(toI32(available))
       const n: i32 = this.streams.read(id, data, QUIC_CONN_FROM, toI32(available))
-      const end: boolean = n === QUIC_STREAM_END || (stream !== null && stream.recvState === QUIC_RECV_DATA_READ)
+      // Every byte up to the FIN read: one more read sees the end, which lets the side finish.
+      const end: boolean =
+        n === QUIC_STREAM_END ||
+        (n > 0 && this.streams.read(id, data, QUIC_CONN_FROM, QUIC_CONN_FROM) === QUIC_STREAM_END)
       if (n > 0 || end) {
         return new QuicStreamData(id, data, end)
       }

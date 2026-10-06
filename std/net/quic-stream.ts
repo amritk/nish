@@ -1064,7 +1064,8 @@ export class QuicStreams {
    * how many it read; 0 when nothing is there yet; `QUIC_STREAM_END` once
    * every byte up to the FIN was read; `QUIC_STREAM_ERR_RESET` once the peer
    * reset it; or another `QUIC_STREAM_ERR_*`. Reading half a buffer gives the
-   * peer more credit.
+   * peer more credit. A stream's receiving side is done when a read answers
+   * `QUIC_STREAM_END` or `QUIC_STREAM_ERR_RESET`, so read until one does.
    */
   read(id: i64, buf: u8[], at: i32, length: i32): i32 {
     const k: i32 = this.slotOf(id)
@@ -1101,13 +1102,13 @@ export class QuicStreams {
       stream.recvLimit = stream.recvRead + toI64(size)
       stream.maxDataOwed = true
     }
-    if (stream.recvState === QUIC_RECV_DATA_RECVD && stream.recvRead === stream.recvFinal) {
+    // The read that finds nothing left past the FIN is the one that answers
+    // the end, and only then is the side done: a slot is never freed under a
+    // reader that has not seen the end yet.
+    if (n === 0 && stream.recvState === QUIC_RECV_DATA_RECVD && stream.recvRead === stream.recvFinal) {
       stream.recvState = QUIC_RECV_DATA_READ
       this.release(k)
-      return n > 0 ? n : QUIC_STREAM_END
-    }
-    if (stream.recvState === QUIC_RECV_DATA_READ) {
-      return n > 0 ? n : QUIC_STREAM_END
+      return QUIC_STREAM_END
     }
     return n
   }

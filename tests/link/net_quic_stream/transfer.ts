@@ -1,0 +1,125 @@
+// A multiplexed transfer: the client opens eight bidirectional and three
+// unidirectional streams at once and the server echoes each bidirectional
+// one back; the server opens streams of both kinds of its own; every byte
+// arrives on its stream, in order, with its FIN, and each stream that
+// finishes both ways frees its slot and, once half the client's limit has,
+// raises it with MAX_STREAMS.
+import { Suite } from "nish/testing";
+import { QUIC_FRAME_MAX_STREAMS_BIDI, QUIC_FRAME_MAX_STREAMS_UNI } from "nish/net/quic-frame";
+import {
+  QUIC_RECV_NONE,
+  QUIC_SEND_NONE,
+  QUIC_STREAM_ERR_DIRECTION,
+  QUIC_STREAM_ERR_STATE,
+  QUIC_STREAM_ERR_UNKNOWN,
+  quicStreamIsLocal,
+  quicStreamIsUni,
+} from "nish/net/quic-stream";
+import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
+import { bytesOf } from "../crypto_x509/hex";
+import { n32, n64 } from "../net_quic_frame/typed";
+import { cat } from "../net_tls_common/client";
+import { qcFind } from "../net_quic_conn/common";
+import { fixedEntropy } from "../net_quic_conn_replay/server";
+import { NqLimits, NqPair, NqRead, nqConfig, nqPair, nqReadAll, nqReceived, nqSend, nqSettle, nqStream, nqText } from "./common";
+
+/** What the client sends on stream `id`: its name and 200 bytes of pattern. */
+const body = (id: i64): string => `stream ${id}: ${nqText(n32(200))}`;
+
+/** The server echoes each of the client's bidirectional streams it read to the end. */
+const echo = (p: NqPair, read: NqRead): void => {
+  for (let k: i32 = 0; k < toI32(read.ids.length); k++) {
+    const id: i64 = read.ids[k];
+    const text: string = read.texts[k];
+    if (!quicStreamIsUni(id) && !quicStreamIsLocal(id) && text.endsWith(" <fin>")) {
+      const data: u8[] = bytesOf(text.substring(0, text.length - 6));
+      p.conn.streamWrite(id, data, n32(0), toI32(data.length), true);
+    }
+  }
+};
+
+/** Eight bidirectional and three unidirectional client streams, the server's own three, all at once. */
+const multiplexChecks = (t: Suite): void => {
+  const p: NqPair = nqPair(new NqLimits());
+  t.eqI32("connected", p.conn.state, QUIC_STATE_CONNECTED);
+  // Two streams to a packet, interleaved: bidirectional 0, 4 … 28 and unidirectional 2, 6, 10.
+  const ids: i64[] = [n64(0), n64(2), n64(4), n64(6), n64(8), n64(10), n64(12), n64(16), n64(20), n64(24), n64(28)];
+  for (let k: i32 = 0; k < toI32(ids.length); k += 2) {
+    const frames: u8[][] = [nqStream(ids[k], n64(0), body(ids[k]), true)];
+    if (k + 1 < toI32(ids.length)) {
+      frames.push(nqStream(ids[k + 1], n64(0), body(ids[k + 1]), true));
+    }
+    nqSend(p, cat(frames));
+  }
+  // And one more unidirectional stream the client leaves open.
+  nqSend(p, nqStream(n64(14), n64(0), "still open", false));
+  const read = new NqRead();
+  nqReadAll(p.conn, n32(64), read);
+  let all: boolean = true;
+  for (const id of ids) {
+    all = all && read.of(id) === `${body(id)} <fin>`;
+  }
+  t.ok("the server reads every stream whole, 64 bytes at a time, each with its FIN", all);
+  t.eqI32("twelve streams came up as events", toI32(read.ids.length), n32(12));
+  t.eqStr("the one left open has no FIN yet", read.of(n64(14)), "still open");
+  const open = p.conn.streams.find(n64(14));
+  t.ok("a client's unidirectional stream has no sending side here", open !== null && open.sendState === QUIC_SEND_NONE);
+  const scratch: u8[] = bytesOf("x");
+  t.eqI32("so writing to it is QUIC_STREAM_ERR_DIRECTION", p.conn.streamWrite(n64(14), scratch, n32(0), n32(1), false), QUIC_STREAM_ERR_DIRECTION);
+  t.ok("a unidirectional stream read to its end has left its slot already", p.conn.streams.find(n64(2)) === null);
+
+  echo(p, read);
+  const serverUni: i64 = p.conn.openStream(false);
+  const serverBidi: i64 = p.conn.openStream(true);
+  const secondUni: i64 = p.conn.openStream(false);
+  t.ok("the server opens its own: unidirectional 3, bidirectional 1, unidirectional 7", serverUni === n64(3) && serverBidi === n64(1) && secondUni === n64(7));
+  const three = p.conn.streams.find(n64(3));
+  t.ok("its unidirectional stream has no receiving side", three !== null && three.recvState === QUIC_RECV_NONE);
+  t.eqI32("so reading it is QUIC_STREAM_ERR_DIRECTION", p.conn.streamRead(n64(3), scratch, n32(0), n32(1)), QUIC_STREAM_ERR_DIRECTION);
+  const hello: u8[] = bytesOf("from the server, one way");
+  p.conn.streamWrite(serverUni, hello, n32(0), toI32(hello.length), true);
+  const ask: u8[] = bytesOf("a question");
+  p.conn.streamWrite(serverBidi, ask, n32(0), toI32(ask.length), true);
+  p.conn.streamWrite(secondUni, ask, n32(0), toI32(ask.length), false);
+  nqSettle(p);
+  let echoed: boolean = true;
+  for (const id of ids) {
+    if (!quicStreamIsUni(id)) {
+      echoed = echoed && nqReceived(p.c, id) === `${body(id)} <fin>`;
+    }
+  }
+  t.ok("every bidirectional stream comes back whole, with its FIN", echoed);
+  t.eqStr("the server's unidirectional stream arrives", nqReceived(p.c, n64(3)), "from the server, one way <fin>");
+  t.eqStr("and its bidirectional one", nqReceived(p.c, n64(1)), "a question <fin>");
+  t.eqStr("and a stream it has not finished, without a FIN", nqReceived(p.c, n64(7)), "a question");
+
+  // The client answers on the server's bidirectional stream.
+  nqSend(p, nqStream(n64(1), n64(0), "an answer", true));
+  const answer = new NqRead();
+  nqReadAll(p.conn, n32(64), answer);
+  t.eqStr("the client's answer on the server's stream is read", answer.of(n64(1)), "an answer <fin>");
+
+  nqSettle(p);
+  t.ok("every stream finished both ways has left its slot", p.conn.streams.find(n64(0)) === null && p.conn.streams.find(n64(1)) === null && p.conn.streams.find(n64(2)) === null);
+  t.ok("the one still sending keeps it", p.conn.streams.find(n64(7)) !== null);
+  t.eqI32("a finished stream is unknown to a write", p.conn.streamWrite(n64(0), scratch, n32(0), n32(1), false), QUIC_STREAM_ERR_UNKNOWN);
+  const raised = qcFind(p.c.appPayloads, QUIC_FRAME_MAX_STREAMS_BIDI);
+  t.ok("with eight finished, MAX_STREAMS raises the client's bidirectional limit (§4.6)", raised.found && raised.frame.value >= n64(12));
+  t.eqI64("to sixteen once all eight have", p.conn.streams.peerBidiLimit, n64(16));
+  const uniRaised = qcFind(p.c.appPayloads, QUIC_FRAME_MAX_STREAMS_UNI);
+  t.ok("and two finished unidirectional streams of four raise that limit to six", uniRaised.found && uniRaised.frame.value === n64(6) && p.conn.streams.peerUniLimit === n64(6));
+  // A stream the client opens past its first eight, under the new limit.
+  nqSend(p, nqStream(n64(32), n64(0), "ninth", true));
+  const ninth = new NqRead();
+  nqReadAll(p.conn, n32(64), ninth);
+  t.eqStr("a ninth bidirectional stream is taken, in a freed slot", ninth.of(n64(32)), "ninth <fin>");
+
+  const fresh = new QuicConnection(nqConfig(new NqLimits()), fixedEntropy());
+  t.eqI64("no stream opens before the handshake", fresh.openStream(true), toI64(QUIC_STREAM_ERR_STATE));
+  t.eqI32("nor is one written", fresh.streamWrite(n64(1), scratch, n32(0), n32(1), false), QUIC_STREAM_ERR_STATE);
+};
+
+/** Every check of the multiplexed transfer. */
+export const transferChecks = (t: Suite): void => {
+  multiplexChecks(t);
+};
