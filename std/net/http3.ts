@@ -922,17 +922,20 @@ export class Http3Connection {
     const stream: QuicStream = this.quic.streams.slots[k]
     while (this.state !== H3_STATE_FAILED) {
       const phase: i32 = this.phase[k]
-      if (phase === H3_PHASE_DONE) {
-        return this.writable(k, id)
-      }
       if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_STOP_NOTED) === 0) {
         // The client stopped the response (QUIC answered with RESET_STREAM, §3.5 of RFC 9000).
+        const told: boolean = (this.flags[k] & (H3_FLAG_DELIVERED | H3_FLAG_SEND_DONE)) === H3_FLAG_DELIVERED
         this.flags[k] = this.flags[k] | H3_FLAG_STOP_NOTED
         this.mark(k, H3_FLAG_SEND_DONE)
-        if ((this.flags[k] & H3_FLAG_DELIVERED) !== 0) {
-          this.phase[k] = H3_PHASE_DISCARD
+        if (told) {
+          if (phase !== H3_PHASE_DONE) {
+            this.phase[k] = H3_PHASE_DISCARD
+          }
           return this.resetEvent(id, stream.stopCode, true)
         }
+      }
+      if (phase === H3_PHASE_DONE) {
+        return this.writable(k, id)
       }
       if (phase === H3_PHASE_DISCARD) {
         return this.discard(k, id)

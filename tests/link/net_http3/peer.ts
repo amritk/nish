@@ -289,6 +289,9 @@ export class H3Peer {
   frame: QuicFrame;
   header: Http3FrameHeader;
   received: H3Received[];
+  /** STOP_SENDING the server sent that the client has not answered with RESET_STREAM yet (RFC 9000 §3.5). */
+  stopIds: i64[];
+  stopCodes: i64[];
   /** The client's next offset on each stream it writes. */
   sendIds: i64[];
   sendOffsets: i64[];
@@ -303,6 +306,8 @@ export class H3Peer {
   /** How many of `c.appPayloads` the client has read. */
   seen: i32 = 0;
   closeApp: boolean = false;
+  /** How many H3_WRITABLE events the application saw. */
+  writables: i32 = 0;
   /** Whether the application holds every `/hold` response back. */
   hold: boolean = true;
 
@@ -317,6 +322,8 @@ export class H3Peer {
     this.received = [];
     this.sendIds = [];
     this.sendOffsets = [];
+    this.stopIds = [];
+    this.stopCodes = [];
     this.apps = [];
     this.log = [];
     this.names = [bytesOf("content-type"), bytesOf("server")];
@@ -475,6 +482,7 @@ export class H3Peer {
       } else if (event === H3_RESET) {
         this.log.push(`reset ${id} 0x${h3Hex(this.h3.errorCode)}${this.h3.resetByPeer ? " by the client" : ""}`);
       } else if (event === H3_WRITABLE) {
+        this.writables = this.writables + 1;
         const s: H3AppStream | null = this.app(id);
         if (s !== null) {
           this.pushOut(s);
@@ -525,7 +533,12 @@ export class H3Peer {
         } else if (f.type === QUIC_FRAME_RESET_STREAM) {
           this.stream(f.streamId).reset = f.errorCode;
         } else if (f.type === QUIC_FRAME_STOP_SENDING) {
-          this.stream(f.streamId).stop = f.errorCode;
+          const r: H3Received = this.stream(f.streamId);
+          if (r.stop < 0) {
+            this.stopIds.push(f.streamId);
+            this.stopCodes.push(f.errorCode);
+          }
+          r.stop = f.errorCode;
         } else if (f.type === QUIC_FRAME_CONNECTION_CLOSE || f.type === QUIC_FRAME_CONNECTION_CLOSE_APP) {
           this.closeCode = f.errorCode;
           this.closeApp = f.type === QUIC_FRAME_CONNECTION_CLOSE_APP;
@@ -551,6 +564,16 @@ export class H3Peer {
     this.serve();
     qcDrain(this.conn, this.c);
     this.absorb();
+    // A QUIC client answers STOP_SENDING with RESET_STREAM.
+    if (toI32(this.stopIds.length) > 0) {
+      const resets: u8[] = [];
+      while (toI32(this.stopIds.length) > 0) {
+        const id: i64 = this.stopIds.pop();
+        const code: i64 = this.stopCodes.pop();
+        quicPushStreamError(resets, id, code, this.offsetOf(id));
+      }
+      this.packet(resets);
+    }
   }
 
   /** Acknowledges and runs the server until it has nothing more to send. */
@@ -646,6 +669,20 @@ export class H3Peer {
     this.packet(payload);
   }
 
+  /** RESET_STREAM of the client's side of `id` with `code`, alone. */
+  cancelOnly(id: i64, code: i64): void {
+    const payload: u8[] = [];
+    quicPushStreamError(payload, id, code, this.offsetOf(id));
+    this.packet(payload);
+  }
+
+  /** STOP_SENDING for `id` with `code`, alone. */
+  stopOnly(id: i64, code: i64): void {
+    const payload: u8[] = [];
+    quicPushStreamError(payload, id, code, n64(-1));
+    this.packet(payload);
+  }
+
   /** The response the server sent on stream `id`, read from its frames. */
   response(id: i64): H3Response {
     const out = new H3Response();
@@ -721,6 +758,10 @@ export const h3Connect = (limits: H3Limits, config: Http3Config): H3Peer => {
   p.absorb();
   return p;
 };
+
+/** An HTTP/3 connection over a QUIC connection that has not started. */
+export const h3Fresh = (): Http3Connection =>
+  new Http3Connection(new Http3Config(), new QuicConnection(h3QuicConfig(new H3Limits()), fixedEntropy()));
 
 /** A connected pair with the client's streams open and SETTINGS sent, on the defaults. */
 export const h3Ready = (): H3Peer => {
