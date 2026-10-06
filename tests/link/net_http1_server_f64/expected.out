@@ -1,0 +1,138 @@
+PASS  a GET is answered with its length, byte for byte
+PASS  a chunked POST cut in two at every byte is echoed whole every time
+PASS  and so is one sent a byte at a time
+PASS  a pipelined pair is answered in order
+PASS  a 2 MiB body with a length streams through 4 KiB chunks and an 8 KiB output and comes back whole
+PASS  and no H1_BODY was larger than chunkSize (4096 bytes)
+PASS  three hundred chunks in come back as chunks
+PASS  a 2 MiB chunked response goes out through an 8 KiB output as the socket drains
+PASS  HEAD has the length of the GET and no body
+PASS  so the next response on the connection is read right
+PASS  Expect: 100-continue is answered with 100 before the body is sent
+PASS  and then the final response
+PASS  an upgrade the program answers without switching is a plain response
+PASS  and the next request on the connection is HTTP again
+PASS  a request with Connection: close is answered with it
+PASS  and the server closes the connection
+PASS  an HTTP/1.0 request asking for keep-alive gets it
+PASS  a chunked response to HTTP/1.0 is sent unframed and ends with the connection
+PASS  an HTTP/1.0 request without keep-alive gets Connection: close and a close
+PASS  the opening handshake is answered with 101 and RFC 6455 §1.3's accept key
+PASS  a frame sent with the handshake is echoed, unmasked
+PASS  a ping is answered with a pong carrying its payload
+PASS  a 5000-byte binary message is echoed
+PASS  a close is answered with a close of its code
+PASS  and the server closes the connection
+PASS  an unmasked frame from a client is answered with close 1002
+PASS  and the connection ends, H1_ERROR telling the program
+PASS  a message past maxMessage is answered with close 1009
+PASS  a handshake the server cannot accept gets the program's 400
+PASS  a warmed slot answers a hundred GETs and a hundred chunked POSTs
+PASS  and the server's calls and its program's answers moved the arena not at all (0 bytes)
+PASS  refused with 431: a header section past maxHeaderBytes
+PASS  refused with 400: a chunk size that is not hex
+PASS  a bad chunk size once the response has started: no second response, and the connection ends
+PASS  refused with 400: Content-Length and Transfer-Encoding together (RFC 9112 §6.1)
+PASS  refused with 400: two Content-Length fields that disagree
+PASS  refused with 400: an obs-fold
+PASS  refused with 414: a target past maxTarget
+PASS  refused with 413: a Content-Length past maxBody
+PASS  refused with 501: a transfer coding other than chunked
+PASS  refused with 505: HTTP/2.0 in a request line
+PASS  a refusal after a good pipelined request: the good one is answered first
+PASS  a request cut short by the end of the stream ends the connection
+PASS  a client gone in the middle of a response: the write fails and the slot is closed
+PASS  a slot that has just moved is not idle
+PASS  past idleTimeout it is closed
+PASS  and its client sees the end
+PASS  four clients fill the pool
+PASS  a fifth is accepted and shed
+PASS  and they all close
+PASS  a free slot answers H1_ERROR to next and done to the rest
+PASS  a slot out of range names the first connection
+PASS  a client offering http/1.1 completes the handshake, the server's signature and Finished verified
+PASS  ALPN chose http/1.1
+PASS  a GET over TLS
+PASS  a chunked POST echoed over TLS
+PASS  fifty exchanges over TLS on the warmed slot
+PASS  and the arena did not move (0 bytes)
+PASS  Connection: close over TLS ends with close_notify
+PASS  a client offering no ALPN completes the handshake
+PASS  and is served HTTP/1.1
+PASS  an idle TLS slot is closed past idleTimeout
+PASS  and its client sees the end
+PASS  a client offering only h2 completes the handshake
+PASS  but ALPN h2 is shut down with close_notify, before any HTTP/1.1 byte
+PASS  and closed
+PASS  a free TLS slot answers H1_ERROR to next and done to flush
+PASS  with nothing gone wrong in the loop
+PASS  respond with no request is H1_CLOSED
+PASS  so are write and end
+PASS  so is acceptWebSocket
+PASS  and sendFrame and closeWebSocket on a slot that is not a WebSocket
+PASS  an empty connection needs more
+PASS  a request reaches the program
+PASS  refused: status 101 through respond
+PASS  refused: status 99
+PASS  refused: status 600
+PASS  refused: a Connection field of the program's
+PASS  refused: an Upgrade field
+PASS  refused: a CR in a value
+PASS  refused: no body on a 200 to a GET
+PASS  refused: a head larger than the output
+PASS  refused: acceptWebSocket on a request that is not a handshake
+PASS  nothing was written by any of them
+PASS  a response with a length
+PASS  refused: a second response
+PASS  refused: more body than the length
+PASS  refused: end while the length is owed
+PASS  an empty write takes nothing
+PASS  the body
+PASS  the end
+PASS  the request ends after
+PASS  refused: end twice
+PASS  what it sent
+PASS  the next pipelined request is read once the first is answered
+PASS  its head does not fit beside the unsent response: H1_AGAIN
+PASS  and the connection waits for the output
+PASS  feed takes nothing while a write is held
+PASS  until half the output is free
+PASS  then H1_WRITE
+PASS  and the head goes
+PASS  a chunked head that fills the output to four bytes
+PASS  a write that cannot fit a chunk is H1_AGAIN
+PASS  and so is the last chunk
+PASS  H1_WRITE once it drains
+PASS  a write that only partly fits takes what fits
+PASS  and the last chunk still fits beside it
+PASS  a write to a response to HEAD takes everything
+PASS  and sends no body, not even the last chunk
+PASS  a 204 takes HTTP1_NO_BODY
+PASS  a body sent to the close ends the connection with its exchange
+PASS  once sent
+PASS  a refused request is H1_ERROR with its status, and the response is queued
+PASS  H1_ERROR is final and nothing more is read
+PASS  refused: a protocol that is not a token
+PASS  the handshake is accepted
+PASS  refused: answering it twice
+PASS  the slot reads frames once the request has ended
+PASS  the 101 names the protocol
+PASS  refused: sendFrame with a close
+PASS  refused: a frame larger than the output
+PASS  refused: a fragmented ping
+PASS  a frame
+PASS  one that does not fit beside it is H1_AGAIN
+PASS  H1_WRITE once it drains
+PASS  a ping is answered by the connection
+PASS  a pong is read past, and a message reaches the program
+PASS  refused: closeWebSocket with 1005
+PASS  closeWebSocket sends the close
+PASS  and the connection is done once it is sent
+PASS  a WebSocket whose stream ends is done
+PASS  a close with no status is H1_WS_CLOSE with 1005, answered with an empty close
+PASS  the largest maxMessage and maxTarget + maxHeaderBytes are accepted
+PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input can hold
+PASS  an aborted connection is done at once
+PASS  a body event is a window onto the parser's buffer
+PASS  a body cut by the end of the stream ends the connection
+http1 server: 137 passed, 0 failed, 0 skipped
