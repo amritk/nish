@@ -155,10 +155,6 @@ export const H3_FRAME_HEADER_MAX: i32 = 16
 const H3_FRAME_SEEN_CAPACITY: i32 = 1
 const H3_FRAME_SEEN_FIELD_SECTION: i32 = 2
 const H3_FRAME_SEEN_BLOCKED: i32 = 4
-const H3_FRAME_SEEN_CONNECT: i32 = 8
-const H3_FRAME_SEEN_DATAGRAM: i32 = 16
-const H3_FRAME_SEEN_WEBTRANSPORT: i32 = 32
-const H3_FRAME_SEEN_SESSIONS: i32 = 64
 
 /** A typed -1 and 0, since a bare literal is an `f64` under `--number-mode f64`. */
 const H3_FRAME_NONE: i64 = -1
@@ -253,26 +249,27 @@ export class Http3Settings {
       this.seen = this.seen | bit
       return H3_SETTINGS_OK
     }
-    // The extension settings: recorded, then kept below like any unknown one.
-    let extension: i32 = 0
+    // The extension settings: recorded (-1 until then, so a second is a repeat), then kept below like any unknown one.
     if (id === H3_SETTINGS_ENABLE_CONNECT_PROTOCOL) {
-      extension = H3_FRAME_SEEN_CONNECT
-      this.enableConnectProtocol = value
-    } else if (id === H3_SETTINGS_H3_DATAGRAM) {
-      extension = H3_FRAME_SEEN_DATAGRAM
-      this.h3Datagram = value
-    } else if (id === H3_SETTINGS_ENABLE_WEBTRANSPORT) {
-      extension = H3_FRAME_SEEN_WEBTRANSPORT
-      this.enableWebtransport = value
-    } else if (id === H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS) {
-      extension = H3_FRAME_SEEN_SESSIONS
-      this.webtransportMaxSessions = value
-    }
-    if (extension !== 0) {
-      if ((this.seen & extension) !== 0) {
+      if (this.enableConnectProtocol >= 0) {
         return H3_SETTINGS_ERROR
       }
-      this.seen = this.seen | extension
+      this.enableConnectProtocol = value
+    } else if (id === H3_SETTINGS_H3_DATAGRAM) {
+      if (this.h3Datagram >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.h3Datagram = value
+    } else if (id === H3_SETTINGS_ENABLE_WEBTRANSPORT) {
+      if (this.enableWebtransport >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.enableWebtransport = value
+    } else if (id === H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS) {
+      if (this.webtransportMaxSessions >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.webtransportMaxSessions = value
     }
     if (this.unknown(id) >= 0) {
       return H3_SETTINGS_ERROR

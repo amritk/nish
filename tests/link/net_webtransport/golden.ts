@@ -32,9 +32,9 @@
 import { Suite } from "nish/testing";
 import { quicPushConnectionClose } from "nish/net/quic-frame";
 import { H3_NO_ERROR } from "nish/net/http3-frame";
-import { fromHex, textOf } from "../crypto_x509/hex";
+import { fromHex, textOf, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { WtLimits, WtPeer, wtConnect, wtHexOf, wtLogged } from "./peer";
+import { WtLimits, WtPeer, wtConnect, wtLogged } from "./peer";
 
 /** The recording: what the client sent on each stream, and its datagrams. */
 const WT_GOLDEN_CONTROL: string = "000416ab60374201080101000700c0000000c671706a013301";
@@ -63,23 +63,23 @@ const replay = (t: Suite): void => {
   t.eqStr("whose fields are wtransport's", `${textOf(p.wt.fields.method)} ${textOf(p.wt.fields.scheme)} ${textOf(p.wt.fields.authority)} ${textOf(p.wt.fields.protocol)}`, "CONNECT https 127.0.0.1:53378 webtransport");
   t.eqStr(
     "the server's SETTINGS, byte for byte",
-    wtHexOf(p.stream(n64(3)).data),
+    toHex(p.stream(n64(3)).data),
     "0004190100070006600008013301ab60374201c0000000c671706a01",
   );
-  t.eqStr("its QPACK streams' types", `${wtHexOf(p.stream(n64(7)).data)} ${wtHexOf(p.stream(n64(11)).data)}`, "02 03");
+  t.eqStr("its QPACK streams' types", `${toHex(p.stream(n64(7)).data)} ${toHex(p.stream(n64(11)).data)}`, "02 03");
   t.eqStr(
     "the 200, byte for byte: :status 200 by static index, sec-webtransport-http3-draft: draft02 as Huffman literals",
-    wtHexOf(p.stream(n64(0)).data),
+    toHex(p.stream(n64(0)).data),
     "011f0000d92f0d4148b782c69b07522b3d895a74a6b65692c1ca9f8592c1ca900b",
   );
   replayDatagram(p, WT_GOLDEN_DATAGRAM);
-  t.eqStr("the datagram comes back as it went", wtHexOf(p.datagrams[0]), WT_GOLDEN_DATAGRAM);
+  t.eqStr("the datagram comes back as it went", toHex(p.datagrams[0]), WT_GOLDEN_DATAGRAM);
   p.send(n64(4), fromHex(WT_GOLDEN_BIDI), true);
   p.settle();
   t.eqStr("the bidirectional stream is echoed on itself", `${textOf(p.stream(n64(4)).data)} ${p.stream(n64(4)).fin}`, "bidi from wtransport true");
   p.send(n64(6), fromHex(WT_GOLDEN_UNI), true);
   p.settle();
-  t.eqStr("the unidirectional one on the server's stream 15: 0x54, session 0, the bytes, FIN", `${wtHexOf(p.stream(n64(15)).data)} ${p.stream(n64(15)).fin}`, `${WT_GOLDEN_UNI} true`);
+  t.eqStr("the unidirectional one on the server's stream 15: 0x54, session 0, the bytes, FIN", `${toHex(p.stream(n64(15)).data)} ${p.stream(n64(15)).fin}`, `${WT_GOLDEN_UNI} true`);
   p.echo = false;
   replayDatagram(p, WT_GOLDEN_CLOSE_DATAGRAM);
   wtLogged(t, "the program saw every part of it", p, ["session 0 /golden", "datagram 0 24", "stream 4 bidi of 0", "end 4", "stream 6 uni of 0", "end 6", "datagram 0 5"]);
@@ -88,7 +88,7 @@ const replay = (t: Suite): void => {
   p.settle();
   t.eqStr(
     "CLOSE_WEBTRANSPORT_SESSION in a DATA frame after the 200, byte for byte, and the FIN",
-    `${wtHexOf(p.stream(n64(0)).data).slice(n32(66))} ${p.stream(n64(0)).fin}`,
+    `${toHex(p.stream(n64(0)).data).slice(n32(66))} ${p.stream(n64(0)).fin}`,
     "000a68430700000007627965 true",
   );
   const close: u8[] = [];

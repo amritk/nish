@@ -10,6 +10,7 @@ PASS  the most the server sends: a 1,200-byte packet's room less the quarter str
 PASS  one at that size goes both ways whole
 PASS  one byte over is refused to the program
 PASS  unknown sessions have no room
+PASS  each session counts its datagrams both ways, for a program's rate cap
 PASS  a bidirectional stream is echoed on itself
 PASS  with its FIN
 PASS  a unidirectional one comes back on the server's own, its type and session first
@@ -78,6 +79,9 @@ PASS  and asks the client to stop
 PASS  each with the code mapped
 PASS  a stream stopped already cannot be stopped again
 PASS  nor written
+PASS  STOP_SENDING alone
+PASS  leaves this side to write
+PASS  the client is asked to stop, and gets the reply and the FIN, not a reset
 PASS  reasons are text
 PASS  a client whose SETTINGS lack SETTINGS_H3_DATAGRAM is answered 400
 PASS  the program never sees it, and the stream is asked to stop with H3_NO_ERROR
@@ -101,6 +105,9 @@ PASS  and the server may not open one past them
 PASS  one stream waits for session 12
 PASS  the next past the waiting room is refused with WT_BUFFERED_STREAM_REJECTED
 PASS  and the one that waited is taken
+PASS  a stream naming a session past what the client's MAX_STREAMS lets it open does not wait: WT_SESSION_GONE
+PASS  a stream waits for session 4
+PASS  whose request turns out malformed, refused before the program sees it: the stream that waited is let go with WT_SESSION_GONE
 PASS  SETTINGS_ENABLE_WEBTRANSPORT twice is H3_SETTINGS_ERROR
 PASS  SETTINGS_H3_DATAGRAM of 2 is H3_SETTINGS_ERROR (RFC 9297 §2.1.1)
 PASS  SETTINGS_ENABLE_CONNECT_PROTOCOL of 2 is H3_SETTINGS_ERROR (RFC 9220 §5)
@@ -120,6 +127,10 @@ PASS  anything after a CLOSE is H3_MESSAGE_ERROR (draft-02 §5): the server's ha
 PASS  though the CLOSE itself was read
 PASS  a CONNECT stream that ends inside a capsule is H3_DATAGRAM_ERROR (RFC 9297 §3.3)
 PASS  and the session is over
+PASS  a CLOSE before the program answered the session reaches it
+PASS  and with no head to finish after, the stream is reset both ways and the slot free at once
+PASS  a CONNECT whose DATA overruns its own content-length is reset by HTTP/3 (H3_MESSAGE_ERROR)
+PASS  and the session's close is not blamed on the client
 PASS  refuse with a status outside 400 to 599 is H3_INVALID
 PASS  accept of a session already accepted is H3_CLOSED
 PASS  refuse of one already accepted too
@@ -135,6 +146,7 @@ PASS  the HTTP/3 layer will not let a stream it does not hold go
 PASS  nor refuse one that is no WebTransport stream
 PASS  nor write to one
 PASS  nor reset one
+PASS  nor stop one
 PASS  nor stop reading a stream that is no request
 PASS  a whole DATA frame on a request with no head yet is H3_INVALID
 PASS  one past the stream's buffer is H3_TOO_LARGE
@@ -172,4 +184,4 @@ PASS  five connections, one after another, through one slot
 PASS  each with its session, which the layer forgot at the restart
 PASS  resetting the slot keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, a session, datagrams, streams, a close
-webtransport: 174 passed, 0 failed, 0 skipped
+webtransport: 186 passed, 0 failed, 0 skipped

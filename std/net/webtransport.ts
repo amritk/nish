@@ -114,6 +114,8 @@ import {
   H3_REQUEST_REJECTED,
   h3Count,
   h3CheckWindow,
+  h3Greased,
+  h3PutFrameHeader,
   h3PutVarint,
   h3ReadFrameHeader,
   h3ReadVarint,
@@ -140,7 +142,8 @@ import {
   Http3Connection,
 } from "nish/net/http3"
 import { QUIC_DATAGRAM_ERR_FULL, QUIC_DATAGRAM_NONE, QUIC_DATAGRAM_OK, QuicConnection } from "nish/net/quic"
-import { quicVarintSize } from "nish/net/quic-packet"
+import { quicPacketCopy, quicVarintSize } from "nish/net/quic-packet"
+import { quicStreamIsUni } from "nish/net/quic-stream"
 
 /** A session asked for: `sessionId`, `fields`. */
 export const WT_SESSION: i32 = 16
@@ -188,13 +191,12 @@ const WT_ASKED: i32 = 1
 const WT_OPEN: i32 = 2
 const WT_GONE: i32 = 3
 
-/** A stream's bits: its side here done, the client's side done, and whether it is bidirectional. */
+/** A stream's bits: its side here done, and the client's side done. */
 const WT_SENT: i32 = 1
 const WT_RECEIVED: i32 = 2
-const WT_BIDI: i32 = 4
 
-/** A session's capsule bits: CLOSE read, DRAIN read. */
-const WT_CLOSE_READ: i32 = 1
+/** Each session's slice of `reason`: a CLOSE capsule's 32-bit code, then its reason. */
+const WT_REASON_STRIDE: i32 = WT_REASON_MAX + 4
 
 /** The bytes a session keeps for a capsule header being read. */
 const WT_HEAD: i32 = 16
@@ -230,7 +232,7 @@ export const wtCodeToHttp3 = (code: i64): i64 => {
 /** The application code an HTTP/3 `code` carries, or -1 when it is outside the range, or one of its greased values. */
 export const wtCodeFromHttp3 = (code: i64): i64 => {
   const last: i64 = wtCodeToHttp3(WT_U32)
-  if (code < WT_FIRST_APP_CODE || code > last || (code - toI64(0x21)) % toI64(0x1f) === toI64(0)) {
+  if (code < WT_FIRST_APP_CODE || code > last || h3Greased(code)) {
     return WT_NONE64
   }
   const shifted: i64 = code - WT_FIRST_APP_CODE
@@ -401,7 +403,8 @@ export class WebTransport {
   /** The first of its streams (a QUIC slot, threaded through `nextStream`), and how many. */
   firstStream: i32[]
   streamCount: i32[]
-  capBits: i32[]
+  /** Whether the client's CLOSE has been read: nothing may follow it. */
+  closeRead: boolean[]
   /** A capsule header being read, `capHeadLen[s]` bytes of `capHead[s * 16 ..]`, and the CLOSE payload's fill. */
   capHeadLen: i32[]
   capHead: u8[]
@@ -468,7 +471,7 @@ export class WebTransport {
     this.outgoing = new Array<u8>(h3.quic.datagramsOut.entrySize + 8)
     this.capsuleOut = new Array<u8>(WT_REASON_MAX + 4 + WT_HEAD)
     this.data = this.datagram
-    this.reason = new Array<u8>(sessions * (WT_REASON_MAX + 4))
+    this.reason = new Array<u8>(sessions * WT_REASON_STRIDE)
     this.acceptNames = [httpFieldBytes("sec-webtransport-http3-draft")]
     this.acceptValues = [httpFieldBytes("draft02")]
     this.none = []
@@ -479,7 +482,7 @@ export class WebTransport {
     this.sessionSlot = new Array<i32>(sessions)
     this.firstStream = new Array<i32>(sessions)
     this.streamCount = new Array<i32>(sessions)
-    this.capBits = new Array<i32>(sessions)
+    this.closeRead = new Array<boolean>(sessions)
     this.capHeadLen = new Array<i32>(sessions)
     this.capHead = new Array<u8>(sessions * WT_HEAD)
     this.capFill = new Array<i32>(sessions)
@@ -716,7 +719,7 @@ export class WebTransport {
     this.sessionId = this.sessionIds[s]
     this.stream = this.sessionIds[s]
     if (event === H3_DATA) {
-      if (this.states[s] === WT_GONE && (this.capBits[s] & WT_CLOSE_READ) === 0) {
+      if (this.states[s] === WT_GONE && !this.closeRead[s]) {
         // This side closed it: what the client still sends is not read.
         return H3_NEED_MORE
       }
@@ -731,9 +734,13 @@ export class WebTransport {
       const wasGone: boolean = this.states[s] === WT_GONE
       const inside: boolean = this.capLeft[s] >= 0 || this.capHeadLen[s] > 0
       this.release(s)
-      if (wasGone || event === H3_RESET) {
-        // This side's half is finished already, or `nish/net/http3` abandoned it with the reset, the client's or its own.
-        return wasGone ? H3_NEED_MORE : this.closedEvent(s, WT_ZERO64, WT_ZERO, h3.resetByPeer)
+      if (wasGone) {
+        // This side's half is finished already.
+        return H3_NEED_MORE
+      }
+      if (event === H3_RESET) {
+        // `nish/net/http3` abandoned this side's half with the reset, the client's or its own.
+        return this.closedEvent(s, WT_ZERO64, WT_ZERO, h3.resetByPeer)
       }
       if (inside) {
         // RFC 9297 §3.3: the stream ended inside a capsule.
@@ -768,7 +775,7 @@ export class WebTransport {
     this.appCode = this.errorCode
     this.closedByPeer = byPeer
     this.data = this.reason
-    this.dataStart = s * (WT_REASON_MAX + 4) + 4
+    this.dataStart = s * WT_REASON_STRIDE + 4
     this.dataLength = length
     return WT_CLOSED
   }
@@ -804,6 +811,11 @@ export class WebTransport {
     if (k < 0 || k >= toI32(this.sessionAt.length)) {
       return H3_NEED_MORE
     }
+    const stale: i32 = this.sessionAt[k]
+    if (stale >= 0 && stale < toI32(this.sessionIds.length) && this.sessionIds[stale] >= 0) {
+      // QUIC freed this slot under a session's CONNECT stream with no event to say so: let go of that session now.
+      this.release(stale)
+    }
     this.freeCount = this.freeCount - 1
     const s: i32 = this.free[this.freeCount]
     this.sessionIds[s] = id
@@ -813,7 +825,7 @@ export class WebTransport {
     this.streamCount[s] = 0
     this.capType[s] = -1
     this.capLeft[s] = -1
-    this.capBits[s] = 0
+    this.closeRead[s] = false
     this.capHeadLen[s] = 0
     this.capFill[s] = 0
     this.datagramsIn[s] = 0
@@ -920,6 +932,9 @@ export class WebTransport {
 
   /** Refuses with WT_SESSION_GONE every stream waiting for session `id`. */
   dropPending(id: i64): void {
+    if (this.waiting.count === 0) {
+      return
+    }
     let e: i32 = this.waiting.first(id)
     for (let guard: i32 = 0; guard < WT_MAX_CAP && e >= 0; guard++) {
       this.refuseStream(this.waiting.take(e), WT_SESSION_GONE)
@@ -946,17 +961,14 @@ export class WebTransport {
     }
     const out: u8[] = this.capsuleOut
     const end: i32 = toI32(out.length)
-    let p: i32 = h3PutVarint(out, WT_ZERO, end, WT_CAPSULE_CLOSE)
-    p = h3PutVarint(out, p, end, toI64(4 + len))
+    let p: i32 = h3PutFrameHeader(out, WT_ZERO, end, WT_CAPSULE_CLOSE, toI64(4 + len))
     const value: i64 = code & WT_U32
     out[p] = toU8(toI32((value >> toI64(24)) & toI64(255)))
     out[p + 1] = toU8(toI32((value >> toI64(16)) & toI64(255)))
     out[p + 2] = toU8(toI32((value >> toI64(8)) & toI64(255)))
     out[p + 3] = toU8(toI32(value & toI64(255)))
     p = p + 4
-    for (let j: i32 = 0; j < len && p + j < end && off + j < toI32(buf.length); j++) {
-      out[p + j] = buf[off + j]
-    }
+    quicPacketCopy(out, p, buf, off, len)
     const result: i32 = this.h3.writeDataWhole(id, out, WT_ZERO, p + len, true)
     if (result !== 0) {
       return result
@@ -976,7 +988,7 @@ export class WebTransport {
     }
     const out: u8[] = this.capsuleOut
     const end: i32 = toI32(out.length)
-    const p: i32 = h3PutVarint(out, h3PutVarint(out, WT_ZERO, end, WT_CAPSULE_DRAIN), end, toI64(0))
+    const p: i32 = h3PutFrameHeader(out, WT_ZERO, end, WT_CAPSULE_DRAIN, toI64(0))
     return this.h3.writeDataWhole(id, out, WT_ZERO, p, false)
   }
 
@@ -992,7 +1004,7 @@ export class WebTransport {
     const bytes: u8[] = this.h3.data
     const base: i32 = s * WT_HEAD
     while (this.capAt < this.capEnd && this.capAt >= 0 && this.capAt < toI32(bytes.length)) {
-      if ((this.capBits[s] & WT_CLOSE_READ) !== 0) {
+      if (this.closeRead[s]) {
         // §5: nothing may follow a CLOSE.
         return this.malformed(s, H3_MESSAGE_ERROR)
       }
@@ -1024,14 +1036,7 @@ export class WebTransport {
         const want: i64 = toI64(this.capEnd - this.capAt)
         const take: i32 = toI32(this.capLeft[s] < want ? this.capLeft[s] : want)
         if (this.capType[s] === WT_CAPSULE_CLOSE) {
-          const at: i32 = s * (WT_REASON_MAX + 4) + this.capFill[s]
-          for (
-            let j: i32 = 0;
-            j < take && at + j < toI32(this.reason.length) && this.capAt + j < toI32(bytes.length);
-            j++
-          ) {
-            this.reason[at + j] = bytes[this.capAt + j]
-          }
+          quicPacketCopy(this.reason, s * WT_REASON_STRIDE + this.capFill[s], bytes, this.capAt, take)
           this.capFill[s] = this.capFill[s] + take
         }
         this.capAt = this.capAt + take
@@ -1061,15 +1066,15 @@ export class WebTransport {
       // RFC 9297 §3.2: a capsule type this side does not know is skipped.
       return H3_NEED_MORE
     }
-    this.capBits[s] = this.capBits[s] | WT_CLOSE_READ
-    const at: i32 = s * (WT_REASON_MAX + 4)
-    let code: i64 = 0
-    for (let j: i32 = 0; j < 4 && at + j < toI32(this.reason.length); j++) {
-      code = (code << toI64(8)) | toI64(toI32(this.reason[at + j]))
-    }
+    this.closeRead[s] = true
     if (this.states[s] === WT_GONE) {
       // This side closed it first, and finished its half then.
       return H3_NEED_MORE
+    }
+    const at: i32 = s * WT_REASON_STRIDE
+    let code: i64 = 0
+    for (let j: i32 = 0; j < 4 && at + j < toI32(this.reason.length); j++) {
+      code = (code << toI64(8)) | toI64(toI32(this.reason[at + j]))
     }
     this.end(s)
     const length: i32 = this.capFill[s] - 4
@@ -1146,8 +1151,8 @@ export class WebTransport {
       this.refuseStream(id, H3_REQUEST_REJECTED)
       return H3_NEED_MORE
     }
-    const bidi: boolean = (id & 2) === 0
-    if (this.h3.acceptStream(id) !== 0 || this.link(s, id, bidi ? WT_BIDI : WT_SENT) < 0) {
+    const bidi: boolean = !quicStreamIsUni(id)
+    if (this.h3.acceptStream(id) !== 0 || this.link(s, id, bidi ? WT_ZERO : WT_SENT) < 0) {
       return H3_NEED_MORE
     }
     this.session = s
@@ -1226,7 +1231,7 @@ export class WebTransport {
     if (stream < 0) {
       return stream
     }
-    this.link(s, stream, bidirectional ? WT_BIDI : WT_RECEIVED)
+    this.link(s, stream, bidirectional ? WT_ZERO : WT_RECEIVED)
     return stream
   }
 
@@ -1300,17 +1305,13 @@ export class WebTransport {
     if (s < 0) {
       return H3_CLOSED
     }
-    if (len > this.maxDatagramPayload(id)) {
-      return H3_TOO_LARGE
-    }
     const out: u8[] = this.outgoing
     const p: i32 = h3PutVarint(out, WT_ZERO, toI32(out.length), id >> toI64(2))
-    if (p < 0 || p + len > toI32(out.length)) {
+    // The quarter stream ID and the payload must fit what QUIC sends now (`maxDatagramPayload`, without the ID's room).
+    if (p < 0 || len > this.quic.maxDatagramPayload() - p || p + len > toI32(out.length)) {
       return H3_TOO_LARGE
     }
-    for (let j: i32 = 0; j < len && p + j < toI32(out.length) && off + j < toI32(buf.length); j++) {
-      out[p + j] = buf[off + j]
-    }
+    quicPacketCopy(out, p, buf, off, len)
     const result: i32 = this.quic.sendDatagram(out, WT_ZERO, p + len)
     if (result === QUIC_DATAGRAM_OK) {
       this.datagramsOut[s] = h3Count(this.datagramsOut[s])

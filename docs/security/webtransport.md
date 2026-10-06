@@ -77,8 +77,8 @@ connection with H3_NO_ERROR. Chrome through Playwright is S2's interop job.
 
 | File | Functions |
 | --- | --- |
-| `std/net/webtransport.ts` | `WebTransport` (`next`, `receiveDatagram`, `route`, `connectEvent`, `asked`, `answer`, `accept`, `refuse`, `release`, `end`, `dropPending`, `close`, `drain`, `capsules`, `capsule`, `malformed`, `arrived`, `adoptWaiting`, `adopt`, `link`, `settle`, `openStream`, `write`, `resetStream`, `stopSending`, `maxDatagramPayload`, `sendDatagram`), `WebTransportWaiting`, `wtCodeToHttp3`, `wtCodeFromHttp3` |
-| `std/net/http3.ts` (the seam) | `Http3Connection`: the settings sent, `takeAgain`, `stepAgain`, `reject`, `held`, `wtStep`, `wtSlot`, `acceptStream`, `refuseStream`, `openStream`, `writeStream`, `resetStream`, `writeDataWhole`, `awaitsRequest`, `discardRequest`, and the changes to `step`, `open`, `typed`, `controlFrame`, `requestStep` and `requestFrame` |
+| `std/net/webtransport.ts` | `WebTransport` (`next`, `receiveDatagram`, `route`, `connectEvent`, `asked`, `answer`, `accept`, `refuse`, `release`, `end`, `dropPending`, `close`, `drain`, `capsules`, `capsule`, `malformed`, `arrived`, `adoptWaiting`, `adopt`, `link`, `settle`, `unlink`, `openStream`, `write`, `resetStream`, `stopSending`, `maxDatagramPayload`, `sendDatagram`), `WebTransportWaiting`, `wtCodeToHttp3`, `wtCodeFromHttp3` |
+| `std/net/http3.ts` (the seam) | `Http3Connection`: the settings sent, `takeAgain`, `stepAgain`, `reject`, `held`, `wtStep`, `wtSlot`, `acceptStream`, `refuseStream`, `stopReading`, `openStream`, `writeStream`, `resetStream`, `stopStream`, `writeDataWhole`, `awaitsRequest`, `discardRequest`, `dropped` (H3_DROPPED), and the changes to `step`, `open`, `typed`, `controlFrame`, `requestStep` and `requestFrame` |
 | `std/net/http3-frame.ts` (the seam) | `Http3Settings.take`'s four extension settings, and the WebTransport constants |
 
 Out of scope: HTTP/3 and QPACK ([http3.md](http3.md)), QUIC and its datagram
@@ -107,9 +107,9 @@ program is trusted; its mistakes panic.
 | --- | --- | --- | --- | --- |
 | WT-1 | Low | `std/net/webtransport.ts` through `std/net/quic.ts` and `std/net/tls.ts` | **The QUIC handshake's memory.** Nothing WebTransport does after a handshake allocates (`net_webtransport`, `arena.ts`); the handshake itself keeps what H3-1 measures, which is TLS-3's. | **Open**, as H3-1. |
 | WT-2 | Low | `std/net/webtransport.ts` | **No clock, and no rate cap.** A session has no idle timeout and no limit on its datagrams a second, and a session asked for stays asked until the program answers it. QUIC's idle timeout ends a connection that goes quiet; a client that keeps sending keeps its sessions. Each session counts its datagrams both ways (`datagramsIn`, `datagramsOut`, saturating) so a program can cap a rate, as the relay caps 256 a second. | **Open, the program's to decide**, as H3-5: the program owns the loop and the clock, and may `close` a session or `drain` it. |
-| WT-3 | Low | `std/net/webtransport.ts` (`asked`, `arrived`, `close`) | **What a client can hold within the caps.** A session this side closed keeps its slot until the client ends its half of the CONNECT stream, as draft-02 §5 has the client do; a stream waiting for a session that never comes keeps its place in the waiting room, unread, so QUIC's flow control holds its sender; a session's streams count against `maxStreams` until both their sides are done. Every one of these is bounded by a cap fixed at start-up (`webtransportSessions`, `maxPending`, `maxStreams`, and QUIC's stream limits) and costs no memory past what the constructor made. | **Accepted.** A program that wants them back sooner resets the stream or closes the connection (WT-2). |
+| WT-3 | Low | `std/net/webtransport.ts` (`asked`, `arrived`, `close`) | **What a client can hold within the caps.** A session this side closed keeps its slot until the client ends its half of the CONNECT stream, as draft-02 §5 has the client do; a stream waiting for a session that never comes keeps its place in the waiting room, unread, so QUIC's flow control holds its sender; a session's streams count against `maxStreams` until both their sides are done. A stream that names a session past what the client's MAX_STREAMS lets it open does not wait at all, and one waiting for a request that ends before it reaches the program — malformed, past the field-section cap, reset, refused after GOAWAY — is let go when `nish/net/http3` reports it (`H3_DROPPED`). One case leaves state behind until the slot is used again: QUIC frees a stream's slot without an event when the client's STOP_SENDING and the acknowledgement of the RESET_STREAM answering it are both read before the program next calls `next` (the carrier's loop always serves a slot between the two), and the layer then lets go of the stream, or of a session, when the slot is next claimed. Every one of these is bounded by a cap fixed at start-up (`webtransportSessions`, `maxPending`, `maxStreams`, and QUIC's stream limits) and costs no memory past what the constructor made. | **Accepted.** A program that wants them back sooner resets the stream or closes the connection (WT-2). |
 | WT-4 | Low | `std/net/webtransport.ts` (`receiveDatagram`, `sendDatagram`) | **Datagrams are copied, and one that overtakes its session is lost.** A datagram is copied out of QUIC's ring into the layer's buffer, and a sent one is put together (quarter stream ID, payload) in the layer's buffer and copied into QUIC's ring: two copies a datagram each way, neither allocating. A datagram that arrives before its session's 200 is dropped and counted (`datagramsDropped`), as RFC 9297 §2.1.1 allows, so a client that sends one with its CONNECT loses it. | **Accepted.** QUIC's `sendDatagram` taking a prefix beside the payload, or handing out a window onto its ring, would remove one copy each way; that is the QUIC lane's module (`std/net/quic*.ts`), which this lane may not edit, so it is recorded here and in the pull request. Buffering early datagrams would cost memory per session for a case the draft lets a server drop. |
-| WT-5 | Low | `std/net/webtransport.ts` (`WebTransportWaiting`) | **The waiting room's hash.** Streams waiting for a session are filed by the session ID they name in a hash salted with 32 bits of entropy and mixed by multiplication, so a request, an accept or a close probes one bucket rather than the room. A client that learned the salt could put every waiting stream in one bucket; the walk is then bounded by `maxPending` (16 by default), once a request or a session's start or end, never a datagram or a frame. | **Accepted.** A keyed PRF is the follow-up if a measurement ever shows a bucket growing. |
+| WT-5 | Low | `std/net/webtransport.ts` (`WebTransportWaiting`) | **The waiting room's hash.** Streams waiting for a session are filed by the session ID they name in a hash salted with 32 bits of entropy and mixed by multiplication, so a request, an accept or a close probes one bucket rather than the room. A client that learned the salt could put every waiting stream in one bucket; the walk is then bounded by `maxPending` (16 by default), once a request or a session's start or end, never a datagram or a frame, and skipped when nothing waits. The layer draws the salt itself, where `Http3Server` takes its index's from the caller. | **Accepted.** A keyed PRF is the follow-up if a measurement ever shows a bucket growing. |
 
 ## Properties verified
 
@@ -164,7 +164,10 @@ signal 0x41 after a request's HEADERS is H3_FRAME_ERROR. After this side's
 GOAWAY a session's new stream is still taken while a request is refused with
 H3_REQUEST_REJECTED. A reset or STOP_SENDING from the client reaches the
 program with its HTTP/3 code and the application code it maps to (or -1, as
-wtransport's unmapped codes are); the server's own carry the mapped code.
+wtransport's unmapped codes are); the server's own carry the mapped code, and
+its STOP_SENDING leaves its own side to write and finish. A stream naming a
+session past the client's MAX_STREAMS is refused at once, and one waiting for
+a request that turns out malformed is let go with WT_SESSION_GONE.
 
 **Close and drain** (`closing.ts`, `refusals.ts`): the client's CLOSE reaches
 the program with its code and reason, the server finishes its half, and every
@@ -173,7 +176,10 @@ closes with code 0 and no reason; the session's slot is free once both halves
 of its CONNECT stream are done. The server's `close` writes the capsule whole
 (0x6843, the length, the code, the reason) and the FIN, refuses a reason past
 1,024 bytes (H3_INVALID), and the client's CLOSE in answer ends the session
-quietly. DRAIN both ways, and an unknown capsule skipped. Malformed, each
+quietly. DRAIN both ways, and an unknown capsule skipped. A CLOSE before the program
+answered the session ends it at once, the CONNECT stream reset both ways and
+the slot free; a close HTTP/3 itself made (a CONNECT whose DATA overruns its
+`content-length`) is not reported as the client's. Malformed, each
 resetting the CONNECT stream and ending the session: a CLOSE shorter than its
 code or with a reason past 1,024 bytes, a DRAIN with a payload, the stream
 ending inside a capsule (H3_DATAGRAM_ERROR, RFC 9297 §3.3), and anything after

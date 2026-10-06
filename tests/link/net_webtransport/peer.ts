@@ -66,12 +66,7 @@ import { fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcShort } from "../net_quic_conn/client";
-import { h3Cat, h3Frame, h3Hex, h3Section, h3Varint } from "../net_http3/peer";
-
-/** The client's three unidirectional streams: control, QPACK encoder, QPACK decoder. */
-export const WT_CLIENT_CONTROL: i64 = 2;
-export const WT_CLIENT_ENCODER: i64 = 6;
-export const WT_CLIENT_DECODER: i64 = 10;
+import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, h3Cat, h3Frame, h3Hex, h3Section, h3Varint } from "../net_http3/peer";
 
 /** The most stream bytes the client puts in one packet. */
 const CHUNK: i32 = 1000;
@@ -544,9 +539,9 @@ export class WtPeer {
 
   /** The client's control stream with SETTINGS `ids`/`values`, and its QPACK streams. */
   openWith(ids: i64[], values: i64[]): void {
-    this.send(WT_CLIENT_CONTROL, h3Cat([h3Varint(H3_STREAM_CONTROL), wtSettingsFrame(ids, values)]), false);
-    this.send(WT_CLIENT_ENCODER, h3Varint(H3_STREAM_QPACK_ENCODER), false);
-    this.send(WT_CLIENT_DECODER, h3Varint(H3_STREAM_QPACK_DECODER), false);
+    this.send(CLIENT_CONTROL, h3Cat([h3Varint(H3_STREAM_CONTROL), wtSettingsFrame(ids, values)]), false);
+    this.send(CLIENT_ENCODER, h3Varint(H3_STREAM_QPACK_ENCODER), false);
+    this.send(CLIENT_DECODER, h3Varint(H3_STREAM_QPACK_DECODER), false);
   }
 
   /** The client's streams opened with `wtransport`'s SETTINGS. */
@@ -706,13 +701,3 @@ export const wtLogged = (t: Suite, name: string, p: WtPeer, want: string[]): boo
   return t.eqStr(name, `missing "${want[at]}" in: ${p.log.join(" | ")}`, "");
 };
 
-/** The bytes `bytes` as lowercase hexadecimal. */
-export const wtHexOf = (bytes: u8[]): string => {
-  const digits: string = "0123456789abcdef";
-  let out: string = "";
-  for (const b of bytes) {
-    const v: i32 = toI32(b);
-    out = `${out}${digits.slice(v >> 4, (v >> 4) + 1)}${digits.slice(v & 15, (v & 15) + 1)}`;
-  }
-  return out;
-};

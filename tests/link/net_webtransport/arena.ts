@@ -32,12 +32,9 @@ import { leafPrivate } from "../net_tls_common/server";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcShort } from "../net_quic_conn/client";
 import { NqMeter, nqMeteredDrain, nqMeteredReceive } from "../net_quic_stream/arena";
-import { h3Cat, h3Frame, h3Pattern, h3Section, h3Varint } from "../net_http3/peer";
+import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, h3Cat, h3Frame, h3Pattern, h3Section, h3Varint } from "../net_http3/peer";
 import {
-  WT_CLIENT_CONTROL,
-  WT_CLIENT_DECODER,
-  WT_CLIENT_ENCODER,
-  WtLimits,
+    WtLimits,
   wtClientParams,
   wtClientSettingIds,
   wtClientSettingValues,
@@ -135,9 +132,9 @@ const wtDatagramFrame = (payload: u8[], data: u8[]): void => {
 /** The client's control stream with `wtransport`'s SETTINGS, and its QPACK streams. */
 const wtOpenClient = (s: WtArenaServer, c: QcClient, m: NqMeter): void => {
   const payload: u8[] = [];
-  wtStreamFrame(payload, WT_CLIENT_CONTROL, n64(0), h3Cat([h3Varint(H3_STREAM_CONTROL), wtSettingsFrame(wtClientSettingIds(), wtClientSettingValues())]), false);
-  wtStreamFrame(payload, WT_CLIENT_ENCODER, n64(0), h3Varint(H3_STREAM_QPACK_ENCODER), false);
-  wtStreamFrame(payload, WT_CLIENT_DECODER, n64(0), h3Varint(H3_STREAM_QPACK_DECODER), false);
+  wtStreamFrame(payload, CLIENT_CONTROL, n64(0), h3Cat([h3Varint(H3_STREAM_CONTROL), wtSettingsFrame(wtClientSettingIds(), wtClientSettingValues())]), false);
+  wtStreamFrame(payload, CLIENT_ENCODER, n64(0), h3Varint(H3_STREAM_QPACK_ENCODER), false);
+  wtStreamFrame(payload, CLIENT_DECODER, n64(0), h3Varint(H3_STREAM_QPACK_DECODER), false);
   wtMeteredPacket(s, c, payload, m);
 };
 

@@ -16,9 +16,9 @@ import {
   wtCodeToHttp3,
 } from "nish/net/webtransport";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { bytesOf, textOf } from "../crypto_x509/hex";
+import { bytesOf, textOf, toHex } from "../crypto_x509/hex";
 import { h3Hex } from "../net_http3/peer";
-import { WtLimits, WtPeer, wtCapsule, wtClosePayload, wtFill, wtHexOf, wtLogged, wtReady } from "./peer";
+import { WtLimits, WtPeer, wtCapsule, wtClosePayload, wtFill, wtLogged, wtReady } from "./peer";
 
 /** The client closes with a code and a reason. */
 const clientCloses = (t: Suite): void => {
@@ -50,7 +50,7 @@ const serverCloses = (t: Suite): void => {
   t.eqI32("a reason past 1,024 bytes is refused", p.wt.close(n64(0), n64(7), wtFill(n32(1025), n32(97)), n32(0), n32(1025)), H3_INVALID);
   t.eqI32("close", p.wt.close(n64(0), n64(7), reason, n32(0), toI32(reason.length)), n32(0));
   p.settle();
-  t.eqStr("CLOSE_WEBTRANSPORT_SESSION: type 0x2843, length 7, code 7, \"bye\"", wtHexOf(p.capsules(n64(0))), "68430700000007627965");
+  t.eqStr("CLOSE_WEBTRANSPORT_SESSION: type 0x2843, length 7, code 7, \"bye\"", toHex(p.capsules(n64(0))), "68430700000007627965");
   t.ok("then the FIN", p.stream(n64(0)).fin);
   t.eqStr("the client's stream is asked to stop with WT_SESSION_GONE", h3Hex(p.stream(n64(14)).stop), h3Hex(WT_SESSION_GONE));
   t.eqI32("a second close finds no session", p.wt.close(n64(0), n64(7), reason, n32(0), n32(0)), H3_CLOSED);
@@ -81,7 +81,7 @@ const draining = (t: Suite): void => {
   wtLogged(t, "the client's DRAIN_WEBTRANSPORT_SESSION reaches the program", p, ["drain 0"]);
   t.eqI32("the server sends its own", p.wt.drain(n64(0)), n32(0));
   p.settle();
-  t.eqStr("type 0x78ae as a four-byte varint, length 0", wtHexOf(p.capsules(n64(0))), "800078ae00");
+  t.eqStr("type 0x78ae as a four-byte varint, length 0", toHex(p.capsules(n64(0))), "800078ae00");
   t.ok("and the session stays open", !p.stream(n64(0)).fin);
   p.capsule(n64(0), wtCapsule(n64(0x29), bytesOf("unknown")), false);
   p.datagram(n64(0), bytesOf("still open"));

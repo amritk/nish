@@ -1132,7 +1132,7 @@ export class Http3Connection {
    * not a client-initiated bidirectional stream is H3_ID_ERROR (draft-02 §4).
    */
   held(k: i32, id: i64, session: i64): i32 {
-    if ((session & 3) !== 0) {
+    if (!http3IsRequest(session)) {
       return this.fail(H3_ID_ERROR)
     }
     this.phase[k] = H3_PHASE_WT_HELD
@@ -1272,7 +1272,7 @@ export class Http3Connection {
    * or H3_CLOSED with WebTransport off or the connection failed.
    */
   openStream(session: i64, bidirectional: boolean): i64 {
-    if (!this.webtransport || this.state === H3_STATE_FAILED || (session & 3) !== 0 || session < 0) {
+    if (!this.webtransport || this.state === H3_STATE_FAILED || !http3IsRequest(session) || session < 0) {
       return toI64(H3_CLOSED)
     }
     const id: i64 = this.quic.openStream(bidirectional)
@@ -1281,12 +1281,9 @@ export class Http3Connection {
       return toI64(H3_AGAIN)
     }
     this.open(k, id)
-    this.flags[k] = H3_FLAG_WT
-    this.phase[k] = H3_PHASE_WT
-    if (!bidirectional) {
-      this.flags[k] = H3_FLAG_WT | H3_FLAG_RECV_DONE
-      this.phase[k] = H3_PHASE_DONE
-    }
+    // A unidirectional stream of this side's has no side for the client to write.
+    this.flags[k] = bidirectional ? H3_FLAG_WT : H3_FLAG_WT | H3_FLAG_RECV_DONE
+    this.phase[k] = bidirectional ? H3_PHASE_WT : H3_PHASE_DONE
     const end: i32 = toI32(this.scratch.length)
     const p: i32 = h3PutVarint(
       this.scratch,

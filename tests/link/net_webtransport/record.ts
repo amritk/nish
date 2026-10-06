@@ -14,10 +14,10 @@ import { QuicConnection } from "nish/net/quic";
 import { H3_ERROR, H3_NEED_MORE } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
 import { WT_DATAGRAM, WT_SESSION, WT_STREAM, WT_STREAM_DATA, WT_STREAM_END, WebTransport } from "nish/net/webtransport";
-import { bytesOf, textOf } from "../crypto_x509/hex";
+import { bytesOf, textOf, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
-import { WtLimits, wtConfig, wtH3Config, wtHexOf, wtQuicConfig } from "./peer";
+import { WtLimits, wtConfig, wtH3Config, wtQuicConfig } from "./peer";
 
 /** What the tap has copied of one stream. */
 class WtTapped {
@@ -83,7 +83,7 @@ class WtRecorder {
       for (let b: i32 = 0; b < ring.lengths[k]; b++) {
         d.push(ring.data[k * ring.entrySize + b]);
       }
-      this.datagrams.push(wtHexOf(d));
+      this.datagrams.push(toHex(d));
     }
     if (quic.closed() && this.closeCode < 0) {
       this.closeCode = quic.error;
@@ -174,7 +174,7 @@ export const record = (port: i32): i32 => {
     server.flush(now);
   }
   for (const s of recorder.streams) {
-    console.log(`stream ${s.id} ${wtHexOf(s.bytes)}${s.fin ? " fin" : ""}${s.reset >= 0 ? ` reset ${s.reset}` : ""}`);
+    console.log(`stream ${s.id} ${toHex(s.bytes)}${s.fin ? " fin" : ""}${s.reset >= 0 ? ` reset ${s.reset}` : ""}`);
   }
   for (const d of recorder.datagrams) {
     console.log(`datagram ${d}`);

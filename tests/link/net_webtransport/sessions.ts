@@ -6,9 +6,9 @@ import { Suite } from "nish/testing";
 import { H3_SETTINGS_ENABLE_CONNECT_PROTOCOL, H3_SETTINGS_ENABLE_WEBTRANSPORT, H3_SETTINGS_H3_DATAGRAM, H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS } from "nish/net/http3-frame";
 import { H3_TOO_LARGE } from "nish/net/http3";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { bytesOf, textOf } from "../crypto_x509/hex";
+import { bytesOf, textOf, toHex } from "../crypto_x509/hex";
 import { h3Cat, h3Pattern, h3Varint } from "../net_http3/peer";
-import { WtLimits, WtPeer, wtConnect, wtHexOf, wtLogged, wtReady } from "./peer";
+import { WtLimits, WtPeer, wtConnect, wtLogged, wtReady } from "./peer";
 
 /** The server's SETTINGS as the client received them on stream 3. */
 const serverSettings = (t: Suite): void => {
@@ -18,7 +18,7 @@ const serverSettings = (t: Suite): void => {
   const control: u8[] = p.stream(n64(3)).data;
   t.eqStr(
     "SETTINGS: QPACK 0 and 0, field sections 8,192, then extended CONNECT 1, HTTP datagrams 1, draft-02 WebTransport 1 and two sessions",
-    wtHexOf(control),
+    toHex(control),
     "0004190100070006600008013301ab60374201c0000000c671706a02",
   );
   t.ok("the client's WebTransport settings were read", p.h3.peer.h3Datagram === n64(1) && p.h3.peer.enableWebtransport === n64(1) && p.h3.peer.webtransportMaxSessions === n64(1) && p.h3.peer.enableConnectProtocol === n64(1));
@@ -38,7 +38,7 @@ const datagrams = (t: Suite): void => {
   const p: WtPeer = wtReady(new WtLimits());
   p.datagram(n64(0), bytesOf("ping"));
   t.eqI32("a datagram is echoed", toI32(p.datagrams.length), n32(1));
-  t.eqStr("with its quarter stream ID first", wtHexOf(p.datagrams[0]), `00${wtHexOf(bytesOf("ping"))}`);
+  t.eqStr("with its quarter stream ID first", toHex(p.datagrams[0]), `00${toHex(bytesOf("ping"))}`);
   const most: i32 = p.wt.maxDatagramPayload(n64(0));
   t.eqI32("the most the server sends: a 1,200-byte packet's room less the quarter stream ID", most, n32(1167));
   const big: u8[] = h3Pattern(most);
@@ -47,6 +47,7 @@ const datagrams = (t: Suite): void => {
   const over: u8[] = h3Pattern(most + 1);
   t.eqI32("one byte over is refused to the program", p.wt.sendDatagram(n64(0), over, n32(0), most + 1), H3_TOO_LARGE);
   t.eqI32("unknown sessions have no room", p.wt.maxDatagramPayload(n64(4)), n32(0));
+  t.eqStr("each session counts its datagrams both ways, for a program's rate cap", `${p.wt.datagramsIn[0]} ${p.wt.datagramsOut[0]}`, "2 2");
 };
 
 /** Streams of both kinds, echoed. */
@@ -59,7 +60,7 @@ const streams = (t: Suite): void => {
   p.uni(n64(14), n64(0), bytesOf("unidirectional"), true);
   p.settle();
   const back: u8[] = p.stream(n64(15)).data;
-  t.eqStr("a unidirectional one comes back on the server's own, its type and session first", wtHexOf(back), `405400${wtHexOf(bytesOf("unidirectional"))}`);
+  t.eqStr("a unidirectional one comes back on the server's own, its type and session first", toHex(back), `405400${toHex(bytesOf("unidirectional"))}`);
   wtLogged(t, "each reached the program", p, ["stream 4 bidi of 0", "end 4", "stream 14 uni of 0", "end 14"]);
 };
 
@@ -84,7 +85,7 @@ const manyStreams = (t: Suite): void => {
   let uni: i32 = 0;
   for (let k: i32 = 0; k < 12; k++) {
     const back: u8[] = p.stream(n64(15) + toI64(k) * n64(4)).data;
-    if (wtHexOf(back) === `405400${wtHexOf(bytesOf(`uni ${k}`))}` && p.stream(n64(15) + toI64(k) * n64(4)).fin) {
+    if (toHex(back) === `405400${toHex(bytesOf(`uni ${k}`))}` && p.stream(n64(15) + toI64(k) * n64(4)).fin) {
       uni++;
     }
   }
@@ -102,7 +103,7 @@ const twoSessions = (t: Suite): void => {
   p.datagram(n64(8), bytesOf("to eight"));
   p.datagram(n64(0), bytesOf("to zero"));
   wtLogged(t, "each datagram reached its own session", p, ["session 8 /second", "datagram 8 8", "datagram 0 7"]);
-  t.ok("and each echo carries its session's quarter stream ID", wtHexOf(p.datagrams[0]) === `02${wtHexOf(bytesOf("to eight"))}` && wtHexOf(p.datagrams[1]) === `00${wtHexOf(bytesOf("to zero"))}`);
+  t.ok("and each echo carries its session's quarter stream ID", toHex(p.datagrams[0]) === `02${toHex(bytesOf("to eight"))}` && toHex(p.datagrams[1]) === `00${toHex(bytesOf("to zero"))}`);
   p.bidi(n64(12), n64(8), bytesOf("on eight"), true);
   p.bidi(n64(16), n64(0), bytesOf("on zero"), true);
   p.settle();
@@ -145,7 +146,7 @@ const serverStreams = (t: Suite): void => {
   const hello: u8[] = bytesOf("from the server");
   t.eqI32("takes a write", p.wt.write(bidi, hello, n32(0), toI32(hello.length), false), toI32(hello.length));
   p.settle();
-  t.eqStr("which the client reads after the signal and the session ID", wtHexOf(p.stream(bidi).data), `404100${wtHexOf(hello)}`);
+  t.eqStr("which the client reads after the signal and the session ID", toHex(p.stream(bidi).data), `404100${toHex(hello)}`);
   p.send(bidi, bytesOf("answer"), true);
   p.echo = false;
   p.settle();
