@@ -28,6 +28,12 @@ PASS  and frees the slot
 PASS  having accepted one connection
 PASS  the pacer has no credit for a datagram
 PASS  the close goes all the same, and the slot is freed
+PASS  a handshake at an epoch-milliseconds clock
+PASS  the pacer holds the slot back, short of its idle deadline
+PASS  the slot is filed for now + the pacer's delay
+PASS  and the server's timeout is that delay
+PASS  300,000 bytes arrive whole with the client quiet between its acknowledgements
+PASS  in under a second of the server's clock, not at the idle timeout
 PASS  a short header too short for a reset, a long one short of a full Initial, a Handshake packet no slot owns: dropped, keeping nothing
 PASS  sixteen answers at once: eight stateless resets and eight Version Negotiations
 PASS  past the budget each is dropped before the listener, and counted
@@ -43,4 +49,4 @@ PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
 PASS  which is the signature, the listener's copy of the first Initial and TlsServer's of the client's parameters: 10 to 12 KiB, where it was about 100 KB
-http3 server: 45 passed, 0 failed, 0 skipped
+http3 server: 51 passed, 0 failed, 0 skipped
