@@ -220,7 +220,7 @@ export const http2Checks = (t: Suite): void => {
   t.ok("http/2: two POSTs of 150,000 bytes on streams 3 and 5 at once, each echoed whole on its own stream", both && h3IsPattern(three) && h3IsPattern(five) && toI32(three.length) === 150000 && toI32(five.length) === 150000);
   t.ok(
     "http/2: past the server's 65,535-byte stream window the client waited for its WINDOW_UPDATEs, and past its own 16,384 the server waited for the client's",
-    h.serverRefills >= 4 && h.clientRefills >= 18 && lp.h2App.overflows === 0
+    h.serverRefills >= 4 && h.clientRefills >= 18 && lp.h2App.table.overflows === 0
   );
   h.log.take();
 

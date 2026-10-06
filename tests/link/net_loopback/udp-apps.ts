@@ -28,122 +28,7 @@ import {
 } from "nish/net/webtransport";
 import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
 import { ZERO } from "../net_tls_record_common/bytes";
-
-/** What one stream entry holds back: more than a stream's 32 KiB of credit, so it never fills. */
-const HELD: i32 = 131072;
-
-/** The streams being echoed at once, across every slot. */
-const ENTRIES: i32 = 16;
-
-/** One echoing stream per entry: its id (-1 when free), where its echo goes, what is held, and how far it has ended. */
-export class EchoTable {
-  held: u8[][];
-  ids: i64[];
-  outs: i64[];
-  slots: i32[];
-  starts: i32[];
-  lengths: i32[];
-  ended: boolean[];
-  empty: u8[];
-  /** Streams that found no free entry, and bytes that found no room: never expected. */
-  overflows: i32 = 0;
-
-  constructor() {
-    this.held = [];
-    this.ids = new Array<i64>(ENTRIES);
-    this.outs = new Array<i64>(ENTRIES);
-    this.slots = new Array<i32>(ENTRIES);
-    this.starts = new Array<i32>(ENTRIES);
-    this.lengths = new Array<i32>(ENTRIES);
-    this.ended = new Array<boolean>(ENTRIES);
-    this.empty = [];
-    for (let k: i32 = 0; k < ENTRIES; k++) {
-      this.held.push(new Array<u8>(HELD));
-      this.ids[k] = toI64(-1);
-    }
-  }
-
-  /** The entry of stream `id` on `slot`, or -1. */
-  find(slot: i32, id: i64): i32 {
-    for (let k: i32 = 0; k < ENTRIES; k++) {
-      if (this.ids[k] === id && this.slots[k] === slot) {
-        return k;
-      }
-    }
-    return -1;
-  }
-
-  /** A free entry for stream `id` on `slot`, echoing on `out`; -1, counted, when none is free. */
-  claim(slot: i32, id: i64, out: i64): i32 {
-    const free: i32 = this.findFree();
-    if (free < 0) {
-      this.overflows = this.overflows + 1;
-      return -1;
-    }
-    this.ids[free] = id;
-    this.outs[free] = out;
-    this.slots[free] = slot;
-    this.starts[free] = 0;
-    this.lengths[free] = 0;
-    this.ended[free] = false;
-    return free;
-  }
-
-  /** Any free entry, or -1. */
-  findFree(): i32 {
-    for (let k: i32 = 0; k < ENTRIES; k++) {
-      if (this.ids[k] < 0) {
-        return k;
-      }
-    }
-    return -1;
-  }
-
-  /** Frees entry `e`. */
-  release(e: i32): void {
-    if (e >= 0) {
-      this.ids[e] = toI64(-1);
-    }
-  }
-
-  /** Frees every entry of `slot`, whose connection is gone. */
-  forget(slot: i32): void {
-    for (let k: i32 = 0; k < ENTRIES; k++) {
-      if (this.slots[k] === slot) {
-        this.ids[k] = toI64(-1);
-      }
-    }
-  }
-
-  /** Keeps `buf[at .. at + n)` behind what entry `e` holds, moving that to the front first when it must. */
-  hold(e: i32, buf: u8[], at: i32, n: i32): void {
-    if (n <= 0 || e < 0) {
-      return;
-    }
-    const held: u8[] = this.held[e];
-    if (this.starts[e] + this.lengths[e] + n > HELD) {
-      for (let k: i32 = 0; k < this.lengths[e]; k++) {
-        held[k] = held[this.starts[e] + k];
-      }
-      this.starts[e] = 0;
-    }
-    if (this.lengths[e] + n > HELD) {
-      this.overflows = this.overflows + 1;
-      return;
-    }
-    const end: i32 = this.starts[e] + this.lengths[e];
-    for (let k: i32 = 0; k < n; k++) {
-      held[end + k] = buf[at + k];
-    }
-    this.lengths[e] = this.lengths[e] + n;
-  }
-
-  /** Marks `n` of entry `e`'s held bytes as gone. */
-  took(e: i32, n: i32): void {
-    this.starts[e] = this.starts[e] + n;
-    this.lengths[e] = this.lengths[e] - n;
-  }
-}
+import { EchoTable } from "./echo-table";
 
 /**
  * QUIC's program: every stream the client opens is echoed back on itself,
@@ -200,9 +85,9 @@ export class QuicApp {
         this.echoed = this.echoed + toI64(w);
       }
       if (t.ended[e]) {
-        if (conn.streamWrite(id, t.empty, ZERO, ZERO, true) >= 0) {
-          t.release(e);
-        }
+        // An empty write always fits, so this fails only on a stream already finished or reset: either way it is done.
+        conn.streamWrite(id, t.empty, ZERO, ZERO, true);
+        t.release(e);
         return;
       }
       const n: i32 = conn.streamRead(id, t.held[e], ZERO, toI32(t.held[e].length));
@@ -364,7 +249,7 @@ export class WtApp {
         this.flush(wt, e);
       }
     } else if (event === WT_WRITABLE) {
-      for (let e: i32 = 0; e < ENTRIES; e++) {
+      for (let e: i32 = 0; e < toI32(t.ids.length); e++) {
         if (t.ids[e] >= 0 && t.slots[e] === slot && (t.outs[e] === wt.stream || t.ids[e] === wt.stream)) {
           this.flush(wt, e);
         }

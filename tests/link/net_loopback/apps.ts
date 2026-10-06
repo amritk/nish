@@ -21,6 +21,7 @@ import { TlsTcpServer } from "nish/net/tls-tcp";
 import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
 import { H2_DATA, H2_GOAWAY, H2_REQUEST, H2_RESET, H2_WINDOW, Http2Connection } from "nish/net/http2";
 import { ZERO } from "../net_tls_record_common/bytes";
+import { EchoTable } from "./echo-table";
 
 /** The largest WebSocket frame the echo sends: a message longer than this goes back in fragments. */
 export const WS_FRAGMENT: i32 = 2048;
@@ -242,73 +243,35 @@ export class H1App {
   }
 }
 
-/** How many streams of one connection `H2App` echoes at once. */
-const H2_STREAMS: i32 = 4;
-/** What one echoing stream can hold back while the client's window is shut: more than the server's own receive window, so it never fills. */
-const H2_HELD: i32 = 131072;
-
 /**
  * HTTP/2's program. A GET is answered with a short body; any other request
  * has its body echoed back on its own stream, DATA frame by DATA frame, and
  * ends when the request has. What the client's flow-control window does not
- * let out yet is held per stream, in a buffer made once, and goes when
- * `H2_WINDOW` says the window has opened (or on any later wake). The
- * server's receive window (65,535 bytes a stream) bounds what a client can
- * send past what was echoed, so the buffer is larger than any backlog.
+ * let out yet waits in the stream's `EchoTable` entry and goes when
+ * `H2_WINDOW` says a window has opened (or on any later wake). The server's
+ * receive window (65,535 bytes a stream) bounds what a client can send past
+ * what was echoed, so an entry never fills.
  */
 export class H2App {
+  table: EchoTable;
   names: u8[][];
   values: u8[][];
   body: u8[];
-  empty: u8[];
-  /** Per slot and stream entry (`slot * H2_STREAMS + k`): its stream id (0 when free), what it holds, and whether the request ended. */
-  ids: i32[];
-  held: u8[][];
-  heldStart: i32[];
-  heldLength: i32[];
-  ended: boolean[];
-  finished: boolean[];
   requests: i32 = 0;
   goaways: i32 = 0;
   resets: i32 = 0;
-  /** Requests that found no free entry, and bytes that found no room: never expected. */
-  overflows: i32 = 0;
 
-  constructor(slots: i32) {
+  constructor() {
+    this.table = new EchoTable();
     this.names = [httpFieldBytes("content-type")];
     this.values = [httpFieldBytes("text/plain")];
     this.body = httpFieldBytes("hello over loopback\n");
-    this.empty = [];
-    const entries: i32 = slots * H2_STREAMS;
-    this.ids = new Array<i32>(entries);
-    this.held = [];
-    this.heldStart = new Array<i32>(entries);
-    this.heldLength = new Array<i32>(entries);
-    this.ended = new Array<boolean>(entries);
-    this.finished = new Array<boolean>(entries);
-    for (let k: i32 = 0; k < entries; k++) {
-      this.held.push(new Array<u8>(H2_HELD));
-    }
-  }
-
-  reset(slot: i32): void {
-    for (let k: i32 = 0; k < H2_STREAMS && slot * H2_STREAMS + k < toI32(this.ids.length); k++) {
-      this.ids[slot * H2_STREAMS + k] = 0;
-    }
-  }
-
-  /** The entry of stream `id` on `slot`, or -1. */
-  entry(slot: i32, id: i32): i32 {
-    for (let k: i32 = 0; k < H2_STREAMS; k++) {
-      if (this.ids[slot * H2_STREAMS + k] === id) {
-        return slot * H2_STREAMS + k;
-      }
-    }
-    return -1;
   }
 
   /** Answers `event` on slot `slot`'s connection. */
   handle(conn: Http2Connection, event: i32, slot: i32): void {
+    const t: EchoTable = this.table;
+    const id: i64 = toI64(conn.stream);
     if (event === H2_REQUEST) {
       this.requests = this.requests + 1;
       conn.respond(conn.stream, toI32(200), this.names, this.values, false);
@@ -316,32 +279,23 @@ export class H2App {
         conn.writeData(conn.stream, this.body, ZERO, toI32(this.body.length), true);
         return;
       }
-      const e: i32 = this.entry(slot, ZERO);
-      if (e < 0) {
-        this.overflows = this.overflows + 1;
-        return;
+      const e: i32 = t.claim(slot, id, id);
+      if (e >= 0) {
+        t.ended[e] = conn.endStream;
+        this.flush(conn, e);
       }
-      this.ids[e] = conn.stream;
-      this.heldStart[e] = 0;
-      this.heldLength[e] = 0;
-      this.ended[e] = conn.endStream;
-      this.finished[e] = false;
-      this.flush(conn, e);
     } else if (event === H2_DATA) {
-      const e: i32 = this.entry(slot, conn.stream);
+      const e: i32 = t.find(slot, id);
       if (e < 0) {
         return;
       }
-      let at: i32 = conn.dataStart;
-      let left: i32 = conn.dataLength;
-      if (this.heldLength[e] === 0 && left > 0) {
-        const n: i32 = conn.writeData(conn.stream, conn.data, at, left, false);
-        const taken: i32 = n > 0 ? n : 0;
-        at = at + taken;
-        left = left - taken;
+      let taken: i32 = 0;
+      if (t.lengths[e] === 0 && conn.dataLength > 0) {
+        const n: i32 = conn.writeData(conn.stream, conn.data, conn.dataStart, conn.dataLength, false);
+        taken = n > 0 ? n : 0;
       }
-      this.hold(e, conn.data, at, left);
-      this.ended[e] = conn.endStream;
+      t.hold(e, conn.data, conn.dataStart + taken, conn.dataLength - taken);
+      t.ended[e] = conn.endStream;
       this.flush(conn, e);
     } else if (event === H2_WINDOW) {
       this.resume(conn, slot);
@@ -349,60 +303,31 @@ export class H2App {
       this.goaways = this.goaways + 1;
     } else if (event === H2_RESET) {
       this.resets = this.resets + 1;
-      const e: i32 = this.entry(slot, conn.stream);
-      if (e >= 0) {
-        this.ids[e] = 0;
-      }
+      t.release(t.find(slot, id));
     }
-  }
-
-  /** Keeps `buf[at .. at + n)` behind what entry `e` already holds, moving that to the front first when it must. */
-  hold(e: i32, buf: u8[], at: i32, n: i32): void {
-    if (n <= 0) {
-      return;
-    }
-    const held: u8[] = this.held[e];
-    if (this.heldStart[e] + this.heldLength[e] + n > H2_HELD) {
-      for (let k: i32 = 0; k < this.heldLength[e]; k++) {
-        held[k] = held[this.heldStart[e] + k];
-      }
-      this.heldStart[e] = 0;
-    }
-    if (this.heldLength[e] + n > H2_HELD) {
-      this.overflows = this.overflows + 1;
-      return;
-    }
-    const end: i32 = this.heldStart[e] + this.heldLength[e];
-    for (let k: i32 = 0; k < n; k++) {
-      held[end + k] = buf[at + k];
-    }
-    this.heldLength[e] = this.heldLength[e] + n;
   }
 
   /** Writes what entry `e` holds as far as the windows let it, then the END_STREAM once the request has ended. */
   flush(conn: Http2Connection, e: i32): void {
-    const id: i32 = this.ids[e];
-    while (this.heldLength[e] > 0) {
-      const n: i32 = conn.writeData(id, this.held[e], this.heldStart[e], this.heldLength[e], false);
+    const t: EchoTable = this.table;
+    const id: i32 = toI32(t.ids[e]);
+    while (t.lengths[e] > 0) {
+      const n: i32 = conn.writeData(id, t.held[e], t.starts[e], t.lengths[e], false);
       if (n <= 0) {
         return;
       }
-      this.heldStart[e] = this.heldStart[e] + n;
-      this.heldLength[e] = this.heldLength[e] - n;
+      t.took(e, n);
     }
-    if (this.ended[e] && !this.finished[e]) {
-      this.finished[e] = conn.writeData(id, this.empty, ZERO, ZERO, true) >= 0;
-      if (this.finished[e]) {
-        this.ids[e] = 0;
-      }
+    if (t.ended[e] && conn.writeData(id, t.empty, ZERO, ZERO, true) >= 0) {
+      t.release(e);
     }
   }
 
-  /** Every stream of `slot` that holds something tries again. */
+  /** Every stream of `slot` that holds something, or owes its END_STREAM, tries again. */
   resume(conn: Http2Connection, slot: i32): void {
-    for (let k: i32 = 0; k < H2_STREAMS; k++) {
-      const e: i32 = slot * H2_STREAMS + k;
-      if (this.ids[e] !== 0) {
+    const t: EchoTable = this.table;
+    for (let e: i32 = 0; e < toI32(t.ids.length); e++) {
+      if (t.ids[e] >= 0 && t.slots[e] === slot) {
         this.flush(conn, e);
       }
     }

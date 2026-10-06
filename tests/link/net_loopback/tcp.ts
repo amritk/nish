@@ -10,7 +10,7 @@
 // when the handshake asks, answer the connection's events, close the slot
 // when it is done. Its answers (`apps.ts`) allocate nothing per request or
 // per byte, so the whole of a server wake, carrier and program together, is
-// what `growth` measures. Every wait is bounded: five seconds without a wake
+// what the loop's `meter` measures. Every wait is bounded: five seconds without a wake
 // is a failure, never a hang.
 import { Secret, secret, wipe } from "nish:secret";
 import {
@@ -113,7 +113,7 @@ export class TcpLoop {
     this.h2 = new Http2TlsServer(tcpConfig([H2_ALPN]), new Http2Config(), carrier === CARRIER_H2 ? this.listener : unused, carrier === CARRIER_H2 ? POOL : toI32(1));
     this.echo = new EchoSlots(POOL);
     this.h1App = new H1App(POOL);
-    this.h2App = new H2App(POOL);
+    this.h2App = new H2App();
     pollAdd(this.loop, this.listener, toI32(1), LISTENER);
   }
 
@@ -217,7 +217,7 @@ export class TcpLoop {
         this.accepted = this.accepted + 1;
         this.echo.reset(slot);
         this.h1App.reset(slot);
-        this.h2App.reset(slot);
+        this.h2App.table.forget(slot);
         pollAdd(this.loop, this.fd(slot), toI32(1), slot);
       } else if (slot === TLS_TCP_POOL_FULL) {
         this.refused = this.refused + 1;
