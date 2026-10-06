@@ -44,29 +44,32 @@
  * derived from it are held in the protection's fields, because a `Secret` may
  * not be one (NL2430), in arrays the protection reuses for every key it is
  * given, and are zeroed when it is installed again or cleared — the key and
- * IV with `secureZero`. The schedule is `u64` words, which `secureZero` does
- * not take, and the copies made while deriving die unwiped or wiped by stores
- * the optimiser may drop (TLS-2 in `docs/security/tls.md`).
+ * IV with `secureZero`. The key and IV are derived straight into place, in an
+ * HKDF scratch that is wiped after each derivation, and the schedule is
+ * expanded into place by `aesKeyInto`. The schedule is `u64` words, which
+ * `secureZero` does not take, and are zeroed by ordinary stores that stand
+ * because it stays reachable (TLS-2 in `docs/security/tls.md`).
  *
  * The record layer is sans-IO: `nish/net/tls/record-server` runs it over a
  * stream for `TlsServer`, and `nish/net/tls-tcp` puts that on a socket.
  * Written from RFC 8446 §5, not ported from another implementation.
  */
-import { AesKey, aesGcmOpen, aesGcmSeal, aesKey } from "nish/crypto/aes"
+import { AesKey, aesGcmOpen, aesGcmSeal, aesKeyInto } from "nish/crypto/aes"
 import { chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import {
   TLS_ALERT_INTERNAL_ERROR,
   TLS_ALERT_UNEXPECTED_MESSAGE,
   TLS_LEGACY_VERSION,
 } from "nish/net/tls/codec"
+import { HkdfScratch, hkdfExpandLabelInto } from "nish/crypto/hkdf"
+import { SHA384_SIZE } from "nish/crypto/sha512"
 import {
   TLS_CHACHA20_POLY1305_SHA256,
   TLS_IV_SIZE,
   tlsExpandLabel,
   tlsSuiteHashLength,
   tlsSuiteKeyLength,
-  tlsTrafficIv,
-  tlsTrafficKey,
+  tlsTrafficKeysInto,
 } from "nish/net/tls/schedule"
 
 // ---- The wire's constants ------------------------------------------------------
@@ -180,6 +183,18 @@ export const tlsRecordLength = (buf: u8[], off: i32, avail: i32): i32 => {
 }
 
 /**
+ * Zeroes an AES key schedule's round keys and H with ordinary stores, which
+ * stand because the schedule stays reachable for the next key (TLS-2).
+ */
+const tlsClearAesKey = (aes: AesKey): void => {
+  for (let k: i32 = 0; k < toI32(aes.roundKeys.length); k++) {
+    aes.roundKeys[k] = toU64(0)
+  }
+  aes.hHi = toU64(0)
+  aes.hLo = toU64(0)
+}
+
+/**
  * The bytes of a stream that are not yet a whole record. The buffer is
  * allocated once, `TLS_MAX_RECORD` bytes, so a reader never grows: `push`
  * takes what fits, and the bytes of a record stay until `consume` lets them
@@ -266,13 +281,18 @@ export class TlsRecordReader {
  * AEAD with the key and IV of the traffic secret it was given, and its
  * sequence number counts from 0. `contentType` is the type the last `open`
  * found inside a protected record, or the header's type for a cleartext one.
+ *
+ * Every array it fills is made by the constructor: a key of each length, an
+ * AES key schedule of each size, the IV, the next traffic secret of each
+ * hash, and the HKDF scratch the keys are derived in. `key` and `aes` point
+ * at the ones the installed suite uses, so changing suites allocates nothing.
  */
 export class TlsRecordProtection {
   /** The AEAD key (§7.3): the suite's key length, zeroed while the direction is cleartext. */
   key: u8[]
   /** The 12-byte traffic IV (§7.3), zeroed while the direction is cleartext. */
   iv: u8[]
-  /** The AES key schedule for the two AES-GCM suites, made when a key of its size is first installed and refilled after. */
+  /** The AES key schedule for the two AES-GCM suites, the one of the installed key's size. */
   aes: AesKey | null = null
   /** The next record's sequence number (§5.3). */
   sequence: i64 = 0
@@ -285,10 +305,25 @@ export class TlsRecordProtection {
   suite: i32 = 0
   /** The real content type of the last record `open` answered. */
   contentType: i32 = 0
+  /** The arrays `key` and `aes` point into: AES-128's and ChaCha20's or AES-256's. */
+  key16: u8[]
+  key32: u8[]
+  aes128: AesKey
+  aes256: AesKey
+  /** Where `advance` derives the next traffic secret: HashLen bytes of it. */
+  next: u8[]
+  /** Where the keys are derived. */
+  kdf: HkdfScratch
 
   constructor() {
-    this.key = []
+    this.key16 = new Array<u8>(16)
+    this.key32 = new Array<u8>(32)
+    this.key = this.key16
     this.iv = new Array<u8>(TLS_IV_SIZE)
+    this.aes128 = new AesKey(10, new Array<u64>(88))
+    this.aes256 = new AesKey(14, new Array<u64>(120))
+    this.next = new Array<u8>(SHA384_SIZE)
+    this.kdf = new HkdfScratch()
     this.recordLimit = TLS_KEY_UPDATE_RECORDS
   }
 
@@ -298,22 +333,17 @@ export class TlsRecordProtection {
   }
 
   /**
-   * Back to cleartext, with the sequence number at 0 and the key, the IV and
-   * the AES key schedule zeroed: the key and IV with `secureZero`, and the
-   * schedule's `u64` words with ordinary stores, which stand because the
-   * schedule stays reachable for the next `install` to fill (TLS-2).
+   * Back to cleartext, with the sequence number at 0 and both keys, the IV
+   * and both AES key schedules zeroed: the keys and IV with `secureZero`,
+   * and the schedules' `u64` words with ordinary stores, which stand because
+   * the schedules stay reachable for the next `install` to fill (TLS-2).
    */
   clear(): void {
-    secureZero(this.key)
+    secureZero(this.key16)
+    secureZero(this.key32)
     secureZero(this.iv)
-    const aes: AesKey | null = this.aes
-    if (aes !== null) {
-      for (let k: i32 = 0; k < toI32(aes.roundKeys.length); k++) {
-        aes.roundKeys[k] = toU64(0)
-      }
-      aes.hHi = toU64(0)
-      aes.hLo = toU64(0)
-    }
+    tlsClearAesKey(this.aes128)
+    tlsClearAesKey(this.aes256)
     this.suite = 0
     this.sequence = 0
     this.contentType = 0
@@ -327,9 +357,8 @@ export class TlsRecordProtection {
    * hash's length.
    *
    * The key, the IV and the AES key schedule are written into the arrays this
-   * direction already has, which are allocated only the first time a key of
-   * their size is installed; what `derive` allocates on the way stays behind
-   * (TLS-3).
+   * direction made when it was constructed, so an install allocates nothing
+   * that outlives it (TLS-3).
    */
   install(suite: i32, secret: u8[]): boolean {
     this.clear()
@@ -343,54 +372,29 @@ export class TlsRecordProtection {
     return true
   }
 
-  /** Makes the key array, and for AES the key schedule, the size `suite` needs, when they are not already. */
+  /** Points `key`, and for AES `aes`, at the arrays of the size `suite` needs. */
   reserve(suite: i32): void {
-    const keyLength: i32 = tlsSuiteKeyLength(suite)
-    if (toI32(this.key.length) !== keyLength) {
-      this.key = new Array<u8>(keyLength)
-    }
+    this.key = tlsSuiteKeyLength(suite) === 16 ? this.key16 : this.key32
     if (suite !== TLS_CHACHA20_POLY1305_SHA256) {
-      const rounds: i32 = keyLength === 16 ? 10 : 14
-      const aes: AesKey | null = this.aes
-      if (aes === null || aes.rounds !== rounds) {
-        this.aes = new AesKey(rounds, new Array<u64>((rounds + 1) << 3))
-      }
+      this.aes = tlsSuiteKeyLength(suite) === 16 ? this.aes128 : this.aes256
     }
   }
 
   /**
    * Fills the key, the IV and the AES key schedule from `secret`, into the
-   * arrays `reserve` made. The derived key and IV are wiped once copied, and
-   * the schedule `aesKey` answered is zeroed, which the optimiser may drop
-   * since nothing reads it again (TLS-2).
-   *
-   * What the derivation allocates on the way — about 5 KB, HKDF's HMAC
-   * state and the schedule `aesKey` answers — stays in the arena: HMAC keeps
-   * its hash state in objects of its own, which neither the automatic scopes
-   * nor a `using a = arena()` block follow (NL2424). A connection's key
-   * installs are bounded, by `TLS_RECORD_MAX_KEY_UPDATES` (TLS-3).
+   * arrays `reserve` chose: the key and IV derived straight into place in the
+   * direction's own HKDF scratch, which is wiped after, and the schedule
+   * expanded into this direction's `AesKey` by `aesKeyInto`. All of it runs
+   * inside an arena block, so a key install leaves the arena where it was.
+   * ChaCha20 has no schedule.
    */
   derive(suite: i32, secret: u8[]): void {
-    const key: u8[] = tlsTrafficKey(suite, secret)
-    const iv: u8[] = tlsTrafficIv(suite, secret)
-    for (let k: i32 = 0; k < toI32(this.key.length) && k < toI32(key.length); k++) {
-      this.key[k] = key[k]
-    }
-    for (let k: i32 = 0; k < toI32(this.iv.length) && k < toI32(iv.length); k++) {
-      this.iv[k] = iv[k]
-    }
+    using _scope = arena()
+    tlsTrafficKeysInto(this.kdf, suite, secret, this.key, this.iv)
     const aes: AesKey | null = this.aes
-    const fresh: AesKey | null = suite === TLS_CHACHA20_POLY1305_SHA256 ? null : aesKey(key)
-    if (aes !== null && fresh !== null) {
-      for (let k: i32 = 0; k < toI32(aes.roundKeys.length) && k < toI32(fresh.roundKeys.length); k++) {
-        aes.roundKeys[k] = fresh.roundKeys[k]
-        fresh.roundKeys[k] = toU64(0)
-      }
-      aes.hHi = fresh.hHi
-      aes.hLo = fresh.hLo
+    if (aes !== null && suite !== TLS_CHACHA20_POLY1305_SHA256) {
+      aesKeyInto(this.key, aes)
     }
-    secureZero(key)
-    secureZero(iv)
   }
 
   /**
@@ -406,13 +410,33 @@ export class TlsRecordProtection {
    * Moves this direction to the next traffic secret (§7.2), the KeyUpdate
    * step: `secret`, the current one, is overwritten in place by the next,
    * and the keys are installed from it; the next secret's own copy is wiped.
-   * What the derivation allocates stays in the arena, as `derive`'s does.
-   * False, as `install` answers, when the keys do not install.
+   * The next secret is derived in place inside an arena block, as `derive`'s
+   * keys are. False, as `install` answers, when the keys do not install.
    */
   advance(secret: u8[]): boolean {
     const suite: i32 = this.suite
-    const next: u8[] = tlsNextTrafficSecret(tlsSuiteHashLength(suite), secret)
-    for (let k: i32 = 0; k < toI32(secret.length) && k < toI32(next.length); k++) {
+    const hashLength: i32 = tlsSuiteHashLength(suite)
+    if (hashLength === 0) {
+      return false
+    }
+    const next: u8[] = this.next
+    {
+      using _scope = arena()
+      const none: u8[] = []
+      hkdfExpandLabelInto(
+        this.kdf,
+        hashLength,
+        secret,
+        "traffic upd",
+        none,
+        TLS_RECORD_FROM,
+        TLS_RECORD_FROM,
+        next,
+        TLS_RECORD_FROM,
+        hashLength
+      )
+    }
+    for (let k: i32 = 0; k < toI32(secret.length) && k < hashLength && k < toI32(next.length); k++) {
       secret[k] = next[k]
     }
     secureZero(next)

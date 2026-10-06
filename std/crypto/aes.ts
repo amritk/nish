@@ -624,6 +624,48 @@ export const aesKey = (key: u8[]): AesKey | null => {
   return expanded
 }
 
+/**
+ * `aesKey` into an `AesKey` the caller already holds: the key schedule of a
+ * 16-byte (AES-128) or 32-byte (AES-256) `key`, bitsliced, and H = E(K,
+ * 0^128) for GCM, written into `out`, whose `roundKeys` must already be the
+ * `8 * (rounds + 1)` words that key length needs (88 or 120). It answers
+ * whether it did; a key of another length, or a schedule array of the wrong
+ * size for it, answers `false` and leaves `out` as it was.
+ *
+ * `aesKey` makes a fresh `AesKey` and stores its schedule into it, which no
+ * arena scope may be put around; this stores numbers only, so a caller that
+ * keeps one `AesKey` per connection installs every key inside a `using a =
+ * arena()` block and leaves the arena where it was. The schedule and H are
+ * secret: the caller wipes `out` when it is done with the key. The working
+ * copy of the schedule is zeroed before it is released, by stores that stand
+ * no better than `aesKey`'s own temporaries do.
+ */
+export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
+  const length: i32 = toI32(key.length)
+  if (length !== 16 && length !== 32) {
+    return false
+  }
+  const rounds: i32 = length === 16 ? 10 : 14
+  const roundKeys: u64[] = out.roundKeys
+  const words: i32 = (rounds + 1) * 8
+  if (toI32(roundKeys.length) !== words) {
+    return false
+  }
+  const expanded: u64[] = aesExpand(key, rounds)
+  for (let i: i32 = 0; i < toI32(roundKeys.length) && i < toI32(expanded.length); i++) {
+    roundKeys[i] = expanded[i]
+    expanded[i] = 0
+  }
+  out.rounds = rounds
+  const buf: u8[] = aesEncryptOne(out, [])
+  out.hHi = aesLoad64(buf, 0, 8)
+  out.hLo = aesLoad64(buf, 8, 16)
+  for (let i: i32 = 0; i < toI32(buf.length); i++) {
+    buf[i] = 0
+  }
+  return true
+}
+
 /** One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or `null` for another length. */
 export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
   if (!aesKeyUsable(key) || toI32(block.length) !== AES_BLOCK) {
