@@ -115,8 +115,18 @@ PASS  and is final
 PASS  UTF-8 of one to four bytes, NUL and the largest code point
 PASS  a window ending inside a character is not
 PASS  the empty window is
+PASS  websocketWriteFrame writes §5.7's unmasked Hello at its offset
+PASS  and the masked one
+PASS  websocketFrameSize counts each length form and the mask
+PASS  a frame that does not fit is WS_NO_ROOM
+PASS  one that just fits is written
+PASS  refused: a reserved opcode
+PASS  refused: a fragmented ping
+PASS  refused: a 3-byte mask
+PASS  reset() starts a refused decoder over
+PASS  and it reads the next connection's message
 PASS  WS_MAX_CONTROL is 125 (§5.5)
 PASS  WS_OP_CLOSE is 8 (§5.2)
 PASS  WS_MESSAGE follows WS_NEED_MORE
 PASS  WS_CLOSE_TOO_BIG is 1009 (§7.4.1)
-websocket: 121 passed, 0 failed, 0 skipped
+websocket: 131 passed, 0 failed, 0 skipped
