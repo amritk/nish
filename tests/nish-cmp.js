@@ -602,9 +602,12 @@ const CAPABILITY_POLICY_NEW = [
 const QPACK_NEW = [
   "tests/link/net_qpack/main.ts",
   "tests/link/net_qpack_f64/main.ts",
+  "tests/link/net_qpack_bad_decoder_stream_window/main.ts",
+  "tests/link/net_qpack_bad_encoder_stream_window/main.ts",
   "tests/link/net_qpack_bad_field_window/main.ts",
   "tests/link/net_qpack_bad_limit/main.ts",
   "tests/link/net_qpack_bad_stream_id/main.ts",
+  "tests/link/net_qpack_bad_value_window/main.ts",
   "tests/link/net_qpack_bad_window/main.ts",
 ]
 

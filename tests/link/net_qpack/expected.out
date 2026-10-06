@@ -286,6 +286,8 @@ PASS  each one counted
 PASS  a section still decodes after them
 PASS  the stream is read as a window
 PASS  of one byte here
+PASS  Set Dynamic Table Capacity 0 at the counter's edge is accepted
+PASS  and the count saturates at 2^31 - 1
 PASS  RFC 9204 B.2's Set Dynamic Table Capacity 220: QPACK_ENCODER_STREAM_ERROR
 PASS  RFC 9204 B.2's Set Dynamic Table Capacity 220: the reason
 PASS  Set Dynamic Table Capacity 1: QPACK_ENCODER_STREAM_ERROR
@@ -317,6 +319,9 @@ PASS  three cancellations
 PASS  the last for stream 0
 PASS  the stream is read as a window
 PASS  of one byte here, stream 4
+PASS  Stream Cancellations at the counter's edge are accepted
+PASS  and the count saturates at 2^31 - 1
+PASS  with the last stream still recorded
 PASS  RFC 9204 B.2's Section Acknowledgment for stream 4: QPACK_DECODER_STREAM_ERROR
 PASS  RFC 9204 B.2's Section Acknowledgment for stream 4: the reason
 PASS  a Section Acknowledgment for stream 0: QPACK_DECODER_STREAM_ERROR
@@ -339,4 +344,4 @@ PASS  the encoder still writes sections
 PASS  a thousand and one pairs of sections decoded, four fields each
 PASS  the last section decoded
 PASS  a thousand passes of both sides after the first allocate nothing
-qpack: 341 passed, 0 failed, 0 skipped
+qpack: 346 passed, 0 failed, 0 skipped

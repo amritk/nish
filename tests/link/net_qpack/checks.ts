@@ -602,6 +602,14 @@ const encoderStreamChecks = (t: Suite): void => {
   t.eqI64("the stream is read as a window", dec.receiveEncoderStream(window, one, one), QPACK_OK);
   t.eqI32("of one byte here", dec.capacityInstructions, toI32(4));
 
+  // A peer may send Set Dynamic Table Capacity 0 without end, so the count
+  // stops at 2^31 - 1 rather than overflowing, which would panic.
+  const most: i32 = 2147483647;
+  const counted = new QpackDecoder(limit);
+  counted.capacityInstructions = most - 1;
+  t.eqI64("Set Dynamic Table Capacity 0 at the counter's edge is accepted", encoderStreamHex(counted, "202020"), QPACK_OK);
+  t.eqI32("and the count saturates at 2^31 - 1", counted.capacityInstructions, most);
+
   refusesEncoderStream(t, "RFC 9204 B.2's Set Dynamic Table Capacity 220", "3fbd01", QPACK_REASON_CAPACITY);
   refusesEncoderStream(t, "Set Dynamic Table Capacity 1", "21", QPACK_REASON_CAPACITY);
   refusesEncoderStream(
@@ -658,6 +666,14 @@ const decoderStreamChecks = (t: Suite): void => {
   const one: i32 = 1;
   t.eqI64("the stream is read as a window", enc.receiveDecoderStream(window, one, one), QPACK_OK);
   t.eqI64("of one byte here, stream 4", enc.lastCancelled, toI64(4));
+
+  // Stream Cancellations are counted the same way: the count saturates.
+  const most: i32 = 2147483647;
+  const counted = new QpackEncoder();
+  counted.cancellations = most - 1;
+  t.eqI64("Stream Cancellations at the counter's edge are accepted", decoderStreamHex(counted, "484c"), QPACK_OK);
+  t.eqI32("and the count saturates at 2^31 - 1", counted.cancellations, most);
+  t.eqI64("with the last stream still recorded", counted.lastCancelled, toI64(12));
 
   refusesDecoderStream(t, "RFC 9204 B.2's Section Acknowledgment for stream 4", "84", QPACK_REASON_ACKNOWLEDGMENT);
   refusesDecoderStream(t, "a Section Acknowledgment for stream 0", "80", QPACK_REASON_ACKNOWLEDGMENT);

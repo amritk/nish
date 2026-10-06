@@ -159,6 +159,13 @@ export const QPACK_REASON_ACKNOWLEDGMENT: i32 = 11
 export const QPACK_REASON_INCREMENT: i32 = 12
 
 /**
+ * Where the instruction counters stop. A peer may send a legal one-byte
+ * instruction as often as it likes, and an `i32` that overflows panics, so a
+ * count saturates here instead: it is for a caller's statistics, not a limit.
+ */
+const QPACK_COUNT_MAX: i32 = 2147483647
+
+/**
  * 2^62 - 1, the largest integer §4.1.1 requires. Spelled as a product: an
  * `i64` literal past 2^53 is refused. It is `QUIC_MAX_VARINT`'s value, kept
  * here rather than imported so that QPACK does not pull in QUIC's packet
@@ -739,7 +746,7 @@ export class QpackDecoder {
   maxFieldSectionSize: i32
   /** Which rule `failed` broke, a `QPACK_REASON_*`. */
   reason: i32
-  /** How many Set Dynamic Table Capacity 0 instructions the encoder stream carried. */
+  /** How many Set Dynamic Table Capacity 0 instructions the encoder stream carried, saturating at 2^31 - 1. */
   capacityInstructions: i32
   /** How many fields the last `decode` answered. */
   count: i32
@@ -816,7 +823,9 @@ export class QpackDecoder {
     for (let i: i32 = off; i >= 0 && i < end && i < toI32(buf.length); i += 1) {
       const b: i32 = toI32(buf[i])
       if (b === 32) {
-        this.capacityInstructions += 1
+        if (this.capacityInstructions < QPACK_COUNT_MAX) {
+          this.capacityInstructions += 1
+        }
       } else {
         if ((b & 192) !== 0) {
           this.reason = QPACK_REASON_INSERT
@@ -1011,7 +1020,7 @@ export class QpackEncoder {
   failed: i64
   /** Which rule `failed` broke, a `QPACK_REASON_*`. */
   reason: i32
-  /** How many Stream Cancellations the decoder stream carried, and the last one's stream. */
+  /** How many Stream Cancellations the decoder stream carried, saturating at 2^31 - 1, and the last one's stream. */
   cancellations: i32
   lastCancelled: i64
   /** The stream ID of a Stream Cancellation still being read, and its next shift; -1 between instructions. */
@@ -1139,7 +1148,9 @@ export class QpackEncoder {
 
   /** Counts a Stream Cancellation for `streamId`. */
   cancelled(streamId: i64): void {
-    this.cancellations += 1
+    if (this.cancellations < QPACK_COUNT_MAX) {
+      this.cancellations += 1
+    }
     this.lastCancelled = streamId
   }
 
