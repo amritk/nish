@@ -184,6 +184,7 @@ import {
   QUIC_FRAME_CONNECTION_CLOSE_APP,
   QUIC_FRAME_CRYPTO,
   QUIC_FRAME_DATAGRAM,
+  QUIC_FRAME_DATAGRAM_LENGTH,
   QUIC_FRAME_DATA_BLOCKED,
   QUIC_FRAME_HANDSHAKE_DONE,
   QUIC_FRAME_MAX_DATA,
@@ -2065,7 +2066,8 @@ export class QuicConnection {
   receiveDatagram(frame: QuicFrame, payload: u8[], frameStart: i32): void {
     const size: i64 = toI64(frame.end - frameStart)
     if (this.config.maxDatagramFrameSize === 0 || size > this.config.maxDatagramFrameSize) {
-      this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(QUIC_FRAME_DATAGRAM))
+      // `fin` is how the frame says it was 0x31, the type with a Length.
+      this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(frame.fin ? QUIC_FRAME_DATAGRAM_LENGTH : QUIC_FRAME_DATAGRAM))
       return
     }
     this.datagramsIn.push(payload, frame.dataStart, frame.dataLength)

@@ -1,0 +1,48 @@
+PASS  97 bytes make a DATAGRAM frame of exactly 100: type, a two-byte Length, the payload
+PASS  one at the server's max_datagram_frame_size of 100 is taken (RFC 9221 §3)
+PASS  so is one without a Length that runs to the packet's end, 100 bytes with its type
+PASS  and with nothing more, nothing is read
+PASS  which readDatagram answers as QUIC_DATAGRAM_NONE
+PASS  a datagram larger than the room given is kept: QUIC_DATAGRAM_ERR_ROOM
+PASS  and read whole with room
+PASS  nine at once fill the ring of eight; the ninth is dropped, as a datagram may be
+PASS  and the eight are read in order
+PASS  one byte over, 101, is PROTOCOL_VIOLATION (RFC 9221 §3)
+PASS  naming the DATAGRAM frame's type, 0x31
+PASS  so is one without a Length of 101
+PASS  naming 0x30
+PASS  with no max_datagram_frame_size offered, any DATAGRAM is PROTOCOL_VIOLATION
+PASS  the client takes 200-byte frames: a payload of 197
+PASS  exactly 197 is queued
+PASS  one byte over is QUIC_DATAGRAM_ERR_TOO_BIG
+PASS  the 197 arrive
+PASS  a client that takes any size gets what fits a 1200-byte packet: 1168
+PASS  1168 bytes are queued
+PASS  1169 are QUIC_DATAGRAM_ERR_TOO_BIG
+PASS  the 1168 go in one datagram of at most 1200 bytes
+PASS  and arrive whole
+PASS  a client that takes no DATAGRAM frames gets none: QUIC_DATAGRAM_ERR_DISABLED
+PASS  and its maxDatagramPayload is 0
+PASS  nor does a connection before its handshake
+PASS  a ninth waiting is QUIC_DATAGRAM_ERR_FULL
+PASS  the eight go together
+PASS  and the ring takes more
+PASS  with the window full the datagram waits (RFC 9221 §5.3)
+PASS  and goes once the window opens
+PASS  counted as bytes in flight, ack-eliciting
+PASS  a datagram goes, and the network loses it
+PASS  the probe timeout's probe does not carry it again (RFC 9221 §5.2)
+PASS  with nothing else in flight, it is a PING
+PASS  200 datagrams in, their echoes out, and the ACKs, keep no arena memory
+PASS  and every echo arrived
+PASS  two loopback sockets
+PASS  the flight is seven datagrams: 8000 bytes of stream
+PASS  every one 1200 bytes but the last: the segment size
+PASS  written back to back
+PASS  read back, they are seven datagrams again
+PASS  byte for byte
+PASS  and the client opens them all: the stream arrives whole
+PASS  with the flight out and nothing new, the next flight is empty
+PASS  the server reads the three packets' stream from the GRO receive, in place
+PASS  having dropped none
+quic datagrams: 47 passed, 0 failed, 0 skipped
