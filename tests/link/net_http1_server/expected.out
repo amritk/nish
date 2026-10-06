@@ -130,7 +130,9 @@ PASS  closeWebSocket sends the close
 PASS  and the connection is done once it is sent
 PASS  a WebSocket whose stream ends is done
 PASS  a close with no status is H1_WS_CLOSE with 1005, answered with an empty close
+PASS  the largest maxMessage and maxTarget + maxHeaderBytes are accepted
+PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input can hold
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 135 passed, 0 failed, 0 skipped
+http1 server: 137 passed, 0 failed, 0 skipped

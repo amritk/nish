@@ -187,6 +187,9 @@ const H1_CHUNK_OVERHEAD: i32 = 12
 /** The longest request line a head can need beyond the target: the method, two spaces, the version, CRLF. */
 const H1_LINE_OVERHEAD: i32 = 44
 
+/** The longest WebSocket frame header, which `WsDecoder` buffers with its whole frame: 2, 8 of length, 4 of mask. */
+const H1_FRAME_HEADER: i32 = 14
+
 // The connection's states.
 const H1_S_HTTP: i32 = 0
 const H1_S_WEBSOCKET: i32 = 1
@@ -230,7 +233,7 @@ const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 =
  * made. Each is a number the program sets once, at start-up.
  */
 export class Http1Config {
-  /** The longest request target; past it, 414. */
+  /** The longest request target; past it, 414. With `maxHeaderBytes`, at most 2^30 − 44, the most a head buffer holds. */
   maxTarget: i32 = 8192
   /** The longest header section, and trailer section; past it, 431. */
   maxHeaderBytes: i32 = 16384
@@ -242,7 +245,7 @@ export class Http1Config {
   chunkSize: i32 = 16384
   /** The output buffer, in bytes: the most of a response waiting for the socket. */
   outputSize: i32 = 65536
-  /** The longest WebSocket message, its fragments together; past it, close 1009. */
+  /** The longest WebSocket message, its fragments together; past it, close 1009. At most 2^30 − 14, so a whole frame fits the decoder's input. */
   maxMessage: i32 = 1048576
   /** Milliseconds without a byte read or written after which `expire` closes a slot. */
   idleTimeout: i32 = 60000
@@ -379,8 +382,19 @@ export class Http1Connection {
     http1ServerCheckCap("maxBody", config.maxBody, H1_ZERO, big)
     http1ServerCheckCap("chunkSize", config.chunkSize, one, big)
     http1ServerCheckCap("outputSize", config.outputSize, output, big)
-    http1ServerCheckCap("maxMessage", config.maxMessage, H1_ZERO, big)
+    http1ServerCheckCap("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER)
     http1ServerCheckCap("idleTimeout", config.idleTimeout, one, big)
+    // The buffers the peer's bytes fill grow by doubling and stop at 2^30
+    // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
+    // buffer could need more is refused here rather than reached by a peer:
+    // the head holds the request line and the header section together, and
+    // the input never holds more than the larger of the two lines or a chunk.
+    http1ServerCheckCap(
+      "maxTarget + maxHeaderBytes",
+      config.maxTarget + config.maxHeaderBytes,
+      one,
+      big - H1_LINE_OVERHEAD
+    )
     this.config = config
     this.parser = new Http1Parser(config.maxTarget, config.maxHeaderBytes, config.maxHeaders, config.maxBody)
     this.parser.keepText = false

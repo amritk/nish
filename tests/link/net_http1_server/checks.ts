@@ -687,6 +687,20 @@ export const serverChecks = (): i32 => {
     wsPeerClose.conn.next() === H1_WS_CLOSE && wsPeerClose.conn.status === 1005 && sentHex(wsPeerClose.conn) === "8800"
   );
 
+  // The largest caps the constructor accepts fit the buffers a peer fills,
+  // which stop growing at 2^30: a whole frame of maxMessage bytes, and the
+  // longest request line beside the longest header section.
+  const widest: Http1Config = testConfig();
+  widest.maxMessage = 1073741810;
+  widest.maxTarget = 1073740756;
+  widest.maxHeaderBytes = 1024;
+  const edge = new Driven(widest, handshake);
+  t.ok("the largest maxMessage and maxTarget + maxHeaderBytes are accepted", edge.event === H1_REQUEST && edge.conn.inputLimit() === 1073740800);
+  edge.conn.acceptWebSocket("");
+  edge.conn.next();
+  edge.conn.next();
+  t.ok("and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input can hold", edge.conn.isWebSocket() && edge.conn.inputLimit() === 1073741824);
+
   const aborted = new Driven(config, get);
   aborted.conn.abort();
   t.ok("an aborted connection is done at once", aborted.conn.isDone() && aborted.conn.next() === H1_ERROR);

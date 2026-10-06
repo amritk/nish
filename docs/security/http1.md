@@ -141,6 +141,17 @@ connection is made (`net_http1_server_bad_config`). The input the connection
 buffers is the largest of `chunkSize`, a header line and a request line, so
 any head the caps allow can be read.
 
+**No cap lets a peer outgrow a buffer.** The buffers a peer's bytes fill —
+the parser's input and head, the decoder's input — grow by doubling and stop
+at 2^30, where growing further panics. So the constructor refuses a cap whose
+buffer could need more: `maxMessage` above 2^30 − 14, since a frame is buffered
+whole with its 14-byte header (`net_http1_server_bad_message`), and
+`maxTarget + maxHeaderBytes` above 2^30 − 44, since the head holds the request
+line beside the header section (`net_http1_server_bad_head`). At the largest
+values accepted, an upgraded slot buffers exactly 2^30 bytes and an HTTP slot
+less (`net_http1_server`). The review of #468 found the first (R1-1): before
+it, a legal `maxMessage` of 2^30 let one frame panic the process.
+
 **Nothing per request on a warmed slot.** A hundred GETs and a hundred chunked
 POSTs on one plain connection, and fifty of each over TLS, move `Arena.used()`
 across the servers' calls and the program's answers by 0 bytes
