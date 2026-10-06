@@ -19,7 +19,6 @@ import { QUIC_ERROR_KEY_UPDATE, quicPushAck } from "nish/net/quic-frame";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
   QUIC_CONN_MAX_KEY_UPDATES,
-  QUIC_CONN_PTO,
   QUIC_STATE_CLOSING,
   QuicConnection,
   QuicStreamData,
@@ -146,7 +145,7 @@ const lcBothWays = (t: Suite): void => {
   t.eqStr("a packet the network delayed, under the previous keys and numbered below the update, is still read (§6.5)", lcRead(conn), "late");
   t.ok("the server may not start an update while it keeps the previous keys", !conn.updateKeys());
   const previous: QuicKeys | null = conn.otherReadKeys;
-  conn.handleTimer(c.now + QUIC_CONN_PTO);
+  conn.handleTimer(c.now + conn.recovery.probeTimeout());
   t.ok("a probe timeout later the previous keys are wiped and the next derived", conn.otherIsNext && previous !== null && lcAllZero(previous.key));
   t.ok("but until the client acknowledges a packet of the new phase, still not", !conn.updateKeys());
 
@@ -233,14 +232,14 @@ const lcCap = (t: Suite): void => {
     write = lcNext(write);
     const packet: u8[] = qcShortWith(c, write.keys, write.phase, c.appPn, fromHex("01"));
     c.appPn = c.appPn + n64(1);
-    c.now = c.now + QUIC_CONN_PTO;
+    c.now = c.now + conn.recovery.probeTimeout();
     if (Arena.used() > toI64(49152)) {
       const filler: u8[] = new Array<u8>(16384);
       filled = filled + toI32(filler.length);
     }
     const before: i64 = Arena.used();
     conn.receive(packet, c.now);
-    conn.handleTimer(c.now + QUIC_CONN_PTO);
+    conn.handleTimer(c.now + conn.recovery.probeTimeout());
     const step: i64 = Arena.used() - before;
     if (step < toI64(0)) {
       crossed = crossed + 1;
@@ -261,7 +260,7 @@ const lcCap = (t: Suite): void => {
     filled = filled + toI32(filler.length);
   }
   const before65: i64 = Arena.used();
-  conn.receive(last, c.now + QUIC_CONN_PTO);
+  conn.receive(last, c.now + conn.recovery.probeTimeout());
   const step65: i64 = Arena.used() - before65;
   t.eqStr(
     `the ${QUIC_CONN_MAX_KEY_UPDATES + 1}th is KEY_UPDATE_ERROR, deriving no key`,
