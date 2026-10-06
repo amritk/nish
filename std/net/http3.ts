@@ -122,6 +122,7 @@ import {
 import {
   H3_CLOSED_CRITICAL_STREAM,
   H3_EXCESSIVE_LOAD,
+  H3_FRAME_WEBTRANSPORT_STREAM,
   H3_FRAME_CANCEL_PUSH,
   H3_FRAME_DATA,
   H3_FRAME_ERROR,
@@ -139,15 +140,21 @@ import {
   H3_REQUEST_CANCELLED,
   H3_REQUEST_INCOMPLETE,
   H3_REQUEST_REJECTED,
+  H3_SETTINGS_ENABLE_CONNECT_PROTOCOL,
+  H3_SETTINGS_ENABLE_WEBTRANSPORT,
+  H3_SETTINGS_ERROR,
+  H3_SETTINGS_H3_DATAGRAM,
   H3_SETTINGS_MAX_FIELD_SECTION_SIZE,
   H3_SETTINGS_OK,
   H3_SETTINGS_QPACK_BLOCKED_STREAMS,
   H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY,
+  H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS,
   H3_STREAM_CONTROL,
   H3_STREAM_CREATION_ERROR,
   H3_STREAM_PUSH,
   H3_STREAM_QPACK_DECODER,
   H3_STREAM_QPACK_ENCODER,
+  H3_STREAM_WEBTRANSPORT,
   Http3FrameHeader,
   Http3Settings,
   h3CheckWindow,
@@ -189,6 +196,14 @@ export const H3_WRITABLE: i32 = 6
 export const H3_GOAWAY: i32 = 7
 /** The connection failed with `errorCode` and is closed. Final. */
 export const H3_ERROR: i32 = 8
+/**
+ * A WebTransport stream arrived (only with `webtransportSessions` on):
+ * `stream`, and `session`, the session ID its first bytes named. It is held,
+ * unread, until the program calls `acceptStream` or `refuseStream`.
+ */
+export const H3_STREAM: i32 = 9
+/** The client sent STOP_SENDING for a WebTransport stream this side writes, and QUIC reset it: `stream`, `errorCode`. */
+export const H3_STOPPED: i32 = 10
 
 /** A write that can take nothing yet: Linux's EAGAIN, as `nish:net` spells it. */
 export const H3_AGAIN: i32 = -11
@@ -205,6 +220,9 @@ export const H3_NO_APPLICATION_PROTOCOL: i64 = 0x0178
 /** The largest control-stream frame read whole: SETTINGS, GOAWAY, MAX_PUSH_ID, CANCEL_PUSH. */
 export const H3_CONTROL_FRAME_MAX: i32 = 1024
 
+/** The most WebTransport sessions a configuration may advertise. */
+export const H3_MAX_SESSIONS: i32 = 256
+
 /** The request streams' phases, and the unidirectional streams'. */
 const H3_PHASE_HEADERS: i32 = 0
 const H3_PHASE_BODY: i32 = 1
@@ -216,6 +234,10 @@ const H3_PHASE_UNI_TYPE: i32 = 6
 const H3_PHASE_CONTROL: i32 = 7
 const H3_PHASE_ENCODER: i32 = 8
 const H3_PHASE_DECODER: i32 = 9
+/** A WebTransport unidirectional stream whose session ID is being read, one held for the program, and one read raw. */
+const H3_PHASE_WT_SESSION: i32 = 10
+const H3_PHASE_WT_HELD: i32 = 11
+const H3_PHASE_WT: i32 = 12
 
 /** A stream slot's flags. */
 const H3_FLAG_DELIVERED: i32 = 1
@@ -224,6 +246,13 @@ const H3_FLAG_SEND_DONE: i32 = 4
 const H3_FLAG_RECV_DONE: i32 = 8
 const H3_FLAG_BLOCKED: i32 = 32
 const H3_FLAG_COUNTED: i32 = 64
+/** On the ring of streams `next` steps again before asking QUIC, or waiting for the client's SETTINGS. */
+const H3_FLAG_AGAIN: i32 = 128
+const H3_FLAG_WAITING: i32 = 16
+/** A WebTransport stream: its bytes are the session's, read and written raw. */
+const H3_FLAG_WT: i32 = 256
+/** A request stream past this side's GOAWAY, refused unless its first bytes make it a WebTransport stream. */
+const H3_FLAG_LATE: i32 = 512
 
 /** The connection's states. */
 const H3_STATE_OPEN: i32 = 0
@@ -242,6 +271,7 @@ const H3_FILLER_TYPE: i32 = 0x21
 const H3_ZERO: i32 = 0
 const H3_ONE: i32 = 1
 const H3_NONE: i64 = -1
+const H3_NONE32: i32 = -1
 const H3_STATUS_TOO_LARGE: i32 = 431
 const H3_DIGIT_ZERO: i32 = 48
 
@@ -268,8 +298,16 @@ export class Http3Config {
   /** The largest DATA frame `writeData` starts. */
   writeChunk: i32 = 16384
   /**
-   * Whether `:protocol` is accepted (RFC 9220's extended CONNECT). Off, and
-   * not advertised: TODO(WP34 R2) sends SETTINGS_ENABLE_CONNECT_PROTOCOL.
+   * The WebTransport sessions this side takes at once
+   * (`nish/net/webtransport`), 0 for none. Above 0 it turns on extended
+   * CONNECT and sends SETTINGS_H3_DATAGRAM, SETTINGS_ENABLE_WEBTRANSPORT and
+   * SETTINGS_WEBTRANSPORT_MAX_SESSIONS, and the QUIC connection must take
+   * DATAGRAM frames; at 0 it must not (RFC 9297 §2.1.1).
+   */
+  webtransportSessions: i32 = 0
+  /**
+   * Whether `:protocol` is accepted (RFC 9220's extended CONNECT), and
+   * SETTINGS_ENABLE_CONNECT_PROTOCOL sent. WebTransport turns it on.
    */
   extendedConnect: boolean = false
 }
@@ -360,6 +398,15 @@ export class Http3Connection {
   pendAt: i32[]
   pendLen: i32[]
   pend: u8[]
+  /**
+   * Streams `next` steps again before asking QUIC for news, a ring of
+   * `againCount` from `againHead`: WebTransport streams the program let go,
+   * and requests that waited for the client's SETTINGS. And those waiting,
+   * `waitCount` of them. A stream is on each at most once (its flags say),
+   * so neither needs more room than there are stream slots.
+   */
+  again: i64[]
+  waiting: i64[]
   /** This side's streams, and the client's critical ones; -1 until there. */
   ownControl: i64 = -1
   ownEncoder: i64 = -1
@@ -379,6 +426,10 @@ export class Http3Connection {
   errorCode: i64 = 0
   /** H3_GOAWAY's push ID. */
   lastStreamId: i64 = 0
+  /** H3_STREAM's session ID. */
+  session: i64 = -1
+  /** The QUIC stream slot of the last event's stream: still right when the read that made the event freed it. */
+  slot: i32 = -1
   /** H3_DATA's window onto `data`. */
   dataStart: i32 = 0
   dataLength: i32 = 0
@@ -391,10 +442,18 @@ export class Http3Connection {
   rejected: i32 = 0
   tooLarge: i32 = 0
   streamErrors: i32 = 0
+  againHead: i32 = 0
+  againCount: i32 = 0
+  waitCount: i32 = 0
+  /** How many times `restart` ran: a layer above that keeps state per connection compares it to know when to forget its own. */
+  generation: i32 = 0
   /** Whether the client's SETTINGS have arrived. */
   settingsSeen: boolean = false
   /** Whether H3_RESET came from the client. */
   resetByPeer: boolean = false
+  /** Whether extended CONNECT is on, and WebTransport. */
+  connect: boolean = false
+  webtransport: boolean = false
 
   /**
    * A connection under `config` over `quic`, whose configuration must let a
@@ -421,6 +480,17 @@ export class Http3Connection {
     http3CheckCap("writeChunk", config.writeChunk, 1, H3_MAX_CHUNK)
     http3CheckCap("the QUIC unidirectional stream limit", toI32(quic.streams.maxUni), 3, 1024)
     http3CheckCap("the QUIC local stream limit", toI32(quic.streams.localStreams), 3, 1024)
+    http3CheckCap("webtransportSessions", config.webtransportSessions, 0, H3_MAX_SESSIONS)
+    // RFC 9297 §2.1.1: QUIC datagrams carry HTTP datagrams, which only WebTransport uses here.
+    const datagrams: boolean = quic.datagramsIn.capacity() > 0
+    if (config.webtransportSessions > 0 && !datagrams) {
+      panic("Http3Connection: WebTransport needs QUIC datagrams, and the QUIC maxDatagramFrameSize is 0")
+    }
+    if (config.webtransportSessions === 0 && datagrams) {
+      panic("Http3Connection: QUIC datagrams advertised with WebTransport off (webtransportSessions 0)")
+    }
+    this.webtransport = config.webtransportSessions > 0
+    this.connect = config.extendedConnect || this.webtransport
     this.config = config
     this.quic = quic
     this.decoder = new QpackDecoder(config.maxFieldSectionSize)
@@ -450,6 +520,18 @@ export class Http3Connection {
       H3_SETTINGS_MAX_FIELD_SECTION_SIZE,
     ]
     this.settingValues = [toI64(0), toI64(0), toI64(config.maxFieldSectionSize)]
+    if (this.connect) {
+      this.settingIds.push(H3_SETTINGS_ENABLE_CONNECT_PROTOCOL)
+      this.settingValues.push(toI64(1))
+    }
+    if (this.webtransport) {
+      this.settingIds.push(H3_SETTINGS_H3_DATAGRAM)
+      this.settingValues.push(toI64(1))
+      this.settingIds.push(H3_SETTINGS_ENABLE_WEBTRANSPORT)
+      this.settingValues.push(toI64(1))
+      this.settingIds.push(H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS)
+      this.settingValues.push(toI64(config.webtransportSessions))
+    }
     const n: i32 = toI32(quic.streams.slots.length)
     this.slotId = new Array<i64>(n)
     this.frameType = new Array<i64>(n)
@@ -465,6 +547,8 @@ export class Http3Connection {
     this.pendAt = new Array<i32>(n)
     this.pendLen = new Array<i32>(n)
     this.pend = new Array<u8>(n * H3_HEAD)
+    this.again = new Array<i64>(n > 0 ? n : H3_ONE)
+    this.waiting = new Array<i64>(n > 0 ? n : H3_ONE)
     this.restart()
   }
 
@@ -504,6 +588,12 @@ export class Http3Connection {
     this.stream = -1
     this.errorCode = 0
     this.lastStreamId = 0
+    this.session = -1
+    this.slot = -1
+    this.againHead = 0
+    this.againCount = 0
+    this.waitCount = 0
+    this.generation = this.generation < 2147483647 ? this.generation + 1 : H3_ONE
     this.dataStart = 0
     this.dataLength = 0
     this.controlFill = 0
@@ -619,7 +709,7 @@ export class Http3Connection {
     }
     while (this.state !== H3_STATE_FAILED) {
       if (this.active < 0) {
-        this.active = this.quic.nextStreamEvent()
+        this.active = this.againCount > 0 ? this.takeAgain() : this.quic.nextStreamEvent()
         if (this.active < 0) {
           return H3_NEED_MORE
         }
@@ -633,11 +723,39 @@ export class Http3Connection {
     return H3_ERROR
   }
 
+  /** The oldest stream on the `again` ring, taken off it. */
+  takeAgain(): i64 {
+    const size: i32 = toI32(this.again.length)
+    const id: i64 = this.again[this.againHead]
+    this.againHead = (this.againHead + 1) % size
+    this.againCount = this.againCount - 1
+    const k: i32 = this.quic.streams.slotOf(id)
+    if (k >= 0 && k < toI32(this.flags.length) && this.slotId[k] === id) {
+      this.flags[k] = this.flags[k] & ~H3_FLAG_AGAIN
+    }
+    return id
+  }
+
+  /** Puts stream `id`, slot `k`, on the `again` ring, unless it is there. */
+  stepAgain(k: i32, id: i64): void {
+    const size: i32 = toI32(this.again.length)
+    if ((this.flags[k] & H3_FLAG_AGAIN) !== 0 || this.againCount >= size) {
+      return
+    }
+    this.again[(this.againHead + this.againCount) % size] = id
+    this.againCount = this.againCount + 1
+    this.flags[k] = this.flags[k] | H3_FLAG_AGAIN
+  }
+
   /** The next event stream `id` has, or H3_NEED_MORE when it has nothing more to say now. */
   step(id: i64): i32 {
     const k: i32 = this.quic.streams.slotOf(id)
     if (k < 0 || k >= toI32(this.slotId.length)) {
       return H3_NEED_MORE
+    }
+    this.slot = k
+    if (this.slotId[k] === id && (this.flags[k] & H3_FLAG_WT) !== 0) {
+      return this.wtStep(k, id)
     }
     const kind: i64 = id & 3
     if (kind === 3) {
@@ -675,16 +793,25 @@ export class Http3Connection {
     }
     this.phase[k] = H3_PHASE_HEADERS
     if (this.goawayId >= 0 && id >= this.goawayId) {
-      // §5.2: a request past the GOAWAY this side sent is refused, both ways, unprocessed.
-      this.quic.streamReset(id, H3_REQUEST_REJECTED)
-      this.quic.streamStopSending(id, H3_REQUEST_REJECTED)
-      this.flags[k] = H3_FLAG_SEND_DONE
-      this.phase[k] = H3_PHASE_DISCARD
-      this.rejected = h3Count(this.rejected)
+      if (this.webtransport) {
+        // A session's new stream may still come after GOAWAY: its first bytes decide.
+        this.flags[k] = H3_FLAG_LATE
+        return
+      }
+      this.reject(k, id)
       return
     }
     this.flags[k] = H3_FLAG_COUNTED
     this.live = this.live + 1
+  }
+
+  /** §5.2: a request past the GOAWAY this side sent is refused, both ways, unprocessed. */
+  reject(k: i32, id: i64): void {
+    this.quic.streamReset(id, H3_REQUEST_REJECTED)
+    this.quic.streamStopSending(id, H3_REQUEST_REJECTED)
+    this.flags[k] = H3_FLAG_SEND_DONE
+    this.phase[k] = H3_PHASE_DISCARD
+    this.rejected = h3Count(this.rejected)
   }
 
   /** One of this side's own streams has news: the client may not stop it (§6.2.1, RFC 9204 §4.2). */
@@ -825,6 +952,12 @@ export class Http3Connection {
       // §6.2.2: only a server pushes.
       return this.fail(H3_STREAM_CREATION_ERROR)
     }
+    if (type === H3_STREAM_WEBTRANSPORT && this.webtransport) {
+      // draft-02 §4.1: the session ID follows the type. The stream has no side for this one to write.
+      this.flags[k] = H3_FLAG_WT | H3_FLAG_SEND_DONE
+      this.phase[k] = H3_PHASE_WT_SESSION
+      return this.wtStep(k, id)
+    }
     // §6.2: a type this side does not know is read and dropped, and its sender asked to stop.
     this.quic.streamStopSending(id, H3_STREAM_CREATION_ERROR)
     this.phase[k] = H3_PHASE_DISCARD
@@ -902,7 +1035,21 @@ export class Http3Connection {
       if (result !== H3_SETTINGS_OK) {
         return this.fail(result)
       }
+      // RFC 9220 §5 and RFC 9297 §2.1.1: each is 0 or 1.
+      if (this.peer.enableConnectProtocol > 1 || this.peer.h3Datagram > 1) {
+        return this.fail(H3_SETTINGS_ERROR)
+      }
       this.settingsSeen = true
+      // The requests that waited for these SETTINGS are stepped again.
+      for (let j: i32 = 0; j < this.waitCount && j < toI32(this.waiting.length); j++) {
+        const id: i64 = this.waiting[j]
+        const w: i32 = this.quic.streams.slotOf(id)
+        if (w >= 0 && w < toI32(this.flags.length) && this.slotId[w] === id) {
+          this.flags[w] = this.flags[w] & ~H3_FLAG_WAITING
+          this.stepAgain(w, id)
+        }
+      }
+      this.waitCount = 0
       return H3_NEED_MORE
     }
     if (type === H3_SKIP_TYPE) {
@@ -953,6 +1100,226 @@ export class Http3Connection {
     return n
   }
 
+  // ---- WebTransport streams ----------------------------------------------------------
+
+  /**
+   * Stream `id`, slot `k`, named session `session` in its first bytes: it is
+   * held, unread, and the program told with H3_STREAM. A session ID that is
+   * not a client-initiated bidirectional stream is H3_ID_ERROR (draft-02 §4).
+   */
+  held(k: i32, id: i64, session: i64): i32 {
+    if ((session & 3) !== 0) {
+      return this.fail(H3_ID_ERROR)
+    }
+    this.phase[k] = H3_PHASE_WT_HELD
+    this.frameLeft[k] = -1
+    this.stream = id
+    this.session = session
+    return H3_STREAM
+  }
+
+  /**
+   * The next event of WebTransport stream `id` in slot `k`: its session ID
+   * (a unidirectional stream's), then its bytes as H3_DATA, H3_END at its
+   * FIN and H3_RESET at the client's RESET_STREAM; H3_STOPPED once for the
+   * client's STOP_SENDING; and H3_WRITABLE.
+   */
+  wtStep(k: i32, id: i64): i32 {
+    const stream: QuicStream = this.quic.streams.slots[k]
+    if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_SEND_DONE) === 0) {
+      this.mark(k, H3_FLAG_SEND_DONE)
+      this.stream = id
+      this.errorCode = stream.stopCode
+      return H3_STOPPED
+    }
+    const phase: i32 = this.phase[k]
+    if (phase === H3_PHASE_WT_SESSION) {
+      const base: i32 = k * H3_HEAD
+      while (this.headLen[k] < 8) {
+        const n: i32 = this.quic.streamRead(id, this.head, base + this.headLen[k], H3_ONE)
+        if (n !== 1) {
+          // Ended or reset before its session ID: nothing is owed (§6.2).
+          if (n < 0) {
+            this.phase[k] = H3_PHASE_DONE
+            this.mark(k, H3_FLAG_RECV_DONE)
+          }
+          return H3_NEED_MORE
+        }
+        this.headLen[k] = this.headLen[k] + 1
+        const session: i64 = h3ReadVarint(this.head, base, base + this.headLen[k])
+        if (session >= 0) {
+          this.headLen[k] = 0
+          return this.held(k, id, session)
+        }
+      }
+      return H3_NEED_MORE
+    }
+    if (phase === H3_PHASE_WT) {
+      if ((this.flags[k] & H3_FLAG_RECV_DONE) === 0) {
+        const resetCode: i64 = stream.resetCode
+        const n: i32 = this.quic.streamRead(id, this.data, H3_ZERO, toI32(this.data.length))
+        if (n > 0) {
+          this.stream = id
+          this.dataStart = 0
+          this.dataLength = n
+          return H3_DATA
+        }
+        if (n < 0) {
+          this.phase[k] = H3_PHASE_DONE
+          this.mark(k, H3_FLAG_RECV_DONE)
+          if (n === QUIC_STREAM_END) {
+            this.stream = id
+            return H3_END
+          }
+          if (n === QUIC_STREAM_ERR_RESET) {
+            return this.resetEvent(id, resetCode, true)
+          }
+        }
+      }
+      return this.writable(k, id)
+    }
+    if (phase === H3_PHASE_DISCARD) {
+      return this.discard(k, id)
+    }
+    return phase === H3_PHASE_DONE ? this.writable(k, id) : H3_NEED_MORE
+  }
+
+  /** The slot of WebTransport stream `id` when it is known here, else -1. */
+  wtSlot(id: i64): i32 {
+    if (this.state === H3_STATE_FAILED) {
+      return -1
+    }
+    const k: i32 = this.quic.streams.slotOf(id)
+    if (k < 0 || k >= toI32(this.slotId.length) || this.slotId[k] !== id || (this.flags[k] & H3_FLAG_WT) === 0) {
+      return -1
+    }
+    return k
+  }
+
+  /**
+   * Lets a stream H3_STREAM held go: its bytes come as H3_DATA from the next
+   * `next()`, and the program may write it. Answers 0, or H3_CLOSED for a
+   * stream that is not one held.
+   */
+  acceptStream(id: i64): i32 {
+    const k: i32 = this.wtSlot(id)
+    if (k < 0 || this.phase[k] !== H3_PHASE_WT_HELD) {
+      return H3_CLOSED
+    }
+    this.phase[k] = H3_PHASE_WT
+    this.stepAgain(k, id)
+    return 0
+  }
+
+  /**
+   * Refuses WebTransport stream `id` with `code`: its side here is reset,
+   * the client's asked to stop, and what it sent read and dropped. Answers 0,
+   * or H3_CLOSED for a stream that is not a WebTransport one.
+   */
+  refuseStream(id: i64, code: i64): i32 {
+    const k: i32 = this.wtSlot(id)
+    if (k < 0) {
+      return H3_CLOSED
+    }
+    this.abandon(k, id, code)
+    if ((this.flags[k] & H3_FLAG_RECV_DONE) === 0) {
+      this.quic.streamStopSending(id, code)
+      this.phase[k] = H3_PHASE_DISCARD
+      this.stepAgain(k, id)
+    }
+    return 0
+  }
+
+  /**
+   * Opens a WebTransport stream of this side's for `session` (draft-02
+   * §4.1, §4.2): unidirectional with the type 0x54, or bidirectional with
+   * the signal 0x41, and the session ID, which go before anything written.
+   * Answers its ID, H3_AGAIN while the client's MAX_STREAMS allows no more,
+   * or H3_CLOSED with WebTransport off or the connection failed.
+   */
+  openStream(session: i64, bidirectional: boolean): i64 {
+    if (!this.webtransport || this.state === H3_STATE_FAILED || (session & 3) !== 0 || session < 0) {
+      return toI64(H3_CLOSED)
+    }
+    const id: i64 = this.quic.openStream(bidirectional)
+    const k: i32 = id >= 0 ? this.quic.streams.slotOf(id) : H3_NONE32
+    if (k < 0 || k >= toI32(this.slotId.length)) {
+      return toI64(H3_AGAIN)
+    }
+    this.open(k, id)
+    this.flags[k] = H3_FLAG_WT
+    this.phase[k] = H3_PHASE_WT
+    if (!bidirectional) {
+      this.flags[k] = H3_FLAG_WT | H3_FLAG_RECV_DONE
+      this.phase[k] = H3_PHASE_DONE
+    }
+    const end: i32 = toI32(this.scratch.length)
+    const p: i32 = h3PutVarint(
+      this.scratch,
+      H3_ZERO,
+      end,
+      bidirectional ? H3_FRAME_WEBTRANSPORT_STREAM : H3_STREAM_WEBTRANSPORT
+    )
+    this.owe(k, this.scratch, h3PutVarint(this.scratch, p, end, session))
+    if (!this.drain(k, id)) {
+      this.mark(k, H3_FLAG_BLOCKED)
+    }
+    return id
+  }
+
+  /**
+   * Writes up to `len` bytes of `buf` from `off` to WebTransport stream `id`,
+   * as they are, and its FIN when `fin` and every byte was taken. Answers how
+   * many it took — fewer only when the send buffer filled, and H3_WRITABLE
+   * then names the stream — or H3_AGAIN when it took none, or H3_CLOSED for
+   * a stream with no side here to write, finished, reset, held or stopped.
+   */
+  writeStream(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
+    h3CheckWindow("Http3Connection.writeStream", buf, off, len)
+    const k: i32 = this.wtSlot(id)
+    if (
+      k < 0 ||
+      (this.flags[k] & H3_FLAG_SEND_DONE) !== 0 ||
+      this.phase[k] === H3_PHASE_WT_HELD ||
+      this.quic.streams.slots[k].stopCode >= 0
+    ) {
+      return H3_CLOSED
+    }
+    if (!this.drain(k, id)) {
+      this.mark(k, H3_FLAG_BLOCKED)
+      return H3_AGAIN
+    }
+    const n: i32 = this.quic.streamWrite(id, buf, off, len, fin)
+    if (n < 0) {
+      return H3_CLOSED
+    }
+    if (n < len) {
+      this.mark(k, H3_FLAG_BLOCKED)
+    } else if (fin) {
+      this.mark(k, H3_FLAG_SEND_DONE)
+    }
+    return n > 0 || (fin && len === 0) ? n : H3_AGAIN
+  }
+
+  /**
+   * Resets this side of WebTransport stream `id` with `code`, and, when
+   * `stop`, asks the client to stop its side with the same code and drops
+   * what it sends. Answers 0 or H3_CLOSED.
+   */
+  resetStream(id: i64, code: i64, stop: boolean): i32 {
+    const k: i32 = this.wtSlot(id)
+    if (k < 0) {
+      return H3_CLOSED
+    }
+    this.abandon(k, id, code)
+    if (stop && (this.flags[k] & H3_FLAG_RECV_DONE) === 0 && this.phase[k] !== H3_PHASE_DISCARD) {
+      this.quic.streamStopSending(id, code)
+      this.phase[k] = H3_PHASE_DISCARD
+      this.stepAgain(k, id)
+    }
+    return 0
+  }
+
   // ---- Request streams ------------------------------------------------------------
 
   /** The next event of request stream `id` in slot `k`. */
@@ -976,6 +1343,15 @@ export class Http3Connection {
       }
       if (phase === H3_PHASE_DISCARD) {
         return this.discard(k, id)
+      }
+      if (this.webtransport && !this.settingsSeen && phase === H3_PHASE_HEADERS && this.headLen[k] === 0) {
+        // draft-02 §3.1: with WebTransport on, a request waits for the client's SETTINGS, which say whether it may be a session.
+        if ((this.flags[k] & H3_FLAG_WAITING) === 0 && this.waitCount < toI32(this.waiting.length)) {
+          this.waiting[this.waitCount] = id
+          this.waitCount = this.waitCount + 1
+          this.flags[k] = this.flags[k] | H3_FLAG_WAITING
+        }
+        return H3_NEED_MORE
       }
       if (this.frameLeft[k] < 0) {
         const event: i32 = this.requestFrame(k, id)
@@ -1066,11 +1442,32 @@ export class Http3Connection {
       if (got === QUIC_STREAM_END && this.headLen[k] > 0) {
         return this.fail(H3_FRAME_ERROR)
       }
+      if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
+        this.reject(k, id)
+        return H3_CONTINUE
+      }
       return this.ended(k, id, got, resetCode)
     }
     const type: i64 = this.header.type
     const length: i64 = this.header.length
     const phase: i32 = this.phase[k]
+    if (type === H3_FRAME_WEBTRANSPORT_STREAM && this.webtransport) {
+      if (phase !== H3_PHASE_HEADERS) {
+        // draft-02 §4.2: the signal opens a stream, and is nothing anywhere else.
+        return this.fail(H3_FRAME_ERROR)
+      }
+      // Its "length" is the session ID.
+      if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
+        this.flags[k] = H3_FLAG_COUNTED
+        this.live = this.live + 1
+      }
+      this.flags[k] = this.flags[k] | H3_FLAG_WT
+      return this.held(k, id, length)
+    }
+    if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
+      this.reject(k, id)
+      return H3_CONTINUE
+    }
     if (type === H3_FRAME_DATA) {
       if (phase !== H3_PHASE_BODY) {
         return this.fail(H3_FRAME_UNEXPECTED)
@@ -1142,11 +1539,12 @@ export class Http3Connection {
       return H3_TRAILERS
     }
     if (
-      this.fields.readRequest(this.nameList, this.valueList, this.config.extendedConnect) !== HTTP_FIELDS_OK
+      this.fields.readRequest(this.nameList, this.valueList, this.connect) !== HTTP_FIELDS_OK
     ) {
       return this.streamError(k, id, H3_MESSAGE_ERROR)
     }
-    // TODO(WP34 R2): an extended CONNECT (`fields.protocol`) becomes a WebTransport session here.
+    // An extended CONNECT reaches the program like any request, `fields.protocol` set:
+    // `nish/net/webtransport` makes a session of one whose protocol is `webtransport`.
     this.contentLength[k] = this.fields.contentLength
     this.phase[k] = H3_PHASE_BODY
     this.flags[k] = this.flags[k] | H3_FLAG_DELIVERED
@@ -1565,6 +1963,45 @@ export class Http3Connection {
   }
 
   /**
+   * Writes `buf[off .. off + len)` as one DATA frame on request stream `id`,
+   * whole or not at all, with the FIN when `fin`: a capsule (RFC 9297 §3.2)
+   * goes this way, so the client never reads half of one. Answers 0;
+   * H3_AGAIN while the send buffer lacks room, and H3_WRITABLE then names the
+   * stream; or as `writeData` refuses, and H3_TOO_LARGE for a frame past the
+   * stream's buffer.
+   */
+  writeDataWhole(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
+    h3CheckWindow("Http3Connection.writeDataWhole", buf, off, len)
+    const k: i32 = this.writeSlot(id)
+    if (k < 0) {
+      return H3_CLOSED
+    }
+    if ((this.flags[k] & H3_FLAG_HEADERS_SENT) === 0 || this.dataLeft[k] > 0) {
+      return H3_INVALID
+    }
+    const length: i64 = toI64(len)
+    const total: i64 = toI64(h3FrameHeaderSize(H3_FRAME_DATA, length)) + length
+    if (total > toI64(this.quic.streams.bufferSize)) {
+      return H3_TOO_LARGE
+    }
+    if (!this.drain(k, id)) {
+      this.mark(k, H3_FLAG_BLOCKED)
+      return H3_AGAIN
+    }
+    if (this.quic.streams.slots[k].room() < total) {
+      this.arm(k, id)
+      return H3_AGAIN
+    }
+    const hp: i32 = h3PutFrameHeader(this.scratch, H3_ZERO, toI32(this.scratch.length), H3_FRAME_DATA, length)
+    this.quic.streamWrite(id, this.scratch, H3_ZERO, hp, false)
+    this.quic.streamWrite(id, buf, off, len, fin)
+    if (fin) {
+      this.mark(k, H3_FLAG_SEND_DONE)
+    }
+    return 0
+  }
+
+  /**
    * Resets request stream `id` both ways with `code` — H3_REQUEST_CANCELLED,
    * or H3_REQUEST_REJECTED for one the program did not process (§4.1.1).
    * Answers 0 or H3_CLOSED.
@@ -1578,6 +2015,49 @@ export class Http3Connection {
     if (this.phase[k] !== H3_PHASE_DONE) {
       this.quic.streamStopSending(id, code)
       this.phase[k] = H3_PHASE_DISCARD
+    }
+    return 0
+  }
+
+  /**
+   * Whether request stream `id` has not yet had its field section read:
+   * not opened, opened by a later stream's frame (RFC 9000 §3.2), or still
+   * waiting for its HEADERS. A WebTransport stream that names it as its
+   * session may wait for it.
+   */
+  awaitsRequest(id: i64): boolean {
+    if (!http3IsRequest(id) || id < 0) {
+      return false
+    }
+    const k: i32 = this.quic.streams.slotOf(id)
+    if (k < 0 || k >= toI32(this.slotId.length)) {
+      return id >= this.quic.streams.peerBidiOpened << 2
+    }
+    if (this.slotId[k] !== id) {
+      return true
+    }
+    return this.phase[k] === H3_PHASE_HEADERS && (this.flags[k] & H3_FLAG_WT) === 0
+  }
+
+  /**
+   * Stops reading request stream `id`: the client is asked to stop with
+   * `code` and what it still sends is dropped unseen, whether or not this
+   * side has finished its response — a refused WebTransport session's
+   * stream, after its status. Answers 0, or H3_CLOSED for a stream that is
+   * not a request here.
+   */
+  discardRequest(id: i64, code: i64): i32 {
+    if (this.state === H3_STATE_FAILED || !http3IsRequest(id)) {
+      return H3_CLOSED
+    }
+    const k: i32 = this.quic.streams.slotOf(id)
+    if (k < 0 || k >= toI32(this.slotId.length) || this.slotId[k] !== id) {
+      return H3_CLOSED
+    }
+    if (this.phase[k] !== H3_PHASE_DONE && this.phase[k] !== H3_PHASE_DISCARD) {
+      this.quic.streamStopSending(id, code)
+      this.phase[k] = H3_PHASE_DISCARD
+      this.stepAgain(k, id)
     }
     return 0
   }
