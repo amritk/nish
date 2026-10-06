@@ -67,13 +67,13 @@ or a signature check that passes for bytes nobody signed.
   fixed xorshift32 seed: an octet set to a random or boundary value (`00 7f 80
   81 82 84 ff`), deleted or inserted. **25,701 inputs**, about 4.7 s and 10 MB,
   run by `npm test` (25,281 until X509-9 gave the golden certificate its 34
-  octets of extensions, which the corpus now cuts and flips too). Each input must return without a panic and must not come
-  back as something it should not be (the program's header states the four
-  properties). Against `main`'s `x509.ts` before this change the same corpus
-  also runs clean; the change moves its counts only where the tighter `[3]`
-  check refuses more (the CA certificate, the one fixture with extensions:
-  1,527 refused before, 1,547 after; the leaf-and-CA PEM: 1,917 before, 1,918
-  after).
+  octets of extensions, which the corpus now cuts and flips too). Each input
+  must return without a panic and must not come back as something it should
+  not be (the program's header states the four properties). Against `main`'s
+  `x509.ts` before this change the same corpus also runs clean; the change
+  moves its counts only where the tighter `[3]` check refuses more (the CA
+  certificate, then the one fixture with extensions: 1,527 refused before, 1,547
+  after; the leaf-and-CA PEM: 1,917 before, 1,918 after).
 - **wasm32 check.** Whether this module could draw randomness itself: a module
   that calls `crypto.getRandomValues` fails to compile for
   `--target wasm32-unknown-unknown` and `wasm32-wasi` (`` `crypto.getRandomValues`

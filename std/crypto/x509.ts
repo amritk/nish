@@ -60,14 +60,14 @@
  * CERTIFICATE_VERIFY_FAILED. It also holds every extension to `SEQUENCE {
  * OID, BOOLEAN OPTIONAL, OCTET STRING }` (`:413`–`:432`) and reads
  * subjectAltName only when one is present (`:434`), so no name is needed
- * there. The two chosen say what the certificate is — an end entity whose key
- * only signs handshakes — rather than leaving a verifier that does build a
- * path to its defaults, and OpenSSL verifies it as its own trust anchor
- * (`tests/link/crypto_x509`'s header has the commands; X509-9,
- * docs/security/crypto-x509.md). The key, the
- * serial and the time are parameters so the golden certificate is
- * deterministic; a caller passes `Date.now()` and, for the key and the serial,
- * bytes from `crypto.getRandomValues`. This module does not draw them itself,
+ * there. The two chosen say what the certificate is, an end entity whose key
+ * only signs handshakes, so a verifier that does build a path need not fall
+ * back on its defaults; OpenSSL verifies it as its own trust anchor
+ * (`tests/link/crypto_x509`'s header has the commands; X509-9 in
+ * docs/security/crypto-x509.md). The key, the serial and the time are
+ * parameters so the golden certificate is deterministic; a caller passes
+ * `Date.now()` and, for the key and the serial, bytes from
+ * `crypto.getRandomValues`. This module does not draw them itself,
  * because a call to the operating system would stop it compiling for wasm32.
  *
  * **Constant time.** A private key is the one secret that passes through here:
