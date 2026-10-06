@@ -17,6 +17,7 @@ import {
   WS_MAX_CONTROL,
   WS_MESSAGE,
   WS_NEED_MORE,
+  WS_NO_ROOM,
   WS_OP_BINARY,
   WS_OP_CLOSE,
   WS_OP_CONTINUATION,
@@ -25,14 +26,17 @@ import {
   WS_OP_TEXT,
   WS_PING,
   WS_PONG,
+  WS_REFUSED,
   WsDecoder,
   websocketAcceptKey,
   websocketClosePayload,
   websocketFrame,
+  websocketFrameSize,
   websocketIsUtf8,
   websocketKeyIsValid,
   websocketRequestKey,
   websocketUpgradeResponse,
+  websocketWriteFrame,
 } from "nish/net/websocket";
 
 const HEX_DIGITS: string = "0123456789abcdef";
@@ -523,6 +527,38 @@ export const websocketChecks = (): i32 => {
   t.eqBool("a window ending inside a character is not", websocketIsUtf8(utf8, zero, cut), false);
   const empty: u8[] = [];
   t.eqBool("the empty window is", websocketIsUtf8(empty, zero, zero), true);
+
+  // --- Writing into a caller's buffer, and starting over ------------------------
+  const into: u8[] = new Array<u8>(20);
+  const helloBytes: u8[] = fromHex("48656c6c6f");
+  const five: i32 = 5;
+  const offset: i32 = 2;
+  const written: i32 = websocketWriteFrame(into, offset, true, WS_OP_TEXT, helloBytes, zero, five, null);
+  t.eqStr("websocketWriteFrame writes §5.7's unmasked Hello at its offset", hexOf(into, offset, written - offset), "810548656c6c6f");
+  const masked: i32 = websocketWriteFrame(into, zero, true, WS_OP_TEXT, helloBytes, zero, five, fromHex("37fa213d"));
+  t.eqStr("and the masked one", hexOf(into, zero, masked), "818537fa213d7f9f4d5158");
+  t.ok(
+    "websocketFrameSize counts each length form and the mask",
+    websocketFrameSize(toI32(125), false) === 127 &&
+      websocketFrameSize(toI32(126), false) === 130 &&
+      websocketFrameSize(toI32(65536), true) === 65550
+  );
+  const small: u8[] = new Array<u8>(6);
+  t.eqI32("a frame that does not fit is WS_NO_ROOM", websocketWriteFrame(small, zero, true, WS_OP_TEXT, helloBytes, zero, five, null), WS_NO_ROOM);
+  const sevenBytes: u8[] = new Array<u8>(7);
+  t.eqI32("one that just fits is written", websocketWriteFrame(sevenBytes, zero, true, WS_OP_TEXT, helloBytes, zero, five, null), toI32(7));
+  t.eqI32("refused: a reserved opcode", websocketWriteFrame(into, zero, true, toI32(3), helloBytes, zero, five, null), WS_REFUSED);
+  t.eqI32("refused: a fragmented ping", websocketWriteFrame(into, zero, false, WS_OP_PING, helloBytes, zero, five, null), WS_REFUSED);
+  t.eqI32("refused: a 3-byte mask", websocketWriteFrame(into, zero, true, WS_OP_TEXT, helloBytes, zero, five, fromHex("010203")), WS_REFUSED);
+
+  const reused: WsDecoder = new WsDecoder(true, 100);
+  reused.feed(bad, zero, toI32(bad.length));
+  reused.next();
+  reused.reset();
+  const maskedHello: u8[] = fromHex("818537fa213d7f9f4d5158");
+  reused.feed(maskedHello, zero, toI32(maskedHello.length));
+  t.eqI32("reset() starts a refused decoder over", reused.next(), WS_MESSAGE);
+  t.eqStr("and it reads the next connection's message", hexOf(reused.data, zero, reused.dataLen), "48656c6c6f");
 
   // Constants the encoder and decoder agree on.
   t.eqI32("WS_MAX_CONTROL is 125 (§5.5)", WS_MAX_CONTROL, k125);
