@@ -61,7 +61,7 @@
  */
 import { Secret } from "nish:secret"
 import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
-import { TlsServer, TlsServerConfig, tlsSignEcdsaP256 } from "nish/net/tls"
+import { TlsP256Signer, TlsServer, TlsServerConfig } from "nish/net/tls"
 import { TLS_ALERT_INTERNAL_ERROR } from "nish/net/tls/codec"
 import { TLS_MAX_RECORD } from "nish/net/tls/record"
 import {
@@ -103,6 +103,8 @@ export class TlsTcpServer {
   scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   peer: u8[]
+  /** Signs every slot's CertificateVerify in `signP256`, one for the pool, keeping nothing per signature. */
+  signer: TlsP256Signer
   /**
    * Each slot's own copy of its connection's ephemeral key, so that wiping it
    * can never reach an array the program has refilled for the next one.
@@ -141,6 +143,7 @@ export class TlsTcpServer {
     }
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
     this.peer = new Array<u8>(TLS_TCP_ADDRESS_SIZE)
+    this.signer = new TlsP256Signer()
   }
 
   /** How many slots the pool has. */
@@ -315,8 +318,9 @@ export class TlsTcpServer {
 
   /**
    * Signs `slot`'s CertificateVerify with the P-256 private key `key` and
-   * hands it over, as `sign` does. The key is borrowed: the caller made the
-   * `Secret`, and wipes it. A malformed key fails the connection with
+   * hands it over, as `sign` does, through the pool's `TlsP256Signer`, so a
+   * handshake's signature keeps nothing. The key is borrowed: the caller made
+   * the `Secret`, and wipes it. A malformed key fails the connection with
    * `internal_error`.
    */
   signP256(slot: i32, key: Secret<u8[]>): i32 {
@@ -324,7 +328,7 @@ export class TlsTcpServer {
     if (input === null) {
       return this.interest(slot)
     }
-    const signature: u8[] | null = tlsSignEcdsaP256(key, input)
+    const signature: u8[] | null = this.signer.sign(key, input)
     if (signature === null) {
       this.connections[slot].fail(TLS_ALERT_INTERNAL_ERROR)
       return this.flush(slot)

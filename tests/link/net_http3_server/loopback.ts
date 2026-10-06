@@ -440,6 +440,11 @@ const reused = (t: Suite): void => {
     high = handshakes[k] > high ? handshakes[k] : high;
   }
   t.ok("and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart", low > n64(0) && high - low < n64(256));
+  // By this meter a handshake kept 34,504 to 34,568 bytes while its
+  // CertificateVerify was signed by `tlsSignEcdsaP256`, whose `p256SignSha256`
+  // stores what it allocates; `serve` signs in the server's `TlsP256Signer`
+  // now, which keeps nothing, and the handshake keeps 25,368.
+  t.ok("and the ECDSA signature is not among what it keeps: under 25,600 bytes, where it kept 34,504 or more before TlsP256Signer", high < n64(25600));
 };
 
 /** Every check of this file. */

@@ -5,7 +5,8 @@
 // and with P1363 `r || s` signatures), and the refusals the module promises —
 // private keys of 0 and n and more, public keys that are the wrong length, off
 // the curve or the identity, an `r` or `s` of 0 or n or more, and a sum
-// u1 G + u2 Q that is the identity. docs/security/crypto-ecc.md is the audit
+// u1 G + u2 Q that is the identity. Then `p256SignSha256Into` over a
+// `P256SignScratch` (scratch.ts). docs/security/crypto-ecc.md is the audit
 // these checks pin.
 //
 // The suite is a function rather than `main` so that `crypto_p256_f64` can run
@@ -36,6 +37,7 @@ import {
   wycheproofEcdsaP256Sha512P1363Cases,
 } from "../crypto_wycheproof/ecdsa_secp256r1_sha256";
 import { fromHex, toHex } from "./hex";
+import { scratchChecks } from "./scratch";
 
 /** The bytes of an ASCII string, for the RFC's messages. */
 const ascii = (text: string): u8[] => {
@@ -342,6 +344,9 @@ export const runSuite = (): i32 => {
   t.ok("the signature of the digest 0 verifies (u1 = 0)", zeroSig !== null && p256Verify(pub, fromHex(N), zeroSig));
   const fiveSig: u8[] | null = p256Sign(priv, digestFive);
   t.ok("the signature of 5 verifies under the digest n + 5", fiveSig !== null && p256Verify(pub, digestNPlusFive, fiveSig));
+
+  // --- Signing over caller-owned scratch ------------------------------------------
+  scratchChecks(t, priv, `${SAMPLE_R}${SAMPLE_S}`, `${TEST_R}${TEST_S}`, N);
 
   return t.done();
 };

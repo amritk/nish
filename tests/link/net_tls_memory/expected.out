@@ -11,8 +11,12 @@ PASS  a thousand rounds of a HelloRetryRequest, a restart and a plain handshake 
 PASS  and after the first round Arena.mark() did not move
 PASS  an AES-256-GCM-SHA384 handshake works out for the loopback run
 PASS  a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one
-PASS  and after the first Arena.mark() did not move: accept, handshake and close reuse the slot
+PASS  and after the first Arena.mark() did not move: accept, handshake, signP256's ECDSA signature (9,312 bytes a connection before TlsP256Signer) and close reuse the slot
 PASS  every slot is free again
+PASS  TlsP256Signer: three hundred signatures, each tlsSignEcdsaP256's DER byte for byte
+PASS  across 3 DER lengths
+PASS  and not one sign moved Arena.mark(): a signature keeps 0 bytes
+PASS  a 31-byte key is refused with null
 PASS  a TlsServer through RFC 8448's handshake holds its secrets in its own arrays
 PASS  and restart zeroes every array of secrets256
 PASS  an AES-256-GCM-SHA384 handshake holds its secrets in secrets384
@@ -23,4 +27,4 @@ PASS  tlsTrafficKeysInto refuses a suite it does not negotiate
 PASS  a secret that is not the suite's hash length
 PASS  and a key array of the wrong length
 PASS  a cleartext protection has no next secret to advance to
-tls memory: 25 passed, 0 failed, 0 skipped
+tls memory: 29 passed, 0 failed, 0 skipped

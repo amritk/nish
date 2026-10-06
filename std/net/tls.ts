@@ -71,7 +71,7 @@ import { Secret, expose, secret, wipe } from "nish:secret"
 import { HkdfScratch, hkdfExtractSha256, hkdfExtractSha384 } from "nish/crypto/hkdf"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
-import { p256SignSha256 } from "nish/crypto/p256"
+import { P256SignScratch, P256_SIGNATURE_SIZE, p256SignSha256, p256SignSha256Into } from "nish/crypto/p256"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import {
@@ -306,6 +306,93 @@ export const tlsSignEcdsaP256 = (priv: Secret<u8[]>, content: u8[]): u8[] | null
     return null
   }
   return tlsEcdsaDerSignature(rs)
+}
+
+/** The shortest and longest DER `ECDSA-Sig-Value` of a P-256 signature: a SEQUENCE of two INTEGERs of 1 to 33 bytes. */
+const TLS_P256_DER_MIN: i32 = 8
+const TLS_P256_DER_MAX: i32 = 72
+
+/** The bytes `tlsDerInteger` writes for the 32-byte magnitude at `rs[at .. at + 32)`: leading zeros dropped, one added for a top bit. */
+const tlsDerIntegerLength = (rs: u8[], at: i32): i32 => {
+  let first: i32 = 0
+  while (first < 31 && at + first >= 0 && at + first < toI32(rs.length) && toI32(rs[at + first]) === 0) {
+    first++
+  }
+  const top: boolean = at + first >= 0 && at + first < toI32(rs.length) && toI32(rs[at + first]) >= 0x80
+  return 32 - first + (top ? 1 : 0)
+}
+
+/** `tlsDerInteger` of `rs[at .. at + 32)` written at `out[to ..)`, `length` its body; answers where it ends. */
+const tlsDerIntegerInto = (out: u8[], to: i32, rs: u8[], at: i32, length: i32): i32 => {
+  const end: i32 = to + 2 + length
+  if (to < 0 || end > toI32(out.length)) {
+    return end
+  }
+  out[to] = toU8(0x02)
+  out[to + 1] = toU8(length)
+  for (let k: i32 = 0; k < length; k++) {
+    // The body's last `length` bytes are the magnitude's, a zero first when it is 33.
+    const from: i32 = at + 32 - length + k
+    const j: i32 = to + 2 + k
+    if (j >= 0 && j < toI32(out.length)) {
+      out[j] = from >= at && from >= 0 && from < toI32(rs.length) ? rs[from] : toU8(0)
+    }
+  }
+  return end
+}
+
+/**
+ * Signs CertificateVerify inputs for `ecdsa_secp256r1_sha256` with nothing
+ * kept per signature: `tlsSignEcdsaP256`'s answer, made in a
+ * `P256SignScratch` and handed back in one of this signer's own arrays, one
+ * per DER length (8 to 72 bytes), since `TlsServer.sign` takes the
+ * signature's length from its array and stores what it computes, so a
+ * signature it is handed cannot be a temporary. A carrier keeps one signer,
+ * not one per slot: signing is synchronous, and the array it answers is read
+ * by `sign` before the next signature replaces it.
+ */
+export class TlsP256Signer {
+  /** The P-256 signer's scratch. */
+  scratch: P256SignScratch
+  /** `r || s` as `p256SignSha256Into` writes it. */
+  rs: u8[]
+  /** The DER signatures, index `length - TLS_P256_DER_MIN`. */
+  ders: u8[][]
+
+  constructor() {
+    this.scratch = new P256SignScratch()
+    this.rs = new Array<u8>(P256_SIGNATURE_SIZE)
+    this.ders = []
+    for (let length: i32 = TLS_P256_DER_MIN; length <= TLS_P256_DER_MAX; length++) {
+      this.ders.push(new Array<u8>(length))
+    }
+  }
+
+  /**
+   * `tlsSignEcdsaP256(priv, content)`, byte for byte, in the array of this
+   * signer's that has its length; `null` for a malformed key. It keeps
+   * nothing: the P-256 signature releases what it allocated, and the DER is
+   * written in place. The key is borrowed.
+   */
+  sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
+    if (
+      !p256SignSha256Into(this.scratch, priv, content, TLS_FROM, toI32(content.length), this.rs, TLS_FROM)
+    ) {
+      return null
+    }
+    const rLength: i32 = tlsDerIntegerLength(this.rs, TLS_FROM)
+    const sLength: i32 = tlsDerIntegerLength(this.rs, 32)
+    const length: i32 = 6 + rLength + sLength
+    const at: i32 = length - TLS_P256_DER_MIN
+    if (at < 0 || at >= toI32(this.ders.length)) {
+      return null
+    }
+    const der: u8[] = this.ders[at]
+    der[0] = toU8(0x30)
+    der[1] = toU8(length - 2)
+    tlsDerIntegerInto(der, tlsDerIntegerInto(der, 2, this.rs, TLS_FROM, rLength), this.rs, 32, sLength)
+    return der
+  }
 }
 
 /** Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`). */
