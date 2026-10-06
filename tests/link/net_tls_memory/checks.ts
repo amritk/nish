@@ -535,10 +535,25 @@ export const memoryChecks = (): i32 => {
   for (const a of lone.secrets256) {
     left = left + (allZero(a) ? 0 : 1);
   }
-  for (const a of lone.secrets384) {
-    left = left + (allZero(a) ? 0 : 1);
+  t.eqI32("and restart zeroes every array of secrets256", left, ZERO);
+  // The same under SHA-384, whose secrets live in the other pool: the
+  // loopback run's ClientHello, signed with its recorded signature.
+  const lone384Key: u8[] = range(wired.key, ZERO, toI32(wired.key.length));
+  const lone384 = new TlsServer(wired.config, wired.random, lone384Key);
+  const hello384: u8[] = paddedHello(TLS_AES_256_GCM_SHA384, toI32(16));
+  lone384.receive(TLS_LEVEL_INITIAL, hello384, ZERO, toI32(hello384.length));
+  lone384.sign(wired.signature);
+  let held384: i32 = 0;
+  for (const a of lone384.secrets384) {
+    held384 = held384 + (allZero(a) ? 0 : 1);
   }
-  t.eqI32("and restart zeroes every array of secrets256 and secrets384", left, ZERO);
+  t.ok("an AES-256-GCM-SHA384 handshake holds its secrets in secrets384", lone384.state !== TLS_STATE_FAILED && held384 >= 5);
+  lone384.restart(wired.random, lone384Key);
+  let left384: i32 = 0;
+  for (const a of lone384.secrets384) {
+    left384 = left384 + (allZero(a) ? 0 : 1);
+  }
+  t.eqI32("and restart zeroes every array of secrets384", left384, ZERO);
 
   // --- The slot's own refusals ------------------------------------------------------------
   const none: u8[] = [];
