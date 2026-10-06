@@ -36,7 +36,7 @@ import { H2_ERROR, H2_NEED_MORE, Http2Config } from "nish/net/http2";
 import { leafPrivate, serverPrivate, tcpConfig } from "../net_tls_common/server";
 import { ZERO } from "../net_tls_record_common/bytes";
 import { CLIENTS, LISTENER, Peer } from "../net_tls_record_tcp/harness";
-import { NqMeter } from "../net_quic_stream/arena";
+import { LbMeter } from "./common";
 import { EchoSlots, H1App, H2App } from "./apps";
 
 const WOULD_BLOCK: i32 = -11;
@@ -91,7 +91,7 @@ export class TcpLoop {
   refused: i32 = 0;
   closed: i32 = 0;
   /** While set, what every server wake — the accept, the carrier's calls and the program's answers — keeps in the arena. */
-  meter: NqMeter | null = null;
+  meter: LbMeter | null = null;
   none: u8[];
 
   constructor(carrier: i32) {
@@ -227,15 +227,15 @@ export class TcpLoop {
     }
   }
 
-  /** What the meter starts a measured call with (see `NqMeter`); nothing while none is set. */
+  /** What the meter starts a measured call with (see `LbMeter`); nothing while none is set. */
   filler(): u8[] {
-    const m: NqMeter | null = this.meter;
+    const m: LbMeter | null = this.meter;
     return m !== null ? m.filler() : this.none;
   }
 
   /** While a meter is set, counts what the call since `before` kept. */
   track(before: i64, filler: u8[]): void {
-    const m: NqMeter | null = this.meter;
+    const m: LbMeter | null = this.meter;
     if (m !== null) {
       m.add(before, filler);
     }

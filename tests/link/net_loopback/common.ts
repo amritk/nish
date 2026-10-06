@@ -9,3 +9,63 @@ export const WARM: i32 = 5;
 
 /** Round `k`'s payload: 72 printable bytes, different every round. */
 export const roundText = (k: i32): string => `round ${k} of the warm connection: abcdefghijklmnopqrstuvwxyz0123456789`;
+
+/** The arena's chunk, which `Arena.used()` counts within (runtime/runtime.c, `nish_arena_grow`). */
+const LB_CHUNK: i64 = 65536;
+
+/**
+ * What the server's calls keep in the arena, summed over the calls measured.
+ * Plain, it adds how far `Arena.used()` moved across each call, which is
+ * exact while nothing is kept: the rounds on a warm connection. Fresh, it
+ * starts each call at the head of a chunk of its own — a 70,000-byte filler
+ * takes a chunk to itself, and a 4 KiB probe opens the next (a small array
+ * stored in a field is kept inside its object, out of the arena) — and reads
+ * `Arena.mark()` as well as `Arena.used()` after the call: when the mark has
+ * left the chunk the call started in, the call filled the rest of that chunk
+ * and went on into another, so it kept the rest of the first and what the
+ * second holds. That counts a handshake that keeps more than a chunk, which
+ * `net_quic_stream`'s `NqMeter` cannot (it reads only the last chunk), and it
+ * counts arena bytes as the process pays for them, a chunk's unused tail
+ * included. A call that kept more than two chunks would be undercounted.
+ */
+export class LbMeter {
+  kept: i64 = 0;
+  startMark: i64 = 0;
+  startUsed: i64 = 0;
+  probe: u8[];
+  none: u8[];
+  fresh: boolean = false;
+
+  constructor(fresh: boolean) {
+    this.fresh = fresh;
+    this.probe = [];
+    this.none = [];
+  }
+
+  /** Called before a measured call: the filler that starts it in a chunk of its own, kept alive until `add`; nothing when plain. */
+  filler(): u8[] {
+    if (!this.fresh) {
+      return this.none;
+    }
+    const filler: u8[] = new Array<u8>(70000);
+    this.probe = new Array<u8>(4096);
+    this.startMark = Arena.mark();
+    this.startUsed = Arena.used();
+    return filler;
+  }
+
+  /** Called after it: counts what the call since `before` kept. */
+  add(before: i64, filler: u8[]): void {
+    const used: i64 = Arena.used();
+    if (!this.fresh) {
+      this.kept = this.kept + (used - before);
+      return;
+    }
+    const moved: i64 = Arena.mark() - this.startMark;
+    if (moved === used - this.startUsed && toI32(filler.length) > 0) {
+      this.kept = this.kept + moved;
+    } else {
+      this.kept = this.kept + (LB_CHUNK - this.startUsed) + used;
+    }
+  }
+}

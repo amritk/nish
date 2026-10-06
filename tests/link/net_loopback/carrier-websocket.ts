@@ -23,13 +23,12 @@ import {
 } from "nish/net/websocket";
 import { ZERO, ascii, join, range } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
-import { NqMeter } from "../net_quic_stream/arena";
 import { ClientReader } from "../net_http1_server/harness";
 import { textOf } from "../crypto_x509/hex";
 import { CARRIER_H1, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
 import { h1Response } from "./carrier-http1";
-import { ROUNDS, WARM, roundText } from "./common";
+import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** A client frame of `payload[off .. off + len)`, masked with 01 02 03 04 as a client's must be. */
 const wsClientFrame = (fin: boolean, opcode: i32, payload: u8[], off: i32, len: i32): u8[] => {
@@ -110,7 +109,7 @@ export const websocketChecks = (t: Suite): void => {
     c.send(wsWhole(WS_OP_TEXT, ascii(`warm ${k}`)));
     lbWsEvent(c, d);
   }
-  const rounds = new NqMeter(false);
+  const rounds = new LbMeter(false);
   lp.meter = rounds;
   let intact: i32 = 0;
   for (let k: i32 = 0; k < ROUNDS; k++) {

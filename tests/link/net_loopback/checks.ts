@@ -6,6 +6,9 @@ import { tlsChecks } from "./carrier-tls";
 import { http1Checks } from "./carrier-http1";
 import { websocketChecks } from "./carrier-websocket";
 import { http2Checks } from "./carrier-http2";
+import { quicChecks } from "./carrier-quic";
+import { http3Checks } from "./carrier-http3";
+import { webtransportChecks } from "./carrier-webtransport";
 
 /** Every check, in one suite; answers the exit code. */
 export const loopbackChecks = (): i32 => {
@@ -14,5 +17,8 @@ export const loopbackChecks = (): i32 => {
   http1Checks(t);
   websocketChecks(t);
   http2Checks(t);
+  quicChecks(t);
+  http3Checks(t);
+  webtransportChecks(t);
   return t.done();
 };

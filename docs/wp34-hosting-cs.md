@@ -349,6 +349,12 @@ over loopback, for every carrier. It is what catches two lanes that each pass
 their own vectors but disagree with each other. T2 and Q2 exist, so it can be
 written now; RFC 8448 over loopback from a Nish client (`net_tls_record_tcp`)
 and the Nish UDP client that replays aioquic's exchanges are its first pieces.
+The suite is `tests/link/net_loopback` (and its `_f64` twin): a section per
+carrier — TLS over TCP, HTTP/1.1, WebSocket, HTTP/2, QUIC, HTTP/3 and
+WebTransport — each a Nish server on the carrier and the lanes' own scripted
+clients on real loopback sockets in one `pollWait` loop, with every server
+call's `Arena.used()` flat over fifty rounds on a warm connection and the
+memory a whole connection keeps pinned beside it.
 
 ## 6. Decisions for the owner
 

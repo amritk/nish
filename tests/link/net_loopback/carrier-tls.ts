@@ -6,11 +6,10 @@
 import { Suite } from "nish/testing";
 import { ascii } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
-import { NqMeter } from "../net_quic_stream/arena";
 import { CARRIER_TLS, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
 import { textOf } from "../crypto_x509/hex";
-import { ROUNDS, WARM, roundText } from "./common";
+import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** One echo of `bytes` through client `c`; whether it came back whole. */
 const tlsEchoed = (c: TlsClient, bytes: u8[]): boolean => {
@@ -22,7 +21,7 @@ const tlsEchoed = (c: TlsClient, bytes: u8[]): boolean => {
 };
 
 /** A connection from handshake to close, with one echo, under `m`; whether it all went as it should. */
-const tlsWholeConnection = (lp: TcpLoop, m: NqMeter): boolean => {
+const tlsWholeConnection = (lp: TcpLoop, m: LbMeter): boolean => {
   lp.meter = m;
   const c = new TlsClient(lp);
   const noAlpn: string[] = [];
@@ -50,7 +49,7 @@ export const tlsChecks = (t: Suite): void => {
   for (let k: i32 = 0; k < WARM; k++) {
     tlsEchoed(c, h3Pattern(toI32(1000)));
   }
-  const rounds = new NqMeter(false);
+  const rounds = new LbMeter(false);
   lp.meter = rounds;
   let intact: i32 = 0;
   for (let k: i32 = 0; k < ROUNDS; k++) {
@@ -66,9 +65,9 @@ export const tlsChecks = (t: Suite): void => {
   t.eqStr("tls: the client's close_notify is answered with the server's", c.awaitAlert(), "1 0");
   t.ok("tls: the server saw the client's close and closed the socket", lp.awaitEnd(c.index) && lp.echo.peerCloses === 1 && lp.awaitClosed(toI32(1)) && lp.busy() === 0);
 
-  const first = new NqMeter(false);
-  const second = new NqMeter(false);
-  const third = new NqMeter(true);
+  const first = new LbMeter(false);
+  const second = new LbMeter(false);
+  const third = new LbMeter(true);
   const all: boolean = tlsWholeConnection(lp, first) && tlsWholeConnection(lp, second) && tlsWholeConnection(lp, third);
   t.ok("tls: three more connections through the slot, each handshaken, echoed and closed", all && lp.busy() === 0);
   console.log(`tls: a connection keeps ${first.kept}, ${second.kept} and ${third.kept} bytes, accept to close`);

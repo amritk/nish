@@ -9,12 +9,11 @@ import { Suite } from "nish/testing";
 import { H1_ALPN } from "nish/net/http1-server";
 import { ascii, join } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
-import { NqMeter } from "../net_quic_stream/arena";
 import { ClientReader } from "../net_http1_server/harness";
 import { textOf } from "../crypto_x509/hex";
 import { CARRIER_H1, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
-import { ROUNDS, WARM, roundText } from "./common";
+import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** The next response client `c` reads, whole or as far as the stream went, its bytes taken off `plain`. */
 export const h1Response = (c: TlsClient): ClientReader => {
@@ -65,7 +64,7 @@ export const http1Checks = (t: Suite): void => {
   for (let k: i32 = 0; k < WARM; k++) {
     h1Echoed(c, h3Pattern(toI32(1000)));
   }
-  const rounds = new NqMeter(false);
+  const rounds = new LbMeter(false);
   lp.meter = rounds;
   let intact: i32 = 0;
   for (let k: i32 = 0; k < ROUNDS; k++) {
@@ -81,7 +80,7 @@ export const http1Checks = (t: Suite): void => {
   t.eqStr("http/1.1: the client's close_notify is answered with the server's", c.awaitAlert(), "1 0");
   t.ok("http/1.1: and the server closes the slot", lp.awaitEnd(c.index) && lp.awaitClosed(toI32(1)) && lp.busy() === 0);
 
-  const whole = new NqMeter(true);
+  const whole = new LbMeter(true);
   lp.meter = whole;
   const d = new TlsClient(lp);
   const shook: boolean = d.handshake([H1_ALPN]);
@@ -95,7 +94,7 @@ export const http1Checks = (t: Suite): void => {
     shook && last.done && last.text() === "the last one" && last.has("Connection: close") && alert === "1 0" && ended
   );
   console.log(`http/1.1: that connection kept ${whole.kept} bytes, accept to close`);
-  t.eqI32("http/1.1: the program answered every request and refused nothing", lp.h1App.requests * 100 + lp.h1App.refusals, toI32(100 * (2 + WARM + ROUNDS + 1)));
+  t.eqI32("http/1.1: the program answered every request and refused nothing", lp.h1App.requests * 100 + lp.h1App.refusals, toI32(100) * (toI32(3) + WARM + ROUNDS));
   t.eqStr("http/1.1: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();
 };

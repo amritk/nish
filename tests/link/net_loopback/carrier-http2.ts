@@ -12,12 +12,11 @@ import { H2_FLAG_END_STREAM, H2_FRAME_DATA, H2_FRAME_SETTINGS, H2_FRAME_WINDOW_U
 import { H2_ALPN } from "nish/net/http2-tls";
 import { ZERO, ascii, range } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
-import { NqMeter } from "../net_quic_stream/arena";
 import { FrameLog, Wire, getOf, postOf } from "../net_http2/peer";
 import { textOf } from "../crypto_x509/hex";
 import { CARRIER_H2, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
-import { ROUNDS, WARM, roundText } from "./common";
+import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** The stream window the client's SETTINGS give the server. */
 const CLIENT_WINDOW: i32 = 16384;
@@ -168,7 +167,7 @@ class H2Client {
 
   /** A DATA frame of `body[at .. at + n)` on `id`, with END_STREAM when `last`. */
   dataFrame(id: i32, body: u8[], at: i32, n: i32, last: boolean): u8[] {
-    const out: u8[] = [toU8((n >> 16) & 255), toU8((n >> 8) & 255), toU8(n & 255), toU8(H2_FRAME_DATA), toU8(last ? H2_FLAG_END_STREAM : 0)];
+    const out: u8[] = [toU8((n >> 16) & 255), toU8((n >> 8) & 255), toU8(n & 255), toU8(H2_FRAME_DATA), toU8(last ? H2_FLAG_END_STREAM : ZERO)];
     out.push(toU8((id >> 24) & 127));
     out.push(toU8((id >> 16) & 255));
     out.push(toU8((id >> 8) & 255));
@@ -234,7 +233,7 @@ export const http2Checks = (t: Suite): void => {
     h.flush();
     h.awaitBody(toI32(7), toI32(warm.length));
   }
-  const rounds = new NqMeter(false);
+  const rounds = new LbMeter(false);
   lp.meter = rounds;
   let intact: i32 = 0;
   for (let k: i32 = 0; k < ROUNDS; k++) {
@@ -249,7 +248,7 @@ export const http2Checks = (t: Suite): void => {
   t.eqI32("http/2: fifty DATA frames echoed on the warm open stream", intact, ROUNDS);
   t.ok(`http/2: and every server wake kept ${rounds.kept} bytes over them`, rounds.kept === toI64(0));
 
-  const request = new NqMeter(true);
+  const request = new LbMeter(true);
   lp.meter = request;
   h.wire.headers(toI32(9), getOf("/hello"), H2_FLAG_END_STREAM);
   h.flush();
