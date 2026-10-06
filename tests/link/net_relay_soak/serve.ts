@@ -13,9 +13,14 @@ import { Relay, RelayConfig } from "../../../examples/relay/relay";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { RIG_WALL, rigRelay } from "../net_relay/rig";
+import { SECRET } from "../net_relay/grants";
+import { bytesOf } from "../crypto_x509/hex";
 
 /** The soak relay's caps: a pool of 64 sessions and 8 spare slots, every one from the loopback. */
 export const SOAK_SESSIONS: i32 = 64;
+
+/** How long the relay serves on with no session accepted or closed, in milliseconds, before it gives up on a driver that has gone. */
+const SOAK_STALL_MS: i64 = 30000;
 
 /**
  * The resident set in bytes, from the second field of this process's
@@ -55,7 +60,7 @@ const checkpoint = (report: string, closed: i32, relay: Relay): void => {
 
 /**
  * The relay on a loopback port of its own, which it writes to `portFile`,
- * until `total` sessions are closed or two minutes pass.
+ * until `total` sessions are closed or `SOAK_STALL_MS` pass with none accepted or closed.
  */
 export const serve = (portFile: string, report: string, total: i32, every: i32): i32 => {
   const fd: i32 = udpBind("127.0.0.1", n32(0), n32(2));
@@ -71,18 +76,25 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
   writeFileSync(report, "");
   writeFileSync(portFile, `${netLocalPort(fd)}\n`);
   const key: Secret<u8[]> = secret(leafPrivate());
+  const grantKey: Secret<u8[]> = secret(bytesOf(SECRET));
   const start: i64 = monotonicNanos() / 1000000;
   let next: i32 = every;
   checkpoint(report, n32(0), relay);
   let closed: i32 = 0;
+  let progress: i64 = start;
+  let seen: i32 = 0;
   while (closed < total) {
     const now: i64 = monotonicNanos() / 1000000;
-    if (now - start > 600000) {
+    if (now - progress > SOAK_STALL_MS) {
       break;
     }
     const wait: i32 = relay.timeout(now);
-    relay.step(now, RIG_WALL + (now - start), key, wait < 0 || wait > 20 ? n32(20) : wait);
+    relay.step(now, RIG_WALL + (now - start), key, grantKey, wait < 0 || wait > 20 ? n32(20) : wait);
     closed = relay.clientClosed;
+    if (relay.accepted + closed !== seen) {
+      seen = relay.accepted + closed;
+      progress = now;
+    }
     while (closed >= next) {
       checkpoint(report, next, relay);
       next = next + every;
@@ -92,6 +104,7 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
     checkpoint(report, total, relay);
   }
   wipe(key);
+  wipe(grantKey);
   appendFileSync(report, `done ${closed} accepted ${relay.accepted} refused ${relay.refusedFull + relay.refusedPeer} up ${relay.forwardedUp} down ${relay.forwardedDown}\n`);
   return 0;
 };

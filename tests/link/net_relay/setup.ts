@@ -2,9 +2,9 @@
 // grant.rs's caller's refusals), and its identity (tls.rs's tests): a minted
 // self-signed certificate pinned by its own hash, a PEM pair loaded from
 // disk and deliberately not pinned, the `--cert-out` bodies byte for byte,
-// one of `--cert` and `--key` without the other refused, and a renewal
-// picked up, a half-written one kept away, and a missing file read as
-// "unchanged".
+// one of `--cert` and `--key` without the other refused, a key that is not
+// the certificate's refused, and a renewal picked up, a half-written or
+// crossed one kept away, and a missing file read as "unchanged".
 import { mkdirSync, writeFileSync } from "nish:fs";
 import { Secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
@@ -87,7 +87,8 @@ const identityChecks = (t: Suite): void => {
   mkdirSync("build/net_relay");
   const cert: string = "build/net_relay/chain.pem";
   const keyFile: string = "build/net_relay/key.pem";
-  writeFileSync(cert, LEAF_PEM);
+  // The CA certificate and its own key: a pair that belongs together.
+  writeFileSync(cert, CA_PEM);
   writeFileSync(keyFile, CA_PKCS8_PEM);
   const source = relaySourceFrom(cert, keyFile);
   const loaded = new RelayIdentity();
@@ -115,6 +116,18 @@ const identityChecks = (t: Suite): void => {
   }
   t.ok("and it is not marked seen, so the next poll looks again", watch.changed());
 
+  // A certificate the key does not belong to: an operator who copied one file before the other.
+  writeFileSync(cert, LEAF_PEM);
+  const crossed = new RelayIdentity();
+  const crossedKey: Secret<u8[]> | null = relayRenew(watch, crossed);
+  t.ok(
+    "a renewal whose key is not the certificate's is refused, and the identity serving is kept",
+    crossedKey === null && crossed.error === "could not load build/net_relay/chain.pem and build/net_relay/key.pem: the key is not the one the certificate names" && watch.changed()
+  );
+  if (crossedKey !== null) {
+    wipe(crossedKey);
+  }
+
   writeFileSync(cert, `${CA_PEM}${LEAF_PEM}`);
   const renewed = new RelayIdentity();
   const next: Secret<u8[]> | null = relayRenew(watch, renewed);
@@ -129,6 +142,16 @@ const identityChecks = (t: Suite): void => {
   t.ok("a key file with no P-256 key is an error", bad === null && badKey.error === "could not load build/net_relay/chain.pem and build/net_relay/key.pem: build/net_relay/key.pem holds no P-256 private key");
   if (bad !== null) {
     wipe(bad);
+  }
+
+  // At start-up a crossed pair is refused the same way, with nothing to fall back to.
+  writeFileSync(cert, LEAF_PEM);
+  writeFileSync(keyFile, CA_PKCS8_PEM);
+  const atStart = new RelayIdentity();
+  const startKey: Secret<u8[]> | null = relayLoadPem(source, atStart);
+  t.ok("at start-up a key that is not the certificate's is refused", startKey === null && atStart.error.endsWith("the key is not the one the certificate names"));
+  if (startKey !== null) {
+    wipe(startKey);
   }
 
   const gone = relaySourceFrom("build/net_relay/none.pem", "build/net_relay/none.key");

@@ -58,10 +58,10 @@ export const rigHello = (token: string, version: i32): u8[] => {
 /**
  * A relay under `config` on the UDP socket `fd`, serving `net_tls_common`'s
  * P-256 test certificate (which the test client checks) and verifying grants
- * with grant.rs's SECRET.
+ * with the grant secret `turn` hands each step, grant.rs's SECRET.
  */
 export const rigRelay = (config: RelayConfig, fd: i32, entropy: u8[]): Relay =>
-  new Relay(config, relayQuicConfig([leafCertificate()], new Array<u8>(32), new Array<u8>(32)), fd, new GrantVerifier(bytesOf(SECRET)), entropy);
+  new Relay(config, relayQuicConfig([leafCertificate()], new Array<u8>(32), new Array<u8>(32)), fd, new GrantVerifier(), entropy);
 
 /** The game server: a UDP socket that records what it is sent and, unless silent, sends it back. */
 export class RigEcho {
@@ -424,16 +424,18 @@ export class Rig {
   /** One turn: the relay's step, signing with the test key, then the game server, then each client reads and acknowledges. Answers whether anything moved. */
   turn(): boolean {
     const key: Secret<u8[]> = secret(leafPrivate());
+    const grantKey: Secret<u8[]> = secret(bytesOf(SECRET));
     // A 70,000-byte filler takes the rest of the current chunk, so the step starts a new one at 0
     // (`net_quic_stream`'s `NqMeter`, exact for a step that keeps under 64 KiB).
     const filler: u8[] = this.measuring ? new Array<u8>(70000) : [];
     const before: i64 = Arena.used();
-    this.relay.step(this.now, this.wall, key, n32(0));
+    this.relay.step(this.now, this.wall, key, grantKey, n32(0));
     const after: i64 = Arena.used();
     if (this.measuring && after !== before && toI32(filler.length) > 0) {
       this.kept = this.kept + after;
     }
     wipe(key);
+    wipe(grantKey);
     let moved: i32 = this.echo.serve();
     for (const c of this.clients) {
       moved = moved + c.read();

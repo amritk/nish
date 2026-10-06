@@ -7,7 +7,7 @@
  *
  *     const relay = new Relay(config, quicConfig, fd, verifier, entropy);
  *     // each time round the loop, `now` monotonic and `wall` Unix, both milliseconds:
- *     const signalled: boolean = relay.step(now, wall, key, relay.timeout(now));
+ *     const signalled: boolean = relay.step(now, wall, key, grantKey, relay.timeout(now));
  *
  * **A session** is one QUIC connection carrying one WebTransport session on
  * `config.path`, and is counted against both caps the moment its first
@@ -16,7 +16,9 @@
  * address. The pool has `spareSlots` QUIC slots past `maxSessions`, so a
  * client over either cap is still told why — its session is accepted, sent
  * CLOSE RATE_LIMITED and closed with QUIC application code 1 — rather than
- * dropped. Then the session has `helloTimeout` to send a HELLO carrying a
+ * dropped. A connection that has opened no session `helloTimeout` after its
+ * first Initial is closed with code 1, so a handshake alone holds neither
+ * place for longer. Then the session has `helloTimeout` to send a HELLO carrying a
  * grant (`grant.ts`); a first datagram that is not one, another version, a
  * grant that does not verify, or an upstream that cannot be reached is
  * answered with CLOSE and the code grant.rs or main.rs gives it. A HELLO that
@@ -233,6 +235,8 @@ export class Relay {
   /** The relay's id for the session, for its log and HELLO_OK, and its CONNECT stream. */
   ids: i64[]
   sessions: i64[]
+  /** When a connection with no session yet is closed: its first Initial plus `helloTimeout`. */
+  connectBy: i64[]
   /** When its client was last heard, and its rate window's start and count. */
   lastHeard: i64[]
   windowStart: i64[]
@@ -284,6 +288,7 @@ export class Relay {
   refusedGrant: i32 = 0
   refusedUpstream: i32 = 0
   helloTimeouts: i32 = 0
+  connectTimeouts: i32 = 0
   idleClosed: i32 = 0
   rateLimited: i32 = 0
   clientClosed: i32 = 0
@@ -346,6 +351,7 @@ export class Relay {
     this.ids = new Array<i64>(slots)
     this.sessions = new Array<i64>(slots)
     this.sessions.fill(RELAY_NONE64)
+    this.connectBy = new Array<i64>(slots)
     this.lastHeard = new Array<i64>(slots)
     this.windowStart = new Array<i64>(slots)
     this.windowCount = new Array<i32>(slots)
@@ -394,11 +400,12 @@ export class Relay {
   /**
    * One turn of the loop: waits up to `waitMs` (0 does not wait, negative
    * forever) for a socket or a signal, then reads every upstream that is
-   * ready, every client datagram (signing a handshake with `key`), runs the
+   * ready, every client datagram (signing a handshake with `key`; a HELLO's
+   * grant is checked against `grantKey`), runs the
    * QUIC and relay timers, serves every slot with news and sends what all of
    * it produced. Answers whether a signal arrived.
    */
-  step(now: i64, wall: i64, key: Secret<u8[]>, waitMs: i32): boolean {
+  step(now: i64, wall: i64, key: Secret<u8[]>, grantKey: Secret<u8[]>, waitMs: i32): boolean {
     this.stepMicros = monotonicNanos() / 1000
     const n: i32 = pollWait(this.loop, this.ready, waitMs)
     let signalled: boolean = false
@@ -415,7 +422,7 @@ export class Relay {
     this.timers(now)
     let slot: i32 = this.server.ready()
     while (slot >= 0) {
-      this.serveSlot(slot, now, wall)
+      this.serveSlot(slot, now, wall, grantKey)
       slot = this.server.ready()
     }
     this.flush(now)
@@ -496,12 +503,27 @@ export class Relay {
     this.nextId = this.nextId < RELAY_U32 ? this.nextId + 1 : 1
     this.ids[slot] = this.nextId
     this.sessions[slot] = RELAY_NONE64
-    // Claimed before the handshake is done, so half-open sessions sit inside the budget.
+    // Both places are claimed before the handshake is done, so half-open connections sit inside both caps.
     this.counted[slot] = this.live < this.config.maxSessions
     if (this.counted[slot]) {
       this.live = this.live + 1
     }
-    this.wheel.file(slot, now + RELAY_RECHECK, now)
+    // The slot's own copy of its address, which `release` gives back by.
+    const peer: u8[] = this.peerAddresses[slot]
+    const from: u8[] = this.server.addresses[slot]
+    for (let k: i32 = 0; k < RELAY_PEER_KEY && k < toI32(from.length) && k < toI32(peer.length); k++) {
+      peer[k] = from[k]
+    }
+    this.peerHeld[slot] = this.peers.claim(peer, this.config.maxPerPeer)
+    // A connection that never opens a session goes at the hello deadline, counted from here.
+    this.connectBy[slot] = now + this.config.helloTimeout
+    this.wheel.file(slot, this.recheck(slot, now), now)
+  }
+
+  /** When a connecting slot is looked at next: in `RELAY_RECHECK`, or at its deadline if that is sooner. */
+  recheck(slot: i32, now: i64): i64 {
+    const next: i64 = now + RELAY_RECHECK
+    return this.connectBy[slot] < next ? this.connectBy[slot] : next
   }
 
   /** Gives back what `slot` holds: its place in both caps, its upstream socket and its timer. */
@@ -565,7 +587,7 @@ export class Relay {
   }
 
   /** Every event `slot`'s connection has, handled. */
-  serveSlot(slot: i32, now: i64, wall: i64): void {
+  serveSlot(slot: i32, now: i64, wall: i64, grantKey: Secret<u8[]>): void {
     this.reconcile(slot, now)
     if (this.servedCount < toI32(this.served.length)) {
       this.served[this.servedCount] = slot
@@ -579,7 +601,7 @@ export class Relay {
         if (state === RELAY_PUMPING) {
           this.pump(slot, wt, now)
         } else if (state === RELAY_HELLO_WAIT) {
-          this.hello(slot, wt, now, wall)
+          this.hello(slot, wt, now, wall, grantKey)
         }
       } else if (event === WT_SESSION) {
         this.session(slot, wt, now)
@@ -602,7 +624,7 @@ export class Relay {
     this.flushBatch()
   }
 
-  /** WT_SESSION: the path, then both caps, before the hello rather than after the grant. */
+  /** WT_SESSION: the path, then both caps (claimed at the first Initial), before the hello rather than after the grant. */
   session(slot: i32, wt: WebTransport, now: i64): void {
     const id: i64 = wt.sessionId
     if (this.states[slot] !== RELAY_CONNECTING || !this.isPath(wt.fields.path)) {
@@ -624,17 +646,11 @@ export class Relay {
       )
       return
     }
-    const peer: u8[] = this.peerAddresses[slot]
-    const from: u8[] = this.server.addresses[slot]
-    for (let k: i32 = 0; k < RELAY_PEER_KEY && k < toI32(from.length) && k < toI32(peer.length); k++) {
-      peer[k] = from[k]
-    }
-    if (!this.peers.claim(peer, this.config.maxPerPeer)) {
+    if (!this.peerHeld[slot]) {
       this.refusedPeer = h3Count(this.refusedPeer)
       this.close(slot, CLOSE_RATE_LIMITED, "too many sessions from this address", RELAY_QUIC_REFUSED, now)
       return
     }
-    this.peerHeld[slot] = true
     this.accepted = h3Count(this.accepted)
     this.states[slot] = RELAY_HELLO_WAIT
     this.wheel.file(slot, now + this.config.helloTimeout, now)
@@ -656,7 +672,7 @@ export class Relay {
   }
 
   /** The first datagram of an accepted session: a HELLO of this version with a grant, or a refusal. */
-  hello(slot: i32, wt: WebTransport, now: i64, wall: i64): void {
+  hello(slot: i32, wt: WebTransport, now: i64, wall: i64, grantKey: Secret<u8[]>): void {
     const f: RelayFrame = this.frame
     const type: i32 = relayDecode(f, wt.data, wt.dataStart, wt.dataLength)
     if (type !== RELAY_HELLO || f.fromRelay) {
@@ -670,7 +686,7 @@ export class Relay {
       return
     }
     const g: RelayGrant = this.grant
-    if (this.verifier.verify(wt.data, f.textStart, f.textLength, wall, g) !== GRANT_OK) {
+    if (this.verifier.verify(wt.data, f.textStart, f.textLength, wall, grantKey, g) !== GRANT_OK) {
       this.refusedGrant = h3Count(this.refusedGrant)
       this.close(slot, g.code, g.reason, RELAY_QUIC_REFUSED, now)
       return
@@ -930,7 +946,7 @@ export class Relay {
     }
   }
 
-  /** `slot`'s timer: the hello deadline, the stats tick and idle check, or a look at a slot on its way out. */
+  /** `slot`'s timer: the connect and hello deadlines, the stats tick and idle check, or a look at a slot on its way out. */
   timer(slot: i32, now: i64): void {
     this.reconcile(slot, now)
     const state: i32 = this.states[slot]
@@ -957,6 +973,14 @@ export class Relay {
       this.fromUpstream[slot] = 0
       this.server.touch(slot)
       this.wheel.file(slot, now + this.config.statsInterval, now)
+    } else if (state === RELAY_CONNECTING) {
+      if (now >= this.connectBy[slot]) {
+        // A handshake, or a connection that pings on, with no session by the hello deadline: closed as a silent session is.
+        this.connectTimeouts = h3Count(this.connectTimeouts)
+        this.close(slot, RELAY_NONE, "", RELAY_QUIC_REFUSED, now)
+      } else {
+        this.wheel.file(slot, this.recheck(slot, now), now)
+      }
     } else if (state !== RELAY_FREE) {
       this.wheel.file(slot, now + RELAY_RECHECK, now)
     }

@@ -12,8 +12,9 @@
  * nothing to pin, because a hash left behind by an earlier self-signed run
  * would go on being handed out and every client would pin a certificate the
  * relay no longer has. The pair is re-read when either file's modification
- * time changes, and a pair that does not load — missing, or half-written
- * during a renewal — keeps the identity already serving (`RelayWatch`).
+ * time changes, and a pair that does not load — missing, half-written
+ * during a renewal, or a key that is not the certificate's — keeps the
+ * identity already serving (`RelayWatch`).
  *
  * One difference from tls.rs: `nish/crypto/x509` mints a certificate with no
  * extensions, so the self-signed one names `CN=localhost` and no
@@ -27,7 +28,15 @@
 import { readFileSyncOrNull, statMtimeSync } from "nish:fs"
 import { Secret, secret, wipe } from "nish:secret"
 import { p256PublicKey } from "nish/crypto/p256"
-import { pemToDer, x509CertificateHash, x509MintSelfSigned, x509ParseP256PrivateKey } from "nish/crypto/x509"
+import { timingSafeEqual } from "nish/crypto/ct"
+import {
+  X509Certificate,
+  pemToDer,
+  x509CertificateHash,
+  x509MintSelfSigned,
+  x509ParseCertificate,
+  x509ParseP256PrivateKey,
+} from "nish/crypto/x509"
 
 /**
  * Days a self-signed certificate is minted for: thirteen rather than the
@@ -157,6 +166,16 @@ export const relayLoadPem = (source: RelaySource, id: RelayIdentity): Secret<u8[
   const key: Secret<u8[]> | null = x509ParseP256PrivateKey(keyText)
   if (key === null) {
     id.error = `could not load ${source.cert} and ${source.key}: ${source.key} holds no P-256 private key`
+    return null
+  }
+  // A pair that each parse but do not belong together, say one file copied
+  // before the other, would sign every handshake with a key the certificate
+  // does not name: refused like a pair that does not load.
+  const leaf: X509Certificate | null = x509ParseCertificate(chain[0])
+  const pub: u8[] | null = p256PublicKey(key)
+  if (leaf === null || !leaf.p256 || pub === null || !timingSafeEqual(pub, leaf.publicKey)) {
+    wipe(key)
+    id.error = `could not load ${source.cert} and ${source.key}: the key is not the one the certificate names`
     return null
   }
   id.chain = chain

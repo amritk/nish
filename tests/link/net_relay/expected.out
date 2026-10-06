@@ -76,6 +76,9 @@ PASS  whitespace between the tokens
 PASS  an object inside the grant is read through
 PASS  a host of 254 bytes
 PASS  one of 253 is a grant
+PASS  a secret of 100 bytes
+PASS  a secret of 64 bytes
+PASS  and it is not the 100-byte one's
 PASS  an object of a string, an integer and an object
 PASS  their kinds
 PASS  i64's largest integer
@@ -117,8 +120,10 @@ PASS  and it is watchable
 PASS  an unchanged pair is no renewal
 PASS  a chain still being written is an error rather than an empty identity
 PASS  and it is not marked seen, so the next poll looks again
+PASS  a renewal whose key is not the certificate's is refused, and the identity serving is kept
 PASS  the finished pair is the renewal: a chain of two
 PASS  a key file with no P-256 key is an error
+PASS  at start-up a key that is not the certificate's is refused
 PASS  files that are not there are an error rather than a panic
 PASS  and the watcher reads them as nothing having changed
 PASS  eight addresses fill a table of eight rows
@@ -180,6 +185,13 @@ PASS  two from one address under a cap of two
 PASS  a third from it is refused
 PASS  another address is unaffected
 PASS  a refused session hands its global place back, and its address holds no extra row
+PASS  64 handshakes from one address, none of them opening a session, hold 64 places of the address
+PASS  the 65th is refused while the 64 are still connecting
+PASS  and closed with code 1
+PASS  a handshake is kept while its hello deadline has not passed
+PASS  at five seconds from its first Initial each is closed with code 1, counted, and its places given back
+PASS  a connection that keeps pinging is kept until the deadline
+PASS  a connection that keeps pinging and never sends CONNECT is closed at the hello deadline
 PASS  four DATA in one pass leave in one GSO send, the shorter last
 PASS  read back by the game server's GRO socket as one
 PASS  a GSO burst from the game server arrives as one GRO read, cut into three DATA
@@ -188,4 +200,4 @@ PASS  keep no arena memory in the relay
 PASS  a datagram to the upstream socket from another address is dropped and counted
 PASS  a stream the client opens is reset, and the session goes on
 PASS  a plain request is answered 404
-relay: 190 passed, 0 failed, 0 skipped
+relay: 202 passed, 0 failed, 0 skipped

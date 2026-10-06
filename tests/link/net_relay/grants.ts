@@ -4,6 +4,7 @@
 // and reason, and the payloads only a signed token can reach — bad JSON,
 // wrong types, a port out of range — signed here with the same secret, since
 // the signature is checked before any of them is read.
+import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { base64urlEncode } from "nish/crypto/base64url";
 import { hmacSha256 } from "nish/crypto/hmac";
@@ -39,9 +40,9 @@ const signRaw = (payload: string): string => {
 };
 
 /** What verifying `token` at `now` answers, with the reason: "code reason". */
-const verdict = (v: GrantVerifier, token: string, now: i64, out: RelayGrant): string => {
+const verdict = (v: GrantVerifier, key: Secret<u8[]>, token: string, now: i64, out: RelayGrant): string => {
   const buf: u8[] = bytesOf(token);
-  const code: i32 = v.verify(buf, n32(0), toI32(buf.length), now, out);
+  const code: i32 = v.verify(buf, n32(0), toI32(buf.length), now, key, out);
   return code === GRANT_OK ? `ok ${out.hostText()}:${out.port}` : `${code} ${out.reason}`;
 };
 
@@ -51,32 +52,33 @@ const payload = (host: string, port: string, expiresAt: string): string =>
 
 /** Every grant check. */
 export const grantChecks = (t: Suite): void => {
-  const v = new GrantVerifier(bytesOf(SECRET));
+  const v = new GrantVerifier();
+  const key: Secret<u8[]> = secret(bytesOf(SECRET));
   const out = new RelayGrant();
-  t.eqStr("accepts a token signed by the TypeScript", verdict(v, TOKEN, NOW, out), "ok 127.0.0.1:8788");
+  t.eqStr("accepts a token signed by the TypeScript", verdict(v, key, TOKEN, NOW, out), "ok 127.0.0.1:8788");
   t.eqI64("and keeps its expiry", out.expiresAt, n64(4102444800000));
 
-  const other = new GrantVerifier(bytesOf("not-the-secret"));
-  t.eqStr("refuses a token signed with another secret", verdict(other, TOKEN, NOW, out), `${CLOSE_TOKEN_INVALID} bad signature`);
+  const other: Secret<u8[]> = secret(bytesOf("not-the-secret"));
+  t.eqStr("refuses a token signed with another secret", verdict(v, other, TOKEN, NOW, out), `${CLOSE_TOKEN_INVALID} bad signature`);
 
   // The whole point: rewriting the upstream host must invalidate the MAC.
   const forgedPayload: string = base64urlEncode(bytesOf(payload('"203.0.113.9"', "53", "4102444800000")));
   const mac: string = TOKEN_MAC;
   t.eqStr(
     "refuses a token whose payload was edited after signing",
-    verdict(v, `v1.${forgedPayload}.${mac}`, NOW, out),
+    verdict(v, key, `v1.${forgedPayload}.${mac}`, NOW, out),
     `${CLOSE_TOKEN_INVALID} bad signature`
   );
 
-  t.eqStr("refuses an expired token even though it is correctly signed", verdict(v, TOKEN, n64(4102444800001), out), `${CLOSE_TOKEN_EXPIRED} token expired`);
-  t.eqStr("an expiry of exactly now is expired", verdict(v, TOKEN, n64(4102444800000), out), `${CLOSE_TOKEN_EXPIRED} token expired`);
-  t.eqStr("a millisecond before it is not", verdict(v, TOKEN, n64(4102444799999), out), "ok 127.0.0.1:8788");
+  t.eqStr("refuses an expired token even though it is correctly signed", verdict(v, key, TOKEN, n64(4102444800001), out), `${CLOSE_TOKEN_EXPIRED} token expired`);
+  t.eqStr("an expiry of exactly now is expired", verdict(v, key, TOKEN, n64(4102444800000), out), `${CLOSE_TOKEN_EXPIRED} token expired`);
+  t.eqStr("a millisecond before it is not", verdict(v, key, TOKEN, n64(4102444799999), out), "ok 127.0.0.1:8788");
 
   // Malformed tokens, refused without panicking: grant.rs's list.
   const malformed: string[] = ["", "v1", "v1.only-two", "v2.eyJ9.abc", "v1.!!!.!!!", "v1.eyJ9.abc.extra"];
   const reasons: string[] = [];
   for (const bad of malformed) {
-    reasons.push(verdict(v, bad, NOW, out));
+    reasons.push(verdict(v, key, bad, NOW, out));
   }
   t.eqStr(
     "malformed tokens: empty, one part, two parts, another version, a signature that is not base64url, four parts",
@@ -84,45 +86,60 @@ export const grantChecks = (t: Suite): void => {
     `${CLOSE_TOKEN_INVALID} malformed token | ${CLOSE_TOKEN_INVALID} malformed token | ${CLOSE_TOKEN_INVALID} malformed token | ${CLOSE_TOKEN_INVALID} malformed token | ${CLOSE_TOKEN_INVALID} malformed token | ${CLOSE_TOKEN_INVALID} malformed token`
   );
   // Forty-two characters end on bits that spell no byte, which base64url refuses, as the base64 crate does.
-  t.eqStr("a signature one character short of the real one", verdict(v, TOKEN.substring(0, TOKEN.length - 1), NOW, out), `${CLOSE_TOKEN_INVALID} malformed token`);
-  t.eqStr("a signature of 31 bytes", verdict(v, `${TOKEN.substring(0, TOKEN.length - TOKEN_MAC.length - 1)}.${base64urlEncode(new Array<u8>(31))}`, NOW, out), `${CLOSE_TOKEN_INVALID} bad signature`);
-  t.eqStr("a version of one letter more", verdict(v, `v11${TOKEN.substring(2, TOKEN.length)}`, NOW, out), `${CLOSE_TOKEN_INVALID} malformed token`);
-  t.eqStr("a capital V", verdict(v, `V1${TOKEN.substring(2, TOKEN.length)}`, NOW, out), `${CLOSE_TOKEN_INVALID} malformed token`);
+  t.eqStr("a signature one character short of the real one", verdict(v, key, TOKEN.substring(0, TOKEN.length - 1), NOW, out), `${CLOSE_TOKEN_INVALID} malformed token`);
+  t.eqStr("a signature of 31 bytes", verdict(v, key, `${TOKEN.substring(0, TOKEN.length - TOKEN_MAC.length - 1)}.${base64urlEncode(new Array<u8>(31))}`, NOW, out), `${CLOSE_TOKEN_INVALID} bad signature`);
+  t.eqStr("a version of one letter more", verdict(v, key, `v11${TOKEN.substring(2, TOKEN.length)}`, NOW, out), `${CLOSE_TOKEN_INVALID} malformed token`);
+  t.eqStr("a capital V", verdict(v, key, `V1${TOKEN.substring(2, TOKEN.length)}`, NOW, out), `${CLOSE_TOKEN_INVALID} malformed token`);
 
   // Signed, so the payload is read: everything a payload can get wrong.
   const invalid: string = `${CLOSE_TOKEN_INVALID} malformed payload`;
-  t.eqStr("a payload that is not base64url", verdict(v, signRaw("!!!"), NOW, out), invalid);
-  t.eqStr("a payload that is not JSON", verdict(v, signGrant("not json", SECRET), NOW, out), invalid);
-  t.eqStr("an empty payload", verdict(v, signRaw(""), NOW, out), invalid);
-  t.eqStr("an array", verdict(v, signGrant("[1,2]", SECRET), NOW, out), invalid);
-  t.eqStr("an empty object", verdict(v, signGrant("{}", SECRET), NOW, out), invalid);
-  t.eqStr("a host that is a number", verdict(v, signGrant(payload("1", "8788", "4102444800000"), SECRET), NOW, out), invalid);
-  t.eqStr("a port that is a string", verdict(v, signGrant(payload('"127.0.0.1"', '"8788"', "4102444800000"), SECRET), NOW, out), invalid);
-  t.eqStr("an expiry that is a string", verdict(v, signGrant(payload('"127.0.0.1"', "8788", '"soon"'), SECRET), NOW, out), invalid);
-  t.eqStr("a port past u16", verdict(v, signGrant(payload('"127.0.0.1"', "65536", "4102444800000"), SECRET), NOW, out), invalid);
-  t.eqStr("a negative port", verdict(v, signGrant(payload('"127.0.0.1"', "-1", "4102444800000"), SECRET), NOW, out), invalid);
-  t.eqStr("port 65535 is in range", verdict(v, signGrant(payload('"127.0.0.1"', "65535", "4102444800000"), SECRET), NOW, out), "ok 127.0.0.1:65535");
-  t.eqStr("an expiry with a fraction", verdict(v, signGrant(payload('"127.0.0.1"', "8788", "4102444800000.5"), SECRET), NOW, out), invalid);
-  t.eqStr("an expiry with an exponent", verdict(v, signGrant(payload('"127.0.0.1"', "8788", "4.1e12"), SECRET), NOW, out), invalid);
-  t.eqStr("a port that is true", verdict(v, signGrant(payload('"127.0.0.1"', "true", "4102444800000"), SECRET), NOW, out), invalid);
-  t.eqStr("a host that is null", verdict(v, signGrant(payload("null", "8788", "4102444800000"), SECRET), NOW, out), invalid);
-  t.eqStr("no host at all", verdict(v, signGrant('{"port":8788,"expiresAt":4102444800000}', SECRET), NOW, out), invalid);
-  t.eqStr("no nonce is fine, as in grant.rs", verdict(v, signGrant('{"host":"10.0.0.1","port":1,"expiresAt":4102444800000}', SECRET), NOW, out), "ok 10.0.0.1:1");
-  t.eqStr("a host twice", verdict(v, signGrant('{"host":"10.0.0.1","host":"10.0.0.2","port":1,"expiresAt":4102444800000}', SECRET), NOW, out), invalid);
-  t.eqStr("a second value after the object", verdict(v, signGrant(`${payload('"127.0.0.1"', "8788", "4102444800000")}{}`, SECRET), NOW, out), invalid);
-  t.eqStr("an escaped host is unescaped", verdict(v, signGrant(payload('"127.0.0.\\u0031"', "8788", "4102444800000"), SECRET), NOW, out), "ok 127.0.0.1:8788");
-  t.eqStr("whitespace between the tokens", verdict(v, signGrant(' { "host" : "::1" ,\n"port":\t9 , "expiresAt" : 4102444800000 } ', SECRET), NOW, out), "ok ::1:9");
-  t.eqStr("an object inside the grant is read through", verdict(v, signGrant('{"host":"10.0.0.1","port":1,"expiresAt":4102444800000,"meta":{"a":{"b":"c"},"d":1}}', SECRET), NOW, out), "ok 10.0.0.1:1");
+  t.eqStr("a payload that is not base64url", verdict(v, key, signRaw("!!!"), NOW, out), invalid);
+  t.eqStr("a payload that is not JSON", verdict(v, key, signGrant("not json", SECRET), NOW, out), invalid);
+  t.eqStr("an empty payload", verdict(v, key, signRaw(""), NOW, out), invalid);
+  t.eqStr("an array", verdict(v, key, signGrant("[1,2]", SECRET), NOW, out), invalid);
+  t.eqStr("an empty object", verdict(v, key, signGrant("{}", SECRET), NOW, out), invalid);
+  t.eqStr("a host that is a number", verdict(v, key, signGrant(payload("1", "8788", "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("a port that is a string", verdict(v, key, signGrant(payload('"127.0.0.1"', '"8788"', "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("an expiry that is a string", verdict(v, key, signGrant(payload('"127.0.0.1"', "8788", '"soon"'), SECRET), NOW, out), invalid);
+  t.eqStr("a port past u16", verdict(v, key, signGrant(payload('"127.0.0.1"', "65536", "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("a negative port", verdict(v, key, signGrant(payload('"127.0.0.1"', "-1", "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("port 65535 is in range", verdict(v, key, signGrant(payload('"127.0.0.1"', "65535", "4102444800000"), SECRET), NOW, out), "ok 127.0.0.1:65535");
+  t.eqStr("an expiry with a fraction", verdict(v, key, signGrant(payload('"127.0.0.1"', "8788", "4102444800000.5"), SECRET), NOW, out), invalid);
+  t.eqStr("an expiry with an exponent", verdict(v, key, signGrant(payload('"127.0.0.1"', "8788", "4.1e12"), SECRET), NOW, out), invalid);
+  t.eqStr("a port that is true", verdict(v, key, signGrant(payload('"127.0.0.1"', "true", "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("a host that is null", verdict(v, key, signGrant(payload("null", "8788", "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("no host at all", verdict(v, key, signGrant('{"port":8788,"expiresAt":4102444800000}', SECRET), NOW, out), invalid);
+  t.eqStr("no nonce is fine, as in grant.rs", verdict(v, key, signGrant('{"host":"10.0.0.1","port":1,"expiresAt":4102444800000}', SECRET), NOW, out), "ok 10.0.0.1:1");
+  t.eqStr("a host twice", verdict(v, key, signGrant('{"host":"10.0.0.1","host":"10.0.0.2","port":1,"expiresAt":4102444800000}', SECRET), NOW, out), invalid);
+  t.eqStr("a second value after the object", verdict(v, key, signGrant(`${payload('"127.0.0.1"', "8788", "4102444800000")}{}`, SECRET), NOW, out), invalid);
+  t.eqStr("an escaped host is unescaped", verdict(v, key, signGrant(payload('"127.0.0.\\u0031"', "8788", "4102444800000"), SECRET), NOW, out), "ok 127.0.0.1:8788");
+  t.eqStr("whitespace between the tokens", verdict(v, key, signGrant(' { "host" : "::1" ,\n"port":\t9 , "expiresAt" : 4102444800000 } ', SECRET), NOW, out), "ok ::1:9");
+  t.eqStr("an object inside the grant is read through", verdict(v, key, signGrant('{"host":"10.0.0.1","port":1,"expiresAt":4102444800000,"meta":{"a":{"b":"c"},"d":1}}', SECRET), NOW, out), "ok 10.0.0.1:1");
   const longHost: string[] = [];
   for (let k: i32 = 0; k < 254; k++) {
     longHost.push("a");
   }
-  t.eqStr("a host of 254 bytes", verdict(v, signGrant(payload(`"${longHost.join("")}"`, "8788", "4102444800000"), SECRET), NOW, out), invalid);
+  t.eqStr("a host of 254 bytes", verdict(v, key, signGrant(payload(`"${longHost.join("")}"`, "8788", "4102444800000"), SECRET), NOW, out), invalid);
   longHost.pop();
-  t.ok("one of 253 is a grant", verdict(v, signGrant(payload(`"${longHost.join("")}"`, "8788", "4102444800000"), SECRET), NOW, out).startsWith("ok "));
+  t.ok("one of 253 is a grant", verdict(v, key, signGrant(payload(`"${longHost.join("")}"`, "8788", "4102444800000"), SECRET), NOW, out).startsWith("ok "));
+
+  // A secret past one SHA-256 block is hashed first (RFC 2104 §2); one of exactly a block is not.
+  const longSecret: string[] = [];
+  for (let k: i32 = 0; k < 100; k++) {
+    longSecret.push(String.fromCharCode(n32(0x61) + (k % n32(26))));
+  }
+  const long: Secret<u8[]> = secret(bytesOf(longSecret.join("")));
+  t.eqStr("a secret of 100 bytes", verdict(v, long, signGrant(payload('"10.0.0.1"', "1", "4102444800000"), longSecret.join("")), NOW, out), "ok 10.0.0.1:1");
+  wipe(long);
+  const block: Secret<u8[]> = secret(bytesOf(longSecret.join("").substring(0, 64)));
+  t.eqStr("a secret of 64 bytes", verdict(v, block, signGrant(payload('"10.0.0.1"', "1", "4102444800000"), longSecret.join("").substring(0, 64)), NOW, out), "ok 10.0.0.1:1");
+  t.eqStr("and it is not the 100-byte one's", verdict(v, block, signGrant(payload('"10.0.0.1"', "1", "4102444800000"), longSecret.join("")), NOW, out), `${CLOSE_TOKEN_INVALID} bad signature`);
+  wipe(block);
 
   jsonChecks(t);
-  arenaCheck(t, v, out);
+  arenaCheck(t, v, key, out);
+  wipe(key);
+  wipe(other);
 };
 
 /** What `RelayJson.read` answers for `text`. */
@@ -201,16 +218,16 @@ const jsonChecks = (t: Suite): void => {
  * 70,000-byte filler takes the rest of the current chunk, so the call starts
  * a new one at 0 (`net_quic_stream`'s `NqMeter`, exact under 64 KiB).
  */
-const keptBy = (v: GrantVerifier, token: u8[], out: RelayGrant): i64 => {
+const keptBy = (v: GrantVerifier, key: Secret<u8[]>, token: u8[], out: RelayGrant): i64 => {
   const filler: u8[] = new Array<u8>(70000);
   const before: i64 = Arena.used();
-  v.verify(token, n32(0), toI32(token.length), NOW, out);
+  v.verify(token, n32(0), toI32(token.length), NOW, key, out);
   const after: i64 = Arena.used();
   return after !== before && toI32(filler.length) > 0 ? after : n64(0);
 };
 
 /** Verifying a grant after warm-up keeps nothing in the arena, accepted or refused at every stage. */
-const arenaCheck = (t: Suite, v: GrantVerifier, out: RelayGrant): void => {
+const arenaCheck = (t: Suite, v: GrantVerifier, key: Secret<u8[]>, out: RelayGrant): void => {
   const short: string = `${TOKEN.substring(0, TOKEN.length - TOKEN_MAC.length - 1)}.${base64urlEncode(new Array<u8>(31))}`;
   const tokens: u8[][] = [
     bytesOf(TOKEN),
@@ -222,8 +239,8 @@ const arenaCheck = (t: Suite, v: GrantVerifier, out: RelayGrant): void => {
   let kept: i64 = 0;
   const each: string[] = [];
   for (const b of tokens) {
-    keptBy(v, b, out);
-    const k: i64 = keptBy(v, b, out);
+    keptBy(v, key, b, out);
+    const k: i64 = keptBy(v, key, b, out);
     each.push(`${k}`);
     kept = kept + k;
   }

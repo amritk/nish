@@ -69,15 +69,11 @@ const nap = (ms: i32): void => {
   pollWait(loop, ready, ms);
 };
 
-/** Runs `total` sessions past warm-up through a relay of its own process, and checks it stayed flat. */
-const soak = (total: i32): i32 => {
-  const t = new Suite("relay soak");
+/** Drives the relay whose files are `files`.*: its port, then `SOAK_WARMUP + total` sessions, then reads its report and checks it. */
+const drive = (t: Suite, total: i32, files: string): void => {
   const all: i32 = SOAK_WARMUP + total;
-  // Named by the count, so that an opt-in run and `npm test`'s cannot share them.
-  const portFile: string = `build/net_relay_soak_${all}.port`;
-  const report: string = `build/net_relay_soak_${all}.report`;
-  const every: i32 = SOAK_WARMUP;
-  spawnSync(["sh", "-c", `rm -f ${portFile} ${report}; '${process.argv[0]}' serve ${portFile} ${report} ${all} ${every} > /dev/null 2>&1 &`]);
+  const portFile: string = `${files}.port`;
+  const report: string = `${files}.report`;
   let port: i64 = -1;
   for (let k: i32 = 0; k < 500 && port < 0; k++) {
     const text: string | null = readFileSyncOrNull(portFile);
@@ -87,7 +83,7 @@ const soak = (total: i32): i32 => {
     }
   }
   if (!t.ok("the relay starts in a process of its own and says its port", port > 0)) {
-    return t.done();
+    return;
   }
   const echo: i32[] = echoSocket();
   let finished: i32 = 0;
@@ -108,7 +104,7 @@ const soak = (total: i32): i32 => {
   const last: string = lineAt(text, all);
   if (!t.ok("the relay reported after warm-up and at the end", warm.length > 0 && last.length > 0)) {
     writeError(text);
-    return t.done();
+    return;
   }
   const resident: i64 = field(last, "rss") - field(warm, "rss");
   // The figures, on stderr: stdout is the checks alone, which `expected.out` pins.
@@ -126,6 +122,18 @@ const soak = (total: i32): i32 => {
   } else {
     t.fail(flatResident, figures);
   }
+};
+
+/** Runs `total` sessions past warm-up through a relay of its own process, and checks it stayed flat. */
+const soak = (total: i32): i32 => {
+  const t = new Suite("relay soak");
+  const all: i32 = SOAK_WARMUP + total;
+  // Named by the count, so that an opt-in run and `npm test`'s cannot share them.
+  const files: string = `build/net_relay_soak_${all}`;
+  spawnSync(["sh", "-c", `rm -f ${files}.port ${files}.report ${files}.pid; '${process.argv[0]}' serve ${files}.port ${files}.report ${all} ${SOAK_WARMUP} > /dev/null 2>&1 & echo $! > ${files}.pid`]);
+  drive(t, total, files);
+  // Whichever way `drive` ended, the relay goes with it: it has exited by itself after a full run, and is stopped here after any other.
+  spawnSync(["sh", "-c", `kill $(cat ${files}.pid) 2> /dev/null; rm -f ${files}.pid`]);
   return t.done();
 };
 

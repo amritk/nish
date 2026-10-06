@@ -31,7 +31,7 @@ import { writeFileSync } from "nish:fs"
 import { udpBind } from "nish:net"
 import { monotonicNanos, signalFd } from "nish:process"
 import { write, writeError } from "nish:io"
-import { Secret, wipe } from "nish:secret"
+import { Secret, secret, wipe } from "nish:secret"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { QUIC_CONN_STATIC_KEY_SIZE } from "nish/net/quic"
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener"
@@ -105,7 +105,12 @@ const bindClient = (o: RelayOptions): i32 => {
  * certificate files again (true): every `CERT_POLL_INTERVAL`, and only for a
  * PEM identity.
  */
-const serveUntilPoll = (relay: Relay, source: RelaySource, key: Secret<u8[]>): boolean => {
+const serveUntilPoll = (
+  relay: Relay,
+  source: RelaySource,
+  key: Secret<u8[]>,
+  grantKey: Secret<u8[]>
+): boolean => {
   const nextPoll: i64 = nowMs() + CERT_POLL_INTERVAL
   let signalled: boolean = false
   while (!signalled) {
@@ -115,7 +120,7 @@ const serveUntilPoll = (relay: Relay, source: RelaySource, key: Secret<u8[]>): b
       const untilPoll: i32 = nextPoll > now ? toI32(nextPoll - now) : 0
       wait = wait < 0 || untilPoll < wait ? untilPoll : wait
     }
-    signalled = relay.step(now, wallMs(), key, wait)
+    signalled = relay.step(now, wallMs(), key, grantKey, wait)
     if (!signalled && source.pem && nowMs() >= nextPoll) {
       return true
     }
@@ -187,19 +192,15 @@ export const main = (): i32 => {
     random(QUIC_CONN_STATIC_KEY_SIZE),
     random(QUIC_CONN_STATIC_KEY_SIZE)
   )
-  const relay = new Relay(
-    config,
-    quicConfig,
-    fd,
-    new GrantVerifier(httpFieldBytes(o.secret)),
-    random(QUIC_LISTENER_ENTROPY_SIZE)
-  )
+  const relay = new Relay(config, quicConfig, fd, new GrantVerifier(), random(QUIC_LISTENER_ENTROPY_SIZE))
+  // The grant secret's bytes, held from here to the last `wipe` and exposed only to the HMAC.
+  const grantKey: Secret<u8[]> = secret(httpFieldBytes(o.secret))
   const signals: i32 = signalFd()
   if (signals >= 0) {
     relay.watchSignals(signals)
   }
 
-  while (serveUntilPoll(relay, source, key)) {
+  while (serveUntilPoll(relay, source, key, grantKey)) {
     const fresh = new RelayIdentity()
     const next: Secret<u8[]> | null = relayRenew(watch, fresh)
     if (next === null) {
@@ -219,5 +220,6 @@ export const main = (): i32 => {
   write("[relay] stopping: closing every session\n")
   relay.shutdown(nowMs())
   wipe(key)
+  wipe(grantKey)
   return 0
 }

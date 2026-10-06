@@ -31,8 +31,10 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 ## What it does, as `main.rs` does it
 
 - **Caps and timeouts**, all start-up numbers in `RelayConfig`: at most 4,096
-  sessions and 64 per address, counted from a connection's first Initial; 256
-  datagrams a second per session, then CLOSE RATE_LIMITED; 5 s to say hello;
+  sessions and 64 per address, both counted from a connection's first
+  Initial; 5 s from that Initial to open a session, or the connection is
+  closed with code 1, so a handshake that pings on holds neither place for
+  longer; 256 datagrams a second per session, then CLOSE RATE_LIMITED; 5 s to say hello;
   10 s idle, checked at each STATS; STATS every 2 s; QUIC's idle timeout 30 s.
   A client over either session cap is still accepted, told why (CLOSE
   RATE_LIMITED) and closed, from a reserve of 64 spare QUIC slots.
@@ -42,7 +44,8 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 - **Identity.** Minted at start for 13 days (`SELF_SIGNED_DAYS`) with its
   SHA-256 written to `--cert-out` as `{"hash":"…","expiresAt":…}`; or
   `--cert`/`--key`, looked at every 60 s and swapped under the running server
-  when either file changes and the pair loads, with `{"trusted":true}` written
+  when either file changes and the pair loads (the key must be the one the
+  certificate names, or the pair is refused), with `{"trusted":true}` written
   so a stale pin cannot survive. Live sessions keep their handshake's identity.
 - **Offload.** The client side always asks for GRO and sends paced GSO flights
   (the carrier's). `--offload` adds GRO on each upstream socket, cut at the
@@ -50,6 +53,14 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   session in one GSO send while its payloads are the same size.
 - **A clean stop** on SIGINT or SIGTERM: CLOSE SHUTDOWN to every session, each
   connection closed, exit 0.
+- **The grant secret** is a `Secret<u8[]>` (`nish:secret`) that `main.ts`
+  holds and wipes on its way out; `GrantVerifier.verify` takes it per call and
+  exposes it to the HMAC alone, which wipes each padded key block. The HMAC's
+  SHA-256 is the verifier's own, over arrays it makes and wipes, because
+  `Sha256` keeps its arrays in fields, which the `using a = arena()` block
+  around verification cannot follow through `exposeWith`. What the wipe cannot
+  reach is the option's string (`--secret` or `CS_RELAY_SECRET`), immutable
+  for the process's life.
 - **Memory.** Every table is made at start-up; a datagram, a timer and a
   session's whole life after its handshake allocate nothing
   (`tests/link/net_relay`, "keep no arena memory in the relay"). The full-size

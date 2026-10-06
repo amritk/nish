@@ -295,6 +295,48 @@ const caps = (t: Suite): void => {
   t.ok("a refused session hands its global place back, and its address holds no extra row", rig2.relay.live === n32(3) && rig2.relay.peers.used === n32(2));
 };
 
+/** A handshake holds both places from its first Initial, and only until the hello deadline unless it opens a session. */
+const connecting = (t: Suite): void => {
+  const config: RelayConfig = rigConfig();
+  config.maxSessions = 66;
+  config.maxPerPeer = 64;
+  const rig = new Rig(config, false);
+  const held: RigClient[] = [];
+  for (let k: i32 = 1; k <= 64; k++) {
+    held.push(rig.connect(k, "127.0.0.1"));
+  }
+  let connected: i32 = 0;
+  for (const c of held) {
+    connected = connected + (c.connected ? 1 : 0);
+  }
+  t.ok("64 handshakes from one address, none of them opening a session, hold 64 places of the address", connected === n32(64) && rig.relay.live === n32(64) && rig.relay.peers.used === n32(1) && rig.relay.accepted === n32(0));
+  const over: RigClient = rig.connect(n32(65), "127.0.0.1");
+  over.open("/cs");
+  rig.settle(n32(50));
+  t.eqStr("the 65th is refused while the 64 are still connecting", lastClose(over), `${CLOSE_RATE_LIMITED} too many sessions from this address`);
+  t.eqStr("and closed with code 1", ended(over), "app 1");
+  rig.advance(n64(4900), n64(700));
+  t.ok("a handshake is kept while its hello deadline has not passed", ended(held[0]) === "open" && rig.relay.connectTimeouts === n32(0));
+  rig.advance(n64(200), n64(200));
+  let closed: i32 = 0;
+  for (const c of held) {
+    closed = closed + (ended(c) === "app 1" && toI32(c.datagrams.length) === n32(0) ? 1 : 0);
+  }
+  t.ok("at five seconds from its first Initial each is closed with code 1, counted, and its places given back", closed === n32(64) && rig.relay.connectTimeouts === n32(64) && rig.relay.live === n32(0) && rig.relay.peers.used === n32(0));
+
+  const rig2 = new Rig(rigConfig(), false);
+  const pinging: RigClient = rig2.connect(n32(1), "127.0.0.1");
+  for (let k: i32 = 0; k < 7; k++) {
+    // An ack-eliciting PING every 700 ms, 4.9 s of them, keeps QUIC alive but opens no session.
+    pinging.packet([toU8(0x01)]);
+    rig2.advance(n64(700), n64(700));
+  }
+  t.eqStr("a connection that keeps pinging is kept until the deadline", ended(pinging), "open");
+  pinging.packet([toU8(0x01)]);
+  rig2.advance(n64(200), n64(200));
+  t.ok("a connection that keeps pinging and never sends CONNECT is closed at the hello deadline", ended(pinging) === "app 1" && rig2.relay.connectTimeouts === n32(1) && rig2.relay.live === n32(0));
+};
+
 /** GSO and GRO both ways with `--offload`. */
 const offload = (t: Suite): void => {
   const config: RelayConfig = rigConfig();
@@ -367,6 +409,7 @@ export const loopbackChecks = (t: Suite): void => {
   relayEnds(t);
   refusals(t);
   caps(t);
+  connecting(t);
   offload(t);
   warm(t);
 };
