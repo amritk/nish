@@ -951,7 +951,11 @@ const quicConnResetTokenInto = (
   mac.begin(key, QUIC_CONN_FROM, toI32(key.length))
   mac.update(cid, at, length)
   mac.finishInto(tag, QUIC_CONN_FROM)
-  for (let k: i32 = 0; k < QUIC_RESET_TOKEN_SIZE && outAt + k < toI32(out.length); k += 1) {
+  for (
+    let k: i32 = 0;
+    k < QUIC_RESET_TOKEN_SIZE && k < toI32(tag.length) && outAt + k < toI32(out.length);
+    k += 1
+  ) {
     out[outAt + k] = tag[k]
   }
   secureZero(tag)
@@ -2465,7 +2469,11 @@ export class QuicConnection {
     mac.begin(this.cidSeed, QUIC_CONN_FROM, toI32(this.cidSeed.length))
     mac.update(counter, QUIC_CONN_FROM, toI32(counter.length))
     mac.finishInto(tag, QUIC_CONN_FROM)
-    for (let k: i32 = 0; k < QUIC_CONN_CID_LENGTH && k < toI32(this.cidScratch.length); k += 1) {
+    for (
+      let k: i32 = 0;
+      k < QUIC_CONN_CID_LENGTH && k < toI32(tag.length) && k < toI32(this.cidScratch.length);
+      k += 1
+    ) {
       this.cidScratch[k] = tag[k]
     }
     secureZero(tag)
