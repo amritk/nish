@@ -68,6 +68,11 @@ export const QUIC_TP_PREFERRED_ADDRESS: i32 = 0x0d
 export const QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT: i32 = 0x0e
 export const QUIC_TP_INITIAL_SCID: i32 = 0x0f
 export const QUIC_TP_RETRY_SCID: i32 = 0x10
+/**
+ * `max_datagram_frame_size` (RFC 9221 §3): the largest DATAGRAM frame, type
+ * and Length included, the sender takes; absent or 0, it takes none.
+ */
+export const QUIC_TP_MAX_DATAGRAM_FRAME_SIZE: i32 = 0x20
 
 /** The smallest `max_udp_payload_size` allowed, and every QUIC path's minimum datagram (RFC 9000 §14). */
 export const QUIC_MIN_UDP_PAYLOAD: i64 = 1200
@@ -97,6 +102,8 @@ export class QuicTransportParameters {
   ackDelayExponent: i64 = 3
   maxAckDelay: i64 = 25
   activeConnectionIdLimit: i64 = 2
+  /** RFC 9221's `max_datagram_frame_size`: 0, the default, for no DATAGRAM frames. */
+  maxDatagramFrameSize: i64 = 0
   errorParameter: i64 = 0
   originalDcid: u8[]
   statelessResetToken: u8[]
@@ -169,6 +176,7 @@ export const quicEncodeTransportParameters = (p: QuicTransportParameters): u8[] 
   quicParamsPushVarint(out, QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT, p.activeConnectionIdLimit, 2)
   quicParamsPushBytes(out, QUIC_TP_INITIAL_SCID, p.initialScid, p.hasInitialScid)
   quicParamsPushBytes(out, QUIC_TP_RETRY_SCID, p.retryScid, p.hasRetryScid)
+  quicParamsPushVarint(out, QUIC_TP_MAX_DATAGRAM_FRAME_SIZE, p.maxDatagramFrameSize, 0)
   return out
 }
 
@@ -329,8 +337,10 @@ const quicParamsIsVarint = (id: i32): boolean =>
 export const quicParseTransportParameters = (bytes: u8[], fromServer: boolean): QuicTransportParameters => {
   const p: QuicTransportParameters = new QuicTransportParameters()
   const end: i32 = toI32(bytes.length)
-  // The known IDs are 0 to 16, so one bit each of an i32 records which were seen.
+  // The known IDs are 0 to 16, so one bit each of an i32 records which were
+  // seen; RFC 9221's 0x20 has a flag of its own.
   let seen: i32 = 0
+  let seenDatagram: boolean = false
   let at: i32 = 0
   while (at < end) {
     const id: i64 = quicVarintRead(bytes, at, end)
@@ -349,6 +359,15 @@ export const quicParseTransportParameters = (bytes: u8[], fromServer: boolean): 
     const valueAt: i32 = at
     const valueLength: i32 = toI32(length)
     at = at + valueLength
+    if (id === toI64(QUIC_TP_MAX_DATAGRAM_FRAME_SIZE)) {
+      const value: i64 = quicParamsVarintValue(bytes, valueAt, valueLength)
+      if (seenDatagram || value < 0) {
+        return quicParamsRefuse(p, id)
+      }
+      seenDatagram = true
+      p.maxDatagramFrameSize = value
+      continue
+    }
     if (id > toI64(QUIC_TP_RETRY_SCID)) {
       continue
     }

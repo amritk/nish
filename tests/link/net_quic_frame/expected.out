@@ -94,6 +94,7 @@ PASS  no refused write appended anything
 PASS  quicPushNewConnectionId writes one
 PASS  as sequence, Retire Prior To, the ID's length and bytes, and the token
 PASS  it reads back
+PASS  with the ID and the token left in the payload, as windows
 PASS  an empty connection ID is refused
 PASS  so is one of 21 bytes
 PASS  so is a 15-byte token
@@ -145,4 +146,52 @@ PASS  a 0-RTT packet carries STREAM but not ACK, CRYPTO or HANDSHAKE_DONE
 PASS  a Retry carries no frames
 PASS  ACK, PADDING and both closes do not elicit an acknowledgement
 PASS  PING and STREAM do
-quic frames: 147 passed, 0 failed, 0 skipped
+PASS  quicAckSize sizes the ACK quicPushAck writes
+PASS  quicPutAck writes it in place
+PASS  the same bytes
+PASS  one byte short of room, it writes nothing
+PASS  and leaves the buffer as it was
+PASS  an ACK with no ranges is refused
+PASS  quicPutCrypto
+PASS  writes quicPushCrypto's bytes
+PASS  and refuses a window outside the data
+PASS  quicPutStream
+PASS  writes quicPushStream's bytes
+PASS  and refuses a length past its data
+PASS  quicPutValue
+PASS  writes quicPushValue's bytes
+PASS  and refuses a type it does not write
+PASS  quicPutStreamValue
+PASS  writes quicPushStreamValue's bytes
+PASS  and refuses another type
+PASS  quicPutNewConnectionId of the first 8 bytes of a 20-byte slot
+PASS  writes quicPushNewConnectionId's bytes
+PASS  and refuses a length past the slot
+PASS  quicPutPathData
+PASS  writes quicPushPathData's bytes
+PASS  and refuses a type it does not write
+PASS  quicPutStreamError
+PASS  writes quicPushStreamError's bytes
+PASS  and refuses no room
+PASS  quicPutConnectionClose
+PASS  writes quicPushConnectionClose's bytes
+PASS  and refuses no room
+PASS  quicPutTypeOnly writes PING
+PASS  and refuses a type with a body
+PASS  quicPutPadding writes zeros up to the buffer's end
+PASS  and they are zero
+PASS  a STREAM frame read from a ring that wraps parses
+PASS  with the ring's tail and then its head, in order
+PASS  quicDatagramSize: type, Length and payload
+PASS  quicPutDatagram writes type 0x31 with a Length
+PASS  as 31 05 and the bytes
+PASS  and refuses no room
+PASS  0x31 reads back
+PASS  as DATAGRAM, its payload a window, and `fin` saying it had a Length
+PASS  0x30 reads to the packet's end
+PASS  with no Length
+PASS  a 0x31 whose Length runs past the packet is FRAME_ENCODING_ERROR
+PASS  so is a type past 0x31
+PASS  DATAGRAM goes in 0-RTT and 1-RTT packets only (RFC 9221 §4)
+PASS  and elicits an acknowledgement (RFC 9221 §5.2)
+quic frames: 196 passed, 0 failed, 0 skipped

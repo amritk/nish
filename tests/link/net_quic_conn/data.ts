@@ -41,20 +41,23 @@ import {
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
   QUIC_CONN_ENTROPY_SIZE,
+  QUIC_CONN_MAX_ISSUED_CIDS,
   QUIC_STATE_CLOSING,
   QUIC_STATE_CONNECTED,
   QUIC_STATE_DRAINING,
   QUIC_STATE_HANDSHAKE,
   QUIC_STATE_WAIT_INITIAL,
+  QuicConnection,
+  QuicServerConfig,
+  QuicStreamData,
+} from "nish/net/quic";
+import {
   QUIC_STREAM_ERR_FINISHED,
   QUIC_STREAM_ERR_FLOW,
   QUIC_STREAM_ERR_STATE,
   QUIC_STREAM_ERR_UNKNOWN,
   QUIC_STREAM_OK,
-  QuicConnection,
-  QuicServerConfig,
-  QuicStreamData,
-} from "nish/net/quic";
+} from "nish/net/quic-stream";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { cat, transcriptHash } from "../net_tls_common/client";
@@ -81,7 +84,7 @@ import {
   qcShortTo,
   QC_T0,
 } from "./client";
-import { QcFound, qcConfig, qcConnected, qcData, qcDefaultConfig, qcFind, qcFrameTypes, qcServer } from "./common";
+import { QcFound, qcConfig, qcConnected, qcData, qcDefaultConfig, qcFind, qcFoundCid, qcFrameTypes, qcServer } from "./common";
 
 /** A STREAM frame of `text` on `id` at `offset`. */
 export const qcStream = (id: i64, offset: i64, text: string, fin: boolean): u8[] => {
@@ -146,7 +149,7 @@ const streamChecks = (t: Suite): void => {
   const dropped: i32 = conn.dropped;
   qcExchange(conn, c, twice);
   qcExchange(conn, c, twice);
-  t.eqStr("a duplicated packet delivers its data once", qcReadAll(conn), "12:a | 12:b");
+  t.eqStr("a duplicated packet delivers its data once", qcReadAll(conn), "12:ab");
   t.eqI32("and is counted as dropped", conn.dropped - dropped, n32(1));
 
   const early: QuicConnection = qcServer(qcDefaultConfig());
@@ -175,11 +178,11 @@ const creditChecks = (t: Suite): void => {
   const maxData: u8[] = [];
   quicPushValue(maxData, QUIC_FRAME_MAX_DATA, n64(2000000));
   qcExchange(conn, c, qcShort(c, maxData));
-  t.eqI64("MAX_DATA raises the connection's credit", conn.peerMaxData, n64(2000000));
+  t.eqI64("MAX_DATA raises the connection's credit", conn.streams.sendMaxData, n64(2000000));
   const lower: u8[] = [];
   quicPushValue(lower, QUIC_FRAME_MAX_DATA, n64(5));
   qcExchange(conn, c, qcShort(c, lower));
-  t.eqI64("and a smaller one does not lower it", conn.peerMaxData, n64(2000000));
+  t.eqI64("and a smaller one does not lower it", conn.streams.sendMaxData, n64(2000000));
 
   const quiet: u8[] = [];
   quicPushTypeOnly(quiet, QUIC_FRAME_PING);
@@ -212,7 +215,7 @@ const idChecks = (t: Suite): void => {
   const conn: QuicConnection = qcServer(qcDefaultConfig());
   const c: QcClient = qcConnected(conn, n64(65536));
   const first: QcFound = qcFind(c.appPayloads, QUIC_FRAME_NEW_CONNECTION_ID);
-  const seq1: u8[] = first.frame.connectionId;
+  const seq1: u8[] = qcFoundCid(first);
   const retire: u8[] = [];
   quicPushValue(retire, QUIC_FRAME_RETIRE_CONNECTION_ID, n64(1));
   qcExchange(conn, c, qcShort(c, retire));
@@ -220,7 +223,7 @@ const idChecks = (t: Suite): void => {
   const replacement: QcFound = qcFind([lastApp(c)], QUIC_FRAME_NEW_CONNECTION_ID);
   t.ok("and the server issues a replacement, sequence 4", replacement.found && replacement.frame.value === n64(4));
   t.eqI32("so the client still holds four", conn.cids.activeLocal(), n32(4));
-  qcExchange(conn, c, qcShortTo(c, replacement.frame.connectionId, retire, n32(0)));
+  qcExchange(conn, c, qcShortTo(c, qcFoundCid(replacement), retire, n32(0)));
   t.eqI32("a packet sent to the new ID is the connection's (retiring 1 twice is fine)", conn.state, QUIC_STATE_CONNECTED);
 
   const newId: u8[] = [];
@@ -249,7 +252,7 @@ const idChecks = (t: Suite): void => {
     quicPushPathData(burst, QUIC_FRAME_PATH_CHALLENGE, pathData, n32(0));
   }
   qcExchange(conn, c, qcShort(c, burst));
-  t.ok("a burst of challenges is answered without growing a queue", conn.state === QUIC_STATE_CONNECTED && toI32(conn.pathResponses.length) === 0);
+  t.ok("a burst of challenges is answered without growing a queue", conn.state === QUIC_STATE_CONNECTED && conn.pathCount === 0);
 
   const ack: u8[] = [];
   quicPushAck(ack, [n64(0), n64(1)], n32(1), n64(0));
@@ -331,13 +334,14 @@ const closeChecks = (t: Suite): void => {
     zero = zero && toI32(b) === 0;
   }
   t.ok("wiping the key bytes", zero);
-  let tokensZero: boolean = toI32(tokens.length) === 6;
+  // Four slots for the server's IDs and four for the client's, the limit it was given.
+  let tokensZero: boolean = toI32(tokens.length) === 8;
   for (const tk of tokens) {
     for (const b of tk) {
       tokensZero = tokensZero && toI32(b) === 0;
     }
   }
-  t.ok("and both sides' stateless reset tokens, four issued and the client's one beside its first ID", tokensZero);
+  t.ok("and every slot's stateless reset token: the four the server issued and the client's one", tokensZero);
   let tlsZero: boolean = toI32(finished.length) === 32 && toI32(params.length) > 0;
   for (const b of finished) {
     tlsZero = tlsZero && toI32(b) === 0;
@@ -472,6 +476,9 @@ const shapeChecks = (t: Suite): void => {
     maxData: n64(65536),
     maxStreamData: n64(16384),
     maxStreamsBidi: n64(4),
+    maxStreamsUni: n64(0),
+    localStreams: n64(0),
+    maxDatagramFrameSize: n64(0),
     maxIdleTimeout: n64(0),
     activeConnectionIdLimit: n64(2),
     statelessResetKey: resetKey(),
@@ -528,6 +535,43 @@ const constructorChecks = (t: Suite): void => {
   const idle: QuicServerConfig = qcConfig(n64(65536), n64(16384), n64(4), n64(4));
   idle.maxIdleTimeout = n64(-1);
   t.eqI64("so is a negative idle timeout", new QuicConnection(idle, fixedEntropy()).error, QUIC_ERROR_INTERNAL);
+  const uni: QuicServerConfig = qcDefaultConfig();
+  uni.maxStreamsUni = n64(1025);
+  const local: QuicServerConfig = qcDefaultConfig();
+  local.localStreams = n64(-1);
+  const datagram: QuicServerConfig = qcDefaultConfig();
+  datagram.maxDatagramFrameSize = n64(1501);
+  const buffers: QuicServerConfig = qcConfig(n64(65536), n64(1048576), n64(1024), n64(4));
+  let newLimits: boolean = true;
+  for (const config of [uni, local, datagram, buffers]) {
+    const conn = new QuicConnection(config, fixedEntropy());
+    newLimits = newLimits && conn.error === QUIC_ERROR_INTERNAL && toI32(conn.streams.slots.length) === n32(0);
+  }
+  t.ok("as are more than 1024 unidirectional or local streams, fewer than none, a DATAGRAM frame past 1500, or 2 GiB of stream buffers, past QUIC_CONN_MAX_STREAM_BUFFERS, with no buffers made", newLimits);
+};
+
+/**
+ * A client that retires the server's IDs over and over gets a replacement
+ * for each until the server has issued QUIC_CONN_MAX_ISSUED_CIDS in all,
+ * and then none: each costs two HMACs that stay in the arena (QUIC-3).
+ */
+const issuedCapChecks = (t: Suite): void => {
+  const conn: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = qcConnected(conn, n64(65536));
+  let sequence: i64 = n64(1);
+  while (conn.cids.nextLocal < QUIC_CONN_MAX_ISSUED_CIDS && sequence < n64(100)) {
+    const retire: u8[] = [];
+    quicPushValue(retire, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence);
+    qcExchange(conn, c, qcShort(c, retire));
+    sequence = sequence + n64(1);
+  }
+  t.eqI64("each retired ID is replaced until 64 have been issued", conn.cids.nextLocal, QUIC_CONN_MAX_ISSUED_CIDS);
+  t.eqI32("the client still holds four", conn.cids.activeLocal(), n32(4));
+  const retire: u8[] = [];
+  quicPushValue(retire, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence);
+  qcExchange(conn, c, qcShort(c, retire));
+  t.ok("past that, a retired ID is not replaced", conn.cids.activeLocal() === n32(3) && conn.cids.nextLocal === QUIC_CONN_MAX_ISSUED_CIDS);
+  t.ok("and the connection carries on", conn.state === QUIC_STATE_CONNECTED);
 };
 
 /** Every data-path check. */
@@ -539,4 +583,5 @@ export const quicConnDataChecks = (t: Suite): void => {
   dropChecks(t);
   shapeChecks(t);
   constructorChecks(t);
+  issuedCapChecks(t);
 };

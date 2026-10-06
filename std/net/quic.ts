@@ -1,20 +1,22 @@
 /**
  * `nish/net/quic` — the server side of a QUIC version 1 connection (RFC 9000,
- * RFC 9001): the TLS 1.3 handshake carried in CRYPTO frames at three
- * encryption levels, transport parameters both ways, acknowledgements per
- * packet number space, the connection-ID table, and stream data once the
- * handshake is done. Sans-IO, like the rest of `nish/net`.
+ * RFC 9001, RFC 9221): the TLS 1.3 handshake carried in CRYPTO frames at
+ * three encryption levels, transport parameters both ways, acknowledgements
+ * per packet number space, the connection-ID table, streams both ways
+ * (`nish/net/quic-stream`) and DATAGRAM frames once the handshake is done.
+ * Sans-IO, like the rest of `nish/net`.
  *
  *     import { QuicConnection, QuicServerConfig } from "nish/net/quic";
  *
  *     const conn = new QuicConnection(config, entropy);   // entropy: QUIC_CONN_ENTROPY_SIZE random bytes
- *     conn.receive(datagram, now);                         // every datagram the client sends; now in ms
+ *     conn.receiveWindow(buf, off, len, now);              // every datagram the client sends; now in ms
  *     const input: u8[] | null = conn.signatureInput();
  *     if (input !== null) { conn.sign(tlsSignEcdsaP256(key, input)); }
- *     let out: u8[] | null = conn.takeDatagram(now);
- *     while (out !== null) { … send it to the client … ; out = conn.takeDatagram(now); }
- *     let data: QuicStreamData | null = conn.readStream();  // what the client sent on its streams
- *     … and at conn.deadline(), conn.handleTimer(now)
+ *     let n: i32 = conn.takeDatagramInto(out, 0, now);     // out: at least QUIC_CONN_DATAGRAM_SIZE bytes
+ *     while (n > 0) { … send out[0 .. n) to the client … ; n = conn.takeDatagramInto(out, 0, now); }
+ *     let id: i64 = conn.nextStreamEvent();                 // a stream with news: read it, write it
+ *     … conn.streamRead(id, buf, 0, size) / conn.streamWrite(id, data, 0, n, fin) …
+ *     … and at conn.deadline(), conn.handleTimer(now); once done, conn.reset(entropy) for the next peer
  *
  * **What it is.** One connection, from the client's first Initial to a
  * CONNECTION_CLOSE either way. The handshake is `nish/net/tls`'s `TlsServer`,
@@ -28,28 +30,51 @@
  * client's are parsed and checked (RFC 9000 §7.3, §7.4) before the server's
  * flight leaves.
  *
+ * **Streams** are `nish/net/quic-stream`'s: both kinds, opened by either
+ * side, with flow control per stream and for the connection raised as the
+ * application reads, and the stream limits raised as streams finish. The
+ * application sees them through a small surface: `nextStreamEvent` names a
+ * stream with something new (opened, readable, finished, reset, stopped, or
+ * writable again), `streamRead` and `streamWrite` move bytes a chunk at a
+ * time with back-pressure, `openStream` opens one of the server's,
+ * `streamReset` and `streamStopSending` abandon a side. `readStream` and
+ * `writeStream` are the all-at-once forms, which allocate.
+ *
+ * **Datagrams** (RFC 9221). With `maxDatagramFrameSize` above 0 the server
+ * advertises `max_datagram_frame_size` and takes DATAGRAM frames up to it; a
+ * DATAGRAM frame it did not offer to take, or one larger, is
+ * PROTOCOL_VIOLATION. `sendDatagram` queues a payload when the client
+ * offered to take one that size and it fits a packet; it goes out within the
+ * congestion window, and is never sent again. `readDatagram` hands out what
+ * arrived. Each way is a fixed ring (`nish/net/quic-datagram`).
+ *
  * **Loss recovery** (RFC 9002) is `nish/net/quic-recovery`'s: every
  * ack-eliciting packet is recorded in its space's ring with what it carried
- * (its CRYPTO range, its STREAM chunks, HANDSHAKE_DONE, NEW_CONNECTION_ID
- * and RETIRE_CONNECTION_ID), the client's ACKs give the RTT estimate and
- * show what was lost by packet or time threshold, and what a lost packet
- * carried is sent again, from the CRYPTO bytes a level keeps until it is
- * discarded and the stream bytes a stream keeps until they are
- * acknowledged. When nothing is acknowledged for a probe timeout, with its
- * backoff, everything in flight is queued again and a probe goes out in
+ * (its CRYPTO range, its STREAM chunks, HANDSHAKE_DONE and the control
+ * frames), the client's ACKs give the RTT estimate and show what was lost by
+ * packet or time threshold, and what a lost packet carried is sent again,
+ * from the CRYPTO bytes a level keeps until it is discarded and the bytes a
+ * stream keeps until they are acknowledged; a control frame goes again with
+ * its current value. When nothing is acknowledged for a probe timeout, with
+ * its backoff, everything in flight is queued again and a probe goes out in
  * each space that has packets in flight, a PING if there is nothing to
  * resend (§6.2.4). NewReno's window holds back everything ack-eliciting but
- * a probe; an ACK always goes. PATH_RESPONSE is never sent again (RFC 9000
- * §13.3). Pacing is the carrier's: `nish/net/quic-listener`'s
- * `quicListenerTakePaced` takes a datagram only when the connection's pacer
- * allows it.
+ * a probe; an ACK always goes. PATH_RESPONSE and DATAGRAM are never sent
+ * again (RFC 9000 §13.3, RFC 9221 §5.2). Pacing, and GSO batching, are the
+ * carrier's: `nish/net/quic-listener`.
  *
- * **What it is not, yet.** Streams with flow-control updates are Q4: the
- * credit the server advertises is never raised, so a stream carries at most
- * `maxStreamData` bytes each way and the connection `maxData`. The server
- * opens no stream of its own and accepts no unidirectional stream. What a
- * server answers before a connection exists — Version Negotiation, Retry and
- * a stateless reset — is `nish/net/quic-listener`'s.
+ * **Nothing allocated per packet** (QUIC-3). A connection is a slot: every
+ * buffer it uses — the packet record, the stream buffers, the CRYPTO
+ * reassembly, the connection-ID table, the datagram rings — is made by the
+ * constructor and reused, and `reset` makes the slot a new connection for
+ * the next peer. A packet is opened (`receiveWindow`) and a datagram built
+ * and sealed (`takeDatagramInto`) inside a `using a = arena()` block, so the
+ * AEAD's and the header protection's temporaries go when the block ends, and
+ * the compiler refuses the block if anything in it could store one. What
+ * still allocates is the handshake's, once a connection: `TlsServer` and its
+ * key schedule (TLS-3), the packet keys of each level, the stateless reset
+ * tokens and connection IDs (HMAC), and a key update (QUIC-4) — recorded in
+ * `docs/security/quic.md`.
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
@@ -78,9 +103,9 @@
  * **Sans-IO and deterministic.** No socket, no clock and no random device:
  * every random choice (the TLS server random and ephemeral key, the server's
  * first connection ID, and the seed later IDs are derived from) comes from
- * the `entropy` the constructor takes, every stateless reset token from the
- * configuration's static key (RFC 9000 §10.3.2), and every ACK says a delay
- * of zero. So a recorded exchange replays byte for byte.
+ * the `entropy` the constructor and `reset` take, every stateless reset
+ * token from the configuration's static key (RFC 9000 §10.3.2), and every
+ * ACK says a delay of zero. So a recorded exchange replays byte for byte.
  *
  * **What a peer cannot do.** Nothing it sends makes this module panic. A
  * datagram that does not parse, a packet that does not authenticate, a
@@ -92,9 +117,10 @@
  * is the next datagram out. Before the client's address is validated — by a
  * Handshake packet, or by a Retry token `nish/net/quic-listener` checked —
  * the server sends at most three times what it received (§8.1). Every buffer
- * a peer can fill is bounded: CRYPTO reassembly by `QUIC_CONN_CRYPTO_WINDOW`,
- * streams by the credit advertised, the connection-ID table by the limit
- * advertised, and the received packet numbers by `QUIC_ACK_MAX_RANGES`.
+ * a peer can fill is fixed: CRYPTO reassembly by `QUIC_CONN_CRYPTO_WINDOW`,
+ * each stream by the credit advertised (its buffer), the connection by
+ * `maxData`, the connection-ID table by the limit advertised, the received
+ * packet numbers by `QUIC_ACK_MAX_RANGES`, and datagrams by their ring.
  *
  * **Secrets.** The packet keys of each level live in this connection's
  * fields as long as the level does, and in `TlsServer`'s (TLS-1); so do the
@@ -102,18 +128,18 @@
  * generation's read keys. A `Secret` may not be a field (NL2430), so they are
  * plain bytes; `secureZero` wipes each level's key, IV and header-protection
  * key when the level is discarded, each generation's key, IV and secret when
- * a key update replaces it, and `release()` the rest — the 1-RTT keys, the
- * traffic secrets `TlsServer` holds, its ephemeral key and the
- * connection-ID seed. What no wipe reaches (the expanded AES key schedules,
- * the HKDF and HMAC intermediates in arena memory) is recorded as QUIC-2 in
- * `docs/security/quic.md`, with #430, the follow-up that moves these structs
- * onto `nish:secret`.
+ * a key update replaces it, and `release()` (and `reset`) the rest — the
+ * 1-RTT keys, the traffic secrets `TlsServer` holds, its ephemeral key and
+ * the connection-ID seed. What no wipe reaches (the expanded AES key
+ * schedules, the HKDF and HMAC intermediates in arena memory) is recorded as
+ * QUIC-2 in `docs/security/quic.md`, with #430, the follow-up that moves
+ * these structs onto `nish:secret`.
  *
- * Written from RFC 9000 and RFC 9001, in this module's own structure;
- * nothing here is ported from another implementation. Private names carry
- * the `quicConn` prefix (`docs/wp26-stdlib.md` §3e).
+ * Written from RFC 9000, RFC 9001 and RFC 9221, in this module's own
+ * structure; nothing here is ported from another implementation. Private
+ * names carry the `quicConn` prefix (`docs/wp26-stdlib.md` §3e).
  */
-import { timingSafeEqual } from "nish/crypto/ct"
+import { timingSafeEqualAt } from "nish/crypto/ct"
 import { hmacSha256 } from "nish/crypto/hmac"
 import {
   QUIC_AEAD_AES_128_GCM,
@@ -131,39 +157,39 @@ import {
   QuicInitialSecrets,
   QuicKeys,
   QuicPacket,
-  quicDecryptPacket,
+  quicDecryptPayload,
   quicInitialSecrets,
   quicKeyUpdateSecret,
   quicKeys,
   quicKeysUpdate,
-  quicLongHeader,
   quicPacketNumberLength,
-  quicParseHeader,
-  quicRemoveHeaderProtection,
-  quicSealPacket,
-  quicShortHeader,
+  quicParseHeaderInto,
+  quicPutLongHeader,
+  quicPutShortHeader,
+  quicSealInPlace,
+  quicUnprotectHeader,
 } from "nish/net/quic-packet"
 import {
   QUIC_ERROR_APPLICATION,
   QUIC_ERROR_CRYPTO,
   QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED,
-  QUIC_ERROR_FINAL_SIZE,
-  QUIC_ERROR_FLOW_CONTROL,
   QUIC_ERROR_INTERNAL,
   QUIC_ERROR_KEY_UPDATE,
   QUIC_ERROR_NO_ERROR,
   QUIC_ERROR_PROTOCOL_VIOLATION,
-  QUIC_ERROR_STREAM_LIMIT,
-  QUIC_ERROR_STREAM_STATE,
   QUIC_ERROR_TRANSPORT_PARAMETER,
   QUIC_FRAME_ACK,
   QUIC_FRAME_ACK_ECN,
   QUIC_FRAME_CONNECTION_CLOSE,
   QUIC_FRAME_CONNECTION_CLOSE_APP,
   QUIC_FRAME_CRYPTO,
+  QUIC_FRAME_DATAGRAM,
+  QUIC_FRAME_DATAGRAM_LENGTH,
   QUIC_FRAME_HANDSHAKE_DONE,
   QUIC_FRAME_MAX_DATA,
   QUIC_FRAME_MAX_STREAM_DATA,
+  QUIC_FRAME_MAX_STREAMS_BIDI,
+  QUIC_FRAME_MAX_STREAMS_UNI,
   QUIC_FRAME_NEW_CONNECTION_ID,
   QUIC_FRAME_NEW_TOKEN,
   QUIC_FRAME_PATH_CHALLENGE,
@@ -178,18 +204,17 @@ import {
   QUIC_RESET_TOKEN_SIZE,
   QuicFrame,
   quicCryptoOverhead,
+  quicDatagramSize,
   quicFrameAckEliciting,
   quicFrameAllowed,
   quicParseFrame,
-  quicPushConnectionClose,
-  quicPushCrypto,
-  quicPushNewConnectionId,
-  quicPushPadding,
-  quicPushPathData,
-  quicPushStream,
-  quicPushTypeOnly,
-  quicPushValue,
-  quicStreamOverhead,
+  quicPutConnectionClose,
+  quicPutCrypto,
+  quicPutNewConnectionId,
+  quicPutPadding,
+  quicPutPathData,
+  quicPutTypeOnly,
+  quicPutValue,
 } from "nish/net/quic-frame"
 import {
   QuicTransportParameters,
@@ -205,7 +230,21 @@ import {
   QuicRecovery,
   QuicSentPackets,
 } from "nish/net/quic-recovery"
-import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid"
+import { QuicCidEntry, QuicCidTable, quicCidCopy } from "nish/net/quic-conn-cid"
+import {
+  QUIC_SEND_RESET_SENT,
+  QUIC_STREAM_END,
+  QUIC_STREAM_ERR_FINISHED,
+  QUIC_STREAM_ERR_FLOW,
+  QUIC_STREAM_ERR_STATE,
+  QUIC_STREAM_ERR_UNKNOWN,
+  QUIC_STREAM_OK,
+  QuicStream,
+  QuicStreams,
+  quicStreamBit,
+  quicStreamSetBit,
+} from "nish/net/quic-stream"
+import { QuicDatagramQueue } from "nish/net/quic-datagram"
 import {
   TLS_LEVEL_APPLICATION,
   TLS_LEVEL_HANDSHAKE,
@@ -225,27 +264,36 @@ export const QUIC_CONN_CID_LENGTH: i32 = 8
 /**
  * The largest datagram the server sends, and the smallest a client's first
  * Initial may arrive in (RFC 9000 §14.1): 1200 bytes, which every QUIC path
- * carries, so no path MTU discovery is needed.
+ * carries, so no path MTU discovery is needed. `takeDatagramInto` needs this
+ * much room.
  */
 export const QUIC_CONN_DATAGRAM_SIZE: i32 = 1200
 /**
- * How many random bytes the constructor takes: 32 for the TLS server random,
- * 32 for the x25519 key, 8 for the first connection ID and 32 for the seed
- * the later IDs and their reset tokens are derived from.
+ * How many random bytes the constructor and `reset` take: 32 for the TLS
+ * server random, 32 for the x25519 key, 8 for the first connection ID and
+ * 32 for the seed the later IDs and their reset tokens are derived from.
  */
 export const QUIC_CONN_ENTROPY_SIZE: i32 = 104
 /**
- * How far ahead of what it has handed TLS the server buffers CRYPTO data at
- * one level. RFC 9000 §7.5 asks for at least 4096 bytes; a frame past this
- * is CRYPTO_BUFFER_EXCEEDED.
+ * How far ahead of what it has handed TLS the server buffers CRYPTO data.
+ * RFC 9000 §7.5 asks for at least 4096 bytes; a frame past this is
+ * CRYPTO_BUFFER_EXCEEDED. One buffer of this size serves every level, since
+ * the client's Initial flight is complete before its Handshake one starts.
  */
 export const QUIC_CONN_CRYPTO_WINDOW: i32 = 16384
 /** The most connection IDs the server keeps active for the client to use, its own first one included. */
 export const QUIC_CONN_LOCAL_CIDS: i32 = 4
-/** The largest per-stream credit a configuration may advertise, which is also each stream's receive buffer. */
+/** The largest per-stream credit a configuration may advertise, which is also each stream's buffer each way. */
 export const QUIC_CONN_MAX_STREAM_DATA: i64 = 1048576
-/** The most bidirectional streams a configuration may let the client open. */
+/** The most streams of one kind a configuration may let the client open at once, or open itself. */
 export const QUIC_CONN_MAX_STREAMS: i64 = 1024
+/**
+ * The most bytes of stream buffer a configuration may make each connection
+ * hold: every stream slot (`maxStreamsBidi + maxStreamsUni + localStreams`)
+ * has `maxStreamData` bytes each way, made when the connection is, so a
+ * configuration past 64 MiB of them is refused rather than allocated.
+ */
+export const QUIC_CONN_MAX_STREAM_BUFFERS: i64 = 67108864
 /** The length of the configuration's static keys: the stateless reset key and the Retry token key. */
 export const QUIC_CONN_STATIC_KEY_SIZE: i32 = 32
 /**
@@ -263,10 +311,11 @@ export const QUIC_CONN_IDLE_FLOOR: i64 = 3000
  */
 export const QUIC_CONN_PACKET_STREAMS: i32 = 4
 /**
- * The most NEW_CONNECTION_ID and RETIRE_CONNECTION_ID frames one packet
- * carries, for the same reason: the three new IDs the server announces once
- * the handshake is done fit one packet, and a burst of retirements the
- * client asks for goes over the next few.
+ * The most control frames one packet carries — NEW_CONNECTION_ID,
+ * RETIRE_CONNECTION_ID and the flow-control, limit and stream-ending frames
+ * of `nish/net/quic-stream` — for the same reason: the three new IDs the
+ * server announces once the handshake is done fit one packet, and the rest
+ * go over the next few.
  */
 export const QUIC_CONN_PACKET_CONTROL: i32 = 4
 /**
@@ -277,6 +326,23 @@ export const QUIC_CONN_PACKET_CONTROL: i32 = 4
  * a probe timeout between two of them.
  */
 export const QUIC_CONN_MAX_KEY_UPDATES: i32 = 64
+/**
+ * How many connection IDs a connection issues in all, its first included.
+ * The client retiring one asks for a replacement (§5.1.1, a SHOULD), and
+ * each costs two HMACs whose temporaries stay in the arena, so this bounds
+ * what a client can make the server derive by retiring IDs over and over;
+ * past it, a retired ID is not replaced.
+ */
+export const QUIC_CONN_MAX_ISSUED_CIDS: i64 = 64
+/** How many DATAGRAM payloads each way a connection holds, when it takes any. */
+export const QUIC_CONN_DATAGRAM_QUEUE: i32 = 8
+/**
+ * The largest `maxDatagramFrameSize` a configuration may advertise: 1500
+ * bytes, an Ethernet path's whole UDP payload, past which no DATAGRAM frame
+ * reaches a server on a real path. Each of the receive ring's entries is
+ * sized to what is advertised, so every frame taken is held.
+ */
+export const QUIC_CONN_MAX_DATAGRAM_FRAME: i64 = 1500
 
 // ---- States ---------------------------------------------------------------------
 
@@ -293,37 +359,43 @@ export const QUIC_STATE_DRAINING: i32 = 4
 /**
  * The idle timeout passed (RFC 9000 §10.1): the connection closed silently,
  * its keys wiped, and nothing more goes out. Its state is to be discarded:
- * drop the connection, so that a later packet to its IDs reaches
- * `nish/net/quic-listener`, whose stateless reset tells the client.
+ * drop the connection (or `reset` the slot), so that a later packet to its
+ * IDs reaches `nish/net/quic-listener`, whose stateless reset tells the client.
  */
 export const QUIC_STATE_TIMED_OUT: i32 = 5
 
-// ---- writeStream's answers ------------------------------------------------------
+// ---- What the datagram calls answer ---------------------------------------------
 
-/** The data was queued. */
-export const QUIC_STREAM_OK: i32 = 0
-/** No such stream: the client has not opened it. */
-export const QUIC_STREAM_ERR_UNKNOWN: i32 = -1
-/** The stream's sending side is already finished. */
-export const QUIC_STREAM_ERR_FINISHED: i32 = -2
-/** The data would pass the credit the client gave, for the stream or the connection. */
-export const QUIC_STREAM_ERR_FLOW: i32 = -3
-/** The connection is not connected. */
-export const QUIC_STREAM_ERR_STATE: i32 = -4
+/** `sendDatagram` queued the payload. */
+export const QUIC_DATAGRAM_OK: i32 = 0
+/** `readDatagram`: nothing has arrived. */
+export const QUIC_DATAGRAM_NONE: i32 = -1
+/** `readDatagram`: the next datagram does not fit in the room given; it is kept. */
+export const QUIC_DATAGRAM_ERR_ROOM: i32 = -2
+/** `sendDatagram`: the client did not offer to take DATAGRAM frames (RFC 9221 §3), or the connection is not connected. */
+export const QUIC_DATAGRAM_ERR_DISABLED: i32 = -3
+/** `sendDatagram`: the payload is larger than the client takes, or than fits one packet (`maxDatagramPayload`). */
+export const QUIC_DATAGRAM_ERR_TOO_BIG: i32 = -4
+/** `sendDatagram`: the send ring is full; try again once a datagram has gone. */
+export const QUIC_DATAGRAM_ERR_FULL: i32 = -5
 
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const QUIC_CONN_FROM: i32 = 0
 /** The same for the `i64` arguments of the methods below, where a literal is not given its parameter's type. */
 const QUIC_CONN_NONE: i64 = 0
+/** TLS's unexpected_message alert, which CRYPTO data at a level TLS is not reading is (RFC 8446 §6). */
+const QUIC_CONN_ALERT_UNEXPECTED: i64 = 10
 
-/** A packet's record: the bit that says it carried HANDSHAKE_DONE, and the kinds of control frame it keeps. */
+/** A packet's record: the bit that says it carried HANDSHAKE_DONE, and the kinds of control frame of its own. */
 const QUIC_CONN_SENT_HANDSHAKE_DONE: i32 = 1
 const QUIC_CONN_CONTROL_NEW_CID: i32 = 1
 const QUIC_CONN_CONTROL_RETIRE: i32 = 2
 
 /**
  * What a QUIC server is configured with, the same for every connection. The
- * limits are the transport parameters it advertises (RFC 9000 §18.2).
+ * limits are the transport parameters it advertises (RFC 9000 §18.2); the
+ * stream limits and `maxStreamData` also size each connection's buffers,
+ * which are made once and reused.
  */
 export interface QuicServerConfig {
   /** DER certificates, leaf first, as `TlsServerConfig` takes them. */
@@ -334,12 +406,26 @@ export interface QuicServerConfig {
   signatureScheme: i32
   /** Whether `nish/net/quic-listener` answers a client's first Initial with a Retry (§8.1.2). */
   retry: boolean
-  /** `initial_max_data`: the most stream bytes the client may send over the connection, 0 to 2^62 − 1. */
+  /** `initial_max_data`: the connection's receive window, 0 to 2^62 − 1, raised as the application reads. */
   maxData: i64
-  /** `initial_max_stream_data_bidi_remote`: the most bytes the client may send on each stream, 1 to 1 MiB. */
+  /**
+   * `initial_max_stream_data_bidi_remote` (and `_uni`, and `_bidi_local`
+   * when the server opens streams): each stream's receive window and the
+   * size of its buffer each way, 1 to 1 MiB.
+   */
   maxStreamData: i64
-  /** `initial_max_streams_bidi`: how many bidirectional streams the client may open, 0 to 1024. */
+  /** `initial_max_streams_bidi`: how many bidirectional streams the client may have open at once, 0 to 1024. */
   maxStreamsBidi: i64
+  /** `initial_max_streams_uni`: how many unidirectional streams the client may have open at once, 0 to 1024. */
+  maxStreamsUni: i64
+  /** How many streams of its own the server may have open at once, 0 to 1024 (`openStream`). */
+  localStreams: i64
+  /**
+   * RFC 9221's `max_datagram_frame_size`: the largest DATAGRAM frame the
+   * server takes, 0 (none, and the parameter is not sent) to 1500. The
+   * server sends DATAGRAM frames only when it takes them too.
+   */
+  maxDatagramFrameSize: i64
   /**
    * `max_idle_timeout` in milliseconds: 0 for none, at most 2^62 − 1. The
    * connection times out after the smaller of this and the client's, and
@@ -361,7 +447,7 @@ export interface QuicServerConfig {
   retryTokenKey: u8[]
 }
 
-/** One run of stream data the client sent, in order: `fin` when it ends the stream. */
+/** One run of stream data the client sent, in order, as `readStream` answers it: `fin` when it ends the stream. */
 export class QuicStreamData {
   streamId: i64 = 0
   data: u8[]
@@ -375,35 +461,47 @@ export class QuicStreamData {
 }
 
 /**
- * Bytes of one stream (CRYPTO or STREAM) put back in order. Data is kept in
- * a ring of `capacity` bytes indexed by offset, beside a byte per slot saying
- * whether it arrived, so frames may come in any order and overlap; `take`
- * answers the run that now continues from what was delivered. A frame
- * reaching `capacity` bytes past what was delivered is refused, which is
- * what bounds the buffer. Nothing is allocated until a frame arrives out of
- * order: data that continues the stream goes straight through.
+ * CRYPTO bytes put back in order: a ring of `capacity` bytes indexed by
+ * stream offset, with a bit per byte saying it arrived, so frames may come
+ * in any order and overlap. What continues the stream from `delivered` is
+ * handed to TLS from the ring itself. One serves the connection: it follows
+ * the level the client is sending at, since the Initial flight is complete
+ * before the Handshake one starts.
  */
 class QuicConnReassembly {
-  /** How many bytes have been handed out. */
-  delivered: i64 = 0
-  /** How many bytes past `delivered` are buffered. */
-  pending: i32 = 0
-  capacity: i32 = 0
   ring: u8[]
   have: u8[]
-  /** Bytes that continue the stream, waiting for `take`. */
-  ready: u8[]
+  /** The level whose bytes the ring holds. */
+  level: i32 = 0
+  /** How many bytes of the level have been handed to TLS. */
+  delivered: i64 = 0
 
   constructor(capacity: i32) {
-    this.capacity = capacity
-    this.ring = []
-    this.have = []
-    this.ready = []
+    this.ring = new Array<u8>(capacity)
+    this.have = new Array<u8>((capacity + 7) >> 3)
+  }
+
+  /** Empties the ring for level `level`. */
+  reset(level: i32): void {
+    this.level = level
+    this.delivered = 0
+    this.have.fill(toU8(0))
   }
 
   /** The ring slot of stream offset `offset`. */
   slot(offset: i64): i32 {
-    return toI32(offset % toI64(this.capacity))
+    const capacity: i32 = toI32(this.ring.length)
+    return capacity > 0 ? toI32(offset % toI64(capacity)) : 0
+  }
+
+  /** Whether the byte in ring slot `s` arrived and is not yet handed out. */
+  arrived(s: i32): boolean {
+    return quicStreamBit(this.have, s)
+  }
+
+  /** Marks ring slot `s` as holding a byte, or not. */
+  mark(s: i32, on: boolean): void {
+    quicStreamSetBit(this.have, s, on)
   }
 
   /**
@@ -412,65 +510,42 @@ class QuicConnReassembly {
    * more past what was delivered. Bytes already delivered are skipped.
    */
   insert(offset: i64, data: u8[], from: i32, length: i32): boolean {
-    const deliveredNow: i64 = this.delivered + toI64(toI32(this.ready.length))
-    if (offset + toI64(length) > deliveredNow + toI64(this.capacity)) {
+    const capacity: i32 = toI32(this.ring.length)
+    if (offset + toI64(length) > this.delivered + toI64(capacity)) {
       return false
-    }
-    if (this.pending === 0 && offset <= deliveredNow) {
-      // The common case: in order, or overlapping what was delivered.
-      const skip: i64 = deliveredNow - offset
-      for (let k: i64 = skip; k < toI64(length); k += 1) {
-        const at: i32 = from + toI32(k)
-        if (at >= 0 && at < toI32(data.length)) {
-          this.ready.push(data[at])
-        }
-      }
-      return true
-    }
-    if (toI32(this.ring.length) === 0) {
-      this.ring = new Array<u8>(this.capacity)
-      this.have = new Array<u8>(this.capacity)
     }
     for (let k: i32 = 0; k < length; k += 1) {
       const position: i64 = offset + toI64(k)
       const at: i32 = from + k
-      if (position >= deliveredNow && at >= 0 && at < toI32(data.length)) {
+      if (position >= this.delivered && at >= 0 && at < toI32(data.length)) {
         const s: i32 = this.slot(position)
-        if (s >= 0 && s < toI32(this.ring.length) && s < toI32(this.have.length)) {
-          if (toI32(this.have[s]) === 0) {
-            this.pending = this.pending + 1
-          }
+        if (s >= 0 && s < capacity) {
           this.ring[s] = data[at]
-          this.have[s] = toU8(1)
+          this.mark(s, true)
         }
       }
-    }
-    // Move whatever now continues the stream out of the ring.
-    let next: i64 = deliveredNow
-    while (this.pending > 0) {
-      const s: i32 = this.slot(next)
-      if (
-        s < 0 ||
-        s >= toI32(this.ring.length) ||
-        s >= toI32(this.have.length) ||
-        toI32(this.have[s]) === 0
-      ) {
-        break
-      }
-      this.ready.push(this.ring[s])
-      this.have[s] = toU8(0)
-      this.pending = this.pending - 1
-      next += 1
     }
     return true
   }
 
-  /** The bytes that continue the stream since the last call, and forgets them. */
-  take(): u8[] {
-    const out: u8[] = this.ready
-    this.ready = []
-    this.delivered = this.delivered + toI64(toI32(out.length))
-    return out
+  /** How many bytes from `delivered` have arrived without a gap, up to the end of the ring's array. */
+  run(): i32 {
+    const capacity: i32 = toI32(this.ring.length)
+    const start: i32 = this.slot(this.delivered)
+    let n: i32 = 0
+    while (start + n < capacity && this.arrived(start + n)) {
+      n += 1
+    }
+    return n
+  }
+
+  /** Hands out the `n` bytes `run` counted: their bits cleared, `delivered` moved past them. */
+  consume(n: i32): void {
+    const start: i32 = this.slot(this.delivered)
+    for (let k: i32 = 0; k < n; k += 1) {
+      this.mark(start + k, false)
+    }
+    this.delivered = this.delivered + toI64(n)
   }
 }
 
@@ -480,10 +555,10 @@ class QuicConnReassembly {
  *
  * The record of a packet is a row of the `sent*` arrays, indexed by the slot
  * `nish/net/quic-recovery` gave it, so it is fixed when the connection is
- * made. One row past the last slot, `staging`, is where `buildPayload`
- * writes the packet being built; `sealInto` copies it to the packet's slot.
- * Only the Application Data space has rows for STREAM chunks and control
- * frames, since only a 1-RTT packet carries them.
+ * made. One row past the last slot, `staging`, is where the packet being
+ * built is described; `recordSent` copies it to the packet's slot. Only the
+ * Application Data space has rows for STREAM chunks and control frames,
+ * since only a 1-RTT packet carries them.
  */
 class QuicConnSpace {
   readKeys: QuicKeys | null = null
@@ -493,14 +568,18 @@ class QuicConnSpace {
   /** The largest packet number the client acknowledged here, or -1. */
   largestAcked: i64 = -1
   received: QuicAckRanges
-  cryptoIn: QuicConnReassembly
   /**
-   * Every CRYPTO byte TLS wrote at this level, from stream offset 0, kept
-   * until the level is discarded so that a lost range can be sent again;
-   * the bytes from `cryptoOutHead` (offset `cryptoOutOffset`) are not sent yet.
+   * Every CRYPTO byte TLS wrote at this level, from stream offset 0, its
+   * first `cryptoOutLength` bytes, kept until the level is discarded so that
+   * a lost range can be sent again; the array is reused by the next
+   * connection in the slot. The bytes from `cryptoOutHead` (offset
+   * `cryptoOutOffset`) are not sent yet.
    */
   cryptoOut: u8[]
+  cryptoOutLength: i32 = 0
   cryptoOutOffset: i64 = 0
+  /** How many CRYPTO bytes the client sent here that were handed to TLS, for a duplicate arriving after the next level started. */
+  cryptoInDelivered: i64 = 0
   /** CRYPTO bytes declared lost, to send before new ones: `[cryptoResendLow, cryptoResendHigh)`, or -1. */
   cryptoResendLow: i64 = -1
   cryptoResendHigh: i64 = -1
@@ -514,14 +593,17 @@ class QuicConnSpace {
   sentStreamOffset: i64[]
   sentStreamLength: i32[]
   sentStreamFin: u8[]
-  /** Each packet's NEW_CONNECTION_ID and RETIRE_CONNECTION_ID frames, `QUIC_CONN_PACKET_CONTROL` to a row: their kind and sequence number. */
+  /** Each packet's control frames, `QUIC_CONN_PACKET_CONTROL` to a row: their kind and value (a sequence number or a stream). */
   sentControlCount: i32[]
   sentControlKind: u8[]
   sentControlValue: i64[]
   /** `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index. */
   level: i32 = 0
   cryptoOutHead: i32 = 0
-  /** The row the packet being built is written to: one past the last slot. */
+  /** The packet `buildDatagram` is putting together here: where it starts in the datagram, or -1 for none, and its payload's end. */
+  builtStart: i32 = -1
+  builtEnd: i32 = 0
+  /** The row the packet being built is described in: one past the last slot. */
   staging: i32 = 0
   /** Whether the keys were discarded (RFC 9001 §4.9): nothing is sent or received here again. */
   discarded: boolean = false
@@ -533,7 +615,6 @@ class QuicConnSpace {
   constructor(level: i32) {
     this.level = level
     this.received = new QuicAckRanges()
-    this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)
     this.cryptoOut = []
     const capacity: i32 =
       level === TLS_LEVEL_APPLICATION ? QUIC_RECOVERY_APPLICATION_CAPACITY : QUIC_RECOVERY_HANDSHAKE_CAPACITY
@@ -552,6 +633,37 @@ class QuicConnSpace {
     this.sentControlCount = new Array<i32>(rows)
     this.sentControlKind = new Array<u8>(chunkRows * QUIC_CONN_PACKET_CONTROL)
     this.sentControlValue = new Array<i64>(chunkRows * QUIC_CONN_PACKET_CONTROL)
+  }
+
+  /** Puts the space back as a new connection has it, keeping its arrays, for a slot reused for another peer. */
+  reset(): void {
+    this.readKeys = null
+    this.writeKeys = null
+    this.nextPn = 0
+    this.largestAcked = -1
+    this.received.clear()
+    this.cryptoOutLength = 0
+    this.cryptoOutOffset = 0
+    this.cryptoOutHead = 0
+    this.cryptoInDelivered = 0
+    this.cryptoResendLow = -1
+    this.cryptoResendHigh = -1
+    this.discarded = false
+    this.probe = false
+    this.clearStaged()
+  }
+
+  /** Appends `bytes` to the CRYPTO stream kept, writing into the array's old room before growing it. */
+  appendCrypto(bytes: u8[]): void {
+    for (const b of bytes) {
+      const at: i32 = this.cryptoOutLength
+      if (at >= 0 && at < toI32(this.cryptoOut.length)) {
+        this.cryptoOut[at] = b
+      } else {
+        this.cryptoOut.push(b)
+      }
+      this.cryptoOutLength = at + 1
+    }
   }
 
   /** The number of STREAM chunks row `row` holds, or 0. */
@@ -714,103 +826,7 @@ class QuicConnSpace {
 
   /** How many CRYPTO bytes are waiting to be sent. */
   cryptoUnsent(): i32 {
-    return toI32(this.cryptoOut.length) - this.cryptoOutHead
-  }
-}
-
-/** One stream the client opened: what it sent, put back in order, and what the server queued to send back. */
-class QuicConnStream {
-  id: i64 = 0
-  recv: QuicConnReassembly
-  /** The highest offset the client sent data to, which flow control counts. */
-  recvHighest: i64 = 0
-  /** The stream's final size once a FIN or RESET_STREAM fixed it, or -1. */
-  finalSize: i64 = -1
-  /** Bytes queued to send, from `sendHead`, at stream offset `sendOffset`. */
-  send: u8[]
-  sendOffset: i64 = 0
-  /** The credit the client gave for this stream: no byte at or past this offset may be sent. */
-  sendLimit: i64 = 0
-  sendHead: i32 = 0
-  /** Whether the end of the stream was handed to the application. */
-  finDelivered: boolean = false
-  /** Whether the client reset the stream; its data is then dropped. */
-  reset: boolean = false
-  /** Whether the application finished the sending side. */
-  sendFin: boolean = false
-  /** Whether a frame carrying the FIN went out, or STOP_SENDING ended the side. */
-  finSent: boolean = false
-  /** The stream offset of `send[0]`: the bytes before it were all acknowledged. */
-  sendBase: i64 = 0
-  /** Bytes declared lost, to send again before new ones: `[resendLow, resendHigh)`, or -1; `resendFin` when the FIN was among them. */
-  resendLow: i64 = -1
-  resendHigh: i64 = -1
-  /** How many packets in flight carry a chunk of this stream: its sent bytes are kept while any does. */
-  outstanding: i32 = 0
-  resendFin: boolean = false
-  /** Whether the client's STOP_SENDING ended the sending side: nothing lost is sent again. */
-  stopped: boolean = false
-
-  constructor(id: i64, capacity: i32, sendLimit: i64) {
-    this.id = id
-    this.recv = new QuicConnReassembly(capacity)
-    this.send = []
-    this.sendLimit = sendLimit
-  }
-
-  /** How many queued bytes have not gone out. */
-  unsent(): i32 {
-    return toI32(this.send.length) - this.sendHead
-  }
-
-  /** Whether a frame is owed: queued bytes, a FIN not yet sent, or bytes to send again. */
-  wantsToSend(): boolean {
-    return (!this.finSent && (this.unsent() > 0 || this.sendFin)) || this.resendLow >= 0
-  }
-
-  /** Ends the sending side for the client's STOP_SENDING: what is queued or lost is dropped, and nothing lost later is sent again. */
-  stopSending(): void {
-    this.finSent = true
-    this.stopped = true
-    this.send = []
-    this.sendHead = 0
-    this.sendBase = this.sendOffset
-    this.resendLow = -1
-    this.resendHigh = -1
-    this.resendFin = false
-  }
-
-  /** Queues the chunk `[offset, offset + length)` of a lost packet to be sent again, with the FIN when it carried it. */
-  resend(offset: i64, length: i32, fin: boolean): void {
-    if (this.stopped) {
-      return
-    }
-    const end: i64 = offset + toI64(length)
-    if (this.resendLow < 0) {
-      this.resendLow = offset
-      this.resendHigh = end
-    } else {
-      if (offset < this.resendLow) {
-        this.resendLow = offset
-      }
-      if (end > this.resendHigh) {
-        this.resendHigh = end
-      }
-    }
-    this.resendFin = this.resendFin || fin
-  }
-
-  /**
-   * Drops the sent bytes once no packet in flight carries any of them and
-   * none are queued to go again: they have all been acknowledged.
-   */
-  trim(): void {
-    if (this.outstanding > 0 || this.resendLow >= 0 || this.sendHead === 0) {
-      return
-    }
-    this.send = quicConnSlice(this.send, this.sendHead, toI32(this.send.length) - this.sendHead)
-    this.sendBase = this.sendBase + toI64(this.sendHead)
-    this.sendHead = 0
+    return this.cryptoOutLength - this.cryptoOutHead
   }
 }
 
@@ -824,13 +840,6 @@ const quicConnSlice = (bytes: u8[], from: i32, length: i32): u8[] => {
     }
   }
   return out
-}
-
-/** Appends every byte of `bytes` to `out`. */
-const quicConnAppend = (out: u8[], bytes: u8[]): void => {
-  for (const b of bytes) {
-    out.push(b)
-  }
 }
 
 /** The packet-protection AEAD that goes with a TLS 1.3 suite (RFC 9001 §5.3). */
@@ -885,6 +894,14 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.maxStreamData <= QUIC_CONN_MAX_STREAM_DATA &&
   config.maxStreamsBidi >= 0 &&
   config.maxStreamsBidi <= QUIC_CONN_MAX_STREAMS &&
+  config.maxStreamsUni >= 0 &&
+  config.maxStreamsUni <= QUIC_CONN_MAX_STREAMS &&
+  config.localStreams >= 0 &&
+  config.localStreams <= QUIC_CONN_MAX_STREAMS &&
+  (config.maxStreamsBidi + config.maxStreamsUni + config.localStreams) * config.maxStreamData * 2 <=
+    QUIC_CONN_MAX_STREAM_BUFFERS &&
+  config.maxDatagramFrameSize >= 0 &&
+  config.maxDatagramFrameSize <= QUIC_CONN_MAX_DATAGRAM_FRAME &&
   config.maxData >= 0 &&
   config.maxData <= QUIC_MAX_VARINT &&
   config.maxIdleTimeout >= 0 &&
@@ -894,17 +911,18 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE
 
 /**
- * One server connection. Make one when a client's first Initial arrives,
- * hand it every datagram the client sends with `receive`, sign when
- * `signatureInput()` asks, send what `takeDatagram()` answers until it
- * answers `null`, and read and write stream data once `state` is
- * `QUIC_STATE_CONNECTED`.
+ * One server connection, which is also a reusable slot. Make one, hand it
+ * every datagram the client sends with `receiveWindow` (or `receive`), sign
+ * when `signatureInput()` asks, send what `takeDatagramInto()` writes until
+ * it answers 0, and use streams and datagrams once `state` is
+ * `QUIC_STATE_CONNECTED`. Once it has closed, `reset` makes it a new
+ * connection for the next client, with its buffers kept.
  *
  * The fields are readable: `state`, `error` (the transport error or
  * application code the connection closed with), `dropped`, `alpn` and
- * `serverName` once the handshake has read them, `peerParameters`, and
- * `cids`, the connection-ID table, which a server that runs many connections
- * routes datagrams by (`ownsConnectionId`).
+ * `serverName` once the handshake has read them, `peerParameters`, `streams`
+ * (the stream table), and `cids`, the connection-ID table, which a server
+ * that runs many connections routes datagrams by (`ownsConnectionId`).
  */
 export class QuicConnection {
   config: QuicServerConfig
@@ -915,7 +933,7 @@ export class QuicConnection {
   serverRandom: u8[]
   ephemeralPrivate: u8[]
   cidSeed: u8[]
-  /** The DCID of the client's first Initial, which the Initial keys come from. */
+  /** The DCID of the client's first Initial, which the Initial keys come from: its first `originalDcidLength` bytes. */
   originalDcid: u8[]
   /** The SCID of the client's first Initial: where long-header packets go, and what its transport parameters must name. */
   peerScid: u8[]
@@ -928,8 +946,10 @@ export class QuicConnection {
   cids: QuicCidTable
   /** Loss detection, the RTT estimate, the congestion window and the pacer (RFC 9002). */
   recovery: QuicRecovery
-  /** The client's transport parameters, once the handshake has checked them. */
+  /** The client's transport parameters, once the handshake has checked them; until then, every default. */
   peerParameters: QuicTransportParameters
+  /** The defaults `peerParameters` starts from, made once and set back by `reset`. */
+  defaultParameters: QuicTransportParameters
   /** Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). */
   bytesReceived: i64 = 0
   bytesSent: i64 = 0
@@ -937,20 +957,24 @@ export class QuicConnection {
   alpn: string = ""
   /** The client's `server_name`, or empty. */
   serverName: string = ""
-  streams: QuicConnStream[]
-  /** Stream data delivered in order and not yet read, from `eventHead`. */
-  events: QuicStreamData[]
-  /** PATH_CHALLENGE data to answer, eight bytes each. */
-  pathResponses: u8[]
-  /** The connection-level credit the client gave, and what the server has queued against it. */
-  peerMaxData: i64 = 0
-  sentData: i64 = 0
-  /** Stream bytes the client sent, counted at each stream's highest offset, against `config.maxData`. */
-  receivedData: i64 = 0
+  /** The streams, both ways (`nish/net/quic-stream`). */
+  streams: QuicStreams
+  /** DATAGRAM payloads waiting to be sent, and those the client sent waiting to be read. */
+  datagramsOut: QuicDatagramQueue
+  datagramsIn: QuicDatagramQueue
+  /** The CRYPTO bytes the client sent, put back in order. */
+  cryptoIn: QuicConnReassembly
+  /** PATH_CHALLENGE data to answer: a ring of four, eight bytes each, `pathCount` from `pathHead`. */
+  pathData: u8[]
   frame: QuicFrame
+  /** The header and the packet numbers of the packet being read, reused for every one. */
+  header: QuicHeader
+  packet: QuicPacket
   /** For a connection `acceptRetry` set up: the DCID of the client's Initial before the Retry, and the Retry's SCID. */
   retryOriginalDcid: u8[]
   retryScid: u8[]
+  /** An empty array, which a cleared secret or ID is set to. */
+  none: u8[]
   /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
   now: i64 = 0
   /** When the idle timer last restarted (RFC 9000 §10.1), or -1 before the first packet. */
@@ -972,10 +996,17 @@ export class QuicConnection {
   writePhaseFirst: i64 = 0
   /** When the previous read keys go and the next are derived, or -1. */
   keyRetainUntil: i64 = -1
+  /** The packet number of a client key update read but not applied yet, or -1. */
+  phasePending: i64 = -1
+  /** The largest DATAGRAM frame the client takes (its `max_datagram_frame_size`), 0 for none. */
+  peerMaxDatagramFrame: i64 = 0
+  originalDcidLength: i32 = 0
+  peerScidLength: i32 = 0
+  pathHead: i32 = 0
+  pathCount: i32 = 0
   state: i32 = 0
   /** Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. */
   dropped: i32 = 0
-  eventHead: i32 = 0
   /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
@@ -996,38 +1027,138 @@ export class QuicConnection {
   /** The Key Phase bit of the current read keys, and of the current write keys. */
   readPhase: boolean = false
   writePhase: boolean = false
+  /** Whether the packet just read brought CRYPTO bytes for TLS, or retired an ID that wants replacing. */
+  cryptoArrived: boolean = false
+  topUpOwed: boolean = false
 
   /**
    * A connection under `config`, with `entropy` its `QUIC_CONN_ENTROPY_SIZE`
    * random bytes, which are copied out and then wiped in the caller's array.
+   * Every buffer the connection will use is made here, sized by `config`.
    * Entropy of another length, or limits outside what `QuicServerConfig`
    * documents, leave the connection closing with INTERNAL_ERROR before it
    * reads anything; it then sends nothing.
    */
   constructor(config: QuicServerConfig, entropy: u8[]) {
     this.config = config
-    this.serverRandom = quicConnSlice(entropy, 0, 32)
-    this.ephemeralPrivate = quicConnSlice(entropy, 32, 32)
-    this.localScid = quicConnSlice(entropy, 64, QUIC_CONN_CID_LENGTH)
-    this.cidSeed = quicConnSlice(entropy, 72, 32)
-    this.originalDcid = []
-    this.peerScid = []
+    this.serverRandom = new Array<u8>(32)
+    this.ephemeralPrivate = new Array<u8>(32)
+    this.localScid = new Array<u8>(QUIC_CONN_CID_LENGTH)
+    this.cidSeed = new Array<u8>(32)
+    this.originalDcid = new Array<u8>(QUIC_MAX_CID_LENGTH)
+    this.peerScid = new Array<u8>(QUIC_MAX_CID_LENGTH)
     this.initial = new QuicConnSpace(TLS_LEVEL_INITIAL)
     this.handshake = new QuicConnSpace(TLS_LEVEL_HANDSHAKE)
     this.application = new QuicConnSpace(TLS_LEVEL_APPLICATION)
-    this.cids = new QuicCidTable(config.activeConnectionIdLimit)
+    this.cids = new QuicCidTable(
+      config.activeConnectionIdLimit >= 2 && config.activeConnectionIdLimit <= 8
+        ? config.activeConnectionIdLimit
+        : 2,
+      QUIC_CONN_LOCAL_CIDS
+    )
     this.recovery = new QuicRecovery()
-    this.peerParameters = new QuicTransportParameters()
-    this.streams = []
-    this.events = []
-    this.pathResponses = []
+    this.defaultParameters = new QuicTransportParameters()
+    this.peerParameters = this.defaultParameters
+    // A configuration that does not fit closes the connection at once (see
+    // `begin`), so it gets no stream or datagram buffers at all.
+    const fits: boolean = quicConnConfigFits(config)
+    const streams: i64 = fits ? config.maxStreamsBidi : QUIC_CONN_NONE
+    const uni: i64 = fits ? config.maxStreamsUni : QUIC_CONN_NONE
+    const local: i64 = fits ? config.localStreams : QUIC_CONN_NONE
+    const buffer: i32 = fits ? toI32(config.maxStreamData) : QUIC_CONN_FROM
+    this.streams = new QuicStreams(streams, uni, local, buffer, fits ? config.maxData : QUIC_CONN_NONE)
+    // The rings are made only when DATAGRAM frames are offered at all.
+    const datagrams: i32 = fits && config.maxDatagramFrameSize > 0 ? QUIC_CONN_DATAGRAM_QUEUE : 0
+    this.datagramsOut = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_SIZE)
+    this.datagramsIn = new QuicDatagramQueue(
+      datagrams,
+      fits ? toI32(config.maxDatagramFrameSize) : QUIC_CONN_FROM
+    )
+    this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)
+    this.pathData = new Array<u8>(QUIC_PATH_DATA_SIZE * 4)
     this.frame = new QuicFrame()
-    this.retryOriginalDcid = []
-    this.retryScid = []
-    this.appReadSecret = []
-    this.appWriteSecret = []
-    this.nextReadSecret = []
-    const fits: boolean = toI32(entropy.length) === QUIC_CONN_ENTROPY_SIZE && quicConnConfigFits(config)
+    this.header = new QuicHeader()
+    this.packet = new QuicPacket()
+    this.none = []
+    this.retryOriginalDcid = this.none
+    this.retryScid = this.none
+    this.appReadSecret = this.none
+    this.appWriteSecret = this.none
+    this.nextReadSecret = this.none
+    this.begin(entropy)
+  }
+
+  /**
+   * Makes this slot a new connection for the next client, with `entropy`
+   * its `QUIC_CONN_ENTROPY_SIZE` fresh random bytes (wiped in the caller's
+   * array): every secret of the last connection is wiped first, as
+   * `release()` does, and every buffer is kept and emptied. The limits are
+   * the constructor's configuration's. A slot reset this way allocates
+   * nothing for itself; the next handshake allocates what any handshake does
+   * (TLS-3 in `docs/security/tls.md`).
+   */
+  reset(entropy: u8[]): void {
+    this.wipeAll()
+    this.initial.reset()
+    this.handshake.reset()
+    this.application.reset()
+    this.cids.reset()
+    this.recovery.reset()
+    this.streams.reset()
+    this.datagramsOut.reset()
+    this.datagramsIn.reset()
+    this.cryptoIn.reset(TLS_LEVEL_INITIAL)
+    this.peerParameters = this.defaultParameters
+    this.tls = null
+    this.error = 0
+    this.errorFrameType = 0
+    this.bytesReceived = 0
+    this.bytesSent = 0
+    this.alpn = ""
+    this.serverName = ""
+    this.retryOriginalDcid = this.none
+    this.retryScid = this.none
+    this.appReadSecret = this.none
+    this.appWriteSecret = this.none
+    this.nextReadSecret = this.none
+    this.otherReadKeys = null
+    this.now = 0
+    this.idleSince = -1
+    this.readPhaseLowest = -1
+    this.readPhaseHighest = -1
+    this.writePhaseFirst = 0
+    this.keyRetainUntil = -1
+    this.phasePending = -1
+    this.peerMaxDatagramFrame = 0
+    this.originalDcidLength = 0
+    this.peerScidLength = 0
+    this.pathHead = 0
+    this.pathCount = 0
+    this.state = QUIC_STATE_WAIT_INITIAL
+    this.dropped = 0
+    this.keyUpdates = 0
+    this.errorIsApplication = false
+    this.closeSent = false
+    this.addressValidated = false
+    this.handshakeComplete = false
+    this.handshakeDonePending = false
+    this.retried = false
+    this.elicitingSent = false
+    this.otherIsNext = false
+    this.readPhase = false
+    this.writePhase = false
+    this.cryptoArrived = false
+    this.topUpOwed = false
+    this.begin(entropy)
+  }
+
+  /** Takes `entropy` (and wipes it), or closes with INTERNAL_ERROR for entropy or a configuration that does not fit. */
+  begin(entropy: u8[]): void {
+    quicCidCopy(this.serverRandom, entropy, 0, 32)
+    quicCidCopy(this.ephemeralPrivate, entropy, 32, 32)
+    quicCidCopy(this.localScid, entropy, 64, QUIC_CONN_CID_LENGTH)
+    quicCidCopy(this.cidSeed, entropy, 72, 32)
+    const fits: boolean = toI32(entropy.length) === QUIC_CONN_ENTROPY_SIZE && quicConnConfigFits(this.config)
     secureZero(entropy)
     if (!fits) {
       this.state = QUIC_STATE_CLOSING
@@ -1132,54 +1263,72 @@ export class QuicConnection {
    * answers for its IDs; the caller drops it once it is done with it.
    */
   ownsConnectionId(dcid: u8[]): boolean {
-    if (this.cids.ownsLocal(dcid)) {
+    return this.ownsConnectionIdAt(dcid, QUIC_CONN_FROM, toI32(dcid.length))
+  }
+
+  /** `ownsConnectionId` of the ID `buf[at .. at + length)`, read in place, so a carrier routes without a copy. */
+  ownsConnectionIdAt(buf: u8[], at: i32, length: i32): boolean {
+    if (this.cids.ownsLocalAt(buf, at, length)) {
       return true
     }
     return (
       !this.handshakeComplete &&
-      toI32(this.originalDcid.length) > 0 &&
-      timingSafeEqual(dcid, this.originalDcid)
+      this.originalDcidLength > 0 &&
+      length === this.originalDcidLength &&
+      timingSafeEqualAt(buf, at, this.originalDcid, QUIC_CONN_FROM, length)
     )
   }
 
-  /**
-   * Takes one datagram from the client, which arrived at `now` (the
-   * caller's monotonic time in milliseconds): every packet in it is opened
-   * and its frames acted on, in order. Answers 0, or the error the
-   * connection closed with — in which case `takeDatagram` answers the
-   * CONNECTION_CLOSE to send. A packet that cannot be used is dropped and
-   * counted (see the module header). Once the connection has closed, or its
-   * idle timeout has passed by `now`, every datagram is ignored.
-   */
+  /** `receiveWindow` of a whole datagram. */
   receive(datagram: u8[], now: i64): i64 {
+    return this.receiveWindow(datagram, QUIC_CONN_FROM, toI32(datagram.length), now)
+  }
+
+  /**
+   * Takes one datagram from the client, `buf[off .. off + len)`, which
+   * arrived at `now` (the caller's monotonic time in milliseconds): every
+   * packet in it is opened and its frames acted on, in order. `buf` is read,
+   * never written, so a GRO receive buffer is handed over a datagram at a
+   * time. Answers 0, or the error the connection closed with — in which case
+   * `takeDatagramInto` writes the CONNECTION_CLOSE to send. A packet that
+   * cannot be used is dropped and counted (see the module header). Once the
+   * connection has closed, or its idle timeout has passed by `now`, every
+   * datagram is ignored.
+   */
+  receiveWindow(buf: u8[], off: i32, len: i32, now: i64): i64 {
     this.runClocks(now)
     if (this.closed()) {
       return this.error
     }
-    const n: i32 = toI32(datagram.length)
-    // §14.1: a client's first Initial comes in a datagram of at least 1200 bytes.
-    if (this.state === QUIC_STATE_WAIT_INITIAL && n < QUIC_CONN_DATAGRAM_SIZE) {
+    if (off < 0 || len < 0 || off > toI32(buf.length) - len) {
       this.drop()
       return 0
     }
-    let at: i32 = 0
+    // §14.1: a client's first Initial comes in a datagram of at least 1200 bytes.
+    if (this.state === QUIC_STATE_WAIT_INITIAL && len < QUIC_CONN_DATAGRAM_SIZE) {
+      this.drop()
+      return 0
+    }
+    const end: i32 = off + len
+    let at: i32 = off
     let counted: boolean = false
-    while (at < n) {
-      const header: QuicHeader = quicParseHeader(datagram, at, QUIC_CONN_CID_LENGTH)
-      if (header.error !== QUIC_PACKET_OK) {
+    while (at < end) {
+      if (quicParseHeaderInto(this.header, buf, at, end, QUIC_CONN_CID_LENGTH) !== QUIC_PACKET_OK) {
         this.drop()
         break
       }
-      counted = this.receivePacket(datagram, header) || counted
-      if (this.closed() || header.type === QUIC_PACKET_SHORT || header.end <= at) {
+      counted = this.receivePacket(buf, this.header) || counted
+      const type: i32 = this.header.type
+      const next: i32 = this.header.end
+      if (this.closed() || type === QUIC_PACKET_SHORT || next <= at) {
         break
       }
-      at = header.end
+      at = next
     }
     // A datagram counts toward the amplification limit once one of its packets
     // proves it is this connection's (RFC 9000 §8.1).
     if (counted) {
-      this.bytesReceived = this.bytesReceived + toI64(n)
+      this.bytesReceived = this.bytesReceived + toI64(len)
     }
     // Loss recovery's timer runs after the datagram, so an acknowledgement
     // it carries settles what it acknowledges before a probe is owed.
@@ -1189,33 +1338,62 @@ export class QuicConnection {
 
   /**
    * Starts the connection from the client's first Initial, `header`: the
-   * original DCID and the client's SCID, the Initial keys (RFC 9001 §5.2),
-   * the first local connection ID, and a `TlsServer` whose transport
-   * parameters name both IDs (RFC 9000 §7.3), the Retry's when `acceptRetry`
-   * set one up, and the first ID's stateless reset token (§18.2). Answers
-   * whether it could: the client's DCID must be at least 8 bytes (§7.2).
+   * original DCID and the client's SCID, and the Initial keys (RFC 9001
+   * §5.2). Answers whether it could: the client's DCID must be at least 8
+   * bytes (§7.2). The rest of the connection — its first local ID and the
+   * `TlsServer` — is made by `establish` once the Initial has opened, so an
+   * Initial that does not authenticate costs only its keys.
    */
-  start(header: QuicHeader): boolean {
-    if (toI32(header.dcid.length) < 8) {
+  start(buf: u8[], header: QuicHeader): boolean {
+    if (
+      header.dcidLength < 8 ||
+      header.dcidLength > QUIC_MAX_CID_LENGTH ||
+      header.scidLength > QUIC_MAX_CID_LENGTH
+    ) {
       return false
     }
-    const secrets: QuicInitialSecrets | null = quicInitialSecrets(header.dcid)
+    const dcid: u8[] = quicConnSlice(buf, header.dcidStart, header.dcidLength)
+    const secrets: QuicInitialSecrets | null = quicInitialSecrets(dcid)
     if (secrets === null) {
       return false
     }
     this.initial.readKeys = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client)
     this.initial.writeKeys = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server)
-    this.originalDcid = header.dcid
-    this.peerScid = header.scid
-    const none: u8[] = []
+    quicCidCopy(this.originalDcid, buf, header.dcidStart, header.dcidLength)
+    this.originalDcidLength = header.dcidLength
+    quicCidCopy(this.peerScid, buf, header.scidStart, header.scidLength)
+    this.peerScidLength = header.scidLength
+    this.state = QUIC_STATE_HANDSHAKE
+    return true
+  }
+
+  /**
+   * The rest of `start`, once the first Initial has opened: the first local
+   * connection ID, and a `TlsServer` whose transport parameters name both
+   * IDs (RFC 9000 §7.3), the Retry's when `acceptRetry` set one up, and the
+   * first ID's stateless reset token (§18.2).
+   */
+  establish(): void {
+    const none: u8[] = this.none
     const resetToken: u8[] = quicStatelessResetToken(this.config.statelessResetKey, this.localScid)
     this.cids.addLocal(this.localScid, resetToken)
-    this.cids.addPeer(QUIC_CONN_NONE, QUIC_CONN_NONE, header.scid, none)
+    this.cids.addPeerAt(
+      QUIC_CONN_NONE,
+      QUIC_CONN_NONE,
+      this.peerScid,
+      QUIC_CONN_FROM,
+      this.peerScidLength,
+      none,
+      QUIC_CONN_FROM,
+      false
+    )
     // §8.1.2: a Retry token the listener checked has validated the address.
     this.addressValidated = this.retried
 
     const params: QuicTransportParameters = new QuicTransportParameters()
-    params.originalDcid = this.retried ? this.retryOriginalDcid : header.dcid
+    params.originalDcid = this.retried
+      ? this.retryOriginalDcid
+      : quicConnSlice(this.originalDcid, 0, this.originalDcidLength)
     params.hasOriginalDcid = true
     params.initialScid = this.localScid
     params.hasInitialScid = true
@@ -1227,6 +1405,12 @@ export class QuicConnection {
     params.initialMaxData = this.config.maxData
     params.initialMaxStreamDataBidiRemote = this.config.maxStreamData
     params.initialMaxStreamsBidi = this.config.maxStreamsBidi
+    // Each of these is advertised only when the configuration uses it, so a
+    // configuration without them sends the parameters it always has.
+    params.initialMaxStreamDataBidiLocal = this.config.localStreams > 0 ? this.config.maxStreamData : 0
+    params.initialMaxStreamsUni = this.config.maxStreamsUni
+    params.initialMaxStreamDataUni = this.config.maxStreamsUni > 0 ? this.config.maxStreamData : 0
+    params.maxDatagramFrameSize = this.config.maxDatagramFrameSize
     params.activeConnectionIdLimit = this.config.activeConnectionIdLimit
     // The server never migrates and asks the client not to (§9): path
     // validation beyond answering PATH_CHALLENGE is not here.
@@ -1241,24 +1425,22 @@ export class QuicConnection {
       quic: true,
     }
     this.tls = new TlsServer(tlsConfig, this.serverRandom, this.ephemeralPrivate)
-    this.state = QUIC_STATE_HANDSHAKE
-    return true
   }
 
   /**
    * One packet of a datagram. Answers whether the packet was used: whether it
    * authenticated as this connection's.
    */
-  receivePacket(datagram: u8[], header: QuicHeader): boolean {
+  receivePacket(buf: u8[], header: QuicHeader): boolean {
     const type: i32 = header.type
     const first: boolean = this.state === QUIC_STATE_WAIT_INITIAL
-    if (first && (type !== QUIC_PACKET_INITIAL || !this.start(header))) {
+    if (first && (type !== QUIC_PACKET_INITIAL || !this.start(buf, header))) {
       this.drop()
       return false
     }
-    const used: boolean = this.openPacket(datagram, header)
-    // A first Initial that does not open leaves nothing behind: the next
-    // datagram is read as a first Initial again.
+    const used: boolean = this.openPacket(buf, header, first)
+    // A first Initial that does not open leaves nothing behind but its keys:
+    // the next datagram is read as a first Initial again.
     if (first && !used) {
       this.unstart()
     }
@@ -1267,22 +1449,26 @@ export class QuicConnection {
 
   /** Undoes `start`, for a first Initial that turned out not to authenticate. */
   unstart(): void {
-    const none: u8[] = []
     this.state = QUIC_STATE_WAIT_INITIAL
     this.addressValidated = false
     this.idleSince = -1
-    this.tls = null
-    this.initial = new QuicConnSpace(TLS_LEVEL_INITIAL)
-    this.cids = new QuicCidTable(this.config.activeConnectionIdLimit)
-    this.originalDcid = none
-    this.peerScid = none
+    this.initial.reset()
+    this.originalDcidLength = 0
+    this.peerScidLength = 0
   }
 
-  /** Opens one packet of a connection already started, and acts on its frames. Answers whether it was used. */
-  openPacket(datagram: u8[], header: QuicHeader): boolean {
+  /**
+   * Opens one packet of a connection already started, and acts on its frames.
+   * The opening and the frames run inside an arena block (`openScoped`), so
+   * their temporaries go when it ends; what has to keep memory — a first
+   * Initial's `TlsServer`, a key update's new keys, TLS reading the CRYPTO
+   * bytes and what it answers — runs after it. Answers whether the packet
+   * was used.
+   */
+  openPacket(buf: u8[], header: QuicHeader, first: boolean): boolean {
     const type: i32 = header.type
     const space: QuicConnSpace | null = this.spaceOf(type)
-    if (space === null || !this.addressedHere(header)) {
+    if (space === null || !this.addressedHere(buf, header)) {
       this.drop()
       return false
     }
@@ -1292,12 +1478,63 @@ export class QuicConnection {
       this.drop()
       return false
     }
+    this.cryptoArrived = false
+    this.topUpOwed = false
+    this.phasePending = -1
+    let used: boolean = false
+    {
+      using _scope = arena()
+      used = this.openScoped(buf, header, space, keys)
+    }
+    if (!used) {
+      return false
+    }
+    if (first) {
+      this.establish()
+    }
+    if (this.phasePending >= 0 && !this.closed()) {
+      this.applyPhase(this.phasePending)
+    }
+    if (this.closed()) {
+      return true
+    }
+    if (type === QUIC_PACKET_HANDSHAKE) {
+      // §8.1: a Handshake packet proves the client holds its address; RFC
+      // 9001 §4.9.1: the server is then done with the Initial keys.
+      this.addressValidated = true
+      this.discard(this.initial)
+    }
+    if (this.cryptoArrived) {
+      this.feedTls()
+    }
+    this.afterTls()
+    if (this.topUpOwed) {
+      this.topUpConnectionIds()
+    }
+    return true
+  }
+
+  /**
+   * `openPacket`'s half inside the arena block: header protection off, the
+   * payload decrypted (with the other key generation's keys when the Key
+   * Phase bit says so), and every frame acted on. Nothing it calls stores
+   * an allocation, which is what lets the block release the packet's
+   * temporaries. Answers whether the packet was used rather than dropped.
+   */
+  openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys): boolean {
+    const packet: QuicPacket = this.packet
     // Every key generation shares the header-protection key (RFC 9001 §6),
     // so the current keys take it off whatever the Key Phase bit says.
-    const packet: QuicPacket = quicRemoveHeaderProtection(keys, datagram, header, space.received.largest)
+    const clear: u8[] = quicUnprotectHeader(keys, buf, header, space.received.largest, packet)
+    const type: i32 = header.type
     const other: boolean = type === QUIC_PACKET_SHORT && packet.keyPhase !== this.readPhase
     const open: QuicKeys | null = other ? this.otherReadKeys : keys
-    if (open === null || !quicDecryptPacket(open, datagram, header, packet) || packet.packetNumber < 0) {
+    if (open === null || packet.packetNumber < 0) {
+      this.drop()
+      return false
+    }
+    const payload: u8[] | null = quicDecryptPayload(open, buf, header, clear, packet)
+    if (payload === null) {
       this.drop()
       return false
     }
@@ -1306,41 +1543,34 @@ export class QuicConnection {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, QUIC_CONN_NONE)
       return true
     }
-    if (space.received.contains(packet.packetNumber)) {
+    const pn: i64 = packet.packetNumber
+    if (space.received.contains(pn)) {
       this.drop()
       return true
     }
-    if (type === QUIC_PACKET_SHORT && !this.notePhase(packet.packetNumber, other)) {
+    if (type === QUIC_PACKET_SHORT && !this.notePhase(pn, other)) {
       return true
     }
-    const eliciting: boolean = this.receiveFrames(space, type, packet.payload, header.dcid)
+    const eliciting: boolean = this.receiveFrames(space, type, payload, buf, header)
     if (this.closed()) {
       return true
     }
-    space.received.record(packet.packetNumber, eliciting)
+    space.received.record(pn, eliciting)
     // §10.1: a packet received and processed restarts the idle timer.
     this.idleSince = this.now
     this.elicitingSent = false
-    if (type === QUIC_PACKET_HANDSHAKE) {
-      // §8.1: a Handshake packet proves the client holds its address; RFC
-      // 9001 §4.9.1: the server is then done with the Initial keys.
-      this.addressValidated = true
-      this.discard(this.initial)
-    }
-    this.afterTls()
     return true
   }
 
   /**
-   * Books a 1-RTT packet `pn` that opened under the current read keys, or,
+   * Checks a 1-RTT packet `pn` that opened under the current read keys, or,
    * when `other`, under the other set (RFC 9001 §6.2, §6.4, §6.5). Under the
-   * next generation's it is a key update: the read keys move on, and the
-   * write keys too unless the server started this update. Under the previous
-   * generation's it is a packet the network delayed. Either is
-   * KEY_UPDATE_ERROR when it breaks §6.4's order — a higher packet number
-   * under older keys than a lower one already had — and an update past
-   * `QUIC_CONN_MAX_KEY_UPDATES` is too. Answers whether the connection is
-   * still open.
+   * next generation's it is a key update, which `applyPhase` carries out
+   * once the packet is read. Under the previous generation's it is a packet
+   * the network delayed. Either is KEY_UPDATE_ERROR when it breaks §6.4's
+   * order — a higher packet number under older keys than a lower one
+   * already had — and an update past `QUIC_CONN_MAX_KEY_UPDATES` is too.
+   * Answers whether the connection is still open.
    */
   notePhase(pn: i64, other: boolean): boolean {
     if (other && !this.otherIsNext) {
@@ -1363,17 +1593,26 @@ export class QuicConnection {
       this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
       return false
     }
+    if (this.writePhase === this.readPhase && this.keyUpdates >= QUIC_CONN_MAX_KEY_UPDATES) {
+      this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
+      return false
+    }
+    this.phasePending = pn
+    return true
+  }
+
+  /**
+   * Carries out the client's key update `notePhase` found in packet `pn`
+   * (RFC 9001 §6.2): the write keys follow, unless the server started this
+   * update, before anything acknowledges the packet; the read keys move on,
+   * and the previous ones are kept for a probe timeout.
+   */
+  applyPhase(pn: i64): void {
     if (this.writePhase === this.readPhase) {
-      // The client started this update: §6.2 has the write keys follow
-      // before anything acknowledges the packet that carried it.
-      if (this.keyUpdates >= QUIC_CONN_MAX_KEY_UPDATES) {
-        this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
-        return false
-      }
       this.keyUpdates = this.keyUpdates + 1
       if (!this.updateWriteKeys()) {
         this.fail(QUIC_ERROR_INTERNAL, QUIC_CONN_NONE)
-        return false
+        return
       }
     }
     const previous: QuicKeys | null = this.application.readKeys
@@ -1382,12 +1621,11 @@ export class QuicConnection {
     this.otherIsNext = false
     secureZero(this.appReadSecret)
     this.appReadSecret = this.nextReadSecret
-    this.nextReadSecret = []
+    this.nextReadSecret = this.none
     this.readPhase = !this.readPhase
     this.readPhaseLowest = pn
     this.readPhaseHighest = pn
     this.keyRetainUntil = this.now + this.recovery.probeTimeout()
-    return true
   }
 
   /**
@@ -1447,19 +1685,30 @@ export class QuicConnection {
   /**
    * Whether `header`'s connection IDs are this connection's: a long header
    * from the client's first SCID to the server's ID (or, for an Initial,
-   * the original DCID), a short header to an active local ID.
+   * the original DCID), a short header to an active local ID. Read in place
+   * from `buf`.
    */
-  addressedHere(header: QuicHeader): boolean {
+  addressedHere(buf: u8[], header: QuicHeader): boolean {
     if (header.type === QUIC_PACKET_SHORT) {
-      return this.cids.ownsLocal(header.dcid)
+      return this.cids.ownsLocalAt(buf, header.dcidStart, header.dcidLength)
     }
-    if (!timingSafeEqual(header.scid, this.peerScid)) {
+    if (
+      header.scidLength !== this.peerScidLength ||
+      !timingSafeEqualAt(buf, header.scidStart, this.peerScid, QUIC_CONN_FROM, this.peerScidLength)
+    ) {
       return false
     }
-    if (timingSafeEqual(header.dcid, this.localScid)) {
+    if (
+      header.dcidLength === QUIC_CONN_CID_LENGTH &&
+      timingSafeEqualAt(buf, header.dcidStart, this.localScid, QUIC_CONN_FROM, QUIC_CONN_CID_LENGTH)
+    ) {
       return true
     }
-    return header.type === QUIC_PACKET_INITIAL && timingSafeEqual(header.dcid, this.originalDcid)
+    return (
+      header.type === QUIC_PACKET_INITIAL &&
+      header.dcidLength === this.originalDcidLength &&
+      timingSafeEqualAt(buf, header.dcidStart, this.originalDcid, QUIC_CONN_FROM, this.originalDcidLength)
+    )
   }
 
   /**
@@ -1468,7 +1717,13 @@ export class QuicConnection {
    * does not parse and a frame the packet type may not carry close the
    * connection (RFC 9000 §12.4).
    */
-  receiveFrames(space: QuicConnSpace, packetType: i32, payload: u8[], dcid: u8[]): boolean {
+  receiveFrames(
+    space: QuicConnSpace,
+    packetType: i32,
+    payload: u8[],
+    buf: u8[],
+    header: QuicHeader
+  ): boolean {
     const end: i32 = toI32(payload.length)
     if (end === 0) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, QUIC_CONN_NONE)
@@ -1488,7 +1743,7 @@ export class QuicConnection {
         return eliciting
       }
       eliciting = eliciting || quicFrameAckEliciting(frame.type)
-      this.receiveFrame(space, frame, payload, dcid)
+      this.receiveFrame(space, frame, payload, at, buf, header)
       if (this.closed() || frame.end <= at) {
         return eliciting
       }
@@ -1497,9 +1752,27 @@ export class QuicConnection {
     return eliciting
   }
 
-  /** One frame, which the packet type is allowed to carry. */
-  receiveFrame(space: QuicConnSpace, frame: QuicFrame, payload: u8[], dcid: u8[]): void {
+  /** Closes the connection with `error` from a stream frame of `type`, unless it is 0. */
+  failOn(error: i64, type: i64): void {
+    if (error !== QUIC_ERROR_NO_ERROR) {
+      this.fail(error, type)
+    }
+  }
+
+  /**
+   * One frame, which the packet type is allowed to carry: it starts at
+   * `payload[frameStart]`, and the packet's header is `header` in `buf`.
+   */
+  receiveFrame(
+    space: QuicConnSpace,
+    frame: QuicFrame,
+    payload: u8[],
+    frameStart: i32,
+    buf: u8[],
+    header: QuicHeader
+  ): void {
     const type: i64 = toI64(frame.type)
+    const streams: QuicStreams = this.streams
     switch (frame.type) {
       case QUIC_FRAME_ACK:
       case QUIC_FRAME_ACK_ECN:
@@ -1509,80 +1782,69 @@ export class QuicConnection {
         this.receiveCrypto(space, frame, payload)
         break
       case QUIC_FRAME_STREAM:
-        this.receiveStream(frame, payload)
+        this.failOn(
+          streams.onStream(
+            frame.streamId,
+            frame.offset,
+            payload,
+            frame.dataStart,
+            frame.dataLength,
+            frame.fin
+          ),
+          type
+        )
         break
-      case QUIC_FRAME_RESET_STREAM: {
-        const stream: QuicConnStream | null = this.streamFor(frame.streamId, type)
-        if (stream !== null) {
-          this.setFinalSize(stream, frame.value, type)
-          stream.reset = true
-        }
+      case QUIC_FRAME_RESET_STREAM:
+        this.failOn(streams.onReset(frame.streamId, frame.errorCode, frame.value), type)
         break
-      }
-      case QUIC_FRAME_STOP_SENDING: {
-        // §3.5: the client wants no more data. A full stream would answer
-        // RESET_STREAM (Q4); here the sending side simply ends, and nothing
-        // of it is sent again.
-        const stream: QuicConnStream | null = this.streamFor(frame.streamId, type)
-        if (stream !== null) {
-          stream.stopSending()
-        }
+      case QUIC_FRAME_STOP_SENDING:
+        this.failOn(streams.onStopSending(frame.streamId, frame.errorCode), type)
         break
-      }
+      case QUIC_FRAME_MAX_STREAM_DATA:
+        this.failOn(streams.onMaxStreamData(frame.streamId, frame.value), type)
+        break
+      case QUIC_FRAME_STREAM_DATA_BLOCKED:
+        this.failOn(streams.onStreamDataBlocked(frame.streamId), type)
+        break
       case QUIC_FRAME_MAX_DATA:
-        if (frame.value > this.peerMaxData) {
-          this.peerMaxData = frame.value
-        }
+        streams.onMaxData(frame.value)
         break
-      case QUIC_FRAME_MAX_STREAM_DATA: {
-        const stream: QuicConnStream | null = this.streamFor(frame.streamId, type)
-        if (stream !== null && frame.value > stream.sendLimit) {
-          stream.sendLimit = frame.value
-        }
+      case QUIC_FRAME_MAX_STREAMS_BIDI:
+        streams.onMaxStreams(false, frame.value)
         break
-      }
-      case QUIC_FRAME_STREAM_DATA_BLOCKED: {
-        // Only the stream ID is checked: the server never raises credit (Q4).
-        this.streamFor(frame.streamId, type)
+      case QUIC_FRAME_MAX_STREAMS_UNI:
+        streams.onMaxStreams(true, frame.value)
         break
-      }
+      case QUIC_FRAME_DATAGRAM:
+        this.receiveDatagram(frame, payload, frameStart)
+        break
       case QUIC_FRAME_NEW_CONNECTION_ID: {
         // §19.15: a client that chose a zero-length connection ID has none to give.
         const error: i64 =
-          toI32(this.peerScid.length) === 0
+          this.peerScidLength === 0
             ? QUIC_ERROR_PROTOCOL_VIOLATION
-            : this.cids.addPeer(frame.value, frame.retirePriorTo, frame.connectionId, frame.resetToken)
-        if (error !== QUIC_ERROR_NO_ERROR) {
-          this.fail(error, type)
-        }
+            : this.cids.addPeerAt(
+                frame.value,
+                frame.retirePriorTo,
+                payload,
+                frame.connectionIdStart,
+                frame.connectionIdLength,
+                payload,
+                frame.resetTokenStart,
+                true
+              )
+        this.failOn(error, type)
         break
       }
       case QUIC_FRAME_RETIRE_CONNECTION_ID: {
-        const error: i64 = this.cids.retireLocal(frame.value, dcid)
-        if (error !== QUIC_ERROR_NO_ERROR) {
-          this.fail(error, type)
-          break
-        }
-        this.topUpConnectionIds()
+        const error: i64 = this.cids.retireLocal(frame.value, buf, header.dcidStart, header.dcidLength)
+        this.failOn(error, type)
+        this.topUpOwed = error === QUIC_ERROR_NO_ERROR
         break
       }
-      case QUIC_FRAME_PATH_CHALLENGE: {
-        // §8.2.2: answer with the same eight bytes. Only the latest few are
-        // kept, so a burst of challenges cannot grow the queue.
-        if (toI32(this.pathResponses.length) >= QUIC_PATH_DATA_SIZE * 4) {
-          this.pathResponses = []
-        }
-        for (
-          let k: i32 = frame.dataStart;
-          k < frame.dataStart + frame.dataLength && k < toI32(payload.length);
-          k += 1
-        ) {
-          if (k >= 0) {
-            this.pathResponses.push(payload[k])
-          }
-        }
+      case QUIC_FRAME_PATH_CHALLENGE:
+        this.receivePathChallenge(frame, payload)
         break
-      }
       // A PATH_RESPONSE answers no PATH_CHALLENGE, since the server sends none
       // (§19.18); NEW_TOKEN and HANDSHAKE_DONE go only to a client (§19.7,
       // §19.20). Each is a PROTOCOL_VIOLATION here.
@@ -1598,8 +1860,9 @@ export class QuicConnection {
         this.drain(frame.errorCode, true)
         break
       default:
-        // PADDING, PING, MAX_STREAMS, DATA_BLOCKED and STREAMS_BLOCKED ask
-        // nothing of a server that opens no streams and never raises credit.
+        // PADDING, PING, DATA_BLOCKED and STREAMS_BLOCKED ask nothing: credit
+        // and limits follow what the application reads and finishes, not
+        // what the client asks for.
         break
     }
   }
@@ -1634,7 +1897,6 @@ export class QuicConnection {
     ) {
       return
     }
-    // An acknowledged packet's streams may let go of the bytes it carried.
     for (let k: i32 = 0; k < sent.ackedCount; k += 1) {
       this.untrack(space, sent.ackedSlot(k))
     }
@@ -1660,19 +1922,18 @@ export class QuicConnection {
   /** Every packet of `space` that loss recovery's last call declared lost: what each carried is queued again. */
   packetsLost(space: QuicConnSpace, sent: QuicSentPackets): void {
     for (let k: i32 = 0; k < sent.lostCount; k += 1) {
-      this.requeue(space, sent.lostSlot(k), true)
+      this.requeue(space, sent.lostSlot(k))
     }
   }
 
   /**
    * Queues again what the packet in row `row` of `space` carried (RFC 9000
    * §13.3): its CRYPTO range, its STREAM chunks with their FIN, HANDSHAKE_DONE,
-   * the NEW_CONNECTION_ID of an ID still active and the RETIRE_CONNECTION_ID
-   * of one not queued already. `settled` says the packet left flight, lost,
-   * rather than being sent again by a probe while still in flight, so its
-   * streams stop counting it.
+   * the NEW_CONNECTION_ID of an ID still active, the RETIRE_CONNECTION_ID of
+   * one not queued already, and each stream control frame that still says
+   * something. A DATAGRAM is never in a record, so it never goes again.
    */
-  requeue(space: QuicConnSpace, row: i32, settled: boolean): void {
+  requeue(space: QuicConnSpace, row: i32): void {
     space.resendCrypto(space.cryptoOffset(row), space.cryptoLength(row))
     if ((space.flags(row) & QUIC_CONN_SENT_HANDSHAKE_DONE) !== 0) {
       this.handshakeDonePending = true
@@ -1687,17 +1948,12 @@ export class QuicConnection {
         at < toI32(space.sentStreamLength.length) &&
         at < toI32(space.sentStreamFin.length)
       ) {
-        const stream: QuicConnStream | null = this.findStream(space.sentStreamId[at])
-        if (stream !== null) {
-          if (settled) {
-            stream.outstanding = stream.outstanding - 1
-          }
-          stream.resend(
-            space.sentStreamOffset[at],
-            space.sentStreamLength[at],
-            toI32(space.sentStreamFin[at]) !== 0
-          )
-        }
+        this.streams.chunkLost(
+          space.sentStreamId[at],
+          space.sentStreamOffset[at],
+          space.sentStreamLength[at],
+          toI32(space.sentStreamFin[at]) !== 0
+        )
       }
     }
     const control: i32 = space.controlCount(row)
@@ -1709,22 +1965,21 @@ export class QuicConnection {
     }
   }
 
-  /** A lost NEW_CONNECTION_ID or RETIRE_CONNECTION_ID, sequence `value`, queued again unless it no longer matters. */
+  /** A lost control frame of kind `kind` (a sequence number or a stream in `value`), queued again unless it no longer matters. */
   requeueControl(kind: i32, value: i64): void {
     if (kind === QUIC_CONN_CONTROL_NEW_CID) {
       for (const entry of this.cids.local) {
-        if (entry.sequence === value && !entry.retired) {
+        if (entry.used && entry.sequence === value) {
           entry.announced = false
         }
       }
       return
     }
-    for (const queued of this.cids.retirePending) {
-      if (queued === value) {
-        return
-      }
+    if (kind === QUIC_CONN_CONTROL_RETIRE) {
+      this.cids.queueRetire(value)
+      return
     }
-    this.cids.retirePending.push(value)
+    this.streams.controlLost(kind, value)
   }
 
   /**
@@ -1744,7 +1999,7 @@ export class QuicConnection {
       for (let k: i32 = 0; k < sent.count; k += 1) {
         const slot: i32 = sent.slot(k)
         if (sent.inFlightAt(slot)) {
-          this.requeue(space, slot, false)
+          this.requeue(space, slot)
         }
       }
       space.probe = true
@@ -1752,135 +2007,100 @@ export class QuicConnection {
   }
 
   /**
-   * A CRYPTO frame: its data put back in order at its level, and what now
-   * continues the stream handed to TLS. A frame too far ahead is
-   * CRYPTO_BUFFER_EXCEEDED; an alert from TLS is CRYPTO_ERROR (RFC 9001 §4.8).
+   * A CRYPTO frame: its data put back in order, for TLS to read once the
+   * packet is (`feedTls`). The buffer follows the level the client is
+   * sending at; data of a level it has moved past is a duplicate of what
+   * TLS already read, or, past that, a message TLS is not reading, which is
+   * its alert unexpected_message (RFC 9001 §4.8). A frame too far ahead is
+   * CRYPTO_BUFFER_EXCEEDED.
    */
   receiveCrypto(space: QuicConnSpace, frame: QuicFrame, payload: u8[]): void {
-    if (!space.cryptoIn.insert(frame.offset, payload, frame.dataStart, frame.dataLength)) {
+    const reassembly: QuicConnReassembly = this.cryptoIn
+    if (space.level < reassembly.level) {
+      if (frame.offset + toI64(frame.dataLength) > space.cryptoInDelivered) {
+        this.fail(QUIC_ERROR_CRYPTO + QUIC_CONN_ALERT_UNEXPECTED, toI64(QUIC_FRAME_CRYPTO))
+      }
+      return
+    }
+    if (space.level > reassembly.level) {
+      this.spaceAt(reassembly.level).cryptoInDelivered = reassembly.delivered
+      reassembly.reset(space.level)
+    }
+    if (!reassembly.insert(frame.offset, payload, frame.dataStart, frame.dataLength)) {
       this.fail(QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED, toI64(QUIC_FRAME_CRYPTO))
       return
     }
-    const bytes: u8[] = space.cryptoIn.take()
+    this.cryptoArrived = true
+  }
+
+  /** Hands TLS what now continues the CRYPTO stream, from the buffer itself; an alert closes with CRYPTO_ERROR. */
+  feedTls(): void {
     const tls: TlsServer | null = this.tls
-    if (tls === null || toI32(bytes.length) === 0) {
+    const reassembly: QuicConnReassembly = this.cryptoIn
+    if (tls === null) {
       return
     }
-    const alert: i32 = tls.receive(space.level, bytes, QUIC_CONN_FROM, toI32(bytes.length))
-    if (alert !== 0) {
-      this.fail(QUIC_ERROR_CRYPTO + toI64(alert), toI64(QUIC_FRAME_CRYPTO))
-      return
-    }
-    this.afterTls()
-  }
-
-  /**
-   * The stream `id` refers to, opening it if the client may and has not yet
-   * (RFC 9000 §3.2), or `null` with the connection closed. The server opens
-   * no streams, so one of its IDs is STREAM_STATE_ERROR; it allows no
-   * unidirectional streams and `maxStreamsBidi` bidirectional ones, so any
-   * other ID past that is STREAM_LIMIT_ERROR (§4.6, §19.8).
-   */
-  streamFor(id: i64, frameType: i64): QuicConnStream | null {
-    if ((id & 1) !== 0) {
-      this.fail(QUIC_ERROR_STREAM_STATE, frameType)
-      return null
-    }
-    if ((id & 2) !== 0 || id >> 2 >= this.config.maxStreamsBidi) {
-      this.fail(QUIC_ERROR_STREAM_LIMIT, frameType)
-      return null
-    }
-    const open: QuicConnStream | null = this.findStream(id)
-    if (open !== null) {
-      return open
-    }
-    const stream: QuicConnStream = new QuicConnStream(
-      id,
-      toI32(this.config.maxStreamData),
-      this.peerParameters.initialMaxStreamDataBidiLocal
-    )
-    this.streams.push(stream)
-    return stream
-  }
-
-  /** The stream `id` the client already opened, or `null`. */
-  findStream(id: i64): QuicConnStream | null {
-    for (const stream of this.streams) {
-      if (stream.id === id) {
-        return stream
+    // A run stops at the buffer's end, so a stream that wraps is two runs.
+    for (let pass: i32 = 0; pass < 2; pass += 1) {
+      const n: i32 = reassembly.run()
+      if (n === 0) {
+        return
+      }
+      const alert: i32 = tls.receive(
+        reassembly.level,
+        reassembly.ring,
+        reassembly.slot(reassembly.delivered),
+        n
+      )
+      reassembly.consume(n)
+      if (alert !== 0) {
+        this.fail(QUIC_ERROR_CRYPTO + toI64(alert), toI64(QUIC_FRAME_CRYPTO))
+        return
       }
     }
-    return null
   }
 
   /**
-   * Fixes a stream's final size at `size` (a FIN, or RESET_STREAM): below what
-   * the client already sent, or different from a size already fixed, it is
-   * FINAL_SIZE_ERROR (§4.5). Answers whether it held.
+   * A DATAGRAM frame (RFC 9221 §4), which starts at `payload[frameStart]`:
+   * one the server did not offer to take, or larger than it offered, is a
+   * PROTOCOL_VIOLATION (§3); otherwise its payload waits for
+   * `readDatagram`, or is dropped when the ring is full.
    */
-  setFinalSize(stream: QuicConnStream, size: i64, frameType: i64): boolean {
-    if ((stream.finalSize >= 0 && stream.finalSize !== size) || size < stream.recvHighest) {
-      this.fail(QUIC_ERROR_FINAL_SIZE, frameType)
-      return false
+  receiveDatagram(frame: QuicFrame, payload: u8[], frameStart: i32): void {
+    const size: i64 = toI64(frame.end - frameStart)
+    if (this.config.maxDatagramFrameSize === 0 || size > this.config.maxDatagramFrameSize) {
+      // `fin` is how the frame says it was 0x31, the type with a Length.
+      this.fail(
+        QUIC_ERROR_PROTOCOL_VIOLATION,
+        toI64(frame.fin ? QUIC_FRAME_DATAGRAM_LENGTH : QUIC_FRAME_DATAGRAM)
+      )
+      return
     }
-    if (!this.creditReceived(stream, size, frameType)) {
-      return false
-    }
-    stream.finalSize = size
-    return true
+    this.datagramsIn.push(payload, frame.dataStart, frame.dataLength)
   }
 
   /**
-   * Counts the client's data on `stream` up to offset `end` against the
-   * credit the server gave, per stream and for the connection; past either
-   * is FLOW_CONTROL_ERROR (§4.1). Answers whether it fit.
+   * A PATH_CHALLENGE (§8.2.2): answered with the same eight bytes. Only the
+   * latest four are kept, so a burst of challenges cannot grow anything.
    */
-  creditReceived(stream: QuicConnStream, end: i64, frameType: i64): boolean {
-    if (end > this.config.maxStreamData) {
-      this.fail(QUIC_ERROR_FLOW_CONTROL, frameType)
-      return false
+  receivePathChallenge(frame: QuicFrame, payload: u8[]): void {
+    if (this.pathCount >= 4) {
+      this.pathHead = 0
+      this.pathCount = 0
     }
-    if (end > stream.recvHighest) {
-      this.receivedData = this.receivedData + (end - stream.recvHighest)
-      stream.recvHighest = end
-      if (this.receivedData > this.config.maxData) {
-        this.fail(QUIC_ERROR_FLOW_CONTROL, frameType)
-        return false
+    const base: i32 = ((this.pathHead + this.pathCount) % 4) * QUIC_PATH_DATA_SIZE
+    for (let k: i32 = 0; k < QUIC_PATH_DATA_SIZE; k += 1) {
+      const from: i32 = frame.dataStart + k
+      if (
+        base + k >= 0 &&
+        base + k < toI32(this.pathData.length) &&
+        from >= 0 &&
+        from < toI32(payload.length)
+      ) {
+        this.pathData[base + k] = payload[from]
       }
     }
-    return true
-  }
-
-  /**
-   * A STREAM frame: checked against the stream's final size and the credit,
-   * put back in order, and what now continues the stream queued for
-   * `readStream`, with the FIN once every byte up to the final size has been.
-   */
-  receiveStream(frame: QuicFrame, payload: u8[]): void {
-    const type: i64 = toI64(QUIC_FRAME_STREAM)
-    const stream: QuicConnStream | null = this.streamFor(frame.streamId, type)
-    if (stream === null) {
-      return
-    }
-    const end: i64 = frame.offset + toI64(frame.dataLength)
-    if (stream.finalSize >= 0 && (end > stream.finalSize || (frame.fin && end !== stream.finalSize))) {
-      this.fail(QUIC_ERROR_FINAL_SIZE, type)
-      return
-    }
-    if (frame.fin ? !this.setFinalSize(stream, end, type) : !this.creditReceived(stream, end, type)) {
-      return
-    }
-    if (stream.reset || stream.finDelivered) {
-      return
-    }
-    // The credit check above keeps `end` within the ring, which is the credit's size.
-    stream.recv.insert(frame.offset, payload, frame.dataStart, frame.dataLength)
-    const data: u8[] = stream.recv.take()
-    const fin: boolean = stream.finalSize >= 0 && stream.recv.delivered === stream.finalSize
-    if (toI32(data.length) > 0 || fin) {
-      stream.finDelivered = fin
-      this.events.push(new QuicStreamData(stream.id, data, fin))
-    }
+    this.pathCount = this.pathCount + 1
   }
 
   /**
@@ -1896,10 +2116,10 @@ export class QuicConnection {
       return
     }
     if (!this.initial.discarded) {
-      quicConnAppend(this.initial.cryptoOut, tls.takeOutput(TLS_LEVEL_INITIAL))
+      this.initial.appendCrypto(tls.takeOutput(TLS_LEVEL_INITIAL))
     }
     if (!this.handshake.discarded) {
-      quicConnAppend(this.handshake.cryptoOut, tls.takeOutput(TLS_LEVEL_HANDSHAKE))
+      this.handshake.appendCrypto(tls.takeOutput(TLS_LEVEL_HANDSHAKE))
     }
     const aead: i32 = quicConnAead(tls.suite)
     if (
@@ -1955,7 +2175,8 @@ export class QuicConnection {
    * parse, and must name as `initial_source_connection_id` the SCID its first
    * Initial came from. Missing, that is TRANSPORT_PARAMETER_ERROR; wrong, a
    * PROTOCOL_VIOLATION. Answers whether they hold, closing the connection
-   * when they do not.
+   * when they do not. The streams take the client's limits from them, and
+   * the datagrams its `max_datagram_frame_size`.
    */
   checkPeerParameters(tls: TlsServer): boolean {
     const p: QuicTransportParameters = quicParseTransportParameters(tls.clientTransportParameters, false)
@@ -1963,12 +2184,23 @@ export class QuicConnection {
       this.fail(QUIC_ERROR_TRANSPORT_PARAMETER, toI64(QUIC_FRAME_CRYPTO))
       return false
     }
-    if (!timingSafeEqual(p.initialScid, this.peerScid)) {
+    if (
+      toI32(p.initialScid.length) !== this.peerScidLength ||
+      !timingSafeEqualAt(p.initialScid, 0, this.peerScid, QUIC_CONN_FROM, this.peerScidLength)
+    ) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(QUIC_FRAME_CRYPTO))
       return false
     }
     this.peerParameters = p
-    this.peerMaxData = p.initialMaxData
+    this.streams.setPeerLimits(
+      p.initialMaxData,
+      p.initialMaxStreamDataBidiLocal,
+      p.initialMaxStreamDataBidiRemote,
+      p.initialMaxStreamDataUni,
+      p.initialMaxStreamsBidi,
+      p.initialMaxStreamsUni
+    )
+    this.peerMaxDatagramFrame = p.maxDatagramFrameSize
     this.recovery.maxAckDelay = p.maxAckDelay
     return true
   }
@@ -1988,7 +2220,7 @@ export class QuicConnection {
     quicConnWipeKeys(space.writeKeys)
     space.readKeys = null
     space.writeKeys = null
-    space.cryptoOut = []
+    space.cryptoOutLength = 0
     space.cryptoOutHead = 0
   }
 
@@ -2009,22 +2241,29 @@ export class QuicConnection {
   /**
    * Issues local connection IDs until the client holds as many as it said it
    * would take (its `active_connection_id_limit`), up to
-   * `QUIC_CONN_LOCAL_CIDS`; each goes out in a NEW_CONNECTION_ID frame with
-   * the stateless reset token the configuration's static key gives it.
+   * `QUIC_CONN_LOCAL_CIDS` at once and `QUIC_CONN_MAX_ISSUED_CIDS` in all;
+   * each goes out in a NEW_CONNECTION_ID frame with the stateless reset
+   * token the configuration's static key gives it. One ID at a time, each
+   * call issuing one and then topping up the rest, since each leaves its
+   * HMAC's temporaries in the arena (QUIC-3) and a loop would hold them
+   * across its passes for no reason.
    */
   topUpConnectionIds(): void {
-    if (!this.handshakeComplete) {
+    if (!this.handshakeComplete || this.cids.nextLocal >= QUIC_CONN_MAX_ISSUED_CIDS) {
       return
     }
     let want: i64 = this.peerParameters.activeConnectionIdLimit
     if (want > toI64(QUIC_CONN_LOCAL_CIDS)) {
       want = toI64(QUIC_CONN_LOCAL_CIDS)
     }
-    while (toI64(this.cids.activeLocal()) < want) {
-      const mac: u8[] = this.deriveConnectionId(this.cids.nextLocal)
-      const cid: u8[] = quicConnSlice(mac, 0, QUIC_CONN_CID_LENGTH)
-      secureZero(mac)
-      this.cids.addLocal(cid, quicStatelessResetToken(this.config.statelessResetKey, cid))
+    if (toI64(this.cids.activeLocal()) >= want) {
+      return
+    }
+    const mac: u8[] = this.deriveConnectionId(this.cids.nextLocal)
+    const cid: u8[] = quicConnSlice(mac, 0, QUIC_CONN_CID_LENGTH)
+    secureZero(mac)
+    if (this.cids.addLocal(cid, quicStatelessResetToken(this.config.statelessResetKey, cid)) >= 0) {
+      this.topUpConnectionIds()
     }
   }
 
@@ -2197,106 +2436,287 @@ export class QuicConnection {
     return this.updateWriteKeys()
   }
 
+  // ---- Streams ------------------------------------------------------------------
+
   /**
-   * The next stream data the client sent, in order per stream, or `null`
-   * when there is none. Each answer is a run of new bytes; `fin` marks the
-   * last of its stream.
+   * The ID of the next stream with something new for the application — the
+   * client opened it, it has bytes or its FIN to read, it was reset or
+   * stopped, or it has room to write again after a short write — or -1
+   * when there is none. Each stream comes up once however much happened;
+   * read and write it until it has nothing more to say.
+   */
+  nextStreamEvent(): i64 {
+    return this.streams.nextEvent()
+  }
+
+  /**
+   * Opens a stream of the server's (RFC 9000 §2.1): bidirectional when
+   * `bidirectional`, else unidirectional. Answers its ID, or
+   * `QUIC_STREAM_ERR_STATE` when not connected, or `QUIC_STREAM_ERR_LIMIT`
+   * when the client's MAX_STREAMS is reached (STREAMS_BLOCKED then goes out)
+   * or `localStreams` of the server's are open.
+   */
+  openStream(bidirectional: boolean): i64 {
+    if (this.state !== QUIC_STATE_CONNECTED) {
+      return toI64(QUIC_STREAM_ERR_STATE)
+    }
+    return this.streams.open(bidirectional)
+  }
+
+  /**
+   * Writes up to `length` bytes of `buf` from `from` to stream `id`, and
+   * finishes its sending side when `fin` and every byte fit. Answers how many
+   * bytes it took — fewer than `length` when the stream's buffer is full, in
+   * which case `nextStreamEvent` names it again once acknowledgements free
+   * room — or a `QUIC_STREAM_ERR_*`: not connected, an unknown stream, one
+   * only the client sends on, one already finished or reset, or one the
+   * client asked to stop (STOP_SENDING, which this side answered with
+   * RESET_STREAM).
+   */
+  streamWrite(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32 {
+    if (this.state !== QUIC_STATE_CONNECTED) {
+      return QUIC_STREAM_ERR_STATE
+    }
+    return this.streams.write(id, buf, from, length, fin)
+  }
+
+  /**
+   * Reads up to `length` bytes of stream `id` into `buf` from `at`. Answers
+   * how many it read, 0 when nothing more has arrived yet, `QUIC_STREAM_END`
+   * once every byte up to the FIN was read, `QUIC_STREAM_ERR_RESET` once the
+   * client reset the stream (its code is the stream's `resetCode`), or
+   * another `QUIC_STREAM_ERR_*`. Reading is what gives the client more credit.
+   */
+  streamRead(id: i64, buf: u8[], at: i32, length: i32): i32 {
+    return this.streams.read(id, buf, at, length)
+  }
+
+  /** Abandons stream `id`'s sending side with application error `code` (RESET_STREAM). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. */
+  streamReset(id: i64, code: i64): i32 {
+    if (this.state !== QUIC_STATE_CONNECTED) {
+      return QUIC_STREAM_ERR_STATE
+    }
+    return this.streams.resetStream(id, code)
+  }
+
+  /** Asks the client to stop sending on stream `id`, with application error `code` (STOP_SENDING). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. */
+  streamStopSending(id: i64, code: i64): i32 {
+    if (this.state !== QUIC_STATE_CONNECTED) {
+      return QUIC_STREAM_ERR_STATE
+    }
+    return this.streams.stopSending(id, code)
+  }
+
+  /**
+   * The next run of stream data the client sent, or `null` when there is
+   * none: the all-at-once form of `nextStreamEvent` and `streamRead`, which
+   * allocates the run it answers. `fin` marks the last of its stream; a
+   * stream the client reset is passed over.
    */
   readStream(): QuicStreamData | null {
-    if (this.eventHead >= toI32(this.events.length)) {
-      if (this.eventHead > 0) {
-        this.events = []
-        this.eventHead = 0
+    let id: i64 = this.streams.nextEvent()
+    while (id >= 0) {
+      const stream: QuicStream | null = this.streams.find(id)
+      const available: i64 = stream !== null ? stream.readable() : 0
+      const data: u8[] = new Array<u8>(toI32(available))
+      const n: i32 = this.streams.read(id, data, QUIC_CONN_FROM, toI32(available))
+      // Every byte up to the FIN read: one more read sees the end, which lets the side finish.
+      const end: boolean =
+        n === QUIC_STREAM_END ||
+        (n > 0 && this.streams.read(id, data, QUIC_CONN_FROM, QUIC_CONN_FROM) === QUIC_STREAM_END)
+      if (n > 0 || end) {
+        return new QuicStreamData(id, data, end)
       }
-      return null
-    }
-    const at: i32 = this.eventHead
-    this.eventHead = at + 1
-    if (at >= 0 && at < toI32(this.events.length)) {
-      return this.events[at]
+      // A reset stream answered QUIC_STREAM_ERR_RESET, which saw it and let
+      // it finish; there is nothing to hand over.
+      id = this.streams.nextEvent()
     }
     return null
   }
 
   /**
-   * Queues `data` to send on stream `streamId`, finishing the sending side
-   * when `fin`. The stream must be one the client opened. Answers
+   * Queues all of `data` on stream `id`, finishing its sending side when
+   * `fin`: the all-or-nothing form of `streamWrite`. Answers
    * `QUIC_STREAM_OK`, or `QUIC_STREAM_ERR_*`: the connection is not
-   * connected, the stream is unknown, its side is already finished, or the
-   * data would pass the credit the client gave for the stream or the
-   * connection (raising credit with MAX_STREAM_DATA and MAX_DATA is the
-   * client's; queueing past it is refused rather than held).
+   * connected, the stream is unknown, its side is already finished (or the
+   * client stopped it), or the data would pass the credit the client gave
+   * for the stream or the connection, or the room in the stream's buffer.
    */
-  writeStream(streamId: i64, data: u8[], fin: boolean): i32 {
+  writeStream(id: i64, data: u8[], fin: boolean): i32 {
     if (this.state !== QUIC_STATE_CONNECTED) {
       return QUIC_STREAM_ERR_STATE
     }
-    const found: QuicConnStream | null = this.findStream(streamId)
-    if (found === null) {
+    const stream: QuicStream | null = this.streams.find(id)
+    if (stream === null) {
       return QUIC_STREAM_ERR_UNKNOWN
     }
-    const stream: QuicConnStream = found
-    if (stream.sendFin || stream.finSent) {
+    if (stream.finQueued || stream.stopCode >= 0 || stream.sendState >= QUIC_SEND_RESET_SENT) {
       return QUIC_STREAM_ERR_FINISHED
     }
     const length: i64 = toI64(toI32(data.length))
-    const end: i64 = stream.sendOffset + toI64(stream.unsent()) + length
-    if (end > stream.sendLimit || this.sentData + length > this.peerMaxData) {
+    if (
+      stream.sendEnd + length > stream.sendLimit ||
+      this.streams.writtenTotal + length > this.streams.sendMaxData ||
+      length > stream.room()
+    ) {
       return QUIC_STREAM_ERR_FLOW
     }
-    quicConnAppend(stream.send, data)
-    this.sentData = this.sentData + length
-    stream.sendFin = fin
-    return QUIC_STREAM_OK
+    const n: i32 = this.streams.write(id, data, QUIC_CONN_FROM, toI32(data.length), fin)
+    return n < 0 ? n : QUIC_STREAM_OK
+  }
+
+  // ---- Datagrams ----------------------------------------------------------------
+
+  /**
+   * The largest DATAGRAM payload `sendDatagram` takes now: what fits the
+   * client's `max_datagram_frame_size` with the frame's type and Length, and
+   * a 1-RTT packet of `QUIC_CONN_DATAGRAM_SIZE` with the longest packet
+   * number; 0 when the client takes none, or the server sends none.
+   */
+  maxDatagramPayload(): i32 {
+    const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
+    const cid: i32 = entry !== null ? entry.length : QUIC_CONN_FROM
+    let limit: i64 = toI64(QUIC_CONN_DATAGRAM_SIZE - 1 - cid - 4 - QUIC_AEAD_TAG_SIZE)
+    if (this.peerMaxDatagramFrame < limit) {
+      limit = this.peerMaxDatagramFrame
+    }
+    // The frame is its type, a Length of 1, 2 or 4 bytes, and the payload.
+    let payload: i64 = limit - 2
+    if (payload > 63) {
+      payload = limit - 3
+    }
+    if (payload > 16383) {
+      payload = limit - 5
+    }
+    const entrySize: i64 = toI64(this.datagramsOut.entrySize)
+    if (payload > entrySize) {
+      payload = entrySize
+    }
+    return payload > 0 && this.datagramsOut.capacity() > 0 ? toI32(payload) : QUIC_CONN_FROM
   }
 
   /**
-   * The next datagram to send, at most `QUIC_CONN_DATAGRAM_SIZE` bytes, or
-   * `null` when nothing is due. Call it until it answers `null` after every
-   * `receive`, `sign`, `writeStream` and `close`. It coalesces an Initial, a
-   * Handshake and a 1-RTT packet as each has something to carry, pads a
-   * datagram with an ack-eliciting Initial to 1200 bytes (RFC 9000 §14.1),
-   * and before the client's address is validated sends only while three
-   * times what was received allows (§8.1). After a close it answers the
-   * CONNECTION_CLOSE once, then `null`. While the handshake waits for a
-   * signature it answers `null`, so the server's flight leaves whole. Lost
+   * Queues `buf[from .. from + length)` as a DATAGRAM (RFC 9221) for the next
+   * packet the congestion window allows; it is never sent again if lost.
+   * Answers `QUIC_DATAGRAM_OK`, `QUIC_DATAGRAM_ERR_DISABLED` when not
+   * connected, the client takes none, or the server takes none and so sends
+   * none, `QUIC_DATAGRAM_ERR_TOO_BIG` for a frame past the client's limit or
+   * a payload past `maxDatagramPayload()`, or `QUIC_DATAGRAM_ERR_FULL` while
+   * the ring holds `QUIC_CONN_DATAGRAM_QUEUE` waiting.
+   */
+  sendDatagram(buf: u8[], from: i32, length: i32): i32 {
+    if (
+      this.state !== QUIC_STATE_CONNECTED ||
+      this.peerMaxDatagramFrame === 0 ||
+      this.datagramsOut.capacity() === 0
+    ) {
+      return QUIC_DATAGRAM_ERR_DISABLED
+    }
+    if (
+      length < 0 ||
+      toI64(quicDatagramSize(length)) > this.peerMaxDatagramFrame ||
+      length > this.maxDatagramPayload()
+    ) {
+      return QUIC_DATAGRAM_ERR_TOO_BIG
+    }
+    if (this.datagramsOut.count >= this.datagramsOut.capacity()) {
+      return QUIC_DATAGRAM_ERR_FULL
+    }
+    return this.datagramsOut.push(buf, from, length) ? QUIC_DATAGRAM_OK : QUIC_DATAGRAM_ERR_TOO_BIG
+  }
+
+  /**
+   * Copies the oldest DATAGRAM payload the client sent into `buf` at `at`,
+   * at most `cap` bytes, and forgets it. Answers its length,
+   * `QUIC_DATAGRAM_NONE` when none is waiting, or `QUIC_DATAGRAM_ERR_ROOM`,
+   * keeping it, when it does not fit.
+   */
+  readDatagram(buf: u8[], at: i32, cap: i32): i32 {
+    return this.datagramsIn.pop(buf, at, cap)
+  }
+
+  // ---- Sending ------------------------------------------------------------------
+
+  /**
+   * The next datagram to send, or `null` when nothing is due: the
+   * allocating form of `takeDatagramInto`, which a test or a recording uses.
+   */
+  takeDatagram(now: i64): u8[] | null {
+    const out: u8[] = new Array<u8>(QUIC_CONN_DATAGRAM_SIZE)
+    const n: i32 = this.takeDatagramInto(out, QUIC_CONN_FROM, now)
+    return n > 0 ? quicConnSlice(out, 0, n) : null
+  }
+
+  /**
+   * Writes the next datagram to send into `out` at `at`, which needs
+   * `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and answers its length, or 0
+   * when nothing is due (or the room is not there). Call it until it answers
+   * 0 after every `receive`, `sign`, write and `close`. It coalesces an
+   * Initial, a Handshake and a 1-RTT packet as each has something to carry,
+   * pads a datagram with an ack-eliciting Initial to 1200 bytes (RFC 9000
+   * §14.1), and before the client's address is validated sends only while
+   * three times what was received allows (§8.1). After a close it writes the
+   * CONNECTION_CLOSE once, then nothing. While the handshake waits for a
+   * signature it writes nothing, so the server's flight leaves whole. Lost
    * data goes before new data. While the congestion window is full (RFC
    * 9002 §7), or a space's record of packets in flight is, a space sends
    * only an ACK, unless a probe timeout asked it for a probe. `now` is the
    * caller's time in milliseconds: a datagram that elicits an
    * acknowledgement restarts the idle timer when it is the first since the
    * client's last packet (RFC 9000 §10.1), and once the idle timeout has
-   * passed nothing goes out. This is not paced: a carrier that paces calls
-   * `nish/net/quic-listener`'s `quicListenerTakePaced` instead.
+   * passed nothing goes out. The datagram is built and sealed in place,
+   * inside an arena block: nothing it does allocates past the call. This is
+   * not paced: a carrier that paces calls `nish/net/quic-listener`'s
+   * `quicListenerTakeFlight` instead.
    */
-  takeDatagram(now: i64): u8[] | null {
+  takeDatagramInto(out: u8[], at: i32, now: i64): i32 {
     this.handleTimer(now)
     if (
       this.state === QUIC_STATE_WAIT_INITIAL ||
       this.state === QUIC_STATE_DRAINING ||
-      this.state === QUIC_STATE_TIMED_OUT
+      this.state === QUIC_STATE_TIMED_OUT ||
+      at < 0 ||
+      at > toI32(out.length) - QUIC_CONN_DATAGRAM_SIZE
     ) {
-      return null
+      return 0
     }
+    let n: i32 = 0
     if (this.state === QUIC_STATE_CLOSING) {
-      return this.takeClose()
+      using _scope = arena()
+      n = this.takeCloseInto(out, at)
+      return n
     }
     const tls: TlsServer | null = this.tls
     if (tls !== null && tls.state === TLS_STATE_WAIT_SIGNATURE) {
-      return null
+      return 0
     }
     // Unvalidated, a datagram goes only when a whole padded one fits the budget.
     if (this.amplificationBlocked()) {
-      return null
+      return 0
     }
-    const levels: i32[] = []
-    const payloads: u8[][] = []
+    {
+      using _scope = arena()
+      n = this.buildDatagram(out, at)
+    }
+    return n
+  }
+
+  /**
+   * `takeDatagramInto`'s datagram, built and sealed into `out` at `at`: one
+   * packet per space with something to carry, each written in place, the
+   * last padded when an Initial elicits, then each sealed where it lies.
+   * Answers the datagram's length, or 0 when no space had anything.
+   */
+  buildDatagram(out: u8[], at: i32): i32 {
     let remaining: i32 = QUIC_CONN_DATAGRAM_SIZE
+    let position: i32 = at
     let paddedInitial: boolean = false
     let eliciting: boolean = false
     const open: boolean = this.recovery.canSend()
+    let last: i32 = -1
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
+      space.builtStart = -1
       const overhead: i32 = this.overhead(space)
       const sent: QuicSentPackets | null = this.recovery.space(level)
       if (sent === null || overhead === 0 || remaining <= overhead + 8) {
@@ -2307,35 +2727,67 @@ export class QuicConnection {
         // and what it carried, already queued again by the probe, stays queued.
         const slot: i32 = this.recovery.evictOldest(level)
         if (slot >= 0) {
-          this.requeue(space, slot, true)
+          this.requeue(space, slot)
         }
       }
       const elicit: boolean = space.probe || (open && !sent.full())
-      const payload: u8[] = this.buildPayload(space, remaining - overhead, elicit)
-      if (toI32(payload.length) === 0) {
+      const headerLength: i32 = overhead - QUIC_AEAD_TAG_SIZE
+      const payloadStart: i32 = position + headerLength
+      let payloadEnd: i32 = this.buildPayloadInto(
+        space,
+        out,
+        payloadStart,
+        payloadStart + remaining - overhead,
+        elicit
+      )
+      if (payloadEnd <= payloadStart) {
         continue
+      }
+      // RFC 9001 §5.4.2: the packet number and payload give header
+      // protection at least four bytes to sample from.
+      const pnLength: i32 = quicPacketNumberLength(space.nextPn, space.largestAcked)
+      if (pnLength + payloadEnd - payloadStart < 4) {
+        payloadEnd = quicPutPadding(out, payloadEnd, 4 - pnLength - (payloadEnd - payloadStart))
       }
       eliciting = eliciting || space.stagedEliciting
       // RFC 9000 §14.1: a datagram with an ack-eliciting Initial is padded.
       if (level === TLS_LEVEL_INITIAL) {
         paddedInitial = space.stagedEliciting
       }
-      levels.push(level)
-      payloads.push(payload)
-      remaining = remaining - overhead - toI32(payload.length)
+      space.builtStart = position
+      space.builtEnd = payloadEnd
+      last = level
+      remaining = remaining - (payloadEnd + QUIC_AEAD_TAG_SIZE - position)
+      position = payloadEnd + QUIC_AEAD_TAG_SIZE
     }
-    const count: i32 = toI32(payloads.length)
-    if (count === 0) {
-      return null
+    if (last < 0) {
+      return 0
     }
     if (paddedInitial && remaining > 0) {
-      quicPushPadding(payloads[count - 1], remaining)
+      const padded: QuicConnSpace = this.spaceAt(last)
+      padded.builtEnd = quicPutPadding(out, padded.builtEnd, remaining)
     }
     if (eliciting && !this.elicitingSent) {
       this.idleSince = this.now
       this.elicitingSent = true
     }
-    return this.seal(levels, payloads)
+    // A packet that cannot be sealed, which only keys `quicKeys` did not
+    // make cause, leaves the datagram unsendable: none of it goes.
+    let total: i32 = 0
+    let sealed: boolean = true
+    for (let level: i32 = 0; level <= last; level += 1) {
+      const space: QuicConnSpace = this.spaceAt(level)
+      if (space.builtStart >= 0) {
+        const n: i32 = this.sealAt(space, out, space.builtStart, space.builtEnd)
+        sealed = sealed && n > 0
+        total = total + n
+      }
+    }
+    if (!sealed) {
+      return 0
+    }
+    this.bytesSent = this.bytesSent + toI64(total)
+    return total
   }
 
   /**
@@ -2352,102 +2804,113 @@ export class QuicConnection {
       return 0
     }
     if (space.level === TLS_LEVEL_APPLICATION) {
-      return 1 + toI32(this.cids.currentPeer().length) + pnLength + QUIC_AEAD_TAG_SIZE
+      const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
+      const cid: i32 = entry !== null ? entry.length : QUIC_CONN_FROM
+      return 1 + cid + pnLength + QUIC_AEAD_TAG_SIZE
     }
     // First byte, version, both IDs with their lengths, the Length (two
     // bytes, always) and, for an Initial, the empty token's length.
     const token: i32 = space.level === TLS_LEVEL_INITIAL ? 1 : 0
-    return (
-      7 +
-      toI32(this.peerScid.length) +
-      toI32(this.localScid.length) +
-      token +
-      2 +
-      pnLength +
-      QUIC_AEAD_TAG_SIZE
-    )
+    return 7 + this.peerScidLength + QUIC_CONN_CID_LENGTH + token + 2 + pnLength + QUIC_AEAD_TAG_SIZE
   }
 
   /**
-   * The frames of one packet of `space`, at most `room` bytes: an ACK when
-   * one is due, and, when `elicit` allows frames that elicit an
+   * The frames of one packet of `space`, written into `out[start .. end)`:
+   * an ACK when one is due, and, when `elicit` allows frames that elicit an
    * acknowledgement, CRYPTO data (lost bytes first), at the application
    * level HANDSHAKE_DONE, RETIRE_CONNECTION_ID, NEW_CONNECTION_ID,
-   * PATH_RESPONSE and stream data, and for a probe with nothing else to
-   * carry a PING. Empty when nothing is due. What it carries is written to
-   * the space's staging row, and `stagedEliciting` says whether anything
-   * elicits an acknowledgement.
+   * PATH_RESPONSE, the streams' control frames, DATAGRAMs and stream data,
+   * and for a probe with nothing else to carry a PING. Answers the offset
+   * past the last frame, `start` when nothing is due. What it carries is
+   * written to the space's staging row, and `stagedEliciting` says whether
+   * anything elicits an acknowledgement.
    */
-  buildPayload(space: QuicConnSpace, room: i32, elicit: boolean): u8[] {
-    let out: u8[] = []
+  buildPayloadInto(space: QuicConnSpace, out: u8[], start: i32, end: i32, elicit: boolean): i32 {
+    let at: i32 = start
     space.clearStaged()
     if (space.received.ackPending) {
-      // The ACK opens the payload, so its array becomes the payload; one too
-      // large for the room is left out and stays due.
-      const ack: u8[] = []
-      if (space.received.pushAck(ack, QUIC_CONN_NONE)) {
-        if (toI32(ack.length) <= room) {
-          out = ack
-        } else {
-          space.received.ackPending = true
-        }
+      // One too large for the room is left out and stays due.
+      const next: i32 = space.received.putAck(out, at, end, QUIC_CONN_NONE)
+      if (next >= 0) {
+        at = next
       }
     }
     if (!elicit) {
-      return out
+      return at
     }
-    this.buildCrypto(space, out, room)
+    at = this.buildCrypto(space, out, at, end)
     if (space.level === TLS_LEVEL_APPLICATION) {
-      this.buildApplication(space, out, room)
+      at = this.buildApplication(space, out, at, end)
     }
-    if (space.probe && !space.stagedEliciting && toI32(out.length) < room) {
-      quicPushTypeOnly(out, QUIC_FRAME_PING)
+    if (space.probe && !space.stagedEliciting && at < end) {
+      at = quicPutTypeOnly(out, at, end, QUIC_FRAME_PING)
       space.stagedEliciting = true
     }
-    return out
+    return at
   }
 
   /**
-   * One CRYPTO frame into `out`, within `room`: the bytes lost first, from
-   * the level's kept stream, then those not sent yet. The level's CRYPTO
-   * stream is kept whole, so a byte's index in `cryptoOut` is its offset.
+   * One CRYPTO frame into `out[at .. end)`: the bytes lost first, from the
+   * level's kept stream, then those not sent yet. The level's CRYPTO stream
+   * is kept whole, so a byte's index in `cryptoOut` is its offset.
    */
-  buildCrypto(space: QuicConnSpace, out: u8[], room: i32): void {
+  buildCrypto(space: QuicConnSpace, out: u8[], at: i32, end: i32): i32 {
     if (space.cryptoResendLow >= 0) {
       const low: i64 = space.cryptoResendLow
       const want: i32 = toI32(space.cryptoResendHigh - low)
-      const left: i32 = room - toI32(out.length) - quicCryptoOverhead(low, want)
+      const left: i32 = end - at - quicCryptoOverhead(low, want)
       const n: i32 = left < want ? left : want
-      if (n > 0 && quicPushCrypto(out, low, space.cryptoOut, toI32(low), n)) {
-        space.stageCrypto(low, n)
-        space.cryptoResendLow = low + toI64(n)
-        if (space.cryptoResendLow >= space.cryptoResendHigh) {
-          space.cryptoResendLow = -1
-          space.cryptoResendHigh = -1
-        }
+      if (n <= 0) {
+        return at
       }
-      return
+      const next: i32 = quicPutCrypto(out, at, end, low, space.cryptoOut, toI32(low), n)
+      if (next < 0) {
+        return at
+      }
+      space.stageCrypto(low, n)
+      space.cryptoResendLow = low + toI64(n)
+      if (space.cryptoResendLow >= space.cryptoResendHigh) {
+        space.cryptoResendLow = -1
+        space.cryptoResendHigh = -1
+      }
+      return next
     }
     const unsent: i32 = space.cryptoUnsent()
-    if (unsent > 0) {
-      const left: i32 = room - toI32(out.length) - quicCryptoOverhead(space.cryptoOutOffset, unsent)
-      const n: i32 = left < unsent ? left : unsent
-      if (n > 0 && quicPushCrypto(out, space.cryptoOutOffset, space.cryptoOut, space.cryptoOutHead, n)) {
-        space.stageCrypto(space.cryptoOutOffset, n)
-        space.cryptoOutHead = space.cryptoOutHead + n
-        space.cryptoOutOffset = space.cryptoOutOffset + toI64(n)
-      }
+    if (unsent <= 0) {
+      return at
     }
+    const left: i32 = end - at - quicCryptoOverhead(space.cryptoOutOffset, unsent)
+    const n: i32 = left < unsent ? left : unsent
+    if (n <= 0) {
+      return at
+    }
+    const next: i32 = quicPutCrypto(
+      out,
+      at,
+      end,
+      space.cryptoOutOffset,
+      space.cryptoOut,
+      space.cryptoOutHead,
+      n
+    )
+    if (next < 0) {
+      return at
+    }
+    space.stageCrypto(space.cryptoOutOffset, n)
+    space.cryptoOutHead = space.cryptoOutHead + n
+    space.cryptoOutOffset = space.cryptoOutOffset + toI64(n)
+    return next
   }
 
   /**
-   * The 1-RTT frames beyond ACK, as many as fit in `room` bytes of `out`
-   * and in the packet's record: `QUIC_CONN_PACKET_CONTROL` connection-ID
-   * frames and `QUIC_CONN_PACKET_STREAMS` STREAM frames.
+   * The 1-RTT frames beyond ACK, as many as fit in `out[at .. end)` and in
+   * the packet's record: `QUIC_CONN_PACKET_CONTROL` control frames and
+   * `QUIC_CONN_PACKET_STREAMS` STREAM frames, and every DATAGRAM that fits.
    */
-  buildApplication(space: QuicConnSpace, out: u8[], room: i32): void {
-    if (this.handshakeDonePending && toI32(out.length) < room) {
-      quicPushTypeOnly(out, QUIC_FRAME_HANDSHAKE_DONE)
+  buildApplication(space: QuicConnSpace, out: u8[], start: i32, end: i32): i32 {
+    let at: i32 = start
+    if (this.handshakeDonePending && at < end) {
+      at = quicPutTypeOnly(out, at, end, QUIC_FRAME_HANDSHAKE_DONE)
       this.handshakeDonePending = false
       space.setFlags(space.staging, QUIC_CONN_SENT_HANDSHAKE_DONE)
       space.stagedEliciting = true
@@ -2455,160 +2918,139 @@ export class QuicConnection {
     // RETIRE_CONNECTION_ID is at most 9 bytes, NEW_CONNECTION_ID with an
     // 8-byte ID at most 42, PATH_RESPONSE 9.
     while (
-      toI32(this.cids.retirePending.length) > 0 &&
-      room - toI32(out.length) >= 9 &&
+      this.cids.retireCount > 0 &&
+      end - at >= 9 &&
       space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
     ) {
       const sequence: i64 = this.cids.takeRetire()
-      quicPushValue(out, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence)
+      at = quicPutValue(out, at, end, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence)
       space.stageControl(QUIC_CONN_CONTROL_RETIRE, sequence)
     }
     let entry: QuicCidEntry | null = this.cids.nextUnannounced()
-    while (
-      entry !== null &&
-      room - toI32(out.length) >= 42 &&
-      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
-    ) {
-      quicPushNewConnectionId(out, entry.sequence, 0, entry.cid, entry.resetToken)
+    while (entry !== null && end - at >= 42 && space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
+      const next: i32 = quicPutNewConnectionId(
+        out,
+        at,
+        end,
+        entry.sequence,
+        QUIC_CONN_NONE,
+        entry.cid,
+        entry.length,
+        entry.resetToken
+      )
+      if (next < 0) {
+        break
+      }
+      at = next
       entry.announced = true
       space.stageControl(QUIC_CONN_CONTROL_NEW_CID, entry.sequence)
       entry = this.cids.nextUnannounced()
     }
-    while (toI32(this.pathResponses.length) >= QUIC_PATH_DATA_SIZE && room - toI32(out.length) >= 9) {
-      quicPushPathData(out, QUIC_FRAME_PATH_RESPONSE, this.pathResponses, 0)
-      this.pathResponses = quicConnSlice(
-        this.pathResponses,
-        QUIC_PATH_DATA_SIZE,
-        toI32(this.pathResponses.length) - QUIC_PATH_DATA_SIZE
+    while (this.pathCount > 0 && end - at >= 9) {
+      const next: i32 = quicPutPathData(
+        out,
+        at,
+        end,
+        QUIC_FRAME_PATH_RESPONSE,
+        this.pathData,
+        (this.pathHead % 4) * QUIC_PATH_DATA_SIZE
       )
+      if (next < 0) {
+        break
+      }
+      at = next
+      this.pathHead = (this.pathHead + 1) % 4
+      this.pathCount = this.pathCount - 1
       // Ack-eliciting, but never sent again (RFC 9000 §13.3).
       space.stagedEliciting = true
     }
-    for (const stream of this.streams) {
-      if (space.streamCount(space.staging) >= QUIC_CONN_PACKET_STREAMS) {
-        return
+    const streams: QuicStreams = this.streams
+    while (space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
+      const next: i32 = streams.putNextControl(out, at, end)
+      if (next <= at) {
+        break
       }
-      if (stream.wantsToSend()) {
-        this.buildStream(space, out, room, stream)
-      }
+      at = next
+      space.stageControl(streams.lastKind, streams.lastValue)
     }
+    // DATAGRAMs ride in any packet the window lets elicit, and are recorded
+    // only by size: a lost one is not sent again (RFC 9221 §5.2).
+    let datagram: i32 = this.datagramsOut.putFrame(out, at, end)
+    while (datagram > at) {
+      at = datagram
+      space.stagedEliciting = true
+      datagram = this.datagramsOut.putFrame(out, at, end)
+    }
+    streams.beginPacket()
+    while (space.streamCount(space.staging) < QUIC_CONN_PACKET_STREAMS) {
+      const next: i32 = streams.putNextChunk(out, at, end)
+      if (next <= at) {
+        break
+      }
+      at = next
+      space.stageChunk(streams.lastId, streams.lastOffset, streams.lastLength, streams.lastFin)
+    }
+    return at
   }
 
   /**
-   * One STREAM frame for `stream`: the bytes lost first, else as much of
-   * its queue as fits, with the FIN when the rest fits too. The bytes stay
-   * in the stream's buffer until no packet in flight carries them.
+   * Seals the packet of `space` whose payload `buildDatagram` wrote from
+   * `start` plus its header to `payloadEnd`: the header written in front of
+   * it, the payload sealed where it lies, and the packet recorded. Answers
+   * the packet's length, or 0 when it could not be sealed, which only keys
+   * `quicKeys` did not make cause.
    */
-  buildStream(space: QuicConnSpace, out: u8[], room: i32, stream: QuicConnStream): void {
-    if (stream.resendLow >= 0) {
-      this.buildResend(space, out, room, stream)
-      return
-    }
-    const unsent: i32 = stream.unsent()
-    const left: i32 = room - toI32(out.length) - quicStreamOverhead(stream.id, stream.sendOffset, unsent)
-    if (left < 0 || (left === 0 && unsent > 0)) {
-      return
-    }
-    const n: i32 = left < unsent ? left : unsent
-    const fin: boolean = stream.sendFin && n === unsent
-    if (!quicPushStream(out, stream.id, stream.sendOffset, stream.send, stream.sendHead, n, fin)) {
-      return
-    }
-    space.stageChunk(stream.id, stream.sendOffset, n, fin)
-    stream.outstanding = stream.outstanding + 1
-    stream.sendHead = stream.sendHead + n
-    stream.sendOffset = stream.sendOffset + toI64(n)
-    if (fin) {
-      stream.finSent = true
-    }
-  }
-
-  /** One STREAM frame of `stream`'s lost bytes, `[resendLow, resendHigh)`, with the FIN when it was lost and the rest fits. */
-  buildResend(space: QuicConnSpace, out: u8[], room: i32, stream: QuicConnStream): void {
-    const low: i64 = stream.resendLow
-    const want: i32 = toI32(stream.resendHigh - low)
-    const left: i32 = room - toI32(out.length) - quicStreamOverhead(stream.id, low, want)
-    if (left < 0 || (left === 0 && want > 0)) {
-      return
-    }
-    const n: i32 = left < want ? left : want
-    const fin: boolean = stream.resendFin && n === want
-    if (!quicPushStream(out, stream.id, low, stream.send, toI32(low - stream.sendBase), n, fin)) {
-      return
-    }
-    space.stageChunk(stream.id, low, n, fin)
-    stream.outstanding = stream.outstanding + 1
-    if (n === want) {
-      stream.resendLow = -1
-      stream.resendHigh = -1
-      stream.resendFin = false
-    } else {
-      stream.resendLow = low + toI64(n)
-    }
-  }
-
-  /**
-   * Seals one packet per entry of `levels` around the matching payload and
-   * answers them as one datagram, counted against the amplification limit.
-   * A payload too short for the header-protection sample is padded first.
-   */
-  seal(levels: i32[], payloads: u8[][]): u8[] | null {
-    const datagram: u8[] = []
-    for (let k: i32 = 0; k < toI32(levels.length) && k < toI32(payloads.length); k += 1) {
-      if (!this.sealInto(datagram, this.spaceAt(levels[k]), payloads[k])) {
-        return null
-      }
-    }
-    this.bytesSent = this.bytesSent + toI64(toI32(datagram.length))
-    return datagram
-  }
-
-  /**
-   * Seals one packet of `space` around `payload` and appends it to
-   * `datagram`. A payload too short for the header-protection sample is
-   * padded first (RFC 9001 §5.4.2). Answers whether it could; it cannot only
-   * when the space has no keys, which the callers have ruled out.
-   */
-  sealInto(datagram: u8[], space: QuicConnSpace, payload: u8[]): boolean {
+  sealAt(space: QuicConnSpace, out: u8[], start: i32, payloadEnd: i32): i32 {
     const keys: QuicKeys | null = space.writeKeys
     const pn: i64 = space.nextPn
     const pnLength: i32 = quicPacketNumberLength(pn, space.largestAcked)
-    if (pnLength + toI32(payload.length) < 4) {
-      quicPushPadding(payload, 4 - pnLength - toI32(payload.length))
-    }
-    const none: u8[] = []
-    const header: u8[] | null =
+    const headerLength: i32 = this.overhead(space) - QUIC_AEAD_TAG_SIZE
+    const payloadLength: i32 = payloadEnd - start - headerLength
+    const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
+    const headerEnd: i32 =
       space.level === TLS_LEVEL_APPLICATION
-        ? quicShortHeader(this.cids.currentPeer(), false, this.writePhase, pn, pnLength)
-        : quicLongHeader(
+        ? quicPutShortHeader(
+            out,
+            start,
+            entry !== null ? entry.cid : this.none,
+            entry !== null ? entry.length : 0,
+            false,
+            this.writePhase,
+            pn,
+            pnLength
+          )
+        : quicPutLongHeader(
+            out,
+            start,
             space.level === TLS_LEVEL_INITIAL ? QUIC_PACKET_INITIAL : QUIC_PACKET_HANDSHAKE,
             this.peerScid,
+            this.peerScidLength,
             this.localScid,
-            none,
+            QUIC_CONN_CID_LENGTH,
+            this.none,
             pn,
             pnLength,
-            toI32(payload.length)
+            payloadLength
           )
-    if (keys === null || header === null) {
-      return false
+    if (keys === null || headerEnd !== start + headerLength) {
+      return 0
     }
-    const packet: u8[] | null = quicSealPacket(keys, header, pn, payload)
-    if (packet === null) {
-      return false
+    const end: i32 = quicSealInPlace(keys, out, start, headerLength, payloadLength, pn)
+    if (end < 0) {
+      return 0
     }
     space.nextPn = pn + 1
-    quicConnAppend(datagram, packet)
-    this.recordSent(space, pn, toI32(packet.length))
-    return true
+    this.recordSent(space, pn, end - start)
+    return end - start
   }
 
   /**
    * Hands an ack-eliciting packet just sealed to loss recovery (RFC 9002
    * §A.5), with what it carried copied from the staging row to its slot. A
    * packet that elicits nothing (an ACK, a CONNECTION_CLOSE) is not
-   * recorded. Recovery cannot refuse one: `takeDatagram` builds nothing
-   * ack-eliciting into a space whose record is full, and packet numbers
-   * only grow.
+   * recorded. `buildDatagram` builds nothing ack-eliciting into a space
+   * whose record is full, so recovery does not refuse one; if it ever did,
+   * what the packet carried is queued again at once, as though lost.
    */
   recordSent(space: QuicConnSpace, pn: i64, size: i32): void {
     if (!space.stagedEliciting) {
@@ -2618,68 +3060,106 @@ export class QuicConnection {
     if (slot >= 0) {
       space.commitStaged(slot)
       space.probe = false
+    } else {
+      this.requeue(space, space.staging)
     }
     space.clearStaged()
   }
 
-  /** An acknowledged packet in row `row`: its STREAM chunks leave their streams' count of packets in flight, which may let the bytes go. */
+  /** An acknowledged packet in row `row`: each stream chunk and stream control frame it carried is settled. */
   untrack(space: QuicConnSpace, row: i32): void {
     const streams: i32 = space.streamCount(row)
     for (let j: i32 = 0; j < streams; j += 1) {
       const at: i32 = row * QUIC_CONN_PACKET_STREAMS + j
-      if (at >= 0 && at < toI32(space.sentStreamId.length)) {
-        const stream: QuicConnStream | null = this.findStream(space.sentStreamId[at])
-        if (stream !== null) {
-          stream.outstanding = stream.outstanding - 1
-          stream.trim()
-        }
+      if (
+        at >= 0 &&
+        at < toI32(space.sentStreamId.length) &&
+        at < toI32(space.sentStreamOffset.length) &&
+        at < toI32(space.sentStreamLength.length) &&
+        at < toI32(space.sentStreamFin.length)
+      ) {
+        this.streams.chunkAcked(
+          space.sentStreamId[at],
+          space.sentStreamOffset[at],
+          space.sentStreamLength[at],
+          toI32(space.sentStreamFin[at]) !== 0
+        )
+      }
+    }
+    const control: i32 = space.controlCount(row)
+    for (let j: i32 = 0; j < control; j += 1) {
+      const at: i32 = row * QUIC_CONN_PACKET_CONTROL + j
+      if (at >= 0 && at < toI32(space.sentControlKind.length) && at < toI32(space.sentControlValue.length)) {
+        this.streams.controlAcked(toI32(space.sentControlKind[at]), space.sentControlValue[at])
       }
     }
   }
 
   /**
-   * The one CONNECTION_CLOSE this side owes, then `null`. It goes in every
-   * space the server still has keys for, since the client may not yet have
-   * the newest (RFC 9000 §10.2.3); in an Initial or Handshake packet an
-   * application's close is sent as the transport close APPLICATION_ERROR,
-   * since those packets may not carry 0x1d (§12.4). Before the handshake is
-   * complete no 1-RTT packet carries it, because the client cannot yet read
-   * one.
+   * The one CONNECTION_CLOSE this side owes, written into `out` at `at`,
+   * then nothing (0). It goes in every space the server still has keys for,
+   * since the client may not yet have the newest (RFC 9000 §10.2.3); in an
+   * Initial or Handshake packet an application's close is sent as the
+   * transport close APPLICATION_ERROR, since those packets may not carry
+   * 0x1d (§12.4). Before the handshake is complete no 1-RTT packet carries
+   * it, because the client cannot yet read one.
    */
-  takeClose(): u8[] | null {
+  takeCloseInto(out: u8[], at: i32): i32 {
     if (this.closeSent) {
-      return null
+      return 0
     }
     this.closeSent = true
-    const levels: i32[] = []
-    const payloads: u8[][] = []
-    const reason: u8[] = []
+    let position: i32 = at
+    const limit: i32 = at + QUIC_CONN_DATAGRAM_SIZE
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
-      if (this.overhead(space) === 0 || (level === TLS_LEVEL_APPLICATION && !this.handshakeComplete)) {
+      const overhead: i32 = this.overhead(space)
+      if (overhead === 0 || (level === TLS_LEVEL_APPLICATION && !this.handshakeComplete)) {
         continue
       }
-      const payload: u8[] = []
-      if (level === TLS_LEVEL_APPLICATION || !this.errorIsApplication) {
-        quicPushConnectionClose(payload, this.errorIsApplication, this.error, this.errorFrameType, reason)
-      } else {
-        quicPushConnectionClose(payload, false, QUIC_ERROR_APPLICATION, 0, reason)
+      space.clearStaged()
+      const payloadStart: i32 = position + overhead - QUIC_AEAD_TAG_SIZE
+      const room: i32 = limit - QUIC_AEAD_TAG_SIZE
+      let payloadEnd: i32 =
+        level === TLS_LEVEL_APPLICATION || !this.errorIsApplication
+          ? quicPutConnectionClose(
+              out,
+              payloadStart,
+              room,
+              this.errorIsApplication,
+              this.error,
+              this.errorFrameType,
+              this.none
+            )
+          : quicPutConnectionClose(
+              out,
+              payloadStart,
+              room,
+              false,
+              QUIC_ERROR_APPLICATION,
+              QUIC_CONN_NONE,
+              this.none
+            )
+      if (payloadEnd < 0) {
+        continue
       }
-      levels.push(level)
-      payloads.push(payload)
+      const pnLength: i32 = quicPacketNumberLength(space.nextPn, space.largestAcked)
+      if (pnLength + payloadEnd - payloadStart < 4) {
+        payloadEnd = quicPutPadding(out, payloadEnd, 4 - pnLength - (payloadEnd - payloadStart))
+      }
+      position = position + this.sealAt(space, out, position, payloadEnd)
     }
-    if (toI32(levels.length) === 0) {
-      return null
-    }
-    return this.seal(levels, payloads)
+    this.bytesSent = this.bytesSent + toI64(position - at)
+    return position - at
   }
 
   /**
    * Wipes everything secret the connection and its `TlsServer` still hold:
    * every level's packet keys, the next generation's read keys, the traffic
    * secrets and expected client Finished, the ephemeral key, the
-   * connection-ID seed and the stateless reset tokens (QUIC-2). Call it when the connection is done with;
-   * the connection is closed after it and sends nothing more.
+   * connection-ID seed and the stateless reset tokens (QUIC-2). Call it when
+   * the connection is done with (or `reset` the slot, which does the same
+   * first); the connection is closed after it and sends nothing more.
    */
   release(): void {
     this.wipeAll()
@@ -2692,8 +3172,9 @@ export class QuicConnection {
 
   /**
    * Wipes every key and secret the connection holds and discards every
-   * level: `release()`'s work, and the idle timeout's. That takes in both
-   * sides' stateless reset tokens and `TlsServer`'s expected client Finished.
+   * level: `release()`'s work, the idle timeout's and `reset`'s. That takes
+   * in both sides' stateless reset tokens and `TlsServer`'s expected client
+   * Finished.
    */
   wipeAll(): void {
     this.discard(this.initial)

@@ -11,6 +11,7 @@ import {
   QUIC_FRAME_NEW_CONNECTION_ID,
   QUIC_FRAME_PATH_CHALLENGE,
   QUIC_FRAME_PING,
+  QUIC_FRAME_RESET_STREAM,
   QUIC_FRAME_RETIRE_CONNECTION_ID,
   QUIC_FRAME_STREAM,
   QuicFrame,
@@ -179,10 +180,16 @@ const rcPacketThreshold = (t: Suite): void => {
   t.eqI32("an ACK of the last three loses the first, three below the largest", conn.recovery.congestionEvents, n32(1));
   qcDrain(conn, c);
   t.eqStr("the next packet carries its bytes again, at their offset", rcStreamIn(rcLastPayload(c)), "0 chunk0");
-  const stream = conn.findStream(n64(0));
-  t.ok("the stream keeps its sent bytes while a packet in flight carries them", stream !== null && toI32(stream.send.length) === n32(24));
+  const stream = conn.streams.find(n64(0));
+  t.ok(
+    "the stream keeps its sent bytes while a packet in flight carries them",
+    stream !== null && stream.sendBase === n64(0) && stream.sendEnd === n64(24)
+  );
   qcExchange(conn, c, qcShort(c, rcAck(n64(0), c.largestApp, n64(0))));
-  t.ok("once every one is acknowledged it lets them go", stream !== null && toI32(stream.send.length) === n32(0) && stream.sendBase === n64(24));
+  t.ok(
+    "once every one is acknowledged it lets them go, and their room in the buffer",
+    stream !== null && stream.sendBase === n64(24) && stream.room() === toI64(16384)
+  );
 };
 
 /** Reordering inside the time threshold is not loss; past it, it is (§6.1.2). */
@@ -315,7 +322,11 @@ const rcResentFrames = (t: Suite): void => {
   stop.handleTimer(s.now);
   qcDrain(stop, s);
   t.eqStr("after STOP_SENDING the stream's lost data is not sent again", rcStreamIn(rcLastPayload(s)), "none");
-  t.eqI32("so the probe is a PING", rcCount(rcLastPayload(s), QUIC_FRAME_PING), n32(1));
+  t.eqI32(
+    "the probe carries the RESET_STREAM that answers STOP_SENDING (RFC 9000 §3.5), sent until acknowledged",
+    rcCount(rcLastPayload(s), QUIC_FRAME_RESET_STREAM),
+    n32(1)
+  );
 
   const path: QuicConnection = qcServer(qcDefaultConfig());
   const p: QcClient = rcOpened(path);
@@ -362,8 +373,8 @@ const rcWindow = (t: Suite): void => {
   conn.writeStream(n64(0), bytesOf(text.join("")), false);
   const sent: i32 = qcDrain(conn, c);
   t.ok("a 2400-byte window lets two datagrams go, and holds the rest", sent === n32(2) && !conn.recovery.canSend());
-  const stream = conn.findStream(n64(0));
-  t.ok("which stays queued", stream !== null && toI32(stream.send.length) - stream.sendHead > n32(0));
+  const stream = conn.streams.find(n64(0));
+  t.ok("which stays queued", stream !== null && stream.sendEnd - stream.sendNext > n64(0));
   qcExchange(conn, c, qcShort(c, fromHex("01")));
   t.eqStr("a PING from the client is still acknowledged: an ACK is not held back", rcStreamIn(rcLastPayload(c)), "none");
   qcExchange(conn, c, qcShort(c, rcAck(n64(0), c.largestApp, n64(0))));
@@ -398,8 +409,9 @@ const rcPacing = (t: Suite): void => {
   const c: QcClient = rcOpened(conn);
   t.ok("with nothing due the pacer lets nothing out", quicListenerTakePaced(conn, c.now) === null && quicListenerPaceTime(conn, c.now) === c.now);
   conn.recovery.congestionWindow = n64(100000);
+  // 16,000 bytes, which the stream's 16 KiB send buffer holds, are some fourteen datagrams.
   const text: string[] = [];
-  for (let k: i32 = 0; k < 2000; k++) {
+  for (let k: i32 = 0; k < 1600; k++) {
     text.push("0123456789");
   }
   conn.writeStream(n64(0), bytesOf(text.join("")), false);

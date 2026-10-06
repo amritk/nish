@@ -80,4 +80,41 @@ PASS  a fifth is CONNECTION_ID_LIMIT_ERROR (RFC 9000 §5.1.2)
 PASS  and the refused frame leaves the table within its bounds
 PASS  with the ID sent to unchanged
 PASS  prune leaves it as it was
-quic connection parts: 82 passed, 0 failed, 0 skipped
+PASS  a value of 0, the default, is not written
+PASS  1200 is written as ID 0x20, a length of 2, and the varint
+PASS  the ID is RFC 9221's
+PASS  and read back
+PASS  sent twice it is TRANSPORT_PARAMETER_ERROR, naming 0x20
+PASS  so is a value that is not exactly one varint
+PASS  with nothing received, putAck writes nothing
+PASS  with too little room it writes nothing
+PASS  and the ACK stays due
+PASS  putAck writes what pushAck appends
+PASS  and it is no longer due
+PASS  clear forgets every packet number, for a reused slot
+PASS  with both local slots taken, a third ID is refused: -1
+PASS  ownsLocalAt reads an ID from a packet in place
+PASS  at the length it was issued with only
+PASS  retiring sequence 0 in a packet sent to 1 is fine
+PASS  which frees its slot for the next
+PASS  addPeerAt takes the ID and token from the frame in place
+PASS  the oldest is still the one sent to, in its slot
+PASS  an ID longer than 20 bytes is refused
+PASS  a retirement queued twice is owed once
+PASS  and the ring holds twice the limit, no more
+PASS  reset empties every slot and the ring, for the next connection
+PASS  with every token zeroed
+PASS  it holds two
+PASS  a payload past its entry size is refused and counted
+PASS  so is a window outside the array
+PASS  two fit
+PASS  a third does not
+PASS  the oldest is 4 bytes
+PASS  it does not fit in 3: kept
+PASS  it is popped whole
+PASS  in order
+PASS  a frame with no room is not written
+PASS  the next goes out as a DATAGRAM frame
+PASS  and the ring is empty
+PASS  reset empties it and its count
+quic connection parts: 119 passed, 0 failed, 0 skipped

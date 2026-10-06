@@ -22,6 +22,9 @@ export const qcConfig = (maxData: i64, maxStreamData: i64, maxStreams: i64, cidL
     maxData: maxData,
     maxStreamData: maxStreamData,
     maxStreamsBidi: maxStreams,
+    maxStreamsUni: n64(0),
+    localStreams: n64(0),
+    maxDatagramFrameSize: n64(0),
     maxIdleTimeout: n64(30000),
     activeConnectionIdLimit: cidLimit,
     statelessResetKey: resetKey(),
@@ -88,6 +91,17 @@ export const qcFind = (payloads: u8[][], type: i32): QcFound => {
         return out;
       }
       at = out.frame.end;
+    }
+  }
+  return out;
+};
+
+/** The connection ID a found NEW_CONNECTION_ID frame carries, copied out of its payload. */
+export const qcFoundCid = (f: QcFound): u8[] => {
+  const out: u8[] = [];
+  for (let k: i32 = f.frame.connectionIdStart; k < f.frame.connectionIdStart + f.frame.connectionIdLength && k < toI32(f.payload.length); k++) {
+    if (k >= 0) {
+      out.push(f.payload[k]);
     }
   }
   return out;

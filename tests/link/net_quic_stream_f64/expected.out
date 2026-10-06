@@ -1,0 +1,145 @@
+PASS  connected
+PASS  the server reads every stream whole, 64 bytes at a time, each with its FIN
+PASS  twelve streams came up as events
+PASS  the one left open has no FIN yet
+PASS  a client's unidirectional stream has no sending side here
+PASS  so writing to it is QUIC_STREAM_ERR_DIRECTION
+PASS  a unidirectional stream read to its end has left its slot already
+PASS  the server opens its own: unidirectional 3, bidirectional 1, unidirectional 7
+PASS  its unidirectional stream has no receiving side
+PASS  so reading it is QUIC_STREAM_ERR_DIRECTION
+PASS  every bidirectional stream comes back whole, with its FIN
+PASS  the server's unidirectional stream arrives
+PASS  and its bidirectional one
+PASS  and a stream it has not finished, without a FIN
+PASS  the client's answer on the server's stream is read
+PASS  every stream finished both ways has left its slot
+PASS  the one still sending keeps it
+PASS  a finished stream is unknown to a write
+PASS  with eight finished, MAX_STREAMS raises the client's bidirectional limit (§4.6)
+PASS  to sixteen once all eight have
+PASS  and two finished unidirectional streams of four raise that limit to six
+PASS  a ninth bidirectional stream is taken, in a freed slot
+PASS  no stream opens before the handshake
+PASS  nor is one written
+PASS  the table holds 8 bidirectional, 1,024 unidirectional and 4 local slots
+PASS  all of them free
+PASS  one frame for stream 4094 opens every one below it
+PASS  each in a slot of its own
+PASS  leaving the twelve slots of the other kinds free
+PASS  read to their ends, all 1,024 finish
+PASS  and every slot is free again
+PASS  the client may open 1,024 more
+PASS  one frame opens the next 1,024
+PASS  in the slots given back, none shared
+PASS  the twelve others still free
+PASS  and the connection is still up
+PASS  a stream takes its whole credit, a buffer of 4096 bytes
+PASS  with nothing read, no credit is raised
+PASS  the application reads half of it
+PASS  which raises the stream's credit to what was read plus a buffer: 6144 (§4.1)
+PASS  and the client may send up to it
+PASS  the connection's 8192 are not raised yet: 2048 read is under half
+PASS  two streams have used the connection's whole window
+PASS  the application reads 2048 more
+PASS  half the window read raises it to 4096 + 8192 (§4.1)
+PASS  and a third stream may use what was given back
+PASS  everything that arrived is read, in order
+PASS  the server's buffer takes 3000 bytes for stream 0
+PASS  and 3000 for stream 4
+PASS  stream 0 sends only its credit, 1000 bytes
+PASS  stream 4 the 500 the connection's 1500 leave
+PASS  the server says STREAM_DATA_BLOCKED at the stream's limit (§19.13)
+PASS  and DATA_BLOCKED at the connection's (§19.12)
+PASS  MAX_STREAM_DATA and MAX_DATA let the rest of stream 0 go, with its FIN
+PASS  and of stream 4
+PASS  a write of 10000 bytes takes the 4096 the buffer holds
+PASS  a second write takes nothing while they are unacknowledged
+PASS  nothing to say yet
+PASS  the acknowledgement frees the room, and the stream comes up again
+PASS  the rest goes as room comes back
+PASS  and all of it arrives, in order
+PASS  the first 100 bytes go, and are lost
+PASS  the FIN alone, written after the next 100 arrived
+PASS  goes in a frame of no bytes, and is lost too
+PASS  the probe timeout sends the lost bytes and the lost FIN again, and the stream arrives whole
+PASS  and no frame put the FIN anywhere but the final size, 200
+PASS  and once all of it is acknowledged the sending side is Data Recvd (§3.1)
+PASS  a FIN alone goes, and is lost
+PASS  with no bytes left to resend, the FIN is sent again on its own
+PASS  at the final size, 100
+PASS  STREAM on the server's unidirectional stream is STREAM_STATE_ERROR (§19.8): the connection closes
+PASS  STREAM on the server's unidirectional stream is STREAM_STATE_ERROR (§19.8): and says so
+PASS  RESET_STREAM on it is too (§19.4): the connection closes
+PASS  RESET_STREAM on it is too (§19.4): and says so
+PASS  STREAM_DATA_BLOCKED on it is too (§19.13): the connection closes
+PASS  STREAM_DATA_BLOCKED on it is too (§19.13): and says so
+PASS  MAX_STREAM_DATA on the client's unidirectional stream is STREAM_STATE_ERROR (§19.10): the connection closes
+PASS  MAX_STREAM_DATA on the client's unidirectional stream is STREAM_STATE_ERROR (§19.10): and says so
+PASS  STOP_SENDING on it is too (§19.5): the connection closes
+PASS  STOP_SENDING on it is too (§19.5): and says so
+PASS  STREAM on a bidirectional stream of the server's it has not opened is STREAM_STATE_ERROR (§19.8): the connection closes
+PASS  STREAM on a bidirectional stream of the server's it has not opened is STREAM_STATE_ERROR (§19.8): and says so
+PASS  MAX_STREAM_DATA on one of its unidirectional streams not opened yet is too (§19.10): the connection closes
+PASS  MAX_STREAM_DATA on one of its unidirectional streams not opened yet is too (§19.10): and says so
+PASS  a bidirectional stream past the limit of eight is STREAM_LIMIT_ERROR (§4.6): the connection closes
+PASS  a bidirectional stream past the limit of eight is STREAM_LIMIT_ERROR (§4.6): and says so
+PASS  a unidirectional stream past the limit of four is too: the connection closes
+PASS  a unidirectional stream past the limit of four is too: and says so
+PASS  with no unidirectional streams allowed, the first is STREAM_LIMIT_ERROR: the connection closes
+PASS  with no unidirectional streams allowed, the first is STREAM_LIMIT_ERROR: and says so
+PASS  a byte past a stream's credit is FLOW_CONTROL_ERROR (§4.1): the connection closes
+PASS  a byte past a stream's credit is FLOW_CONTROL_ERROR (§4.1): and says so
+PASS  and past the connection's, over two streams: the connection closes
+PASS  and past the connection's, over two streams: and says so
+PASS  a RESET_STREAM whose final size is past the credit is FLOW_CONTROL_ERROR too: the connection closes
+PASS  a RESET_STREAM whose final size is past the credit is FLOW_CONTROL_ERROR too: and says so
+PASS  data past a FIN is FINAL_SIZE_ERROR (§4.5): the connection closes
+PASS  data past a FIN is FINAL_SIZE_ERROR (§4.5): and says so
+PASS  a second FIN at another size is too: the connection closes
+PASS  a second FIN at another size is too: and says so
+PASS  a FIN below data already received is too: the connection closes
+PASS  a FIN below data already received is too: and says so
+PASS  a RESET_STREAM below data already received is too: the connection closes
+PASS  a RESET_STREAM below data already received is too: and says so
+PASS  a RESET_STREAM at another size than the FIN is too: the connection closes
+PASS  a RESET_STREAM at another size than the FIN is too: and says so
+PASS  RESET_STREAM from the client: the receiving side is reset (§3.2)
+PASS  and the application reads the reset with its code
+PASS  the same RESET_STREAM again changes nothing
+PASS  STOP_SENDING is answered with RESET_STREAM carrying its code and what was sent (§3.5)
+PASS  and writing to the stream then is QUIC_STREAM_ERR_STOPPED
+PASS  the stream says why: the client's code
+PASS  the server resets stream 8
+PASS  RESET_STREAM goes out with its code and a final size of 0
+PASS  the sending side is Reset Sent
+PASS  so a write is QUIC_STREAM_ERR_FINISHED
+PASS  and resetting again is too
+PASS  the server asks the client to stop sending on 8
+PASS  STOP_SENDING goes out with its code
+PASS  once acknowledged, the RESET_STREAM is Reset Recvd
+PASS  the client's answering reset ends the stream both ways, and frees its slot
+PASS  reading a stream never opened is QUIC_STREAM_ERR_UNKNOWN
+PASS  so is a read outside the buffer given
+PASS  resetting one is too
+PASS  and stopping one
+PASS  resetting the client's unidirectional stream, which has no sending side, is QUIC_STREAM_ERR_DIRECTION
+PASS  stopping the server's own unidirectional stream, which has no receiving side, is too
+PASS  stopping a stream whose every byte arrived is QUIC_STREAM_ERR_FINISHED
+PASS  once closed, a reset is QUIC_STREAM_ERR_STATE
+PASS  and so is STOP_SENDING
+PASS  the server opens its first unidirectional stream, 3
+PASS  the client allows one: the next is QUIC_STREAM_ERR_LIMIT
+PASS  and STREAMS_BLOCKED tells the client at which limit (§19.14)
+PASS  MAX_STREAMS from the client lets the next open, 7
+PASS  two of the server's are open, its own limit: the next is QUIC_STREAM_ERR_LIMIT
+PASS  a finished stream of the server's arrives
+PASS  and once acknowledged leaves its slot: the next opens, 11
+PASS  connected
+PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no arena memory
+PASS  and the echo is all there: 32,000 bytes sent back
+PASS  six connections, one after another, through one slot
+PASS  resetting the slot for the next keeps no arena memory
+PASS  after its handshake a connection keeps none: ten echoes, a close
+PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
+quic streams: 144 passed, 0 failed, 0 skipped
