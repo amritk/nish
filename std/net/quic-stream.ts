@@ -390,7 +390,6 @@ export class QuicStreams {
    * each of those costs one pop, not a pass over the table.
    */
   free: i32[]
-  freeCount: i32 = 0
   /** The configured limits on the client's streams at once and this side's own. */
   maxBidi: i64 = 0
   maxUni: i64 = 0
@@ -436,12 +435,15 @@ export class QuicStreams {
   bufferSize: i32 = 0
   lastLength: i32 = 0
   lastKind: i32 = 0
-  lastFin: boolean = false
   eventHead: i32 = 0
   eventCount: i32 = 0
+  /** How many slots `free` holds. */
+  freeCount: i32 = 0
   /** Where the next packet's search for a stream to send starts, and how many it has looked at. */
   cursor: i32 = 0
   scanned: i32 = 0
+  /** Whether the last `putNextChunk` carried the FIN, for the packet's record. */
+  lastFin: boolean = false
   /** Whether some stream may owe a control frame, so `putNextControl` looks at the slots at all. */
   streamOwes: boolean = false
   /** What the connection owes: MAX_DATA, DATA_BLOCKED, MAX_STREAMS and STREAMS_BLOCKED of each type. */
