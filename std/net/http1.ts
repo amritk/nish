@@ -123,6 +123,16 @@ const HTTP1_S_CLOSED: i32 = 9
 const HTTP1_S_ERROR: i32 = 10
 
 /**
+ * What `http1Tally` found in a comma-separated list: how many elements it
+ * has, how many of them are the word asked about, and whether the last is.
+ */
+class Http1ListTally {
+  elements: i32 = 0
+  matches: i32 = 0
+  lastMatches: boolean = false
+}
+
+/**
  * One connection's request parser, from the first byte to the close: requests
  * on a kept-alive connection follow one another through the same parser.
  */
@@ -144,12 +154,25 @@ export class Http1Parser {
   reason: string = ""
   /** The bytes fed and not yet consumed are `buf[start .. end)`. */
   buf: u8[]
+  /**
+   * The request line and the kept field lines of the request, copied out of
+   * `buf` as each is read, names in lowercase: what the spans below index.
+   * Kept from one request to the next, so a slot that has seen its largest
+   * head allocates nothing for the next one.
+   */
+  head: u8[]
+  /** Four entries per field, into `head`: name start and end, value start and end (OWS trimmed). */
+  spans: i32[]
+  /** Reused by every list `http1Tally` walks. */
+  tally: Http1ListTally
 
   // --- limits, the caller's --------------------------------------------------
   maxTarget: i32 = 0
   maxHeaderBytes: i32 = 0
   maxHeaders: i32 = 0
   maxBody: i32 = 0
+  /** The most body bytes one `HTTP1_BODY` hands over; a caller's number, 2^30 unless set. */
+  maxChunk: i32 = 1073741824
 
   /** The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. */
   minor: i32 = 1
@@ -159,6 +182,15 @@ export class Http1Parser {
   bodyLen: i32 = 0
   /** The status code to answer once `next()` said `HTTP1_ERROR`. */
   status: i32 = 0
+  /** The method is `head[methodStart .. methodEnd)` and the target `head[targetStart .. targetEnd)`. */
+  methodStart: i32 = 0
+  methodEnd: i32 = 0
+  targetStart: i32 = 0
+  targetEnd: i32 = 0
+  /** How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. */
+  headerCount: i32 = 0
+  /** How much of `head` the request uses. */
+  headLength: i32 = 0
 
   // --- internal --------------------------------------------------------------
   start: i32 = 0
@@ -180,6 +212,14 @@ export class Http1Parser {
 
   chunked: boolean = false
   keepAlive: boolean = false
+  /** Whether the request asked to switch protocols (`upgrade` is its value when `keepText`). */
+  upgrading: boolean = false
+  /**
+   * Whether `method`, `target`, `names`, `values` and `upgrade` are filled as
+   * strings. A server that must allocate nothing per request turns it off and
+   * reads the head through `head`, the spans and the `...Is` methods.
+   */
+  keepText: boolean = true
 
   /**
    * Each limit is clamped into 0 to 2^30, so that the sums the parser makes
@@ -195,6 +235,9 @@ export class Http1Parser {
     this.body = this.buf
     this.names = []
     this.values = []
+    this.head = new Array<u8>(256)
+    this.spans = new Array<i32>(64)
+    this.tally = new Http1ListTally()
   }
 
   /**
@@ -237,20 +280,81 @@ export class Http1Parser {
 
   /**
    * The value of the first field named `name` (any case), or `null`. A field
-   * that may repeat is read through `names` and `values`.
+   * that may repeat is read through the spans. The answer is a fresh string;
+   * `headerIndex` and `headerIs` allocate nothing.
    */
   header(name: string): string | null {
-    // Stored names are lowercase already, so `name` is folded as it is
-    // compared, and nothing is allocated.
-    const nameLength: i32 = toI32(name.length)
-    const names: string[] = this.names
-    const count: i32 = toI32(names.length)
-    for (let i: i32 = 0; i < count; i += 1) {
-      if (http1SameWord(name, 0, nameLength, names[i])) {
-        return this.values[i]
+    const i: i32 = this.headerIndex(name)
+    if (i < 0) {
+      return null
+    }
+    const spans: i32[] = this.spans
+    const at: i32 = 4 * i
+    if (at + 3 >= toI32(spans.length)) {
+      return null
+    }
+    return http1Text(this.head, spans[at + 2], spans[at + 3], false)
+  }
+
+  /** The index of the first field named `name` (any case), or -1. */
+  headerIndex(name: string): i32 {
+    const spans: i32[] = this.spans
+    const count: i32 = this.headerCount
+    for (let i: i32 = 0; i < count && 4 * i + 1 < toI32(spans.length); i += 1) {
+      if (http1HeadIs(this.head, spans[4 * i], spans[4 * i + 1], name, true)) {
+        return i
       }
     }
-    return null
+    return -1
+  }
+
+  /** Whether the first field named `name` (any case) has exactly the value `value`. */
+  headerIs(name: string, value: string): boolean {
+    const i: i32 = this.headerIndex(name)
+    const spans: i32[] = this.spans
+    if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+      return false
+    }
+    return http1HeadIs(this.head, spans[4 * i + 2], spans[4 * i + 3], value, false)
+  }
+
+  /** Whether the method is exactly `text` (methods are case-sensitive, RFC 9110 §9.1). */
+  methodIs(text: string): boolean {
+    return http1HeadIs(this.head, this.methodStart, this.methodEnd, text, false)
+  }
+
+  /** Whether the request target is exactly `text`. */
+  targetIs(text: string): boolean {
+    return http1HeadIs(this.head, this.targetStart, this.targetEnd, text, false)
+  }
+
+  /**
+   * Whether the request asked to switch to exactly `protocol` (any case): one
+   * `Upgrade` field holding that one token, with `upgrade` in `Connection`.
+   */
+  upgradeIs(protocol: string): boolean {
+    if (!this.upgrading) {
+      return false
+    }
+    const spans: i32[] = this.spans
+    let found: i32 = -1
+    for (let i: i32 = 0; i < this.headerCount && 4 * i + 1 < toI32(spans.length); i += 1) {
+      if (http1HeadIs(this.head, spans[4 * i], spans[4 * i + 1], "upgrade", false)) {
+        if (found >= 0) {
+          return false
+        }
+        found = i
+      }
+    }
+    if (found < 0 || 4 * found + 3 >= toI32(spans.length)) {
+      return false
+    }
+    return http1HeadIs(this.head, spans[4 * found + 2], spans[4 * found + 3], protocol, true)
+  }
+
+  /** How many bytes were fed and not consumed yet: what a caller bounds its reads by. */
+  buffered(): i32 {
+    return this.end - this.start
   }
 
   /** After `HTTP1_UPGRADE`: every byte fed past the request, as a fresh array. */
@@ -325,11 +429,20 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.method = ""
   p.target = ""
   p.minor = 1
-  p.names = []
-  p.values = []
+  if (p.keepText) {
+    p.names = []
+    p.values = []
+  }
+  p.headLength = 0
+  p.headerCount = 0
+  p.methodStart = 0
+  p.methodEnd = 0
+  p.targetStart = 0
+  p.targetEnd = 0
   p.contentLength = -1
   p.chunked = false
   p.keepAlive = false
+  p.upgrading = false
   p.upgrade = ""
   p.bodyLen = 0
   p.bodyTotal = 0
@@ -428,43 +541,124 @@ const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
 }
 
 /**
- * What `http1ListTally` found in a comma-separated list: how many elements it
- * has, how many of them are the word asked about, and whether the last is.
+ * Whether `bytes[a .. b)` is `word`; with `fold`, an uppercase ASCII letter in
+ * `word` matches its lowercase form in `bytes`, which is how a stored field
+ * name (already in lowercase) is compared with a caller's.
  */
-class Http1ListTally {
-  elements: i32 = 0
-  matches: i32 = 0
-  lastMatches: boolean = false
+const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): boolean => {
+  const n: i32 = toI32(word.length)
+  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < n && a + k < toI32(bytes.length); k += 1) {
+    let c: i32 = toI32(word.charCodeAt(k))
+    let d: i32 = toI32(bytes[a + k])
+    if (fold && c >= 65 && c <= 90) {
+      c += 32
+    }
+    if (fold && d >= 65 && d <= 90) {
+      d += 32
+    }
+    if (c !== d) {
+      return false
+    }
+  }
+  return true
 }
 
 /**
- * Walks the comma-separated list in `text` (RFC 9110 §5.6.1), each element
- * trimmed of OWS and compared with `word` in any case. Empty elements are
- * skipped, as the rule says a recipient must accept them. Nothing is copied.
+ * Copies `buf[from .. to)` to the end of `head`, growing it when it must, and
+ * answers where the copy starts.
  */
-const http1ListTally = (text: string, word: string): Http1ListTally => {
-  const tally: Http1ListTally = new Http1ListTally()
-  const n: i32 = toI32(text.length)
-  let from: i32 = 0
-  for (let k: i32 = 0; k <= n; k += 1) {
-    const c: i32 = k < n ? toI32(text.charCodeAt(k)) : 44
+const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
+  const n: i32 = to - from
+  const at: i32 = p.headLength
+  let size: i32 = toI32(p.head.length)
+  if (n > size - at) {
+    while (size - at < n) {
+      if (size > 1073741823) {
+        panic("Http1Parser: a head of more than 2^31 - 1 bytes")
+      }
+      size = size * 2
+    }
+    const grown: u8[] = new Array<u8>(size)
+    const old: u8[] = p.head
+    for (let k: i32 = 0; k < at && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
+      grown[k] = old[k]
+    }
+    p.head = grown
+  }
+  const head: u8[] = p.head
+  const buf: u8[] = p.buf
+  for (let k: i32 = 0; k < n && at + k < toI32(head.length) && from + k < toI32(buf.length); k += 1) {
+    if (from + k >= 0) {
+      head[at + k] = buf[from + k]
+    }
+  }
+  p.headLength = at + n
+  return at
+}
+
+/** Sets `spans[at]`, growing the array when it must. */
+const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
+  if (at >= toI32(p.spans.length)) {
+    const old: i32[] = p.spans
+    const grown: i32[] = new Array<i32>(2 * at + 4)
+    for (let k: i32 = 0; k < toI32(old.length) && k < toI32(grown.length); k += 1) {
+      grown[k] = old[k]
+    }
+    p.spans = grown
+  }
+  const spans: i32[] = p.spans
+  if (at >= 0 && at < toI32(spans.length)) {
+    spans[at] = value
+  }
+}
+
+/**
+ * Walks the comma-separated list in `head[from .. to)` (RFC 9110 §5.6.1),
+ * each element trimmed of OWS and compared with `word` in any case, adding to
+ * `tally`. Empty elements are skipped, as the rule says a recipient must
+ * accept them. Nothing is copied.
+ */
+const http1TallyRun = (tally: Http1ListTally, head: u8[], from: i32, to: i32, word: string): void => {
+  let start: i32 = from
+  for (let k: i32 = from; k <= to; k += 1) {
+    const c: i32 = k < to && k >= 0 && k < toI32(head.length) ? toI32(head[k]) : 44
     if (c === 44) {
-      let a: i32 = from
+      let a: i32 = start
       let b: i32 = k
-      while (a >= 0 && a < b && a < n && http1IsOws(toI32(text.charCodeAt(a)))) {
+      while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
         a += 1
       }
-      while (b > a && b - 1 >= 0 && b - 1 < n && http1IsOws(toI32(text.charCodeAt(b - 1)))) {
+      while (b > a && b - 1 >= 0 && b - 1 < toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
         b -= 1
       }
       if (b > a) {
         tally.elements += 1
-        tally.lastMatches = http1SameWord(text, a, b, word)
+        tally.lastMatches = http1HeadIs(head, a, b, word, true)
         if (tally.lastMatches) {
           tally.matches += 1
         }
       }
-      from = k + 1
+      start = k + 1
+    }
+  }
+}
+
+/**
+ * The list every field named `name` makes together (RFC 9110 §5.3: the
+ * fields of one name are one list), tallied for `word` into `p.tally`.
+ */
+const http1Tally = (p: Http1Parser, name: string, word: string): Http1ListTally => {
+  const tally: Http1ListTally = p.tally
+  tally.elements = 0
+  tally.matches = 0
+  tally.lastMatches = false
+  const spans: i32[] = p.spans
+  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
+    if (http1HeadIs(p.head, spans[4 * i], spans[4 * i + 1], name, false)) {
+      http1TallyRun(tally, p.head, spans[4 * i + 2], spans[4 * i + 3], word)
     }
   }
   return tally
@@ -544,8 +738,15 @@ const http1RequestLine = (p: Http1Parser): i32 => {
     return http1Fail(p, 505, "an HTTP major version other than 1")
   }
   p.minor = buf[i + 7] === 48 ? 0 : 1
-  p.method = http1Text(buf, a, methodEnd, false)
-  p.target = http1Text(buf, targetStart, targetEnd, false)
+  const at: i32 = http1HeadAppend(p, a, b)
+  p.methodStart = at
+  p.methodEnd = at + (methodEnd - a)
+  p.targetStart = at + (targetStart - a)
+  p.targetEnd = at + (targetEnd - a)
+  if (p.keepText) {
+    p.method = http1Text(buf, a, methodEnd, false)
+    p.target = http1Text(buf, targetStart, targetEnd, false)
+  }
   p.state = HTTP1_S_FIELDS
   return HTTP1_NEED_MORE
 }
@@ -590,57 +791,67 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
     while (valueEnd > valueStart && valueEnd - 1 >= 0 && http1IsOws(toI32(buf[valueEnd - 1]))) {
       valueEnd -= 1
     }
-    p.names.push(http1Text(buf, a, nameEnd, true))
-    p.values.push(http1Text(buf, valueStart, valueEnd, false))
+    const at: i32 = http1HeadAppend(p, a, b)
+    const head: u8[] = p.head
+    for (let k: i32 = at; k < at + (nameEnd - a) && k < toI32(head.length); k += 1) {
+      if (k >= 0 && head[k] >= 65 && head[k] <= 90) {
+        head[k] = head[k] + 32
+      }
+    }
+    const base: i32 = 4 * p.headerCount
+    http1SpanSet(p, base + 3, at + (valueEnd - a))
+    http1SpanSet(p, base, at)
+    http1SpanSet(p, base + 1, at + (nameEnd - a))
+    http1SpanSet(p, base + 2, at + (valueStart - a))
+    p.headerCount += 1
+    if (p.keepText) {
+      p.names.push(http1Text(buf, a, nameEnd, true))
+      p.values.push(http1Text(buf, valueStart, valueEnd, false))
+    }
   }
   return HTTP1_NEED_MORE
 }
 
 /**
  * The header section has ended: decide the framing and the connection's fate
- * (§6.3, §9.3) and answer `HTTP1_HEAD`, or the refusal.
+ * (§6.3, §9.3) and answer `HTTP1_HEAD`, or the refusal. It reads the spans,
+ * and allocates nothing unless `keepText` asks for `upgrade` as a string.
  */
 const http1EndOfHead = (p: Http1Parser): i32 => {
-  const names: string[] = p.names
-  const values: string[] = p.values
-  const count: i32 = toI32(values.length)
+  const spans: i32[] = p.spans
+  const head: u8[] = p.head
   let hosts: i32 = 0
   let lengths: i32 = 0
-  let lengthValue: string = ""
-  // A field that may repeat is one list (RFC 9110 §5.3), so each is gathered
-  // and joined once rather than read field by field.
-  const codingFields: string[] = []
-  const connectionFields: string[] = []
-  const upgradeFields: string[] = []
-  for (let i: i32 = 0; i < count && i < toI32(names.length); i += 1) {
-    // `values` is pushed beside `names`, so the two lengths are one; the
-    // test on each is what proves both reads.
-    const name: string = names[i]
-    const value: string = i < toI32(values.length) ? values[i] : ""
-    if (name === "host") {
+  let lengthField: i32 = -1
+  let codingFields: i32 = 0
+  let upgradeFields: i32 = 0
+  let upgradeBytes: i32 = 0
+  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
+    const a: i32 = spans[4 * i]
+    const b: i32 = spans[4 * i + 1]
+    if (http1HeadIs(head, a, b, "host", false)) {
       hosts += 1
-    } else if (name === "content-length") {
+    } else if (http1HeadIs(head, a, b, "content-length", false)) {
       lengths += 1
-      lengthValue = value
-    } else if (name === "transfer-encoding") {
-      codingFields.push(value)
-    } else if (name === "connection") {
-      connectionFields.push(value)
-    } else if (name === "upgrade") {
-      upgradeFields.push(value)
+      lengthField = i
+    } else if (http1HeadIs(head, a, b, "transfer-encoding", false)) {
+      codingFields += 1
+    } else if (http1HeadIs(head, a, b, "upgrade", false)) {
+      upgradeFields += 1
+      upgradeBytes += spans[4 * i + 3] - spans[4 * i + 2]
     }
   }
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return http1Fail(p, 400, "a request without exactly one Host")
   }
-  if (toI32(codingFields.length) > 0) {
+  if (codingFields > 0) {
     if (lengths > 0) {
       return http1Fail(p, 400, "both Content-Length and Transfer-Encoding")
     }
     if (p.minor === 0) {
       return http1Fail(p, 400, "Transfer-Encoding in an HTTP/1.0 request")
     }
-    const codings: Http1ListTally = http1ListTally(codingFields.join(","), "chunked")
+    const codings: Http1ListTally = http1Tally(p, "transfer-encoding", "chunked")
     if (!codings.lastMatches) {
       return http1Fail(p, 400, "a transfer coding list that does not end in chunked")
     }
@@ -653,8 +864,13 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     p.chunked = true
   } else if (lengths > 1) {
     return http1Fail(p, 400, "Content-Length given twice")
-  } else if (lengths === 1) {
-    const size: i32 = http1ContentLength(lengthValue, p.maxBody)
+  } else if (lengths === 1 && 4 * lengthField + 3 < toI32(spans.length) && lengthField >= 0) {
+    const size: i32 = http1ContentLength(
+      head,
+      spans[4 * lengthField + 2],
+      spans[4 * lengthField + 3],
+      p.maxBody
+    )
     if (size === -1) {
       return http1Fail(p, 400, "a Content-Length that is not a run of digits")
     }
@@ -663,13 +879,24 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     }
     p.contentLength = size
   }
-  const connection: string = connectionFields.join(",")
-  const close: boolean = http1ListTally(connection, "close").matches > 0
-  const keep: boolean = http1ListTally(connection, "keep-alive").matches > 0
-  const upgradeAsked: boolean = http1ListTally(connection, "upgrade").matches > 0
-  const upgradeValue: string = upgradeFields.join(", ")
+  // Each tally is read before the next one reuses it.
+  const close: boolean = http1Tally(p, "connection", "close").matches > 0
+  const keep: boolean = http1Tally(p, "connection", "keep-alive").matches > 0
+  const upgradeAsked: boolean = http1Tally(p, "connection", "upgrade").matches > 0
   p.keepAlive = p.minor === 1 ? !close : keep && !close
-  p.upgrade = p.minor === 1 && upgradeAsked ? upgradeValue : ""
+  // The fields of one name joined with ", " are empty only when there is one
+  // field and it is empty: the same test, without the join.
+  p.upgrading = p.minor === 1 && upgradeAsked && (upgradeFields > 1 || upgradeBytes > 0)
+  if (p.keepText && p.upgrading) {
+    const upgrades: string[] = []
+    const names: string[] = p.names
+    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(p.values.length); i += 1) {
+      if (names[i] === "upgrade") {
+        upgrades.push(p.values[i])
+      }
+    }
+    p.upgrade = upgrades.join(", ")
+  }
   if (p.chunked) {
     p.state = HTTP1_S_CHUNK_SIZE
   } else if (p.contentLength > 0) {
@@ -682,19 +909,19 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
 }
 
 /**
- * `text` as a Content-Length (1*DIGIT, RFC 9112 §6.2): the value, -1 when it
- * is not a run of digits, or -2 when it is one over `limit`. The digits are
- * all read even past the limit, so `12x` is a 400 however long it is.
+ * `bytes[from .. to)` as a Content-Length (1*DIGIT, RFC 9112 §6.2): the
+ * value, -1 when it is not a run of digits, or -2 when it is one over
+ * `limit`. The digits are all read even past the limit, so `12x` is a 400
+ * however long it is.
  */
-const http1ContentLength = (text: string, limit: i32): i32 => {
-  const n: i32 = toI32(text.length)
-  if (n === 0) {
+const http1ContentLength = (bytes: u8[], from: i32, to: i32, limit: i32): i32 => {
+  if (to <= from) {
     return -1
   }
   let value: i32 = 0
   let over: boolean = false
-  for (let k: i32 = 0; k < n; k += 1) {
-    const c: i32 = toI32(text.charCodeAt(k))
+  for (let k: i32 = from; k < to && k >= 0 && k < toI32(bytes.length); k += 1) {
+    const c: i32 = toI32(bytes[k])
     if (c < 48 || c > 57) {
       return -1
     }
@@ -793,7 +1020,10 @@ const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
   if (ready <= 0) {
     return HTTP1_NEED_MORE
   }
-  const take: i32 = ready < p.left ? ready : p.left
+  let take: i32 = ready < p.left ? ready : p.left
+  if (take > p.maxChunk && p.maxChunk > 0) {
+    take = p.maxChunk
+  }
   p.body = p.buf
   p.bodyOff = p.start
   p.bodyLen = take
@@ -877,7 +1107,7 @@ const http1Next = (p: Http1Parser): i32 => {
         break
       }
       case HTTP1_S_MESSAGE_END: {
-        if (toI32(p.upgrade.length) > 0) {
+        if (p.upgrading) {
           p.state = HTTP1_S_UPGRADED
         } else if (!p.keepAlive) {
           p.state = HTTP1_S_CLOSED
@@ -994,11 +1224,58 @@ export const http1ResponseHead = (
   return http1BytesOf(parts.join(""))
 }
 
+/** How many hex digits `len` takes, without leading zeros: at least one. */
+const http1HexDigits = (len: i32): i32 => {
+  let digits: i32 = 1
+  while (digits < 8 && len >> (4 * digits) !== 0) {
+    digits += 1
+  }
+  return digits
+}
+
 /**
- * `data[off .. off + len)` as one chunk of a chunked body (RFC 9112 §7.1):
- * the size in hex, CRLF, the bytes, CRLF. An empty window answers an empty
- * array, because a chunk of size zero is the end of the body and only
- * `http1LastChunk` writes that. A window outside `data` panics.
+ * Writes `data[off .. off + len)` as one chunk of a chunked body (RFC 9112
+ * §7.1) into `out` at `at` — the size in lowercase hex, CRLF, the bytes,
+ * CRLF — and answers where it ends, or `HTTP1_NO_ROOM` when it does not fit,
+ * with `out` untouched. An empty window writes nothing and answers `at`,
+ * because a chunk of size zero ends the body. A window outside `data` panics.
+ */
+export const http1WriteChunk = (out: u8[], at: i32, data: u8[], off: i32, len: i32): i32 => {
+  const size: i32 = toI32(data.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic("http1WriteChunk: the window is outside the buffer")
+  }
+  if (len === 0) {
+    return at
+  }
+  const digits: i32 = http1HexDigits(len)
+  const outLength: i32 = toI32(out.length)
+  if (at < 0 || at > outLength || len > outLength - at - digits - 4) {
+    return HTTP1_NO_ROOM
+  }
+  let v: i32 = len
+  for (let k: i32 = at + digits - 1; k >= at && k >= 0 && k < outLength; k -= 1) {
+    const d: i32 = v & 15
+    out[k] = toU8(d < 10 ? 48 + d : 87 + d)
+    v = v >> 4
+  }
+  const headEnd: i32 = at + digits + 2
+  out[headEnd - 2] = 13
+  out[headEnd - 1] = 10
+  for (let k: i32 = 0; k < len && headEnd + k < outLength; k += 1) {
+    out[headEnd + k] = data[off + k]
+  }
+  out[headEnd + len] = 13
+  out[headEnd + len + 1] = 10
+  return headEnd + len + 2
+}
+
+/**
+ * `data[off .. off + len)` as one chunk of a chunked body, in an array of its
+ * own; `http1WriteChunk` writes the same bytes into a buffer the caller owns.
+ * An empty window answers an empty array, because a chunk of size zero is the
+ * end of the body and only `http1LastChunk` writes that. A window outside
+ * `data` panics.
  */
 export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
   const size: i32 = toI32(data.length)
@@ -1008,30 +1285,169 @@ export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
   if (len === 0) {
     return []
   }
-  // The size in lowercase hex without leading zeros, written straight into
-  // the one array the chunk needs: count its digits, then fill from the last.
-  let digits: i32 = 1
-  while (digits < 8 && len >> (4 * digits) !== 0) {
-    digits += 1
-  }
-  const headLength: i32 = digits + 2
-  const out: u8[] = new Array<u8>(headLength + len + 2)
-  const outLength: i32 = toI32(out.length)
-  let v: i32 = len
-  for (let k: i32 = digits - 1; k >= 0 && k < outLength; k -= 1) {
-    const d: i32 = v & 15
-    out[k] = toU8(d < 10 ? 48 + d : 87 + d)
-    v = v >> 4
-  }
-  out[digits] = 13
-  out[digits + 1] = 10
-  for (let k: i32 = 0; k < len && headLength + k < outLength; k += 1) {
-    out[headLength + k] = data[off + k]
-  }
-  out[headLength + len] = 13
-  out[headLength + len + 1] = 10
+  const out: u8[] = new Array<u8>(http1HexDigits(len) + len + 4)
+  http1WriteChunk(out, 0, data, off, len)
   return out
 }
 
 /** The last chunk and the empty trailer section that end a chunked body: `0\r\n\r\n`. */
 export const http1LastChunk = (): u8[] => [48, 13, 10, 13, 10]
+
+/** `http1WriteResponseHead` and `http1WriteChunk`: the bytes do not fit at `at`. */
+export const HTTP1_NO_ROOM: i32 = -1
+/** `http1WriteResponseHead`: a head the writer refuses to write. */
+export const HTTP1_REFUSED: i32 = -2
+
+/** Whether `bytes` is a non-empty run of tchars. */
+const http1BytesAreToken = (bytes: u8[]): boolean => {
+  for (const b of bytes) {
+    if (!http1IsTokenByte(toI32(b))) {
+      return false
+    }
+  }
+  return toI32(bytes.length) > 0
+}
+
+/** Whether every byte of `bytes` may stand in a field value. */
+const http1BytesAreFieldText = (bytes: u8[]): boolean => {
+  for (const b of bytes) {
+    if (!http1IsValueByte(toI32(b))) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether `bytes` is `word`, which is lowercase, in any ASCII case. */
+const http1BytesAre = (bytes: u8[], word: string): boolean =>
+  http1HeadIs(bytes, 0, toI32(bytes.length), word, true)
+
+/** How many decimal digits `n`, which is not negative, takes. */
+const http1DecimalDigits = (n: i32): i32 => {
+  let digits: i32 = 1
+  let v: i32 = n
+  while (v >= 10) {
+    v = v / 10
+    digits += 1
+  }
+  return digits
+}
+
+/** Writes `text` at `out[at ..)`, which the caller has made sure holds it, and answers where it ends. */
+const http1PutText = (out: u8[], at: i32, text: string): i32 => {
+  const n: i32 = toI32(text.length)
+  for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
+    if (at + k >= 0) {
+      out[at + k] = toU8(text.charCodeAt(k))
+    }
+  }
+  return at + n
+}
+
+/** Writes `bytes` at `out[at ..)`, likewise. */
+const http1PutBytes = (out: u8[], at: i32, bytes: u8[]): i32 => {
+  const n: i32 = toI32(bytes.length)
+  for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
+    if (at + k >= 0) {
+      out[at + k] = bytes[k]
+    }
+  }
+  return at + n
+}
+
+/** Writes the decimal digits of `n`, which is not negative, at `out[at ..)`, likewise. */
+const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
+  const digits: i32 = http1DecimalDigits(n)
+  let v: i32 = n
+  for (let k: i32 = at + digits - 1; k >= at && k >= 0 && k < toI32(out.length); k -= 1) {
+    const digit: i32 = v % 10
+    out[k] = toU8(48 + digit)
+    v = v / 10
+  }
+  return at + digits
+}
+
+/**
+ * `http1ResponseHead`'s status line and header section, written into `out`
+ * at `at` with nothing allocated: field names and values are octets (as
+ * `nish/net/http-fields` holds them), and `connection`, when not empty, is
+ * sent as a `Connection` field after the caller's. Answers where the head
+ * ends; `HTTP1_REFUSED` for everything `http1ResponseHead` refuses, a
+ * `Connection` among the caller's fields when `connection` is given, and a
+ * `connection` that is not field text; `HTTP1_NO_ROOM` when it is well formed
+ * but does not fit. Either way `out` is untouched.
+ */
+export const http1WriteResponseHead = (
+  out: u8[],
+  at: i32,
+  status: i32,
+  reason: string,
+  names: u8[][],
+  values: u8[][],
+  bodyLength: i32,
+  connection: string
+): i32 => {
+  if (status < 100 || status > 599 || !http1IsFieldText(reason) || !http1IsFieldText(connection)) {
+    return HTTP1_REFUSED
+  }
+  if (bodyLength < HTTP1_NO_BODY || ((status < 200 || status === 204) && bodyLength !== HTTP1_NO_BODY)) {
+    return HTTP1_REFUSED
+  }
+  const count: i32 = toI32(names.length)
+  if (toI32(values.length) !== count) {
+    return HTTP1_REFUSED
+  }
+  // "HTTP/1.1 " status SP reason CRLF, then each field, then the framing
+  // field, the connection field and the empty line: counted before anything
+  // is written, in 64 bits so that no caller's lengths can wrap the sum.
+  let need: i64 = toI64(17) + toI64(reason.length)
+  for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
+    const name: u8[] = names[i]
+    const value: u8[] = values[i]
+    if (!http1BytesAreToken(name) || !http1BytesAreFieldText(value)) {
+      return HTTP1_REFUSED
+    }
+    if (http1BytesAre(name, "content-length") || http1BytesAre(name, "transfer-encoding")) {
+      return HTTP1_REFUSED
+    }
+    if (toI32(connection.length) > 0 && http1BytesAre(name, "connection")) {
+      return HTTP1_REFUSED
+    }
+    need = need + toI64(name.length) + toI64(value.length) + toI64(4)
+  }
+  if (bodyLength >= 0) {
+    need = need + toI64(18 + http1DecimalDigits(bodyLength))
+  } else if (bodyLength === HTTP1_CHUNKED) {
+    need = need + toI64(28)
+  }
+  if (toI32(connection.length) > 0) {
+    need = need + toI64(14) + toI64(connection.length)
+  }
+  if (at < 0 || at > toI32(out.length) || need > toI64(toI32(out.length) - at)) {
+    return HTTP1_NO_ROOM
+  }
+  let end: i32 = http1PutText(out, at, "HTTP/1.1 ")
+  end = http1PutDecimal(out, end, status)
+  end = http1PutText(out, end, " ")
+  end = http1PutText(out, end, reason)
+  end = http1PutText(out, end, "\r\n")
+  for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
+    end = http1PutBytes(out, end, names[i])
+    end = http1PutText(out, end, ": ")
+    end = http1PutBytes(out, end, values[i])
+    end = http1PutText(out, end, "\r\n")
+  }
+  if (bodyLength >= 0) {
+    end = http1PutText(out, end, "Content-Length: ")
+    end = http1PutDecimal(out, end, bodyLength)
+    end = http1PutText(out, end, "\r\n")
+  } else if (bodyLength === HTTP1_CHUNKED) {
+    end = http1PutText(out, end, "Transfer-Encoding: chunked\r\n")
+  }
+  if (toI32(connection.length) > 0) {
+    end = http1PutText(out, end, "Connection: ")
+    end = http1PutText(out, end, connection)
+    end = http1PutText(out, end, "\r\n")
+  }
+  return http1PutText(out, end, "\r\n")
+}

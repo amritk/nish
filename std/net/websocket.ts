@@ -278,6 +278,25 @@ export class WsDecoder {
   next(): i32 {
     return websocketNext(this)
   }
+
+  /**
+   * Puts the decoder back as the constructor left it, for the next
+   * connection, keeping the buffers it has grown: a slot that is reused
+   * allocates nothing to start over.
+   */
+  reset(): void {
+    this.state = WS_S_FRAMES
+    this.start = 0
+    this.end = 0
+    this.dataLen = 0
+    this.opcode = 0
+    this.closeCode = 0
+    this.closeReason = ""
+    this.messageOpcode = 0
+    this.messageLen = 0
+    this.data = this.control
+    websocketUtf8Reset(this.utf8)
+  }
 }
 
 /** Makes room for `len` more input bytes at `d.end`, moving the live bytes down first. */
@@ -542,17 +561,111 @@ const websocketNext = (d: WsDecoder): i32 => {
 
 // --- The encoder -------------------------------------------------------------
 
+/** The longest payload a frame may carry here: its header, at most 14 bytes, still fits an `i32` length. */
+const WS_MAX_FRAME_PAYLOAD: i32 = 2147483633
+
+/** `websocketWriteFrame`: the frame does not fit at `at`. */
+export const WS_NO_ROOM: i32 = -1
+/** `websocketWriteFrame`: a frame the encoder refuses to write. */
+export const WS_REFUSED: i32 = -2
+
+/** How many bytes a frame of `len` payload bytes takes, its header included. */
+export const websocketFrameSize = (len: i32, masked: boolean): i32 => {
+  let extended: i32 = 8
+  if (len < 126) {
+    extended = 0
+  } else if (len < 65536) {
+    extended = 2
+  }
+  return 2 + extended + (masked ? 4 : 0) + len
+}
+
 /**
- * One frame (§5.2): FIN, the opcode, the payload `payload[off .. off + len)`
- * and, when `mask` is not null, masked with that 4-byte key. A client masks
- * every frame with a fresh key from `crypto.getRandomValues` (§5.3); a server
- * passes null. The length takes the shortest of its three forms.
- *
- * Answers `null` for an opcode RFC 6455 does not define, a control frame that
- * is not FIN or is longer than 125 bytes, and a mask that is not 4 bytes. A
- * window outside `payload` panics. A text frame's payload is not checked here,
- * because a fragment may end inside a character; `websocketIsUtf8` checks a
- * whole message.
+ * Writes one frame (§5.2) into `out` at `at`: FIN, the opcode, the payload
+ * `payload[off .. off + len)` and, when `mask` is not null, masked with that
+ * 4-byte key. A client masks every frame with a fresh key from
+ * `crypto.getRandomValues` (§5.3); a server passes null. The length takes the
+ * shortest of its three forms. Answers where the frame ends, `WS_NO_ROOM` when
+ * it does not fit, or `WS_REFUSED` for an opcode RFC 6455 does not define, a
+ * control frame that is not FIN or is longer than 125 bytes, and a mask that
+ * is not 4 bytes; on either refusal `out` is untouched. A window outside
+ * `payload` panics. A text frame's payload is not checked here, because a
+ * fragment may end inside a character; `websocketIsUtf8` checks a whole
+ * message.
+ */
+export const websocketWriteFrame = (
+  out: u8[],
+  at: i32,
+  fin: boolean,
+  opcode: i32,
+  payload: u8[],
+  off: i32,
+  len: i32,
+  mask: u8[] | null
+): i32 => {
+  const size: i32 = toI32(payload.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic("websocketWriteFrame: the window is outside the buffer")
+  }
+  if (!websocketIsKnownOpcode(opcode)) {
+    return WS_REFUSED
+  }
+  const control: boolean = opcode >= 8
+  if (control && (!fin || len > WS_MAX_CONTROL)) {
+    return WS_REFUSED
+  }
+  if (mask !== null && toI32(mask.length) !== 4) {
+    return WS_REFUSED
+  }
+  if (len > WS_MAX_FRAME_PAYLOAD) {
+    panic("websocketWriteFrame: a frame longer than 2^31 - 1 bytes")
+  }
+  const frameSize: i32 = websocketFrameSize(len, mask !== null)
+  const outLength: i32 = toI32(out.length)
+  if (at < 0 || at > outLength || frameSize > outLength - at) {
+    return WS_NO_ROOM
+  }
+  const headerLength: i32 = frameSize - len
+  const finBit: i32 = fin ? 0x80 : 0
+  out[at] = toU8(finBit | opcode)
+  const maskBit: i32 = mask === null ? 0 : 0x80
+  const extended: i32 = headerLength - 2 - (mask === null ? 0 : 4)
+  if (extended === 0) {
+    out[at + 1] = toU8(maskBit | len)
+  } else if (extended === 2) {
+    out[at + 1] = toU8(maskBit | 126)
+    out[at + 2] = toU8(len >> 8)
+    out[at + 3] = toU8(len)
+  } else {
+    out[at + 1] = toU8(maskBit | 127)
+    // The top four bytes are zero: `len` is an `i32`.
+    for (let k: i32 = 2; k < 6; k += 1) {
+      out[at + k] = 0
+    }
+    out[at + 6] = toU8(len >> 24)
+    out[at + 7] = toU8(len >> 16)
+    out[at + 8] = toU8(len >> 8)
+    out[at + 9] = toU8(len)
+  }
+  const payloadAt: i32 = at + headerLength
+  for (let k: i32 = 0; k < len && payloadAt + k < outLength; k += 1) {
+    out[payloadAt + k] = payload[off + k]
+  }
+  if (mask !== null) {
+    const keyAt: i32 = at + 2 + extended
+    for (let k: i32 = 0; k < 4 && k < toI32(mask.length); k += 1) {
+      out[keyAt + k] = mask[k]
+    }
+    // Masking and unmasking are the same XOR, so the copied payload goes
+    // through the decoder's own loop, reading the key just written.
+    websocketUnmaskInto(out, payloadAt, len, true, keyAt, out, payloadAt)
+  }
+  return payloadAt + len
+}
+
+/**
+ * One frame, as `websocketWriteFrame` writes it, in an array of its own; the
+ * same refusals answer `null`. A window outside `payload` panics.
  */
 export const websocketFrame = (
   fin: boolean,
@@ -566,59 +679,12 @@ export const websocketFrame = (
   if (off < 0 || len < 0 || off > size || len > size - off) {
     panic("websocketFrame: the window is outside the buffer")
   }
-  if (!websocketIsKnownOpcode(opcode)) {
-    return null
-  }
-  const control: boolean = opcode >= 8
-  if (control && (!fin || len > WS_MAX_CONTROL)) {
-    return null
-  }
-  if (mask !== null && toI32(mask.length) !== 4) {
-    return null
-  }
-  let extended: i32 = 8
-  if (len < 126) {
-    extended = 0
-  } else if (len < 65536) {
-    extended = 2
-  }
-  const maskBytes: i32 = mask === null ? 0 : 4
-  const headerLength: i32 = 2 + extended + maskBytes
-  if (len > 2147483647 - headerLength) {
+  if (len > WS_MAX_FRAME_PAYLOAD) {
     panic("websocketFrame: a frame longer than 2^31 - 1 bytes")
   }
-  const out: u8[] = new Array<u8>(headerLength + len)
-  const outLength: i32 = toI32(out.length)
-  const finBit: i32 = fin ? 0x80 : 0
-  out[0] = toU8(finBit | opcode)
-  const maskBit: i32 = mask === null ? 0 : 0x80
-  if (extended === 0) {
-    out[1] = toU8(maskBit | len)
-  } else if (extended === 2) {
-    out[1] = toU8(maskBit | 126)
-    out[2] = toU8(len >> 8)
-    out[3] = toU8(len)
-  } else {
-    out[1] = toU8(maskBit | 127)
-    // The top four bytes stay zero: `len` is an `i32`.
-    out[6] = toU8(len >> 24)
-    out[7] = toU8(len >> 16)
-    out[8] = toU8(len >> 8)
-    out[9] = toU8(len)
-  }
-  for (let k: i32 = 0; k < len && headerLength + k < outLength; k += 1) {
-    out[headerLength + k] = payload[off + k]
-  }
-  if (mask !== null) {
-    const keyAt: i32 = 2 + extended
-    for (let k: i32 = 0; k < 4 && k < toI32(mask.length); k += 1) {
-      out[keyAt + k] = mask[k]
-    }
-    // Masking and unmasking are the same XOR, so the copied payload goes
-    // through the decoder's own loop, reading the key just written.
-    websocketUnmaskInto(out, headerLength, len, true, keyAt, out, headerLength)
-  }
-  return out
+  const out: u8[] = new Array<u8>(websocketFrameSize(len, mask !== null))
+  const at: i32 = 0
+  return websocketWriteFrame(out, at, fin, opcode, payload, off, len, mask) < 0 ? null : out
 }
 
 /**
@@ -709,17 +775,6 @@ export const websocketKeyIsValid = (key: string): boolean => {
   return bytes !== null && toI32(bytes.length) === 16
 }
 
-/** `text` with its ASCII letters in lowercase. */
-const websocketLowerAscii = (text: string): string => {
-  const parts: string[] = []
-  const n: i32 = toI32(text.length)
-  for (let k: i32 = 0; k < n; k += 1) {
-    const c: i32 = toI32(text.charCodeAt(k))
-    parts.push(String.fromCharCode(c >= 65 && c <= 90 ? c + 32 : c))
-  }
-  return parts.join("")
-}
-
 /**
  * The client's key when the head `p` has just read is a valid opening
  * handshake (§4.2.1): a GET in HTTP/1.1, asking to upgrade to `websocket`
@@ -728,14 +783,10 @@ const websocketLowerAscii = (text: string): string => {
  * version is wrong, §4.4).
  */
 export const websocketRequestKey = (p: Http1Parser): string | null => {
-  if (p.method !== "GET" || p.minor !== 1) {
+  if (!p.methodIs("GET") || p.minor !== 1 || !p.upgradeIs("websocket")) {
     return null
   }
-  if (websocketLowerAscii(p.upgrade) !== "websocket") {
-    return null
-  }
-  const version: string | null = p.header("sec-websocket-version")
-  if (version === null || version !== "13") {
+  if (!p.headerIs("sec-websocket-version", "13")) {
     return null
   }
   const key: string | null = p.header("sec-websocket-key")
