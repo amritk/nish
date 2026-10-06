@@ -34,7 +34,7 @@ import { leafPublic } from "../net_tls_common/server";
 import { GROUP_SECP256R1, clientFinish, clientHello, clientShare, extAlpn, extKeyShare, extSignatureAlgorithms, extSupportedGroups, extSupportedVersions } from "../net_tls_common/client";
 import { Opened, ZERO, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
 import { clearRecord, clientKeysFor } from "../net_tls_record_common/client";
-import { FrameLog, Wire } from "../net_http2/peer";
+import { FrameLog, Wire, textAt } from "../net_http2/peer";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { fromHex, textOf } from "../crypto_x509/hex";
 import { InteropServer } from "./server";
@@ -186,11 +186,7 @@ export class QuicClient {
             r.fin = r.fin || (f.fin && f.offset + toI64(f.dataLength) <= toI64(toI32(r.data.length)));
           }
         } else if (f.type === QUIC_FRAME_DATAGRAM || f.type === QUIC_FRAME_DATAGRAM_LENGTH) {
-          const d: u8[] = [];
-          for (let k: i32 = 0; k < f.dataLength; k++) {
-            d.push(payload[f.dataStart + k]);
-          }
-          this.datagrams.push(d);
+          this.datagrams.push(range(payload, f.dataStart, f.dataStart + f.dataLength));
         }
         at = f.end;
       }
@@ -210,10 +206,7 @@ export class QuicClient {
       let read: i32 = 0;
       let n: i32 = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
       while (n >= 0) {
-        const d: u8[] = [];
-        for (let k: i32 = 0; k < n; k++) {
-          d.push(this.rx[k]);
-        }
+        const d: u8[] = range(this.rx, ZERO, n);
         this.c.datagrams.push(d);
         qcReceive(this.c, d);
         read++;
@@ -258,16 +251,8 @@ export const h3Answer = (r: Received): H3Answer => {
     const start: i32 = at + size;
     if (header.type === H3_FRAME_HEADERS && dec.decode(r.data, start, length) === QPACK_OK) {
       for (let k: i32 = 0; k < dec.count; k++) {
-        const name: u8[] = [];
-        for (let j: i32 = 0; j < dec.nameLength[k]; j++) {
-          name.push(dec.bytes[dec.nameStart[k] + j]);
-        }
-        if (textOf(name) === ":status") {
-          const value: u8[] = [];
-          for (let j: i32 = 0; j < dec.valueLength[k]; j++) {
-            value.push(dec.bytes[dec.valueStart[k] + j]);
-          }
-          out.status = textOf(value);
+        if (textAt(dec.bytes, dec.nameStart[k], dec.nameLength[k]) === ":status") {
+          out.status = textAt(dec.bytes, dec.valueStart[k], dec.valueLength[k]);
         }
       }
     } else if (header.type === H3_FRAME_DATA) {

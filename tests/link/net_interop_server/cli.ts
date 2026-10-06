@@ -115,25 +115,19 @@ export const serve = (argv: string[]): i32 => {
     console.log(`unsupported test case ${args.options.testcase}`);
     return 127;
   }
-  if (args.certs !== "") {
-    const chain: u8[][] | null = loadChain(args.certs);
-    const loaded: Secret<u8[]> | null = loadKey(args.certs);
-    if (loaded === null) {
-      console.log(`no P-256 key in ${args.certs}/priv.key`);
-      return 3;
-    }
-    if (chain === null || toI32(chain.length) === 0) {
-      console.log(`no certificate in ${args.certs}/cert.pem`);
-      wipe(loaded);
-      return 3;
-    }
-    const code: i32 = run(args, chain, loaded);
-    wipe(loaded);
-    return code;
+  const loaded: Secret<u8[]> | null = args.certs === "" ? mintKey() : loadKey(args.certs);
+  if (loaded === null) {
+    console.log(`no P-256 key in ${args.certs}/priv.key`);
+    return 3;
   }
-  const key: Secret<u8[]> = mintKey();
-  const der: u8[] = mintCertificate(key, toI64(Date.now()));
-  const code: i32 = toI32(der.length) > 0 ? run(args, [der], key) : 3;
-  wipe(key);
+  const minted: u8[] = args.certs === "" ? mintCertificate(loaded, toI64(Date.now())) : [];
+  const chain: u8[][] | null = args.certs === "" ? [minted] : loadChain(args.certs);
+  let code: i32 = 3;
+  if (chain === null || toI32(chain.length) === 0 || toI32(chain[0].length) === 0) {
+    console.log(`no certificate in ${args.certs}/cert.pem, or none minted`);
+  } else {
+    code = run(args, chain, loaded);
+  }
+  wipe(loaded);
   return code;
 };

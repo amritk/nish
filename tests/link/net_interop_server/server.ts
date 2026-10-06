@@ -39,9 +39,6 @@ const TOKEN_QUIC: i32 = 1;
 const TOKEN_H1: i32 = 2;
 const TOKEN_SIGNAL: i32 = 4;
 
-/** The longest one wait lasts, so a stop is never far off. */
-const WAIT_MAX: i32 = 1000;
-
 /** What the server is started with. */
 export class InteropOptions {
   /** The directory files are served from, or "" for none. */
@@ -60,7 +57,7 @@ export class InteropOptions {
 }
 
 /** Milliseconds on the monotonic clock. */
-export const nowMs = (): i64 => monotonicNanos() / toI64(1000000);
+const nowMs = (): i64 => monotonicNanos() / toI64(1000000);
 
 /** Fresh random bytes, `n` of them. */
 const randomBytes = (n: i32): u8[] => {
@@ -92,7 +89,7 @@ export const supportedTestcase = (name: string): boolean =>
  * the runner's 1,000 for `multiplexing`, which the server raises as streams
  * finish.
  */
-export const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
+const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
   return {
     certificateChain: chain,
     alpn: [H3_ALPN, HQ_ALPN],
@@ -117,7 +114,6 @@ export class InteropServer {
   h1: H1Loop;
   h2: InteropH2;
   h3: Http3Server;
-  wts: WebTransport[];
   app: InteropApp;
   ready: i32[];
   loop: i32 = -1;
@@ -145,12 +141,12 @@ export class InteropServer {
       options.slots,
       randomBytes(QUIC_LISTENER_ENTROPY_SIZE)
     );
-    this.wts = [];
+    const wts: WebTransport[] = [];
     for (let slot: i32 = 0; slot < this.h3.size(); slot++) {
-      this.wts.push(new WebTransport(new WebTransportConfig(), this.h3.connection(slot)));
+      wts.push(new WebTransport(new WebTransportConfig(), this.h3.connection(slot)));
     }
     const files = new InteropFiles(options.www);
-    this.app = new InteropApp(this.h3, this.wts, files);
+    this.app = new InteropApp(this.h3, wts, files);
     this.h1 = new H1Loop(testConfig(), tcpConfig([H1_ALPN]), 16, options.h1Port, options.h1sPort);
     this.h1.serving = true;
     this.h2 = new InteropH2(this.loop, "127.0.0.1", options.h2Port, chain, files, toI32(64));
@@ -184,7 +180,7 @@ export class InteropServer {
     if (timeout < 0 || timeout > wait) {
       timeout = wait;
     }
-    const n: i32 = pollWait(this.loop, this.ready, timeout > WAIT_MAX ? WAIT_MAX : timeout);
+    const n: i32 = pollWait(this.loop, this.ready, timeout);
     for (let i: i32 = 0; i < n; i++) {
       const who: i32 = this.ready[2 * i];
       if (who === TOKEN_H1) {

@@ -30,7 +30,8 @@ import {
   WT_WRITABLE,
   WebTransport,
 } from "nish/net/webtransport";
-import { textOf } from "../crypto_x509/hex";
+import { textAt } from "../net_http2/peer";
+import { range } from "../net_tls_record_common/bytes";
 import { InteropFiles } from "./files";
 
 /** The ALPN of the quic-interop-runner's HTTP/0.9. */
@@ -83,19 +84,6 @@ class InteropStream {
   }
 }
 
-/**
- * What tells one connection in a slot from the next: the Source Connection ID
- * the server chose for it at random, as a 64-bit number. (The client's
- * original DCID would not do: a client may choose the same one twice.)
- */
-export const connectionMark = (quic: QuicConnection): i64 => {
-  let mark: i64 = 0;
-  for (let k: i32 = 0; k < 8 && k < toI32(quic.localScid.length); k++) {
-    mark = (mark << toI64(8)) | toI64(quic.localScid[k]);
-  }
-  return mark;
-};
-
 /** The application over every slot of `server`. */
 export class InteropApp {
   server: Http3Server;
@@ -103,8 +91,8 @@ export class InteropApp {
   files: InteropFiles;
   /** Each slot's stream entries, `perSlot` of them, by the QUIC stream slot. */
   streams: InteropStream[];
-  /** Each slot's connection, as `connectionMark` read it when its entries were last cleared. */
-  marks: i64[];
+  /** Each slot's `Http3Connection.generation` when its entries were last cleared. */
+  marks: i32[];
   names: u8[][];
   textValues: u8[][];
   fileValues: u8[][];
@@ -125,7 +113,7 @@ export class InteropApp {
     for (let k: i32 = 0; k < this.perSlot * server.size(); k++) {
       this.streams.push(new InteropStream());
     }
-    this.marks = new Array<i64>(server.size());
+    this.marks = new Array<i32>(server.size());
     this.names = [httpFieldBytes("content-type"), httpFieldBytes("server")];
     this.textValues = [httpFieldBytes("text/plain"), httpFieldBytes("nish")];
     this.fileValues = [httpFieldBytes(files.type), httpFieldBytes("nish")];
@@ -140,14 +128,22 @@ export class InteropApp {
     return this.streams[slot * this.perSlot + k];
   }
 
+  /** The entry of stream `id` in `slot` while it holds that stream in `mode`, or `null`. */
+  live(slot: i32, id: i64, mode: i32): InteropStream | null {
+    const s: InteropStream | null = this.entry(slot, id);
+    return s !== null && s.id === id && s.mode === mode ? s : null;
+  }
+
   /**
    * Every event of `slot`'s connection, answered. A slot holds one
    * connection after another, whose stream IDs start again from 0, so its
-   * entries are cleared when the connection in it is a new one.
+   * entries are cleared when the connection in it is a new one: `Http3Server`
+   * restarts the slot's `Http3Connection` for every connection it accepts,
+   * whatever its ALPN, and that counts in `generation`.
    */
   serve(slot: i32): void {
     const quic: QuicConnection = this.server.quic(slot);
-    const mark: i64 = connectionMark(quic);
+    const mark: i32 = this.server.connection(slot).generation;
     if (mark !== this.marks[slot]) {
       this.marks[slot] = mark;
       for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
@@ -211,12 +207,7 @@ export class InteropApp {
     if (end < 0 && !ended && s.inputLength < REQUEST_MAX) {
       return;
     }
-    const line: u8[] = [];
-    const stop: i32 = end >= 0 ? end : s.inputLength;
-    for (let k: i32 = 0; k < stop; k++) {
-      line.push(s.input[k]);
-    }
-    const text: string = textOf(line);
+    const text: string = textAt(s.input, toI32(0), end >= 0 ? end : s.inputLength);
     // `GET /<file>`, perhaps with a version after it, which HTTP/0.9 never had.
     const rest: string = text.startsWith("GET ") ? text.slice(toI32(4)) : "";
     const space: i32 = toI32(rest.indexOf(" "));
@@ -258,9 +249,7 @@ export class InteropApp {
           s.start(h3.stream, MODE_H3);
           s.h3 = true;
           // The fields are the connection's, and are written over by its next request.
-          for (const b of h3.fields.path) {
-            s.path.push(b);
-          }
+          s.path = range(h3.fields.path, toI32(0), toI32(h3.fields.path.length));
           s.get = httpFieldIs(h3.fields.method, "GET");
         }
       } else if (event === H3_DATA) {
@@ -269,14 +258,14 @@ export class InteropApp {
           s.received = s.received + toI64(h3.dataLength);
         }
       } else if (event === H3_END) {
-        const s: InteropStream | null = this.entry(slot, h3.stream);
-        if (s !== null && s.id === h3.stream && s.mode === MODE_H3) {
+        const s: InteropStream | null = this.live(slot, h3.stream, MODE_H3);
+        if (s !== null) {
           this.answerH3(h3, wt, s);
         }
       } else if (event === H3_WRITABLE || event === WT_WRITABLE) {
         const id: i64 = event === H3_WRITABLE ? h3.stream : wt.stream;
-        const s: InteropStream | null = this.entry(slot, id);
-        if (s !== null && s.id === id && s.mode === MODE_WRITE) {
+        const s: InteropStream | null = this.live(slot, id, MODE_WRITE);
+        if (s !== null) {
           this.pushH3(h3, wt, s);
         }
       } else if (event === WT_SESSION) {
@@ -292,13 +281,13 @@ export class InteropApp {
           s.start(wt.stream, MODE_WT_READ);
         }
       } else if (event === WT_STREAM_DATA) {
-        const s: InteropStream | null = this.entry(slot, wt.stream);
-        if (s !== null && s.id === wt.stream && s.mode === MODE_WT_READ) {
+        const s: InteropStream | null = this.live(slot, wt.stream, MODE_WT_READ);
+        if (s !== null) {
           this.takeEcho(wt, s);
         }
       } else if (event === WT_STREAM_END) {
-        const s: InteropStream | null = this.entry(slot, wt.stream);
-        if (s !== null && s.id === wt.stream && s.mode === MODE_WT_READ) {
+        const s: InteropStream | null = this.live(slot, wt.stream, MODE_WT_READ);
+        if (s !== null) {
           this.echoBack(slot, h3, wt, s);
         }
       }

@@ -23,7 +23,7 @@ import { bytesOf, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
 import { getOf } from "../net_http2/peer";
-import { H3Limits, h3Cat, h3ClientParams, h3ClientSettings, h3Frame, h3Section, h3Varint } from "../net_http3/peer";
+import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Cat, h3ClientParams, h3ClientSettings, h3Frame, h3Section, h3Varint } from "../net_http3/peer";
 import { WtLimits, wtClientParams, wtClientSettingIds, wtClientSettingValues, wtSettingsFrame } from "../net_webtransport/peer";
 import { H2TlsClient, QuicClient, h3Answer } from "./client";
 import { parseServe, serve } from "./cli";
@@ -36,9 +36,9 @@ const CONTENT: string = "a file from www\n";
 
 /** A client's three unidirectional HTTP/3 streams, with `settings` on the control stream. */
 const openH3 = (q: QuicClient, settings: u8[]): void => {
-  q.send(n64(2), h3Cat([h3Varint(H3_STREAM_CONTROL), settings]), false);
-  q.send(n64(6), h3Varint(H3_STREAM_QPACK_ENCODER), false);
-  q.send(n64(10), h3Varint(H3_STREAM_QPACK_DECODER), false);
+  q.send(CLIENT_CONTROL, h3Cat([h3Varint(H3_STREAM_CONTROL), settings]), false);
+  q.send(CLIENT_ENCODER, h3Varint(H3_STREAM_QPACK_ENCODER), false);
+  q.send(CLIENT_DECODER, h3Varint(H3_STREAM_QPACK_DECODER), false);
 };
 
 /** The HEADERS frame of a request with these pseudo-headers, then `names`/`values`. */

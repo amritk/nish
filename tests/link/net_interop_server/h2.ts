@@ -25,14 +25,19 @@ export const H2_SLOT_TOKEN: i32 = 1000;
 const STATUS_OK: i32 = 200;
 const STATUS_NOT_FOUND: i32 = 404;
 
+/** A response's phases: waiting for the request body to end, writing, or free. */
+const PHASE_BODY: i32 = 0;
+const PHASE_WRITE: i32 = 1;
+const PHASE_FREE: i32 = 2;
+
 /** One response being written: its stream and the bytes still owed. */
 class H2Pending {
-  stream: i32 = 0;
   /** The request body's bytes so far, for a request that is not a GET. */
   received: i64 = 0;
   out: u8[];
+  stream: i32 = 0;
   at: i32 = 0;
-  /** Waiting for the request body to end (0), writing (1), or free (2). */
+  /** `PHASE_FREE` (a field initialiser is a literal). */
   phase: i32 = 2;
 
   constructor() {
@@ -41,7 +46,7 @@ class H2Pending {
 }
 
 /** A TLS configuration offering `h2` with `chain`. */
-export const h2TlsConfig = (chain: u8[][]): TlsServerConfig => {
+const h2TlsConfig = (chain: u8[][]): TlsServerConfig => {
   const none: u8[] = [];
   return {
     certificateChain: chain,
@@ -60,16 +65,16 @@ export class InteropH2 {
   /** Each slot's responses, `perSlot` of them. */
   pending: H2Pending[];
   names: u8[][];
+  /** The response fields and the 404 body, made once. */
+  textValues: u8[][];
+  fileValues: u8[][];
+  notFound: u8[];
   randomBuffer: u8[];
   keyBuffer: u8[];
   loop: i32 = -1;
   listener: i32 = -1;
   port: i32 = 0;
   perSlot: i32 = 0;
-  /** Connections accepted and closed, and requests answered, for a log or a test. */
-  accepted: i32 = 0;
-  closed: i32 = 0;
-  answered: i32 = 0;
   logging: boolean = false;
 
   /** Listens on `host`:`port` (0 for any) with `size` slots, its descriptors in `loop`. */
@@ -86,6 +91,9 @@ export class InteropH2 {
       this.pending.push(new H2Pending());
     }
     this.names = [httpFieldBytes("content-type"), httpFieldBytes("server")];
+    this.textValues = [httpFieldBytes("text/plain"), httpFieldBytes("nish")];
+    this.fileValues = [httpFieldBytes(files.type), httpFieldBytes("nish")];
+    this.notFound = httpFieldBytes("not found\n");
     this.randomBuffer = new Array<u8>(32);
     this.keyBuffer = new Array<u8>(32);
     if (this.listener >= 0) {
@@ -100,9 +108,8 @@ export class InteropH2 {
       crypto.getRandomValues(this.keyBuffer);
       const slot: i32 = this.server.accept(this.randomBuffer, this.keyBuffer);
       if (slot >= 0) {
-        this.accepted = this.accepted + 1;
         for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
-          this.pending[k].phase = 2;
+          this.pending[k].phase = PHASE_FREE;
         }
         pollAdd(this.loop, this.server.fd(slot), toI32(1), H2_SLOT_TOKEN + slot);
       } else if (slot !== TLS_TCP_POOL_FULL) {
@@ -140,7 +147,6 @@ export class InteropH2 {
         console.log(`h2 connection closed: streams ${conn.lastPeerStream} error ${conn.errorCode}`);
       }
       this.server.close(slot);
-      this.closed = this.closed + 1;
       return;
     }
     pollModify(this.loop, this.server.fd(slot), wants & 3, H2_SLOT_TOKEN + slot);
@@ -149,13 +155,13 @@ export class InteropH2 {
   /** The entry for a new response on `stream` in `slot`, or `null` when every one is busy. */
   take(slot: i32, stream: i32): H2Pending | null {
     for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
-      if (this.pending[k].phase === 2) {
+      if (this.pending[k].phase === PHASE_FREE) {
         const p: H2Pending = this.pending[k];
         p.stream = stream;
         p.received = 0;
         p.out = [];
         p.at = 0;
-        p.phase = 0;
+        p.phase = PHASE_BODY;
         return p;
       }
     }
@@ -165,7 +171,7 @@ export class InteropH2 {
   /** The response being made on `stream` in `slot`, or `null`. */
   find(slot: i32, stream: i32): H2Pending | null {
     for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
-      if (this.pending[k].phase !== 2 && this.pending[k].stream === stream) {
+      if (this.pending[k].phase !== PHASE_FREE && this.pending[k].stream === stream) {
         return this.pending[k];
       }
     }
@@ -182,22 +188,22 @@ export class InteropH2 {
       if (httpFieldIs(conn.fields.method, "GET")) {
         const body: u8[] | null = this.files.get(conn.fields.path);
         if (body === null) {
-          this.start(conn, p, STATUS_NOT_FOUND, "text/plain", httpFieldBytes("not found\n"));
+          this.start(conn, p, STATUS_NOT_FOUND, this.textValues, this.notFound);
         } else {
-          this.start(conn, p, STATUS_OK, this.files.type, body);
+          this.start(conn, p, STATUS_OK, this.fileValues, body);
         }
       } else if (conn.endStream) {
-        this.start(conn, p, STATUS_OK, "text/plain", httpFieldBytes("received 0 bytes\n"));
+        this.start(conn, p, STATUS_OK, this.textValues, httpFieldBytes("received 0 bytes\n"));
       }
     } else if (event === H2_DATA || event === H2_TRAILERS) {
       // A body ends with END_STREAM on its last DATA frame, or on its trailers.
       const p: H2Pending | null = this.find(slot, conn.stream);
-      if (p !== null && p.phase === 0) {
+      if (p !== null && p.phase === PHASE_BODY) {
         if (event === H2_DATA) {
           p.received = p.received + toI64(conn.dataLength);
         }
         if (conn.endStream || event === H2_TRAILERS) {
-          this.start(conn, p, STATUS_OK, "text/plain", httpFieldBytes(`received ${p.received} bytes\n`));
+          this.start(conn, p, STATUS_OK, this.textValues, httpFieldBytes(`received ${p.received} bytes\n`));
         }
       }
     } else if (event === H2_WINDOW) {
@@ -205,16 +211,14 @@ export class InteropH2 {
     }
   }
 
-  /** Sends the head of `p`'s response, of content type `type`, and as much of `body` as the windows take. */
-  start(conn: Http2Connection, p: H2Pending, status: i32, type: string, body: u8[]): void {
-    const values: u8[][] = [httpFieldBytes(type), httpFieldBytes("nish")];
+  /** Sends the head of `p`'s response with the field `values`, and as much of `body` as the windows take. */
+  start(conn: Http2Connection, p: H2Pending, status: i32, values: u8[][], body: u8[]): void {
     if (conn.respond(p.stream, status, this.names, values, false) < 0) {
-      p.phase = 2;
+      p.phase = PHASE_FREE;
       return;
     }
     p.out = body;
-    p.phase = 1;
-    this.answered = this.answered + 1;
+    p.phase = PHASE_WRITE;
     this.push(conn, p);
   }
 
@@ -226,19 +230,19 @@ export class InteropH2 {
   push(conn: Http2Connection, p: H2Pending): i32 {
     const length: i32 = toI32(p.out.length);
     let moved: i32 = 0;
-    while (p.phase === 1) {
+    while (p.phase === PHASE_WRITE) {
       const n: i32 = conn.writeData(p.stream, p.out, p.at, length - p.at, true);
       if (n < 0) {
         // H2_AGAIN waits for a window or for room in the output; anything else ends the response.
         if (n !== H2_AGAIN) {
-          p.phase = 2;
+          p.phase = PHASE_FREE;
         }
         return moved;
       }
       p.at = p.at + n;
       moved = moved + (n > 0 ? n : 1);
       if (p.at >= length) {
-        p.phase = 2;
+        p.phase = PHASE_FREE;
       }
     }
     return moved;
@@ -248,7 +252,7 @@ export class InteropH2 {
   pushAll(slot: i32, conn: Http2Connection): i32 {
     let moved: i32 = 0;
     for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
-      if (this.pending[k].phase === 1) {
+      if (this.pending[k].phase === PHASE_WRITE) {
         moved = moved + this.push(conn, this.pending[k]);
       }
     }

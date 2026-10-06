@@ -62,6 +62,8 @@ env:
   H1_PORT: "8080"
   H1S_PORT: "8081"
   H2_PORT: "8443"
+  # serve's flags for those ports, expanded unquoted where the server starts.
+  SERVE_PORTS: --port 4433 --h1-port 8080 --h1s-port 8081 --h2-port 8443
 
 jobs:
   build:
@@ -183,9 +185,11 @@ jobs:
         run: |
           docker load --input nish-interop.tar.gz
           docker run -d --name nish --network host --entrypoint /interop-server nish-interop:ci \
-            serve --port "$QUIC_PORT" --h1-port "$H1_PORT" --h1s-port "$H1S_PORT" --h2-port "$H2_PORT"
-          sleep 1
+            serve $SERVE_PORTS
+          # Ready once it has printed its ports, which it does after binding them and writing the hash file.
+          for _ in $(seq 1 100); do docker logs nish 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
           docker logs nish
+          docker logs nish 2>&1 | grep -q '^ports '
 
       - name: Fetch h2spec and check its SHA-256
         run: |
@@ -222,9 +226,11 @@ jobs:
           docker load --input nish-interop.tar.gz
           docker pull "$CURL"
           docker run -d --name nish --network host -v "$RUNNER_TEMP/www:/www:ro" --entrypoint /interop-server nish-interop:ci \
-            serve --www /www --port "$QUIC_PORT" --h1-port "$H1_PORT" --h1s-port "$H1S_PORT" --h2-port "$H2_PORT"
-          sleep 1
+            serve --www /www $SERVE_PORTS
+          # Ready once it has printed its ports, which it does after binding them and writing the hash file.
+          for _ in $(seq 1 100); do docker logs nish 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
           docker logs nish
+          docker logs nish 2>&1 | grep -q '^ports '
 
       - name: GET and POST over HTTP/3 and HTTP/2
         run: |
@@ -280,10 +286,12 @@ jobs:
           # shellcheck disable=SC2086 # $certs is empty or two words
           docker run -d --name nish --network host -v "$RUNNER_TEMP/out:/out" -v "$RUNNER_TEMP/certs:/certs:ro" \
             --entrypoint /interop-server nish-interop:ci \
-            serve --port "$QUIC_PORT" --h1-port "$H1_PORT" --h1s-port "$H1S_PORT" --h2-port "$H2_PORT" \
+            serve $SERVE_PORTS \
             --hash-file /out/hash $certs
-          sleep 1
+          # Ready once it has printed its ports, which it does after binding them and writing the hash file.
+          for _ in $(seq 1 100); do docker logs nish 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
           docker logs nish
+          docker logs nish 2>&1 | grep -q '^ports '
 
       - name: Chromium opens a session and echoes a datagram and a stream
         run: |
