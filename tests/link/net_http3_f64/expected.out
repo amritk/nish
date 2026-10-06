@@ -1,0 +1,114 @@
+PASS  the server's control stream: its type, then SETTINGS first
+PASS  its QPACK encoder stream: its type, and nothing at capacity 0
+PASS  its QPACK decoder stream likewise
+PASS  none of the three ends
+PASS  the client's SETTINGS arrived, its reserved identifier 0x21 kept, not refused
+PASS  and with no SETTINGS_MAX_FIELD_SECTION_SIZE, the client's limit is none
+PASS  the client's streams are its control, encoder and decoder
+PASS  Set Dynamic Table Capacity 0 on the client's encoder stream is accepted
+PASS  as is a Stream Cancellation on its decoder stream
+PASS  a GET of /hello: 200
+PASS  with the fields the program gave
+PASS  then its body in DATA, then the FIN
+PASS  the program saw the request, then its end
+PASS  a path it does not know: 404, HEADERS alone with the FIN
+PASS  both finished both ways: no request open
+PASS  and the connection is open
+PASS  the response: 200
+PASS  the 200,000 bytes come back whole and in order, then the FIN
+PASS  the program read every byte of the request
+PASS  never more than a body chunk, 16,384 bytes, at a time
+PASS  the response went in DATA frames of at most writeChunk
+PASS  held back by the send buffer and resumed: H3_WRITABLE came
+PASS  and the request ended whole: its content-length matched
+PASS  the client never sent past the credit it had: no error
+PASS  twelve GETs open at once, ended in reverse: twelve whole responses
+PASS  the program had every request before any ended
+PASS  two large responses at once, each whole
+PASS  and every request finished
+PASS  the program saw the request, its trailers, then its end
+PASS  the response: 200, its body
+PASS  then its trailers, which end it
+PASS  GOAWAY before the server's control stream is open: H3_AGAIN
+PASS  three requests held, then GOAWAY
+PASS  it names stream 12, the first the client has not opened: 07 01 0c
+PASS  with those three still open
+PASS  a request on stream 12 is refused both ways with H3_REQUEST_REJECTED
+PASS  one that arrived whole has only its response refused: nothing is left to stop
+PASS  before the program sees either
+PASS  the three in flight finish normally
+PASS  and with every response acknowledged, the connection is done
+PASS  a second GOAWAY
+PASS  never raises the ID
+PASS  MAX_PUSH_ID 5, then CANCEL_PUSH of push 3: no error
+PASS  the client's GOAWAY reaches the program, its push ID with it, and again
+PASS  and requests go on
+PASS  a request the client cancels mid-body reaches the program as H3_RESET with its code
+PASS  the server's half ends with the same code
+PASS  and no request is open
+PASS  RESET_STREAM alone: the program is told, and the server abandons its response with H3_REQUEST_CANCELLED
+PASS  STOP_SENDING alone: H3_RESET with its code, and QUIC's RESET_STREAM answering it
+PASS  every one of them finished
+PASS  and the connection lives
+PASS  no :path, an uppercase name, connection, transfer-encoding, a pseudo-header after a field, :protocol off, :status, a host that disagrees, a bad content-length, te: gzip, :method twice: each reset both ways with H3_MESSAGE_ERROR
+PASS  none reached the program
+PASS  and the connection carries on
+PASS  a body short of its content-length: the program gets the request, then H3_RESET with H3_MESSAGE_ERROR
+PASS  and the response is reset with it
+PASS  a body past it: H3_RESET as the DATA arrives
+PASS  reset both ways
+PASS  a stream that ends before HEADERS — empty, or after an unknown frame — is H3_REQUEST_INCOMPLETE
+PASS  unseen by the program
+PASS  and every one of them finished
+PASS  reserved and unknown frames before HEADERS, between DATA and at the end are skipped: the body comes back whole
+PASS  a unidirectional stream of an unknown type is asked to stop with H3_STREAM_CREATION_ERROR
+PASS  one that ends before its type, or inside it, is let go (§6.2)
+PASS  and the connection carries on
+PASS  a HEADERS frame past the limit: skipped, answered 431 with the FIN
+PASS  and the rest of the request asked to stop, with H3_NO_ERROR (§4.1.2)
+PASS  a section that fits its frame but not the limit once decoded: 431 too
+PASS  the program saw neither
+PASS  trailers past the limit: the request was the program's, so H3_RESET with H3_EXCESSIVE_LOAD
+PASS  and trailers past it once decoded
+PASS  trailers with a pseudo-header: H3_MESSAGE_ERROR
+PASS  and the connection carries on
+PASS  the client's limit is read from its SETTINGS
+PASS  a response head past it is H3_TOO_LARGE: :status, content-type and server count 138
+PASS  one within it goes: :status alone counts 42
+PASS  and arrives
+PASS  a status below 200
+PASS  or past 599: H3_INVALID
+PASS  an uppercase field name
+PASS  a connection-specific field
+PASS  more names than values
+PASS  DATA before the head
+PASS  trailers before the head
+PASS  a stream that is no request of the client's
+PASS  the server's own control stream
+PASS  the client's control stream
+PASS  a head
+PASS  and a second: H3_INVALID
+PASS  writing until the buffer is full: a write takes less than it was given
+PASS  then nothing: H3_AGAIN
+PASS  the FIN inside an unfinished DATA frame: H3_INVALID
+PASS  so are trailers there
+PASS  acknowledgements free room, and H3_WRITABLE names the stream
+PASS  the rest goes, with the FIN: 32,768 bytes in order
+PASS  a write after the FIN
+PASS  reset
+PASS  the client sees RESET_STREAM with the code
+PASS  and the stream takes nothing more
+PASS  trailers on a stream with no room wait
+PASS  so do trailers on one with none at all
+PASS  each arrives after its body, the padding the server wrote to be told of room skipped as an unknown frame
+PASS  every request finished
+PASS  connected
+PASS  200 requests on a warm connection — HEADERS and DATA in, a 200 with a body out, ACKs and credit — keep no arena memory
+PASS  and every one was answered
+PASS  each finished both ways
+PASS  six connections, one after another, through one slot
+PASS  each served its ten requests
+PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
+PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
+PASS  and from the second on, each handshake keeps exactly as much: nothing in the slot grows
+http3: 113 passed, 0 failed, 0 skipped

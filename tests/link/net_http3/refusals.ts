@@ -30,6 +30,7 @@ import {
   h3Logged,
   h3Pattern,
   h3Ready,
+  h3Saw,
   h3Section,
   h3Varint,
 } from "./peer";
@@ -110,7 +111,7 @@ const lengths = (t: Suite): void => {
   p.send(n64(12), greased(), true);
   p.settle();
   t.ok("a stream that ends before HEADERS — empty, or after an unknown frame — is H3_REQUEST_INCOMPLETE", p.stream(n64(8)).reset === H3_REQUEST_INCOMPLETE && p.stream(n64(12)).reset === H3_REQUEST_INCOMPLETE);
-  t.ok("unseen by the program", p.log.indexOf("request 8 GET /hello") < n32(0) && toI32(p.log.length) === n32(4));
+  t.ok("unseen by the program", !h3Saw(p, "request 8 GET /hello") && toI32(p.log.length) === n32(4));
   t.eqI32("and every one of them finished", p.h3.live, n32(0));
 };
 

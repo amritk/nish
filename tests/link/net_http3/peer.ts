@@ -775,6 +775,9 @@ export const h3Ready = (): H3Peer => {
   return p;
 };
 
+/** Whether the server's application logged `line`. */
+export const h3Saw = (p: H3Peer, line: string): boolean => toI32(p.log.indexOf(line)) >= 0;
+
 /** Checks the client got `want` events in the server's log, in order, and says which was missing. */
 export const h3Logged = (t: Suite, name: string, p: H3Peer, want: string[]): boolean => {
   let at: i32 = 0;

@@ -20,6 +20,7 @@ import {
   h3Pattern,
   h3Fresh,
   h3Ready,
+  h3Saw,
   h3Section,
   h3Varint,
 } from "./peer";
@@ -85,7 +86,7 @@ const post = (t: Suite): void => {
   t.ok("never more than a body chunk, 16,384 bytes, at a time", s !== null && s.largest > n32(0) && s.largest <= n32(16384));
   t.ok("the response went in DATA frames of at most writeChunk", r.largest <= n32(16384) && r.frames >= n32(13));
   t.ok("held back by the send buffer and resumed: H3_WRITABLE came", p.writables > n32(0));
-  t.ok("and the request ended whole: its content-length matched", p.log.indexOf("end 0") >= n32(0));
+  t.ok("and the request ended whole: its content-length matched", h3Saw(p, "end 0"));
   t.eqI64("the client never sent past the credit it had: no error", p.closeCode, n64(-1));
 };
 
@@ -153,7 +154,7 @@ const goaway = (t: Suite): void => {
   p.get(n64(16), "/hello");
   p.settle();
   t.ok("one that arrived whole has only its response refused: nothing is left to stop", p.stream(n64(16)).reset === H3_REQUEST_REJECTED && p.stream(n64(16)).stop === n64(-1));
-  t.ok("before the program sees either", p.log.indexOf("request 12 GET /hello") < n32(0) && p.log.indexOf("request 16 GET /hello") < n32(0) && p.h3.rejected === n32(2));
+  t.ok("before the program sees either", !h3Saw(p, "request 12 GET /hello") && !h3Saw(p, "request 16 GET /hello") && p.h3.rejected === n32(2));
   p.release();
   p.settle();
   let finished: boolean = true;
@@ -197,13 +198,13 @@ const cancelled = (t: Suite): void => {
   p.settle();
   p.cancelOnly(n64(4), H3_REQUEST_CANCELLED);
   p.settle();
-  t.ok("RESET_STREAM alone: the program is told, and the server abandons its response with H3_REQUEST_CANCELLED", p.log.indexOf("reset 4 0x10c by the client") >= n32(0) && p.stream(n64(4)).reset === H3_REQUEST_CANCELLED); 
+  t.ok("RESET_STREAM alone: the program is told, and the server abandons its response with H3_REQUEST_CANCELLED", h3Saw(p, "reset 4 0x10c by the client") && p.stream(n64(4)).reset === H3_REQUEST_CANCELLED); 
   // STOP_SENDING alone: the client wants no response, and the program is told.
   p.get(n64(8), "/hold");
   p.settle();
   p.stopOnly(n64(8), H3_REQUEST_CANCELLED);
   p.settle();
-  t.ok("STOP_SENDING alone: H3_RESET with its code, and QUIC's RESET_STREAM answering it", p.log.indexOf("reset 8 0x10c by the client") >= n32(0) && p.stream(n64(8)).reset === H3_REQUEST_CANCELLED);
+  t.ok("STOP_SENDING alone: H3_RESET with its code, and QUIC's RESET_STREAM answering it", h3Saw(p, "reset 8 0x10c by the client") && p.stream(n64(8)).reset === H3_REQUEST_CANCELLED);
   p.settle();
   t.eqI32("every one of them finished", p.h3.live, n32(0));
   t.eqI64("and the connection lives", p.closeCode, n64(-1));
