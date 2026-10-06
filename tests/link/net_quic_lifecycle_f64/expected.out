@@ -67,7 +67,8 @@ PASS  and a quiet minute fills the budget again, no further
 PASS  so many have gone in all
 PASS  a connection that has read nothing has no deadline
 PASS  connected at 1000 ms
-PASS  with only the server's 30 s advertised, the deadline is 30 s after the last packet
+PASS  with only the server's 30 s advertised, the idle deadline is 30 s after the last packet
+PASS  with the server's 1-RTT packet unacknowledged, deadline() is the earlier probe timeout (RFC 9002 §6.2.1)
 PASS  a millisecond before it, the connection is alive
 PASS  at it, the connection has timed out
 PASS  silently: nothing goes out, not even a CONNECTION_CLOSE (§10.1)
@@ -75,7 +76,8 @@ PASS  its keys are discarded and wiped
 PASS  and nothing is timed any more
 PASS  a packet after that is ignored
 PASS  the client's 5 s, smaller, wins (§10.1)
-PASS  a 1 s timeout is raised to three probe timeouts
+PASS  a 1 s timeout is raised to three probe timeouts (with no RTT sample, 3 × 1022 ms)
+PASS  which is never under QUIC_CONN_IDLE_FLOOR
 PASS  with the server's 0, the client's 8 s alone
 PASS  with neither advertising one there is no timeout at all
 PASS  a packet received restarts the timer
@@ -115,4 +117,4 @@ PASS  under ChaCha20-Poly1305 a client's update is followed too
 PASS  all 64 of the client's updates are followed
 PASS  each, its packet read and the next keys derived, leaves at most 12 KB in the arena, a ceiling over what QUIC-4 records
 PASS  the 65th is KEY_UPDATE_ERROR, deriving no key
-quic lifecycle: 117 passed, 0 failed, 0 skipped
+quic lifecycle: 119 passed, 0 failed, 0 skipped

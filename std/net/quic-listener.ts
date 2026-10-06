@@ -51,6 +51,18 @@
  * `QUIC_LISTENER_RESET_INTERVAL` milliseconds. Each reset's other bytes are
  * unpredictable, from the listener's own generator.
  *
+ * **Pacing** (RFC 9002 §7.7) is the carrier's send loop, so it is here
+ * beside the rest of what the carrier calls: `quicListenerTakePaced` takes a
+ * connection's next datagram only when its pacer has the credit for it, and
+ * `quicListenerPaceTime` says when it will. The pacer earns 5/4 of the
+ * congestion window per smoothed RTT and lets a burst of at most the initial
+ * window go at once, so a flight leaves spread over the round trip instead
+ * of in one burst that overruns a queue on the path.
+ *
+ *     let out: u8[] | null = quicListenerTakePaced(conn, now);
+ *     while (out !== null) { … send it … ; out = quicListenerTakePaced(conn, now); }
+ *     … and wake at the earlier of conn.deadline() and quicListenerPaceTime(conn, now)
+ *
  * **Sans-IO and deterministic.** The caller gives the time, the client's
  * address and, once, `QUIC_LISTENER_ENTROPY_SIZE` random bytes: every
  * unpredictable byte the listener sends (a Retry's connection ID and unused
@@ -93,6 +105,7 @@ import {
   QUIC_CONN_CID_LENGTH,
   QUIC_CONN_DATAGRAM_SIZE,
   QUIC_CONN_STATIC_KEY_SIZE,
+  QuicConnection,
   QuicServerConfig,
   quicStatelessResetToken,
 } from "nish/net/quic"
@@ -513,3 +526,27 @@ export class QuicListener {
     return answer
   }
 }
+
+/**
+ * The next datagram `conn` sends at `now`, as `takeDatagram` answers it,
+ * but only when the connection's pacer has the credit for a full datagram
+ * (RFC 9002 §7.7); `null` when it has not, or when nothing is due. The
+ * datagram is charged to the pacer at its real size.
+ */
+export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | null => {
+  if (conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE) > 0) {
+    return null
+  }
+  const out: u8[] | null = conn.takeDatagram(now)
+  if (out !== null) {
+    conn.recovery.onPaced(now, toI32(out.length))
+  }
+  return out
+}
+
+/**
+ * When `quicListenerTakePaced` next lets `conn` send a full datagram, in the
+ * caller's milliseconds: `now` when it may already.
+ */
+export const quicListenerPaceTime = (conn: QuicConnection, now: i64): i64 =>
+  now + conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE)
