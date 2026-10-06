@@ -59,7 +59,12 @@ export const timerChecks = (t: Suite): void => {
 
   const p: LcPair = lcIdlePair(n64(30000), n64(0));
   t.eqI32("connected at 1000 ms", p.conn.state, QUIC_STATE_CONNECTED);
-  t.eqI64("with only the server's 30 s advertised, the deadline is 30 s after the last packet", p.conn.deadline(), QC_T0 + n64(30000));
+  t.eqI64("with only the server's 30 s advertised, the idle deadline is 30 s after the last packet", p.conn.idleDeadline(), QC_T0 + n64(30000));
+  t.eqI64(
+    "with the server's 1-RTT packet unacknowledged, deadline() is the earlier probe timeout (RFC 9002 §6.2.1)",
+    p.conn.deadline(),
+    p.conn.recovery.ptoTime()
+  );
   const writeKeys: QuicKeys | null = p.conn.application.writeKeys;
   p.conn.handleTimer(QC_T0 + n64(29999));
   t.eqI32("a millisecond before it, the connection is alive", p.conn.state, QUIC_STATE_CONNECTED);
@@ -71,31 +76,33 @@ export const timerChecks = (t: Suite): void => {
   p.conn.receive(qcShort(p.c, qcStream(n64(0), n64(0), "late", true)), QC_T0 + n64(30001));
   t.ok("a packet after that is ignored", p.conn.readStream() === null && p.conn.state === QUIC_STATE_TIMED_OUT);
 
-  t.eqI64("the client's 5 s, smaller, wins (§10.1)", lcIdlePair(n64(30000), n64(5000)).conn.deadline(), QC_T0 + n64(5000));
-  t.eqI64("a 1 s timeout is raised to three probe timeouts", lcIdlePair(n64(30000), n64(1000)).conn.deadline(), QC_T0 + QUIC_CONN_IDLE_FLOOR);
-  t.eqI64("with the server's 0, the client's 8 s alone", lcIdlePair(n64(0), n64(8000)).conn.deadline(), QC_T0 + n64(8000));
+  t.eqI64("the client's 5 s, smaller, wins (§10.1)", lcIdlePair(n64(30000), n64(5000)).conn.idleDeadline(), QC_T0 + n64(5000));
+  const short: LcPair = lcIdlePair(n64(30000), n64(1000));
+  t.eqI64("a 1 s timeout is raised to three probe timeouts (with no RTT sample, 3 × 1022 ms)", short.conn.idleDeadline(), QC_T0 + short.conn.recovery.probeTimeout() * n64(3));
+  t.ok("which is never under QUIC_CONN_IDLE_FLOOR", short.conn.idleDeadline() - QC_T0 >= QUIC_CONN_IDLE_FLOOR);
+  t.eqI64("with the server's 0, the client's 8 s alone", lcIdlePair(n64(0), n64(8000)).conn.idleDeadline(), QC_T0 + n64(8000));
   const forever: LcPair = lcIdlePair(n64(0), n64(0));
   forever.conn.handleTimer(QC_T0 + n64(1000000000));
-  t.ok("with neither advertising one there is no timeout at all", forever.conn.deadline() === n64(-1) && forever.conn.state === QUIC_STATE_CONNECTED);
+  t.ok("with neither advertising one there is no timeout at all", forever.conn.idleDeadline() === n64(-1) && forever.conn.state === QUIC_STATE_CONNECTED);
 
   const r: LcPair = lcIdlePair(n64(30000), n64(0));
   r.c.now = QC_T0 + n64(20000);
   qcExchange(r.conn, r.c, lcPing(r.c));
-  t.eqI64("a packet received restarts the timer", r.conn.deadline(), QC_T0 + n64(50000));
+  t.eqI64("a packet received restarts the timer", r.conn.idleDeadline(), QC_T0 + n64(50000));
   r.c.now = QC_T0 + n64(500);
   qcExchange(r.conn, r.c, lcPing(r.c));
-  t.eqI64("time handed in out of order does not run the clock backwards", r.conn.deadline(), QC_T0 + n64(50000));
+  t.eqI64("time handed in out of order does not run the clock backwards", r.conn.idleDeadline(), QC_T0 + n64(50000));
 
   const s: LcPair = lcIdlePair(n64(30000), n64(0));
   s.c.now = QC_T0 + n64(1000);
   qcExchange(s.conn, s.c, qcShort(s.c, qcStream(n64(0), n64(0), "ping", false)));
-  t.eqI64("the stream data restarts it, and the bare ACK the server answers with does not", s.conn.deadline(), QC_T0 + n64(31000));
+  t.eqI64("the stream data restarts it, and the bare ACK the server answers with does not", s.conn.idleDeadline(), QC_T0 + n64(31000));
   s.conn.writeStream(n64(0), bytesOf("pong"), false);
   s.conn.takeDatagram(QC_T0 + n64(4000));
-  t.eqI64("the server's first ack-eliciting packet since restarts it", s.conn.deadline(), QC_T0 + n64(34000));
+  t.eqI64("the server's first ack-eliciting packet since restarts it", s.conn.idleDeadline(), QC_T0 + n64(34000));
   s.conn.writeStream(n64(0), bytesOf("pong"), false);
   s.conn.takeDatagram(QC_T0 + n64(7000));
-  t.eqI64("its second does not (§10.1)", s.conn.deadline(), QC_T0 + n64(34000));
+  t.eqI64("its second does not (§10.1)", s.conn.idleDeadline(), QC_T0 + n64(34000));
 
   const late: LcPair = lcIdlePair(n64(30000), n64(0));
   late.conn.receive(qcShort(late.c, qcStream(n64(0), n64(0), "late", true)), QC_T0 + n64(30000));

@@ -1,0 +1,147 @@
+PASS  before a sample: smoothed_rtt is kInitialRtt, 333 ms, and rttvar half of it (§6.2.2)
+PASS  the window starts at kInitialWindow, 12000 bytes (§7.2)
+PASS  ssthresh starts unbounded
+PASS  nothing in flight: no timer
+PASS  a packet is recorded in slot 0
+PASS  which puts 1200 bytes in flight
+PASS  an ACK of it at 100 ms acknowledges one packet
+PASS  the first sample sets min_rtt and smoothed_rtt to it and rttvar to half, ignoring the ACK delay
+PASS  and empties the flight
+PASS  a 160 ms sample with a 10 ms ACK delay: adjusted 150, rttvar 50, smoothed 106
+PASS  an 80 ms sample lowers min_rtt, and a delay that would take it below min_rtt is not taken off
+PASS  the probe timeout: 102 + 4 × 44 + max_ack_delay 25 = 303 ms (§6.2.1)
+PASS  the loss delay: 9/8 of max(80, 102) = 114 ms (§6.1.2)
+PASS  acknowledgements while the window sat mostly idle do not grow it (§7.8)
+PASS  before the handshake is confirmed the ACK delay is not capped at max_ack_delay
+PASS  and the probe timeout has no max_ack_delay in it: 105 + 188
+PASS  an Initial ACK's delay is ignored (§5.3)
+PASS  an ACK whose largest is a packet never recorded (an ACK-only one) still acknowledges the rest
+PASS  but takes no RTT sample (§5.1)
+PASS  and moves the largest acknowledged to it
+PASS  five packets in flight
+PASS  an ACK of 4 alone loses 0 and 1, three or more below it (kPacketThreshold)
+PASS  2 and 3 are not lost yet: loss_time is their send time plus the loss delay, 100 + 55
+PASS  and it is the timer
+PASS  one congestion event
+PASS  halves the window: ssthresh 6000 (B.6)
+PASS  the window is ssthresh
+PASS  recovery started at the ACK
+PASS  what is still in flight is 2 and 3
+PASS  a millisecond early the timer does nothing
+PASS  at loss_time it declares the rest lost by time
+PASS  2 and 3, in the Application Data space
+PASS  sent before recovery started, they are no second congestion event (§7.3.2)
+PASS  and packets sent before the first RTT sample are no persistent congestion (§7.6.2)
+PASS  nothing is left in flight
+PASS  an ACK of 1 before 0 loses nothing: 0 is only one below
+PASS  but sets loss_time, 0 + 9/8 × 49
+PASS  the ACK of 0 that the network delayed arrives first
+PASS  so there is no loss, no congestion event and no timer
+PASS  an ACK of what was acknowledged already acknowledges nothing
+PASS  one packet in flight at 1000 ms: the probe timeout is 1000 + 997 + 25
+PASS  a millisecond early nothing fires
+PASS  at it the probe timeout fires
+PASS  in the Application Data space, with pto_count 1
+PASS  the next one is twice as far from the packet: 1000 + 2 × 1022
+PASS  and then four times
+PASS  a probe timeout declares nothing lost
+PASS  the backoff stops at QUIC_RECOVERY_MAX_BACKOFF doublings
+PASS  so the deadline stays in range: 1000 + 1022 × 2^16
+PASS  an ACK resets the backoff
+PASS  before the handshake is confirmed, Application Data has no probe timeout (A.8)
+PASS  a Handshake packet has one, without max_ack_delay: 10 + 997
+PASS  an amplification-blocked server has none (§6.2.2.1)
+PASS  so its timer fires nothing
+PASS  the earliest space wins: the Initial packet sent at 5 ms
+PASS  and the probe goes in the Initial space
+PASS  discarding a space takes its packets out of flight and resets the backoff (A.11)
+PASS  with only Application Data in flight before confirmation, no timer is left
+PASS  ten full datagrams fill the initial window
+PASS  slow start: each acknowledged byte adds one to the window (B.5)
+PASS  and there is room again
+PASS  an ACK of 13 to 29 loses 10, 11 and 12: the threshold counts from the largest acknowledged, 29
+PASS  ssthresh and the window become half of 24000
+PASS  packets sent before the recovery period started do not grow the window
+PASS  nothing more is lost, and there is no second congestion event
+PASS  30 to 34, sent in recovery's wake, grow it by 1200 × 1200 / window each (B.5)
+PASS  halving 3000 stops at kMinimumWindow, 2400 bytes
+PASS  an ACK of 6 loses 1 to 5, by packet and by time threshold
+PASS  spanning 186 ms, past three probe timeouts: persistent congestion (§7.6)
+PASS  which ends the recovery period
+PASS  and collapses the window to the minimum, from which the ACK's own packet grows it in slow start
+PASS  the same losses with 2 acknowledged between them are no persistent congestion
+PASS  a full datagram may go at once
+PASS  after a burst of the initial window the next waits 27 ms
+PASS  27 ms later it may go
+PASS  a long idle refills the budget only up to the initial window
+PASS  time handed in backwards earns nothing
+PASS  and restarts the pacer's clock there
+PASS  a space index below 0 records nothing
+PASS  nor one past Application Data
+PASS  nor a packet of no bytes
+PASS  nor a packet number past 2^62 - 1
+PASS  nor a packet number not above the last one recorded
+PASS  an ACK for no space is refused
+PASS  so is an ACK with no range
+PASS  and one whose ranges are not there
+PASS  a range count past the array reads only what is there
+PASS  there is no space 3
+PASS  results past the count are -1
+PASS  nothing in flight: nothing to evict
+PASS  and no space 9 to evict from
+PASS  the Initial space keeps 16 packets in flight
+PASS  and is then full
+PASS  so a 17th is refused
+PASS  an ACK of the oldest frees its slot for the next
+PASS  evicting gives up the oldest still in flight, packet 1
+PASS  out of flight, with no congestion event
+PASS  the server's first flight goes out, and the network loses it
+PASS  with no RTT sample, its probe timeout is 333 + 4 × 166 ms after it
+PASS  there is room under the amplification limit for a probe
+PASS  at it the probe timeout fires
+PASS  and a probe goes out
+PASS  its Initial carries the ServerHello again, from offset 0
+PASS  the client completes the handshake from what was sent again
+PASS  its ACK of the probe gave the first RTT sample, 0 ms on this clock
+PASS  and reset the backoff
+PASS  four chunks go in four packets
+PASS  an ACK of the last three loses the first, three below the largest
+PASS  the next packet carries its bytes again, at their offset
+PASS  the stream keeps its sent bytes while a packet in flight carries them
+PASS  once every one is acknowledged it lets them go
+PASS  an ACK of the later packet alone sets a loss timer 45 ms after the earlier was sent
+PASS  RTT: latest 40, smoothed 40, rttvar 20
+PASS  at it the earlier packet is lost
+PASS  and its bytes go again
+PASS  the earlier packet's ACK arriving inside the loss delay is reordering, not loss
+PASS  two samples: latest 60, smoothed 41, rttvar 17, min 40
+PASS  the probe timeout is 41 + 4 × 17 + the client's max_ack_delay of 25
+PASS  the client's max_ack_delay came from its transport parameters
+PASS  an ACK Delay too large to scale counts as max_ack_delay
+PASS  an ack_delay_exponent past 20 is read as the default, 3
+PASS  the probe timeout is 1022 ms after the last ack-eliciting packet
+PASS  the probe carries the stream data again, from its start
+PASS  and HANDSHAKE_DONE and the NEW_CONNECTION_IDs the lost packets carried
+PASS  the next is twice the period after the probe
+PASS  then four times
+PASS  until the idle timeout ends the connection
+PASS  after a handful of probes: the backoff keeps a black hole cheap
+PASS  a lost RETIRE_CONNECTION_ID goes again
+PASS  once, even when two packets in flight carried it
+PASS  after STOP_SENDING the stream's lost data is not sent again
+PASS  so the probe is a PING
+PASS  a lost PATH_RESPONSE is not sent again (RFC 9000 §13.3): the probe is a PING
+PASS  a lost NEW_CONNECTION_ID for an ID the client retired is not sent again; its replacement is
+PASS  a 2400-byte window lets two datagrams go, and holds the rest
+PASS  which stays queued
+PASS  a PING from the client is still acknowledged: an ACK is not held back
+PASS  the client's ACK opens the window, and the next data goes
+PASS  128 small packets fill the Application Data space's record
+PASS  the next waits, though the window has room
+PASS  a probe timeout gives up the oldest record for the probe, which goes out
+PASS  with nothing due the pacer lets nothing out
+PASS  ten full datagrams go at once: the initial window's burst
+PASS  the next waits 4 ms
+PASS  not a millisecond less
+PASS  and then goes
+quic recovery: 146 passed, 0 failed, 0 skipped
