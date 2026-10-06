@@ -94,6 +94,7 @@ PASS  no refused write appended anything
 PASS  quicPushNewConnectionId writes one
 PASS  as sequence, Retire Prior To, the ID's length and bytes, and the token
 PASS  it reads back
+PASS  with the ID and the token left in the payload, as windows
 PASS  an empty connection ID is refused
 PASS  so is one of 21 bytes
 PASS  so is a 15-byte token
@@ -145,4 +146,4 @@ PASS  a 0-RTT packet carries STREAM but not ACK, CRYPTO or HANDSHAKE_DONE
 PASS  a Retry carries no frames
 PASS  ACK, PADDING and both closes do not elicit an acknowledgement
 PASS  PING and STREAM do
-quic frames: 147 passed, 0 failed, 0 skipped
+quic frames: 148 passed, 0 failed, 0 skipped

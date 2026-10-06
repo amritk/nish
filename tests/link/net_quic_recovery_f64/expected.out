@@ -108,7 +108,7 @@ PASS  four chunks go in four packets
 PASS  an ACK of the last three loses the first, three below the largest
 PASS  the next packet carries its bytes again, at their offset
 PASS  the stream keeps its sent bytes while a packet in flight carries them
-PASS  once every one is acknowledged it lets them go
+PASS  once every one is acknowledged it lets them go, and their room in the buffer
 PASS  an ACK of the later packet alone sets a loss timer 45 ms after the earlier was sent
 PASS  RTT: latest 40, smoothed 40, rttvar 20
 PASS  at it the earlier packet is lost
@@ -129,7 +129,7 @@ PASS  after a handful of probes: the backoff keeps a black hole cheap
 PASS  a lost RETIRE_CONNECTION_ID goes again
 PASS  once, even when two packets in flight carried it
 PASS  after STOP_SENDING the stream's lost data is not sent again
-PASS  so the probe is a PING
+PASS  the probe carries the RESET_STREAM that answers STOP_SENDING (RFC 9000 §3.5), sent until acknowledged
 PASS  a lost PATH_RESPONSE is not sent again (RFC 9000 §13.3): the probe is a PING
 PASS  a lost NEW_CONNECTION_ID for an ID the client retired is not sent again; its replacement is
 PASS  a 2400-byte window lets two datagrams go, and holds the rest

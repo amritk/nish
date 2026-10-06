@@ -262,6 +262,13 @@ export class QuicSentPackets {
     this.lastAckEliciting = -1
     this.clearResults()
   }
+
+  /** Empties the ring and forgets every number, for a connection slot reused for another peer. */
+  reset(): void {
+    this.clear()
+    this.largestAcked = -1
+    this.lastPn = -1
+  }
 }
 
 /** Whether `pn` falls in one of the first `count` `[smallest, largest]` pairs of `ranges`. */
@@ -325,12 +332,34 @@ export class QuicRecovery {
       new QuicSentPackets(QUIC_RECOVERY_HANDSHAKE_CAPACITY),
       new QuicSentPackets(QUIC_RECOVERY_APPLICATION_CAPACITY),
     ]
+    this.reset()
+  }
+
+  /**
+   * Puts everything back as a new connection has it: every space empty, the
+   * RTT estimate and the window at their initial values. A connection slot
+   * reused for another peer calls it; the rings are kept.
+   */
+  reset(): void {
+    for (const sp of this.spaces) {
+      sp.reset()
+    }
+    this.latestRtt = 0
     this.smoothedRtt = QUIC_RECOVERY_INITIAL_RTT
     this.rttVar = QUIC_RECOVERY_INITIAL_RTT / 2
+    this.minRtt = 0
+    this.firstSampleTime = -1
     this.maxAckDelay = QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY
     this.congestionWindow = QUIC_RECOVERY_INITIAL_WINDOW
-    this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
     this.ssthresh = QUIC_MAX_VARINT
+    this.recoveryStart = -1
+    this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
+    this.pacerTime = -1
+    this.ptoCount = 0
+    this.timeoutSpace = -1
+    this.congestionEvents = 0
+    this.persistentCongestions = 0
+    this.handshakeConfirmed = false
   }
 
   /** Space `space`'s packets, or `null` for an index that names no space. */

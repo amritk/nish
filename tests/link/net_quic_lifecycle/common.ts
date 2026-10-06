@@ -129,7 +129,15 @@ export const lcIssuedIds = (payloads: u8[][]): LcIssuedId[] => {
         break;
       }
       if (frame.type === QUIC_FRAME_NEW_CONNECTION_ID) {
-        out.push(new LcIssuedId(frame.connectionId, frame.resetToken));
+        const cid: u8[] = [];
+        const token: u8[] = [];
+        for (let k: i32 = 0; k < frame.connectionIdLength; k++) {
+          cid.push(payload[frame.connectionIdStart + k]);
+        }
+        for (let k: i32 = 0; k < 16; k++) {
+          token.push(payload[frame.resetTokenStart + k]);
+        }
+        out.push(new LcIssuedId(cid, token));
       }
       at = frame.end;
     }

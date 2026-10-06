@@ -92,7 +92,7 @@ PASS  an application close from the client drains too, keeping its code
 PASS  and the application cannot close it again
 PASS  release() discards the 1-RTT keys
 PASS  wiping the key bytes
-PASS  and both sides' stateless reset tokens, four issued and the client's one beside its first ID
+PASS  and every slot's stateless reset token: the four the server issued and the client's one
 PASS  and TLS's expected client Finished and the encoded transport parameters, which carry a token
 PASS  and the connection sends nothing more
 PASS  a first Initial in a datagram under 1200 bytes

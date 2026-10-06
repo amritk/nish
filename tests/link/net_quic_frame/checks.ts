@@ -296,7 +296,11 @@ const otherChecks = (t: Suite): void => {
   const f: QuicFrame = frameOf(toHex(ncid));
   t.ok(
     "it reads back",
-    f.type === QUIC_FRAME_NEW_CONNECTION_ID && f.value === n64(3) && f.retirePriorTo === n64(1) && toHex(f.connectionId) === "0102030405060708" && toHex(f.resetToken) === toHex(token)
+    f.type === QUIC_FRAME_NEW_CONNECTION_ID && f.value === n64(3) && f.retirePriorTo === n64(1) && toHex(ncid).substring(8, 24) === "0102030405060708"
+  );
+  t.ok(
+    "with the ID and the token left in the payload, as windows",
+    f.connectionIdStart === n32(4) && f.connectionIdLength === n32(8) && f.resetTokenStart === n32(12) && toHex(ncid).substring(24) === toHex(token)
   );
   const refused: u8[] = [];
   const none: u8[] = [];
