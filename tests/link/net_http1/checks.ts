@@ -29,10 +29,12 @@ import {
   Http1Parser,
   HTTP1_NO_ROOM,
   HTTP1_REFUSED,
+  http1BytesAre,
   http1Chunk,
   http1LastChunk,
   http1ResponseHead,
   http1WriteChunk,
+  http1WriteLastChunk,
   http1WriteResponseHead,
 } from "nish/net/http1";
 
@@ -819,6 +821,14 @@ export const http1Checks = (): i32 => {
   const tight: u8[] = new Array<u8>(15);
   t.eqI32("a chunk that just fits is written", http1WriteChunk(tight, zero, digits, zero, ten), toI32(15));
   t.eqI32("one byte further on it is HTTP1_NO_ROOM", http1WriteChunk(tight, one, digits, zero, ten), HTTP1_NO_ROOM);
+
+  const lastEnd: i32 = http1WriteLastChunk(out, toI32(3));
+  t.eqStr("http1WriteLastChunk writes the last chunk at its offset", textOf(out, toI32(3), lastEnd - 3), "0\r\n\r\n");
+  t.eqI32("and is HTTP1_NO_ROOM four bytes from the end", http1WriteLastChunk(tight, toI32(11)), HTTP1_NO_ROOM);
+  t.ok(
+    "http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter",
+    http1BytesAre(bytesOf("Content-LENGTH"), "content-length") && !http1BytesAre(bytesOf("content-lengthx"), "content-length") && !http1BytesAre(bytesOf("content"), "content-length")
+  );
 
   return t.done();
 };

@@ -193,4 +193,7 @@ PASS  http1WriteChunk writes the chunk at its offset
 PASS  an empty chunk writes nothing
 PASS  a chunk that just fits is written
 PASS  one byte further on it is HTTP1_NO_ROOM
-http1: 195 passed, 0 failed, 0 skipped
+PASS  http1WriteLastChunk writes the last chunk at its offset
+PASS  and is HTTP1_NO_ROOM four bytes from the end
+PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
+http1: 198 passed, 0 failed, 0 skipped
