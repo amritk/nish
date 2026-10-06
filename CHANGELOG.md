@@ -26,6 +26,85 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-06
+
+### Breaking changes
+
+- checker: Add `Secret<T>`, key material the checker keeps in and wipes ([#418](https://github.com/amritk/nish/pull/418))
+- codegen: Make signed integer overflow a checked panic by default ([#426](https://github.com/amritk/nish/pull/426))
+
+### Added
+
+- std: HKDF-Expand-Label for TLS 1.3 and QUIC ([#398](https://github.com/amritk/nish/pull/398))
+- runtime: A secure-wipe builtin the optimiser cannot drop ([#417](https://github.com/amritk/nish/pull/417))
+- runtime: Nish:net tcpConnect — the client half of TCP ([#411](https://github.com/amritk/nish/pull/411))
+- checker: Add using a = arena(), a checked arena bracket ([#420](https://github.com/amritk/nish/pull/420))
+- cli: Carry a machine-applicable fix on a diagnostic, and apply it with nish --fix ([#421](https://github.com/amritk/nish/pull/421))
+- checker: Report the capabilities each function, module and package can reach ([#423](https://github.com/amritk/nish/pull/423))
+- std: Nish/net/tls — the TLS 1.3 server handshake, reproducing RFC 8448 §3 ([#407](https://github.com/amritk/nish/pull/407))
+- checker: Add nish:unsafe and scope the unsafe flags to the entry package ([#422](https://github.com/amritk/nish/pull/422))
+- cli: Builtins for the owner checks, and a cryptographic run-cache name (CLI-8) ([#425](https://github.com/amritk/nish/pull/425))
+- cli: Fix truthiness, String(n), Map.get and call-site type arguments mechanically ([#431](https://github.com/amritk/nish/pull/431))
+- std: Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1) ([#404](https://github.com/amritk/nish/pull/404))
+- cli: Fix export default, export lists, type-only imports and fs imports mechanically ([#429](https://github.com/amritk/nish/pull/429))
+- std: Nish/net/hpack — HPACK with Huffman (WP34 H2, first part) ([#406](https://github.com/amritk/nish/pull/406))
+- checker: Record every panic site with its kind, and --emit-panics ([#424](https://github.com/amritk/nish/pull/424))
+- checker: Deprecate Arena.release and Arena.reset in favour of using a = arena() ([#428](https://github.com/amritk/nish/pull/428))
+- std: Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1) ([#399](https://github.com/amritk/nish/pull/399))
+- std: Nish/net/tls records over TCP (WP34 T2) ([#437](https://github.com/amritk/nish/pull/437))
+- std: Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part) ([#441](https://github.com/amritk/nish/pull/441))
+- std: Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part) ([#444](https://github.com/amritk/nish/pull/444))
+- checker: --deny-panics and noPanic refuse every remaining panic site ([#443](https://github.com/amritk/nish/pull/443))
+- checker: Let a nish:unsafe import opt uncheckedGet and uncheckedSet into the no-panic scope ([#455](https://github.com/amritk/nish/pull/455))
+- checker: Refuse a program that reaches a capability its policy does not grant (WP36) ([#452](https://github.com/amritk/nish/pull/452))
+- cli: Migrate --unchecked-indexing to uncheckedGet and uncheckedSet with nish --fix ([#459](https://github.com/amritk/nish/pull/459))
+- cli: Fix an index not proven in range with a panic guard ([#460](https://github.com/amritk/nish/pull/460))
+- net: HTTP/2 frames, streams and flow control ([#465](https://github.com/amritk/nish/pull/465))
+- net: QUIC loss recovery, PTO, NewReno and pacing ([#466](https://github.com/amritk/nish/pull/466))
+- net: QPACK with the static table and dynamic capacity 0 ([#464](https://github.com/amritk/nish/pull/464))
+- net: The HTTP/1.1 server on nish:net ([#468](https://github.com/amritk/nish/pull/468))
+- net: QUIC streams, DATAGRAM frames and GSO batching ([#469](https://github.com/amritk/nish/pull/469))
+- net: HTTP/3 on QUIC streams ([#470](https://github.com/amritk/nish/pull/470))
+- net: WebTransport over HTTP/3 ([#471](https://github.com/amritk/nish/pull/471))
+
+### Fixed
+
+- runtime: Build the wasi profile against a libc without realpath ([#396](https://github.com/amritk/nish/pull/396))
+- checker: Type an object literal in an `I | null` context as the struct, not the union ([#401](https://github.com/amritk/nish/pull/401))
+- checker: Prove a literal receiver's slice in range so NL8002 stays quiet ([#400](https://github.com/amritk/nish/pull/400))
+- runtime: Remaining runtime hardening (RT-10..RT-13) and shim O_NOFOLLOW parity ([#405](https://github.com/amritk/nish/pull/405))
+- checker: Refuse push and pop on typed arrays reached through Map/Set reads, generics and imported aliases ([#409](https://github.com/amritk/nish/pull/409))
+- codegen: Close CG-2, CG-3, CG-4, CG-8 and CG-10 ([#427](https://github.com/amritk/nish/pull/427))
+- checker: Read the root package's `nish` field strictly ([#458](https://github.com/amritk/nish/pull/458))
+- net: Wake a paced HTTP/3 slot at the pacer's time, not twice it ([#490](https://github.com/amritk/nish/pull/490))
+- crypto: Give the minted self-signed certificate the extensions Chrome requires ([#491](https://github.com/amritk/nish/pull/491))
+
+### Performance
+
+- checker: Credit a panic or process.exit guard in the range analysis ([#457](https://github.com/amritk/nish/pull/457))
+- net: A TLS handshake that keeps its state in the slot ([#467](https://github.com/amritk/nish/pull/467))
+
+### Documentation
+
+- Add the secret-wipe and generated-golden rules to CLAUDE.md ([#391](https://github.com/amritk/nish/pull/391))
+- self: Write down the builtin and mutation-check conventions, and bring the security records up to date ([#449](https://github.com/amritk/nish/pull/449))
+- codegen: Describe checked signed overflow where the cookbook and README still said nsw ([#454](https://github.com/amritk/nish/pull/454))
+- Condense the landed work-package notes and bring the plans and references up to date ([#462](https://github.com/amritk/nish/pull/462))
+
+### Tests
+
+- Constant-time check plumbing (CT-14, CT-15), a narrower nish-cmp declaration, and record corrections ([#397](https://github.com/amritk/nish/pull/397))
+- Declare the HKDF-Expand-Label nish-cmp differences against 0.16.0 ([#403](https://github.com/amritk/nish/pull/403))
+- Pin the AWFY Storage and List peak-RSS results ([#408](https://github.com/amritk/nish/pull/408))
+- runtime: Exercise nish:net's dual-stack IPv6 path, and correct its error-rule wording ([#402](https://github.com/amritk/nish/pull/402))
+- self: Let the stage-1 fuzz differential declare an intended IR change, and run it in CI ([#448](https://github.com/amritk/nish/pull/448))
+- Run the wasi checks in CI, pin the shim's symlink refusal, and bound every native run ([#450](https://github.com/amritk/nish/pull/450))
+
+### Build
+
+- Regenerate package-lock.json for v0.16.0 ([#392](https://github.com/amritk/nish/pull/392))
+
+
 ## [0.16.0] - 2026-10-02
 
 ### Added
@@ -650,3 +729,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.14.0]: https://github.com/amritk/nish/releases/tag/v0.14.0
 [0.15.0]: https://github.com/amritk/nish/releases/tag/v0.15.0
 [0.16.0]: https://github.com/amritk/nish/releases/tag/v0.16.0
+[0.17.0]: https://github.com/amritk/nish/releases/tag/v0.17.0
