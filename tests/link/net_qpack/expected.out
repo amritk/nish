@@ -1,0 +1,347 @@
+PASS  QPACK_DECOMPRESSION_FAILED is 0x0200
+PASS  QPACK_ENCODER_STREAM_ERROR is 0x0201
+PASS  QPACK_DECODER_STREAM_ERROR is 0x0202
+PASS  an encoder stream is type 0x02
+PASS  a decoder stream is type 0x03
+PASS  SETTINGS_QPACK_MAX_TABLE_CAPACITY is 0x01
+PASS  SETTINGS_QPACK_BLOCKED_STREAMS is 0x07
+PASS  every section begins with Required Insert Count 0 and Base 0
+PASS  RFC 9204 B.1 encoded
+PASS  RFC 9204 B.1 decodes
+PASS  RFC 9204 B.1 decoded
+PASS  RFC 9204 B.1 one field
+PASS  RFC 9204 B.1 its name is a window of the decoder's bytes
+PASS  RFC 9204 B.1 its value starts after the name
+PASS  RFC 9204 B.1 a section with no field lines decodes
+PASS  RFC 9204 B.1 and answers no field
+PASS  static 0 (:authority: ) is Indexed Field Line 0
+PASS  static 1 (:path: /) is Indexed Field Line 1
+PASS  static 2 (age: 0) is Indexed Field Line 2
+PASS  static 3 (content-disposition: ) is Indexed Field Line 3
+PASS  static 4 (content-length: 0) is Indexed Field Line 4
+PASS  static 5 (cookie: ) is Indexed Field Line 5
+PASS  static 6 (date: ) is Indexed Field Line 6
+PASS  static 7 (etag: ) is Indexed Field Line 7
+PASS  static 8 (if-modified-since: ) is Indexed Field Line 8
+PASS  static 9 (if-none-match: ) is Indexed Field Line 9
+PASS  static 10 (last-modified: ) is Indexed Field Line 10
+PASS  static 11 (link: ) is Indexed Field Line 11
+PASS  static 12 (location: ) is Indexed Field Line 12
+PASS  static 13 (referer: ) is Indexed Field Line 13
+PASS  static 14 (set-cookie: ) is Indexed Field Line 14
+PASS  static 15 (:method: CONNECT) is Indexed Field Line 15
+PASS  static 16 (:method: DELETE) is Indexed Field Line 16
+PASS  static 17 (:method: GET) is Indexed Field Line 17
+PASS  static 18 (:method: HEAD) is Indexed Field Line 18
+PASS  static 19 (:method: OPTIONS) is Indexed Field Line 19
+PASS  static 20 (:method: POST) is Indexed Field Line 20
+PASS  static 21 (:method: PUT) is Indexed Field Line 21
+PASS  static 22 (:scheme: http) is Indexed Field Line 22
+PASS  static 23 (:scheme: https) is Indexed Field Line 23
+PASS  static 24 (:status: 103) is Indexed Field Line 24
+PASS  static 25 (:status: 200) is Indexed Field Line 25
+PASS  static 26 (:status: 304) is Indexed Field Line 26
+PASS  static 27 (:status: 404) is Indexed Field Line 27
+PASS  static 28 (:status: 503) is Indexed Field Line 28
+PASS  static 29 (accept: */*) is Indexed Field Line 29
+PASS  static 30 (accept: application/dns-message) is Indexed Field Line 30
+PASS  static 31 (accept-encoding: gzip, deflate, br) is Indexed Field Line 31
+PASS  static 32 (accept-ranges: bytes) is Indexed Field Line 32
+PASS  static 33 (access-control-allow-headers: cache-control) is Indexed Field Line 33
+PASS  static 34 (access-control-allow-headers: content-type) is Indexed Field Line 34
+PASS  static 35 (access-control-allow-origin: *) is Indexed Field Line 35
+PASS  static 36 (cache-control: max-age=0) is Indexed Field Line 36
+PASS  static 37 (cache-control: max-age=2592000) is Indexed Field Line 37
+PASS  static 38 (cache-control: max-age=604800) is Indexed Field Line 38
+PASS  static 39 (cache-control: no-cache) is Indexed Field Line 39
+PASS  static 40 (cache-control: no-store) is Indexed Field Line 40
+PASS  static 41 (cache-control: public, max-age=31536000) is Indexed Field Line 41
+PASS  static 42 (content-encoding: br) is Indexed Field Line 42
+PASS  static 43 (content-encoding: gzip) is Indexed Field Line 43
+PASS  static 44 (content-type: application/dns-message) is Indexed Field Line 44
+PASS  static 45 (content-type: application/javascript) is Indexed Field Line 45
+PASS  static 46 (content-type: application/json) is Indexed Field Line 46
+PASS  static 47 (content-type: application/x-www-form-urlencoded) is Indexed Field Line 47
+PASS  static 48 (content-type: image/gif) is Indexed Field Line 48
+PASS  static 49 (content-type: image/jpeg) is Indexed Field Line 49
+PASS  static 50 (content-type: image/png) is Indexed Field Line 50
+PASS  static 51 (content-type: text/css) is Indexed Field Line 51
+PASS  static 52 (content-type: text/html; charset=utf-8) is Indexed Field Line 52
+PASS  static 53 (content-type: text/plain) is Indexed Field Line 53
+PASS  static 54 (content-type: text/plain;charset=utf-8) is Indexed Field Line 54
+PASS  static 55 (range: bytes=0-) is Indexed Field Line 55
+PASS  static 56 (strict-transport-security: max-age=31536000) is Indexed Field Line 56
+PASS  static 57 (strict-transport-security: max-age=31536000; includesubdomains) is Indexed Field Line 57
+PASS  static 58 (strict-transport-security: max-age=31536000; includesubdomains; preload) is Indexed Field Line 58
+PASS  static 59 (vary: accept-encoding) is Indexed Field Line 59
+PASS  static 60 (vary: origin) is Indexed Field Line 60
+PASS  static 61 (x-content-type-options: nosniff) is Indexed Field Line 61
+PASS  static 62 (x-xss-protection: 1; mode=block) is Indexed Field Line 62
+PASS  static 63 (:status: 100) is Indexed Field Line 63
+PASS  static 64 (:status: 204) is Indexed Field Line 64
+PASS  static 65 (:status: 206) is Indexed Field Line 65
+PASS  static 66 (:status: 302) is Indexed Field Line 66
+PASS  static 67 (:status: 400) is Indexed Field Line 67
+PASS  static 68 (:status: 403) is Indexed Field Line 68
+PASS  static 69 (:status: 421) is Indexed Field Line 69
+PASS  static 70 (:status: 425) is Indexed Field Line 70
+PASS  static 71 (:status: 500) is Indexed Field Line 71
+PASS  static 72 (accept-language: ) is Indexed Field Line 72
+PASS  static 73 (access-control-allow-credentials: FALSE) is Indexed Field Line 73
+PASS  static 74 (access-control-allow-credentials: TRUE) is Indexed Field Line 74
+PASS  static 75 (access-control-allow-headers: *) is Indexed Field Line 75
+PASS  static 76 (access-control-allow-methods: get) is Indexed Field Line 76
+PASS  static 77 (access-control-allow-methods: get, post, options) is Indexed Field Line 77
+PASS  static 78 (access-control-allow-methods: options) is Indexed Field Line 78
+PASS  static 79 (access-control-expose-headers: content-length) is Indexed Field Line 79
+PASS  static 80 (access-control-request-headers: content-type) is Indexed Field Line 80
+PASS  static 81 (access-control-request-method: get) is Indexed Field Line 81
+PASS  static 82 (access-control-request-method: post) is Indexed Field Line 82
+PASS  static 83 (alt-svc: clear) is Indexed Field Line 83
+PASS  static 84 (authorization: ) is Indexed Field Line 84
+PASS  static 85 (content-security-policy: script-src 'none'; object-src 'none'; base-uri 'none') is Indexed Field Line 85
+PASS  static 86 (early-data: 1) is Indexed Field Line 86
+PASS  static 87 (expect-ct: ) is Indexed Field Line 87
+PASS  static 88 (forwarded: ) is Indexed Field Line 88
+PASS  static 89 (if-range: ) is Indexed Field Line 89
+PASS  static 90 (origin: ) is Indexed Field Line 90
+PASS  static 91 (purpose: prefetch) is Indexed Field Line 91
+PASS  static 92 (server: ) is Indexed Field Line 92
+PASS  static 93 (timing-allow-origin: *) is Indexed Field Line 93
+PASS  static 94 (upgrade-insecure-requests: 1) is Indexed Field Line 94
+PASS  static 95 (user-agent: ) is Indexed Field Line 95
+PASS  static 96 (x-forwarded-for: ) is Indexed Field Line 96
+PASS  static 97 (x-frame-options: deny) is Indexed Field Line 97
+PASS  static 98 (x-frame-options: sameorigin) is Indexed Field Line 98
+PASS  Appendix A has 99 entries, and the module says so
+PASS  every static entry encodes as its own Indexed Field Line
+PASS  every static index decodes to its entry
+PASS  every static entry marked never indexed is a literal with the N bit, and decodes as one
+PASS  a never-indexed :path / is a literal with name reference 1, not index 1
+PASS  a field whose name the table holds twice names the lowest index
+PASS  the last entries, past 62, take a second byte
+PASS  a request Huffman-coded is pylsqpack's section, byte for byte
+PASS  the Huffman-coded request decodes
+PASS  the Huffman-coded request decoded
+PASS  the raw request is longer
+PASS  the raw request decodes
+PASS  the raw request decoded
+PASS  a literal name, raw, with its length past the 3-bit prefix
+PASS  a literal name, never indexed, sets the N bit and not the name's H bit
+PASS  the never-indexed literal name decodes
+PASS  the never-indexed literal name decoded
+PASS  RFC 7541 C.4.1's Huffman www.example.com as :authority decodes
+PASS  RFC 7541 C.4.1's Huffman www.example.com decoded
+PASS  a 200-byte value's length takes a continuation byte
+PASS  the 200-byte value decodes
+PASS  the 200-byte value decoded
+PASS  the 200-byte value Huffman-coded is pylsqpack's prefix
+PASS  the Huffman-coded 200-byte value decodes
+PASS  the Huffman-coded 200-byte value decoded
+PASS  a section in the middle of a buffer decodes
+PASS  a section in the middle of a buffer decoded
+PASS  a field given as windows is encoded from the windows
+PASS  a Delta Base of 2^62 - 1 is read, and allowed: nothing uses it
+PASS  and the field after it is read
+PASS  nine continuation bytes are read, even all zero
+PASS  a Delta Base of 2^62 is refused
+PASS  as an integer past 62 bits
+PASS  a tenth continuation byte is refused
+PASS  as an integer past 62 bits, though its value is 127
+PASS  a Required Insert Count of 2^62 is refused
+PASS  as an integer, before it is a non-zero count
+PASS  a static index past 62 bits is refused
+PASS  as an integer
+PASS  a static index of 2^62 - 1 is read whole
+PASS  and refused as past the table
+PASS  a name index past 62 bits is refused
+PASS  as an integer
+PASS  a value length past 62 bits is refused
+PASS  as an integer, not as a string cut short
+PASS  RFC 9204 B.4's Stream Cancellation for stream 8
+PASS  a Stream Cancellation past the 6-bit prefix
+PASS  a Stream Cancellation for stream 2^62 - 1
+PASS  which the encoder side reads back
+PASS  as stream 2^62 - 1
+PASS  a field costs its name, its value and this much
+PASS  two indexed fields at 80 bytes fit a limit of 80
+PASS  both are answered
+PASS  a third indexed field is past the limit
+PASS  and nothing is answered
+PASS  which is not sticky: the next section decodes
+PASS  its field answered
+PASS  a literal past the limit is refused too
+PASS  with nothing answered
+PASS  and no reason, since it is not a refusal
+PASS  a Huffman value that fits the limit exactly decodes
+PASS  and is answered whole
+PASS  a byte less and it is past the limit
+PASS  with nothing kept in its bytes
+PASS  a Huffman literal name and value at the limit decode
+PASS  a Huffman literal name past the limit is refused
+PASS  a Huffman value past the limit after its name is refused
+PASS  the hostile section names :path and codes its value in 1,000 bytes
+PASS  a small section warms the decoder
+PASS  a 1,600-byte Huffman value is past a limit of 64
+PASS  and the decoder kept none of it: the arena did not move
+PASS  the next section still decodes
+PASS  a limit of 0 still takes a section with no fields
+PASS  and refuses one field
+PASS  an empty section: QPACK_DECOMPRESSION_FAILED
+PASS  an empty section: the reason
+PASS  an empty section: no fields
+PASS  a section with no Base: QPACK_DECOMPRESSION_FAILED
+PASS  a section with no Base: the reason
+PASS  a section with no Base: no fields
+PASS  RFC 9204 B.2's section, Required Insert Count 2: QPACK_DECOMPRESSION_FAILED
+PASS  RFC 9204 B.2's section, Required Insert Count 2: the reason
+PASS  RFC 9204 B.2's section, Required Insert Count 2: no fields
+PASS  RFC 9204 B.4's section, Required Insert Count 4: QPACK_DECOMPRESSION_FAILED
+PASS  RFC 9204 B.4's section, Required Insert Count 4: the reason
+PASS  RFC 9204 B.4's section, Required Insert Count 4: no fields
+PASS  a Required Insert Count of 1: QPACK_DECOMPRESSION_FAILED
+PASS  a Required Insert Count of 1: the reason
+PASS  a Required Insert Count of 1: no fields
+PASS  a negative Base: QPACK_DECOMPRESSION_FAILED
+PASS  a negative Base: the reason
+PASS  a negative Base: no fields
+PASS  a negative Base with a Delta Base: QPACK_DECOMPRESSION_FAILED
+PASS  a negative Base with a Delta Base: the reason
+PASS  a negative Base with a Delta Base: no fields
+PASS  an Indexed Field Line into the dynamic table: QPACK_DECOMPRESSION_FAILED
+PASS  an Indexed Field Line into the dynamic table: the reason
+PASS  an Indexed Field Line into the dynamic table: no fields
+PASS  an Indexed Field Line with Post-Base Index: QPACK_DECOMPRESSION_FAILED
+PASS  an Indexed Field Line with Post-Base Index: the reason
+PASS  an Indexed Field Line with Post-Base Index: no fields
+PASS  a Literal Field Line with dynamic Name Reference: QPACK_DECOMPRESSION_FAILED
+PASS  a Literal Field Line with dynamic Name Reference: the reason
+PASS  a Literal Field Line with dynamic Name Reference: no fields
+PASS  a never-indexed one: QPACK_DECOMPRESSION_FAILED
+PASS  a never-indexed one: the reason
+PASS  a never-indexed one: no fields
+PASS  a Literal Field Line with Post-Base Name Reference: QPACK_DECOMPRESSION_FAILED
+PASS  a Literal Field Line with Post-Base Name Reference: the reason
+PASS  a Literal Field Line with Post-Base Name Reference: no fields
+PASS  a never-indexed one: QPACK_DECOMPRESSION_FAILED
+PASS  a never-indexed one: the reason
+PASS  a never-indexed one: no fields
+PASS  a dynamic reference after a good field: QPACK_DECOMPRESSION_FAILED
+PASS  a dynamic reference after a good field: the reason
+PASS  a dynamic reference after a good field: no fields
+PASS  static index 99: QPACK_DECOMPRESSION_FAILED
+PASS  static index 99: the reason
+PASS  static index 99: no fields
+PASS  static name index 99: QPACK_DECOMPRESSION_FAILED
+PASS  static name index 99: the reason
+PASS  static name index 99: no fields
+PASS  an index cut short: QPACK_DECOMPRESSION_FAILED
+PASS  an index cut short: the reason
+PASS  an index cut short: no fields
+PASS  a name index cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a name index cut short: the reason
+PASS  a name index cut short: no fields
+PASS  a name reference with no value: QPACK_DECOMPRESSION_FAILED
+PASS  a name reference with no value: the reason
+PASS  a name reference with no value: no fields
+PASS  a value cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a value cut short: the reason
+PASS  a value cut short: no fields
+PASS  a value length cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a value length cut short: the reason
+PASS  a value length cut short: no fields
+PASS  a literal name cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a literal name cut short: the reason
+PASS  a literal name cut short: no fields
+PASS  a literal name length cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a literal name length cut short: the reason
+PASS  a literal name length cut short: no fields
+PASS  a literal name with no value: QPACK_DECOMPRESSION_FAILED
+PASS  a literal name with no value: the reason
+PASS  a literal name with no value: no fields
+PASS  a Delta Base cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a Delta Base cut short: the reason
+PASS  a Delta Base cut short: no fields
+PASS  a Required Insert Count cut short: QPACK_DECOMPRESSION_FAILED
+PASS  a Required Insert Count cut short: the reason
+PASS  a Required Insert Count cut short: no fields
+PASS  a Huffman value padded with zeros: QPACK_DECOMPRESSION_FAILED
+PASS  a Huffman value padded with zeros: the reason
+PASS  a Huffman value padded with zeros: no fields
+PASS  a Huffman value holding EOS: QPACK_DECOMPRESSION_FAILED
+PASS  a Huffman value holding EOS: the reason
+PASS  a Huffman value holding EOS: no fields
+PASS  a Huffman name padded with zeros: QPACK_DECOMPRESSION_FAILED
+PASS  a Huffman name padded with zeros: the reason
+PASS  a Huffman name padded with zeros: no fields
+PASS  a refused section
+PASS  leaves the decoder spent: a good section is refused too
+PASS  with the first reason kept
+PASS  and no fields
+PASS  and so is its encoder stream
+PASS  Set Dynamic Table Capacity 0 is accepted
+PASS  as often as it is sent
+PASS  and nothing at all is nothing
+PASS  each one counted
+PASS  a section still decodes after them
+PASS  the stream is read as a window
+PASS  of one byte here
+PASS  Set Dynamic Table Capacity 0 at the counter's edge is accepted
+PASS  and the count saturates at 2^31 - 1
+PASS  RFC 9204 B.2's Set Dynamic Table Capacity 220: QPACK_ENCODER_STREAM_ERROR
+PASS  RFC 9204 B.2's Set Dynamic Table Capacity 220: the reason
+PASS  Set Dynamic Table Capacity 1: QPACK_ENCODER_STREAM_ERROR
+PASS  Set Dynamic Table Capacity 1: the reason
+PASS  RFC 9204 B.2's Insert With Name Reference, static: QPACK_ENCODER_STREAM_ERROR
+PASS  RFC 9204 B.2's Insert With Name Reference, static: the reason
+PASS  RFC 9204 B.3's Insert With Literal Name: QPACK_ENCODER_STREAM_ERROR
+PASS  RFC 9204 B.3's Insert With Literal Name: the reason
+PASS  RFC 9204 B.5's Insert With Name Reference, dynamic: QPACK_ENCODER_STREAM_ERROR
+PASS  RFC 9204 B.5's Insert With Name Reference, dynamic: the reason
+PASS  RFC 9204 B.4's Duplicate: QPACK_ENCODER_STREAM_ERROR
+PASS  RFC 9204 B.4's Duplicate: the reason
+PASS  a Duplicate of relative index 0: QPACK_ENCODER_STREAM_ERROR
+PASS  a Duplicate of relative index 0: the reason
+PASS  an insert after a good capacity: QPACK_ENCODER_STREAM_ERROR
+PASS  an insert after a good capacity: the reason
+PASS  a refused instruction
+PASS  leaves the encoder stream spent
+PASS  and the decoder too
+PASS  with the first reason kept
+PASS  and only the good instructions counted
+PASS  no cancellation yet
+PASS  RFC 9204 B.4's Stream Cancellation is accepted
+PASS  for stream 8
+PASS  a Stream Cancellation split after its first byte
+PASS  is not counted until it is whole
+PASS  and is finished by the next bytes
+PASS  three cancellations
+PASS  the last for stream 0
+PASS  the stream is read as a window
+PASS  of one byte here, stream 4
+PASS  Stream Cancellations at the counter's edge are accepted
+PASS  and the count saturates at 2^31 - 1
+PASS  with the last stream still recorded
+PASS  RFC 9204 B.2's Section Acknowledgment for stream 4: QPACK_DECODER_STREAM_ERROR
+PASS  RFC 9204 B.2's Section Acknowledgment for stream 4: the reason
+PASS  a Section Acknowledgment for stream 0: QPACK_DECODER_STREAM_ERROR
+PASS  a Section Acknowledgment for stream 0: the reason
+PASS  RFC 9204 B.3's Insert Count Increment of 1: QPACK_DECODER_STREAM_ERROR
+PASS  RFC 9204 B.3's Insert Count Increment of 1: the reason
+PASS  an Insert Count Increment of 0: QPACK_DECODER_STREAM_ERROR
+PASS  an Insert Count Increment of 0: the reason
+PASS  a stream ID of 2^62: QPACK_DECODER_STREAM_ERROR
+PASS  a stream ID of 2^62: the reason
+PASS  a tenth continuation byte: QPACK_DECODER_STREAM_ERROR
+PASS  a tenth continuation byte: the reason
+PASS  an acknowledgment after a good cancellation: QPACK_DECODER_STREAM_ERROR
+PASS  an acknowledgment after a good cancellation: the reason
+PASS  a refused instruction
+PASS  leaves the decoder stream spent
+PASS  with the first reason kept
+PASS  and nothing counted
+PASS  the encoder still writes sections
+PASS  a thousand and one pairs of sections decoded, four fields each
+PASS  the last section decoded
+PASS  a thousand passes of both sides after the first allocate nothing
+qpack: 346 passed, 0 failed, 0 skipped
