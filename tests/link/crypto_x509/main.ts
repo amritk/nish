@@ -72,6 +72,7 @@ import {
   P384_PKCS8_PEM,
   P384_SEC1_PEM,
 } from "./fixtures"
+import { handshakeSuite } from "./handshake"
 import { fromHex, toHex } from "./hex"
 
 // RFC 6979 A.2.5.
@@ -464,4 +465,4 @@ const chainSuite = (): i32 => {
   return t.done()
 }
 
-export const main = (): i32 => mintSuite() + parseSuite() + pemSuite() + keySuite() + chainSuite()
+export const main = (): i32 => mintSuite() + parseSuite() + pemSuite() + keySuite() + chainSuite() + handshakeSuite()

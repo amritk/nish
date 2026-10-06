@@ -127,3 +127,13 @@ PASS  a certificate minted with OpenSSL's key verifies under itself
 PASS  a chain with one bad certificate answers null
 PASS  a PEM with no certificate answers null
 x509 chain: 17 passed, 0 failed, 0 skipped
+PASS  the server takes the ClientHello
+PASS  and signs with the minted certificate's key
+PASS  the Certificate carries the minted DER, octet for octet
+PASS  the client parses it
+PASS  with the two critical extensions at the end of its TBS
+PASS  CertificateVerify verifies under the key read from the certificate
+PASS  the server's Finished verifies
+PASS  the server takes the client's Finished
+PASS  connected
+x509 mint in a TLS handshake: 9 passed, 0 failed, 0 skipped
