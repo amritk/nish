@@ -242,6 +242,7 @@ export class WsDecoder {
     this.control = new Array<u8>(WS_MAX_CONTROL)
     this.data = this.control
     this.utf8 = new WsUtf8()
+    this.reset()
   }
 
   /**
@@ -625,11 +626,16 @@ export const websocketWriteFrame = (
   if (at < 0 || at > outLength || frameSize > outLength - at) {
     return WS_NO_ROOM
   }
+  let extended: i32 = 8
+  if (len < 126) {
+    extended = 0
+  } else if (len < 65536) {
+    extended = 2
+  }
   const headerLength: i32 = frameSize - len
   const finBit: i32 = fin ? 0x80 : 0
   out[at] = toU8(finBit | opcode)
   const maskBit: i32 = mask === null ? 0 : 0x80
-  const extended: i32 = headerLength - 2 - (mask === null ? 0 : 4)
   if (extended === 0) {
     out[at + 1] = toU8(maskBit | len)
   } else if (extended === 2) {

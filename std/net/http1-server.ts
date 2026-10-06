@@ -106,12 +106,13 @@ import {
   HTTP1_REFUSED,
   HTTP1_UPGRADE,
   Http1Parser,
+  http1BytesAre,
   http1WriteChunk,
+  http1WriteLastChunk,
   http1WriteResponseHead,
 } from "nish/net/http1"
 import {
   WS_CLOSE,
-  WS_CLOSE_NO_STATUS,
   WS_ERROR,
   WS_MAX_CONTROL,
   WS_MESSAGE,
@@ -206,6 +207,24 @@ const http1ServerCheckCap = (name: string, value: i32, low: i32, high: i32): voi
   }
 }
 
+/** Panics unless `buf[off .. off + len)` is inside `buf`: a window past its buffer is the caller's mistake. */
+const http1ServerCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
+  const size: i32 = toI32(buf.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(`${what}: the window is outside the buffer`)
+  }
+}
+
+/** Copies `src[off .. off + n)` to `out` at `at`, which the caller has made sure holds it, and answers where it ends. */
+const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 => {
+  for (let k: i32 = 0; k < n && at + k < toI32(out.length) && off + k < toI32(src.length); k++) {
+    if (at + k >= 0 && off + k >= 0) {
+      out[at + k] = src[off + k]
+    }
+  }
+  return at + n
+}
+
 /**
  * The caps of every connection made from it, fixed when the connection is
  * made. Each is a number the program sets once, at start-up.
@@ -281,30 +300,13 @@ const http1ServerReason = (status: i32): string => {
   }
 }
 
-/** Whether `bytes` is `word`, which is lowercase, in any ASCII case. */
-const http1ServerSameWord = (bytes: u8[], word: string): boolean => {
-  if (toI32(bytes.length) !== toI32(word.length)) {
-    return false
-  }
-  for (let k: i32 = 0; k < toI32(bytes.length) && k < toI32(word.length); k++) {
-    let c: i32 = toI32(bytes[k])
-    if (c >= 65 && c <= 90) {
-      c = c + 32
-    }
-    if (c !== toI32(word.charCodeAt(k))) {
-      return false
-    }
-  }
-  return true
-}
-
 /** Whether `name` is one of the fields the server decides and a program may not send. */
 const http1ServerReserved = (name: u8[]): boolean =>
-  http1ServerSameWord(name, "connection") ||
-  http1ServerSameWord(name, "upgrade") ||
-  http1ServerSameWord(name, "keep-alive") ||
-  http1ServerSameWord(name, "transfer-encoding") ||
-  http1ServerSameWord(name, "content-length")
+  http1BytesAre(name, "connection") ||
+  http1BytesAre(name, "upgrade") ||
+  http1BytesAre(name, "keep-alive") ||
+  http1BytesAre(name, "transfer-encoding") ||
+  http1BytesAre(name, "content-length")
 
 /**
  * One connection's HTTP/1.1 server, sans-IO: bytes in through `feed`, events
@@ -325,6 +327,8 @@ export class Http1Connection {
   data: u8[]
   /** A ping's payload, kept until its pong fits. */
   pong: u8[]
+  /** No fields, for the responses the connection writes itself: made once. */
+  noFields: u8[][]
   /** When the carrier last moved a byte for the connection, in `monotonicNanos`. */
   lastActive: i64 = 0
   outputStart: i32 = 0
@@ -340,11 +344,13 @@ export class Http1Connection {
   pongLength: i32 = 0
   state: i32 = 0
   response: i32 = 0
+  /**
+   * How the response's body is framed: a length (0 or more), `HTTP1_CHUNKED`,
+   * or `HTTP1_NO_BODY` for one that ends with the connection.
+   */
+  responseFraming: i32 = 0
   /** A response with a length: the bytes it still owes. */
   responseLeft: i32 = 0
-  /** The response is chunked, or has a length; with neither it ends with the connection. */
-  responseChunked: boolean = false
-  responseLength: boolean = false
   /** The response carries no body (HEAD, 204, 304): what is written is dropped. */
   responseEmpty: boolean = false
   /** A request's head has been read and its exchange is not over. */
@@ -383,6 +389,7 @@ export class Http1Connection {
     this.output = new Array<u8>(config.outputSize)
     this.data = this.output
     this.pong = new Array<u8>(WS_MAX_CONTROL)
+    this.noFields = []
     // A line must fit whole before the parser can read it, so the buffer
     // holds the longest request line or field line however small a chunk is.
     let limit: i32 = config.chunkSize
@@ -410,9 +417,8 @@ export class Http1Connection {
     this.pongLength = 0
     this.state = H1_S_HTTP
     this.response = H1_R_NONE
+    this.responseFraming = 0
     this.responseLeft = 0
-    this.responseChunked = false
-    this.responseLength = false
     this.responseEmpty = false
     this.requestOpen = false
     this.requestEnded = false
@@ -446,10 +452,7 @@ export class Http1Connection {
    * outside `buf` panics.
    */
   feed(buf: u8[], off: i32, len: i32): i32 {
-    const size: i32 = toI32(buf.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
-      panic("Http1Connection.feed: the window is outside the buffer")
-    }
+    http1ServerCheckWindow("Http1Connection.feed", buf, off, len)
     const room: i32 = this.inputRoom()
     const n: i32 = len < room ? len : room
     if (n <= 0) {
@@ -617,14 +620,13 @@ export class Http1Connection {
     if (this.response === H1_R_NONE) {
       // The control reserve keeps room for this whatever the output holds.
       this.room()
-      const none: u8[][] = []
       const end: i32 = http1WriteResponseHead(
         this.output,
         this.outputEnd,
         status,
         http1ServerReason(status),
-        none,
-        none,
+        this.noFields,
+        this.noFields,
         H1_ZERO,
         "close"
       )
@@ -703,9 +705,10 @@ export class Http1Connection {
   sendClose(code: i32): void {
     this.room()
     const payload: u8[] | null = websocketClosePayload(code, "")
-    const empty: u8[] = this.pong
-    const body: u8[] = payload === null ? empty : payload
-    const n: i32 = payload === null || code === WS_CLOSE_NO_STATUS ? H1_ZERO : toI32(body.length)
+    // A code that may not be sent (1005, for a close that had none) is
+    // answered with an empty close.
+    const body: u8[] = payload === null ? this.pong : payload
+    const n: i32 = payload === null ? H1_ZERO : toI32(body.length)
     const end: i32 = websocketWriteFrame(
       this.output,
       this.outputEnd,
@@ -799,8 +802,7 @@ export class Http1Connection {
     }
     this.closeAfter = close
     this.response = H1_R_BODY
-    this.responseChunked = framing === HTTP1_CHUNKED
-    this.responseLength = framing >= 0
+    this.responseFraming = framing
     this.responseLeft = framing >= 0 ? framing : 0
     this.responseEmpty = empty
     return 0
@@ -816,22 +818,20 @@ export class Http1Connection {
    * panics.
    */
   write(buf: u8[], off: i32, len: i32): i32 {
-    const size: i32 = toI32(buf.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
-      panic("Http1Connection.write: the window is outside the buffer")
-    }
+    http1ServerCheckWindow("Http1Connection.write", buf, off, len)
     if (this.response !== H1_R_BODY || this.state !== H1_S_HTTP) {
       return H1_CLOSED
     }
     if (this.responseEmpty || len === 0) {
       return len
     }
-    if (this.responseLength && len > this.responseLeft) {
+    const chunked: boolean = this.responseFraming === HTTP1_CHUNKED
+    if (this.responseFraming >= 0 && len > this.responseLeft) {
       return H1_INVALID
     }
     const room: i32 = this.bodyRoom()
     let take: i32 = len
-    if (this.responseChunked) {
+    if (chunked) {
       if (take > room - H1_CHUNK_OVERHEAD) {
         take = room - H1_CHUNK_OVERHEAD
       }
@@ -842,18 +842,11 @@ export class Http1Connection {
       this.writeHeld = true
       return H1_AGAIN
     }
-    if (this.responseChunked) {
+    if (chunked) {
       this.outputEnd = http1WriteChunk(this.output, this.outputEnd, buf, off, take)
     } else {
-      const output: u8[] = this.output
-      const at: i32 = this.outputEnd
-      for (let k: i32 = 0; k < take && at + k < toI32(output.length); k++) {
-        if (at + k >= 0) {
-          output[at + k] = buf[off + k]
-        }
-      }
-      this.outputEnd = at + take
-      if (this.responseLength) {
+      this.outputEnd = http1ServerCopy(this.output, this.outputEnd, buf, off, take)
+      if (this.responseFraming >= 0) {
         this.responseLeft = this.responseLeft - take
       }
     }
@@ -873,28 +866,24 @@ export class Http1Connection {
     if (this.response !== H1_R_BODY || this.state !== H1_S_HTTP) {
       return H1_CLOSED
     }
-    if (this.responseLength && !this.responseEmpty && this.responseLeft > 0) {
+    if (this.responseEmpty) {
+      this.response = H1_R_DONE
+      return 0
+    }
+    if (this.responseFraming >= 0 && this.responseLeft > 0) {
       return H1_INVALID
     }
-    if (this.responseChunked && !this.responseEmpty) {
+    if (this.responseFraming === HTTP1_CHUNKED) {
+      // The last chunk comes out of the body's room, not the reserve.
       if (this.bodyRoom() < 5) {
         this.writeHeld = true
         return H1_AGAIN
       }
-      const last: u8[] = this.output
-      const at: i32 = this.outputEnd
-      if (at >= 0 && at + 4 < toI32(last.length)) {
-        last[at] = 48
-        last[at + 1] = 13
-        last[at + 2] = 10
-        last[at + 3] = 13
-        last[at + 4] = 10
-      }
-      this.outputEnd = at + 5
+      this.outputEnd = http1WriteLastChunk(this.output, this.outputEnd)
     }
     this.response = H1_R_DONE
     // A response with neither a length nor chunks ends with the connection.
-    if (!this.responseChunked && !this.responseLength && !this.responseEmpty) {
+    if (this.responseFraming === HTTP1_NO_BODY) {
       this.closeAfter = true
     }
     return 0
@@ -927,14 +916,7 @@ export class Http1Connection {
       this.writeHeld = true
       return H1_AGAIN
     }
-    const output: u8[] = this.output
-    const at: i32 = this.outputEnd
-    for (let k: i32 = 0; k < n && at + k < toI32(output.length); k++) {
-      if (at + k >= 0) {
-        output[at + k] = head[k]
-      }
-    }
-    this.outputEnd = at + n
+    this.outputEnd = http1ServerCopy(this.output, this.outputEnd, head, H1_ZERO, n)
     this.response = H1_R_DONE
     this.upgraded = true
     this.closeAfter = false
@@ -950,10 +932,7 @@ export class Http1Connection {
    * when the slot is not an open WebSocket. A window outside `buf` panics.
    */
   sendFrame(fin: boolean, opcode: i32, buf: u8[], off: i32, len: i32): i32 {
-    const size: i32 = toI32(buf.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
-      panic("Http1Connection.sendFrame: the window is outside the buffer")
-    }
+    http1ServerCheckWindow("Http1Connection.sendFrame", buf, off, len)
     if (this.state !== H1_S_WEBSOCKET) {
       return H1_CLOSED
     }
@@ -982,7 +961,7 @@ export class Http1Connection {
     if (this.state !== H1_S_WEBSOCKET) {
       return H1_CLOSED
     }
-    if (code === WS_CLOSE_NO_STATUS || websocketClosePayload(code, "") === null) {
+    if (websocketClosePayload(code, "") === null) {
       return H1_INVALID
     }
     this.sendClose(code)
@@ -1097,6 +1076,7 @@ export class Http1Server {
     }
     const conn: Http1Connection = this.connections[slot]
     const fd: i32 = this.fds[slot]
+    let moved: boolean = false
     while (true) {
       const room: i32 = conn.inputRoom()
       const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
@@ -1112,8 +1092,11 @@ export class Http1Server {
         }
         break
       }
-      conn.lastActive = monotonicNanos()
+      moved = true
       conn.feed(this.scratch, H1_ZERO, n)
+    }
+    if (moved) {
+      conn.lastActive = monotonicNanos()
     }
     return this.flush(slot)
   }
@@ -1169,6 +1152,7 @@ export class Http1Server {
   send(slot: i32): void {
     const conn: Http1Connection = this.connections[slot]
     const fd: i32 = this.fds[slot]
+    const pending: i32 = conn.outputEnd - conn.outputStart
     while (conn.wantsWrite()) {
       const n: i32 = netWrite(fd, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
       if (n <= 0) {
@@ -1177,8 +1161,10 @@ export class Http1Server {
         }
         break
       }
-      conn.lastActive = monotonicNanos()
       conn.consume(n)
+    }
+    if (conn.outputEnd - conn.outputStart < pending) {
+      conn.lastActive = monotonicNanos()
     }
   }
 
@@ -1281,7 +1267,9 @@ export class Http1TlsServer {
 
   /** The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest. */
   readable(slot: i32): i32 {
-    this.connection(slot).lastActive = monotonicNanos()
+    if (this.holds(slot)) {
+      this.connections[slot].lastActive = monotonicNanos()
+    }
     this.tls.readable(slot)
     return this.flush(slot)
   }
@@ -1355,13 +1343,16 @@ export class Http1TlsServer {
   /** Writes what `slot`'s connection holds into TLS, as far as TLS takes it. */
   send(slot: i32): void {
     const conn: Http1Connection = this.connections[slot]
+    const pending: i32 = conn.outputEnd - conn.outputStart
     while (conn.wantsWrite()) {
       const n: i32 = this.tls.write(slot, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
       if (n <= 0) {
         break
       }
-      conn.lastActive = monotonicNanos()
       conn.consume(n)
+    }
+    if (conn.outputEnd - conn.outputStart < pending) {
+      conn.lastActive = monotonicNanos()
     }
   }
 

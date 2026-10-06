@@ -238,6 +238,7 @@ export class Http1Parser {
     this.head = new Array<u8>(256)
     this.spans = new Array<i32>(64)
     this.tally = new Http1ListTally()
+    this.restart()
   }
 
   /**
@@ -287,6 +288,9 @@ export class Http1Parser {
     const i: i32 = this.headerIndex(name)
     if (i < 0) {
       return null
+    }
+    if (this.keepText && i < toI32(this.values.length)) {
+      return this.values[i]
     }
     const spans: i32[] = this.spans
     const at: i32 = 4 * i
@@ -845,6 +849,7 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
   let codingFields: i32 = 0
   let upgradeFields: i32 = 0
   let upgradeBytes: i32 = 0
+  let connectionFields: i32 = 0
   for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
     const a: i32 = spans[4 * i]
     const b: i32 = spans[4 * i + 1]
@@ -855,6 +860,8 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
       lengthField = i
     } else if (http1HeadIs(head, a, b, "transfer-encoding", false)) {
       codingFields += 1
+    } else if (http1HeadIs(head, a, b, "connection", false)) {
+      connectionFields += 1
     } else if (http1HeadIs(head, a, b, "upgrade", false)) {
       upgradeFields += 1
       upgradeBytes += spans[4 * i + 3] - spans[4 * i + 2]
@@ -898,10 +905,12 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     }
     p.contentLength = size
   }
-  // Each tally is read before the next one reuses it.
-  const close: boolean = http1Tally(p, "connection", "close").matches > 0
-  const keep: boolean = http1Tally(p, "connection", "keep-alive").matches > 0
-  const upgradeAsked: boolean = http1Tally(p, "connection", "upgrade").matches > 0
+  // Each tally is read before the next one reuses it, and none is walked
+  // for a request without a Connection field, which is most of them.
+  const listed: boolean = connectionFields > 0
+  const close: boolean = listed && http1Tally(p, "connection", "close").matches > 0
+  const keep: boolean = listed && http1Tally(p, "connection", "keep-alive").matches > 0
+  const upgradeAsked: boolean = listed && http1Tally(p, "connection", "upgrade").matches > 0
   p.keepAlive = p.minor === 1 ? !close : keep && !close
   // The fields of one name joined with ", " are empty only when there is one
   // field and it is empty: the same test, without the join.
@@ -1312,6 +1321,17 @@ export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
 /** The last chunk and the empty trailer section that end a chunked body: `0\r\n\r\n`. */
 export const http1LastChunk = (): u8[] => [48, 13, 10, 13, 10]
 
+/**
+ * Writes `http1LastChunk`'s five bytes into `out` at `at` and answers where
+ * they end, or `HTTP1_NO_ROOM` with `out` untouched.
+ */
+export const http1WriteLastChunk = (out: u8[], at: i32): i32 => {
+  if (at < 0 || at > toI32(out.length) - 5) {
+    return HTTP1_NO_ROOM
+  }
+  return http1PutText(out, at, "0\r\n\r\n")
+}
+
 /** `http1WriteResponseHead` and `http1WriteChunk`: the bytes do not fit at `at`. */
 export const HTTP1_NO_ROOM: i32 = -1
 /** `http1WriteResponseHead`: a head the writer refuses to write. */
@@ -1337,8 +1357,8 @@ const http1BytesAreFieldText = (bytes: u8[]): boolean => {
   return true
 }
 
-/** Whether `bytes` is `word`, which is lowercase, in any ASCII case. */
-const http1BytesAre = (bytes: u8[], word: string): boolean =>
+/** Whether the octets of `bytes` spell `word`, which is lowercase, in any ASCII case: a field name compared as RFC 9110 §5.1 says. */
+export const http1BytesAre = (bytes: u8[], word: string): boolean =>
   http1HeadIs(bytes, 0, toI32(bytes.length), word, true)
 
 /** How many decimal digits `n`, which is not negative, takes. */
