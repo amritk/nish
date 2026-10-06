@@ -32,7 +32,10 @@
  * **SETTINGS** (§7.2.4). `h3ReadSettings` reads a whole payload into an
  * `Http3Settings`: the three identifiers this endpoint understands, and the
  * first `H3_SETTINGS_KEEP` it does not, kept rather than dropped so that an
- * extension (WebTransport's, RFC 9220's) can read them. A payload that ends
+ * extension can read them. The four that extended CONNECT and WebTransport
+ * read (RFC 9220's, RFC 9297's and the two of the WebTransport drafts) are
+ * also recorded in fields of their own, refused when repeated, so a peer
+ * cannot push them out of reach behind eight others. A payload that ends
  * inside a pair is H3_FRAME_ERROR (§7.1); an identifier HTTP/2 defined with
  * no HTTP/3 counterpart (0x00, 0x02 to 0x05), or one that appears twice, is
  * H3_SETTINGS_ERROR (§7.2.4, §7.2.4.1). A repeat among the unknown ones is
@@ -40,14 +43,16 @@
  * not compared, so a peer cannot make the read cost more than a fixed number
  * of compares per setting.
  *
- * **Stream types** (§6.2): control 0x00, push 0x01, and RFC 9204's QPACK
- * encoder 0x02 and decoder 0x03. Each is one varint at the start of a
+ * **Stream types** (§6.2): control 0x00, push 0x01, RFC 9204's QPACK
+ * encoder 0x02 and decoder 0x03, and WebTransport's 0x54, whose bidirectional
+ * counterpart is the signal 0x41 where a request's first frame would be. Each is one varint at the start of a
  * unidirectional stream, written with `h3PutVarint`.
  *
  * **Error codes** (§8.1) are the `H3_*` values from 0x0100; QPACK's three
  * (0x0200 to 0x0202) are `nish/net/qpack`'s.
  *
- * Written from RFC 9114 §6.2, §7, §8.1 and §11.2, not ported from another
+ * Written from RFC 9114 §6.2, §7, §8.1 and §11.2, RFC 9220 §5, RFC 9297
+ * §2.1.1 and §5.2 and draft-ietf-webtrans-http3-02, not ported from another
  * implementation. Private names carry the `h3Frame` prefix, since a `std/`
  * module's private functions share the importing program's flat symbol
  * namespace (`docs/wp26-stdlib.md` §3e).
@@ -87,6 +92,17 @@ export const H3_STREAM_PUSH: i64 = 0x01
 export const H3_STREAM_QPACK_ENCODER: i64 = QPACK_ENCODER_STREAM
 /** QPACK's decoder stream. */
 export const H3_STREAM_QPACK_DECODER: i64 = QPACK_DECODER_STREAM
+/**
+ * A WebTransport unidirectional stream (draft-ietf-webtrans-http3-02 §4.1):
+ * the type, then the session ID, then the session's bytes.
+ */
+export const H3_STREAM_WEBTRANSPORT: i64 = 0x54
+/**
+ * The signal that opens a WebTransport bidirectional stream (draft-02 §4.2):
+ * where a request's first frame type would be, then the session ID, then the
+ * session's bytes. It is not a frame: no length follows it.
+ */
+export const H3_FRAME_WEBTRANSPORT_STREAM: i64 = 0x41
 
 // ---- Settings (§7.2.4.1, RFC 9204 §5) -------------------------------------------
 
@@ -96,6 +112,14 @@ export const H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY: i64 = QPACK_SETTINGS_MAX_TABL
 export const H3_SETTINGS_MAX_FIELD_SECTION_SIZE: i64 = 0x06
 /** SETTINGS_QPACK_BLOCKED_STREAMS. */
 export const H3_SETTINGS_QPACK_BLOCKED_STREAMS: i64 = QPACK_SETTINGS_BLOCKED_STREAMS
+/** SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 9220 §5, RFC 8441 §3): 1 lets the peer send an extended CONNECT. */
+export const H3_SETTINGS_ENABLE_CONNECT_PROTOCOL: i64 = 0x08
+/** SETTINGS_H3_DATAGRAM (RFC 9297 §2.1.1): 1 lets the peer send HTTP datagrams. */
+export const H3_SETTINGS_H3_DATAGRAM: i64 = 0x33
+/** SETTINGS_ENABLE_WEBTRANSPORT of draft-ietf-webtrans-http3-02 §3.1, which Chrome and `wtransport` 0.7 send. */
+export const H3_SETTINGS_ENABLE_WEBTRANSPORT: i64 = 0x2b603742
+/** SETTINGS_WEBTRANSPORT_MAX_SESSIONS of draft-ietf-webtrans-http3-07 §3.1, which `wtransport` 0.7 sends beside the draft-02 one. */
+export const H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS: i64 = 0xc671706a
 
 /** How many identifiers `Http3Settings` keeps that it does not understand. */
 export const H3_SETTINGS_KEEP: i32 = 8
@@ -121,6 +145,10 @@ export const H3_REQUEST_INCOMPLETE: i64 = 0x010d
 export const H3_MESSAGE_ERROR: i64 = 0x010e
 export const H3_CONNECT_ERROR: i64 = 0x010f
 export const H3_VERSION_FALLBACK: i64 = 0x0110
+/** WT_SESSION_GONE (draft-ietf-webtrans-http3-02 §4.5): a WebTransport stream of a session that is gone, or can never come. */
+export const H3_WT_SESSION_GONE: i64 = 0x170d7b68
+/** H3_DATAGRAM_ERROR (RFC 9297 §5.2): an HTTP datagram or a capsule that does not parse. */
+export const H3_DATAGRAM_ERROR: i64 = 0x33
 
 /** The largest frame header: two eight-byte varints. */
 export const H3_FRAME_HEADER_MAX: i32 = 16
@@ -153,6 +181,17 @@ export class Http3Settings {
   maxTableCapacity: i64 = 0
   maxFieldSectionSize: i64 = -1
   blockedStreams: i64 = 0
+  /**
+   * The extension settings WebTransport reads, -1 when the frame did not
+   * carry them: SETTINGS_ENABLE_CONNECT_PROTOCOL, SETTINGS_H3_DATAGRAM,
+   * SETTINGS_ENABLE_WEBTRANSPORT and SETTINGS_WEBTRANSPORT_MAX_SESSIONS. Each
+   * is recorded here, where a peer cannot push it out of reach, and also kept
+   * as an unknown identifier while there is room, so `unknown` still finds it.
+   */
+  enableConnectProtocol: i64 = -1
+  h3Datagram: i64 = -1
+  enableWebtransport: i64 = -1
+  webtransportMaxSessions: i64 = -1
   /** The bits of the identifiers understood that the frame set. */
   seen: i32 = 0
   /** How many unknown identifiers are kept. */
@@ -170,6 +209,10 @@ export class Http3Settings {
     this.maxTableCapacity = 0
     this.maxFieldSectionSize = -1
     this.blockedStreams = 0
+    this.enableConnectProtocol = -1
+    this.h3Datagram = -1
+    this.enableWebtransport = -1
+    this.webtransportMaxSessions = -1
     this.seen = 0
     this.unknownCount = 0
     this.dropped = 0
@@ -207,6 +250,28 @@ export class Http3Settings {
       }
       this.seen = this.seen | bit
       return H3_SETTINGS_OK
+    }
+    // The extension settings: recorded (-1 until then, so a second is a repeat), then kept below like any unknown one.
+    if (id === H3_SETTINGS_ENABLE_CONNECT_PROTOCOL) {
+      if (this.enableConnectProtocol >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.enableConnectProtocol = value
+    } else if (id === H3_SETTINGS_H3_DATAGRAM) {
+      if (this.h3Datagram >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.h3Datagram = value
+    } else if (id === H3_SETTINGS_ENABLE_WEBTRANSPORT) {
+      if (this.enableWebtransport >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.enableWebtransport = value
+    } else if (id === H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS) {
+      if (this.webtransportMaxSessions >= 0) {
+        return H3_SETTINGS_ERROR
+      }
+      this.webtransportMaxSessions = value
     }
     if (this.unknown(id) >= 0) {
       return H3_SETTINGS_ERROR
