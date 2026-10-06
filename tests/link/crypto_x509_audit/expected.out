@@ -22,7 +22,7 @@ PASS  three octets, U+20AC, mint as written
 PASS  U+D7FF, the last before the surrogates, mints
 PASS  four octets, U+10FFFF, mint as written
 X509-3: the minted common name is UTF-8 without NUL: 15 passed, 0 failed, 0 skipped
-PASS  the golden, v3 with nothing after the key, reads
+PASS  the old golden, v3 with nothing after the key, reads
 PASS  [3] holding a real extension reads
 PASS  [3] holding a NULL is refused
 PASS  [3] holding an empty SEQUENCE is refused
