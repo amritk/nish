@@ -143,5 +143,5 @@ PASS  and the echo is all there: 32,000 bytes sent back
 PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
-PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
+PASS  and from the second on, a handshake through the slot keeps nothing either (QUIC-3)
 quic streams: 146 passed, 0 failed, 0 skipped

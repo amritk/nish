@@ -48,5 +48,5 @@ PASS  five connections through one slot, each closed after its GOAWAY
 PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
-PASS  which is the signature, the listener's copy of the first Initial and TlsServer's of the client's parameters: 10 to 12 KiB, where it was about 100 KB
+PASS  which is the signature and the listener's copy of the first Initial: 10 to 12 KiB, where it was about 100 KB
 http3 server: 51 passed, 0 failed, 0 skipped

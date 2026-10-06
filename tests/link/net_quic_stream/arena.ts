@@ -179,11 +179,10 @@ const perPacket = (t: Suite): void => {
 
 /**
  * Connection after connection through one slot: `reset` keeps nothing,
- * after its handshake a connection keeps nothing, and the handshake keeps
- * exactly as much each time from the second on, so nothing in the slot
- * grows with the connections it has served. What it keeps is `TlsServer`'s
- * copy of the client's transport parameters alone (QUIC-3);
- * `tests/link/net_quic_memory` meters it exactly, across every chunk.
+ * after its handshake a connection keeps nothing, and from the second on
+ * neither does the handshake, so nothing in the slot grows with the
+ * connections it has served (QUIC-3; `tests/link/net_quic_memory` meters it
+ * across every chunk).
  */
 const perConnection = (t: Suite): void => {
   const limits = new NqLimits();
@@ -220,11 +219,11 @@ const perConnection = (t: Suite): void => {
   t.eqI32("six connections, one after another, through one slot", connected, n32(6));
   t.eqI64("resetting the slot for the next keeps no arena memory", resets, n64(0));
   t.eqI64("after its handshake a connection keeps none: ten echoes, a close", after, n64(0));
-  let same: boolean = handshakes[1] > n64(0);
-  for (let k: i32 = 2; k < toI32(handshakes.length); k++) {
-    same = same && handshakes[k] === handshakes[1];
+  let none: boolean = toI32(handshakes.length) > 1;
+  for (let k: i32 = 1; k < toI32(handshakes.length); k++) {
+    none = none && handshakes[k] === n64(0);
   }
-  t.ok("and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows", same);
+  t.ok("and from the second on, a handshake through the slot keeps nothing either (QUIC-3)", none);
 };
 
 /** Every arena check. */

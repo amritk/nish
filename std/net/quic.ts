@@ -78,8 +78,7 @@
  * secrets, the stateless reset tokens and the connection IDs computed in
  * arena blocks; the transport parameters encoded and parsed into the
  * slot's own objects. After the first connection in a slot, a connection
- * keeps nothing but `TlsServer`'s copy of the client's transport
- * parameters, a few dozen bytes (QUIC-3 in `docs/security/quic.md`).
+ * keeps nothing at all (QUIC-3 in `docs/security/quic.md`).
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
@@ -1248,8 +1247,8 @@ export class QuicConnection {
    * array): every secret of the last connection is wiped first, as
    * `release()` does, and every buffer is kept and emptied. The limits are
    * the constructor's configuration's. A slot reset this way allocates
-   * nothing, and the next handshake keeps nothing but `TlsServer`'s copy of
-   * the client's transport parameters (QUIC-3 in `docs/security/quic.md`).
+   * nothing, and neither does the next handshake (QUIC-3 in
+   * `docs/security/quic.md`).
    */
   reset(entropy: u8[]): void {
     this.wipeAll()

@@ -199,8 +199,8 @@ const h3ShapedSections = (t: Suite): void => {
  * Connection after connection through one slot: the reset keeps nothing,
  * and after its handshake a connection keeps nothing from the second on,
  * once the decoder's arrays and the field lists have grown to the section the
- * requests send. The handshake keeps exactly as much each time from the
- * second on, and that is the QUIC handshake's (TLS-3).
+ * requests send. From the second on the handshake keeps nothing either,
+ * since the QUIC connection keeps its state in the slot (QUIC-3).
  */
 const h3PerConnection = (t: Suite): void => {
   const limits = new H3Limits();
@@ -240,11 +240,11 @@ const h3PerConnection = (t: Suite): void => {
   t.eqI32("each served its ten requests", s.answered, n32(60));
   t.eqI64("resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory", resets, n64(0));
   t.eqI64("after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close", after, n64(0));
-  let same: boolean = handshakes[1] > n64(0);
-  for (let k: i32 = 2; k < toI32(handshakes.length); k++) {
-    same = same && handshakes[k] === handshakes[1];
+  let none: boolean = toI32(handshakes.length) > 1;
+  for (let k: i32 = 1; k < toI32(handshakes.length); k++) {
+    none = none && handshakes[k] === n64(0);
   }
-  t.ok("and from the second on, each handshake keeps exactly as much: nothing in the slot grows", same);
+  t.ok("and from the second on, a handshake keeps nothing either: its state is the slot's (QUIC-3)", none);
 };
 
 /** Every arena check. */

@@ -14,11 +14,12 @@
 //      server's close.
 //
 // After two warm-up passes, which grow what a slot grows once (the CRYPTO
-// buffers, the TLS input), `Arena.mark()` must not move across a hundred
-// passes: the loop allocates nothing of its own, so any byte a server call
-// kept would move it, whichever chunk it landed in. One pass is also metered
-// call by call from a chunk of its own (`QmMeter`), which is how the bytes a
-// connection used to keep were measured.
+// buffers, the TLS input, the parameter arrays), one pass is metered call by
+// call from a chunk of its own (`QmMeter`), which is how the bytes a
+// connection used to keep were measured, and must keep 0; then
+// `Arena.mark()` must not move across a hundred passes: the loop allocates
+// nothing of its own, so any byte a server call kept would move it, whichever
+// chunk it landed in.
 //
 // The signature is the caller's and is made once: RFC 6979 makes the P-256
 // signature of a fixed input the same every time.
@@ -293,28 +294,9 @@ const qmRecordSuite = (conn: QuicConnection, suite: i32, b: QmBuffers, pass: QmP
 };
 
 /**
- * What `TlsServer` keeps of each handshake over QUIC: its copy of the
- * client's transport parameters, a fresh array of their length
- * (`handleClientHello` in std/net/tls.ts, TLS-3's named remainder), made
- * here once and metered the same way.
- */
-const qmParametersCopy = (conn: QuicConnection): i64 => {
-  const tls: TlsServer | null = conn.tls;
-  if (tls === null) {
-    return n64(-1);
-  }
-  const m = new QmMeter();
-  m.begin();
-  const copy: u8[] = new Array<u8>(toI32(tls.clientTransportParameters.length));
-  m.end();
-  return toI32(copy.length) >= 0 ? m.kept : n64(-1);
-};
-
-/**
  * Runs `s` through the slot `conn`: the warm-up, one pass metered call by
- * call, then `PASSES` metered a pass at a time. `label` names the run. Each
- * connection must keep exactly the copy of the client's transport
- * parameters that `TlsServer` makes, and nothing else.
+ * call, then `PASSES` with `Arena.mark()` read before and after. `label`
+ * names the run.
  */
 const qmRun = (t: Suite, label: string, conn: QuicConnection, s: QmScript, b: QmBuffers): void => {
   const pass = new QmPass();
@@ -326,20 +308,15 @@ const qmRun = (t: Suite, label: string, conn: QuicConnection, s: QmScript, b: Qm
   qmReplay(conn, s, b, pass, m);
   const metered: i64 = m.kept;
   exact = exact + (pass.wrong === 0 && pass.connected ? 1 : 0);
-  const residue: i64 = qmParametersCopy(conn);
-  const whole = new QmMeter();
+  const before: i64 = Arena.mark();
   for (let k: i32 = 0; k < PASSES; k++) {
-    whole.begin();
     qmReplay(conn, s, b, pass, null);
-    whole.end();
     exact = exact + (pass.wrong === 0 && pass.connected ? 1 : 0);
   }
+  const after: i64 = Arena.mark();
   t.eqI32(`${label}: ${PASSES + 1} connections through one slot, every datagram the recorded one`, exact, PASSES + 1);
-  t.ok(
-    `${label}: a connection keeps only TlsServer's copy of the client's transport parameters, ${residue} bytes, metered call by call`,
-    residue > n64(0) && metered === residue
-  );
-  t.eqI64(`${label}: and ${PASSES} more keep exactly that each`, whole.kept, residue * toI64(PASSES));
+  t.eqI64(`${label}: a connection keeps 0 bytes of arena, metered call by call`, metered, n64(0));
+  t.ok(`${label}: and over ${PASSES} more, Arena.mark() did not move`, after === before);
 };
 
 /** Whether every key in `slots` is zero, the AES-256 schedules included. */

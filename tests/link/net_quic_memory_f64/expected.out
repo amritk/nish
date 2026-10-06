@@ -21,16 +21,16 @@ PASS  parsed again, from nothing, every field is back at its default and the ID'
 PASS  a server-only parameter from a client is still TRANSPORT_PARAMETER_ERROR
 PASS  a 21-byte initial_source_connection_id is TRANSPORT_PARAMETER_ERROR, and is not copied into the reused array
 PASS  aioquic, AES-128-GCM: 101 connections through one slot, every datagram the recorded one
-PASS  aioquic, AES-128-GCM: a connection keeps only TlsServer's copy of the client's transport parameters, 96 bytes, metered call by call
-PASS  aioquic, AES-128-GCM: and 100 more keep exactly that each
+PASS  aioquic, AES-128-GCM: a connection keeps 0 bytes of arena, metered call by call
+PASS  aioquic, AES-128-GCM: and over 100 more, Arena.mark() did not move
 PASS  ChaCha20-Poly1305: the recorded connection completes, echoes and follows the client's key update
 PASS  ChaCha20-Poly1305: 101 connections through one slot, every datagram the recorded one
-PASS  ChaCha20-Poly1305: a connection keeps only TlsServer's copy of the client's transport parameters, 56 bytes, metered call by call
-PASS  ChaCha20-Poly1305: and 100 more keep exactly that each
+PASS  ChaCha20-Poly1305: a connection keeps 0 bytes of arena, metered call by call
+PASS  ChaCha20-Poly1305: and over 100 more, Arena.mark() did not move
 PASS  AES-256-GCM: the recorded connection completes, echoes and follows the client's key update
 PASS  AES-256-GCM: 101 connections through one slot, every datagram the recorded one
-PASS  AES-256-GCM: a connection keeps only TlsServer's copy of the client's transport parameters, 56 bytes, metered call by call
-PASS  AES-256-GCM: and 100 more keep exactly that each
+PASS  AES-256-GCM: a connection keeps 0 bytes of arena, metered call by call
+PASS  AES-256-GCM: and over 100 more, Arena.mark() did not move
 PASS  the slot keeps its TlsServer across connections
 PASS  before the next connection, the slot holds the last one's keys and secrets
 PASS  and reset zeroes them all: every space's key slots, AES schedules included, the key-update and Initial secrets, and TlsServer's secrets
