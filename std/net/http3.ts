@@ -108,10 +108,15 @@
  * `acceptStream` (its bytes then come as H3_DATA, H3_END, H3_RESET and
  * H3_STOPPED, and `writeStream` writes them as they are) or `refuseStream`.
  * `openStream` opens one of this side's; `writeDataWhole` writes a capsule;
- * a GOAWAY still lets a session's new stream in. The client's SETTINGS
- * values for these are checked, 0 or 1 (H3_SETTINGS_ERROR), a session ID that
- * is no client-initiated bidirectional stream is H3_ID_ERROR, and the signal
- * anywhere but a stream's start is H3_FRAME_ERROR.
+ * a GOAWAY still lets a session's new stream in, and `H3_DROPPED` names a
+ * request stream that ended before its request reached the program. The
+ * client's SETTINGS_ENABLE_CONNECT_PROTOCOL and SETTINGS_H3_DATAGRAM must be
+ * 0 or 1 (H3_SETTINGS_ERROR), a session ID that is no client-initiated
+ * bidirectional stream is H3_ID_ERROR, and the signal anywhere but a stream's
+ * start is H3_FRAME_ERROR. Holding every request, not only an extended
+ * CONNECT, until the client's SETTINGS keeps a decoded field section from
+ * having to be held per stream; it costs a request only when the client's
+ * control stream is lost or reordered.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -217,6 +222,12 @@ export const H3_ERROR: i32 = 8
 export const H3_STREAM: i32 = 9
 /** The client sent STOP_SENDING for a WebTransport stream this side writes, and QUIC reset it: `stream`, `errorCode`. */
 export const H3_STOPPED: i32 = 10
+/**
+ * A request stream ended before its request reached the program (only with
+ * `webtransportSessions` on): `stream`. Nothing is owed the program; a
+ * WebTransport layer lets go of the streams that waited for it as a session.
+ */
+export const H3_DROPPED: i32 = 11
 
 /** A write that can take nothing yet: Linux's EAGAIN, as `nish:net` spells it. */
 export const H3_AGAIN: i32 = -11
@@ -1240,12 +1251,17 @@ export class Http3Connection {
       return H3_CLOSED
     }
     this.abandon(k, id, code)
-    if ((this.flags[k] & H3_FLAG_RECV_DONE) === 0) {
+    this.stopReading(k, id, code)
+    return 0
+  }
+
+  /** Asks the client to stop stream `id`, slot `k`, with `code`, and drops what it still sends, unless its side is over or being dropped. */
+  stopReading(k: i32, id: i64, code: i64): void {
+    if (this.phase[k] !== H3_PHASE_DONE && this.phase[k] !== H3_PHASE_DISCARD) {
       this.quic.streamStopSending(id, code)
       this.phase[k] = H3_PHASE_DISCARD
       this.stepAgain(k, id)
     }
-    return 0
   }
 
   /**
@@ -1319,22 +1335,27 @@ export class Http3Connection {
     return n > 0 || (fin && len === 0) ? n : H3_AGAIN
   }
 
-  /**
-   * Resets this side of WebTransport stream `id` with `code`, and, when
-   * `stop`, asks the client to stop its side with the same code and drops
-   * what it sends. Answers 0 or H3_CLOSED.
-   */
-  resetStream(id: i64, code: i64, stop: boolean): i32 {
+  /** Resets this side of WebTransport stream `id` with `code`; the client's side goes on. Answers 0 or H3_CLOSED. */
+  resetStream(id: i64, code: i64): i32 {
     const k: i32 = this.wtSlot(id)
     if (k < 0) {
       return H3_CLOSED
     }
     this.abandon(k, id, code)
-    if (stop && (this.flags[k] & H3_FLAG_RECV_DONE) === 0 && this.phase[k] !== H3_PHASE_DISCARD) {
-      this.quic.streamStopSending(id, code)
-      this.phase[k] = H3_PHASE_DISCARD
-      this.stepAgain(k, id)
+    return 0
+  }
+
+  /**
+   * Asks the client to stop its side of WebTransport stream `id` with
+   * `code`, and drops what it still sends; this side's goes on. Answers 0 or
+   * H3_CLOSED.
+   */
+  stopStream(id: i64, code: i64): i32 {
+    const k: i32 = this.wtSlot(id)
+    if (k < 0) {
+      return H3_CLOSED
     }
+    this.stopReading(k, id, code)
     return 0
   }
 
@@ -1462,7 +1483,7 @@ export class Http3Connection {
       }
       if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
         this.reject(k, id)
-        return H3_CONTINUE
+        return this.dropped(id)
       }
       return this.ended(k, id, got, resetCode)
     }
@@ -1484,7 +1505,7 @@ export class Http3Connection {
     }
     if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
       this.reject(k, id)
-      return H3_CONTINUE
+      return this.dropped(id)
     }
     if (type === H3_FRAME_DATA) {
       if (phase !== H3_PHASE_BODY) {
@@ -1623,7 +1644,7 @@ export class Http3Connection {
     if (n === QUIC_STREAM_ERR_RESET) {
       // §4.1.1: a response to a request that will not finish is abandoned too.
       this.abandon(k, id, resetCode === H3_REQUEST_CANCELLED ? H3_REQUEST_CANCELLED : H3_REQUEST_INCOMPLETE)
-      return delivered ? this.resetEvent(id, resetCode, true) : H3_NEED_MORE
+      return delivered ? this.resetEvent(id, resetCode, true) : this.dropped(id)
     }
     if (n !== QUIC_STREAM_END) {
       return H3_NEED_MORE
@@ -1632,7 +1653,7 @@ export class Http3Connection {
       // §4.1.1: the stream ended before a whole request.
       this.abandon(k, id, H3_REQUEST_INCOMPLETE)
       this.streamErrors = h3Count(this.streamErrors)
-      return H3_NEED_MORE
+      return this.dropped(id)
     }
     if (this.contentLength[k] >= 0 && this.dataTotal[k] !== this.contentLength[k]) {
       // §4.1.2: the body is shorter than its content-length.
@@ -1661,7 +1682,16 @@ export class Http3Connection {
     if ((this.flags[k] & H3_FLAG_DELIVERED) !== 0) {
       return this.resetEvent(id, code, false)
     }
-    return H3_NEED_MORE
+    return this.dropped(id)
+  }
+
+  /** H3_DROPPED for request stream `id` with WebTransport on, which waits on such a stream; H3_NEED_MORE without. */
+  dropped(id: i64): i32 {
+    if (!this.webtransport) {
+      return H3_NEED_MORE
+    }
+    this.stream = id
+    return H3_DROPPED
   }
 
   /** H3_RESET for `id` with `code`. */
@@ -1686,7 +1716,7 @@ export class Http3Connection {
     }
     this.quic.streamStopSending(id, H3_NO_ERROR)
     this.phase[k] = H3_PHASE_DISCARD
-    return H3_NEED_MORE
+    return this.dropped(id)
   }
 
   /**
@@ -2047,7 +2077,9 @@ export class Http3Connection {
     }
     const k: i32 = this.quic.streams.slotOf(id)
     if (k < 0 || k >= toI32(this.slotId.length)) {
-      return id >= this.quic.streams.peerBidiOpened << 2
+      // Not opened yet, and one the client's MAX_STREAMS lets it open now.
+      const streams = this.quic.streams
+      return id >= streams.peerBidiOpened << 2 && id < streams.peerBidiLimit << 2
     }
     if (this.slotId[k] !== id) {
       return true
@@ -2070,11 +2102,7 @@ export class Http3Connection {
     if (k < 0 || k >= toI32(this.slotId.length) || this.slotId[k] !== id) {
       return H3_CLOSED
     }
-    if (this.phase[k] !== H3_PHASE_DONE && this.phase[k] !== H3_PHASE_DISCARD) {
-      this.quic.streamStopSending(id, code)
-      this.phase[k] = H3_PHASE_DISCARD
-      this.stepAgain(k, id)
-    }
+    this.stopReading(k, id, code)
     return 0
   }
 

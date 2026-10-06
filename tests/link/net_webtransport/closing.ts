@@ -111,6 +111,11 @@ const streamErrors = (t: Suite): void => {
   t.eqStr("each with the code mapped", `${h3Hex(p.stream(n64(8)).reset)} ${h3Hex(p.stream(n64(8)).stop)}`, `${h3Hex(wtCodeToHttp3(n64(5)))} ${h3Hex(wtCodeToHttp3(n64(6)))}`);
   t.eqI32("a stream stopped already cannot be stopped again", p.wt.stopSending(n64(8), n64(6)), H3_CLOSED);
   t.eqI32("nor written", p.wt.write(n64(8), bytesOf("z"), n32(0), n32(1), false), H3_CLOSED);
+  p.bidi(n64(12), n64(0), bytesOf("upload"), false);
+  t.eqI32("STOP_SENDING alone", p.wt.stopSending(n64(12), n64(9)), n32(0));
+  t.eqI32("leaves this side to write", p.wt.write(n64(12), bytesOf("reply"), n32(0), n32(5), true), n32(5));
+  p.settle();
+  t.eqStr("the client is asked to stop, and gets the reply and the FIN, not a reset", `${h3Hex(p.stream(n64(12)).stop)} ${textOf(p.stream(n64(12)).data)} ${p.stream(n64(12)).fin} ${p.stream(n64(12)).reset}`, `${h3Hex(wtCodeToHttp3(n64(9)))} reply true -1`);
   t.eqStr("reasons are text", textOf(bytesOf("ok")), "ok");
 };
 

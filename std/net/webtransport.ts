@@ -124,10 +124,12 @@ import {
   H3_AGAIN,
   H3_CLOSED,
   H3_DATA,
+  H3_DROPPED,
   H3_END,
   H3_ERROR,
   H3_GOAWAY,
   H3_INVALID,
+  H3_MAX_SESSIONS,
   H3_NEED_MORE,
   H3_REQUEST,
   H3_RESET,
@@ -453,7 +455,7 @@ export class WebTransport {
    */
   constructor(config: WebTransportConfig, h3: Http3Connection) {
     const sessions: i32 = h3.config.webtransportSessions
-    webtransportCheckCap("webtransportSessions", sessions, 1, 256)
+    webtransportCheckCap("webtransportSessions", sessions, 1, H3_MAX_SESSIONS)
     webtransportCheckCap("maxStreams", config.maxStreams, 1, WT_MAX_CAP)
     webtransportCheckCap("maxPending", config.maxPending, 0, WT_MAX_CAP)
     this.config = config
@@ -651,6 +653,11 @@ export class WebTransport {
     if (event === H3_GOAWAY) {
       return event
     }
+    if (event === H3_DROPPED) {
+      // A request that never reached the program: no session will come of it.
+      this.dropPending(id)
+      return H3_NEED_MORE
+    }
     if (event === H3_REQUEST) {
       if (toI32(h3.fields.protocol.length) > 0) {
         return this.asked(id)
@@ -725,8 +732,8 @@ export class WebTransport {
       const inside: boolean = this.capLeft[s] >= 0 || this.capHeadLen[s] > 0
       this.release(s)
       if (wasGone || event === H3_RESET) {
-        // This side's half is finished already, or `nish/net/http3` abandoned it with the client's reset.
-        return wasGone ? H3_NEED_MORE : this.closedEvent(s, WT_ZERO64, WT_ZERO, true)
+        // This side's half is finished already, or `nish/net/http3` abandoned it with the reset, the client's or its own.
+        return wasGone ? H3_NEED_MORE : this.closedEvent(s, WT_ZERO64, WT_ZERO, h3.resetByPeer)
       }
       if (inside) {
         // RFC 9297 §3.3: the stream ended inside a capsule.
@@ -740,11 +747,18 @@ export class WebTransport {
     return event === H3_WRITABLE ? WT_WRITABLE : H3_NEED_MORE
   }
 
-  /** Finishes this side's half of CONNECT stream `id` with its FIN, or a reset when the FIN cannot go. */
-  finish(id: i64): void {
-    if (this.h3.writeData(id, this.reason, WT_ZERO, WT_ZERO, true) < 0) {
-      this.h3.reset(id, H3_NO_ERROR)
+  /**
+   * Finishes this side's half of CONNECT stream `id` with its FIN, or with
+   * a reset both ways when the FIN cannot go — a session never answered has
+   * no head for it to follow. Answers whether the FIN went: after a reset
+   * the stream is dropped unread, so no event will end the session later.
+   */
+  finish(id: i64): boolean {
+    if (this.h3.writeData(id, this.reason, WT_ZERO, WT_ZERO, true) >= 0) {
+      return true
     }
+    this.h3.reset(id, H3_NO_ERROR)
+    return false
   }
 
   /** WT_CLOSED for session `s` with `code` and the reason `reason[s * 1028 + 4 ..][0 .. length)`. */
@@ -893,7 +907,7 @@ export class WebTransport {
     let k: i32 = this.firstStream[s]
     for (let guard: i32 = 0; guard < WT_MAX_CAP && k >= 0 && k < toI32(this.streamIds.length); guard++) {
       const following: i32 = this.nextStream[k]
-      this.h3.resetStream(this.streamIds[k], WT_SESSION_GONE, true)
+      this.h3.refuseStream(this.streamIds[k], WT_SESSION_GONE)
       this.streamIds[k] = -1
       this.streamSession[k] = -1
       k = following
@@ -1058,9 +1072,12 @@ export class WebTransport {
       return H3_NEED_MORE
     }
     this.end(s)
-    // §5: the CLOSE is answered by finishing this side's half.
-    this.finish(this.sessionIds[s])
-    return this.closedEvent(s, code, this.capFill[s] - 4, true)
+    const length: i32 = this.capFill[s] - 4
+    // §5: the CLOSE is answered by finishing this side's half; when that cannot go, the session is over here and now.
+    if (!this.finish(this.sessionIds[s])) {
+      this.release(s)
+    }
+    return this.closedEvent(s, code, length, true)
   }
 
   /** A capsule that breaks a rule on session `s`: its CONNECT stream reset both ways with `code`, and the session over. */
@@ -1146,6 +1163,10 @@ export class WebTransport {
     if (k < 0 || k >= toI32(this.streamIds.length)) {
       return WT_NONE
     }
+    if (this.streamIds[k] >= 0) {
+      // QUIC freed this slot under a stream whose end no event told (a STOP_SENDING it answered and saw acknowledged): let go of it now.
+      this.unlink(k)
+    }
     const head: i32 = this.firstStream[s]
     this.streamIds[k] = id
     this.streamSession[k] = s
@@ -1163,9 +1184,13 @@ export class WebTransport {
   /** Marks `bits` done on the stream in slot `k`, and takes it off its session once both sides are. */
   settle(k: i32, bits: i32): void {
     this.streamBits[k] = this.streamBits[k] | bits
-    if ((this.streamBits[k] & (WT_SENT | WT_RECEIVED)) !== (WT_SENT | WT_RECEIVED)) {
-      return
+    if ((this.streamBits[k] & (WT_SENT | WT_RECEIVED)) === (WT_SENT | WT_RECEIVED)) {
+      this.unlink(k)
     }
+  }
+
+  /** Takes the stream in slot `k` off its session's list. */
+  unlink(k: i32): void {
     const s: i32 = this.streamSession[k]
     const before: i32 = this.prevStream[k]
     const after: i32 = this.nextStream[k]
@@ -1230,7 +1255,7 @@ export class WebTransport {
     if (k < 0) {
       return H3_CLOSED
     }
-    this.h3.resetStream(id, wtCodeToHttp3(code), false)
+    this.h3.resetStream(id, wtCodeToHttp3(code))
     this.settle(k, WT_SENT)
     return 0
   }
@@ -1242,8 +1267,8 @@ export class WebTransport {
     if (k < 0 || (this.streamBits[k] & WT_RECEIVED) !== 0) {
       return H3_CLOSED
     }
-    this.h3.resetStream(id, wtCodeToHttp3(code), true)
-    this.settle(k, WT_RECEIVED | WT_SENT)
+    this.h3.stopStream(id, wtCodeToHttp3(code))
+    this.settle(k, WT_RECEIVED)
     return 0
   }
 

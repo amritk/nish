@@ -148,6 +148,14 @@ const streamsRefused = (t: Suite): void => {
   q.session(n64(12), "/late");
   q.settle();
   wtLogged(t, "and the one that waited is taken", q, ["session 12 /late", "stream 16 bidi of 12"]);
+  const far: WtPeer = wtReady(new WtLimits());
+  far.uni(n64(14), n64(4000), bytesOf("far"), false);
+  t.eqStr("a stream naming a session past what the client's MAX_STREAMS lets it open does not wait: WT_SESSION_GONE", h3Hex(far.stream(n64(14)).stop), h3Hex(WT_SESSION_GONE));
+  const broken: WtPeer = wtReady(new WtLimits());
+  broken.uni(n64(14), n64(4), bytesOf("waits"), false);
+  t.eqI32("a stream waits for session 4", broken.wt.waiting.count, n32(1));
+  broken.send(n64(4), h3Frame(H3_FRAME_HEADERS, h3Section(broken.enc, [":method", ":scheme", ":authority", ":path", "Upper"], ["CONNECT", "https", "localhost", "/x", "y"])), false);
+  t.ok("whose request turns out malformed, refused before the program sees it: the stream that waited is let go with WT_SESSION_GONE", broken.wt.waiting.count === n32(0) && broken.stream(n64(14)).stop === WT_SESSION_GONE && broken.stream(n64(4)).reset === H3_MESSAGE_ERROR);
 };
 
 /** The connection errors WebTransport adds. */
@@ -205,6 +213,17 @@ const capsulesRefused = (t: Suite): void => {
   cut.capsule(n64(0), h3Cat([h3Varint(WT_CAPSULE_CLOSE), h3Varint(n64(10)), wtFill(n32(3), n32(0))]), true);
   t.eqI64("a CONNECT stream that ends inside a capsule is H3_DATAGRAM_ERROR (RFC 9297 §3.3)", cut.stream(n64(0)).reset, H3_DATAGRAM_ERROR);
   wtLogged(t, "and the session is over", cut, [`closed 0 0 ""`]);
+  const asked: WtPeer = wtReady(new WtLimits());
+  asked.session(n64(4), "/hold");
+  asked.capsule(n64(4), wtCapsule(WT_CAPSULE_CLOSE, wtClosePayload(n64(3), bytesOf("never mind"))), false);
+  wtLogged(t, "a CLOSE before the program answered the session reaches it", asked, ["session 4 /hold", `closed 4 3 "never mind" by the client`]);
+  t.ok("and with no head to finish after, the stream is reset both ways and the slot free at once", asked.stream(n64(4)).reset === H3_NO_ERROR && asked.stream(n64(4)).stop === H3_NO_ERROR && asked.wt.freeCount === n32(1));
+  const local: WtPeer = wtConnect(new WtLimits());
+  local.open();
+  local.send(n64(0), h3Frame(H3_FRAME_HEADERS, h3Section(local.enc, [":method", ":scheme", ":authority", ":path", ":protocol", "content-length"], ["CONNECT", "https", "localhost", "/cl", "webtransport", "0"])), false);
+  local.capsule(n64(0), wtCapsule(WT_CAPSULE_DRAIN, wtFill(n32(0), n32(0))), false);
+  t.eqI64("a CONNECT whose DATA overruns its own content-length is reset by HTTP/3 (H3_MESSAGE_ERROR)", local.stream(n64(0)).reset, H3_MESSAGE_ERROR);
+  wtLogged(t, "and the session's close is not blamed on the client", local, ["session 0 /cl", `closed 0 0 ""`]);
 };
 
 /** Each call's refusals. */
@@ -227,7 +246,8 @@ const callsRefused = (t: Suite): void => {
   t.eqI32("the HTTP/3 layer will not let a stream it does not hold go", p.h3.acceptStream(n64(14)), H3_CLOSED);
   t.eqI32("nor refuse one that is no WebTransport stream", p.h3.refuseStream(n64(4), n64(0)), H3_CLOSED);
   t.eqI32("nor write to one", p.h3.writeStream(n64(4), x, n32(0), n32(1), false), H3_CLOSED);
-  t.eqI32("nor reset one", p.h3.resetStream(n64(4), n64(0), true), H3_CLOSED);
+  t.eqI32("nor reset one", p.h3.resetStream(n64(4), n64(0)), H3_CLOSED);
+  t.eqI32("nor stop one", p.h3.stopStream(n64(4), n64(0)), H3_CLOSED);
   t.eqI32("nor stop reading a stream that is no request", p.h3.discardRequest(n64(14), n64(0)), H3_CLOSED);
   t.eqI32("a whole DATA frame on a request with no head yet is H3_INVALID", p.h3.writeDataWhole(n64(4), x, n32(0), n32(1), false), H3_INVALID);
   t.eqI32("one past the stream's buffer is H3_TOO_LARGE", p.h3.writeDataWhole(n64(0), wtFill(n32(32768), n32(0)), n32(0), n32(32768), false), H3_TOO_LARGE);
