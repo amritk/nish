@@ -239,6 +239,9 @@ const H3_DIGIT_ZERO: i32 = 48
 /** The largest body chunk or DATA frame a configuration may ask for. */
 const H3_MAX_CHUNK: i32 = 1048576
 
+/** The size classes of a field's copy: up to 2^23 bytes, past any stream buffer QUIC allows. */
+const H3_FIELD_CLASSES: i32 = 24
+
 /** The bytes a slot keeps for a frame header being read or written. */
 const H3_HEAD: i32 = 16
 
@@ -321,9 +324,9 @@ export class Http3Connection {
   zeros: u8[]
   /** A response's field section, encoded, emptied and reused. */
   encoded: u8[]
-  /** Copies of the decoded names and values, one array per line, reused, and the lists handed to `fields`. */
-  names: u8[][]
-  values: u8[][]
+  /** Copies of the decoded names and values, in arrays by size class (`copyOf`), and the lists handed to `fields`. */
+  pools: u8[][][]
+  poolUsed: i32[]
   nameList: u8[][]
   valueList: u8[][]
   statusName: u8[]
@@ -414,8 +417,12 @@ export class Http3Connection {
     this.scratch = new Array<u8>(64)
     this.zeros = new Array<u8>(256)
     this.encoded = []
-    this.names = []
-    this.values = []
+    this.pools = []
+    for (let j: i32 = 0; j < H3_FIELD_CLASSES; j++) {
+      const pool: u8[][] = []
+      this.pools.push(pool)
+    }
+    this.poolUsed = new Array<i32>(H3_FIELD_CLASSES)
     this.nameList = []
     this.valueList = []
     this.statusName = httpFieldBytes(":status")
@@ -1126,30 +1133,41 @@ export class Http3Connection {
     while (toI32(this.valueList.length) > 0) {
       this.valueList.pop()
     }
+    this.poolUsed.fill(H3_ZERO)
     for (let i: i32 = 0; i < d.count; i++) {
-      if (i >= toI32(this.names.length)) {
-        const freshName: u8[] = []
-        const freshValue: u8[] = []
-        this.names.push(freshName)
-        this.values.push(freshValue)
-      }
-      const name: u8[] = this.names[i]
-      const value: u8[] = this.values[i]
-      http3Empty(name)
-      http3Empty(value)
-      const ns: i32 = d.nameStart[i]
-      const nl: i32 = d.nameLength[i]
-      for (let j: i32 = ns; j < ns + nl && j >= 0 && j < toI32(d.bytes.length); j++) {
-        name.push(d.bytes[j])
-      }
-      const vs: i32 = d.valueStart[i]
-      const vl: i32 = d.valueLength[i]
-      for (let j: i32 = vs; j < vs + vl && j >= 0 && j < toI32(d.bytes.length); j++) {
-        value.push(d.bytes[j])
-      }
-      this.nameList.push(name)
-      this.valueList.push(value)
+      this.nameList.push(this.copyOf(d, d.nameStart[i], d.nameLength[i]))
+      this.valueList.push(this.copyOf(d, d.valueStart[i], d.valueLength[i]))
     }
+  }
+
+  /**
+   * A copy of the decoder's bytes `[start, start + length)`, in an array of
+   * the size class `length` falls in: class `j` holds arrays made with room
+   * for 2^j bytes, for strings shorter than that and at least half as long.
+   * A section takes the arrays of each class in order and the next takes the
+   * same ones again, so a class grows only when one section needs more of its
+   * size than any before it, and the total stays bounded by the field-section
+   * cap (`docs/security/http3.md`, H3-2).
+   */
+  copyOf(d: QpackDecoder, start: i32, length: i32): u8[] {
+    let j: i32 = 0
+    while (j < H3_FIELD_CLASSES - 1 && 1 << j <= length) {
+      j++
+    }
+    const pool: u8[][] = this.pools[j]
+    const used: i32 = this.poolUsed[j]
+    if (used >= toI32(pool.length)) {
+      const fresh: u8[] = new Array<u8>(1 << j)
+      http3Empty(fresh)
+      pool.push(fresh)
+    }
+    this.poolUsed[j] = used + 1
+    const out: u8[] = pool[used]
+    http3Empty(out)
+    for (let k: i32 = start; k < start + length && k >= 0 && k < toI32(d.bytes.length); k++) {
+      out.push(d.bytes[k])
+    }
+    return out
   }
 
   /**

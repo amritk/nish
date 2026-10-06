@@ -106,9 +106,11 @@ PASS  connected
 PASS  200 requests on a warm connection — HEADERS and DATA in, a 200 with a body out, ACKs and credit — keep no arena memory
 PASS  and every one was answered
 PASS  each finished both ways
+PASS  seven sections, each with its 3,000-byte field on another line, keep no arena memory: the copies are by size, not by line
+PASS  and all eight were answered
 PASS  six connections, one after another, through one slot
 PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
 PASS  and from the second on, each handshake keeps exactly as much: nothing in the slot grows
-http3: 113 passed, 0 failed, 0 skipped
+http3: 115 passed, 0 failed, 0 skipped

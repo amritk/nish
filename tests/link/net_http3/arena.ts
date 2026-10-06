@@ -81,8 +81,13 @@ const h3MeteredPacket = (s: ArenaServer, c: QcClient, payload: u8[], m: NqMeter)
 
 /** One request, whole, on stream `id`. */
 const h3Round = (s: ArenaServer, c: QcClient, id: i64, m: NqMeter): void => {
+  h3RoundOf(s, c, id, s.request, m);
+};
+
+/** The request `request`, whole, on stream `id`. */
+const h3RoundOf = (s: ArenaServer, c: QcClient, id: i64, request: u8[], m: NqMeter): void => {
   const payload: u8[] = [];
-  quicPushStream(payload, id, n64(0), s.request, n32(0), toI32(s.request.length), true);
+  quicPushStream(payload, id, n64(0), request, n32(0), toI32(request.length), true);
   h3MeteredPacket(s, c, payload, m);
 };
 
@@ -151,6 +156,46 @@ const h3PerRequest = (t: Suite): void => {
 };
 
 /**
+ * Field sections shaped to grow a connection's copies of them: each of eight
+ * requests carries a 3,000-byte field on a line of its own, the others short.
+ * The copies are taken by size class, not by line, so once the first has
+ * filled its class the other seven keep nothing (H3-2).
+ */
+const h3ShapedSections = (t: Suite): void => {
+  const limits = new H3Limits();
+  const s = new ArenaServer(limits);
+  const c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
+  const warm = new NqMeter(false);
+  if (!h3MeteredHandshake(s, c, limits, warm)) {
+    t.fail("connected", "the handshake did not complete");
+    return;
+  }
+  h3OpenClient(s, c, warm);
+  const enc = new QpackEncoder();
+  const big: string[] = [];
+  for (let k: i32 = 0; k < 3000; k++) {
+    big.push("v");
+  }
+  const requests: u8[][] = [];
+  for (let r: i32 = 0; r < 8; r++) {
+    const names: string[] = [":method", ":scheme", ":authority", ":path"];
+    const values: string[] = ["GET", "https", "localhost", "/shaped"];
+    for (let line: i32 = 0; line < 8; line++) {
+      names.push(`x-line-${line}`);
+      values.push(line === r ? big.join("") : "short");
+    }
+    requests.push(h3Frame(n64(1), h3Section(enc, names, values)));
+  }
+  h3RoundOf(s, c, n64(0), requests[0], warm);
+  const m = new NqMeter(false);
+  for (let r: i32 = 1; r < 8; r++) {
+    h3RoundOf(s, c, toI64(r) * n64(4), requests[r], m);
+  }
+  t.eqI64("seven sections, each with its 3,000-byte field on another line, keep no arena memory: the copies are by size, not by line", m.kept, n64(0));
+  t.eqI32("and all eight were answered", s.answered, n32(8));
+};
+
+/**
  * Connection after connection through one slot: the reset keeps nothing,
  * and after its handshake a connection keeps nothing from the second on,
  * once the decoder's arrays and the field lists have grown to the section the
@@ -205,5 +250,6 @@ const h3PerConnection = (t: Suite): void => {
 /** Every arena check. */
 export const h3ArenaChecks = (t: Suite): void => {
   h3PerRequest(t);
+  h3ShapedSections(t);
   h3PerConnection(t);
 };

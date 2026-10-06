@@ -78,6 +78,7 @@ import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
 import {
   QUIC_LISTEN_ACCEPT,
   QUIC_LISTENER_FLIGHT_MAX,
+  QUIC_LISTENER_MIN_RESET,
   QuicFlight,
   QuicListener,
   QuicListenerAnswer,
@@ -605,6 +606,9 @@ export class Http3Server {
 
   /** A datagram no slot owns: the listener decides, and may make a connection in a free slot. */
   unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
+    if (!this.worthListening(buf, at, len)) {
+      return
+    }
     const datagram: u8[] = new Array<u8>(len)
     for (let k: i32 = 0; k < len && k < toI32(datagram.length) && at + k < toI32(buf.length); k++) {
       datagram[k] = buf[at + k]
@@ -618,7 +622,6 @@ export class Http3Server {
       return
     }
     if (this.freeCount <= 0) {
-      this.refused = http3ServerCount(this.refused)
       return
     }
     this.freeCount = this.freeCount - 1
@@ -638,6 +641,41 @@ export class Http3Server {
     this.signatures[slot] = H3_SERVER_NONE
     this.accepted = http3ServerCount(this.accepted)
     this.serve(slot, buf, at, len, now, key)
+  }
+
+  /**
+   * Whether the listener could answer `buf[at .. at + len)` at all, read
+   * from its first bytes: what it would drop without a word, it costs
+   * nothing to drop here, before the copy and the parse the listener makes
+   * (H3-3). That is a short header too short for a stateless reset; a long
+   * one shorter than a full Initial, which neither Version Negotiation nor a
+   * new connection answers (RFC 9000 §14.1, §6.1); version 0; a version 1
+   * packet that is not an Initial, or whose DCID is under 8 bytes (§7.2);
+   * and an Initial when no slot is free, which is counted in `refused`.
+   */
+  worthListening(buf: u8[], at: i32, len: i32): boolean {
+    const first: i32 = toI32(buf[at])
+    if ((first & 0x80) === 0) {
+      return len > QUIC_LISTENER_MIN_RESET
+    }
+    if (len < QUIC_CONN_DATAGRAM_SIZE || len < 6) {
+      return false
+    }
+    let version: i32 = 0
+    for (let k: i32 = 1; k <= 4; k++) {
+      version = (version << 8) | toI32(buf[at + k])
+    }
+    if (version !== 1) {
+      return version !== 0
+    }
+    if ((first & 0x30) !== 0 || toI32(buf[at + 5]) < 8) {
+      return false
+    }
+    if (this.freeCount <= 0) {
+      this.refused = http3ServerCount(this.refused)
+      return false
+    }
+    return true
   }
 
   /** Hands `slot`'s connection a datagram, signs when the handshake asks, and refiles its IDs and timer. */
