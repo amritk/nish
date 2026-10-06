@@ -98,6 +98,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The runner's docker-compose.yml names each endpoint's interface
+      # (`interface_name`), which needs Docker Engine 28.1 or later; the image's
+      # is older. The runner's own CI installs this version the same way.
+      - uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5.5.0
+        with:
+          version: version=v28.3.0
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: nish-interop-image
@@ -248,8 +255,9 @@ jobs:
           check "curl --http3-only POST" "$(curl_in -sSfk --http3-only --data-binary 'a body of 21 bytes...' "https://127.0.0.1:$QUIC_PORT/post")" "received 21 bytes"
           check "curl --http2 GET of the file" "$(curl_in -sSfk --http2 "https://127.0.0.1:$H2_PORT/file" | sha256sum)" "$want"
           check "curl --http2 POST" "$(curl_in -sSfk --http2 --data-binary 'a body of 21 bytes...' "https://127.0.0.1:$H2_PORT/post")" "received 21 bytes"
-          check "curl --http2 says it spoke HTTP/2" "$(curl_in -sSk --http2 -o /dev/null -w '%{http_version}' "https://127.0.0.1:$H2_PORT/file")" "2"
-          check "curl --http3-only says it spoke HTTP/3" "$(curl_in -sSk --http3-only -o /dev/null -w '%{http_version}' "https://127.0.0.1:$QUIC_PORT/file")" "3"
+          # -w prints the version even for a transfer that failed, so the transfer must succeed too.
+          check "curl --http2 says it spoke HTTP/2" "$(curl_in -sSfk --http2 -o /dev/null -w '%{http_version}' "https://127.0.0.1:$H2_PORT/file" || echo ' (failed)')" "2"
+          check "curl --http3-only says it spoke HTTP/3" "$(curl_in -sSfk --http3-only -o /dev/null -w '%{http_version}' "https://127.0.0.1:$QUIC_PORT/file" || echo ' (failed)')" "3"
           exit "$fail"
 
       - name: The server's log
