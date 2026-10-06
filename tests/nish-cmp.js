@@ -598,6 +598,19 @@ const CAPABILITY_POLICY_NEW = [
   "tests/link/caps_policy_manifest_unsafe/main.ts",
 ]
 
+/** Programs new with `nish/net/qpack` (WP34 R1, first part), which the reference refuses: its std/ has no such module. */
+const QPACK_NEW = [
+  "tests/link/net_qpack/main.ts",
+  "tests/link/net_qpack_f64/main.ts",
+  "tests/link/net_qpack_bad_decoder_stream_window/main.ts",
+  "tests/link/net_qpack_bad_encoder_stream_window/main.ts",
+  "tests/link/net_qpack_bad_field_window/main.ts",
+  "tests/link/net_qpack_bad_limit/main.ts",
+  "tests/link/net_qpack_bad_stream_id/main.ts",
+  "tests/link/net_qpack_bad_value_window/main.ts",
+  "tests/link/net_qpack_bad_window/main.ts",
+]
+
 const DECLARED = [
   {
     program: "tests/link/net_hpack/main.ts",
@@ -3009,6 +3022,11 @@ const DECLARED = [
     CAPABILITY_POLICY_NEW,
     "a program that reaches a capability its policy does not grant",
     "a new program: it is compiled under `--allow`, or its root `package.json` carries a `capabilities` policy, which the reference compiler does not read"
+  ),
+  ...declareMoved(
+    QPACK_NEW,
+    "QPACK with the static table and dynamic capacity 0",
+    "a new program: it imports `nish/net/qpack`, which the reference compiler's standard library does not have"
   ),
   // Last, because it covers every program and a narrower entry above must
   // still be the one a difference is reported under.
