@@ -1,0 +1,56 @@
+PASS  a second control stream: H3_STREAM_CREATION_ERROR
+PASS  a second QPACK encoder stream
+PASS  a second QPACK decoder stream
+PASS  a push stream from a client
+PASS  a control stream that does not start with SETTINGS: H3_MISSING_SETTINGS
+PASS  not even with an unknown frame first
+PASS  requests before the client's SETTINGS are no error: they are served
+PASS  the client's control stream ends: H3_CLOSED_CRITICAL_STREAM
+PASS  it is reset
+PASS  the client's QPACK encoder stream ends
+PASS  its decoder stream is reset
+PASS  the client asks the server to stop its control stream
+PASS  or its QPACK encoder stream
+PASS  or its decoder stream
+PASS  DATA on the control stream: H3_FRAME_UNEXPECTED
+PASS  HEADERS on the control stream: H3_FRAME_UNEXPECTED
+PASS  a second SETTINGS on the control stream: H3_FRAME_UNEXPECTED
+PASS  PUSH_PROMISE on the control stream: H3_FRAME_UNEXPECTED
+PASS  PRIORITY (0x02) on the control stream: H3_FRAME_UNEXPECTED
+PASS  PING (0x06) on the control stream: H3_FRAME_UNEXPECTED
+PASS  WINDOW_UPDATE (0x08) on the control stream: H3_FRAME_UNEXPECTED
+PASS  CONTINUATION (0x09) on the control stream: H3_FRAME_UNEXPECTED
+PASS  DATA before HEADERS on a request stream: H3_FRAME_UNEXPECTED
+PASS  PUSH_PROMISE on a request stream: H3_FRAME_UNEXPECTED
+PASS  SETTINGS on a request stream: H3_FRAME_UNEXPECTED
+PASS  GOAWAY on a request stream: H3_FRAME_UNEXPECTED
+PASS  MAX_PUSH_ID on a request stream: H3_FRAME_UNEXPECTED
+PASS  CANCEL_PUSH on a request stream: H3_FRAME_UNEXPECTED
+PASS  PRIORITY (0x02) on a request stream: H3_FRAME_UNEXPECTED
+PASS  CONTINUATION (0x09) on a request stream: H3_FRAME_UNEXPECTED
+PASS  PUSH_PROMISE after a request's HEADERS
+PASS  HEADERS after the trailers
+PASS  DATA after the trailers
+PASS  SETTINGS with an identifier HTTP/2 used, 0x02: H3_SETTINGS_ERROR
+PASS  SETTINGS with an identifier twice
+PASS  SETTINGS whose payload ends inside a value: H3_FRAME_ERROR
+PASS  GOAWAY with a byte after its identifier
+PASS  an empty MAX_PUSH_ID
+PASS  a DATA frame cut short by the stream's end
+PASS  a frame header cut short by the stream's end
+PASS  a HEADERS frame cut short by the stream's end
+PASS  an unknown frame cut short by it
+PASS  SETTINGS past H3_CONTROL_FRAME_MAX, 1,024 bytes: H3_EXCESSIVE_LOAD
+PASS  a GOAWAY that long can only be the wrong length: H3_FRAME_ERROR
+PASS  a client's GOAWAY whose push ID rises: H3_ID_ERROR
+PASS  a MAX_PUSH_ID that falls
+PASS  CANCEL_PUSH with no push ID allowed
+PASS  CANCEL_PUSH past the MAX_PUSH_ID
+PASS  a Set Dynamic Table Capacity above 0: QPACK_ENCODER_STREAM_ERROR
+PASS  an Insert With Name Reference
+PASS  a Section Acknowledgment on the decoder stream: QPACK_DECODER_STREAM_ERROR
+PASS  an Insert Count Increment
+PASS  a field section with a Required Insert Count: QPACK_DECOMPRESSION_FAILED
+PASS  a static index past 98
+PASS  an empty HEADERS frame, which has no section prefix
+http3 errors: 55 passed, 0 failed, 0 skipped
