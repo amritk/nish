@@ -98,6 +98,15 @@ PASS  the server asks the client to stop sending on 8
 PASS  STOP_SENDING goes out with its code
 PASS  once acknowledged, the RESET_STREAM is Reset Recvd
 PASS  the client's answering reset ends the stream both ways, and frees its slot
+PASS  reading a stream never opened is QUIC_STREAM_ERR_UNKNOWN
+PASS  so is a read outside the buffer given
+PASS  resetting one is too
+PASS  and stopping one
+PASS  resetting the client's unidirectional stream, which has no sending side, is QUIC_STREAM_ERR_DIRECTION
+PASS  stopping the server's own unidirectional stream, which has no receiving side, is too
+PASS  stopping a stream whose every byte arrived is QUIC_STREAM_ERR_FINISHED
+PASS  once closed, a reset is QUIC_STREAM_ERR_STATE
+PASS  and so is STOP_SENDING
 PASS  the server opens its first unidirectional stream, 3
 PASS  the client allows one: the next is QUIC_STREAM_ERR_LIMIT
 PASS  and STREAMS_BLOCKED tells the client at which limit (§19.14)
@@ -112,4 +121,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
-quic streams: 114 passed, 0 failed, 0 skipped
+quic streams: 123 passed, 0 failed, 0 skipped

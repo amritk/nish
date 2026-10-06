@@ -221,4 +221,35 @@ PASS  nor against a 21-byte original DCID
 PASS  an Initial is not a Retry
 PASS  nor is a header that did not parse
 PASS  a Retry with an empty token still parses (the client discards it)
-quic-packet: 223 passed, 0 failed, 0 skipped
+PASS  quicLongHeaderSize sizes A.2's header
+PASS  and is 0 for a type that has none
+PASS  quicPutLongHeader writes A.2's header from an ID in a 20-byte slot
+PASS  byte for byte
+PASS  and refuses a buffer one byte short
+PASS  or an ID length past its array
+PASS  quicPutShortHeader writes A.5's
+PASS  and refuses a packet-number length of 5
+PASS  quicVarintPut writes 37 in two bytes
+PASS  as 4025
+PASS  and refuses a size of 3
+PASS  or a size too short for the value
+PASS  or a buffer without the room
+PASS  quicPacketGrow appends zeros for a writer to fill
+PASS  quicSealInPlace seals A.2 where it lies, ending at 1200
+PASS  byte for byte
+PASS  with no room for the tag it refuses
+PASS  and with a packet number the header does not carry
+PASS  quicParseHeaderInto reads A.2
+PASS  as windows: the DCID at 6, 8 bytes, no SCID, no token
+PASS  and leaves the header's arrays alone
+PASS  quicUnprotectHeader answers the header in the clear and packet number 2
+PASS  storing nothing but numbers into the packet
+PASS  quicDecryptPayload answers the frames
+PASS  a flipped tag byte does not open
+PASS  and a packet in error is not opened again
+PASS  a limit inside the header is QUIC_ERR_TRUNCATED
+PASS  and unprotecting it answers nothing
+PASS  a short header read up to a limit
+PASS  ends at the limit, not the buffer
+PASS  and A.5 opens from it: one PING
+quic-packet: 254 passed, 0 failed, 0 skipped

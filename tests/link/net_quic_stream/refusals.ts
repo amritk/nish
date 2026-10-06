@@ -20,6 +20,9 @@ import {
   quicPushValue,
 } from "nish/net/quic-frame";
 import {
+  QUIC_STREAM_ERR_DIRECTION,
+  QUIC_STREAM_ERR_STATE,
+  QUIC_STREAM_ERR_UNKNOWN,
   QUIC_RECV_RESET_RECVD,
   QUIC_SEND_RESET_RECVD,
   QUIC_SEND_RESET_SENT,
@@ -150,6 +153,26 @@ const endingChecks = (t: Suite): void => {
   t.ok("the client's answering reset ends the stream both ways, and frees its slot", gone.of(n64(8)) === " <reset 12>" && p.conn.streams.find(n64(8)) === null);
 };
 
+/** What the stream calls answer for a stream that is not there, a side it does not have, or a connection not up. */
+const answerChecks = (t: Suite): void => {
+  const p: NqPair = nqPair(new NqLimits());
+  nqSend(p, cat([nqStream(n64(2), n64(0), "one way", false), nqStream(n64(0), n64(0), "both", true)]));
+  const read = new NqRead();
+  nqReadAll(p.conn, n32(64), read);
+  const buf: u8[] = new Array<u8>(8);
+  t.eqI32("reading a stream never opened is QUIC_STREAM_ERR_UNKNOWN", p.conn.streamRead(n64(40), buf, n32(0), n32(8)), QUIC_STREAM_ERR_UNKNOWN);
+  t.eqI32("so is a read outside the buffer given", p.conn.streamRead(n64(2), buf, n32(4), n32(8)), QUIC_STREAM_ERR_UNKNOWN);
+  t.eqI32("resetting one is too", p.conn.streamReset(n64(40), n64(1)), QUIC_STREAM_ERR_UNKNOWN);
+  t.eqI32("and stopping one", p.conn.streamStopSending(n64(40), n64(1)), QUIC_STREAM_ERR_UNKNOWN);
+  t.eqI32("resetting the client's unidirectional stream, which has no sending side, is QUIC_STREAM_ERR_DIRECTION", p.conn.streamReset(n64(2), n64(1)), QUIC_STREAM_ERR_DIRECTION);
+  const own: i64 = p.conn.openStream(false);
+  t.eqI32("stopping the server's own unidirectional stream, which has no receiving side, is too", p.conn.streamStopSending(own, n64(1)), QUIC_STREAM_ERR_DIRECTION);
+  t.eqI32("stopping a stream whose every byte arrived is QUIC_STREAM_ERR_FINISHED", p.conn.streamStopSending(n64(0), n64(1)), QUIC_STREAM_ERR_FINISHED);
+  p.conn.close(n64(0));
+  t.eqI32("once closed, a reset is QUIC_STREAM_ERR_STATE", p.conn.streamReset(n64(2), n64(1)), QUIC_STREAM_ERR_STATE);
+  t.eqI32("and so is STOP_SENDING", p.conn.streamStopSending(n64(2), n64(1)), QUIC_STREAM_ERR_STATE);
+};
+
 /** The limits on the server's own streams, and the client's raised as its streams finish. */
 const limitChecks = (t: Suite): void => {
   const limits = new NqLimits();
@@ -177,5 +200,6 @@ const limitChecks = (t: Suite): void => {
 export const refusalChecks = (t: Suite): void => {
   streamRefusals(t);
   endingChecks(t);
+  answerChecks(t);
   limitChecks(t);
 };

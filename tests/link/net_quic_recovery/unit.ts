@@ -296,6 +296,21 @@ const rcRefusalChecks = (t: Suite): void => {
 };
 
 /** Every check of the module on its own. */
+/** `reset` puts a used recovery back as a new connection has it, for a reused slot (QUIC-3). */
+const rcResetChecks = (t: Suite): void => {
+  const r = new QuicRecovery();
+  r.onPacketSent(n32(2), n64(0), n32(1200), n64(0));
+  r.onPacketSent(n32(2), n64(1), n32(1200), n64(0));
+  r.onAck(n32(2), [n64(1), n64(1)], n32(1), n64(0), n64(100));
+  r.reset();
+  const sp: QuicSentPackets | null = r.space(n32(2));
+  t.ok(
+    "reset empties every space and puts the estimate and the window back",
+    sp !== null && sp.count === n32(0) && sp.inFlight === n32(0) && sp.lastPn === n64(-1) && r.bytesInFlight() === n64(0) && r.smoothedRtt === n64(333) && r.congestionWindow === n64(12000) && r.minRtt === n64(0) && r.firstSampleTime === n64(-1)
+  );
+  t.eqI32("so the next connection records its packet 0 again, in slot 0", r.onPacketSent(n32(2), n64(0), n32(1200), n64(0)), n32(0));
+};
+
 export const recoveryUnitChecks = (t: Suite): void => {
   rcRttChecks(t);
   rcLossChecks(t);
@@ -303,4 +318,5 @@ export const recoveryUnitChecks = (t: Suite): void => {
   rcCongestionChecks(t);
   rcPacerChecks(t);
   rcRefusalChecks(t);
+  rcResetChecks(t);
 };

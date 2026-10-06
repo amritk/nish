@@ -30,6 +30,7 @@ import { QUIC_ACK_MAX_RANGES, QuicAckRanges } from "nish/net/quic-conn-ack";
 import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
+import { partsSlotChecks } from "./slots";
 
 /** 2^62 − 1, as a product: an `i64` literal past 2^53 is refused. */
 const MAX_VARINT: i64 = 1073741824 * 4294967296 - 1;
@@ -317,5 +318,6 @@ export const quicConnPartsChecks = (): i32 => {
   partsParamChecks(t);
   partsAckChecks(t);
   partsCidChecks(t);
+  partsSlotChecks(t);
   return t.done();
 };

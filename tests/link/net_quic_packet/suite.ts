@@ -2,11 +2,13 @@
 // and the f64 entries run the same checks.
 import { Suite } from "nish/testing";
 import { vectorChecks } from "./checks";
+import { inPlaceChecks } from "./inplace";
 import { refusalChecks } from "./refusals";
 
 export const quicPacketChecks = (): i32 => {
   const t = new Suite("quic-packet");
   vectorChecks(t);
   refusalChecks(t);
+  inPlaceChecks(t);
   return t.done();
 };

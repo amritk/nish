@@ -922,14 +922,6 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.activeConnectionIdLimit <= 8 &&
   toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE
 
-/** A limit the configuration gives, clamped into what the buffers are sized for when it is out of range. */
-const quicConnClamp = (value: i64, low: i64, high: i64): i64 => {
-  if (value < low) {
-    return low
-  }
-  return value > high ? high : value
-}
-
 /**
  * One server connection, which is also a reusable slot. Make one, hand it
  * every datagram the client sends with `receiveWindow` (or `receive`), sign
@@ -1070,23 +1062,25 @@ export class QuicConnection {
     this.initial = new QuicConnSpace(TLS_LEVEL_INITIAL)
     this.handshake = new QuicConnSpace(TLS_LEVEL_HANDSHAKE)
     this.application = new QuicConnSpace(TLS_LEVEL_APPLICATION)
-    this.cids = new QuicCidTable(quicConnClamp(config.activeConnectionIdLimit, 2, 8), QUIC_CONN_LOCAL_CIDS)
+    this.cids = new QuicCidTable(
+      config.activeConnectionIdLimit >= 2 && config.activeConnectionIdLimit <= 8
+        ? config.activeConnectionIdLimit
+        : 2,
+      QUIC_CONN_LOCAL_CIDS
+    )
     this.recovery = new QuicRecovery()
     this.defaultParameters = new QuicTransportParameters()
     this.peerParameters = this.defaultParameters
-    const streams: i64 = quicConnClamp(config.maxStreamsBidi, 0, QUIC_CONN_MAX_STREAMS)
-    const uni: i64 = quicConnClamp(config.maxStreamsUni, 0, QUIC_CONN_MAX_STREAMS)
-    const local: i64 = quicConnClamp(config.localStreams, 0, QUIC_CONN_MAX_STREAMS)
-    const buffer: i32 = toI32(quicConnClamp(config.maxStreamData, 1, QUIC_CONN_MAX_STREAM_DATA))
-    this.streams = new QuicStreams(
-      streams,
-      uni,
-      local,
-      buffer,
-      quicConnClamp(config.maxData, 0, QUIC_MAX_VARINT)
-    )
+    // A configuration that does not fit closes the connection at once (see
+    // `begin`), so it gets no stream or datagram buffers at all.
+    const fits: boolean = quicConnConfigFits(config)
+    const streams: i64 = fits ? config.maxStreamsBidi : QUIC_CONN_NONE
+    const uni: i64 = fits ? config.maxStreamsUni : QUIC_CONN_NONE
+    const local: i64 = fits ? config.localStreams : QUIC_CONN_NONE
+    const buffer: i32 = fits ? toI32(config.maxStreamData) : QUIC_CONN_FROM
+    this.streams = new QuicStreams(streams, uni, local, buffer, fits ? config.maxData : QUIC_CONN_NONE)
     // The rings are made only when DATAGRAM frames are offered at all.
-    const datagrams: i32 = config.maxDatagramFrameSize > 0 ? QUIC_CONN_DATAGRAM_QUEUE : 0
+    const datagrams: i32 = fits && config.maxDatagramFrameSize > 0 ? QUIC_CONN_DATAGRAM_QUEUE : 0
     this.datagramsOut = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_SIZE)
     this.datagramsIn = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_SIZE)
     this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)

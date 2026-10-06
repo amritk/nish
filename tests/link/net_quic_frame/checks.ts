@@ -59,6 +59,7 @@ import {
 } from "nish/net/quic-frame";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { a2Payload, a3Payload } from "../net_quic_packet/vectors";
+import { inPlaceChecks } from "./inplace";
 import { n32, n64 } from "./typed";
 
 
@@ -419,5 +420,6 @@ export const quicFrameChecks = (): i32 => {
   valueChecks(t);
   otherChecks(t);
   parseChecks(t);
+  inPlaceChecks(t);
   return t.done();
 };

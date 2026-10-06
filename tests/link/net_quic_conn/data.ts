@@ -41,6 +41,7 @@ import {
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
   QUIC_CONN_ENTROPY_SIZE,
+  QUIC_CONN_MAX_ISSUED_CIDS,
   QUIC_STATE_CLOSING,
   QUIC_STATE_CONNECTED,
   QUIC_STATE_DRAINING,
@@ -534,6 +535,42 @@ const constructorChecks = (t: Suite): void => {
   const idle: QuicServerConfig = qcConfig(n64(65536), n64(16384), n64(4), n64(4));
   idle.maxIdleTimeout = n64(-1);
   t.eqI64("so is a negative idle timeout", new QuicConnection(idle, fixedEntropy()).error, QUIC_ERROR_INTERNAL);
+  const uni: QuicServerConfig = qcDefaultConfig();
+  uni.maxStreamsUni = n64(1025);
+  const local: QuicServerConfig = qcDefaultConfig();
+  local.localStreams = n64(-1);
+  const datagram: QuicServerConfig = qcDefaultConfig();
+  datagram.maxDatagramFrameSize = n64(65536);
+  let newLimits: boolean = true;
+  for (const config of [uni, local, datagram]) {
+    const conn = new QuicConnection(config, fixedEntropy());
+    newLimits = newLimits && conn.error === QUIC_ERROR_INTERNAL && toI32(conn.streams.slots.length) === n32(0);
+  }
+  t.ok("as are more than 1024 unidirectional or local streams, fewer than none, or a DATAGRAM frame past 65535, with no buffers made", newLimits);
+};
+
+/**
+ * A client that retires the server's IDs over and over gets a replacement
+ * for each until the server has issued QUIC_CONN_MAX_ISSUED_CIDS in all,
+ * and then none: each costs two HMACs that stay in the arena (QUIC-3).
+ */
+const issuedCapChecks = (t: Suite): void => {
+  const conn: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = qcConnected(conn, n64(65536));
+  let sequence: i64 = n64(1);
+  while (conn.cids.nextLocal < QUIC_CONN_MAX_ISSUED_CIDS && sequence < n64(100)) {
+    const retire: u8[] = [];
+    quicPushValue(retire, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence);
+    qcExchange(conn, c, qcShort(c, retire));
+    sequence = sequence + n64(1);
+  }
+  t.eqI64("each retired ID is replaced until 64 have been issued", conn.cids.nextLocal, QUIC_CONN_MAX_ISSUED_CIDS);
+  t.eqI32("the client still holds four", conn.cids.activeLocal(), n32(4));
+  const retire: u8[] = [];
+  quicPushValue(retire, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence);
+  qcExchange(conn, c, qcShort(c, retire));
+  t.ok("past that, a retired ID is not replaced", conn.cids.activeLocal() === n32(3) && conn.cids.nextLocal === QUIC_CONN_MAX_ISSUED_CIDS);
+  t.ok("and the connection carries on", conn.state === QUIC_STATE_CONNECTED);
 };
 
 /** Every data-path check. */
@@ -545,4 +582,5 @@ export const quicConnDataChecks = (t: Suite): void => {
   dropChecks(t);
   shapeChecks(t);
   constructorChecks(t);
+  issuedCapChecks(t);
 };

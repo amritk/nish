@@ -95,6 +95,8 @@ PASS  so a 17th is refused
 PASS  an ACK of the oldest frees its slot for the next
 PASS  evicting gives up the oldest still in flight, packet 1
 PASS  out of flight, with no congestion event
+PASS  reset empties every space and puts the estimate and the window back
+PASS  so the next connection records its packet 0 again, in slot 0
 PASS  the server's first flight goes out, and the network loses it
 PASS  with no RTT sample, its probe timeout is 333 + 4 × 166 ms after it
 PASS  there is room under the amplification limit for a probe
@@ -144,4 +146,4 @@ PASS  ten full datagrams go at once: the initial window's burst
 PASS  the next waits 4 ms
 PASS  not a millisecond less
 PASS  and then goes
-quic recovery: 146 passed, 0 failed, 0 skipped
+quic recovery: 148 passed, 0 failed, 0 skipped

@@ -134,6 +134,11 @@ PASS  nor does it sign anything
 PASS  the caller's entropy is wiped once it is copied
 PASS  limits outside what QuicServerConfig allows are refused the same way
 PASS  so is a negative idle timeout
+PASS  as are more than 1024 unidirectional or local streams, fewer than none, or a DATAGRAM frame past 65535, with no buffers made
+PASS  each retired ID is replaced until 64 have been issued
+PASS  the client still holds four
+PASS  past that, a retired ID is not replaced
+PASS  and the connection carries on
 PASS  a 1-RTT packet with no frames is PROTOCOL_VIOLATION (§12.4): the connection closes
 PASS  a 1-RTT packet with no frames is PROTOCOL_VIOLATION (§12.4): and says so
 PASS  an unknown frame type is FRAME_ENCODING_ERROR: the connection closes
@@ -201,4 +206,4 @@ PASS  closed in an Initial and a Handshake packet
 PASS  each naming the frame
 PASS  while TLS waits for the signature nothing is sent
 PASS  an empty signature fails TLS with internal_error
-quic connection: 203 passed, 0 failed, 0 skipped
+quic connection: 208 passed, 0 failed, 0 skipped

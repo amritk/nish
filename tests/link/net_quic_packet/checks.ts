@@ -207,7 +207,7 @@ const keyChecks = (t: Suite): void => {
 }
 
 /** A.2's payload: the CRYPTO frame and PADDING to 1162 bytes. */
-const a2Frames = (): u8[] => {
+export const a2Frames = (): u8[] => {
   const frames: u8[] = bytesOf(a2Payload());
   return joined(frames, zeros(1162 - toI32(frames.length)));
 }
