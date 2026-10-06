@@ -385,12 +385,17 @@ major. Whether it happens at all is still wp22 §10's open question.
 1. **WP34, hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)): the port
    of a browser game and its servers, starting with its Rust relay on a Nish
    network stack. Built: the compiler items N1, N2, N3, N5 and N6, every
-   cryptography lane K1 to K6, TLS 1.3 (T1, T2) and QUIC (Q1, Q2); HTTP/1.1
-   and WebSocket parsing (H1) and HPACK (H2) are half built. Next are the
-   HTTP/1.1 server, HTTP/2 frames and streams, QUIC Q3 and Q4, HTTP/3 and
-   WebTransport, and moving the key-holding structs onto `nish:secret`
-   ([#430](https://github.com/amritk/nish/issues/430)). §5 of the note has the
-   lane table and the order.
+   cryptography lane K1 to K6, and the stack — TLS 1.3 (T1, T2), the HTTP/1.1
+   server and WebSocket (H1), HTTP/2 (H2), QUIC with loss recovery, streams
+   and datagrams (Q1 to Q4), HTTP/3 with QPACK (R1) and WebTransport (R2) —
+   and the relay itself, `examples/relay/` (A1), with every cap, timeout and
+   close code of cs's. Next: the QUIC handshake's memory per connection (about
+   101 KB, H3-1), which keeps N9's soak from going flat and is `std/net`'s to
+   remove; the loopback suite and S2's interop job; moving the key-holding
+   structs onto `nish:secret` ([#430](https://github.com/amritk/nish/issues/430));
+   and, once a release carries R2, the cs side: `services/relay` replaced,
+   `boot-check`'s wire pass and `bench:offload` against the Rust relay. §5 of
+   the note has the lane table and what each lane left.
 2. **WP33 R3 and R4, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
    R1 (the `portability` class behind `--warn-portability`) and R2 (the
    typed-array names lose `push` and `pop`) are built, and so is R5's exact
