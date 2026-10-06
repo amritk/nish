@@ -1,11 +1,13 @@
 PASS  a thousand RFC 8448 handshakes in one restarted slot: every ServerHello and flight record is the trace's
-PASS  and every handshake after the first leaves the arena the same
-PASS  which is aesKey's four AES-128 schedules and nothing else: 4544 bytes, 4 x 1136 (52,808 before the slot)
+PASS  and after the first, AES-128-GCM's included, Arena.mark() did not move (52,808 bytes a handshake before the slot)
+PASS  the slot holds the AES-128 schedule while open, and wipeKeys zeroes it, both directions
+PASS  and so does start, when the slot is handed its next connection
 PASS  a 3,000-byte padded ChaCha20 handshake works out: two records, then the close
 PASS  a thousand ChaCha20 handshakes in one slot, every byte the recorded one
 PASS  the first grew the slot's input buffer for its ClientHello (2048 to 4096 bytes)
 PASS  and after it Arena.mark() did not move: the handshake allocates nothing that outlives it
-PASS  a thousand connections accepted, handshaken and closed over loopback, every byte the recorded one
+PASS  an AES-256-GCM-SHA384 handshake works out for the loopback run
+PASS  a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one
 PASS  and after the first Arena.mark() did not move: accept, handshake and close reuse the slot
 PASS  every slot is free again
 PASS  a restart with a random that is not 32 bytes fails the server with internal_error
@@ -14,4 +16,4 @@ PASS  tlsTrafficKeysInto refuses a suite it does not negotiate
 PASS  a secret that is not the suite's hash length
 PASS  and a key array of the wrong length
 PASS  a cleartext protection has no next secret to advance to
-tls memory: 16 passed, 0 failed, 0 skipped
+tls memory: 18 passed, 0 failed, 0 skipped

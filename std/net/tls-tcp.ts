@@ -35,8 +35,8 @@
  * own `TlsServer`, which `accept` restarts for the connection, so neither the
  * handshake nor application data allocates anything that outlives a call:
  * a thousand connections through one slot leave `Arena.mark()` where the
- * first left it, but for the schedule `aesKey` leaves per key install under
- * an AES suite (TLS-3 in `docs/security/tls.md`, `tests/link/net_tls_memory`).
+ * first left it, under every suite (TLS-3 in `docs/security/tls.md`,
+ * `tests/link/net_tls_memory`).
  *
  * **Randomness is the caller's.** `accept` takes the 32-byte server random and
  * the 32-byte x25519 private key the handshake uses, as `TlsServer` does, so a

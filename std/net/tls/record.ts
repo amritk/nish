@@ -45,15 +45,16 @@
  * not be one (NL2430), in arrays the protection reuses for every key it is
  * given, and are zeroed when it is installed again or cleared — the key and
  * IV with `secureZero`. The key and IV are derived straight into place, in an
- * HKDF scratch that is wiped after each derivation. The schedule is `u64`
- * words, which `secureZero` does not take, and the copy `aesKey` answers is
- * zeroed by stores the optimiser may drop (TLS-2 in `docs/security/tls.md`).
+ * HKDF scratch that is wiped after each derivation, and the schedule is
+ * expanded into place by `aesKeyInto`. The schedule is `u64` words, which
+ * `secureZero` does not take, and are zeroed by ordinary stores that stand
+ * because it stays reachable (TLS-2 in `docs/security/tls.md`).
  *
  * The record layer is sans-IO: `nish/net/tls/record-server` runs it over a
  * stream for `TlsServer`, and `nish/net/tls-tcp` puts that on a socket.
  * Written from RFC 8446 §5, not ported from another implementation.
  */
-import { AesKey, aesGcmOpen, aesGcmSeal, aesKey } from "nish/crypto/aes"
+import { AesKey, aesGcmOpen, aesGcmSeal, aesKeyInto } from "nish/crypto/aes"
 import { chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import {
   TLS_ALERT_INTERNAL_ERROR,
@@ -356,8 +357,8 @@ export class TlsRecordProtection {
    * hash's length.
    *
    * The key, the IV and the AES key schedule are written into the arrays this
-   * direction made when it was constructed; only `aesKey`'s schedule, for an
-   * AES suite, is left in the arena (TLS-3).
+   * direction made when it was constructed, so an install allocates nothing
+   * that outlives it (TLS-3).
    */
   install(suite: i32, secret: u8[]): boolean {
     this.clear()
@@ -381,31 +382,18 @@ export class TlsRecordProtection {
 
   /**
    * Fills the key, the IV and the AES key schedule from `secret`, into the
-   * arrays `reserve` chose. The key and IV are derived straight into place,
-   * in the direction's own HKDF scratch, inside an arena block, so nothing of
-   * that derivation outlives it and the scratch is wiped.
-   *
-   * The AES key schedule is the exception: `aesKey` answers it in an `AesKey`
-   * of its own, which stores the round keys it allocates, so no arena block
-   * may be put around it (NL2424), and its 1,456 bytes stay in the arena
-   * after it is copied here and zeroed — by stores the optimiser may drop,
-   * since nothing reads them again (TLS-2, TLS-3). ChaCha20 has no schedule
-   * and leaves nothing.
+   * arrays `reserve` chose: the key and IV derived straight into place in the
+   * direction's own HKDF scratch, which is wiped after, and the schedule
+   * expanded into this direction's `AesKey` by `aesKeyInto`. All of it runs
+   * inside an arena block, so a key install leaves the arena where it was.
+   * ChaCha20 has no schedule.
    */
   derive(suite: i32, secret: u8[]): void {
-    {
-      using _scope = arena()
-      tlsTrafficKeysInto(this.kdf, suite, secret, this.key, this.iv)
-    }
+    using _scope = arena()
+    tlsTrafficKeysInto(this.kdf, suite, secret, this.key, this.iv)
     const aes: AesKey | null = this.aes
-    const fresh: AesKey | null = suite === TLS_CHACHA20_POLY1305_SHA256 ? null : aesKey(this.key)
-    if (aes !== null && fresh !== null) {
-      for (let k: i32 = 0; k < toI32(aes.roundKeys.length) && k < toI32(fresh.roundKeys.length); k++) {
-        aes.roundKeys[k] = fresh.roundKeys[k]
-        fresh.roundKeys[k] = toU64(0)
-      }
-      aes.hHi = fresh.hHi
-      aes.hLo = fresh.hLo
+    if (aes !== null && suite !== TLS_CHACHA20_POLY1305_SHA256) {
+      aesKeyInto(this.key, aes)
     }
   }
 

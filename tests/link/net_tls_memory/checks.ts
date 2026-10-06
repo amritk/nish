@@ -4,15 +4,14 @@
 //
 //   1. RFC 8448 §3 replayed through one `TlsRecordServer` and one
 //      `TlsServer`, restarted for every connection: every ServerHello and
-//      flight record is the trace's, and what each handshake leaves is
-//      exactly the four AES-128 key schedules `aesKey` answers (its own
-//      allocation, which `nish/crypto/aes` stores and nothing here can
-//      scope), nothing of the handshake's own.
+//      flight record is the trace's, and after the first, AES-128-GCM's key
+//      schedules expanded in place, `Arena.mark()` does not move at all. The
+//      schedules the slot holds are wiped by `wipeKeys` and by `start`.
 //   2. A production handshake — ChaCha20-Poly1305, the P-256 leaf — through
 //      the same kind of slot, with a ClientHello padded past the server's
 //      first input buffer so that the first handshake grows it: after that
 //      first one, `Arena.mark()` does not move at all.
-//   3. The same handshake over loopback through `TlsTcpServer`'s slot pool,
+//   3. An AES-256-GCM-SHA384 handshake over loopback through `TlsTcpServer`'s slot pool,
 //      a Nish client on plain `nish:net` sending recorded bytes: accept,
 //      handshake, close, a thousand times, and `Arena.mark()` does not move.
 //
@@ -21,7 +20,7 @@
 // same every time (RFC 6979 makes the P-256 signature deterministic), every
 // handshake is the same bytes, so the loops compare every byte and allocate
 // nothing of their own. The P-256 signature is the caller's and is made once,
-// since `p256SignSha256` stores what it allocates as `aesKey` does.
+// since `p256SignSha256` stores what it allocates.
 //
 // Then the refusals the slot's own entry points add: a restart with
 // randomness of the wrong length, and the in-place key derivations asked for
@@ -42,7 +41,6 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { aesKey } from "nish/crypto/aes";
 import { HkdfScratch } from "nish/crypto/hkdf";
 import { TLS_STATE_FAILED, TlsServer, TlsServerConfig, tlsSignEcdsaP256 } from "nish/net/tls";
 import {
@@ -52,7 +50,12 @@ import {
   TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
   TLS_VERSION_13,
 } from "nish/net/tls/codec";
-import { TLS_CHACHA20_POLY1305_SHA256, tlsTrafficKeysInto } from "nish/net/tls/schedule";
+import {
+  TLS_AES_256_GCM_SHA384,
+  TLS_CHACHA20_POLY1305_SHA256,
+  tlsSuiteHashLength,
+  tlsTrafficKeysInto,
+} from "nish/net/tls/schedule";
 import { TLS_CONTENT_ALERT, TLS_CONTENT_HANDSHAKE, TlsRecordProtection } from "nish/net/tls/record";
 import {
   TLS_RECORD_DATA,
@@ -113,25 +116,14 @@ const sends = (conn: TlsRecordServer, want: u8[]): boolean => {
   return same;
 };
 
-/**
- * Starts a fresh chunk of the arena, so that `Arena.used()` afterwards counts
- * only what was allocated since, however full the last chunk was: an array
- * of 64 KiB is a chunk of its own, and the next allocation opens another. It
- * answers the array, so that no arena scope of its own takes it back.
- */
-const freshChunk = (): u8[] => {
-  const filler: u8[] = new Array<u8>(65536);
-  filler[0] = toU8(1);
-  return filler;
-};
-
-/** The bytes one `aesKey` of a 16-byte key leaves in the arena, measured as a handshake is. */
-const aesKeyCost = (): i64 => {
-  const key: u8[] = new Array<u8>(16);
-  freshChunk();
-  const answer = aesKey(key);
-  const cost: i64 = Arena.used();
-  return answer === null ? toI64(-1) : cost;
+/** Whether every word of `words` is zero. */
+const allZeroWords = (words: u64[]): boolean => {
+  for (const w of words) {
+    if (w !== toU64(0)) {
+      return false;
+    }
+  }
+  return true;
 };
 
 /** Everything a client sends, and a server answers, in one production handshake. */
@@ -161,13 +153,13 @@ class Recorded {
 }
 
 /**
- * A ClientHello offering ChaCha20-Poly1305 alone, with an x25519 share and a
+ * A ClientHello offering `suite` alone, with an x25519 share and a
  * `padding`-byte extension of a type nobody defined (which the server skips),
  * so that `padding` decides how long it is.
  */
-const paddedHello = (padding: i32): u8[] => {
+const paddedHello = (suite: i32, padding: i32): u8[] => {
   const none: u8[] = [];
-  return clientHelloRaw(TLS_LEGACY_VERSION, none, [TLS_CHACHA20_POLY1305_SHA256], [toU8(0)], [
+  return clientHelloRaw(TLS_LEGACY_VERSION, none, [suite], [toU8(0)], [
     extSupportedVersions([TLS_VERSION_13]),
     extSupportedGroups([TLS_GROUP_X25519, GROUP_SECP256R1]),
     extSignatureAlgorithms([TLS_SIGNATURE_ECDSA_SECP256R1_SHA256]),
@@ -176,11 +168,11 @@ const paddedHello = (padding: i32): u8[] => {
   ]);
 };
 
-/** Works out a production handshake once, with the record-layer tests' client, for the runs to replay. */
-const record = (padding: i32): Recorded => {
+/** Works out a production handshake under `suite` once, with the record-layer tests' client, for the runs to replay. */
+const record = (suite: i32, padding: i32): Recorded => {
   const r = new Recorded();
   const conn = new TlsRecordServer(new TlsServer(r.config, r.random, range(r.key, ZERO, toI32(r.key.length))));
-  const hello: u8[] = paddedHello(padding);
+  const hello: u8[] = paddedHello(suite, padding);
   r.hello = clearRecord(hello);
   feed(conn, r.hello);
   const input: u8[] | null = conn.signatureInput();
@@ -195,13 +187,13 @@ const record = (padding: i32): Recorded => {
     return r;
   }
   const serverHello: u8[] = range(records[0], toI32(5), toI32(records[0].length));
-  const keys = clientKeysFor(32, hello, serverHello);
-  const flight: Opened = openOne(protectionFor(TLS_CHACHA20_POLY1305_SHA256, keys.serverHandshake), records[1]);
+  const keys = clientKeysFor(tlsSuiteHashLength(suite), hello, serverHello);
+  const flight: Opened = openOne(protectionFor(suite, keys.serverHandshake), records[1]);
   keys.finishWith(flight.content);
   const closeNotify: u8[] = [toU8(1), toU8(0)];
   r.finish = join([
-    sealOne(protectionFor(TLS_CHACHA20_POLY1305_SHA256, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO),
-    sealOne(protectionFor(TLS_CHACHA20_POLY1305_SHA256, keys.clientApplication), TLS_CONTENT_ALERT, closeNotify, ZERO),
+    sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO),
+    sealOne(protectionFor(suite, keys.clientApplication), TLS_CONTENT_ALERT, closeNotify, ZERO),
   ]);
   feed(conn, r.finish);
   conn.close();
@@ -373,12 +365,12 @@ export const memoryChecks = (): i32 => {
   refill(slotKey, traceKey);
   const traceTls = new TlsServer(rfc8448Config(), traceRandom, slotKey);
   const traceConn = new TlsRecordServer(traceTls);
-  const aesCost: i64 = aesKeyCost();
   let traceExact: i32 = 0;
-  let traceLeft: i64 = 0;
-  let traceSteady: i32 = 0;
+  let traceMark: i64 = 0;
   for (let round: i32 = 0; round < ROUNDS; round++) {
-    freshChunk();
+    if (round === 1) {
+      traceMark = Arena.mark();
+    }
     refill(slotKey, traceKey);
     traceTls.restart(traceRandom, slotKey);
     traceConn.start(traceTls);
@@ -390,23 +382,25 @@ export const memoryChecks = (): i32 => {
     if (hello && flight && traceConn.state === TLS_RECORD_STATE_OPEN && traceTls.serverName === "server") {
       traceExact = traceExact + 1;
     }
-    const left: i64 = Arena.used();
-    if (round === 1) {
-      traceLeft = left;
-    }
-    if (round > 0 && left === traceLeft) {
-      traceSteady = traceSteady + 1;
-    }
   }
+  const traceAfter: i64 = Arena.mark();
   t.eqI32("a thousand RFC 8448 handshakes in one restarted slot: every ServerHello and flight record is the trace's", traceExact, ROUNDS);
-  t.eqI32("and every handshake after the first leaves the arena the same", traceSteady, ROUNDS - 1);
-  t.ok(
-    `which is aesKey's four AES-128 schedules and nothing else: ${traceLeft} bytes, 4 x ${aesCost} (52,808 before the slot)`,
-    aesCost > toI64(0) && traceLeft === toI64(4) * aesCost
-  );
+  t.ok("and after the first, AES-128-GCM's included, Arena.mark() did not move (52,808 bytes a handshake before the slot)", traceAfter === traceMark);
+  const schedule: u64[] = traceConn.writeProtection.aes128.roundKeys;
+  const held: boolean = !allZeroWords(schedule);
+  traceConn.wipeKeys();
+  t.ok("the slot holds the AES-128 schedule while open, and wipeKeys zeroes it, both directions", held && allZeroWords(schedule) && allZeroWords(traceConn.readProtection.aes128.roundKeys));
+  traceTls.restart(traceRandom, slotKey);
+  traceConn.start(traceTls);
+  feed(traceConn, traceHello);
+  traceConn.sign(traceSignature);
+  feed(traceConn, traceFinished);
+  const reheld: boolean = !allZeroWords(schedule);
+  traceConn.start(traceTls);
+  t.ok("and so does start, when the slot is handed its next connection", reheld && allZeroWords(schedule));
 
   // --- 2. A production handshake in one slot, with a long ClientHello --------------------
-  const padded: Recorded = record(3000);
+  const padded: Recorded = record(TLS_CHACHA20_POLY1305_SHA256, toI32(3000));
   t.ok("a 3,000-byte padded ChaCha20 handshake works out: two records, then the close", toI32(padded.serverFlight.length) > 0 && toI32(padded.serverClose.length) > 0);
   const slotTls = new TlsServer(padded.config, padded.random, new Array<u8>(32));
   const slot = new TlsRecordServer(slotTls);
@@ -440,7 +434,7 @@ export const memoryChecks = (): i32 => {
   t.ok("and after it Arena.mark() did not move: the handshake allocates nothing that outlives it", slotAfter === slotMark);
 
   // --- 3. Over loopback, through TlsTcpServer's slot pool ---------------------------------
-  const wired: Recorded = record(16);
+  const wired: Recorded = record(TLS_AES_256_GCM_SHA384, toI32(16));
   const w = new Wire(wired.config);
   let wireExact: i32 = 0;
   let wireMark: i64 = 0;
@@ -453,7 +447,8 @@ export const memoryChecks = (): i32 => {
     }
   }
   const wireAfter: i64 = Arena.mark();
-  t.eqI32("a thousand connections accepted, handshaken and closed over loopback, every byte the recorded one", wireExact, ROUNDS);
+  t.ok("an AES-256-GCM-SHA384 handshake works out for the loopback run", toI32(wired.serverFlight.length) > 0 && toI32(wired.serverClose.length) > 0);
+  t.eqI32("a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one", wireExact, ROUNDS);
   t.ok("and after the first Arena.mark() did not move: accept, handshake and close reuse the slot", wireAfter === wireMark);
   t.eqI32("every slot is free again", w.server.busy(), ZERO);
   netClose(w.listener);

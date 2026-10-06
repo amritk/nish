@@ -40,11 +40,8 @@
  * out of `TlsServer`'s own buffers, and the application secrets are copied
  * into arrays of this slot's, so a slot that hands its `TlsServer` the next
  * connection with `restart` runs every handshake after the first without
- * moving the arena. The one thing a key install leaves is the schedule
- * `aesKey` answers for an AES suite — 1,136 bytes for AES-128, 1,456 for
- * AES-256, nothing for ChaCha20 — so a connection takes at most
- * `TLS_RECORD_MAX_KEY_UPDATES` KeyUpdates from its client (TLS-3 in
- * `docs/security/tls.md`). When the caller leaves application data unread
+ * moving the arena, whichever suite it negotiates; a KeyUpdate's key
+ * install leaves nothing either (TLS-3 in `docs/security/tls.md`). When the caller leaves application data unread
  * for long enough to fill its buffer, records stay in the reader and
  * `interest` stops asking for reads, which is how the peer is made to wait.
  *
@@ -154,10 +151,10 @@ export const TLS_RECORD_IDLE_LIMIT: i32 = 16
 
 /**
  * How many KeyUpdates one connection takes from its client before refusing
- * the next with `unexpected_message`. Under an AES suite each costs a key
- * install whose AES schedule stays in the arena (1,136 bytes for AES-128,
- * twice that when the server answers), so the cap is what bounds that memory
- * (TLS-3). A client that
+ * the next with `unexpected_message`. Each costs one key install, two when
+ * the server answers, which leave nothing in the arena; the cap bounds the
+ * work a client can ask for, as `TLS_RECORD_IDLE_LIMIT` does in a row. A
+ * client that
  * updates when RFC 8446 §5.5 asks, once per 2^24 records, reaches it after
  * 2^30 records; §4.6.3 itself sets no limit, so one that updates on a clock of
  * its own is cut off at the sixty-fifth, a trade-off TLS-3 records.
