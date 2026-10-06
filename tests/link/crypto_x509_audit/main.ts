@@ -27,6 +27,7 @@ import {
   CA_PKCS8_PEM,
   CA_PRIVATE,
   CA_SEC1_PEM,
+  GOLDEN_NO_EXTENSIONS,
   GOLDEN_PEM,
   LEAF_PEM,
 } from "../crypto_x509/fixtures"
@@ -34,7 +35,7 @@ import { fromHex, textOf, toHex } from "../crypto_x509/hex"
 
 // 2026-01-01T00:00:00Z.
 const NOT_BEFORE: i64 = 1767225600000
-// The golden certificate with its two validity times swapped: notBefore 2026-01-15, notAfter 2026-01-01.
+// GOLDEN_NO_EXTENSIONS with its two validity times swapped: notBefore 2026-01-15, notAfter 2026-01-01.
 const SWAPPED: string =
   "308201223081caa00302010202100123456789abcdef0123456789abcdef300a06082a8648ce3d04030230143112301006035504030c096c6f63616c686f7374301e170d3236303131353030303030305a170d3236303130313030303030305a30143112301006035504030c096c6f63616c686f73743059301306072a8648ce3d020106082a8648ce3d0301070342000460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299300a06082a8648ce3d0403020347003044022041e3cdab220d60d16846a1033a3679f7b0fe54fc74492d8ba72f70817578970302206e840bdbd9eac275a7ca1ca3b39ca8a23e20a06e2d83a076f797bf5a10226506"
 
@@ -66,13 +67,14 @@ const golden = (): u8[] => {
 }
 
 /**
- * The golden certificate with `extra` appended to its tbsCertificate after the
- * key, and both lengths grown to match. The signature no longer covers the
+ * The mint's certificate from before X509-9, which ended at the key
+ * (`GOLDEN_NO_EXTENSIONS`), with `extra` appended to its tbsCertificate after
+ * the key, and both lengths grown to match. The signature no longer covers the
  * TBS, which the parser does not look at; `extra` stays under 50 octets so
  * both lengths keep their form (`30 82 01 xx`, `30 81 xx`).
  */
 const withTrailing = (extraHex: string): u8[] => {
-  const g: u8[] = golden()
+  const g: u8[] = fromHex(GOLDEN_NO_EXTENSIONS)
   const extra: u8[] = fromHex(extraHex)
   const grow: i32 = toI32(extra.length)
   const outer: i32 = 0x122 + grow
@@ -89,7 +91,7 @@ const withTrailing = (extraHex: string): u8[] => {
   return out
 }
 
-/** Whether `x509ParseCertificate` reads the golden with `extraHex` after the key. */
+/** Whether `x509ParseCertificate` reads the old golden with `extraHex` after the key. */
 const readsWith = (extraHex: string): boolean => x509ParseCertificate(withTrailing(extraHex)) !== null
 
 /** The mint with the golden's key, time and days, serial 1, under `name`. */
@@ -166,7 +168,7 @@ const nameSuite = (): i32 => {
 
 const trailingSuite = (): i32 => {
   const t = new Suite("X509-4: what follows the key is well formed")
-  t.ok("the golden, v3 with nothing after the key, reads", readsWith(""))
+  t.ok("the old golden, v3 with nothing after the key, reads", readsWith(""))
   t.ok("[3] holding a real extension reads", readsWith("a310300e300c0603551d130101ff04023000"))
   t.eqBool("[3] holding a NULL is refused", readsWith("a3020500"), false)
   t.eqBool("[3] holding an empty SEQUENCE is refused", readsWith("a3023000"), false)

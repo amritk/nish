@@ -1,8 +1,7 @@
 // The server side of the `nish/net/tls` tests: a P-256 key and the
-// self-signed certificate `nish/crypto/x509` mints for it, the injected
+// self-signed certificate `nish/crypto/x509` once minted for it, the injected
 // randomness, and the configuration every case starts from.
 import { Secret, secret, wipe } from "nish:secret";
-import { x509MintSelfSigned } from "nish/crypto/x509";
 import { p256PublicKeyPlain } from "../crypto_p256/plain";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { TlsServer, TlsServerConfig, tlsSignEcdsaP256 } from "nish/net/tls";
@@ -20,19 +19,20 @@ export const leafPublic = (): u8[] => {
   return pub;
 };
 
-/** A self-signed certificate for the key, valid for a day from 2026-01-01. */
-export const leafCertificate = (): u8[] => {
-  const notBefore: i64 = 1767225600000;
-  const days: i32 = 1;
-  const serial: u8[] = [toU8(1)];
-  const key: Secret<u8[]> = secret(leafPrivate());
-  const der: u8[] | null = x509MintSelfSigned(key, "localhost", notBefore, days, serial);
-  wipe(key);
-  if (der === null) {
-    return [];
-  }
-  return der;
-};
+/**
+ * A self-signed certificate for the key, valid for a day from 2026-01-01, as a
+ * constant: the DER `x509MintSelfSigned` wrote for this key, "localhost",
+ * 2026-01-01T00:00:00Z, one day and serial 1, the last mint before X509-9
+ * gave the mint its two extensions (docs/security/crypto-x509.md). It is frozen
+ * because the aioquic recordings of `net_quic_conn_replay` and
+ * `net_quic_lifecycle_replay` carry it in their TLS transcripts, so a minted
+ * certificate that moves would move every recorded byte after it. The mint
+ * itself is checked in a handshake in `crypto_x509` (`handshake.ts`).
+ */
+export const leafCertificate = (): u8[] =>
+  fromHex(
+    "308201133081bba003020102020101300a06082a8648ce3d04030230143112301006035504030c096c6f63616c686f7374301e170d3236303130313030303030305a170d3236303130323030303030305a30143112301006035504030c096c6f63616c686f73743059301306072a8648ce3d020106082a8648ce3d0301070342000460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299300a06082a8648ce3d040302034700304402200c0b8258087e44f6428624ddfd22cc752379dd41ca39ecfb138a13c8a47193e102200d00e6e9e36e4d0b5caa1cc1c6feea59eb10c1b010c9edff71a38b182cb8631d"
+  );
 
 /** The server random every test server is handed: 0xa0, 0xa1, … 0xbf. */
 export const serverRandom = (): u8[] => {
