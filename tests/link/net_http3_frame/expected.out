@@ -1,0 +1,60 @@
+PASS  DATA: 00 05, then its five bytes
+PASS  written back
+PASS  HEADERS of 300 bytes: 01 41 2c
+PASS  written back
+PASS  CANCEL_PUSH of push ID 7: 03 01 07
+PASS  its payload is the one push ID
+PASS  written back
+PASS  SETTINGS of three pairs: 04 09, then 01 00, 07 00, 06 80 00 40 00
+PASS  read whole
+PASS  as capacity 0, no blocked streams, a field section of 16,384
+PASS  written back
+PASS  an empty SETTINGS is 04 00
+PASS  and reads as the defaults: the field section unlimited (§7.2.4.1)
+PASS  PUSH_PROMISE: 05 04, push ID 2, then a field section
+PASS  whose push ID is the payload's first varint, the section after it
+PASS  GOAWAY of stream 4: 07 01 04
+PASS  written back
+PASS  MAX_PUSH_ID of 10: 0d 01 0a
+PASS  written back
+PASS  a reserved type 0x1f * N + 0x21 reads like any other: 81 d9 05 e1, length 0
+PASS  and is a greased value
+PASS  as 0x20, 0x22 and 0x3f are not
+PASS  an eight-byte length is a header too: 2^62 - 1
+PASS  the largest header is two eight-byte varints
+PASS  a header cut at any of its first five bytes is not a header yet
+PASS  and is one at the sixth
+PASS  read from the middle of a buffer
+PASS  a header written at an offset answers where its payload goes
+PASS  one byte short of room is refused
+PASS  so is an end past the buffer
+PASS  and a length no varint holds
+PASS  whose header size is 0
+PASS  a varint with no room
+PASS  or written backwards
+PASS  an identifier frame with no room
+PASS  or an identifier no varint holds
+PASS  SETTINGS with more identifiers than values
+PASS  with a value no varint holds
+PASS  or without the room for its payload
+PASS  an identifier payload with a byte after its varint: -1, H3_FRAME_ERROR's case
+PASS  one that ends inside it
+PASS  and an empty one
+PASS  a two-byte identifier
+PASS  the same identifier twice: H3_SETTINGS_ERROR
+PASS  an identifier HTTP/2 used with no HTTP/3 setting — 0x00, 0x02 to 0x05 — is H3_SETTINGS_ERROR
+PASS  a payload that ends after an identifier: H3_FRAME_ERROR (§7.1)
+PASS  one that ends inside a value
+PASS  an unknown identifier is no error
+PASS  and is kept, with its value, for an extension to read
+PASS  one it does not have reads as -1
+PASS  an unknown identifier twice, while kept: H3_SETTINGS_ERROR
+PASS  ten unknown identifiers
+PASS  the first H3_SETTINGS_KEEP kept, the rest counted, not compared
+PASS  a read starts from the defaults
+PASS  the stream types are one byte each: control, push, QPACK encoder, decoder (§6.2, RFC 9204 §4.2)
+PASS  PRIORITY, PING, WINDOW_UPDATE and CONTINUATION are HTTP/2's reserved types (§7.2.8)
+PASS  and no type HTTP/3 defines is
+PASS  the error codes of §8.1 are 0x0100 to 0x0110, in the RFC's order
+PASS  the settings are §7.2.4.1's 0x06 and RFC 9204's 0x01 and 0x07
+http3 frames: 59 passed, 0 failed, 0 skipped
