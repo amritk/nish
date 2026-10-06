@@ -2,7 +2,9 @@
 // `tests/link/net_http3/peer.ts` on a UDP socket of its own, and an
 // `Http3Server` on another, in one loop. A GET, a POST echoed both ways, a
 // response held back by the pacer, and a GOAWAY that lets the server close
-// the connection and free the slot; a client whose handshake chose another
+// the connection and free the slot; a client that only acknowledges, on a
+// clock in epoch milliseconds, so the wheel alone must wake what the pacer
+// held back; a client whose handshake chose another
 // ALPN; a client that finds no slot free; and connection after connection
 // through one slot with the arena measured.
 import { netAddress, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
@@ -11,7 +13,7 @@ import { Suite } from "nish/testing";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
-import { QuicServerConfig } from "nish/net/quic";
+import { QUIC_CONN_DATAGRAM_SIZE, QuicServerConfig } from "nish/net/quic";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
 import { H3_ALPN, H3_END, H3_ERROR, H3_NEED_MORE, Http3Connection } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
@@ -29,6 +31,7 @@ import {
   H3Peer,
   h3Config,
   H3Response,
+  H3Wire,
   h3Cat,
   h3ClientSettings,
   h3Frame,
@@ -113,6 +116,64 @@ const closeUnpaced = (t: Suite): void => {
     p.pump(wire);
   }
   t.eqStr("the close goes all the same, and the slot is freed", `${p.closeApp} ${p.closeCode} ${loop.server.busy()}`, `true ${H3_NO_ERROR} 0`);
+};
+
+/**
+ * A client like curl's quiche, which sends only to acknowledge what arrived
+ * and is quiet once everything is acknowledged, on a clock in milliseconds
+ * since the epoch: past 2^31, so a pacer time taken for a delay, or narrowed
+ * to an i32, files the wake far past the idle deadline. Time moves only to
+ * the server's own `timeout`, never by a datagram from the client.
+ */
+const quiet = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  const server: Http3Server = loop.server;
+  const c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
+  c.now = n64(1760000000000);
+  const slot: i32 = n32(0);
+  const p = new H3Peer(server.quic(slot), server.connection(slot), c);
+  const wire = new H3Wire(server, loop.port);
+  p.wire = wire;
+  const hello: u8[] = h3Hello(limits);
+  c.before = hello;
+  p.transmit(wire, qcInitial(c, qcCrypto(n64(0), hello), n32(1200)));
+  if (!t.ok("a handshake at an epoch-milliseconds clock", qcReadFlight(c, n32(0), n32(0)))) {
+    return;
+  }
+  p.transmit(wire, qcFinishedPacket(c));
+  p.open(n64(-1));
+  p.settle();
+  const quic = server.quic(slot);
+  // Spend some of the pacer's credit, as a flight just sent would.
+  quic.recovery.onPaced(c.now, n32(30000));
+  server.touch(slot);
+  server.flush(c.now);
+  const delay: i64 = quic.recovery.pacerDelay(c.now, QUIC_CONN_DATAGRAM_SIZE);
+  t.ok("the pacer holds the slot back, short of its idle deadline", delay > n64(0) && c.now + delay < quic.deadline());
+  t.ok("the slot is filed for now + the pacer's delay", server.wheel.dueAt[slot] === c.now + delay);
+  t.eqI64("and the server's timeout is that delay", toI64(server.timeout(c.now)), delay);
+  const none: string[] = [];
+  const start: i64 = c.now;
+  p.send(n64(0), p.headers("GET", "/big/300000", none, none), true);
+  let acked: i32 = toI32(c.appPayloads.length);
+  for (let round: i32 = 0; round < 400 && !p.stream(n64(0)).fin && !quic.closed(); round++) {
+    if (toI32(c.appPayloads.length) > acked) {
+      acked = toI32(c.appPayloads.length);
+      p.ack();
+    } else {
+      // Nothing new arrived and everything is acknowledged: the client is quiet.
+      const wait: i32 = server.timeout(c.now);
+      if (wait < 0) {
+        break;
+      }
+      c.now = c.now + toI64(wait > 0 ? wait : n32(1));
+      p.pump(wire);
+    }
+  }
+  const big: H3Response = p.response(n64(0));
+  t.ok("300,000 bytes arrive whole with the client quiet between its acknowledgements", toI32(big.body.length) === n32(300000) && h3IsPattern(big.body) && big.fin);
+  t.ok("in under a second of the server's clock, not at the idle timeout", c.now - start < n64(1000) && !quic.closed());
 };
 
 /** A handshake that chose another protocol than h3 never reaches HTTP/3 (RFC 9114 §3.1). */
@@ -385,6 +446,7 @@ const reused = (t: Suite): void => {
 export const loopbackChecks = (t: Suite): void => {
   exchange(t);
   closeUnpaced(t);
+  quiet(t);
   flood(t);
   alpn(t);
   full(t);
