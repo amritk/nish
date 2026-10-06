@@ -3,6 +3,16 @@ PASS  its SHA-256 is OpenSSL's
 PASS  its PEM is OpenSSL's, byte for byte
 PASS  milliseconds are rounded down to the second
 PASS  X509_MAX_DAYS is fourteen
+PASS  the minted certificate, extensions and all, parses
+PASS  its TBS ends with the [3] extensions block
+PASS  [3] EXPLICIT around one SEQUENCE of 30 octets
+PASS  basicConstraints 2.5.29.19, critical TRUE, cA FALSE left out as the DEFAULT
+PASS  keyUsage 2.5.29.15, critical TRUE, digitalSignature alone (7 unused bits)
+PASS  they follow the subject public key directly
+PASS  the SHA-256 is over the DER that carries them
+PASS  it verifies under itself, the signature covering them
+PASS  the mint's old certificate, with no extensions, still parses
+PASS  its hash is not the new one
 PASS  days 0 answers null
 PASS  days 15 answers null
 PASS  days -1 answers null
@@ -26,7 +36,7 @@ PASS  a 65-byte common name answers null
 PASS  private key 0 answers null
 PASS  private key n answers null
 PASS  a 31-byte private key answers null
-x509 mint: 28 passed, 0 failed, 0 skipped
+x509 mint: 38 passed, 0 failed, 0 skipped
 PASS  the golden certificate parses
 PASS  its der is the input
 PASS  its serial
@@ -37,7 +47,7 @@ PASS  notBefore
 PASS  notAfter
 PASS  issuer is subject
 PASS  the subject is CN=localhost
-PASS  tbs is the second element's 205 bytes
+PASS  tbs is the second element's 239 bytes
 PASS  it verifies under itself
 PASS  with the last byte of s flipped it parses
 PASS  and does not verify
@@ -117,3 +127,13 @@ PASS  a certificate minted with OpenSSL's key verifies under itself
 PASS  a chain with one bad certificate answers null
 PASS  a PEM with no certificate answers null
 x509 chain: 17 passed, 0 failed, 0 skipped
+PASS  the server takes the ClientHello
+PASS  and signs with the minted certificate's key
+PASS  the Certificate carries the minted DER, octet for octet
+PASS  the client parses it
+PASS  with the two critical extensions at the end of its TBS
+PASS  CertificateVerify verifies under the key read from the certificate
+PASS  the server's Finished verifies
+PASS  the server takes the client's Finished
+PASS  connected
+x509 mint in a TLS handshake: 9 passed, 0 failed, 0 skipped

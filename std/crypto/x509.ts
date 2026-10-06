@@ -33,7 +33,8 @@
  * `null`, never a panic. The reader looks at what this module uses — the
  * version, serial, algorithms, names as opaque bytes, validity, the subject
  * public key and the signature — and checks the order of what follows the key
- * (`[1]`, `[2]`, `[3]`) without parsing extensions.
+ * (`[1]`, `[2]`, `[3]`) without parsing extensions; the mint writes two of its
+ * own (below).
  *
  * **PEM is RFC 7468's strict grammar**, with standard base64 (`+` and `/`,
  * padded with `=`), not `base64url`: 64 characters a line and a shorter last
@@ -47,15 +48,26 @@
  * requirements"): X.509 v3, an ECDSA P-256 key signed with ecdsa-with-SHA256,
  * and a validity period of at most fourteen days — `notAfter - notBefore`,
  * which is what Chromium compares, so `days` is 1 to 14. Subject and issuer
- * are the same single common name, as a UTF8String. It carries **no
- * extensions**: the specification requires none, a browser checking a pinned
- * hash does no path building for basicConstraints or keyUsage to inform, and
- * every extension would be one more field whose absence is part of the
- * contract a hash pins. OpenSSL verifies it as its own trust anchor all the
- * same (`tests/link/crypto_x509`'s header has the commands). The key, the
- * serial and the time are parameters so the golden certificate is
- * deterministic; a caller passes `Date.now()` and, for the key and the serial,
- * bytes from `crypto.getRandomValues`. This module does not draw them itself,
+ * are the same single common name, as a UTF8String. It carries **two
+ * extensions, both critical and both constant**: basicConstraints with cA
+ * FALSE and keyUsage with digitalSignature alone. The W3C text requires no
+ * extension, but Chromium does: the verifier behind `serverCertificateHashes`,
+ * quiche's `WebTransportFingerprintProofVerifier`, parses the certificate
+ * with `CertificateView::ParseSingleCertificate` before it compares the hash,
+ * and that answers null when `[3] extensions` is absent
+ * (`quiche/quic/core/crypto/certificate_view.cc:395`, at the quiche revision
+ * 62826931 Chromium 141 pins), so the handshake fails with
+ * CERTIFICATE_VERIFY_FAILED. It also holds every extension to `SEQUENCE {
+ * OID, BOOLEAN OPTIONAL, OCTET STRING }` (`:413`–`:432`) and reads
+ * subjectAltName only when one is present (`:434`), so no name is needed
+ * there. The two chosen say what the certificate is, an end entity whose key
+ * only signs handshakes, so a verifier that does build a path need not fall
+ * back on its defaults; OpenSSL verifies it as its own trust anchor
+ * (`tests/link/crypto_x509`'s header has the commands; X509-9 in
+ * docs/security/crypto-x509.md). The key, the serial and the time are
+ * parameters so the golden certificate is deterministic; a caller passes
+ * `Date.now()` and, for the key and the serial, bytes from
+ * `crypto.getRandomValues`. This module does not draw them itself,
  * because a call to the operating system would stop it compiling for wasm32.
  *
  * **Constant time.** A private key is the one secret that passes through here:
@@ -1285,11 +1297,37 @@ export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certifica
 }
 
 /**
+ * The minted certificate's `[3] extensions`, whole, in DER. They do not depend
+ * on the key, the name or the time, so they are one constant block rather
+ * than a tree of `x509DerWrap` calls (`tests/link/crypto_x509` pins each
+ * octet, and `x509ParseCertificate` reads the result back):
+ *
+ *     a3 20                      [3] EXPLICIT, 32 octets
+ *       30 1e                    Extensions SEQUENCE, 30 octets
+ *         30 0c                  Extension (RFC 5280 §4.2.1.9)
+ *           06 03 55 1d 13       basicConstraints, 2.5.29.19
+ *           01 01 ff             critical TRUE
+ *           04 02 30 00          OCTET STRING { SEQUENCE {} }: cA FALSE is the
+ *                                DEFAULT, so DER leaves it out (X.690 §11.5)
+ *         30 0e                  Extension (RFC 5280 §4.2.1.3)
+ *           06 03 55 1d 0f       keyUsage, 2.5.29.15
+ *           01 01 ff             critical TRUE
+ *           04 04 03 02 07 80    OCTET STRING { BIT STRING, 7 unused bits,
+ *                                bit 0 digitalSignature }: DER drops a named
+ *                                bit list's trailing zero bits (X.690 §11.2.2)
+ */
+const x509MintExtensions = (): u8[] => [
+  0xa3, 0x20, 0x30, 0x1e, 0x30, 0x0c, 0x06, 0x03, 0x55, 0x1d, 0x13, 0x01, 0x01, 0xff, 0x04, 0x02, 0x30, 0x00,
+  0x30, 0x0e, 0x06, 0x03, 0x55, 0x1d, 0x0f, 0x01, 0x01, 0xff, 0x04, 0x04, 0x03, 0x02, 0x07, 0x80,
+]
+
+/**
  * A self-signed X.509 v3 certificate, in DER, for the P-256 key `priv`: subject
  * and issuer `CN=commonName`, valid from `notBeforeMs` (milliseconds since
  * 1970, rounded down to the second) for exactly `days` days, serial number
- * `serial`, and signed with ecdsa-with-SHA256 — see the module comment for why
- * it has no extensions. `null` when `days` is below 1 or above
+ * `serial`, carrying `x509MintExtensions`' basicConstraints and keyUsage, and
+ * signed with ecdsa-with-SHA256 — see the module comment for why Chromium
+ * needs an extension at all. `null` when `days` is below 1 or above
  * `X509_MAX_DAYS`, `notBeforeMs` is negative or the validity would end after
  * 9999, `commonName` is empty, longer than 64 bytes, not UTF-8 or holds a NUL
  * (it is written as a UTF8String), `priv` is not a P-256 private key, or
@@ -1356,6 +1394,7 @@ export const x509MintSelfSigned = (
     x509DerWrap(X509_TAG_SEQUENCE, [x509DerTimeAt(start), x509DerTimeAt(end)]),
     distinguished,
     spki,
+    x509MintExtensions(),
   ])
   const rs: u8[] | null = p256SignSha256(priv, tbs)
   if (rs === null) {
