@@ -24,14 +24,15 @@ import { bytesOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { qcDrain } from "../net_quic_conn/client";
 import { qcFind } from "../net_quic_conn/common";
-import { NqLimits, NqPair, NqRead, nqAck, nqPair, nqReadAll, nqReceived, nqSend, nqSettle, nqStream, nqText } from "./common";
+import { NqLimits, NqPair, NqRead, nqAck, nqPair, nqReadAll, nqReceived, nqSend, nqSettle, nqText } from "./common";
+import { qcStream } from "../net_quic_conn/data";
 
 /** `count` bytes of stream `id` from `offset`, in STREAM frames of 1000, a packet each. */
 const sendBytes = (p: NqPair, id: i64, offset: i64, count: i32, fin: boolean): void => {
   let sent: i32 = 0;
   while (sent < count) {
     const n: i32 = count - sent < 1000 ? count - sent : 1000;
-    nqSend(p, nqStream(id, offset + toI64(sent), nqText(n), fin && sent + n === count));
+    nqSend(p, qcStream(id, offset + toI64(sent), nqText(n), fin && sent + n === count));
     sent = sent + n;
   }
 };
@@ -73,8 +74,8 @@ const sendCredit = (t: Suite): void => {
   limits.clientBidiLocal = n64(1000);
   limits.clientMaxData = n64(1500);
   const p: NqPair = nqPair(limits);
-  nqSend(p, nqStream(n64(0), n64(0), "go", false));
-  nqSend(p, nqStream(n64(4), n64(0), "go", false));
+  nqSend(p, qcStream(n64(0), n64(0), "go", false));
+  nqSend(p, qcStream(n64(4), n64(0), "go", false));
   nqReadAll(p.conn, n32(64), new NqRead());
   const data: u8[] = bytesOf(nqText(n32(3000)));
   t.eqI32("the server's buffer takes 3000 bytes for stream 0", p.conn.streamWrite(n64(0), data, n32(0), n32(3000), true), n32(3000));
@@ -101,7 +102,7 @@ const backPressure = (t: Suite): void => {
   const limits = new NqLimits();
   limits.maxStreamData = n64(4096);
   const p: NqPair = nqPair(limits);
-  nqSend(p, nqStream(n64(0), n64(0), "go", false));
+  nqSend(p, qcStream(n64(0), n64(0), "go", false));
   nqReadAll(p.conn, n32(64), new NqRead());
   const data: u8[] = bytesOf(nqText(n32(10000)));
   const first: i32 = p.conn.streamWrite(n64(0), data, n32(0), n32(10000), false);
@@ -145,7 +146,7 @@ const finsEndAt = (p: NqPair, id: i64, final: i64): boolean => {
 /** A lost FIN goes again on its own, and only ever at the final size (RFC 9000 §4.5). */
 const lostFin = (t: Suite): void => {
   const p: NqPair = nqPair(new NqLimits());
-  nqSend(p, nqStream(n64(0), n64(0), "go", false));
+  nqSend(p, qcStream(n64(0), n64(0), "go", false));
   nqReadAll(p.conn, n32(64), new NqRead());
   nqSettle(p);
   const first: u8[] = bytesOf(nqText(n32(100)));
@@ -173,7 +174,7 @@ const lostFin = (t: Suite): void => {
 
   // Only the FIN is lost: every byte before it was acknowledged.
   const q: NqPair = nqPair(new NqLimits());
-  nqSend(q, nqStream(n64(0), n64(0), "go", false));
+  nqSend(q, qcStream(n64(0), n64(0), "go", false));
   nqReadAll(q.conn, n32(64), new NqRead());
   q.conn.streamWrite(n64(0), first, n32(0), n32(100), false);
   nqSettle(q);

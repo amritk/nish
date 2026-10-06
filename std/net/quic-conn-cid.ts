@@ -74,7 +74,7 @@ export class QuicCidEntry {
 }
 
 /** Copies `length` bytes of `from` at `at` into the start of `to`, and zeroes the rest of `to`. */
-const quicCidCopy = (to: u8[], from: u8[], at: i32, length: i32): void => {
+export const quicCidCopy = (to: u8[], from: u8[], at: i32, length: i32): void => {
   for (let k: i32 = 0; k < toI32(to.length); k += 1) {
     to[k] = k < length && at + k >= 0 && at + k < toI32(from.length) ? from[at + k] : toU8(0)
   }

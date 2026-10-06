@@ -94,14 +94,6 @@ export const nqPair = (limits: NqLimits): NqPair => {
   return new NqPair(conn, nqConnect(conn, limits));
 };
 
-/** A STREAM frame of `text` on `id` at `offset`. */
-export const nqStream = (id: i64, offset: i64, text: string, fin: boolean): u8[] => {
-  const out: u8[] = [];
-  const data: u8[] = bytesOf(text);
-  quicPushStream(out, id, offset, data, n32(0), toI32(data.length), fin);
-  return out;
-};
-
 /** `count` bytes of a repeating pattern, `0123456789`, as text. */
 export const nqText = (count: i32): string => {
   const parts: string[] = [];

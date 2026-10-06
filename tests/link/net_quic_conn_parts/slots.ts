@@ -15,15 +15,7 @@ import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid";
 import { QuicDatagramQueue } from "nish/net/quic-datagram";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
-
-/** The first `n` bytes of `buf`, as hex. */
-const headHex = (buf: u8[], n: i32): string => {
-  const out: u8[] = [];
-  for (let k: i32 = 0; k < n && k < toI32(buf.length); k++) {
-    out.push(buf[k]);
-  }
-  return toHex(out);
-};
+import { windowHex } from "../net_quic_frame/checks";
 
 /** `max_datagram_frame_size` written only when offered, read back, and refused when sent twice or malformed. */
 const datagramParameterChecks = (t: Suite): void => {
@@ -58,7 +50,7 @@ const ackSlotChecks = (t: Suite): void => {
   again.record(n64(1), true);
   again.record(n64(5), true);
   again.pushAck(pushed, n64(0));
-  t.eqStr("putAck writes what pushAck appends", headHex(buf, end), toHex(pushed));
+  t.eqStr("putAck writes what pushAck appends", windowHex(buf, n32(0), end), toHex(pushed));
   t.ok("and it is no longer due", !r.ackPending);
   r.clear();
   t.ok("clear forgets every packet number, for a reused slot", r.count === n32(0) && r.largest === n64(-1) && !r.contains(n64(1)));
@@ -126,11 +118,11 @@ const datagramRingChecks = (t: Suite): void => {
   t.eqI32("the oldest is 4 bytes", ring.peekLength(), n32(4));
   t.eqI32("it does not fit in 3: kept", ring.pop(out, n32(0), n32(3)), n32(-2));
   t.eqI32("it is popped whole", ring.pop(out, n32(0), n32(8)), n32(4));
-  t.eqStr("in order", headHex(out, n32(4)), "01020304");
+  t.eqStr("in order", windowHex(out, n32(0), n32(4)), "01020304");
   t.eqI32("a frame with no room is not written", ring.putFrame(out, n32(0), n32(4)), n32(0));
   const end: i32 = ring.putFrame(out, n32(0), n32(8));
   const frame = new QuicFrame();
-  t.ok("the next goes out as a DATAGRAM frame", end === n32(5) && quicParseFrame(frame, out, n32(0), end) === n64(0) && frame.type === QUIC_FRAME_DATAGRAM && headHex(out, n32(5)) === "3103020304");
+  t.ok("the next goes out as a DATAGRAM frame", end === n32(5) && quicParseFrame(frame, out, n32(0), end) === n64(0) && frame.type === QUIC_FRAME_DATAGRAM && windowHex(out, n32(0), n32(5)) === "3103020304");
   t.eqI32("and the ring is empty", ring.pop(out, n32(0), n32(8)), n32(-1));
   ring.push(data, n32(0), n32(1));
   ring.reset();

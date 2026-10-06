@@ -230,7 +230,7 @@ import {
   QuicRecovery,
   QuicSentPackets,
 } from "nish/net/quic-recovery"
-import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid"
+import { QuicCidEntry, QuicCidTable, quicCidCopy } from "nish/net/quic-conn-cid"
 import {
   QUIC_SEND_RESET_SENT,
   QUIC_STREAM_END,
@@ -241,6 +241,8 @@ import {
   QUIC_STREAM_OK,
   QuicStream,
   QuicStreams,
+  quicStreamBit,
+  quicStreamSetBit,
 } from "nish/net/quic-stream"
 import { QuicDatagramQueue } from "nish/net/quic-datagram"
 import {
@@ -381,8 +383,6 @@ export const QUIC_DATAGRAM_ERR_FULL: i32 = -5
 const QUIC_CONN_FROM: i32 = 0
 /** The same for the `i64` arguments of the methods below, where a literal is not given its parameter's type. */
 const QUIC_CONN_NONE: i64 = 0
-/** A typed one, for the bit shifts of the CRYPTO reassembly's bitmap. */
-const QUIC_CONN_BIT: i32 = 1
 /** TLS's unexpected_message alert, which CRYPTO data at a level TLS is not reading is (RFC 8446 §6). */
 const QUIC_CONN_ALERT_UNEXPECTED: i64 = 10
 
@@ -390,10 +390,6 @@ const QUIC_CONN_ALERT_UNEXPECTED: i64 = 10
 const QUIC_CONN_SENT_HANDSHAKE_DONE: i32 = 1
 const QUIC_CONN_CONTROL_NEW_CID: i32 = 1
 const QUIC_CONN_CONTROL_RETIRE: i32 = 2
-
-/** What `openPacket`'s scoped half answers: dropped, used, or used and a client key update to apply. */
-const QUIC_CONN_OPEN_DROPPED: i32 = 0
-const QUIC_CONN_OPEN_USED: i32 = 1
 
 /**
  * What a QUIC server is configured with, the same for every connection. The
@@ -500,20 +496,12 @@ class QuicConnReassembly {
 
   /** Whether the byte in ring slot `s` arrived and is not yet handed out. */
   arrived(s: i32): boolean {
-    const at: i32 = s >> 3
-    return (
-      at >= 0 && at < toI32(this.have.length) && (toI32(this.have[at]) & (QUIC_CONN_BIT << (s & 7))) !== 0
-    )
+    return quicStreamBit(this.have, s)
   }
 
   /** Marks ring slot `s` as holding a byte, or not. */
   mark(s: i32, on: boolean): void {
-    const at: i32 = s >> 3
-    if (at >= 0 && at < toI32(this.have.length)) {
-      const bit: i32 = QUIC_CONN_BIT << (s & 7)
-      const old: i32 = toI32(this.have[at])
-      this.have[at] = toU8(on ? old | bit : old & ~bit)
-    }
+    quicStreamSetBit(this.have, s, on)
   }
 
   /**
@@ -612,6 +600,9 @@ class QuicConnSpace {
   /** `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index. */
   level: i32 = 0
   cryptoOutHead: i32 = 0
+  /** The packet `buildDatagram` is putting together here: where it starts in the datagram, or -1 for none, and its payload's end. */
+  builtStart: i32 = -1
+  builtEnd: i32 = 0
   /** The row the packet being built is described in: one past the last slot. */
   staging: i32 = 0
   /** Whether the keys were discarded (RFC 9001 §4.9): nothing is sent or received here again. */
@@ -849,13 +840,6 @@ const quicConnSlice = (bytes: u8[], from: i32, length: i32): u8[] => {
     }
   }
   return out
-}
-
-/** Copies `bytes[from .. from + length)` into the start of `to`, zeroing what is left of it. */
-const quicConnCopyInto = (to: u8[], bytes: u8[], from: i32, length: i32): void => {
-  for (let k: i32 = 0; k < toI32(to.length); k += 1) {
-    to[k] = k < length && from + k >= 0 && from + k < toI32(bytes.length) ? bytes[from + k] : toU8(0)
-  }
 }
 
 /** The packet-protection AEAD that goes with a TLS 1.3 suite (RFC 9001 §5.3). */
@@ -1170,10 +1154,10 @@ export class QuicConnection {
 
   /** Takes `entropy` (and wipes it), or closes with INTERNAL_ERROR for entropy or a configuration that does not fit. */
   begin(entropy: u8[]): void {
-    quicConnCopyInto(this.serverRandom, entropy, 0, 32)
-    quicConnCopyInto(this.ephemeralPrivate, entropy, 32, 32)
-    quicConnCopyInto(this.localScid, entropy, 64, QUIC_CONN_CID_LENGTH)
-    quicConnCopyInto(this.cidSeed, entropy, 72, 32)
+    quicCidCopy(this.serverRandom, entropy, 0, 32)
+    quicCidCopy(this.ephemeralPrivate, entropy, 32, 32)
+    quicCidCopy(this.localScid, entropy, 64, QUIC_CONN_CID_LENGTH)
+    quicCidCopy(this.cidSeed, entropy, 72, 32)
     const fits: boolean = toI32(entropy.length) === QUIC_CONN_ENTROPY_SIZE && quicConnConfigFits(this.config)
     secureZero(entropy)
     if (!fits) {
@@ -1375,9 +1359,9 @@ export class QuicConnection {
     }
     this.initial.readKeys = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client)
     this.initial.writeKeys = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server)
-    quicConnCopyInto(this.originalDcid, buf, header.dcidStart, header.dcidLength)
+    quicCidCopy(this.originalDcid, buf, header.dcidStart, header.dcidLength)
     this.originalDcidLength = header.dcidLength
-    quicConnCopyInto(this.peerScid, buf, header.scidStart, header.scidLength)
+    quicCidCopy(this.peerScid, buf, header.scidStart, header.scidLength)
     this.peerScidLength = header.scidLength
     this.state = QUIC_STATE_HANDSHAKE
     return true
@@ -1497,12 +1481,12 @@ export class QuicConnection {
     this.cryptoArrived = false
     this.topUpOwed = false
     this.phasePending = -1
-    let outcome: i32 = QUIC_CONN_OPEN_DROPPED
+    let used: boolean = false
     {
       using _scope = arena()
-      outcome = this.openScoped(buf, header, space, keys)
+      used = this.openScoped(buf, header, space, keys)
     }
-    if (outcome === QUIC_CONN_OPEN_DROPPED) {
+    if (!used) {
       return false
     }
     if (first) {
@@ -1535,9 +1519,9 @@ export class QuicConnection {
    * payload decrypted (with the other key generation's keys when the Key
    * Phase bit says so), and every frame acted on. Nothing it calls stores
    * an allocation, which is what lets the block release the packet's
-   * temporaries. Answers `QUIC_CONN_OPEN_DROPPED` or `QUIC_CONN_OPEN_USED`.
+   * temporaries. Answers whether the packet was used rather than dropped.
    */
-  openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys): i32 {
+  openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys): boolean {
     const packet: QuicPacket = this.packet
     // Every key generation shares the header-protection key (RFC 9001 §6),
     // so the current keys take it off whatever the Key Phase bit says.
@@ -1547,35 +1531,35 @@ export class QuicConnection {
     const open: QuicKeys | null = other ? this.otherReadKeys : keys
     if (open === null || packet.packetNumber < 0) {
       this.drop()
-      return QUIC_CONN_OPEN_DROPPED
+      return false
     }
     const payload: u8[] | null = quicDecryptPayload(open, buf, header, clear, packet)
     if (payload === null) {
       this.drop()
-      return QUIC_CONN_OPEN_DROPPED
+      return false
     }
     // §17.2, §17.3.1: reserved bits set under a valid tag close the connection.
     if (packet.error === QUIC_ERR_RESERVED_BITS) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, QUIC_CONN_NONE)
-      return QUIC_CONN_OPEN_USED
+      return true
     }
     const pn: i64 = packet.packetNumber
     if (space.received.contains(pn)) {
       this.drop()
-      return QUIC_CONN_OPEN_USED
+      return true
     }
     if (type === QUIC_PACKET_SHORT && !this.notePhase(pn, other)) {
-      return QUIC_CONN_OPEN_USED
+      return true
     }
     const eliciting: boolean = this.receiveFrames(space, type, payload, buf, header)
     if (this.closed()) {
-      return QUIC_CONN_OPEN_USED
+      return true
     }
     space.received.record(pn, eliciting)
     // §10.1: a packet received and processed restarts the idle timer.
     this.idleSince = this.now
     this.elicitingSent = false
-    return QUIC_CONN_OPEN_USED
+    return true
   }
 
   /**
@@ -2729,16 +2713,10 @@ export class QuicConnection {
     let paddedInitial: boolean = false
     let eliciting: boolean = false
     const open: boolean = this.recovery.canSend()
-    // Each packet's start, header length and payload end, by level; -1 for none.
-    let start0: i32 = -1
-    let start1: i32 = -1
-    let start2: i32 = -1
-    let end0: i32 = 0
-    let end1: i32 = 0
-    let end2: i32 = 0
     let last: i32 = -1
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
+      space.builtStart = -1
       const overhead: i32 = this.overhead(space)
       const sent: QuicSentPackets | null = this.recovery.space(level)
       if (sent === null || overhead === 0 || remaining <= overhead + 8) {
@@ -2776,16 +2754,8 @@ export class QuicConnection {
       if (level === TLS_LEVEL_INITIAL) {
         paddedInitial = space.stagedEliciting
       }
-      if (level === 0) {
-        start0 = position
-        end0 = payloadEnd
-      } else if (level === 1) {
-        start1 = position
-        end1 = payloadEnd
-      } else {
-        start2 = position
-        end2 = payloadEnd
-      }
+      space.builtStart = position
+      space.builtEnd = payloadEnd
       last = level
       remaining = remaining - (payloadEnd + QUIC_AEAD_TAG_SIZE - position)
       position = payloadEnd + QUIC_AEAD_TAG_SIZE
@@ -2794,13 +2764,8 @@ export class QuicConnection {
       return 0
     }
     if (paddedInitial && remaining > 0) {
-      if (last === 0) {
-        end0 = quicPutPadding(out, end0, remaining)
-      } else if (last === 1) {
-        end1 = quicPutPadding(out, end1, remaining)
-      } else {
-        end2 = quicPutPadding(out, end2, remaining)
-      }
+      const padded: QuicConnSpace = this.spaceAt(last)
+      padded.builtEnd = quicPutPadding(out, padded.builtEnd, remaining)
     }
     if (eliciting && !this.elicitingSent) {
       this.idleSince = this.now
@@ -2810,20 +2775,13 @@ export class QuicConnection {
     // make cause, leaves the datagram unsendable: none of it goes.
     let total: i32 = 0
     let sealed: boolean = true
-    if (start0 >= 0) {
-      const n: i32 = this.sealAt(this.initial, out, start0, end0)
-      sealed = sealed && n > 0
-      total = total + n
-    }
-    if (start1 >= 0) {
-      const n: i32 = this.sealAt(this.handshake, out, start1, end1)
-      sealed = sealed && n > 0
-      total = total + n
-    }
-    if (start2 >= 0) {
-      const n: i32 = this.sealAt(this.application, out, start2, end2)
-      sealed = sealed && n > 0
-      total = total + n
+    for (let level: i32 = 0; level <= last; level += 1) {
+      const space: QuicConnSpace = this.spaceAt(level)
+      if (space.builtStart >= 0) {
+        const n: i32 = this.sealAt(space, out, space.builtStart, space.builtEnd)
+        sealed = sealed && n > 0
+        total = total + n
+      }
     }
     if (!sealed) {
       return 0

@@ -27,18 +27,9 @@ import {
   quicUnprotectHeader,
   quicVarintPut,
 } from "nish/net/quic-packet";
-import { bytesOf, hexOf, joined } from "./bytes";
+import { bytesOf, hexOf, joined, prefix } from "./bytes";
 import { a2Frames, a5Packet, a5Secret, clientDcid, initialOf, keysOf } from "./checks";
 import { a2Packet } from "./vectors";
-
-/** The first `n` bytes of `buf`. */
-const head = (buf: u8[], n: i32): u8[] => {
-  const out: u8[] = [];
-  for (let k: i32 = 0; k < n && k < toI32(buf.length); k++) {
-    out.push(buf[k]);
-  }
-  return out;
-};
 
 /** Headers written in place, and varints. */
 const headerChecks = (t: Suite): void => {
@@ -53,14 +44,14 @@ const headerChecks = (t: Suite): void => {
   t.eqI32("and is 0 for a type that has none", quicLongHeaderSize(QUIC_PACKET_SHORT, 8, 0, 0, 2, 4, 1162), toI32(0));
   const end: i32 = quicPutLongHeader(buf, 0, QUIC_PACKET_INITIAL, slot, 8, none, 0, none, 2, 4, 1162);
   t.eqI32("quicPutLongHeader writes A.2's header from an ID in a 20-byte slot", end, toI32(22));
-  t.eqStr("byte for byte", hexOf(head(buf, end)), "c300000001088394c8f03e5157080000449e00000002");
+  t.eqStr("byte for byte", hexOf(prefix(buf, end)), "c300000001088394c8f03e5157080000449e00000002");
   t.eqI32("and refuses a buffer one byte short", quicPutLongHeader(buf, 1179, QUIC_PACKET_INITIAL, slot, 8, none, 0, none, 2, 4, 1162), toI32(-1));
   t.eqI32("or an ID length past its array", quicPutLongHeader(buf, 0, QUIC_PACKET_INITIAL, slot, 21, none, 0, none, 2, 4, 1162), toI32(-1));
   const shortEnd: i32 = quicPutShortHeader(buf, 0, none, 0, false, false, 654360564, 3);
-  t.eqStr("quicPutShortHeader writes A.5's", hexOf(head(buf, shortEnd)), "4200bff4");
+  t.eqStr("quicPutShortHeader writes A.5's", hexOf(prefix(buf, shortEnd)), "4200bff4");
   t.eqI32("and refuses a packet-number length of 5", quicPutShortHeader(buf, 0, none, 0, false, false, 1, 5), toI32(-1));
   t.eqI32("quicVarintPut writes 37 in two bytes", quicVarintPut(buf, 0, 37, 2), toI32(2));
-  t.eqStr("as 4025", hexOf(head(buf, 2)), "4025");
+  t.eqStr("as 4025", hexOf(prefix(buf, 2)), "4025");
   t.eqI32("and refuses a size of 3", quicVarintPut(buf, 0, 37, 3), toI32(-1));
   t.eqI32("or a size too short for the value", quicVarintPut(buf, 0, 16384, 2), toI32(-1));
   t.eqI32("or a buffer without the room", quicVarintPut(buf, 1199, 16384, 4), toI32(-1));
@@ -96,7 +87,7 @@ const packetChecks = (t: Suite): void => {
   t.ok("storing nothing but numbers into the packet", toI32(packet.header.length) === 0 && toI32(packet.payload.length) === 0);
   const plain: u8[] | null = quicDecryptPayload(keys, datagram, header, clear, packet);
   t.ok("quicDecryptPayload answers the frames", plain !== null && hexOf(plain) === hexOf(frames) && packet.error === QUIC_PACKET_OK);
-  const forged: u8[] = joined(head(datagram, 1199), [toU8(toI32(datagram[1199]) ^ 1)]);
+  const forged: u8[] = joined(prefix(datagram, 1199), [toU8(toI32(datagram[1199]) ^ 1)]);
   const forgedClear: u8[] = quicUnprotectHeader(keys, forged, header, -1, packet);
   t.ok("a flipped tag byte does not open", quicDecryptPayload(keys, forged, header, forgedClear, packet) === null && packet.error === QUIC_ERR_DECRYPT);
   t.ok("and a packet in error is not opened again", quicDecryptPayload(keys, datagram, header, clear, packet) === null);

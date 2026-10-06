@@ -178,13 +178,13 @@ export const quicStreamIsLocal = (id: i64): boolean => (id & 1) !== 0
 export const quicStreamIsUni = (id: i64): boolean => (id & 2) !== 0
 
 /** Whether bit `k` of `bits` is set; false outside the array. */
-const quicStreamBit = (bits: u8[], k: i32): boolean => {
+export const quicStreamBit = (bits: u8[], k: i32): boolean => {
   const at: i32 = k >> 3
   return at >= 0 && at < toI32(bits.length) && (toI32(bits[at]) & (QUIC_STREAM_ONE << (k & 7))) !== 0
 }
 
 /** Sets or clears bit `k` of `bits`. */
-const quicStreamSetBit = (bits: u8[], k: i32, on: boolean): void => {
+export const quicStreamSetBit = (bits: u8[], k: i32, on: boolean): void => {
   const at: i32 = k >> 3
   if (at < 0 || at >= toI32(bits.length)) {
     return
@@ -736,12 +736,19 @@ export class QuicStreams {
   /**
    * The slot a frame for stream `id` refers to (§3.2, §4.6, §19.8): opening
    * it, and every lower stream of its type, when it is the peer's and new.
-   * Answers the slot; -1 for a stream that finished and is gone, whose
-   * frames are ignored; or -2 with `error` holding STREAM_LIMIT_ERROR for
-   * the peer's stream past the limit, or STREAM_STATE_ERROR for one of this
-   * side's that it has not opened.
+   * `receiving` says whether the frame is about the stream's receiving half
+   * (STREAM, RESET_STREAM, STREAM_DATA_BLOCKED) or its sending half
+   * (STOP_SENDING, MAX_STREAM_DATA). Answers the slot; -1 for a stream that
+   * finished and is gone, whose frames are ignored; or -2 with `locateError`
+   * holding STREAM_LIMIT_ERROR for the peer's stream past the limit, or
+   * STREAM_STATE_ERROR for one of this side's that it has not opened or a
+   * unidirectional stream without the half the frame is about (§19.4-§19.13).
    */
-  locate(id: i64): i32 {
+  locate(id: i64, receiving: boolean): i32 {
+    if (quicStreamIsUni(id) && quicStreamIsLocal(id) === receiving) {
+      this.locateError = QUIC_ERROR_STREAM_STATE
+      return -2
+    }
     const sequence: i64 = id >> 2
     const uni: boolean = quicStreamIsUni(id)
     if (quicStreamIsLocal(id)) {
@@ -806,10 +813,7 @@ export class QuicStreams {
    * side sends on, the final size, or the credit.
    */
   onStream(id: i64, offset: i64, buf: u8[], from: i32, length: i32, fin: boolean): i64 {
-    if (quicStreamIsLocal(id) && quicStreamIsUni(id)) {
-      return QUIC_ERROR_STREAM_STATE
-    }
-    const k: i32 = this.locate(id)
+    const k: i32 = this.locate(id, true)
     if (k === -2) {
       return this.locateError
     }
@@ -866,10 +870,7 @@ export class QuicStreams {
 
   /** RESET_STREAM (§19.4): the peer abandons the stream at `finalSize` with `code`. Answers 0 or the transport error. */
   onReset(id: i64, code: i64, finalSize: i64): i64 {
-    if (quicStreamIsLocal(id) && quicStreamIsUni(id)) {
-      return QUIC_ERROR_STREAM_STATE
-    }
-    const k: i32 = this.locate(id)
+    const k: i32 = this.locate(id, true)
     if (k === -2) {
       return this.locateError
     }
@@ -907,10 +908,7 @@ export class QuicStreams {
    * or the transport error.
    */
   onStopSending(id: i64, code: i64): i64 {
-    if (!quicStreamIsLocal(id) && quicStreamIsUni(id)) {
-      return QUIC_ERROR_STREAM_STATE
-    }
-    const k: i32 = this.locate(id)
+    const k: i32 = this.locate(id, false)
     if (k === -2) {
       return this.locateError
     }
@@ -928,10 +926,7 @@ export class QuicStreams {
 
   /** MAX_STREAM_DATA (§19.10): more credit for the stream. Answers 0 or the transport error. */
   onMaxStreamData(id: i64, limit: i64): i64 {
-    if (!quicStreamIsLocal(id) && quicStreamIsUni(id)) {
-      return QUIC_ERROR_STREAM_STATE
-    }
-    const k: i32 = this.locate(id)
+    const k: i32 = this.locate(id, false)
     if (k === -2) {
       return this.locateError
     }
@@ -950,10 +945,7 @@ export class QuicStreams {
 
   /** STREAM_DATA_BLOCKED (§19.13): only the ID is checked; credit follows reading, not asking. */
   onStreamDataBlocked(id: i64): i64 {
-    if (quicStreamIsLocal(id) && quicStreamIsUni(id)) {
-      return QUIC_ERROR_STREAM_STATE
-    }
-    const k: i32 = this.locate(id)
+    const k: i32 = this.locate(id, true)
     return k === -2 ? this.locateError : QUIC_ERROR_NO_ERROR
   }
 

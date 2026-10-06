@@ -17,7 +17,8 @@
  * ported from another implementation. Private names carry the
  * `quicDatagram` prefix (`docs/wp26-stdlib.md` §3e).
  */
-import { quicDatagramSize, quicPutDatagram } from "nish/net/quic-frame"
+import { quicPutDatagram } from "nish/net/quic-frame"
+import { quicPacketCopy } from "nish/net/quic-packet"
 
 /** A ring of `entries` datagram payloads of at most `entrySize` bytes each, oldest first. */
 export class QuicDatagramQueue {
@@ -69,11 +70,7 @@ export class QuicDatagramQueue {
     }
     const k: i32 = (this.head + this.count) % entries
     const base: i32 = k * this.entrySize
-    for (let j: i32 = 0; j < length; j += 1) {
-      if (base + j >= 0 && base + j < toI32(this.data.length) && from + j < toI32(buf.length)) {
-        this.data[base + j] = buf[from + j]
-      }
-    }
+    quicPacketCopy(this.data, base, buf, from, length)
     if (k >= 0 && k < entries) {
       this.lengths[k] = length
     }
@@ -108,12 +105,7 @@ export class QuicDatagramQueue {
     if (at < 0 || cap < length || at > toI32(buf.length) - length) {
       return -2
     }
-    const base: i32 = this.head * this.entrySize
-    for (let j: i32 = 0; j < length; j += 1) {
-      if (base + j >= 0 && base + j < toI32(this.data.length) && at + j < toI32(buf.length)) {
-        buf[at + j] = this.data[base + j]
-      }
-    }
+    quicPacketCopy(buf, at, this.data, this.head * this.entrySize, length)
     this.drop()
     return length
   }
@@ -125,7 +117,7 @@ export class QuicDatagramQueue {
    */
   putFrame(buf: u8[], at: i32, end: i32): i32 {
     const length: i32 = this.peekLength()
-    if (length < 0 || quicDatagramSize(length) > end - at) {
+    if (length < 0) {
       return at
     }
     const next: i32 = quicPutDatagram(buf, at, end, this.data, this.head * this.entrySize, length)

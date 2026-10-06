@@ -15,7 +15,8 @@ import { QUIC_LISTENER_FLIGHT_MAX, QuicFlight, quicListenerReceiveSegments, quic
 import { bytesOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { qcReceive, qcShort } from "../net_quic_conn/client";
-import { NqLimits, NqPair, NqRead, nqPair, nqReadAll, nqReceived, nqSend, nqStream, nqText } from "../net_quic_stream/common";
+import { NqLimits, NqPair, NqRead, nqPair, nqReadAll, nqReceived, nqSend, nqText } from "../net_quic_stream/common";
+import { qcStream } from "../net_quic_conn/data";
 
 const WOULD_BLOCK: i32 = -11;
 const NOT_SUPPORTED: i32 = -95;
@@ -94,7 +95,7 @@ const serverFlight = (t: Suite, loop: Loop): void => {
   const limits = new NqLimits();
   limits.maxStreamData = n64(16384);
   const p: NqPair = nqPair(limits);
-  nqSend(p, nqStream(n64(0), n64(0), "send", false));
+  nqSend(p, qcStream(n64(0), n64(0), "send", false));
   nqReadAll(p.conn, n32(64), new NqRead());
   const data: u8[] = bytesOf(nqText(n32(8000)));
   p.conn.streamWrite(n64(0), data, n32(0), n32(8000), true);

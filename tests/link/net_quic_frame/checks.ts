@@ -81,7 +81,7 @@ export const errorOf = (hex: string): i64 => {
 };
 
 /** `bytes[from .. from + length)` as hex. */
-const windowHex = (bytes: u8[], from: i32, length: i32): string => {
+export const windowHex = (bytes: u8[], from: i32, length: i32): string => {
   const out: u8[] = [];
   for (let k: i32 = from; k < from + length && k < toI32(bytes.length); k++) {
     if (k >= 0) {

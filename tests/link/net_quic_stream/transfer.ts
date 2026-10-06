@@ -21,7 +21,8 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { cat } from "../net_tls_common/client";
 import { qcFind } from "../net_quic_conn/common";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
-import { NqLimits, NqPair, NqRead, nqConfig, nqPair, nqReadAll, nqReceived, nqSend, nqSettle, nqStream, nqText } from "./common";
+import { NqLimits, NqPair, NqRead, nqConfig, nqPair, nqReadAll, nqReceived, nqSend, nqSettle, nqText } from "./common";
+import { qcStream } from "../net_quic_conn/data";
 
 /** What the client sends on stream `id`: its name and 200 bytes of pattern. */
 const body = (id: i64): string => `stream ${id}: ${nqText(n32(200))}`;
@@ -45,14 +46,14 @@ const multiplexChecks = (t: Suite): void => {
   // Two streams to a packet, interleaved: bidirectional 0, 4 … 28 and unidirectional 2, 6, 10.
   const ids: i64[] = [n64(0), n64(2), n64(4), n64(6), n64(8), n64(10), n64(12), n64(16), n64(20), n64(24), n64(28)];
   for (let k: i32 = 0; k < toI32(ids.length); k += 2) {
-    const frames: u8[][] = [nqStream(ids[k], n64(0), body(ids[k]), true)];
+    const frames: u8[][] = [qcStream(ids[k], n64(0), body(ids[k]), true)];
     if (k + 1 < toI32(ids.length)) {
-      frames.push(nqStream(ids[k + 1], n64(0), body(ids[k + 1]), true));
+      frames.push(qcStream(ids[k + 1], n64(0), body(ids[k + 1]), true));
     }
     nqSend(p, cat(frames));
   }
   // And one more unidirectional stream the client leaves open.
-  nqSend(p, nqStream(n64(14), n64(0), "still open", false));
+  nqSend(p, qcStream(n64(14), n64(0), "still open", false));
   const read = new NqRead();
   nqReadAll(p.conn, n32(64), read);
   let all: boolean = true;
@@ -94,7 +95,7 @@ const multiplexChecks = (t: Suite): void => {
   t.eqStr("and a stream it has not finished, without a FIN", nqReceived(p.c, n64(7)), "a question");
 
   // The client answers on the server's bidirectional stream.
-  nqSend(p, nqStream(n64(1), n64(0), "an answer", true));
+  nqSend(p, qcStream(n64(1), n64(0), "an answer", true));
   const answer = new NqRead();
   nqReadAll(p.conn, n32(64), answer);
   t.eqStr("the client's answer on the server's stream is read", answer.of(n64(1)), "an answer <fin>");
@@ -109,7 +110,7 @@ const multiplexChecks = (t: Suite): void => {
   const uniRaised = qcFind(p.c.appPayloads, QUIC_FRAME_MAX_STREAMS_UNI);
   t.ok("and two finished unidirectional streams of four raise that limit to six", uniRaised.found && uniRaised.frame.value === n64(6) && p.conn.streams.peerUniLimit === n64(6));
   // A stream the client opens past its first eight, under the new limit.
-  nqSend(p, nqStream(n64(32), n64(0), "ninth", true));
+  nqSend(p, qcStream(n64(32), n64(0), "ninth", true));
   const ninth = new NqRead();
   nqReadAll(p.conn, n32(64), ninth);
   t.eqStr("a ninth bidirectional stream is taken, in a freed slot", ninth.of(n64(32)), "ninth <fin>");

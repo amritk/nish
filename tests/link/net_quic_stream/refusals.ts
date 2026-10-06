@@ -37,7 +37,8 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { cat } from "../net_tls_common/client";
 import { qcDrain } from "../net_quic_conn/client";
 import { QcFound, qcFind } from "../net_quic_conn/common";
-import { NqLimits, NqPair, NqRead, nqPair, nqReadAll, nqReceived, nqSend, nqSettle, nqStream } from "./common";
+import { NqLimits, NqPair, NqRead, nqPair, nqReadAll, nqReceived, nqSend, nqSettle } from "./common";
+import { qcStream } from "../net_quic_conn/data";
 
 /** `code` and the frame type, as the close reports them. */
 const closeOf = (f: QcFound): string => (f.found ? `${f.frame.errorCode} ${f.frame.frameType}` : "no close");
@@ -74,45 +75,45 @@ const streamValue = (type: i32, id: i64, value: i64): u8[] => {
 const streamRefusals = (t: Suite): void => {
   const state: i64 = QUIC_ERROR_STREAM_STATE;
   const reset: i64 = toI64(QUIC_FRAME_RESET_STREAM);
-  refuse(t, "STREAM on the server's unidirectional stream is STREAM_STATE_ERROR (§19.8)", nqStream(n64(3), n64(0), "x", false), state, n64(8));
+  refuse(t, "STREAM on the server's unidirectional stream is STREAM_STATE_ERROR (§19.8)", qcStream(n64(3), n64(0), "x", false), state, n64(8));
   refuse(t, "RESET_STREAM on it is too (§19.4)", ending(n64(3), n64(1), n64(0)), state, reset);
   refuse(t, "STREAM_DATA_BLOCKED on it is too (§19.13)", streamValue(QUIC_FRAME_STREAM_DATA_BLOCKED, n64(3), n64(1)), state, toI64(QUIC_FRAME_STREAM_DATA_BLOCKED));
   refuse(t, "MAX_STREAM_DATA on the client's unidirectional stream is STREAM_STATE_ERROR (§19.10)", streamValue(QUIC_FRAME_MAX_STREAM_DATA, n64(2), n64(9)), state, toI64(QUIC_FRAME_MAX_STREAM_DATA));
   refuse(t, "STOP_SENDING on it is too (§19.5)", ending(n64(2), n64(1), n64(-1)), state, toI64(QUIC_FRAME_STOP_SENDING));
-  refuse(t, "STREAM on a bidirectional stream of the server's it has not opened is STREAM_STATE_ERROR (§19.8)", nqStream(n64(1), n64(0), "x", false), state, n64(8));
+  refuse(t, "STREAM on a bidirectional stream of the server's it has not opened is STREAM_STATE_ERROR (§19.8)", qcStream(n64(1), n64(0), "x", false), state, n64(8));
   refuse(t, "MAX_STREAM_DATA on one of its unidirectional streams not opened yet is too (§19.10)", streamValue(QUIC_FRAME_MAX_STREAM_DATA, n64(7), n64(9)), state, toI64(QUIC_FRAME_MAX_STREAM_DATA));
-  refuse(t, "a bidirectional stream past the limit of eight is STREAM_LIMIT_ERROR (§4.6)", nqStream(n64(32), n64(0), "x", false), QUIC_ERROR_STREAM_LIMIT, n64(8));
-  refuse(t, "a unidirectional stream past the limit of four is too", nqStream(n64(18), n64(0), "x", false), QUIC_ERROR_STREAM_LIMIT, n64(8));
+  refuse(t, "a bidirectional stream past the limit of eight is STREAM_LIMIT_ERROR (§4.6)", qcStream(n64(32), n64(0), "x", false), QUIC_ERROR_STREAM_LIMIT, n64(8));
+  refuse(t, "a unidirectional stream past the limit of four is too", qcStream(n64(18), n64(0), "x", false), QUIC_ERROR_STREAM_LIMIT, n64(8));
   const noUni = new NqLimits();
   noUni.maxStreamsUni = n64(0);
-  refuseUnder(t, "with no unidirectional streams allowed, the first is STREAM_LIMIT_ERROR", noUni, nqStream(n64(2), n64(0), "x", false), QUIC_ERROR_STREAM_LIMIT, n64(8));
+  refuseUnder(t, "with no unidirectional streams allowed, the first is STREAM_LIMIT_ERROR", noUni, qcStream(n64(2), n64(0), "x", false), QUIC_ERROR_STREAM_LIMIT, n64(8));
 
   const small = new NqLimits();
   small.maxStreamData = n64(16);
   small.maxData = n64(24);
-  refuseUnder(t, "a byte past a stream's credit is FLOW_CONTROL_ERROR (§4.1)", small, nqStream(n64(0), n64(16), "x", false), QUIC_ERROR_FLOW_CONTROL, n64(8));
+  refuseUnder(t, "a byte past a stream's credit is FLOW_CONTROL_ERROR (§4.1)", small, qcStream(n64(0), n64(16), "x", false), QUIC_ERROR_FLOW_CONTROL, n64(8));
   refuseUnder(
     t,
     "and past the connection's, over two streams",
     small,
-    cat([nqStream(n64(0), n64(0), "0123456789abcdef", false), nqStream(n64(4), n64(0), "012345678", false)]),
+    cat([qcStream(n64(0), n64(0), "0123456789abcdef", false), qcStream(n64(4), n64(0), "012345678", false)]),
     QUIC_ERROR_FLOW_CONTROL,
     n64(8)
   );
   refuseUnder(t, "a RESET_STREAM whose final size is past the credit is FLOW_CONTROL_ERROR too", small, ending(n64(0), n64(1), n64(17)), QUIC_ERROR_FLOW_CONTROL, reset);
 
   const finalSize: i64 = QUIC_ERROR_FINAL_SIZE;
-  refuse(t, "data past a FIN is FINAL_SIZE_ERROR (§4.5)", cat([nqStream(n64(0), n64(0), "abc", true), nqStream(n64(0), n64(3), "d", false)]), finalSize, n64(8));
-  refuse(t, "a second FIN at another size is too", cat([nqStream(n64(0), n64(0), "abc", true), nqStream(n64(0), n64(0), "ab", true)]), finalSize, n64(8));
-  refuse(t, "a FIN below data already received is too", cat([nqStream(n64(0), n64(0), "abc", false), nqStream(n64(0), n64(0), "a", true)]), finalSize, n64(8));
-  refuse(t, "a RESET_STREAM below data already received is too", cat([nqStream(n64(0), n64(0), "abc", false), ending(n64(0), n64(1), n64(2))]), finalSize, reset);
-  refuse(t, "a RESET_STREAM at another size than the FIN is too", cat([nqStream(n64(0), n64(0), "abc", true), ending(n64(0), n64(1), n64(4))]), finalSize, reset);
+  refuse(t, "data past a FIN is FINAL_SIZE_ERROR (§4.5)", cat([qcStream(n64(0), n64(0), "abc", true), qcStream(n64(0), n64(3), "d", false)]), finalSize, n64(8));
+  refuse(t, "a second FIN at another size is too", cat([qcStream(n64(0), n64(0), "abc", true), qcStream(n64(0), n64(0), "ab", true)]), finalSize, n64(8));
+  refuse(t, "a FIN below data already received is too", cat([qcStream(n64(0), n64(0), "abc", false), qcStream(n64(0), n64(0), "a", true)]), finalSize, n64(8));
+  refuse(t, "a RESET_STREAM below data already received is too", cat([qcStream(n64(0), n64(0), "abc", false), ending(n64(0), n64(1), n64(2))]), finalSize, reset);
+  refuse(t, "a RESET_STREAM at another size than the FIN is too", cat([qcStream(n64(0), n64(0), "abc", true), ending(n64(0), n64(1), n64(4))]), finalSize, reset);
 };
 
 /** The client resets a stream, stops one, and the server does both. */
 const endingChecks = (t: Suite): void => {
   const p: NqPair = nqPair(new NqLimits());
-  nqSend(p, cat([nqStream(n64(0), n64(0), "abcde", false), nqStream(n64(4), n64(0), "x", false), nqStream(n64(8), n64(0), "y", false)]));
+  nqSend(p, cat([qcStream(n64(0), n64(0), "abcde", false), qcStream(n64(4), n64(0), "x", false), qcStream(n64(8), n64(0), "y", false)]));
   nqReadAll(p.conn, n32(64), new NqRead());
   nqSend(p, ending(n64(0), n64(9), n64(5)));
   const zero = p.conn.streams.find(n64(0));
@@ -156,7 +157,7 @@ const endingChecks = (t: Suite): void => {
 /** What the stream calls answer for a stream that is not there, a side it does not have, or a connection not up. */
 const answerChecks = (t: Suite): void => {
   const p: NqPair = nqPair(new NqLimits());
-  nqSend(p, cat([nqStream(n64(2), n64(0), "one way", false), nqStream(n64(0), n64(0), "both", true)]));
+  nqSend(p, cat([qcStream(n64(2), n64(0), "one way", false), qcStream(n64(0), n64(0), "both", true)]));
   const read = new NqRead();
   nqReadAll(p.conn, n32(64), read);
   const buf: u8[] = new Array<u8>(8);

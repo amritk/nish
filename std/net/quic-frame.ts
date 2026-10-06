@@ -57,6 +57,7 @@ import {
   QUIC_PACKET_INITIAL,
   QUIC_PACKET_SHORT,
   QUIC_PACKET_ZERO_RTT,
+  quicPacketCopy,
   quicPacketGrow,
   quicVarintLength,
   quicVarintPut,
@@ -597,15 +598,6 @@ const quicFrameWindowFits = (bytes: u8[], from: i32, length: i32): boolean =>
 const quicFrameRoom = (buf: u8[], at: i32, end: i32, size: i32): boolean =>
   size > 0 && at >= 0 && end <= toI32(buf.length) && at <= end - size
 
-/** Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows. */
-const quicFrameCopyInto = (buf: u8[], at: i32, bytes: u8[], from: i32, length: i32): void => {
-  for (let k: i32 = 0; k < length; k += 1) {
-    if (at + k >= 0 && at + k < toI32(buf.length) && from + k >= 0 && from + k < toI32(bytes.length)) {
-      buf[at + k] = bytes[from + k]
-    }
-  }
-}
-
 /** Writes one byte and answers the offset past it; the caller has checked the room. */
 const quicFramePutByte = (buf: u8[], at: i32, value: i32): i32 => {
   if (at >= 0 && at < toI32(buf.length)) {
@@ -784,7 +776,7 @@ export const quicPutCrypto = (
   let cursor: i32 = quicFramePutByte(buf, at, QUIC_FRAME_CRYPTO)
   cursor = quicFramePutVarint(buf, cursor, offset)
   cursor = quicFramePutVarint(buf, cursor, toI64(length))
-  quicFrameCopyInto(buf, cursor, data, from, length)
+  quicPacketCopy(buf, cursor, data, from, length)
   return cursor + length
 }
 
@@ -850,8 +842,8 @@ export const quicPutStream = (
   cursor = quicFramePutVarint(buf, cursor, toI64(length))
   // Two runs: up to the end of the array, then from its start.
   const first: i32 = length < size - from ? length : size - from
-  quicFrameCopyInto(buf, cursor, data, from, first)
-  quicFrameCopyInto(buf, cursor + first, data, 0, length - first)
+  quicPacketCopy(buf, cursor, data, from, first)
+  quicPacketCopy(buf, cursor + first, data, 0, length - first)
   return cursor + length
 }
 
@@ -999,8 +991,8 @@ export const quicPutNewConnectionId = (
   cursor = quicFramePutVarint(buf, cursor, sequence)
   cursor = quicFramePutVarint(buf, cursor, retirePriorTo)
   cursor = quicFramePutByte(buf, cursor, cidLength)
-  quicFrameCopyInto(buf, cursor, connectionId, 0, cidLength)
-  quicFrameCopyInto(buf, cursor + cidLength, resetToken, 0, QUIC_RESET_TOKEN_SIZE)
+  quicPacketCopy(buf, cursor, connectionId, 0, cidLength)
+  quicPacketCopy(buf, cursor + cidLength, resetToken, 0, QUIC_RESET_TOKEN_SIZE)
   return cursor + cidLength + QUIC_RESET_TOKEN_SIZE
 }
 
@@ -1050,7 +1042,7 @@ export const quicPutPathData = (buf: u8[], at: i32, end: i32, type: i32, data: u
     return -1
   }
   const cursor: i32 = quicFramePutByte(buf, at, type)
-  quicFrameCopyInto(buf, cursor, data, from, QUIC_PATH_DATA_SIZE)
+  quicPacketCopy(buf, cursor, data, from, QUIC_PATH_DATA_SIZE)
   return cursor + QUIC_PATH_DATA_SIZE
 }
 
@@ -1153,7 +1145,7 @@ export const quicPutConnectionClose = (
     cursor = quicFramePutVarint(buf, cursor, frameType)
   }
   cursor = quicFramePutVarint(buf, cursor, toI64(reasonLength))
-  quicFrameCopyInto(buf, cursor, reason, 0, reasonLength)
+  quicPacketCopy(buf, cursor, reason, 0, reasonLength)
   return cursor + reasonLength
 }
 
@@ -1185,7 +1177,7 @@ export const quicPushNewToken = (out: u8[], token: u8[]): boolean => {
   const size: i32 = 1 + quicVarintSize(toI64(length)) + length
   let cursor: i32 = quicFramePutByte(out, quicFrameGrow(out, size), QUIC_FRAME_NEW_TOKEN)
   cursor = quicFramePutVarint(out, cursor, toI64(length))
-  quicFrameCopyInto(out, cursor, token, 0, length)
+  quicPacketCopy(out, cursor, token, 0, length)
   return true
 }
 
@@ -1209,6 +1201,6 @@ export const quicPutDatagram = (buf: u8[], at: i32, end: i32, data: u8[], from: 
     quicFramePutByte(buf, at, QUIC_FRAME_DATAGRAM_LENGTH),
     toI64(length)
   )
-  quicFrameCopyInto(buf, cursor, data, from, length)
+  quicPacketCopy(buf, cursor, data, from, length)
   return cursor + length
 }

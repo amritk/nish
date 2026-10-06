@@ -29,7 +29,8 @@ import {
   qcReceive,
   qcShort,
 } from "../net_quic_conn/client";
-import { NqLimits, nqConfig, nqParams, nqStream, nqText } from "./common";
+import { NqLimits, nqConfig, nqParams, nqText } from "./common";
+import { qcStream } from "../net_quic_conn/data";
 
 /**
  * The bytes the server kept across the calls measured so far. `Arena.used()`
@@ -109,7 +110,7 @@ const echoRound = (conn: QuicConnection, c: QcClient, offset: i64, m: NqMeter): 
   if (c.largestApp >= n64(0)) {
     quicPushAck(ack, [n64(0), c.largestApp], n32(1), n64(0));
   }
-  const packet: u8[] = qcShort(c, cat([nqStream(n64(0), offset, nqText(n32(100)), false), ack]));
+  const packet: u8[] = qcShort(c, cat([qcStream(n64(0), offset, nqText(n32(100)), false), ack]));
   nqMeteredReceive(conn, packet, c.now, m);
   const filler: u8[] = m.filler();
   const before: i64 = Arena.used();
