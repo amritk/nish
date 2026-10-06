@@ -226,6 +226,16 @@ twins) are unchanged, byte for byte, with all of it in.
   finish, so the slots, which are its limits, are never short; datagrams the
   receive ring cannot hold are dropped and counted; owed frames are flags,
   not queues.
+- **No frame costs work that grows with the table per stream it opens**
+  (`transfer.ts`). A frame naming a high stream ID opens every lower one of
+  its type (§3.2), so one 10-byte STREAM frame for the client's 1,024th
+  stream opens 1,024 at once, and `release` lets it do so again each time
+  half the limit finishes. A stream is found through a hash index and its
+  slot taken from a stack of free slots, so that frame costs 1,024 pops.
+  Scanning the table for each slot, as the code first did, cost about
+  525,000 slot comparisons (1,024 · 1,025 / 2). The check opens all 1,024
+  with one frame, gives every slot back and opens the next 1,024 in them,
+  each in a slot of its own.
 - **Flow control works both ways** (`flow.ts`): a stream takes exactly its
   credit, MAX_STREAM_DATA and MAX_DATA follow reading half a buffer and half
   the window; the client's credit holds the server's data back, with

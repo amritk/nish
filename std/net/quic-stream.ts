@@ -384,6 +384,13 @@ export class QuicStreams {
   index: i32[]
   /** Slots with news for the application, `eventCount` of them from `eventHead`. */
   events: i32[]
+  /**
+   * The free slots, a stack of `freeCount`, so a stream opens without a
+   * scan: a frame naming a high stream ID opens every lower one (§3.2), and
+   * each of those costs one pop, not a pass over the table.
+   */
+  free: i32[]
+  freeCount: i32 = 0
   /** The configured limits on the client's streams at once and this side's own. */
   maxBidi: i64 = 0
   maxUni: i64 = 0
@@ -463,6 +470,7 @@ export class QuicStreams {
     }
     this.index = new Array<i32>(size)
     this.events = new Array<i32>(count > 0 ? count : QUIC_STREAM_ONE)
+    this.free = new Array<i32>(count > 0 ? count : QUIC_STREAM_ONE)
     this.bufferSize = bufferSize
     this.maxBidi = maxBidi
     this.maxUni = maxUni
@@ -476,6 +484,12 @@ export class QuicStreams {
     for (const stream of this.slots) {
       stream.id = -1
       stream.queued = false
+    }
+    // Slot 0 on top, so a fresh connection fills the table in order.
+    const count: i32 = toI32(this.slots.length)
+    this.freeCount = 0
+    for (let k: i32 = count - 1; k >= 0; k -= 1) {
+      this.pushFree(k)
     }
     this.index.fill(0)
     this.eventHead = 0
@@ -667,19 +681,28 @@ export class QuicStreams {
     return -1
   }
 
-  /** A free slot, or -1. */
-  freeSlot(): i32 {
-    for (let k: i32 = 0; k < toI32(this.slots.length); k += 1) {
-      if (this.slots[k].id < 0) {
-        return k
-      }
+  /** Puts slot `k` on the free stack. */
+  pushFree(k: i32): void {
+    const at: i32 = this.freeCount
+    if (at >= 0 && at < toI32(this.free.length)) {
+      this.free[at] = k
+      this.freeCount = at + 1
     }
-    return -1
+  }
+
+  /** Takes a free slot off the stack, or -1 when every slot is in use. */
+  takeFree(): i32 {
+    const at: i32 = this.freeCount - 1
+    if (at < 0 || at >= toI32(this.free.length)) {
+      return -1
+    }
+    this.freeCount = at
+    return this.free[at]
   }
 
   /** Opens `id` in a free slot with its first credits; answers the slot, or -1 when none is free. */
   openSlot(id: i64): i32 {
-    const k: i32 = this.freeSlot()
+    const k: i32 = this.takeFree()
     if (k < 0 || k >= toI32(this.slots.length)) {
       return -1
     }
@@ -714,6 +737,7 @@ export class QuicStreams {
     const id: i64 = stream.id
     this.indexRemove(k, id)
     stream.id = -1
+    this.pushFree(k)
     if (quicStreamIsLocal(id)) {
       this.localOpen = this.localOpen - 1
       return

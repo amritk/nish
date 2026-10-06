@@ -22,6 +22,18 @@ PASS  and two finished unidirectional streams of four raise that limit to six
 PASS  a ninth bidirectional stream is taken, in a freed slot
 PASS  no stream opens before the handshake
 PASS  nor is one written
+PASS  the table holds 8 bidirectional, 1,024 unidirectional and 4 local slots
+PASS  all of them free
+PASS  one frame for stream 4094 opens every one below it
+PASS  each in a slot of its own
+PASS  leaving the twelve slots of the other kinds free
+PASS  read to their ends, all 1,024 finish
+PASS  and every slot is free again
+PASS  the client may open 1,024 more
+PASS  one frame opens the next 1,024
+PASS  in the slots given back, none shared
+PASS  the twelve others still free
+PASS  and the connection is still up
 PASS  a stream takes its whole credit, a buffer of 4096 bytes
 PASS  with nothing read, no credit is raised
 PASS  the application reads half of it
@@ -130,4 +142,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
-quic streams: 132 passed, 0 failed, 0 skipped
+quic streams: 144 passed, 0 failed, 0 skipped

@@ -3,7 +3,8 @@
 // one back; the server opens streams of both kinds of its own; every byte
 // arrives on its stream, in order, with its FIN, and each stream that
 // finishes both ways frees its slot and, once half the client's limit has,
-// raises it with MAX_STREAMS.
+// raises it with MAX_STREAMS. And the most streams a frame can open at once
+// (§3.2), taken off the free-slot stack, given back and taken again.
 import { Suite } from "nish/testing";
 import { QUIC_FRAME_MAX_STREAMS_BIDI, QUIC_FRAME_MAX_STREAMS_UNI } from "nish/net/quic-frame";
 import {
@@ -120,7 +121,74 @@ const multiplexChecks = (t: Suite): void => {
   t.eqI32("nor is one written", fresh.streamWrite(n64(1), scratch, n32(0), n32(1), false), QUIC_STREAM_ERR_STATE);
 };
 
+/** How many of the client's unidirectional streams one frame may open in `burstChecks`. */
+const BURST: i32 = 1024;
+
+/** Whether every one of `count` client unidirectional streams from sequence `first` has a slot of its own. */
+const ownSlots = (p: NqPair, first: i32, count: i32): boolean => {
+  const seen: boolean[] = [];
+  for (let k: i32 = 0; k < toI32(p.conn.streams.slots.length); k++) {
+    seen.push(false);
+  }
+  let distinct: boolean = true;
+  for (let s: i32 = first; s < first + count; s++) {
+    const slot: i32 = p.conn.streams.slotOf((toI64(s) << n64(2)) | n64(2));
+    if (slot < 0 || slot >= toI32(seen.length) || seen[slot]) {
+      distinct = false;
+    } else {
+      seen[slot] = true;
+    }
+  }
+  return distinct;
+};
+
+/** Finishes the client's unidirectional streams from sequence `first`, `count` of them, a hundred FINs to a packet. */
+const finishAll = (p: NqPair, first: i32, count: i32): void => {
+  let s: i32 = first;
+  while (s < first + count) {
+    const frames: u8[][] = [];
+    for (let j: i32 = 0; j < 100 && s < first + count; j++) {
+      frames.push(qcStream((toI64(s) << n64(2)) | n64(2), n64(0), "", true));
+      s = s + 1;
+    }
+    nqSend(p, cat(frames));
+  }
+  nqReadAll(p.conn, n32(64), new NqRead());
+};
+
+/**
+ * One STREAM frame naming the client's 1,024th unidirectional stream opens
+ * all 1,024 (§3.2), each from the free-slot stack rather than a scan of the
+ * table; read to their ends they give every slot back, and the next 1,024,
+ * under the raised limit, take them again, each its own.
+ */
+const burstChecks = (t: Suite): void => {
+  const limits = new NqLimits();
+  limits.maxStreamData = n64(1024);
+  limits.maxStreamsUni = toI64(BURST);
+  const p: NqPair = nqPair(limits);
+  const streams = p.conn.streams;
+  const slots: i32 = toI32(streams.slots.length);
+  t.eqI32("the table holds 8 bidirectional, 1,024 unidirectional and 4 local slots", slots, n32(1036));
+  t.eqI32("all of them free", streams.freeCount, slots);
+  const top: i64 = (toI64(BURST - 1) << n64(2)) | n64(2);
+  nqSend(p, qcStream(top, n64(0), "top", true));
+  t.eqI64("one frame for stream 4094 opens every one below it", streams.peerUniOpened, toI64(BURST));
+  t.eqI32("each in a slot of its own", toI32(ownSlots(p, n32(0), BURST) ? 1 : 0), n32(1));
+  t.eqI32("leaving the twelve slots of the other kinds free", streams.freeCount, slots - BURST);
+  finishAll(p, n32(0), BURST - 1);
+  t.eqI64("read to their ends, all 1,024 finish", streams.peerUniClosed, toI64(BURST));
+  t.eqI32("and every slot is free again", streams.freeCount, slots);
+  t.eqI64("the client may open 1,024 more", streams.peerUniLimit, toI64(2 * BURST));
+  nqSend(p, qcStream((toI64(2 * BURST - 1) << n64(2)) | n64(2), n64(0), "again", true));
+  t.eqI64("one frame opens the next 1,024", streams.peerUniOpened, toI64(2 * BURST));
+  t.eqI32("in the slots given back, none shared", toI32(ownSlots(p, BURST, BURST) ? 1 : 0), n32(1));
+  t.eqI32("the twelve others still free", streams.freeCount, slots - BURST);
+  t.eqI32("and the connection is still up", p.conn.state, QUIC_STATE_CONNECTED);
+};
+
 /** Every check of the multiplexed transfer. */
 export const transferChecks = (t: Suite): void => {
   multiplexChecks(t);
+  burstChecks(t);
 };
