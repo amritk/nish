@@ -56,6 +56,10 @@
  * does not yet, and `docs/security/quic.md` records that as QUIC-1. The
  * Initial keys are not secret, because anyone who reads the client's first
  * DCID can derive them (RFC 9001 §5.2); the Handshake and 1-RTT keys are.
+ * A connection slot derives into a `QuicKeysSlot` instead (`quicKeysInto`,
+ * `quicKeysUpdateInto`, `quicKeyUpdateSecretInto`, `quicInitialSecretsInto`):
+ * its keys live in arrays the slot owns, which `QuicKeysSlot.wipe` zeroes,
+ * and the derivation's own temporaries go with its arena block.
  *
  * **Constant time.** The AEADs and the header-protection masks are
  * `nish/crypto/aes` and `nish/crypto/chacha20poly1305`, with their guarantees.
@@ -73,10 +77,17 @@
  * private functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
-import { aesGcmOpen, aesGcmSeal, aesHeaderMask, aesKey, AesKey } from "nish/crypto/aes"
+import { aesGcmOpen, aesGcmSeal, aesHeaderMask, aesKey, aesKeyInto, AesKey } from "nish/crypto/aes"
 import { chacha20HeaderMask, chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import { timingSafeEqual } from "nish/crypto/ct"
-import { hkdfExpandLabelSha256, hkdfExpandLabelSha384, hkdfExtractSha256 } from "nish/crypto/hkdf"
+import {
+  HkdfScratch,
+  hkdfExpandLabelInto,
+  hkdfExpandLabelSha256,
+  hkdfExpandLabelSha384,
+  hkdfExtractInto,
+  hkdfExtractSha256,
+} from "nish/crypto/hkdf"
 
 /** QUIC version 1 (RFC 9000 §15), the only version this module protects. */
 export const QUIC_VERSION_1: i64 = 1
@@ -1044,6 +1055,219 @@ export const quicKeysUpdate = (keys: QuicKeys, nextSecret: u8[]): QuicKeys | nul
     return null
   }
   return quicPacketDerive(keys.aead, nextSecret, keys.hp, keys.hpAes)
+}
+
+// ---- Keys in a connection slot ----------------------------------------------
+
+/**
+ * The storage one direction of one level's packet keys lives in for a
+ * connection slot (QUIC-3): a key and a header-protection key of each
+ * length, the IV, and an AES key schedule of each size for each, made once,
+ * and the `QuicKeys` that `quicKeysInto` and `quicKeysUpdateInto` point at
+ * the ones the negotiated AEAD uses. So installing a level's keys, or a key
+ * update's, writes into memory the slot already holds and keeps nothing in
+ * the arena, where `quicKeys` makes a fresh `QuicKeys` and four arrays a
+ * level. `wipe` zeroes all of it.
+ */
+export class QuicKeysSlot {
+  /** The keys, pointing into the arrays below; `aead` is 0 until something is derived. */
+  keys: QuicKeys
+  key16: u8[]
+  key32: u8[]
+  hp16: u8[]
+  hp32: u8[]
+  packet128: AesKey
+  packet256: AesKey
+  hp128: AesKey
+  hp256: AesKey
+
+  constructor() {
+    this.key16 = new Array<u8>(16)
+    this.key32 = new Array<u8>(32)
+    this.hp16 = new Array<u8>(16)
+    this.hp32 = new Array<u8>(32)
+    this.keys = new QuicKeys(0, this.key16, new Array<u8>(QUIC_IV_SIZE), this.hp16)
+    this.packet128 = new AesKey(10, new Array<u64>(88))
+    this.packet256 = new AesKey(14, new Array<u64>(120))
+    this.hp128 = new AesKey(10, new Array<u64>(88))
+    this.hp256 = new AesKey(14, new Array<u64>(120))
+  }
+
+  /**
+   * Zeroes every key the slot holds: the keys and the IV with `secureZero`,
+   * the AES schedules' `u64` words with ordinary stores, which stand because
+   * the schedules stay reachable for the next derivation to fill.
+   */
+  wipe(): void {
+    secureZero(this.key16)
+    secureZero(this.key32)
+    secureZero(this.hp16)
+    secureZero(this.hp32)
+    secureZero(this.keys.iv)
+    quicPacketClearAes(this.packet128)
+    quicPacketClearAes(this.packet256)
+    quicPacketClearAes(this.hp128)
+    quicPacketClearAes(this.hp256)
+  }
+}
+
+/** Zeroes an AES key schedule and its GCM hash key with ordinary stores (see `QuicKeysSlot.wipe`). */
+const quicPacketClearAes = (key: AesKey): void => {
+  const words: u64[] = key.roundKeys
+  for (let k: i32 = 0; k < toI32(words.length); k += 1) {
+    words[k] = 0
+  }
+  key.hHi = 0
+  key.hLo = 0
+}
+
+/** Points `slot.keys` at the arrays `aead` needs: the packet key and its schedule, and the header-protection ones. */
+const quicPacketPoint = (slot: QuicKeysSlot, aead: i32): void => {
+  const keys: QuicKeys = slot.keys
+  const wide: boolean = quicPacketKeyLength(aead) === 32
+  keys.aead = aead
+  keys.key = wide ? slot.key32 : slot.key16
+  keys.hp = wide ? slot.hp32 : slot.hp16
+  keys.packetAes = null
+  keys.hpAes = null
+  if (aead !== QUIC_AEAD_CHACHA20_POLY1305) {
+    keys.packetAes = wide ? slot.packet256 : slot.packet128
+    keys.hpAes = wide ? slot.hp256 : slot.hp128
+  }
+}
+
+/**
+ * `quicPacketDerive` in place: the packet key and IV from `secret` into
+ * `keys`' own arrays, and for the AES suites the key's schedule expanded
+ * into its own `AesKey`. HKDF runs in `kdf`, which wipes what it held, and
+ * the expansion's temporaries go with the arena block.
+ */
+const quicPacketDeriveInto = (kdf: HkdfScratch, keys: QuicKeys, secret: u8[]): void => {
+  const aead: i32 = keys.aead
+  const hashLength: i32 = quicPacketSecretLength(aead)
+  using _scope = arena()
+  const none: u8[] = []
+  hkdfExpandLabelInto(kdf, hashLength, secret, "quic key", none, 0, 0, keys.key, 0, quicPacketKeyLength(aead))
+  hkdfExpandLabelInto(kdf, hashLength, secret, "quic iv", none, 0, 0, keys.iv, 0, QUIC_IV_SIZE)
+  const packetAes: AesKey | null = keys.packetAes
+  if (packetAes !== null) {
+    aesKeyInto(keys.key, packetAes)
+  }
+}
+
+/**
+ * `quicKeys` into `slot`: the packet key, IV and header-protection key of
+ * RFC 9001 §5.1 derived from `secret` straight into the slot's arrays, in
+ * `kdf`, with the AES schedules expanded in place. Answers the slot's keys,
+ * or `null`, deriving nothing, where `quicKeys` answers `null`. The keys
+ * are the slot's: the next derivation into it overwrites them.
+ */
+export const quicKeysInto = (
+  kdf: HkdfScratch,
+  slot: QuicKeysSlot,
+  aead: i32,
+  secret: u8[]
+): QuicKeys | null => {
+  if (!quicPacketSecretFits(aead, secret)) {
+    return null
+  }
+  quicPacketPoint(slot, aead)
+  const keys: QuicKeys = slot.keys
+  quicPacketDeriveInto(kdf, keys, secret)
+  {
+    using _scope = arena()
+    const none: u8[] = []
+    hkdfExpandLabelInto(
+      kdf,
+      quicPacketSecretLength(aead),
+      secret,
+      "quic hp",
+      none,
+      0,
+      0,
+      keys.hp,
+      0,
+      quicPacketKeyLength(aead)
+    )
+    const hpAes: AesKey | null = keys.hpAes
+    if (hpAes !== null) {
+      aesKeyInto(keys.hp, hpAes)
+    }
+  }
+  return keys
+}
+
+/**
+ * `quicKeysUpdate` into `slot`, which must not be the slot `keys` live in:
+ * the next generation's packet key and IV from `nextSecret`, and `keys`'
+ * header-protection key shared, as every generation shares it (RFC 9001
+ * §6). Answers the slot's keys, or `null` where `quicKeysUpdate` does.
+ */
+export const quicKeysUpdateInto = (
+  kdf: HkdfScratch,
+  slot: QuicKeysSlot,
+  keys: QuicKeys,
+  nextSecret: u8[]
+): QuicKeys | null => {
+  if (!quicPacketKeysUsable(keys) || !quicPacketSecretFits(keys.aead, nextSecret)) {
+    return null
+  }
+  quicPacketPoint(slot, keys.aead)
+  const next: QuicKeys = slot.keys
+  next.hp = keys.hp
+  next.hpAes = keys.hpAes
+  quicPacketDeriveInto(kdf, next, nextSecret)
+  return next
+}
+
+/**
+ * `quicKeyUpdateSecret` into `out`, which must be exactly the secret's
+ * length and not `secret` itself. Answers whether it derived, which it does
+ * where `quicKeyUpdateSecret` answers a secret.
+ */
+export const quicKeyUpdateSecretInto = (kdf: HkdfScratch, aead: i32, secret: u8[], out: u8[]): boolean => {
+  const length: i32 = quicPacketSecretLength(aead)
+  if (!quicPacketSecretFits(aead, secret) || toI32(out.length) !== length) {
+    return false
+  }
+  using _scope = arena()
+  const none: u8[] = []
+  hkdfExpandLabelInto(kdf, length, secret, "quic ku", none, 0, 0, out, 0, length)
+  return true
+}
+
+/**
+ * `quicInitialSecrets` of the Destination Connection ID `buf[at .. at +
+ * length)`, read in place, into `client` and `server`, 32 bytes each.
+ * Answers whether it derived: not for an ID over 20 bytes, a window outside
+ * `buf`, or an output of another length.
+ */
+export const quicInitialSecretsInto = (
+  kdf: HkdfScratch,
+  buf: u8[],
+  at: i32,
+  length: i32,
+  client: u8[],
+  server: u8[]
+): boolean => {
+  if (
+    length < 0 ||
+    length > QUIC_MAX_CID_LENGTH ||
+    at < 0 ||
+    at > toI32(buf.length) - length ||
+    toI32(client.length) !== 32 ||
+    toI32(server.length) !== 32
+  ) {
+    return false
+  }
+  using _scope = arena()
+  const none: u8[] = []
+  const initial: u8[] = new Array<u8>(32)
+  hkdfExtractInto(kdf, 32, quicPacketInitialSalt(), quicPacketSlice(buf, at, at + length), initial, 0)
+  hkdfExpandLabelInto(kdf, 32, initial, "client in", none, 0, 0, client, 0, 32)
+  hkdfExpandLabelInto(kdf, 32, initial, "server in", none, 0, 0, server, 0, 32)
+  secureZero(initial)
+  return true
 }
 
 /** The bits of the first byte header protection covers: four in a long header, five in a short one (RFC 9001 §5.4.1). */

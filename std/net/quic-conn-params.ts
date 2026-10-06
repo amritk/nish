@@ -126,6 +126,42 @@ export class QuicTransportParameters {
   }
 }
 
+/** Empties `to`, keeping its room. */
+const quicParamsEmpty = (to: u8[]): void => {
+  while (to.length > 0) {
+    to.pop()
+  }
+}
+
+/** Sets `p` back to what a new `QuicTransportParameters` holds, keeping its arrays, emptied. */
+const quicParamsDefaults = (p: QuicTransportParameters): void => {
+  p.error = 0
+  p.maxIdleTimeout = 0
+  p.maxUdpPayloadSize = 65527
+  p.initialMaxData = 0
+  p.initialMaxStreamDataBidiLocal = 0
+  p.initialMaxStreamDataBidiRemote = 0
+  p.initialMaxStreamDataUni = 0
+  p.initialMaxStreamsBidi = 0
+  p.initialMaxStreamsUni = 0
+  p.ackDelayExponent = 3
+  p.maxAckDelay = 25
+  p.activeConnectionIdLimit = 2
+  p.maxDatagramFrameSize = 0
+  p.errorParameter = 0
+  quicParamsEmpty(p.originalDcid)
+  quicParamsEmpty(p.statelessResetToken)
+  quicParamsEmpty(p.preferredAddress)
+  quicParamsEmpty(p.initialScid)
+  quicParamsEmpty(p.retryScid)
+  p.hasOriginalDcid = false
+  p.hasStatelessResetToken = false
+  p.hasPreferredAddress = false
+  p.hasInitialScid = false
+  p.hasRetryScid = false
+  p.disableActiveMigration = false
+}
+
 /** Appends one parameter whose value is a varint, when it differs from `fallback`, its default. */
 const quicParamsPushVarint = (out: u8[], id: i32, value: i64, fallback: i64): void => {
   if (value === fallback || quicVarintSize(value) === 0) {
@@ -158,6 +194,18 @@ const quicParamsPushBytes = (out: u8[], id: i32, bytes: u8[], present: boolean):
  */
 export const quicEncodeTransportParameters = (p: QuicTransportParameters): u8[] => {
   const out: u8[] = []
+  quicEncodeTransportParametersInto(p, out)
+  return out
+}
+
+/**
+ * `quicEncodeTransportParameters` into `out`, which is emptied first: the
+ * encoding is pushed into the room the array already has, so a connection
+ * slot that keeps one array for its parameters grows it only when they
+ * outgrow every earlier connection's.
+ */
+export const quicEncodeTransportParametersInto = (p: QuicTransportParameters, out: u8[]): void => {
+  quicParamsEmpty(out)
   quicParamsPushBytes(out, QUIC_TP_ORIGINAL_DCID, p.originalDcid, p.hasOriginalDcid)
   quicParamsPushVarint(out, QUIC_TP_MAX_IDLE_TIMEOUT, p.maxIdleTimeout, 0)
   quicParamsPushBytes(out, QUIC_TP_STATELESS_RESET_TOKEN, p.statelessResetToken, p.hasStatelessResetToken)
@@ -177,19 +225,20 @@ export const quicEncodeTransportParameters = (p: QuicTransportParameters): u8[] 
   quicParamsPushBytes(out, QUIC_TP_INITIAL_SCID, p.initialScid, p.hasInitialScid)
   quicParamsPushBytes(out, QUIC_TP_RETRY_SCID, p.retryScid, p.hasRetryScid)
   quicParamsPushVarint(out, QUIC_TP_MAX_DATAGRAM_FRAME_SIZE, p.maxDatagramFrameSize, 0)
-  return out
 }
 
-/** The bytes `data[from .. from + length)`, copied; the caller has checked the window. */
-const quicParamsCopy = (data: u8[], from: i32, length: i32): u8[] => {
-  const out: u8[] = new Array<u8>(length)
-  const n: i32 = toI32(out.length)
-  for (let k: i32 = 0; k < n; k += 1) {
+/**
+ * `bytes[from .. from + length)` into `to`, which is emptied first and
+ * refilled in the room it has: a parameters object reused for connection
+ * after connection keeps its arrays. The caller has checked the window.
+ */
+const quicParamsCopyInto = (to: u8[], data: u8[], from: i32, length: i32): void => {
+  quicParamsEmpty(to)
+  for (let k: i32 = 0; k < length; k += 1) {
     if (from + k >= 0 && from + k < toI32(data.length)) {
-      out[k] = data[from + k]
+      to.push(data[from + k])
     }
   }
-  return out
 }
 
 /** Fails `p` over parameter `id` and answers it. */
@@ -293,30 +342,33 @@ const quicParamsStoreBytes = (
   at: i32,
   length: i32
 ): boolean => {
+  // A value is copied only once its length is one the parameter allows, so a
+  // reused object's arrays never grow past it whatever a peer sends.
+  const cidFits: boolean = length <= QUIC_MAX_CID_LENGTH
   switch (id) {
     case QUIC_TP_ORIGINAL_DCID:
-      p.originalDcid = quicParamsCopy(bytes, at, length)
+      quicParamsCopyInto(p.originalDcid, bytes, at, cidFits ? length : 0)
       p.hasOriginalDcid = true
-      return length <= QUIC_MAX_CID_LENGTH
+      return cidFits
     case QUIC_TP_STATELESS_RESET_TOKEN:
-      p.statelessResetToken = quicParamsCopy(bytes, at, length)
+      quicParamsCopyInto(p.statelessResetToken, bytes, at, length === QUIC_RESET_TOKEN_SIZE ? length : 0)
       p.hasStatelessResetToken = true
       return length === QUIC_RESET_TOKEN_SIZE
     case QUIC_TP_DISABLE_ACTIVE_MIGRATION:
       p.disableActiveMigration = true
       return length === 0
     case QUIC_TP_PREFERRED_ADDRESS:
-      p.preferredAddress = quicParamsCopy(bytes, at, length)
+      quicParamsCopyInto(p.preferredAddress, bytes, at, length)
       p.hasPreferredAddress = true
       return true
     case QUIC_TP_INITIAL_SCID:
-      p.initialScid = quicParamsCopy(bytes, at, length)
+      quicParamsCopyInto(p.initialScid, bytes, at, cidFits ? length : 0)
       p.hasInitialScid = true
-      return length <= QUIC_MAX_CID_LENGTH
+      return cidFits
     default:
-      p.retryScid = quicParamsCopy(bytes, at, length)
+      quicParamsCopyInto(p.retryScid, bytes, at, cidFits ? length : 0)
       p.hasRetryScid = true
-      return length <= QUIC_MAX_CID_LENGTH
+      return cidFits
   }
 }
 
@@ -336,6 +388,22 @@ const quicParamsIsVarint = (id: i32): boolean =>
  */
 export const quicParseTransportParameters = (bytes: u8[], fromServer: boolean): QuicTransportParameters => {
   const p: QuicTransportParameters = new QuicTransportParameters()
+  quicParseTransportParametersInto(p, bytes, fromServer)
+  return p
+}
+
+/**
+ * `quicParseTransportParameters` into `p`, which is set back to every
+ * default first, its byte-valued fields emptied and refilled in the room
+ * their arrays have: a connection slot parses each client's parameters into
+ * one object of its own. Answers `p`.
+ */
+export const quicParseTransportParametersInto = (
+  p: QuicTransportParameters,
+  bytes: u8[],
+  fromServer: boolean
+): QuicTransportParameters => {
+  quicParamsDefaults(p)
   const end: i32 = toI32(bytes.length)
   // The known IDs are 0 to 16, so one bit each of an i32 records which were
   // seen; RFC 9221's 0x20 has a flag of its own.

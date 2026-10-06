@@ -70,11 +70,16 @@
  * the next peer. A packet is opened (`receiveWindow`) and a datagram built
  * and sealed (`takeDatagramInto`) inside a `using a = arena()` block, so the
  * AEAD's and the header protection's temporaries go when the block ends, and
- * the compiler refuses the block if anything in it could store one. What
- * still allocates is the handshake's, once a connection: `TlsServer` and its
- * key schedule (TLS-3), the packet keys of each level, the stateless reset
- * tokens and connection IDs (HMAC), and a key update (QUIC-4) — recorded in
- * `docs/security/quic.md`.
+ * the compiler refuses the block if anything in it could store one. The
+ * handshake keeps its state in the slot too: one `TlsServer`, made by the
+ * slot's first handshake and `restart`ed by each after it; every level's
+ * packet keys, and a key update's, derived in place into `QuicKeysSlot`s
+ * (`nish/net/quic-packet`) over the slot's HKDF scratch; the Initial
+ * secrets, the stateless reset tokens and the connection IDs computed in
+ * arena blocks; the transport parameters encoded and parsed into the
+ * slot's own objects. After the first connection in a slot, a connection
+ * keeps nothing but `TlsServer`'s copy of the client's transport
+ * parameters, a few dozen bytes (QUIC-3 in `docs/security/quic.md`).
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
@@ -94,11 +99,11 @@
  * derivation and shows no timing difference (§6.3); if it opens, the client
  * has updated, and the server's write keys follow before anything is
  * acknowledged (§6.2). `updateKeys()` starts an update from the server once
- * the client has acknowledged a packet of the current phase (§6.1). Each
- * update the client starts costs two key derivations, which stay in the arena
- * (QUIC-4 in `docs/security/quic.md`), so a connection takes at most
- * `QUIC_CONN_MAX_KEY_UPDATES` of them and closes on the next with
- * KEY_UPDATE_ERROR.
+ * the client has acknowledged a packet of the current phase (§6.1). The
+ * generations take turns in two key slots and two secrets a direction, so an
+ * update keeps nothing in the arena; each still costs two key derivations of
+ * work, so a connection takes at most `QUIC_CONN_MAX_KEY_UPDATES` updates the
+ * client starts and closes on the next with KEY_UPDATE_ERROR (QUIC-4).
  *
  * **Sans-IO and deterministic.** No socket, no clock and no random device:
  * every random choice (the TLS server random and ephemeral key, the server's
@@ -122,25 +127,27 @@
  * `maxData`, the connection-ID table by the limit advertised, the received
  * packet numbers by `QUIC_ACK_MAX_RANGES`, and datagrams by their ring.
  *
- * **Secrets.** The packet keys of each level live in this connection's
- * fields as long as the level does, and in `TlsServer`'s (TLS-1); so do the
+ * **Secrets.** The packet keys of each level live in this connection's key
+ * slots as long as the level does, and in `TlsServer`'s (TLS-1); so do the
  * 1-RTT secrets the next key generation is derived from, and the next
  * generation's read keys. A `Secret` may not be a field (NL2430), so they are
  * plain bytes; `secureZero` wipes each level's key, IV and header-protection
- * key when the level is discarded, each generation's key, IV and secret when
- * a key update replaces it, and `release()` (and `reset`) the rest — the
- * 1-RTT keys, the traffic secrets `TlsServer` holds, its ephemeral key and
- * the connection-ID seed. What no wipe reaches (the expanded AES key
- * schedules, the HKDF and HMAC intermediates in arena memory) is recorded as
- * QUIC-2 in `docs/security/quic.md`, with #430, the follow-up that moves
- * these structs onto `nish:secret`.
+ * key, and its AES schedules with ordinary stores, when the level is
+ * discarded, each generation's key, IV and secret when a key update
+ * replaces it, and `release()` (and `reset`) the rest — the 1-RTT keys, the
+ * key-update secrets, the traffic secrets `TlsServer` holds, its ephemeral
+ * key and the connection-ID seed. What no wipe reaches (`aesKeyInto`'s
+ * working copy of a schedule) is recorded as QUIC-2 in
+ * `docs/security/quic.md`, with #430, the follow-up that moves these structs
+ * onto `nish:secret`.
  *
  * Written from RFC 9000, RFC 9001 and RFC 9221, in this module's own
  * structure; nothing here is ported from another implementation. Private
  * names carry the `quicConn` prefix (`docs/wp26-stdlib.md` §3e).
  */
 import { timingSafeEqualAt } from "nish/crypto/ct"
-import { hmacSha256 } from "nish/crypto/hmac"
+import { HkdfScratch } from "nish/crypto/hkdf"
+import { HmacSha256Scratch, hmacSha256 } from "nish/crypto/hmac"
 import {
   QUIC_AEAD_AES_128_GCM,
   QUIC_AEAD_AES_256_GCM,
@@ -154,14 +161,14 @@ import {
   QUIC_PACKET_OK,
   QUIC_PACKET_SHORT,
   QuicHeader,
-  QuicInitialSecrets,
   QuicKeys,
+  QuicKeysSlot,
   QuicPacket,
   quicDecryptPayload,
-  quicInitialSecrets,
-  quicKeyUpdateSecret,
-  quicKeys,
-  quicKeysUpdate,
+  quicInitialSecretsInto,
+  quicKeyUpdateSecretInto,
+  quicKeysInto,
+  quicKeysUpdateInto,
   quicPacketNumberLength,
   quicParseHeaderInto,
   quicPutLongHeader,
@@ -218,8 +225,8 @@ import {
 } from "nish/net/quic-frame"
 import {
   QuicTransportParameters,
-  quicEncodeTransportParameters,
-  quicParseTransportParameters,
+  quicEncodeTransportParametersInto,
+  quicParseTransportParametersInto,
 } from "nish/net/quic-conn-params"
 import { QuicAckRanges } from "nish/net/quic-conn-ack"
 import {
@@ -320,8 +327,8 @@ export const QUIC_CONN_PACKET_STREAMS: i32 = 4
 export const QUIC_CONN_PACKET_CONTROL: i32 = 4
 /**
  * How many key updates a connection takes from its client (RFC 9001 §6).
- * Each costs two key derivations whose temporaries stay in the arena, so the
- * cap bounds what a client can make the server derive (QUIC-4); the next one
+ * Each costs two key derivations of work, though none of their memory, so
+ * the cap bounds what a client can make the server derive (QUIC-4); the next one
  * closes the connection with KEY_UPDATE_ERROR. A client also has to wait
  * a probe timeout between two of them.
  */
@@ -381,6 +388,10 @@ export const QUIC_DATAGRAM_ERR_FULL: i32 = -5
 
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const QUIC_CONN_FROM: i32 = 0
+/** A space's key slots (`QuicConnSpace.keySlot`): the read keys', the write keys', and where Application Data's write keys start. */
+const QUIC_CONN_READ_SLOT: i32 = 0
+const QUIC_CONN_WRITE_SLOT: i32 = 1
+const QUIC_CONN_APP_WRITE_SLOTS: i32 = 2
 /** The same for the `i64` arguments of the methods below, where a literal is not given its parameter's type. */
 const QUIC_CONN_NONE: i64 = 0
 /** TLS's unexpected_message alert, which CRYPTO data at a level TLS is not reading is (RFC 8446 §6). */
@@ -597,6 +608,12 @@ class QuicConnSpace {
   sentControlCount: i32[]
   sentControlKind: u8[]
   sentControlValue: i64[]
+  /**
+   * Where this space's packet keys live, made once for the slot (QUIC-3):
+   * the read keys' and the write keys', and for the Application Data space a
+   * second of each, which a key update derives the next generation into.
+   */
+  keySlots: QuicKeysSlot[]
   /** `TLS_LEVEL_INITIAL`, `_HANDSHAKE` or `_APPLICATION`, which is also the space's index. */
   level: i32 = 0
   cryptoOutHead: i32 = 0
@@ -616,6 +633,11 @@ class QuicConnSpace {
     this.level = level
     this.received = new QuicAckRanges()
     this.cryptoOut = []
+    this.keySlots = []
+    const slots: i32 = level === TLS_LEVEL_APPLICATION ? 4 : 2
+    for (let k: i32 = 0; k < slots; k += 1) {
+      this.keySlots.push(new QuicKeysSlot())
+    }
     const capacity: i32 =
       level === TLS_LEVEL_APPLICATION ? QUIC_RECOVERY_APPLICATION_CAPACITY : QUIC_RECOVERY_HANDSHAKE_CAPACITY
     const rows: i32 = capacity + 1
@@ -653,16 +675,37 @@ class QuicConnSpace {
     this.clearStaged()
   }
 
-  /** Appends `bytes` to the CRYPTO stream kept, writing into the array's old room before growing it. */
-  appendCrypto(bytes: u8[]): void {
-    for (const b of bytes) {
+  /**
+   * Appends `bytes[0 .. length)` to the CRYPTO stream kept, writing into the
+   * array's old room before growing it: TLS's output buffer is read in
+   * place, so its flight is not copied on the way.
+   */
+  appendCrypto(bytes: u8[], length: i32): void {
+    for (let k: i32 = 0; k < length && k < toI32(bytes.length); k += 1) {
       const at: i32 = this.cryptoOutLength
       if (at >= 0 && at < toI32(this.cryptoOut.length)) {
-        this.cryptoOut[at] = b
+        this.cryptoOut[at] = bytes[k]
       } else {
-        this.cryptoOut.push(b)
+        this.cryptoOut.push(bytes[k])
       }
       this.cryptoOutLength = at + 1
+    }
+  }
+
+  /**
+   * Key slot `k` of this space: in the Initial and Handshake spaces 0 holds
+   * the read keys and 1 the write keys; in Application Data 0 and 1 hold
+   * the read keys' generations and 2 and 3 the write keys'.
+   */
+  keySlot(k: i32): QuicKeysSlot {
+    const at: i32 = k >= 0 && k < toI32(this.keySlots.length) ? k : 0
+    return this.keySlots[at]
+  }
+
+  /** Zeroes every key this space's slots hold, the AES schedules included. */
+  wipeKeySlots(): void {
+    for (const slot of this.keySlots) {
+      slot.wipe()
     }
   }
 
@@ -888,6 +931,64 @@ export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
   return token
 }
 
+/**
+ * `quicStatelessResetToken` of the ID `cid[at .. at + length)` into
+ * `out[outAt ..]`, computed in a connection's own HMAC scratch inside an
+ * arena block, so issuing an ID keeps nothing (QUIC-3). The scratch and the
+ * full MAC are wiped before it returns.
+ */
+const quicConnResetTokenInto = (
+  mac: HmacSha256Scratch,
+  key: u8[],
+  cid: u8[],
+  at: i32,
+  length: i32,
+  out: u8[],
+  outAt: i32
+): void => {
+  using _scope = arena()
+  const tag: u8[] = new Array<u8>(32)
+  mac.begin(key, QUIC_CONN_FROM, toI32(key.length))
+  mac.update(cid, at, length)
+  mac.finishInto(tag, QUIC_CONN_FROM)
+  for (let k: i32 = 0; k < QUIC_RESET_TOKEN_SIZE && outAt + k < toI32(out.length); k += 1) {
+    out[outAt + k] = tag[k]
+  }
+  secureZero(tag)
+  mac.wipe()
+}
+
+/** Puts `from[at .. at + length)` in `to`, emptied first, in the room `to` already has. */
+const quicConnRefill = (to: u8[], from: u8[], at: i32, length: i32): void => {
+  while (to.length > 0) {
+    to.pop()
+  }
+  for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(from.length); k += 1) {
+    to.push(from[at + k])
+  }
+}
+
+/**
+ * Secret `index` (0 or 1) of a direction's pool, of the length `aead`'s hash
+ * gives: what a key update derives the next traffic secret into.
+ */
+const quicConnSecretAt = (pool: u8[][], aead: i32, index: i32): u8[] => {
+  let wanted: i32 = index === 1 ? 1 : 0
+  if (aead === QUIC_AEAD_AES_256_GCM) {
+    wanted = wanted + 2
+  }
+  const at: i32 = wanted < toI32(pool.length) ? wanted : 0
+  return pool[at]
+}
+
+/** Two secrets of SHA-256's length and two of SHA-384's, for one direction's key updates. */
+const quicConnSecretPool = (): u8[][] => [
+  new Array<u8>(32),
+  new Array<u8>(32),
+  new Array<u8>(48),
+  new Array<u8>(48),
+]
+
 /** Whether the configuration's limits are ones this module can honour. */
 const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.maxStreamData >= 1 &&
@@ -940,6 +1041,30 @@ export class QuicConnection {
   /** The server's first connection ID, the SCID of every long-header packet it sends. */
   localScid: u8[]
   tls: TlsServer | null = null
+  /** The slot's `TlsServer`, made by its first handshake and `restart`ed by every one after (QUIC-3). */
+  tlsSlot: TlsServer | null = null
+  /** Its configuration, made once: the parameters it carries are `localEncoded`, rewritten for each connection. */
+  tlsConfig: TlsServerConfig
+  /** The server's transport parameters, set for each connection, and their encoding. */
+  localParameters: QuicTransportParameters
+  localEncoded: u8[]
+  /** The client's transport parameters, parsed into the slot's own object. */
+  parsedParameters: QuicTransportParameters
+  /** Where every key derivation and HMAC of the connection runs. */
+  kdf: HkdfScratch
+  /** The Initial secrets of RFC 9001 §5.2, the client's and the server's. */
+  initialClient: u8[]
+  initialServer: u8[]
+  /**
+   * The 1-RTT secrets a key update derives, two of each hash's length a
+   * direction (SHA-256's first, then SHA-384's), used in turn: the next
+   * generation's goes in the one the current generation's is not in.
+   */
+  writeSecrets: u8[][]
+  readSecrets: u8[][]
+  /** A connection ID being issued and its stateless reset token, before the table copies them. */
+  cidScratch: u8[]
+  tokenScratch: u8[]
   initial: QuicConnSpace
   handshake: QuicConnSpace
   application: QuicConnSpace
@@ -1009,6 +1134,12 @@ export class QuicConnection {
   dropped: i32 = 0
   /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
+  /** Which of the Application Data space's two read slots, and two write slots, hold the current keys. */
+  appReadSlot: i32 = 0
+  appWriteSlot: i32 = 0
+  /** Which of `readSecrets` and `writeSecrets` (0 or 1) holds the current secret, or -1 for `TlsServer`'s own. */
+  readSecretCurrent: i32 = -1
+  writeSecretCurrent: i32 = -1
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
@@ -1080,8 +1211,27 @@ export class QuicConnection {
     this.header = new QuicHeader()
     this.packet = new QuicPacket()
     this.none = []
-    this.retryOriginalDcid = this.none
-    this.retryScid = this.none
+    this.retryOriginalDcid = []
+    this.retryScid = []
+    this.localParameters = new QuicTransportParameters()
+    this.localEncoded = []
+    this.parsedParameters = new QuicTransportParameters()
+    const extra: u8[] = []
+    this.tlsConfig = {
+      certificateChain: config.certificateChain,
+      alpn: config.alpn,
+      quicTransportParameters: this.localEncoded,
+      extraExtensions: extra,
+      signatureScheme: config.signatureScheme,
+      quic: true,
+    }
+    this.kdf = new HkdfScratch()
+    this.initialClient = new Array<u8>(32)
+    this.initialServer = new Array<u8>(32)
+    this.writeSecrets = quicConnSecretPool()
+    this.readSecrets = quicConnSecretPool()
+    this.cidScratch = new Array<u8>(QUIC_CONN_CID_LENGTH)
+    this.tokenScratch = new Array<u8>(QUIC_RESET_TOKEN_SIZE)
     this.appReadSecret = this.none
     this.appWriteSecret = this.none
     this.nextReadSecret = this.none
@@ -1094,8 +1244,8 @@ export class QuicConnection {
    * array): every secret of the last connection is wiped first, as
    * `release()` does, and every buffer is kept and emptied. The limits are
    * the constructor's configuration's. A slot reset this way allocates
-   * nothing for itself; the next handshake allocates what any handshake does
-   * (TLS-3 in `docs/security/tls.md`).
+   * nothing, and the next handshake keeps nothing but `TlsServer`'s copy of
+   * the client's transport parameters (QUIC-3 in `docs/security/quic.md`).
    */
   reset(entropy: u8[]): void {
     this.wipeAll()
@@ -1109,6 +1259,7 @@ export class QuicConnection {
     this.datagramsIn.reset()
     this.cryptoIn.reset(TLS_LEVEL_INITIAL)
     this.peerParameters = this.defaultParameters
+    // The slot keeps its `TlsServer`, wiped by `wipeAll`; the next handshake restarts it.
     this.tls = null
     this.error = 0
     this.errorFrameType = 0
@@ -1116,12 +1267,16 @@ export class QuicConnection {
     this.bytesSent = 0
     this.alpn = ""
     this.serverName = ""
-    this.retryOriginalDcid = this.none
-    this.retryScid = this.none
+    quicConnRefill(this.retryOriginalDcid, this.none, QUIC_CONN_FROM, QUIC_CONN_FROM)
+    quicConnRefill(this.retryScid, this.none, QUIC_CONN_FROM, QUIC_CONN_FROM)
     this.appReadSecret = this.none
     this.appWriteSecret = this.none
     this.nextReadSecret = this.none
     this.otherReadKeys = null
+    this.appReadSlot = 0
+    this.appWriteSlot = 0
+    this.readSecretCurrent = -1
+    this.writeSecretCurrent = -1
     this.now = 0
     this.idleSince = -1
     this.readPhaseLowest = -1
@@ -1201,8 +1356,8 @@ export class QuicConnection {
     ) {
       return false
     }
-    this.retryOriginalDcid = quicConnSlice(originalDcid, 0, toI32(originalDcid.length))
-    this.retryScid = quicConnSlice(retryScid, 0, toI32(retryScid.length))
+    quicConnRefill(this.retryOriginalDcid, originalDcid, QUIC_CONN_FROM, toI32(originalDcid.length))
+    quicConnRefill(this.retryScid, retryScid, QUIC_CONN_FROM, toI32(retryScid.length))
     this.retried = true
     return true
   }
@@ -1352,13 +1507,29 @@ export class QuicConnection {
     ) {
       return false
     }
-    const dcid: u8[] = quicConnSlice(buf, header.dcidStart, header.dcidLength)
-    const secrets: QuicInitialSecrets | null = quicInitialSecrets(dcid)
-    if (secrets === null) {
+    const secrets: boolean = quicInitialSecretsInto(
+      this.kdf,
+      buf,
+      header.dcidStart,
+      header.dcidLength,
+      this.initialClient,
+      this.initialServer
+    )
+    if (!secrets) {
       return false
     }
-    this.initial.readKeys = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client)
-    this.initial.writeKeys = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server)
+    this.initial.readKeys = quicKeysInto(
+      this.kdf,
+      this.initial.keySlot(QUIC_CONN_READ_SLOT),
+      QUIC_AEAD_AES_128_GCM,
+      this.initialClient
+    )
+    this.initial.writeKeys = quicKeysInto(
+      this.kdf,
+      this.initial.keySlot(QUIC_CONN_WRITE_SLOT),
+      QUIC_AEAD_AES_128_GCM,
+      this.initialServer
+    )
     quicCidCopy(this.originalDcid, buf, header.dcidStart, header.dcidLength)
     this.originalDcidLength = header.dcidLength
     quicCidCopy(this.peerScid, buf, header.scidStart, header.scidLength)
@@ -1369,14 +1540,24 @@ export class QuicConnection {
 
   /**
    * The rest of `start`, once the first Initial has opened: the first local
-   * connection ID, and a `TlsServer` whose transport parameters name both
-   * IDs (RFC 9000 §7.3), the Retry's when `acceptRetry` set one up, and the
-   * first ID's stateless reset token (§18.2).
+   * connection ID, and the slot's `TlsServer` started with transport
+   * parameters that name both IDs (RFC 9000 §7.3), the Retry's when
+   * `acceptRetry` set one up, and the first ID's stateless reset token
+   * (§18.2).
    */
   establish(): void {
     const none: u8[] = this.none
-    const resetToken: u8[] = quicStatelessResetToken(this.config.statelessResetKey, this.localScid)
-    this.cids.addLocal(this.localScid, resetToken)
+    const token: u8[] = this.tokenScratch
+    quicConnResetTokenInto(
+      this.kdf.sha256,
+      this.config.statelessResetKey,
+      this.localScid,
+      QUIC_CONN_FROM,
+      QUIC_CONN_CID_LENGTH,
+      token,
+      QUIC_CONN_FROM
+    )
+    this.cids.addLocal(this.localScid, token)
     this.cids.addPeerAt(
       QUIC_CONN_NONE,
       QUIC_CONN_NONE,
@@ -1390,17 +1571,27 @@ export class QuicConnection {
     // §8.1.2: a Retry token the listener checked has validated the address.
     this.addressValidated = this.retried
 
-    const params: QuicTransportParameters = new QuicTransportParameters()
-    params.originalDcid = this.retried
-      ? this.retryOriginalDcid
-      : quicConnSlice(this.originalDcid, 0, this.originalDcidLength)
+    // The parameters, and their encoding, are rewritten in the slot's own
+    // arrays, which grow only when a connection needs more than any before.
+    const params: QuicTransportParameters = this.localParameters
+    if (this.retried) {
+      quicConnRefill(
+        params.originalDcid,
+        this.retryOriginalDcid,
+        QUIC_CONN_FROM,
+        toI32(this.retryOriginalDcid.length)
+      )
+    } else {
+      quicConnRefill(params.originalDcid, this.originalDcid, QUIC_CONN_FROM, this.originalDcidLength)
+    }
     params.hasOriginalDcid = true
     params.initialScid = this.localScid
     params.hasInitialScid = true
-    params.retryScid = this.retryScid
+    quicConnRefill(params.retryScid, this.retryScid, QUIC_CONN_FROM, toI32(this.retryScid.length))
     params.hasRetryScid = this.retried
-    params.statelessResetToken = resetToken
+    quicConnRefill(params.statelessResetToken, token, QUIC_CONN_FROM, QUIC_RESET_TOKEN_SIZE)
     params.hasStatelessResetToken = true
+    secureZero(token)
     params.maxIdleTimeout = this.config.maxIdleTimeout
     params.initialMaxData = this.config.maxData
     params.initialMaxStreamDataBidiRemote = this.config.maxStreamData
@@ -1415,16 +1606,18 @@ export class QuicConnection {
     // The server never migrates and asks the client not to (§9): path
     // validation beyond answering PATH_CHALLENGE is not here.
     params.disableActiveMigration = true
-    const extra: u8[] = []
-    const tlsConfig: TlsServerConfig = {
-      certificateChain: this.config.certificateChain,
-      alpn: this.config.alpn,
-      quicTransportParameters: quicEncodeTransportParameters(params),
-      extraExtensions: extra,
-      signatureScheme: this.config.signatureScheme,
-      quic: true,
+    quicEncodeTransportParametersInto(params, this.localEncoded)
+    // One `TlsServer` a slot, made by its first handshake (so its flight is
+    // sized for these parameters) and restarted, wiped, by each after it.
+    const tls: TlsServer | null = this.tlsSlot
+    if (tls !== null) {
+      tls.restart(this.serverRandom, this.ephemeralPrivate)
+      this.tls = tls
+    } else {
+      const made: TlsServer = new TlsServer(this.tlsConfig, this.serverRandom, this.ephemeralPrivate)
+      this.tlsSlot = made
+      this.tls = made
     }
-    this.tls = new TlsServer(tlsConfig, this.serverRandom, this.ephemeralPrivate)
   }
 
   /**
@@ -1460,10 +1653,10 @@ export class QuicConnection {
   /**
    * Opens one packet of a connection already started, and acts on its frames.
    * The opening and the frames run inside an arena block (`openScoped`), so
-   * their temporaries go when it ends; what has to keep memory — a first
-   * Initial's `TlsServer`, a key update's new keys, TLS reading the CRYPTO
-   * bytes and what it answers — runs after it. Answers whether the packet
-   * was used.
+   * their temporaries go when it ends; what may grow a buffer of the slot —
+   * a first Initial's `TlsServer` and parameters, a key update, TLS reading
+   * the CRYPTO bytes and what it answers — runs after it. Answers whether
+   * the packet was used.
    */
   openPacket(buf: u8[], header: QuicHeader, first: boolean): boolean {
     const type: i32 = header.type
@@ -1619,8 +1812,10 @@ export class QuicConnection {
     this.application.readKeys = this.otherReadKeys
     this.otherReadKeys = previous
     this.otherIsNext = false
+    this.appReadSlot = 1 - this.appReadSlot
     secureZero(this.appReadSecret)
     this.appReadSecret = this.nextReadSecret
+    this.readSecretCurrent = this.readSecretCurrent === 0 ? 1 : 0
     this.nextReadSecret = this.none
     this.readPhase = !this.readPhase
     this.readPhaseLowest = pn
@@ -1639,11 +1834,13 @@ export class QuicConnection {
     if (keys === null) {
       return false
     }
-    const secret: u8[] | null = quicKeyUpdateSecret(keys.aead, this.appWriteSecret)
-    if (secret === null) {
+    const target: i32 = this.writeSecretCurrent === 0 ? 1 : 0
+    const secret: u8[] = quicConnSecretAt(this.writeSecrets, keys.aead, target)
+    if (!quicKeyUpdateSecretInto(this.kdf, keys.aead, this.appWriteSecret, secret)) {
       return false
     }
-    const next: QuicKeys | null = quicKeysUpdate(keys, secret)
+    const slot: QuicKeysSlot = this.application.keySlot(QUIC_CONN_APP_WRITE_SLOTS + 1 - this.appWriteSlot)
+    const next: QuicKeys | null = quicKeysUpdateInto(this.kdf, slot, keys, secret)
     if (next === null) {
       secureZero(secret)
       return false
@@ -1652,6 +1849,8 @@ export class QuicConnection {
     secureZero(this.appWriteSecret)
     this.application.writeKeys = next
     this.appWriteSecret = secret
+    this.writeSecretCurrent = target
+    this.appWriteSlot = 1 - this.appWriteSlot
     this.writePhase = !this.writePhase
     this.writePhaseFirst = this.application.nextPn
     return true
@@ -1673,12 +1872,17 @@ export class QuicConnection {
     if (keys === null) {
       return
     }
-    const secret: u8[] | null = quicKeyUpdateSecret(keys.aead, this.appReadSecret)
-    if (secret === null) {
+    const secret: u8[] = quicConnSecretAt(this.readSecrets, keys.aead, this.readSecretCurrent === 0 ? 1 : 0)
+    if (!quicKeyUpdateSecretInto(this.kdf, keys.aead, this.appReadSecret, secret)) {
       return
     }
     this.nextReadSecret = secret
-    this.otherReadKeys = quicKeysUpdate(keys, secret)
+    this.otherReadKeys = quicKeysUpdateInto(
+      this.kdf,
+      this.application.keySlot(1 - this.appReadSlot),
+      keys,
+      secret
+    )
     this.otherIsNext = this.otherReadKeys !== null
   }
 
@@ -2116,10 +2320,12 @@ export class QuicConnection {
       return
     }
     if (!this.initial.discarded) {
-      this.initial.appendCrypto(tls.takeOutput(TLS_LEVEL_INITIAL))
+      this.initial.appendCrypto(tls.outputInitial, tls.outputInitialLength)
+      tls.clearOutput(TLS_LEVEL_INITIAL)
     }
     if (!this.handshake.discarded) {
-      this.handshake.appendCrypto(tls.takeOutput(TLS_LEVEL_HANDSHAKE))
+      this.handshake.appendCrypto(tls.outputHandshake, tls.outputHandshakeLength)
+      tls.clearOutput(TLS_LEVEL_HANDSHAKE)
     }
     const aead: i32 = quicConnAead(tls.suite)
     if (
@@ -2132,8 +2338,16 @@ export class QuicConnection {
       }
       this.alpn = tls.alpn
       this.serverName = tls.serverName
-      this.handshake.readKeys = this.keysFor(aead, tls.readSecret(TLS_LEVEL_HANDSHAKE))
-      this.handshake.writeKeys = this.keysFor(aead, tls.writeSecret(TLS_LEVEL_HANDSHAKE))
+      this.handshake.readKeys = this.keysFor(
+        this.handshake.keySlot(QUIC_CONN_READ_SLOT),
+        aead,
+        tls.readSecret(TLS_LEVEL_HANDSHAKE)
+      )
+      this.handshake.writeKeys = this.keysFor(
+        this.handshake.keySlot(QUIC_CONN_WRITE_SLOT),
+        aead,
+        tls.writeSecret(TLS_LEVEL_HANDSHAKE)
+      )
     }
     if (
       !this.application.discarded &&
@@ -2143,8 +2357,12 @@ export class QuicConnection {
       const write: u8[] | null = tls.writeSecret(TLS_LEVEL_APPLICATION)
       const read: u8[] | null = tls.readSecret(TLS_LEVEL_APPLICATION)
       if (write !== null && read !== null) {
-        this.application.writeKeys = this.keysFor(aead, write)
-        this.application.readKeys = this.keysFor(aead, read)
+        this.application.writeKeys = this.keysFor(
+          this.application.keySlot(QUIC_CONN_APP_WRITE_SLOTS + this.appWriteSlot),
+          aead,
+          write
+        )
+        this.application.readKeys = this.keysFor(this.application.keySlot(this.appReadSlot), aead, read)
         // The key update secrets start from `TlsServer`'s own arrays, so the
         // first update wipes those too, rather than leaving a copy behind.
         this.appWriteSecret = write
@@ -2162,12 +2380,12 @@ export class QuicConnection {
     }
   }
 
-  /** `quicKeys` of a secret TLS has, or `null` when it has none yet. */
-  keysFor(aead: i32, secret: u8[] | null): QuicKeys | null {
+  /** `quicKeysInto` `slot` of a secret TLS has, or `null` when it has none yet. */
+  keysFor(slot: QuicKeysSlot, aead: i32, secret: u8[] | null): QuicKeys | null {
     if (secret === null) {
       return null
     }
-    return quicKeys(aead, secret)
+    return quicKeysInto(this.kdf, slot, aead, secret)
   }
 
   /**
@@ -2179,7 +2397,11 @@ export class QuicConnection {
    * the datagrams its `max_datagram_frame_size`.
    */
   checkPeerParameters(tls: TlsServer): boolean {
-    const p: QuicTransportParameters = quicParseTransportParameters(tls.clientTransportParameters, false)
+    const p: QuicTransportParameters = quicParseTransportParametersInto(
+      this.parsedParameters,
+      tls.clientTransportParameters,
+      false
+    )
     if (p.error !== QUIC_ERROR_NO_ERROR || !p.hasInitialScid) {
       this.fail(QUIC_ERROR_TRANSPORT_PARAMETER, toI64(QUIC_FRAME_CRYPTO))
       return false
@@ -2218,6 +2440,7 @@ export class QuicConnection {
     space.probe = false
     quicConnWipeKeys(space.readKeys)
     quicConnWipeKeys(space.writeKeys)
+    space.wipeKeySlots()
     space.readKeys = null
     space.writeKeys = null
     space.cryptoOutLength = 0
@@ -2227,15 +2450,26 @@ export class QuicConnection {
   /**
    * The HMAC-SHA256 under the connection's seed of the sequence number
    * `sequence`, whose first 8 bytes are the local connection ID of that
-   * number: so the IDs are unlinkable to anyone without the seed and need no
-   * more entropy.
+   * number, into `cidScratch`: so the IDs are unlinkable to anyone without
+   * the seed and need no more entropy. It runs in the connection's HMAC
+   * scratch inside an arena block, and wipes the MAC and the scratch.
    */
-  deriveConnectionId(sequence: i64): u8[] {
+  deriveConnectionId(sequence: i64): void {
+    const mac: HmacSha256Scratch = this.kdf.sha256
+    using _scope = arena()
     const counter: u8[] = new Array<u8>(8)
     for (let k: i32 = 0; k < 8 && k < toI32(counter.length); k += 1) {
       counter[k] = toU8(toI32((sequence >> (toI64(7 - k) * 8)) & 255))
     }
-    return hmacSha256(this.cidSeed, counter)
+    const tag: u8[] = new Array<u8>(32)
+    mac.begin(this.cidSeed, QUIC_CONN_FROM, toI32(this.cidSeed.length))
+    mac.update(counter, QUIC_CONN_FROM, toI32(counter.length))
+    mac.finishInto(tag, QUIC_CONN_FROM)
+    for (let k: i32 = 0; k < QUIC_CONN_CID_LENGTH && k < toI32(this.cidScratch.length); k += 1) {
+      this.cidScratch[k] = tag[k]
+    }
+    secureZero(tag)
+    mac.wipe()
   }
 
   /**
@@ -2243,27 +2477,34 @@ export class QuicConnection {
    * would take (its `active_connection_id_limit`), up to
    * `QUIC_CONN_LOCAL_CIDS` at once and `QUIC_CONN_MAX_ISSUED_CIDS` in all;
    * each goes out in a NEW_CONNECTION_ID frame with the stateless reset
-   * token the configuration's static key gives it. One ID at a time, each
-   * call issuing one and then topping up the rest, since each leaves its
-   * HMAC's temporaries in the arena (QUIC-3) and a loop would hold them
-   * across its passes for no reason.
+   * token the configuration's static key gives it. Each ID and token is made
+   * in the slot's scratch and copied into the table, so issuing keeps
+   * nothing (QUIC-3).
    */
   topUpConnectionIds(): void {
-    if (!this.handshakeComplete || this.cids.nextLocal >= QUIC_CONN_MAX_ISSUED_CIDS) {
+    if (!this.handshakeComplete) {
       return
     }
     let want: i64 = this.peerParameters.activeConnectionIdLimit
     if (want > toI64(QUIC_CONN_LOCAL_CIDS)) {
       want = toI64(QUIC_CONN_LOCAL_CIDS)
     }
-    if (toI64(this.cids.activeLocal()) >= want) {
-      return
-    }
-    const mac: u8[] = this.deriveConnectionId(this.cids.nextLocal)
-    const cid: u8[] = quicConnSlice(mac, 0, QUIC_CONN_CID_LENGTH)
-    secureZero(mac)
-    if (this.cids.addLocal(cid, quicStatelessResetToken(this.config.statelessResetKey, cid)) >= 0) {
-      this.topUpConnectionIds()
+    while (this.cids.nextLocal < QUIC_CONN_MAX_ISSUED_CIDS && toI64(this.cids.activeLocal()) < want) {
+      this.deriveConnectionId(this.cids.nextLocal)
+      quicConnResetTokenInto(
+        this.kdf.sha256,
+        this.config.statelessResetKey,
+        this.cidScratch,
+        QUIC_CONN_FROM,
+        QUIC_CONN_CID_LENGTH,
+        this.tokenScratch,
+        QUIC_CONN_FROM
+      )
+      const added: i64 = this.cids.addLocal(this.cidScratch, this.tokenScratch)
+      secureZero(this.tokenScratch)
+      if (added < 0) {
+        return
+      }
     }
   }
 
@@ -3187,6 +3428,14 @@ export class QuicConnection {
     secureZero(this.appReadSecret)
     secureZero(this.appWriteSecret)
     secureZero(this.nextReadSecret)
+    for (const secret of this.writeSecrets) {
+      secureZero(secret)
+    }
+    for (const secret of this.readSecrets) {
+      secureZero(secret)
+    }
+    secureZero(this.initialClient)
+    secureZero(this.initialServer)
     secureZero(this.cidSeed)
     secureZero(this.ephemeralPrivate)
     // The stateless reset tokens of both sides' IDs: either one ends the
@@ -3198,6 +3447,7 @@ export class QuicConnection {
       secureZero(entry.resetToken)
     }
     secureZero(this.peerParameters.statelessResetToken)
+    secureZero(this.localParameters.statelessResetToken)
     const tls: TlsServer | null = this.tls
     if (tls !== null) {
       // The server's encoded transport parameters carry its first ID's token.

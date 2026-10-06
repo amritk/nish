@@ -1,0 +1,38 @@
+PASS  quicInitialSecretsInto reads the DCID in place: RFC 9001 A.1's client and server secrets, as quicInitialSecrets has them
+PASS  it refuses a DCID over 20 bytes
+PASS  a window outside the datagram
+PASS  and an output that is not 32 bytes
+PASS  quicKeysInto under AES-256-GCM is quicKeys, schedules included
+PASS  then in the same slot under ChaCha20-Poly1305, with no schedules
+PASS  then under AES-128-GCM
+PASS  quicKeysInto refuses an AEAD it does not know
+PASS  and a secret that is not its hash's length
+PASS  quicKeyUpdateSecretInto is quicKeyUpdateSecret
+PASS  it refuses an output of the wrong length
+PASS  and a secret of the wrong length
+PASS  quicKeysUpdateInto is quicKeysUpdate
+PASS  and shares the header-protection key and its schedule, which every generation keeps
+PASS  it refuses keys quicKeys did not make
+PASS  and a next secret of the wrong length
+PASS  QuicKeysSlot.wipe zeroes both key sizes, the IV and all four AES schedules
+PASS  quicEncodeTransportParametersInto replaces what the array held with quicEncodeTransportParameters' bytes
+PASS  quicParseTransportParametersInto reads them back into the object it is given
+PASS  parsed again, from nothing, every field is back at its default and the ID's array is kept, emptied
+PASS  a server-only parameter from a client is still TRANSPORT_PARAMETER_ERROR
+PASS  a 21-byte initial_source_connection_id is TRANSPORT_PARAMETER_ERROR, and is not copied into the reused array
+PASS  aioquic, AES-128-GCM: 101 connections through one slot, every datagram the recorded one
+PASS  aioquic, AES-128-GCM: a connection keeps only TlsServer's copy of the client's transport parameters, 96 bytes, metered call by call
+PASS  aioquic, AES-128-GCM: and 100 more keep exactly that each
+PASS  ChaCha20-Poly1305: the recorded connection completes, echoes and follows the client's key update
+PASS  ChaCha20-Poly1305: 101 connections through one slot, every datagram the recorded one
+PASS  ChaCha20-Poly1305: a connection keeps only TlsServer's copy of the client's transport parameters, 56 bytes, metered call by call
+PASS  ChaCha20-Poly1305: and 100 more keep exactly that each
+PASS  AES-256-GCM: the recorded connection completes, echoes and follows the client's key update
+PASS  AES-256-GCM: 101 connections through one slot, every datagram the recorded one
+PASS  AES-256-GCM: a connection keeps only TlsServer's copy of the client's transport parameters, 56 bytes, metered call by call
+PASS  AES-256-GCM: and 100 more keep exactly that each
+PASS  the slot keeps its TlsServer across connections
+PASS  before the next connection, the slot holds the last one's keys and secrets
+PASS  and reset zeroes them all: every space's key slots, AES schedules included, the key-update and Initial secrets, and TlsServer's secrets
+PASS  and the server's own parameters' reset token, and their encoding, which carries it
+quic memory: 37 passed, 0 failed, 0 skipped

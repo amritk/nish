@@ -179,11 +179,11 @@ const perPacket = (t: Suite): void => {
 
 /**
  * Connection after connection through one slot: `reset` keeps nothing,
- * after its handshake a connection keeps nothing, and the handshake — which
- * allocates, for TLS-3 and its key derivations (`docs/security/quic.md`) —
- * keeps exactly as much each time from the second on, so nothing in the
- * slot grows with the connections it has served. The handshake is measured
- * with a `fresh` meter, since it crosses chunks.
+ * after its handshake a connection keeps nothing, and the handshake keeps
+ * exactly as much each time from the second on, so nothing in the slot
+ * grows with the connections it has served. What it keeps is `TlsServer`'s
+ * copy of the client's transport parameters alone (QUIC-3);
+ * `tests/link/net_quic_memory` meters it exactly, across every chunk.
  */
 const perConnection = (t: Suite): void => {
   const limits = new NqLimits();

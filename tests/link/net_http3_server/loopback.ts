@@ -20,7 +20,7 @@ import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
-import { NqMeter } from "../net_quic_stream/arena";
+import { QmMeter, qmPlain } from "../net_quic_memory/meter";
 import {
   CLIENT_CONTROL,
   CLIENT_DECODER,
@@ -240,20 +240,17 @@ class Lean {
  * at its end, a 200 and 1,000 bytes), flush. Then the client reads what came
  * back, unmeasured. Answers whether anything moved.
  */
-const leanRound = (l: Lean, m: NqMeter): boolean => {
+const leanRound = (l: Lean, m: QmMeter): boolean => {
   const server: Http3Server = l.loop.server;
   const key: Secret<u8[]> = secret(leafPrivate());
-  let filler: u8[] = m.filler();
-  let before: i64 = Arena.used();
+  m.begin();
   const got: i32 = server.receive(l.c.now, key);
-  m.add(before, filler);
+  m.end();
   wipe(key);
-  filler = m.filler();
-  before = Arena.used();
+  m.begin();
   server.tick(l.c.now);
-  m.add(before, filler);
-  filler = m.filler();
-  before = Arena.used();
+  m.end();
+  m.begin();
   let slot: i32 = server.ready();
   while (slot >= 0) {
     const h3: Http3Connection = server.connection(slot);
@@ -268,11 +265,10 @@ const leanRound = (l: Lean, m: NqMeter): boolean => {
     }
     slot = server.ready();
   }
-  m.add(before, filler);
-  filler = m.filler();
-  before = Arena.used();
+  m.end();
+  m.begin();
   server.flush(l.c.now);
-  m.add(before, filler);
+  m.end();
   let read: i32 = 0;
   let n: i32 = udpRecvFrom(l.fd, l.rx, n32(0), n32(65536), l.from, l.meta);
   while (n >= 0) {
@@ -290,7 +286,7 @@ const leanRound = (l: Lean, m: NqMeter): boolean => {
 };
 
 /** Sends `datagram` to the server and runs rounds until nothing moves. */
-const leanSend = (l: Lean, datagram: u8[], m: NqMeter): void => {
+const leanSend = (l: Lean, datagram: u8[], m: QmMeter): void => {
   udpSendTo(l.fd, datagram, n32(0), toI32(datagram.length), l.to, n32(0), n32(0));
   for (let k: i32 = 0; k < 64 && leanRound(l, m); k++) {
     // until quiet
@@ -298,7 +294,7 @@ const leanSend = (l: Lean, datagram: u8[], m: NqMeter): void => {
 };
 
 /** A 1-RTT packet of `payload` from the client, with an ACK of everything it has first. */
-const leanPacket = (l: Lean, payload: u8[], m: NqMeter): void => {
+const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
   const all: u8[] = [];
   if (l.c.largestApp >= n64(0)) {
     quicPushAck(all, [n64(0), l.c.largestApp], n32(1), n64(0));
@@ -326,7 +322,7 @@ const reused = (t: Suite): void => {
   for (let k: i32 = 0; k < 5; k++) {
     const l = new Lean(loop);
     l.c.now = toI64(k) * n64(100000);
-    const handshake = new NqMeter(true);
+    const handshake = new QmMeter();
     const hello: u8[] = h3Hello(limits);
     l.c.before = hello;
     leanSend(l, qcInitial(l.c, qcCrypto(n64(0), hello), n32(1200)), handshake);
@@ -336,7 +332,7 @@ const reused = (t: Suite): void => {
     }
     leanSend(l, qcFinishedPacket(l.c), handshake);
     handshakes.push(handshake.kept);
-    const rest = new NqMeter(false);
+    const rest = qmPlain();
     const control: u8[] = h3Cat([h3Varint(H3_STREAM_CONTROL), h3ClientSettings(n64(-1))]);
     const open: u8[] = [];
     quicPushStream(open, CLIENT_CONTROL, n64(0), control, n32(0), toI32(control.length), false);
@@ -348,11 +344,10 @@ const reused = (t: Suite): void => {
       quicPushStream(payload, toI64(r) * n64(4), n64(0), l.request, n32(0), toI32(l.request.length), true);
       leanPacket(l, payload, rest);
     }
-    const filler: u8[] = rest.filler();
-    const before: i64 = Arena.used();
+    rest.begin();
     loop.server.connection(n32(0)).goaway();
     loop.server.touch(n32(0));
-    rest.add(before, filler);
+    rest.end();
     const empty: u8[] = [];
     for (let r: i32 = 0; r < 4 && loop.server.busy() > 0; r++) {
       leanPacket(l, empty, rest);
@@ -371,7 +366,13 @@ const reused = (t: Suite): void => {
   // The carrier draws real entropy for every connection, so a handshake's
   // messages differ by a byte here and there (an ECDSA signature's DER length,
   // a key share's), and so does what it keeps: a spread of a few dozen bytes,
-  // not a growth.
+  // not a growth. Since the slot keeps the handshake's state (H3-1), what is
+  // left is the caller's and the carrier's, none of it the QUIC connection's
+  // but `TlsServer`'s copy of the client's transport parameters: the P-256
+  // signature, 9,248 to 9,376 bytes as its DER length is 70 to 72
+  // (`p256SignSha256` stores what it allocates, so no arena block may hold
+  // it), and the copy of the first Initial and its parse that the listener
+  // makes (H3-3). Before, each handshake kept about 100 KB.
   let low: i64 = handshakes[1];
   let high: i64 = handshakes[1];
   for (let k: i32 = 2; k < toI32(handshakes.length); k++) {
@@ -379,6 +380,7 @@ const reused = (t: Suite): void => {
     high = handshakes[k] > high ? handshakes[k] : high;
   }
   t.ok("and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart", low > n64(0) && high - low < n64(256));
+  t.ok("which is the signature, the listener's copy of the first Initial and TlsServer's of the client's parameters: 10 to 12 KiB, where it was about 100 KB", low >= n64(10240) && high <= n64(12288));
 };
 
 /** Every check of this file. */
