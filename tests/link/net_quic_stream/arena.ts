@@ -31,23 +31,51 @@ import {
 } from "../net_quic_conn/client";
 import { NqLimits, nqConfig, nqParams, nqStream, nqText } from "./common";
 
-/** The bytes the server kept across the calls measured so far. */
+/**
+ * The bytes the server kept across the calls measured so far. `Arena.used()`
+ * counts the current chunk, so a call that allocates across a chunk's end
+ * cannot be measured by a difference. A `fresh` meter starts each call in a
+ * chunk of its own instead — a 70,000-byte array, which takes a chunk to
+ * itself, fills it, so the call's first allocation starts a new chunk at 0
+ * — and counts what the new chunk holds after the call; that is exact for a
+ * call that keeps under 64 KiB.
+ */
 export class NqMeter {
   kept: i64 = 0;
   out: u8[];
   buf: u8[];
+  none: u8[];
+  fresh: boolean = false;
 
-  constructor() {
+  constructor(fresh: boolean) {
     this.out = new Array<u8>(QUIC_CONN_DATAGRAM_SIZE);
     this.buf = new Array<u8>(256);
+    this.none = [];
+    this.fresh = fresh;
+  }
+
+  /** A filler that starts the next call in a new chunk, for a `fresh` meter; nothing otherwise. */
+  filler(): u8[] {
+    return this.fresh ? new Array<u8>(70000) : this.none;
+  }
+
+  /** Counts what the call since `before` kept; `filler` is the one taken before it, kept alive until here. */
+  add(before: i64, filler: u8[]): void {
+    const after: i64 = Arena.used();
+    if (!this.fresh) {
+      this.kept = this.kept + (after - before);
+    } else if (after !== before && toI32(filler.length) > 0) {
+      this.kept = this.kept + after;
+    }
   }
 }
 
 /** The server takes `datagram` at `now`, measured. */
 export const nqMeteredReceive = (conn: QuicConnection, datagram: u8[], now: i64, m: NqMeter): void => {
+  const filler: u8[] = m.filler();
   const before: i64 = Arena.used();
   conn.receive(datagram, now);
-  m.kept = m.kept + (Arena.used() - before);
+  m.add(before, filler);
 };
 
 /**
@@ -57,9 +85,10 @@ export const nqMeteredReceive = (conn: QuicConnection, datagram: u8[], now: i64,
 export const nqMeteredDrain = (conn: QuicConnection, c: QcClient, m: NqMeter): i32 => {
   let count: i32 = 0;
   for (let guard: i32 = 0; guard < 64; guard++) {
+    const filler: u8[] = m.filler();
     const before: i64 = Arena.used();
     const n: i32 = conn.takeDatagramInto(m.out, n32(0), c.now);
-    m.kept = m.kept + (Arena.used() - before);
+    m.add(before, filler);
     if (n <= 0) {
       return count;
     }
@@ -82,6 +111,7 @@ const echoRound = (conn: QuicConnection, c: QcClient, offset: i64, m: NqMeter): 
   }
   const packet: u8[] = qcShort(c, cat([nqStream(n64(0), offset, nqText(n32(100)), false), ack]));
   nqMeteredReceive(conn, packet, c.now, m);
+  const filler: u8[] = m.filler();
   const before: i64 = Arena.used();
   let id: i64 = conn.nextStreamEvent();
   while (id >= n64(0)) {
@@ -91,7 +121,7 @@ const echoRound = (conn: QuicConnection, c: QcClient, offset: i64, m: NqMeter): 
     }
     id = conn.nextStreamEvent();
   }
-  m.kept = m.kept + (Arena.used() - before);
+  m.add(before, filler);
   nqMeteredDrain(conn, c, m);
 };
 
@@ -101,17 +131,19 @@ const meteredHandshake = (conn: QuicConnection, c: QcClient, limits: NqLimits, m
   c.before = hello;
   const from: i32 = toI32(c.datagrams.length);
   nqMeteredReceive(conn, qcInitial(c, qcCrypto(n64(0), hello), n32(1200)), c.now, m);
-  let before: i64 = Arena.used();
+  const fillInput: u8[] = m.filler();
+  const beforeInput: i64 = Arena.used();
   const input: u8[] | null = conn.signatureInput();
-  m.kept = m.kept + (Arena.used() - before);
+  m.add(beforeInput, fillInput);
   if (input !== null) {
     const key: Secret<u8[]> = secret(leafPrivate());
     const signature: u8[] | null = tlsSignEcdsaP256(key, input);
     wipe(key);
     if (signature !== null) {
-      before = Arena.used();
+      const fillSign: u8[] = m.filler();
+      const beforeSign: i64 = Arena.used();
       conn.sign(signature);
-      m.kept = m.kept + (Arena.used() - before);
+      m.add(beforeSign, fillSign);
     }
   }
   nqMeteredDrain(conn, c, m);
@@ -128,14 +160,14 @@ const perPacket = (t: Suite): void => {
   const limits = new NqLimits();
   const conn = new QuicConnection(nqConfig(limits), fixedEntropy());
   const c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
-  const warm = new NqMeter();
+  const warm = new NqMeter(false);
   if (!t.ok("connected", meteredHandshake(conn, c, limits, warm))) {
     return;
   }
   for (let k: i32 = 0; k < 20; k++) {
     echoRound(conn, c, toI64(k) * n64(100), warm);
   }
-  const m = new NqMeter();
+  const m = new NqMeter(false);
   for (let k: i32 = 20; k < 320; k++) {
     echoRound(conn, c, toI64(k) * n64(100), m);
   }
@@ -145,15 +177,17 @@ const perPacket = (t: Suite): void => {
 };
 
 /**
- * Connection after connection through one slot: `reset` keeps nothing, and
- * after its handshake a connection keeps nothing either. The handshake
- * itself allocates (TLS-3 and the key derivations, which
- * `docs/security/quic.md` measures), and is not measured here: `Arena.used()`
- * counts the current chunk, and a handshake of some 23 KB crosses chunks.
+ * Connection after connection through one slot: `reset` keeps nothing,
+ * after its handshake a connection keeps nothing, and the handshake — which
+ * allocates, for TLS-3 and its key derivations (`docs/security/quic.md`) —
+ * keeps exactly as much each time from the second on, so nothing in the
+ * slot grows with the connections it has served. The handshake is measured
+ * with a `fresh` meter, since it crosses chunks.
  */
 const perConnection = (t: Suite): void => {
   const limits = new NqLimits();
   const slot = new QuicConnection(nqConfig(limits), fixedEntropy());
+  const handshakes: i64[] = [];
   let resets: i64 = 0;
   let after: i64 = 0;
   let connected: i32 = 0;
@@ -165,10 +199,12 @@ const perConnection = (t: Suite): void => {
       resets = resets + (Arena.used() - before);
     }
     const c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
-    if (meteredHandshake(slot, c, limits, new NqMeter())) {
+    const handshake = new NqMeter(true);
+    if (meteredHandshake(slot, c, limits, handshake)) {
       connected++;
     }
-    const rest = new NqMeter();
+    handshakes.push(handshake.kept);
+    const rest = new NqMeter(false);
     for (let r: i32 = 0; r < 10; r++) {
       echoRound(slot, c, toI64(r) * n64(100), rest);
     }
@@ -182,7 +218,12 @@ const perConnection = (t: Suite): void => {
   }
   t.eqI32("six connections, one after another, through one slot", connected, n32(6));
   t.eqI64("resetting the slot for the next keeps no arena memory", resets, n64(0));
-  t.eqI64("and after its handshake a connection keeps none: ten echoes, a close", after, n64(0));
+  t.eqI64("after its handshake a connection keeps none: ten echoes, a close", after, n64(0));
+  let same: boolean = handshakes[1] > n64(0);
+  for (let k: i32 = 2; k < toI32(handshakes.length); k++) {
+    same = same && handshakes[k] === handshakes[1];
+  }
+  t.ok("and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows", same);
 };
 
 /** Every arena check. */

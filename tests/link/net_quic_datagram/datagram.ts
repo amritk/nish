@@ -220,8 +220,8 @@ const ackAll = (c: QcClient): u8[] => {
 /** Datagrams both ways, round after round, keep no arena memory once warm. */
 const datagramArenaChecks = (t: Suite): void => {
   const p: NqPair = nqPair(offering(n64(200)));
-  const meter = new NqMeter();
-  const warm = new NqMeter();
+  const meter = new NqMeter(false);
+  const warm = new NqMeter(false);
   const buf: u8[] = new Array<u8>(256);
   for (let k: i32 = 0; k < 220; k++) {
     const m: NqMeter = k < 20 ? warm : meter;

@@ -110,5 +110,6 @@ PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no
 PASS  and the echo is all there: 32,000 bytes sent back
 PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
-PASS  and after its handshake a connection keeps none: ten echoes, a close
-quic streams: 113 passed, 0 failed, 0 skipped
+PASS  after its handshake a connection keeps none: ten echoes, a close
+PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
+quic streams: 114 passed, 0 failed, 0 skipped
