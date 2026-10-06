@@ -114,6 +114,10 @@ const H3_SERVER_KEYS: i32 = QUIC_CONN_LOCAL_CIDS + 1
 const H3_SERVER_ZERO: i32 = 0
 const H3_SERVER_NONE: i64 = -1
 
+/** The index hash's masks, which keep its shifts from overflowing. */
+const H3_SERVER_MASK_LOW: i64 = 0x3fffffffffff
+const H3_SERVER_MASK: i64 = 0x7fffffffffff
+
 /** A slot's states. */
 const H3_SERVER_FREE: i32 = 0
 const H3_SERVER_BUSY: i32 = 1
@@ -158,7 +162,7 @@ export class Http3CidIndex {
     for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(buf.length); k++) {
       const j: i32 = k & 7
       const mixed: i64 = toI64(toI32(buf[at + k]) ^ toI32(this.salt[j]))
-      h = (((h << 7) & toI64(0x3fffffffffff)) ^ (h >> 29) ^ mixed) & toI64(0x7fffffffffff)
+      h = (((h << 7) & H3_SERVER_MASK_LOW) ^ (h >> 29) ^ mixed) & H3_SERVER_MASK
     }
     h = h ^ (h >> 17) ^ (h >> 31)
     return toI32(h & toI64(toI32(this.table.length) - 1))
@@ -377,7 +381,8 @@ export class Http3Wheel {
       }
       if (this.bits[word] === 0) {
         // An empty word: on to the next one.
-        time = time + toI64(64 - (b & 63))
+        const word64: i32 = 64
+        time = time + toI64(word64 - (b & 63))
       } else if (this.head[b] !== 0) {
         return time <= now ? H3_SERVER_ZERO : toI32(time - now)
       } else {
@@ -601,7 +606,7 @@ export class Http3Server {
   /** A datagram no slot owns: the listener decides, and may make a connection in a free slot. */
   unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     const datagram: u8[] = new Array<u8>(len)
-    for (let k: i32 = 0; k < len; k++) {
+    for (let k: i32 = 0; k < len && k < toI32(datagram.length) && at + k < toI32(buf.length); k++) {
       datagram[k] = buf[at + k]
     }
     const answer: QuicListenerAnswer = this.listener.handle(datagram, address, now)
@@ -626,7 +631,7 @@ export class Http3Server {
       quic.acceptRetry(answer.originalDcid, answer.retryScid)
     }
     const to: u8[] = this.addresses[slot]
-    for (let k: i32 = 0; k < H3_SERVER_ADDRESS && k < toI32(address.length); k++) {
+    for (let k: i32 = 0; k < toI32(to.length) && k < toI32(address.length); k++) {
       to[k] = address[k]
     }
     this.state[slot] = H3_SERVER_BUSY
