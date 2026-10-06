@@ -32,7 +32,10 @@
  * **SETTINGS** (§7.2.4). `h3ReadSettings` reads a whole payload into an
  * `Http3Settings`: the three identifiers this endpoint understands, and the
  * first `H3_SETTINGS_KEEP` it does not, kept rather than dropped so that an
- * extension (WebTransport's, RFC 9220's) can read them. A payload that ends
+ * extension can read them. The four that extended CONNECT and WebTransport
+ * read (RFC 9220's, RFC 9297's and the two of the WebTransport drafts) are
+ * also recorded in fields of their own, refused when repeated, so a peer
+ * cannot push them out of reach behind eight others. A payload that ends
  * inside a pair is H3_FRAME_ERROR (§7.1); an identifier HTTP/2 defined with
  * no HTTP/3 counterpart (0x00, 0x02 to 0x05), or one that appears twice, is
  * H3_SETTINGS_ERROR (§7.2.4, §7.2.4.1). A repeat among the unknown ones is
@@ -40,14 +43,16 @@
  * not compared, so a peer cannot make the read cost more than a fixed number
  * of compares per setting.
  *
- * **Stream types** (§6.2): control 0x00, push 0x01, and RFC 9204's QPACK
- * encoder 0x02 and decoder 0x03. Each is one varint at the start of a
+ * **Stream types** (§6.2): control 0x00, push 0x01, RFC 9204's QPACK
+ * encoder 0x02 and decoder 0x03, and WebTransport's 0x54, whose bidirectional
+ * counterpart is the signal 0x41 where a request's first frame would be. Each is one varint at the start of a
  * unidirectional stream, written with `h3PutVarint`.
  *
  * **Error codes** (§8.1) are the `H3_*` values from 0x0100; QPACK's three
  * (0x0200 to 0x0202) are `nish/net/qpack`'s.
  *
- * Written from RFC 9114 §6.2, §7, §8.1 and §11.2, not ported from another
+ * Written from RFC 9114 §6.2, §7, §8.1 and §11.2, RFC 9220 §5, RFC 9297
+ * §2.1.1 and §5.2 and draft-ietf-webtrans-http3-02, not ported from another
  * implementation. Private names carry the `h3Frame` prefix, since a `std/`
  * module's private functions share the importing program's flat symbol
  * namespace (`docs/wp26-stdlib.md` §3e).

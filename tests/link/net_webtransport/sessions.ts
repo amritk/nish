@@ -120,7 +120,7 @@ const ordering = (t: Suite): void => {
   wtLogged(t, "and becomes a session once they arrive", p, ["session 0 /early"]);
   p.bidi(n64(8), n64(4), bytesOf("early stream"), true);
   p.uni(n64(14), n64(4), bytesOf("early uni"), true);
-  t.eqI32("streams for a session whose CONNECT has not arrived wait, unread", p.wt.pendingCount, n32(2));
+  t.eqI32("streams for a session whose CONNECT has not arrived wait, unread", p.wt.waiting.count, n32(2));
   p.session(n64(4), "/late");
   p.settle();
   wtLogged(t, "and are taken once it is accepted", p, ["session 4 /late", "stream 8 bidi of 4", "stream 14 uni of 4", "end 8", "end 14"]);
@@ -128,7 +128,7 @@ const ordering = (t: Suite): void => {
   const q: WtPeer = wtReady(new WtLimits());
   q.session(n64(4), "/hold");
   q.bidi(n64(8), n64(4), bytesOf("held"), true);
-  t.eqI32("a stream of a session not yet answered waits too", q.wt.pendingCount, n32(1));
+  t.eqI32("a stream of a session not yet answered waits too", q.wt.waiting.count, n32(1));
   t.eqI32("its session's datagrams are dropped meanwhile", q.wt.datagramsDropped, n32(0));
   q.datagram(n64(4), bytesOf("too soon"));
   t.eqI32("counted", q.wt.datagramsDropped, n32(1));

@@ -126,6 +126,7 @@ import {
   H3_DATA,
   H3_END,
   H3_ERROR,
+  H3_GOAWAY,
   H3_INVALID,
   H3_NEED_MORE,
   H3_REQUEST,
@@ -207,6 +208,8 @@ const WT_ONE: i32 = 1
 const WT_NONE: i32 = -1
 const WT_NONE64: i64 = -1
 const WT_U32: i64 = 0xffffffff
+/** Knuth's multiplicative constant, 2^32 over the golden ratio: odd, so the product keeps every bit of the salted number. */
+const WT_HASH_MULTIPLIER: i64 = 2654435761
 
 /** The caps of a WebTransport layer, fixed when it is made. */
 export class WebTransportConfig {
@@ -236,6 +239,128 @@ export const wtCodeFromHttp3 = (code: i64): i64 => {
 const webtransportCheckCap = (what: string, value: i32, low: i32, high: i32): void => {
   if (value < low || value > high) {
     panic(`WebTransport: ${what} of ${value}, outside ${low} to ${high}`)
+  }
+}
+
+/**
+ * The streams waiting for a session (draft-02 §4.5): at most `size`, filed
+ * by the session ID they named in a hash keyed with bytes of entropy, each
+ * bucket a list in arrival order. A session's waiting streams, and whether a
+ * request's stream has any, are found by one probe and a walk of that
+ * bucket, never by a pass over the room, so a client choosing session IDs
+ * cannot make a request, an accept or a close cost the room's size.
+ */
+export class WebTransportWaiting {
+  /** Entry `e`: the stream, the session it named, its bucket's neighbours; a free entry's `next` threads the free list. */
+  streams: i64[]
+  sessions: i64[]
+  next: i32[]
+  prev: i32[]
+  /** Each bucket's first and last entry, or -1. */
+  heads: i32[]
+  tails: i32[]
+  salt: i64 = 0
+  freeHead: i32 = -1
+  count: i32 = 0
+
+  constructor(size: i32) {
+    const n: i32 = size > 0 ? size : WT_ONE
+    this.streams = new Array<i64>(n)
+    this.sessions = new Array<i64>(n)
+    this.next = new Array<i32>(n)
+    this.prev = new Array<i32>(n)
+    let buckets: i32 = 2
+    while (buckets < n * 2) {
+      buckets = buckets * 2
+    }
+    this.heads = new Array<i32>(buckets)
+    this.tails = new Array<i32>(buckets)
+    const entropy: u8[] = new Array<u8>(4)
+    crypto.getRandomValues(entropy)
+    for (let j: i32 = 0; j < toI32(entropy.length); j++) {
+      this.salt = (this.salt << toI64(8)) | toI64(toI32(entropy[j]))
+    }
+    this.reset()
+  }
+
+  /** Empties the room. */
+  reset(): void {
+    this.heads.fill(WT_NONE)
+    this.tails.fill(WT_NONE)
+    const n: i32 = toI32(this.next.length)
+    for (let e: i32 = 0; e < n; e++) {
+      this.next[e] = e + 1 < n ? e + 1 : WT_NONE
+    }
+    this.freeHead = 0
+    this.count = 0
+  }
+
+  /** The bucket of session ID `session`: its stream number, salted, times an odd constant, high bits. */
+  bucket(session: i64): i32 {
+    const x: i64 = ((session >> toI64(2)) ^ this.salt) & toI64(0x7fffffff)
+    const mixed: i64 = (x * WT_HASH_MULTIPLIER) >> toI64(16)
+    return toI32(mixed & toI64(toI32(this.heads.length) - 1))
+  }
+
+  /** Files stream `stream`, waiting for session `session`; answers whether there was room. */
+  add(stream: i64, session: i64): boolean {
+    const e: i32 = this.freeHead
+    if (e < 0 || e >= toI32(this.next.length)) {
+      return false
+    }
+    this.freeHead = this.next[e]
+    const b: i32 = this.bucket(session)
+    const tail: i32 = this.tails[b]
+    this.streams[e] = stream
+    this.sessions[e] = session
+    this.next[e] = -1
+    this.prev[e] = tail
+    if (tail >= 0 && tail < toI32(this.next.length)) {
+      this.next[tail] = e
+    } else {
+      this.heads[b] = e
+    }
+    this.tails[b] = e
+    this.count = this.count + 1
+    return true
+  }
+
+  /** The oldest entry waiting for session `session`, or -1. */
+  first(session: i64): i32 {
+    let e: i32 = this.heads[this.bucket(session)]
+    for (
+      let guard: i32 = 0;
+      guard < toI32(this.next.length) && e >= 0 && e < toI32(this.next.length);
+      guard++
+    ) {
+      if (this.sessions[e] === session) {
+        return e
+      }
+      e = this.next[e]
+    }
+    return WT_NONE
+  }
+
+  /** Takes entry `e` out of the room and answers its stream. */
+  take(e: i32): i64 {
+    const stream: i64 = this.streams[e]
+    const b: i32 = this.bucket(this.sessions[e])
+    const before: i32 = this.prev[e]
+    const after: i32 = this.next[e]
+    if (before >= 0 && before < toI32(this.next.length)) {
+      this.next[before] = after
+    } else {
+      this.heads[b] = after
+    }
+    if (after >= 0 && after < toI32(this.prev.length)) {
+      this.prev[after] = before
+    } else {
+      this.tails[b] = before
+    }
+    this.next[e] = this.freeHead
+    this.freeHead = e
+    this.count = this.count - 1
+    return stream
   }
 }
 
@@ -293,9 +418,10 @@ export class WebTransport {
   nextStream: i32[]
   prevStream: i32[]
   streamBits: i32[]
-  /** The streams waiting for a session: their IDs, and the session IDs they named. */
-  pendingIds: i64[]
-  pendingSessions: i64[]
+  /** The streams waiting for a session. */
+  waiting: WebTransportWaiting
+  /** Sessions accepted while streams waited for them, `adoptCount` of them: `next` takes those streams first. */
+  adoptions: i32[]
   /** The last event's session ID, stream, and codes. */
   sessionId: i64 = -1
   stream: i64 = -1
@@ -310,7 +436,7 @@ export class WebTransport {
   dataStart: i32 = 0
   dataLength: i32 = 0
   freeCount: i32 = 0
-  pendingCount: i32 = 0
+  adoptCount: i32 = 0
   /** The `h3.generation` this layer's state belongs to. */
   generation: i32 = 0
   /** Counters for a log or a test, each saturating: datagrams dropped, sessions refused here, streams refused. */
@@ -319,8 +445,6 @@ export class WebTransport {
   streamsRefused: i32 = 0
   /** WT_STREAM's kind, and whether WT_CLOSED came from the client. */
   bidirectional: boolean = false
-  /** Whether a session was accepted while streams waited: `next` takes those first. */
-  adopting: boolean = false
   closedByPeer: boolean = false
 
   /**
@@ -368,9 +492,8 @@ export class WebTransport {
     this.nextStream = new Array<i32>(slots)
     this.prevStream = new Array<i32>(slots)
     this.streamBits = new Array<i32>(slots)
-    const pending: i32 = config.maxPending > 0 ? config.maxPending : WT_ONE
-    this.pendingIds = new Array<i64>(pending)
-    this.pendingSessions = new Array<i64>(pending)
+    this.waiting = new WebTransportWaiting(config.maxPending)
+    this.adoptions = new Array<i32>(sessions)
     this.restart()
   }
 
@@ -387,7 +510,8 @@ export class WebTransport {
       this.free[this.freeCount] = s
       this.freeCount = this.freeCount + 1
     }
-    this.pendingCount = 0
+    this.waiting.reset()
+    this.adoptCount = 0
     this.capAt = 0
     this.capEnd = 0
     this.capSession = -1
@@ -402,7 +526,6 @@ export class WebTransport {
     this.sessionsRefused = 0
     this.streamsRefused = 0
     this.bidirectional = false
-    this.adopting = false
     this.closedByPeer = false
   }
 
@@ -451,7 +574,7 @@ export class WebTransport {
   next(): i32 {
     this.current()
     for (let guard: i32 = 0; guard < 1000000; guard++) {
-      if (this.adopting) {
+      if (this.adoptCount > 0) {
         const event: i32 = this.adoptWaiting()
         if (event !== H3_NEED_MORE) {
           return event
@@ -524,6 +647,9 @@ export class WebTransport {
     const id: i64 = h3.stream
     if (event === H3_STREAM) {
       return this.arrived(id, h3.session)
+    }
+    if (event === H3_GOAWAY) {
+      return event
     }
     if (event === H3_REQUEST) {
       if (toI32(h3.fields.protocol.length) > 0) {
@@ -712,7 +838,10 @@ export class WebTransport {
     }
     this.states[s] = WT_OPEN
     // The streams that waited for it are taken by the next calls of `next`, each with its WT_STREAM.
-    this.adopting = this.pendingCount > 0
+    if (this.waiting.first(id) >= 0 && this.adoptCount < toI32(this.adoptions.length)) {
+      this.adoptions[this.adoptCount] = s
+      this.adoptCount = this.adoptCount + 1
+    }
     return 0
   }
 
@@ -777,26 +906,11 @@ export class WebTransport {
 
   /** Refuses with WT_SESSION_GONE every stream waiting for session `id`. */
   dropPending(id: i64): void {
-    let j: i32 = 0
-    while (j < this.pendingCount && j < toI32(this.pendingIds.length)) {
-      if (this.pendingSessions[j] === id) {
-        const stream: i64 = this.pendingIds[j]
-        this.unpend(j)
-        this.refuseStream(stream, WT_SESSION_GONE)
-      } else {
-        j++
-      }
+    let e: i32 = this.waiting.first(id)
+    for (let guard: i32 = 0; guard < WT_MAX_CAP && e >= 0; guard++) {
+      this.refuseStream(this.waiting.take(e), WT_SESSION_GONE)
+      e = this.waiting.first(id)
     }
-  }
-
-  /** Takes waiting stream `j` off the list, the last one moved into its place. */
-  unpend(j: i32): void {
-    const last: i32 = this.pendingCount - 1
-    if (last >= 0 && last < toI32(this.pendingIds.length) && j >= 0 && j < toI32(this.pendingIds.length)) {
-      this.pendingIds[j] = this.pendingIds[last]
-      this.pendingSessions[j] = this.pendingSessions[last]
-    }
-    this.pendingCount = last >= 0 ? last : WT_ZERO
   }
 
   /**
@@ -972,10 +1086,7 @@ export class WebTransport {
     }
     if ((s >= 0 && this.states[s] === WT_ASKED) || (s < 0 && this.h3.awaitsRequest(session))) {
       // draft-02 §4.5: it waits, unread, for its session.
-      if (this.pendingCount < this.config.maxPending && this.pendingCount < toI32(this.pendingIds.length)) {
-        this.pendingIds[this.pendingCount] = id
-        this.pendingSessions[this.pendingCount] = session
-        this.pendingCount = this.pendingCount + 1
+      if (this.waiting.count < this.config.maxPending && this.waiting.add(id, session)) {
         return H3_NEED_MORE
       }
       this.refuseStream(id, WT_BUFFERED_STREAM_REJECTED)
@@ -986,26 +1097,19 @@ export class WebTransport {
   }
 
   /**
-   * Takes the first waiting stream whose session is accepted now, in one pass
-   * over the few that wait: answers its WT_STREAM, or H3_NEED_MORE, and stops
-   * looking, once none is left.
+   * Takes the oldest stream still waiting for the last session accepted
+   * with streams waiting: answers its WT_STREAM, or H3_NEED_MORE once that
+   * session has none left (or is gone), when the next session's turn comes.
    */
   adoptWaiting(): i32 {
-    let j: i32 = 0
-    while (j < this.pendingCount && j < toI32(this.pendingIds.length)) {
-      const s: i32 = this.sessionOf(this.pendingSessions[j])
-      if (s >= 0 && this.states[s] === WT_OPEN) {
-        const stream: i64 = this.pendingIds[j]
-        this.unpend(j)
-        const event: i32 = this.adopt(s, stream)
-        if (event !== H3_NEED_MORE) {
-          return event
-        }
-      } else {
-        j++
+    const s: i32 = this.adoptions[this.adoptCount - 1]
+    if (s >= 0 && s < toI32(this.states.length) && this.states[s] === WT_OPEN) {
+      const e: i32 = this.waiting.first(this.sessionIds[s])
+      if (e >= 0) {
+        return this.adopt(s, this.waiting.take(e))
       }
     }
-    this.adopting = false
+    this.adoptCount = this.adoptCount - 1
     return H3_NEED_MORE
   }
 

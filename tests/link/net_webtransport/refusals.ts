@@ -69,6 +69,20 @@ const sessionsRefused = (t: Suite): void => {
   t.eqStr("one with HTTP datagrams but neither WebTransport setting is answered 400", noWebTransport.status(n64(0)), ":status: 400");
   const draft07: WtPeer = askWith([H3_SETTINGS_H3_DATAGRAM, H3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS], [n64(1), n64(4)]);
   t.eqStr("SETTINGS_WEBTRANSPORT_MAX_SESSIONS alone, as a draft-07 client sends it, is enough", draft07.status(n64(0)), ":status: 200; sec-webtransport-http3-draft: draft02");
+  const ids: i64[] = [];
+  const values: i64[] = [];
+  for (let k: i32 = 0; k < 8; k++) {
+    ids.push(n64(0x21) + toI64(k) * n64(0x1f));
+    values.push(n64(0));
+  }
+  for (const id of wtClientSettingIds()) {
+    ids.push(id);
+  }
+  for (const value of wtClientSettingValues()) {
+    values.push(value);
+  }
+  const behind: WtPeer = askWith(ids, values);
+  t.ok("WebTransport's settings count though eight unknown ones fill the kept list first", behind.status(n64(0)) === ":status: 200; sec-webtransport-http3-draft: draft02" && behind.h3.peer.unknownCount === n32(8));
   const p: WtPeer = wtReady(new WtLimits());
   p.send(n64(4), p.connectFrame("/ws", "websocket", "https"), false);
   p.settle();
@@ -129,7 +143,7 @@ const streamsRefused = (t: Suite): void => {
   const q: WtPeer = wtReady(pending);
   q.bidi(n64(16), n64(12), bytesOf("first"), false);
   q.bidi(n64(20), n64(12), bytesOf("second"), false);
-  t.eqI32("one stream waits for session 12", q.wt.pendingCount, n32(1));
+  t.eqI32("one stream waits for session 12", q.wt.waiting.count, n32(1));
   t.eqStr("the next past the waiting room is refused with WT_BUFFERED_STREAM_REJECTED", h3Hex(q.stream(n64(20)).stop), h3Hex(WT_BUFFERED_STREAM_REJECTED));
   q.session(n64(12), "/late");
   q.settle();

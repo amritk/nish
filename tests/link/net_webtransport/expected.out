@@ -83,6 +83,7 @@ PASS  a client whose SETTINGS lack SETTINGS_H3_DATAGRAM is answered 400
 PASS  the program never sees it, and the stream is asked to stop with H3_NO_ERROR
 PASS  one with HTTP datagrams but neither WebTransport setting is answered 400
 PASS  SETTINGS_WEBTRANSPORT_MAX_SESSIONS alone, as a draft-07 client sends it, is enough
+PASS  WebTransport's settings count though eight unknown ones fill the kept list first
 PASS  another :protocol is answered 501 (RFC 8441 §4)
 PASS  an :scheme other than https is answered 400
 PASS  a session past the cap of two is answered 429
@@ -171,4 +172,4 @@ PASS  five connections, one after another, through one slot
 PASS  each with its session, which the layer forgot at the restart
 PASS  resetting the slot keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, a session, datagrams, streams, a close
-webtransport: 173 passed, 0 failed, 0 skipped
+webtransport: 174 passed, 0 failed, 0 skipped

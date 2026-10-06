@@ -95,10 +95,23 @@
  * counters saturate, and the lookup of a stream's state is the QUIC
  * connection's own hash index (`QuicStreams.slotOf`), never a scan.
  *
- * TODO(WP34 R2): extended CONNECT (RFC 9220), SETTINGS_ENABLE_CONNECT_PROTOCOL
- * and HTTP datagrams are WebTransport's. The seams are `config.extendedConnect`,
- * which `HttpFields.readRequest` is given, and the unknown SETTINGS
- * identifiers `peer` keeps.
+ * **Extended CONNECT and WebTransport.** With `extendedConnect` the
+ * connection sends SETTINGS_ENABLE_CONNECT_PROTOCOL 1 and a request may carry
+ * `:protocol` (RFC 9220); without it `:protocol` is malformed,
+ * H3_MESSAGE_ERROR. `webtransportSessions` above 0 turns that on and also
+ * sends SETTINGS_H3_DATAGRAM 1, draft-02's SETTINGS_ENABLE_WEBTRANSPORT 1 and
+ * draft-07's SETTINGS_WEBTRANSPORT_MAX_SESSIONS, and `nish/net/webtransport`
+ * runs its sessions on top: a request then waits for the client's SETTINGS
+ * (draft-02 §3.1), and a stream that opens with WebTransport's unidirectional
+ * type (0x54) or bidirectional signal (0x41) is read as far as its session ID,
+ * held unread and named in `H3_STREAM` until the program calls
+ * `acceptStream` (its bytes then come as H3_DATA, H3_END, H3_RESET and
+ * H3_STOPPED, and `writeStream` writes them as they are) or `refuseStream`.
+ * `openStream` opens one of this side's; `writeDataWhole` writes a capsule;
+ * a GOAWAY still lets a session's new stream in. The client's SETTINGS
+ * values for these are checked, 0 or 1 (H3_SETTINGS_ERROR), a session ID that
+ * is no client-initiated bidirectional stream is H3_ID_ERROR, and the signal
+ * anywhere but a stream's start is H3_FRAME_ERROR.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -1190,7 +1203,12 @@ export class Http3Connection {
       return -1
     }
     const k: i32 = this.quic.streams.slotOf(id)
-    if (k < 0 || k >= toI32(this.slotId.length) || this.slotId[k] !== id || (this.flags[k] & H3_FLAG_WT) === 0) {
+    if (
+      k < 0 ||
+      k >= toI32(this.slotId.length) ||
+      this.slotId[k] !== id ||
+      (this.flags[k] & H3_FLAG_WT) === 0
+    ) {
       return -1
     }
     return k
@@ -1538,9 +1556,7 @@ export class Http3Connection {
       this.stream = id
       return H3_TRAILERS
     }
-    if (
-      this.fields.readRequest(this.nameList, this.valueList, this.connect) !== HTTP_FIELDS_OK
-    ) {
+    if (this.fields.readRequest(this.nameList, this.valueList, this.connect) !== HTTP_FIELDS_OK) {
       return this.streamError(k, id, H3_MESSAGE_ERROR)
     }
     // An extended CONNECT reaches the program like any request, `fields.protocol` set:
