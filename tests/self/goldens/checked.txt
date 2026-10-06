@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 921 programs, 85203 dump lines.
+# 921 programs, 85204 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -72542,7 +72542,7 @@ function Http3Server.flushSlot(this: Http3Server, slot: i32, now: i64): void -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.close
   escaping: now slot
-  calls: nish.Http3Connection.isDone nish.Http3Server.refile nish.Http3Server.release nish.Http3Server.send nish.Http3Wheel.file nish.QuicConnection.close nish.QuicConnection.closed nish.QuicConnection.deadline nish.QuicConnection.takeDatagramInto nish.quicListenerPaceTime nish.quicListenerTakeFlight nish_panic_index nish_panic_overflow
+  calls: nish.Http3Connection.isDone nish.Http3Server.refile nish.Http3Server.release nish.Http3Server.send nish.Http3Wheel.file nish.QuicConnection.close nish.QuicConnection.closed nish.QuicConnection.deadline nish.QuicConnection.takeDatagramInto nish.quicListenerPaceTime nish.quicListenerTakeFlight nish_panic_index
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.release#0 nish.Http3Server.refile#0
   stackSites=0 stackLocals=0
   local 797:11 quic: QuicConnection (const)
@@ -72550,64 +72550,65 @@ function Http3Server.flushSlot(this: Http3Server, slot: i32, now: i64): void -> 
   callee 798:39 QuicConnection.closed -> @nish.QuicConnection.closed
   callee 799:7 QuicConnection.close -> @nish.QuicConnection.close
   local 801:11 to: u8[] (const)
-  local 802:14 guard: i32 (let)
-  local 803:13 n: i32 (const)
-  callee 803:22 quicListenerTakeFlight -> @nish.quicListenerTakeFlight
-  local 814:13 segment: i32 (const)
-  callee 815:12 Http3Server.send -> @nish.Http3Server.send
-  callee 819:9 QuicConnection.closed -> @nish.QuicConnection.closed
-  local 821:13 n: i32 (const)
-  callee 821:22 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
-  callee 823:9 Http3Server.send -> @nish.Http3Server.send
-  callee 825:7 Http3Server.release -> @nish.Http3Server.release
-  callee 828:5 Http3Server.refile -> @nish.Http3Server.refile
-  local 829:9 due: i64 (let)
-  callee 829:20 QuicConnection.deadline -> @nish.QuicConnection.deadline
-  local 830:11 pace: i32 (const)
-  callee 830:29 quicListenerPaceTime -> @nish.quicListenerPaceTime
-  callee 834:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  local 802:9 retried: boolean (let)
+  local 803:14 guard: i32 (let)
+  local 804:13 n: i32 (const)
+  callee 804:22 quicListenerTakeFlight -> @nish.quicListenerTakeFlight
+  local 821:13 segment: i32 (const)
+  callee 822:12 Http3Server.send -> @nish.Http3Server.send
+  callee 827:9 QuicConnection.closed -> @nish.QuicConnection.closed
+  local 829:13 n: i32 (const)
+  callee 829:22 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
+  callee 831:9 Http3Server.send -> @nish.Http3Server.send
+  callee 833:7 Http3Server.release -> @nish.Http3Server.release
+  callee 836:5 Http3Server.refile -> @nish.Http3Server.refile
+  local 839:9 due: i64 (let)
+  callee 839:20 QuicConnection.deadline -> @nish.QuicConnection.deadline
+  local 840:11 paced: i64 (const)
+  callee 840:24 quicListenerPaceTime -> @nish.quicListenerPaceTime
+  callee 844:5 Http3Wheel.file -> @nish.Http3Wheel.file
 function Http3Server.unindex(this: Http3Server, slot: i32): void -> @nish.Http3Server.unindex [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3CidIndex.remove
   calls: nish.Http3CidIndex.remove nish_panic_overflow
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 839:11 first: i32 (const)
-  local 840:14 j: i32 (let)
-  callee 841:7 Http3CidIndex.remove -> @nish.Http3CidIndex.remove
+  local 849:11 first: i32 (const)
+  local 850:14 j: i32 (let)
+  callee 851:7 Http3CidIndex.remove -> @nish.Http3CidIndex.remove
 function Http3Server.release(this: Http3Server, slot: i32): void -> @nish.Http3Server.release [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 850:5
+  sharedWrite: 860:5
   escaping: slot
   calls: nish.Http3Server.unindex nish.Http3Wheel.unfile nish.QuicConnection.release nish_panic_index nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.unindex#0
   stackSites=0 stackLocals=0
-  callee 847:5 Http3Server.unindex -> @nish.Http3Server.unindex
-  callee 848:5 Http3Wheel.unfile -> @nish.Http3Wheel.unfile
-  callee 849:5 QuicConnection.release -> @nish.QuicConnection.release
+  callee 857:5 Http3Server.unindex -> @nish.Http3Server.unindex
+  callee 858:5 Http3Wheel.unfile -> @nish.Http3Wheel.unfile
+  callee 859:5 QuicConnection.release -> @nish.QuicConnection.release
 function Http3Server.tick(this: Http3Server, now: i64): void -> @nish.Http3Server.tick [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 861:7
+  sharedWrite: 871:7
   escaping: now
   calls: nish.Http3Server.dirty nish.Http3Server.holds nish.Http3Wheel.file nish.Http3Wheel.take nish.QuicConnection.handleTimer nish_panic_index nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.dirty#0
   stackSites=0 stackLocals=0
-  local 859:11 wheel: Http3Wheel (const)
-  local 868:9 steps: i32 (let)
-  local 870:11 slot: i32 (let)
-  callee 870:23 Http3Wheel.take -> @nish.Http3Wheel.take
-  callee 872:13 Http3Server.holds -> @nish.Http3Server.holds
-  callee 875:13 Http3Wheel.file -> @nish.Http3Wheel.file
-  callee 877:13 QuicConnection.handleTimer -> @nish.QuicConnection.handleTimer
-  callee 878:13 Http3Server.dirty -> @nish.Http3Server.dirty
-  callee 881:16 Http3Wheel.take -> @nish.Http3Wheel.take
+  local 869:11 wheel: Http3Wheel (const)
+  local 878:9 steps: i32 (let)
+  local 880:11 slot: i32 (let)
+  callee 880:23 Http3Wheel.take -> @nish.Http3Wheel.take
+  callee 882:13 Http3Server.holds -> @nish.Http3Server.holds
+  callee 885:13 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 887:13 QuicConnection.handleTimer -> @nish.QuicConnection.handleTimer
+  callee 888:13 Http3Server.dirty -> @nish.Http3Server.dirty
+  callee 891:16 Http3Wheel.take -> @nish.Http3Wheel.take
 function Http3Server.timeout(this: Http3Server, now: i64): i32 -> @nish.Http3Server.timeout [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.Http3Wheel.next
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 893:12 Http3Wheel.next -> @nish.Http3Wheel.next
+  callee 903:12 Http3Wheel.next -> @nish.Http3Wheel.next
 module std/net/webtransport.ts [package nish]
 import HttpFields from "nish/net/http-fields" -> struct HttpFields
 import httpFieldBytes from "nish/net/http-fields" -> function @nish.httpFieldBytes
