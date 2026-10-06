@@ -173,6 +173,7 @@ import {
   H3_STREAM_QPACK_DECODER,
   H3_STREAM_QPACK_ENCODER,
   H3_STREAM_WEBTRANSPORT,
+  H3_WT_SESSION_GONE,
   Http3FrameHeader,
   Http3Settings,
   h3CheckWindow,
@@ -1135,6 +1136,13 @@ export class Http3Connection {
     if (!http3IsRequest(session)) {
       return this.fail(H3_ID_ERROR)
     }
+    if (this.goawayId >= 0 && session >= this.goawayId) {
+      // A session at or past this side's GOAWAY can never come (its CONNECT is refused), so its stream is gone.
+      this.abandon(k, id, H3_WT_SESSION_GONE)
+      this.stopReading(k, id, H3_WT_SESSION_GONE)
+      this.rejected = h3Count(this.rejected)
+      return H3_NEED_MORE
+    }
     this.phase[k] = H3_PHASE_WT_HELD
     this.frameLeft[k] = -1
     this.stream = id
@@ -1492,13 +1500,14 @@ export class Http3Connection {
         // draft-02 §4.2: the signal opens a stream, and is nothing anywhere else.
         return this.fail(H3_FRAME_ERROR)
       }
-      // Its "length" is the session ID.
-      if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
-        this.flags[k] = H3_FLAG_COUNTED
+      // Its "length" is the session ID. A stream past this side's GOAWAY counts once it is held, for a session below it.
+      this.flags[k] = this.flags[k] | H3_FLAG_WT
+      const event: i32 = this.held(k, id, length)
+      if (event === H3_STREAM && (this.flags[k] & H3_FLAG_LATE) !== 0) {
+        this.flags[k] = (this.flags[k] & ~H3_FLAG_LATE) | H3_FLAG_COUNTED
         this.live = this.live + 1
       }
-      this.flags[k] = this.flags[k] | H3_FLAG_WT
-      return this.held(k, id, length)
+      return event
     }
     if ((this.flags[k] & H3_FLAG_LATE) !== 0) {
       this.reject(k, id)
@@ -2069,7 +2078,7 @@ export class Http3Connection {
    * session may wait for it.
    */
   awaitsRequest(id: i64): boolean {
-    if (!http3IsRequest(id) || id < 0) {
+    if (!http3IsRequest(id) || id < 0 || (this.goawayId >= 0 && id >= this.goawayId)) {
       return false
     }
     const k: i32 = this.quic.streams.slotOf(id)

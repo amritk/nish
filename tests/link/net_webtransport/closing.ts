@@ -11,6 +11,7 @@ import {
   WT_CAPSULE_CLOSE,
   WT_CAPSULE_DRAIN,
   WT_FIRST_APP_CODE,
+  WT_REASON_MAX,
   WT_SESSION_GONE,
   wtCodeFromHttp3,
   wtCodeToHttp3,
@@ -47,7 +48,7 @@ const serverCloses = (t: Suite): void => {
   p.uni(n64(14), n64(0), bytesOf("half"), false);
   p.settle();
   const reason: u8[] = bytesOf("bye");
-  t.eqI32("a reason past 1,024 bytes is refused", p.wt.close(n64(0), n64(7), wtFill(n32(1025), n32(97)), n32(0), n32(1025)), H3_INVALID);
+  t.eqI32("a reason past 1,024 bytes is refused", p.wt.close(n64(0), n64(7), wtFill(WT_REASON_MAX + 1, n32(97)), n32(0), WT_REASON_MAX + 1), H3_INVALID);
   t.eqI32("close", p.wt.close(n64(0), n64(7), reason, n32(0), toI32(reason.length)), n32(0));
   p.settle();
   t.eqStr("CLOSE_WEBTRANSPORT_SESSION: type 0x2843, length 7, code 7, \"bye\"", toHex(p.capsules(n64(0))), "68430700000007627965");

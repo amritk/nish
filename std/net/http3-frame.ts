@@ -145,6 +145,8 @@ export const H3_REQUEST_INCOMPLETE: i64 = 0x010d
 export const H3_MESSAGE_ERROR: i64 = 0x010e
 export const H3_CONNECT_ERROR: i64 = 0x010f
 export const H3_VERSION_FALLBACK: i64 = 0x0110
+/** WT_SESSION_GONE (draft-ietf-webtrans-http3-02 §4.5): a WebTransport stream of a session that is gone, or can never come. */
+export const H3_WT_SESSION_GONE: i64 = 0x170d7b68
 /** H3_DATAGRAM_ERROR (RFC 9297 §5.2): an HTTP datagram or a capsule that does not parse. */
 export const H3_DATAGRAM_ERROR: i64 = 0x33
 

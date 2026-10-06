@@ -112,6 +112,7 @@ import {
   H3_MESSAGE_ERROR,
   H3_NO_ERROR,
   H3_REQUEST_REJECTED,
+  H3_WT_SESSION_GONE,
   h3Count,
   h3CheckWindow,
   h3Greased,
@@ -131,7 +132,6 @@ import {
   H3_ERROR,
   H3_GOAWAY,
   H3_INVALID,
-  H3_MAX_SESSIONS,
   H3_NEED_MORE,
   H3_REQUEST,
   H3_RESET,
@@ -176,7 +176,7 @@ export const WT_CAPSULE_DRAIN: i64 = 0x78ae
 /** The longest reason a CLOSE capsule carries. */
 export const WT_REASON_MAX: i32 = 1024
 /** A stream of a session that is gone (draft-02 §4.5). */
-export const WT_SESSION_GONE: i64 = 0x170d7b68
+export const WT_SESSION_GONE: i64 = H3_WT_SESSION_GONE
 /** A stream refused because no more may wait for their session (§4.5). */
 export const WT_BUFFERED_STREAM_REJECTED: i64 = 0x3994bd84
 /** The first HTTP/3 code a WebTransport application code maps to. */
@@ -458,7 +458,10 @@ export class WebTransport {
    */
   constructor(config: WebTransportConfig, h3: Http3Connection) {
     const sessions: i32 = h3.config.webtransportSessions
-    webtransportCheckCap("webtransportSessions", sessions, 1, H3_MAX_SESSIONS)
+    // `Http3Connection` already holds the count to `H3_MAX_SESSIONS`; what can be wrong here is a connection with WebTransport off.
+    if (sessions < 1) {
+      panic("WebTransport: the Http3Connection has WebTransport off (webtransportSessions 0)")
+    }
     webtransportCheckCap("maxStreams", config.maxStreams, 1, WT_MAX_CAP)
     webtransportCheckCap("maxPending", config.maxPending, 0, WT_MAX_CAP)
     this.config = config
@@ -789,6 +792,15 @@ export class WebTransport {
   asked(id: i64): i32 {
     const h3: Http3Connection = this.h3
     const f: HttpFields = h3.fields
+    const k: i32 = this.quic.streams.slotOf(id)
+    if (k >= 0 && k < toI32(this.sessionAt.length)) {
+      const stale: i32 = this.sessionAt[k]
+      if (stale >= 0 && stale < toI32(this.sessionIds.length) && this.sessionIds[stale] >= 0) {
+        // QUIC freed this slot under a session's CONNECT stream with no event to say so: let go of
+        // that session now, before the cap below counts it.
+        this.release(stale)
+      }
+    }
     let status: i32 = 0
     const peer = h3.peer
     if (!httpFieldIs(f.protocol, "webtransport")) {
@@ -807,14 +819,8 @@ export class WebTransport {
       this.dropPending(id)
       return H3_NEED_MORE
     }
-    const k: i32 = this.quic.streams.slotOf(id)
     if (k < 0 || k >= toI32(this.sessionAt.length)) {
       return H3_NEED_MORE
-    }
-    const stale: i32 = this.sessionAt[k]
-    if (stale >= 0 && stale < toI32(this.sessionIds.length) && this.sessionIds[stale] >= 0) {
-      // QUIC freed this slot under a session's CONNECT stream with no event to say so: let go of that session now.
-      this.release(stale)
     }
     this.freeCount = this.freeCount - 1
     const s: i32 = this.free[this.freeCount]
@@ -1260,7 +1266,10 @@ export class WebTransport {
     if (k < 0) {
       return H3_CLOSED
     }
-    this.h3.resetStream(id, wtCodeToHttp3(code))
+    const result: i32 = this.h3.resetStream(id, wtCodeToHttp3(code))
+    if (result !== 0) {
+      return result
+    }
     this.settle(k, WT_SENT)
     return 0
   }
@@ -1272,7 +1281,10 @@ export class WebTransport {
     if (k < 0 || (this.streamBits[k] & WT_RECEIVED) !== 0) {
       return H3_CLOSED
     }
-    this.h3.stopStream(id, wtCodeToHttp3(code))
+    const result: i32 = this.h3.stopStream(id, wtCodeToHttp3(code))
+    if (result !== 0) {
+      return result
+    }
     this.settle(k, WT_RECEIVED)
     return 0
   }

@@ -159,6 +159,12 @@ PASS  a stream of a session after GOAWAY is still taken
 PASS  a request past it is refused with H3_REQUEST_REJECTED
 PASS  as is a stream that ends before its first frame
 PASS  two refused
+PASS  a stream naming a session at or past the GOAWAY, which can never come, is refused as gone both ways
+PASS  not counted as work in flight, not left waiting, and not seen by the program
+PASS  a CONNECT on the slot a lost session held is a session, not a 429
+PASS  the connection failed (H3_DATAGRAM_ERROR)
+PASS  a reset of the session's stream is H3_CLOSED
+PASS  and so is STOP_SENDING
 PASS  wtransport's SETTINGS are read: draft-02 and draft-07 WebTransport, HTTP datagrams, extended CONNECT
 PASS  its CONNECT is a session
 PASS  whose fields are wtransport's
@@ -184,4 +190,4 @@ PASS  five connections, one after another, through one slot
 PASS  each with its session, which the layer forgot at the restart
 PASS  resetting the slot keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, a session, datagrams, streams, a close
-webtransport: 186 passed, 0 failed, 0 skipped
+webtransport: 192 passed, 0 failed, 0 skipped

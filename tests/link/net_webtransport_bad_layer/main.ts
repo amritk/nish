@@ -2,7 +2,7 @@
 // `webtransportSessions` 0 would take sessions the connection never
 // advertised, so it is the program's mistake and panics when it is made, with
 //
-//     WebTransport: webtransportSessions of 0, outside 1 to 256
+//     WebTransport: the Http3Connection has WebTransport off (webtransportSessions 0)
 //
 // and exits 1. The link harness compares stdout and the exit code only, so
 // the message is named here rather than pinned.

@@ -29,6 +29,7 @@ import {
   WT_CAPSULE_CLOSE,
   WT_CAPSULE_DRAIN,
   WT_LIMIT,
+  WT_REASON_MAX,
   WT_SESSION_GONE,
 } from "nish/net/webtransport";
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -197,10 +198,10 @@ const capsulesRefused = (t: Suite): void => {
   t.eqStr("a CLOSE shorter than its code resets the CONNECT stream with H3_DATAGRAM_ERROR", `${h3Hex(short.stream(n64(0)).reset)} ${h3Hex(short.stream(n64(0)).stop)}`, want);
   wtLogged(t, "and ends the session", short, [`closed 0 0 ""`]);
   const long: WtPeer = wtReady(new WtLimits());
-  long.capsule(n64(0), wtCapsule(WT_CAPSULE_CLOSE, wtClosePayload(n64(1), wtFill(n32(1025), n32(97)))), false);
+  long.capsule(n64(0), wtCapsule(WT_CAPSULE_CLOSE, wtClosePayload(n64(1), wtFill(WT_REASON_MAX + 1, n32(97)))), false);
   t.eqStr("a CLOSE whose reason is past 1,024 bytes too", `${h3Hex(long.stream(n64(0)).reset)} ${h3Hex(long.stream(n64(0)).stop)}`, want);
   const fits: WtPeer = wtReady(new WtLimits());
-  fits.capsule(n64(0), wtCapsule(WT_CAPSULE_CLOSE, wtClosePayload(n64(1), wtFill(n32(1024), n32(97)))), false);
+  fits.capsule(n64(0), wtCapsule(WT_CAPSULE_CLOSE, wtClosePayload(n64(1), wtFill(WT_REASON_MAX, n32(97)))), false);
   t.ok("one of exactly 1,024 is read", toI32(fits.log.join("|").indexOf(`closed 0 1 "aaaa`)) >= 0 && fits.stream(n64(0)).fin);
   const drain: WtPeer = wtReady(new WtLimits());
   drain.capsule(n64(0), wtCapsule(WT_CAPSULE_DRAIN, bytesOf("x")), false);
@@ -274,6 +275,42 @@ const afterGoaway = (t: Suite): void => {
   p.send(n64(12), wtFill(n32(0), n32(0)), true);
   t.eqI64("as is a stream that ends before its first frame", p.stream(n64(12)).reset, H3_REQUEST_REJECTED);
   t.eqI32("two refused", p.h3.rejected, n32(2));
+  const live: i32 = p.h3.live;
+  p.bidi(n64(16), n64(20), bytesOf("no such session"), false);
+  p.uni(n64(14), n64(24), bytesOf("nor this"), false);
+  t.eqStr("a stream naming a session at or past the GOAWAY, which can never come, is refused as gone both ways", `${h3Hex(p.stream(n64(16)).reset)} ${h3Hex(p.stream(n64(16)).stop)} ${h3Hex(p.stream(n64(14)).stop)}`, `${h3Hex(WT_SESSION_GONE)} ${h3Hex(WT_SESSION_GONE)} ${h3Hex(WT_SESSION_GONE)}`);
+  t.ok("not counted as work in flight, not left waiting, and not seen by the program", p.h3.live === live && p.wt.waiting.count === n32(0) && !p.h3.awaitsRequest(n64(20)) && !wtSaw(p, "stream 16 bidi of 20"));
+};
+
+/** What a slot QUIC freed without an event leaves behind is let go when the slot is next claimed, before any cap counts it. */
+const staleSlot = (t: Suite): void => {
+  const limits = new WtLimits();
+  limits.sessions = n32(1);
+  const p: WtPeer = wtReady(limits);
+  const connect: u8[] = p.connectFrame("/next", "webtransport", "https");
+  const first: u8[] = [connect[0]];
+  p.send(n64(4), first, false);
+  const k: i32 = p.conn.streams.slotOf(n64(4));
+  // As if QUIC had freed session 0's CONNECT slot and given it to stream 4, with no event to say so.
+  p.wt.sessionAt[k] = n32(0);
+  const rest: u8[] = [];
+  for (let j: i32 = 1; j < toI32(connect.length); j++) {
+    rest.push(connect[j]);
+  }
+  p.send(n64(4), rest, false);
+  p.settle();
+  t.eqStr("a CONNECT on the slot a lost session held is a session, not a 429", p.status(n64(4)), ":status: 200; sec-webtransport-http3-draft: draft02");
+};
+
+/** After the connection failed, a stream reset or STOP_SENDING reports it was not sent. */
+const afterFailure = (t: Suite): void => {
+  const p: WtPeer = wtReady(new WtLimits());
+  p.echo = false;
+  p.bidi(n64(4), n64(0), bytesOf("x"), false);
+  p.rawDatagram(wtFill(n32(0), n32(0)));
+  t.ok("the connection failed (H3_DATAGRAM_ERROR)", p.closeCode === H3_DATAGRAM_ERROR);
+  t.eqI32("a reset of the session's stream is H3_CLOSED", p.wt.resetStream(n64(4), n64(1)), H3_CLOSED);
+  t.eqI32("and so is STOP_SENDING", p.wt.stopSending(n64(4), n64(1)), H3_CLOSED);
 };
 
 export const refusalChecks = (t: Suite): void => {
@@ -284,4 +321,6 @@ export const refusalChecks = (t: Suite): void => {
   capsulesRefused(t);
   callsRefused(t);
   afterGoaway(t);
+  staleSlot(t);
+  afterFailure(t);
 };
