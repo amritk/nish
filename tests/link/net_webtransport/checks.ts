@@ -5,7 +5,9 @@
 // `closing.ts`, every refusal in `refusals.ts`, the `wtransport` 0.7 exchange
 // replayed in `golden.ts`, and the arena in `arena.ts`.
 import { Suite } from "nish/testing";
+import { wtArenaChecks } from "./arena";
 import { closingChecks } from "./closing";
+import { refusalChecks } from "./refusals";
 import { sessionChecks } from "./sessions";
 
 /** Every check, in one suite. */
@@ -13,5 +15,7 @@ export const wtChecks = (): i32 => {
   const t = new Suite("webtransport");
   sessionChecks(t);
   closingChecks(t);
+  refusalChecks(t);
+  wtArenaChecks(t);
   return t.done();
 };
