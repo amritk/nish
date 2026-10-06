@@ -8,6 +8,8 @@
 // from the STREAM, RESET_STREAM, STOP_SENDING and CONNECTION_CLOSE frames of
 // every packet the client opens. `loopback.ts` drives the same client over a
 // UDP socket instead.
+import { netAddress, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
+import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import {
   QUIC_FRAME_CONNECTION_CLOSE,
@@ -54,11 +56,25 @@ import {
   Http3Config,
   Http3Connection,
 } from "nish/net/http3";
-import { leafCertificate } from "../net_tls_common/server";
+import { Http3Server } from "nish/net/http3-server";
+import { leafCertificate, leafPrivate } from "../net_tls_common/server";
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcShort } from "../net_quic_conn/client";
+import {
+  CLIENT_SCID,
+  QcClient,
+  qcConnect,
+  qcCrypto,
+  qcDrain,
+  qcExchange,
+  qcFinishedPacket,
+  qcHello,
+  qcInitial,
+  qcReadFlight,
+  qcReceive,
+  qcShort,
+} from "../net_quic_conn/client";
 
 /** The client's three unidirectional streams: control, QPACK encoder, QPACK decoder. */
 export const CLIENT_CONTROL: i64 = 2;
@@ -279,6 +295,33 @@ export class H3AppStream {
   }
 }
 
+/**
+ * The client's socket, when the peer talks to an `Http3Server` over UDP
+ * instead of handing datagrams to a `QuicConnection` itself: every datagram
+ * goes out of it to the server's port, and `H3Peer.pump` runs the server's
+ * loop and reads what comes back.
+ */
+export class H3Wire {
+  server: Http3Server;
+  to: u8[];
+  rx: u8[];
+  from: u8[];
+  meta: i32[];
+  fd: i32 = -1;
+  /** The server's slot the client's connection is in, once accepted. */
+  slot: i32 = -1;
+
+  constructor(server: Http3Server, port: i32) {
+    this.server = server;
+    this.fd = udpBind("127.0.0.1", n32(0), n32(0));
+    this.to = new Array<u8>(18);
+    netAddress(this.to, "127.0.0.1", port);
+    this.rx = new Array<u8>(65536);
+    this.from = new Array<u8>(18);
+    this.meta = [n32(0), n32(0)];
+  }
+}
+
 /** The server, the client, and the application, together. */
 export class H3Peer {
   conn: QuicConnection;
@@ -310,6 +353,8 @@ export class H3Peer {
   writables: i32 = 0;
   /** Whether the application holds every `/hold` response back. */
   hold: boolean = true;
+  /** The client's socket, when the server is an `Http3Server` across loopback. */
+  wire: H3Wire | null = null;
 
   constructor(conn: QuicConnection, h3: Http3Connection, c: QcClient) {
     this.conn = conn;
@@ -560,10 +605,15 @@ export class H3Peer {
 
   /** One 1-RTT packet of `payload` to the server, the server's application run, and what it sends read. */
   packet(payload: u8[]): void {
-    qcExchange(this.conn, this.c, qcShort(this.c, payload));
-    this.serve();
-    qcDrain(this.conn, this.c);
-    this.absorb();
+    const wire: H3Wire | null = this.wire;
+    if (wire !== null) {
+      this.transmit(wire, qcShort(this.c, payload));
+    } else {
+      qcExchange(this.conn, this.c, qcShort(this.c, payload));
+      this.serve();
+      qcDrain(this.conn, this.c);
+      this.absorb();
+    }
     // A QUIC client answers STOP_SENDING with RESET_STREAM.
     if (toI32(this.stopIds.length) > 0) {
       const resets: u8[] = [];
@@ -573,6 +623,70 @@ export class H3Peer {
         quicPushStreamError(resets, id, code, this.offsetOf(id));
       }
       this.packet(resets);
+    }
+  }
+
+  /** Sends `datagram` from the client's socket and runs the loop until both sides are quiet. */
+  transmit(wire: H3Wire, datagram: u8[]): void {
+    udpSendTo(wire.fd, datagram, n32(0), toI32(datagram.length), wire.to, n32(0), n32(0));
+    this.pump(wire);
+  }
+
+  /**
+   * The server's loop and the client's reads, round after round: the server
+   * takes what arrived, runs its timers, serves every ready slot (this
+   * peer's with its application, any other by reading its events) and
+   * flushes; the client reads what came back. The clock moves a millisecond
+   * a round, and up to the server's next timer when nothing moved, so the
+   * pacer lets a long response out.
+   */
+  pump(wire: H3Wire): void {
+    const server: Http3Server = wire.server;
+    for (let round: i32 = 0; round < 2000; round++) {
+      const key: Secret<u8[]> = secret(leafPrivate());
+      const got: i32 = server.receive(this.c.now, key);
+      wipe(key);
+      server.tick(this.c.now);
+      let slot: i32 = server.ready();
+      while (slot >= 0) {
+        if (wire.slot < 0) {
+          wire.slot = slot;
+          this.conn = server.quic(slot);
+          this.h3 = server.connection(slot);
+        }
+        if (slot === wire.slot) {
+          this.serve();
+        } else {
+          let event: i32 = server.connection(slot).next();
+          while (event !== H3_NEED_MORE && event !== H3_ERROR) {
+            event = server.connection(slot).next();
+          }
+        }
+        slot = server.ready();
+      }
+      server.flush(this.c.now);
+      let read: i32 = 0;
+      let n: i32 = udpRecvFrom(wire.fd, wire.rx, n32(0), n32(65536), wire.from, wire.meta);
+      while (n >= 0) {
+        const datagram: u8[] = [];
+        for (let k: i32 = 0; k < n; k++) {
+          datagram.push(wire.rx[k]);
+        }
+        this.c.datagrams.push(datagram);
+        qcReceive(this.c, datagram);
+        read++;
+        n = udpRecvFrom(wire.fd, wire.rx, n32(0), n32(65536), wire.from, wire.meta);
+      }
+      this.absorb();
+      if (got === 0 && read === 0) {
+        const wait: i32 = server.timeout(this.c.now);
+        if (wait < 0 || wait > 50) {
+          return;
+        }
+        this.c.now = this.c.now + toI64(wait > 0 ? wait : n32(1));
+      } else {
+        this.c.now = this.c.now + n64(1);
+      }
     }
   }
 
@@ -760,6 +874,26 @@ export const h3Connect = (limits: H3Limits, config: Http3Config): H3Peer => {
   p.serve();
   qcDrain(conn, c);
   p.absorb();
+  return p;
+};
+
+/**
+ * A client connected to `server`, listening on `port`, across loopback, with
+ * ALPN `limits.alpn`: its handshake datagrams go through the server's
+ * listener and into a slot. Its own streams are not open yet.
+ */
+export const h3WireConnect = (server: Http3Server, port: i32, limits: H3Limits): H3Peer => {
+  const c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
+  const p = new H3Peer(server.quic(n32(0)), server.connection(n32(0)), c);
+  const wire = new H3Wire(server, port);
+  p.wire = wire;
+  const hello: u8[] = h3Hello(limits);
+  c.before = hello;
+  const from: i32 = toI32(c.datagrams.length);
+  p.transmit(wire, qcInitial(c, qcCrypto(n64(0), hello), n32(1200)));
+  if (qcReadFlight(c, from, n32(0))) {
+    p.transmit(wire, qcFinishedPacket(c));
+  }
   return p;
 };
 

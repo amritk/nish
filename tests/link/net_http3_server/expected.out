@@ -1,0 +1,36 @@
+PASS  twenty IDs filed for four slots: each found, and found as its slot
+PASS  an ID never filed is not found
+PASS  nor one of another length
+PASS  half removed: those are gone, and every other is still found across the holes
+PASS  removing an empty entry, or one out of range, changes nothing
+PASS  an ID already filed under another entry stays with that one
+PASS  an ID filed from a window of a datagram, and found from another
+PASS  one longer than 20 bytes is never filed
+PASS  an empty wheel has no timeout
+PASS  three slots filed: the next is 10 ms away
+PASS  one of the two at 1,010 taken out: still 10 ms
+PASS  both: the one at 1,050
+PASS  a deadline already past is due now
+PASS  and is taken from the cursor's bucket
+PASS  leaving none there
+PASS  a deadline past the horizon is filed at the horizon, to be filed again then
+PASS  keeping the deadline it was filed for
+PASS  a slot with no deadline is filed nowhere
+PASS  a deadline two words of buckets away
+PASS  a handshake across loopback, through the listener into a slot
+PASS  a GET: 200, its body, the FIN
+PASS  a POST of 100,000 bytes echoed whole, in GSO flights the client reads back
+PASS  300,000 bytes the pacer lets out over time
+PASS  GOAWAY
+PASS  with every request finished the server closes: H3_NO_ERROR
+PASS  and frees the slot
+PASS  having accepted one connection
+PASS  a client that chose nish-echo is closed with CRYPTO_ERROR no_application_protocol
+PASS  and its slot freed
+PASS  the first takes the one slot
+PASS  the second gets no answer, and is counted
+PASS  five connections through one slot, each closed after its GOAWAY
+PASS  each served its five requests
+PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
+PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
+http3 server: 35 passed, 0 failed, 0 skipped
