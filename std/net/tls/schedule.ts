@@ -18,6 +18,13 @@
  * into one. The traffic key and IV are here too, because T2's record layer
  * needs them and RFC 8448 prints them beside the secrets.
  *
+ * **In place.** Each step also has an `*Into` form that computes in an
+ * `HkdfScratch` the caller owns and writes into the caller's array, and
+ * `TlsTranscript` resets and reads its hash in hashers it allocated once, so
+ * a handshake that keeps its state in a connection slot can run the whole
+ * schedule inside `using a = arena()` blocks and leave the arena where it was
+ * (TLS-3 in `docs/security/tls.md`). The scratch is wiped by every step.
+ *
  * **Secrets are not wiped.** Every function here answers or holds a secret as
  * plain bytes, and each stays in arena memory until that memory is reused.
  * `secureZero`, the store no optimiser removes, is on `main`, and `std/` may
@@ -27,12 +34,16 @@
  * Written from RFC 8446, not ported from another implementation.
  */
 import {
+  HkdfScratch,
+  hkdfExpandLabelInto,
   hkdfExpandLabelSha256,
   hkdfExpandLabelSha384,
+  hkdfExtractInto,
   hkdfExtractSha256,
   hkdfExtractSha384,
 } from "nish/crypto/hkdf"
-import { hmacSha256, hmacSha384 } from "nish/crypto/hmac"
+import { hmacCopySha256, hmacCopySha384, hmacSha256, hmacSha384 } from "nish/crypto/hmac"
+import { tlsHexInto } from "nish/net/tls/codec"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
 
@@ -173,18 +184,38 @@ export const tlsTrafficIv = (suite: i32, secret: u8[]): u8[] => {
  * synthetic `message_hash` message holding its hash.
  *
  * Both hashers are kept so that the field types do not depend on the suite;
- * only the one `hashLength` names is fed.
+ * only the one `hashLength` names is fed. So are a fresh pair, which `reset`
+ * starts the transcript again from, and a twin pair `hashInto` reads the hash
+ * through: all six are made once, so a transcript reused for the next
+ * connection with `reset` allocates nothing that outlives a call.
  */
 export class TlsTranscript {
   /** 32 for SHA-256, 48 for SHA-384. */
   hashLength: i32
   sha256: Sha256
   sha384: Sha384
+  /** Never fed: the initial hash values `reset` copies from. */
+  fresh256: Sha256
+  fresh384: Sha384
+  /** Where `hashInto` finishes a copy of the running hash, so that the transcript goes on. */
+  twin256: Sha256
+  twin384: Sha384
 
   constructor(hashLength: i32) {
     this.hashLength = hashLength
     this.sha256 = new Sha256()
     this.sha384 = new Sha384()
+    this.fresh256 = new Sha256()
+    this.fresh384 = new Sha384()
+    this.twin256 = new Sha256()
+    this.twin384 = new Sha384()
+  }
+
+  /** Starts an empty transcript over the hash `hashLength` names, in the hashers it already has. */
+  reset(hashLength: i32): void {
+    this.hashLength = hashLength
+    hmacCopySha256(this.fresh256, this.sha256)
+    hmacCopySha384(this.fresh384, this.sha384)
   }
 
   /** Absorbs `data[off .. off + len)`, a whole handshake message or part of one. */
@@ -196,12 +227,30 @@ export class TlsTranscript {
     }
   }
 
+  /**
+   * Writes the transcript hash of everything absorbed so far, `hashLength`
+   * bytes, at `out[at]`; the transcript goes on. What the digest allocates
+   * dies with the call. A window outside `out` writes what fits.
+   */
+  hashInto(out: u8[], at: i32): void {
+    let digest: u8[] = []
+    if (this.hashLength === SHA384_SIZE) {
+      hmacCopySha384(this.sha384, this.twin384)
+      digest = this.twin384.digest()
+    } else {
+      hmacCopySha256(this.sha256, this.twin256)
+      digest = this.twin256.digest()
+    }
+    for (let k: i32 = 0; k < toI32(digest.length) && at + k >= 0 && at + k < toI32(out.length); k++) {
+      out[at + k] = digest[k]
+    }
+  }
+
   /** The transcript hash of everything absorbed so far, in a fresh array; the transcript goes on. */
   hash(): u8[] {
-    if (this.hashLength === SHA384_SIZE) {
-      return this.sha384.copy().digest()
-    }
-    return this.sha256.copy().digest()
+    const out: u8[] = new Array<u8>(this.hashLength)
+    this.hashInto(out, TLS_SCHEDULE_FROM)
+    return out
   }
 
   /**
@@ -211,12 +260,170 @@ export class TlsTranscript {
    * absorbs its HelloRetryRequest.
    */
   restartWithMessageHash(): void {
-    const first: u8[] = this.hash()
+    const first: u8[] = new Array<u8>(SHA384_SIZE)
+    this.hashInto(first, TLS_SCHEDULE_FROM)
     const header: u8[] = [toU8(254), toU8(0), toU8(0), toU8(this.hashLength)]
     const headerLength: i32 = 4
-    this.sha256 = new Sha256()
-    this.sha384 = new Sha384()
+    this.reset(this.hashLength)
     this.update(header, TLS_SCHEDULE_FROM, headerLength)
     this.update(first, TLS_SCHEDULE_FROM, this.hashLength)
   }
+}
+
+// ---- The schedule in place -------------------------------------------------------
+
+/** SHA-256 of the empty string, Derive-Secret's context for "derived" (RFC 8446 §7.1). */
+const TLS_EMPTY_HASH_SHA256: string = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+/** SHA-384 of the empty string. */
+const TLS_EMPTY_HASH_SHA384: string =
+  "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b"
+
+/** Writes the hash of the empty string under the hash `hashLength` names, from the constants above, at `out[0]`. */
+const tlsEmptyHashInto = (hashLength: i32, out: u8[]): void => {
+  tlsHexInto(
+    hashLength === SHA384_SIZE ? TLS_EMPTY_HASH_SHA384 : TLS_EMPTY_HASH_SHA256,
+    out,
+    TLS_SCHEDULE_FROM
+  )
+}
+
+/**
+ * `tlsDeriveSecret` in place: Derive-Secret (RFC 8446 §7.1) of `secret` with
+ * `label` and the transcript hash `transcriptHash[hashOff .. hashOff +
+ * hashLength)`, its HashLen bytes written at `out[0]`.
+ */
+export const tlsDeriveSecretInto = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  secret: u8[],
+  label: string,
+  transcriptHash: u8[],
+  hashOff: i32,
+  out: u8[]
+): void => {
+  hkdfExpandLabelInto(
+    kdf,
+    hashLength,
+    secret,
+    label,
+    transcriptHash,
+    hashOff,
+    hashLength,
+    out,
+    TLS_SCHEDULE_FROM,
+    hashLength
+  )
+}
+
+/**
+ * `tlsMasterSecret` in place: HKDF-Extract of HashLen zeros under
+ * `Derive-Secret(handshake, "derived", "")`, written at `out[0]`. The salt is
+ * wiped before it returns.
+ */
+export const tlsMasterSecretInto = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  handshakeSecret: u8[],
+  out: u8[]
+): void => {
+  const empty: u8[] = new Array<u8>(hashLength)
+  tlsEmptyHashInto(hashLength, empty)
+  const salt: u8[] = new Array<u8>(hashLength)
+  tlsDeriveSecretInto(kdf, hashLength, handshakeSecret, "derived", empty, TLS_SCHEDULE_FROM, salt)
+  hkdfExtractInto(kdf, hashLength, salt, new Array<u8>(hashLength), out, TLS_SCHEDULE_FROM)
+  secureZero(salt)
+}
+
+/**
+ * `tlsFinishedVerifyData` in place: the HMAC of `transcriptHash[hashOff ..
+ * hashOff + hashLength)` under `finished_key = Expand-Label(baseKey,
+ * "finished", "", HashLen)` (RFC 8446 §4.4.4), written at `out[at]`. The
+ * finished key is wiped before it returns, and so is the scratch.
+ */
+export const tlsFinishedVerifyDataInto = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  baseKey: u8[],
+  transcriptHash: u8[],
+  hashOff: i32,
+  out: u8[],
+  at: i32
+): void => {
+  const none: u8[] = []
+  const finishedKey: u8[] = new Array<u8>(hashLength)
+  hkdfExpandLabelInto(
+    kdf,
+    hashLength,
+    baseKey,
+    "finished",
+    none,
+    TLS_SCHEDULE_FROM,
+    TLS_SCHEDULE_FROM,
+    finishedKey,
+    TLS_SCHEDULE_FROM,
+    hashLength
+  )
+  if (hashLength === SHA384_SIZE) {
+    kdf.sha384.begin(finishedKey, TLS_SCHEDULE_FROM, hashLength)
+    kdf.sha384.update(transcriptHash, hashOff, hashLength)
+    kdf.sha384.finishInto(out, at)
+  } else {
+    kdf.sha256.begin(finishedKey, TLS_SCHEDULE_FROM, hashLength)
+    kdf.sha256.update(transcriptHash, hashOff, hashLength)
+    kdf.sha256.finishInto(out, at)
+  }
+  secureZero(finishedKey)
+  kdf.wipe()
+}
+
+/**
+ * `tlsTrafficKey` and `tlsTrafficIv` in place: the AEAD key a traffic secret
+ * gives `suite` (RFC 8446 §7.3) written into `key`, which must be the suite's
+ * key length, and its 12-byte IV into `iv`. `false`, writing nothing, for a
+ * suite this module does not negotiate, a secret that is not its hash's
+ * length, or a key or IV array of the wrong length.
+ */
+export const tlsTrafficKeysInto = (
+  kdf: HkdfScratch,
+  suite: i32,
+  secret: u8[],
+  key: u8[],
+  iv: u8[]
+): boolean => {
+  const none: u8[] = []
+  const hashLength: i32 = tlsSuiteHashLength(suite)
+  const keyLength: i32 = tlsSuiteKeyLength(suite)
+  if (
+    hashLength === 0 ||
+    toI32(secret.length) !== hashLength ||
+    toI32(key.length) !== keyLength ||
+    toI32(iv.length) !== TLS_IV_SIZE
+  ) {
+    return false
+  }
+  hkdfExpandLabelInto(
+    kdf,
+    hashLength,
+    secret,
+    "key",
+    none,
+    TLS_SCHEDULE_FROM,
+    TLS_SCHEDULE_FROM,
+    key,
+    TLS_SCHEDULE_FROM,
+    keyLength
+  )
+  hkdfExpandLabelInto(
+    kdf,
+    hashLength,
+    secret,
+    "iv",
+    none,
+    TLS_SCHEDULE_FROM,
+    TLS_SCHEDULE_FROM,
+    iv,
+    TLS_SCHEDULE_FROM,
+    TLS_IV_SIZE
+  )
+  return true
 }

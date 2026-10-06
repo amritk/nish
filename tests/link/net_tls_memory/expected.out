@@ -1,0 +1,26 @@
+PASS  a thousand RFC 8448 handshakes in one restarted slot: every ServerHello and flight record is the trace's
+PASS  and after the first, AES-128-GCM's included, Arena.mark() did not move (52,808 bytes a handshake before the slot)
+PASS  the slot holds the AES-128 schedule while open, and wipeKeys zeroes it, both directions
+PASS  and so does start, when the slot is handed its next connection
+PASS  a 3,000-byte padded ChaCha20 handshake works out: two records, then the close
+PASS  a thousand ChaCha20 handshakes in one slot, every byte the recorded one
+PASS  the first grew the slot's input buffer for its ClientHello (2048 to 4096 bytes)
+PASS  and after it Arena.mark() did not move: the handshake allocates nothing that outlives it
+PASS  a ClientHello with no x25519 share is answered with a HelloRetryRequest
+PASS  a thousand rounds of a HelloRetryRequest, a restart and a plain handshake in one slot: every plain one the recorded bytes
+PASS  and after the first round Arena.mark() did not move
+PASS  an AES-256-GCM-SHA384 handshake works out for the loopback run
+PASS  a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one
+PASS  and after the first Arena.mark() did not move: accept, handshake and close reuse the slot
+PASS  every slot is free again
+PASS  a TlsServer through RFC 8448's handshake holds its secrets in its own arrays
+PASS  and restart zeroes every array of secrets256
+PASS  an AES-256-GCM-SHA384 handshake holds its secrets in secrets384
+PASS  and restart zeroes every array of secrets384
+PASS  a restart with a random that is not 32 bytes fails the server with internal_error
+PASS  and so does one with a key that is not 32 bytes
+PASS  tlsTrafficKeysInto refuses a suite it does not negotiate
+PASS  a secret that is not the suite's hash length
+PASS  and a key array of the wrong length
+PASS  a cleartext protection has no next secret to advance to
+tls memory: 25 passed, 0 failed, 0 skipped
