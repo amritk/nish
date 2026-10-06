@@ -6,12 +6,15 @@
 // hand with OpenSSL 3.0.13 (the PR that added this module has the output):
 //
 //   openssl x509 -inform DER -in golden.der -noout -text
-//     (v3, ecdsa-with-SHA256, CN = localhost, Jan 1 to Jan 15 2026, P-256)
+//     (v3, ecdsa-with-SHA256, CN = localhost, Jan 1 to Jan 15 2026, P-256,
+//     "X509v3 Basic Constraints: critical CA:FALSE" and "X509v3 Key Usage:
+//     critical Digital Signature" since X509-9; that pull request has the output)
 //   openssl x509 -inform DER -in golden.der -out golden.pem
 //   openssl verify -x509_strict -attime 1767312000 -CAfile golden.pem golden.pem
-//     (golden.pem: OK; `-attime` because its fourteen days are in the past)
+//     (golden.pem: OK; `-attime` because its fourteen days are in the past;
+//     OK with `-purpose sslserver` too)
 //   openssl x509 -inform DER -in golden.der -outform DER | sha256sum
-//     (1fbbe716…, GOLDEN_SHA256 below)
+//     (0cd025fe…, GOLDEN_SHA256 below)
 //
 // Then: the golden read back; the calendar at a leap day, at the 2049/2050
 // switch from UTCTime to GeneralizedTime and at the end of 9999; the PEM
@@ -53,6 +56,7 @@ import {
   CA_PRIVATE,
   CA_SEC1_PEM,
   CA_SHA256,
+  GOLDEN_NO_EXTENSIONS,
   GOLDEN_PEM,
   KEY_PKCS8,
   KEY_SEC1,
@@ -82,8 +86,15 @@ const SERIAL: string = "0123456789abcdef0123456789abcdef"
 const NOT_BEFORE: i64 = 1767225600000
 const NOT_AFTER: i64 = 1768435200000
 const GOLDEN: string =
-  "308201223081caa00302010202100123456789abcdef0123456789abcdef300a06082a8648ce3d04030230143112301006035504030c096c6f63616c686f7374301e170d3236303130313030303030305a170d3236303131353030303030305a30143112301006035504030c096c6f63616c686f73743059301306072a8648ce3d020106082a8648ce3d0301070342000460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299300a06082a8648ce3d0403020347003044022041e3cdab220d60d16846a1033a3679f7b0fe54fc74492d8ba72f70817578970302206e840bdbd9eac275a7ca1ca3b39ca8a23e20a06e2d83a076f797bf5a10226506"
-const GOLDEN_SHA256: string = "1fbbe71684cc9e604673b2e291046ab6ea08aee7db4f9859e87cce9418978b82"
+  "308201453081eca00302010202100123456789abcdef0123456789abcdef300a06082a8648ce3d04030230143112301006035504030c096c6f63616c686f7374301e170d3236303130313030303030305a170d3236303131353030303030305a30143112301006035504030c096c6f63616c686f73743059301306072a8648ce3d020106082a8648ce3d0301070342000460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299a320301e300c0603551d130101ff04023000300e0603551d0f0101ff040403020780300a06082a8648ce3d0403020348003045022100a708a4eb8898ea2351c1a76ca2f914da495b96ac707062954b80d61dbee83d0202206457036311441990e3383c81d9cd9ae4f72d634da7b6d89ca2834b13b3bde147"
+const GOLDEN_SHA256: string = "0cd025fe12693ea5e973d39944acb38ee131caee71ed9fe83cfce8a0ddc5ec59"
+
+// The mint's `[3] extensions` (X509-9): basicConstraints, critical, cA FALSE,
+// then keyUsage, critical, digitalSignature alone. Chromium's quiche refuses a
+// certificate with no extensions before it compares a pinned hash.
+const EXTENSIONS: string = "a320301e300c0603551d130101ff04023000300e0603551d0f0101ff040403020780"
+const BASIC_CONSTRAINTS: string = "300c0603551d130101ff04023000"
+const KEY_USAGE: string = "300e0603551d0f0101ff040403020780"
 
 // 2028-02-28T12:30:15Z, two days before 2028-03-01 across a leap day.
 const LEAP: i64 = 1835353815000
@@ -120,6 +131,18 @@ const flipLast = (bytes: u8[]): u8[] => {
     out.push(i === length - 1 ? bytes[i] ^ toU8(1) : bytes[i])
   }
   return out
+}
+
+/** The hex of `bytes[from, to)`, or "null" when that is not inside `bytes`. */
+const sliceHex = (bytes: u8[], from: i32, to: i32): string => {
+  if (from < 0 || to < from || to > toI32(bytes.length)) {
+    return "null"
+  }
+  const out: u8[] = []
+  for (let i: i32 = from; i < to; i++) {
+    out.push(bytes[i])
+  }
+  return toHex(out)
 }
 
 /** Hex DER as a PEM block with `label`. */
@@ -167,6 +190,46 @@ const roundTrips = (notBeforeMs: i64, days: i32): boolean => {
   )
 }
 
+/**
+ * X509-9: the minted certificate ends its TBS with the two critical
+ * extensions, octet for octet, reads back through `x509ParseCertificate`
+ * (whose `x509DerExtensionsSound` holds `[3]` to one non-empty SEQUENCE), and
+ * its SHA-256 is taken over the DER that carries them.
+ */
+const extensionsChecks = (t: Suite, der: u8[] | null): void => {
+  if (der === null) {
+    t.fail("the golden mints", "null")
+    return
+  }
+  const cert: X509Certificate | null = x509ParseCertificate(der)
+  if (cert === null) {
+    t.fail("the minted certificate, extensions and all, parses", "null")
+    return
+  }
+  t.pass("the minted certificate, extensions and all, parses")
+  const tbsLength: i32 = toI32(cert.tbs.length)
+  t.eqStr("its TBS ends with the [3] extensions block", sliceHex(cert.tbs, tbsLength - 34, tbsLength), EXTENSIONS)
+  t.eqStr("[3] EXPLICIT around one SEQUENCE of 30 octets", sliceHex(cert.tbs, tbsLength - 34, tbsLength - 30), "a320301e")
+  t.eqStr(
+    "basicConstraints 2.5.29.19, critical TRUE, cA FALSE left out as the DEFAULT",
+    sliceHex(cert.tbs, tbsLength - 30, tbsLength - 16),
+    BASIC_CONSTRAINTS
+  )
+  t.eqStr(
+    "keyUsage 2.5.29.15, critical TRUE, digitalSignature alone (7 unused bits)",
+    sliceHex(cert.tbs, tbsLength - 16, tbsLength),
+    KEY_USAGE
+  )
+  t.eqStr("they follow the subject public key directly", sliceHex(cert.tbs, tbsLength - 34 - 65, tbsLength - 34), PUBLIC)
+  t.eqStr("the SHA-256 is over the DER that carries them", toHex(x509CertificateHash(der)), GOLDEN_SHA256)
+  t.ok("it verifies under itself, the signature covering them", x509VerifySignature(cert, cert))
+  const old: X509Certificate | null = x509ParseCertificate(fromHex(GOLDEN_NO_EXTENSIONS))
+  t.ok("the mint's old certificate, with no extensions, still parses", old !== null)
+  if (old !== null) {
+    t.ok("its hash is not the new one", toHex(x509CertificateHash(old.der)) !== GOLDEN_SHA256)
+  }
+}
+
 const mintSuite = (): i32 => {
   const t = new Suite("x509 mint")
   const der: u8[] | null = mintAt(NOT_BEFORE, 14)
@@ -175,6 +238,7 @@ const mintSuite = (): i32 => {
   t.eqStr("its PEM is OpenSSL's, byte for byte", derToPem(fromHex(GOLDEN), "CERTIFICATE"), GOLDEN_PEM)
   t.eqStr("milliseconds are rounded down to the second", toHex(mintAt(NOT_BEFORE + 999, 14)), GOLDEN)
   t.eqI32("X509_MAX_DAYS is fourteen", X509_MAX_DAYS, 14)
+  extensionsChecks(t, der)
 
   t.eqStr("days 0 answers null", toHex(mintAt(NOT_BEFORE, 0)), "null")
   t.eqStr("days 15 answers null", toHex(mintAt(NOT_BEFORE, 15)), "null")
@@ -236,7 +300,7 @@ const parseSuite = (): i32 => {
     toHex(golden.subject),
     "30143112301006035504030c096c6f63616c686f7374"
   )
-  t.eqI32("tbs is the second element's 205 bytes", toI32(golden.tbs.length), 205)
+  t.eqI32("tbs is the second element's 239 bytes", toI32(golden.tbs.length), 239)
   t.ok("it verifies under itself", x509VerifySignature(golden, golden))
   const forged: X509Certificate | null = x509ParseCertificate(flipLast(fromHex(GOLDEN)))
   t.ok("with the last byte of s flipped it parses", forged !== null)

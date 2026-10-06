@@ -16,7 +16,7 @@ bytes an attacker supplies:
 | PEM and base64 | `pemToDer`, `x509Base64Decode`, `derToPem`, `x509Base64Encode` |
 | Private keys | `x509ParseP256PrivateKey`, `x509Sec1Key`, `x509Pkcs8Key` |
 | Certificates | `x509ParseCertificate`, `x509ParseChain`, `x509VerifySignature`, `x509CertificateHash` |
-| Minting | `x509MintSelfSigned`, `x509DerTimeAt`, `x509DerUnsignedInteger`, `x509IsUtf8Name` (new) |
+| Minting | `x509MintSelfSigned`, `x509DerTimeAt`, `x509DerUnsignedInteger`, `x509IsUtf8Name` (new), `x509MintExtensions` (X509-9) |
 
 `nish/crypto/p256`'s verify and public-key functions are relied on (a key of
 the wrong length or off the curve, `r` or `s` of 0 or n and above, answer
@@ -65,8 +65,9 @@ or a signature check that passes for bytes nobody signed.
   four PEM files — cut at every length, every DER bit flipped, a random bit of
   every PEM character flipped, and 600 (DER) or 300 (PEM) random edits from a
   fixed xorshift32 seed: an octet set to a random or boundary value (`00 7f 80
-  81 82 84 ff`), deleted or inserted. **25,281 inputs**, about 4.7 s and 10 MB,
-  run by `npm test`. Each input must return without a panic and must not come
+  81 82 84 ff`), deleted or inserted. **25,701 inputs**, about 4.7 s and 10 MB,
+  run by `npm test` (25,281 until X509-9 gave the golden certificate its 34
+  octets of extensions, which the corpus now cuts and flips too). Each input must return without a panic and must not come
   back as something it should not be (the program's header states the four
   properties). Against `main`'s `x509.ts` before this change the same corpus
   also runs clean; the change moves its counts only where the tighter `[3]`
@@ -83,6 +84,8 @@ or a signature check that passes for bytes nobody signed.
 
 Line numbers are those of `std/crypto/x509.ts` at commit 78ba8d8, the commit
 that fixes X509-8; nothing after it in this pull request touches that file.
+X509-9 came later, from the interop job, and its line numbers are those of the
+commit that fixes it.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -94,6 +97,7 @@ that fixes X509-8; nothing after it in this pull request touches that file.
 | X509-6 | Low | `std/crypto/x509.ts:1256` (`x509MintSelfSigned`) | The mint takes its private key and serial from the caller, and this module cannot draw them itself: one call to `crypto.getRandomValues` anywhere in `x509.ts` makes every program that imports it refuse to compile for wasm32. A caller that passes a counter or a fixed serial gets a predictable certificate. | Partly fixed: the module comment's example now draws the key and the serial from `crypto.getRandomValues`, and says why the module does not. **Open**: a helper that draws both (for example `std/crypto/x509-random.ts`, imported only by native programs) is outside this stage's files. |
 | X509-7 | Low | `std/crypto/x509.ts:1022` (`x509ParseP256PrivateKey`) and the arena | Private-key material — the PEM text, the decoded DER, the scalar copies — is never wiped; it stays in arena memory until that memory is reused. The language has no zeroisation primitive a compiler must not elide. | **Closed in this change.** `x509ParseP256PrivateKey` answers `Secret<u8[]> \| null` from `nish:secret` (docs/LANGUAGE.md, "Secrets"), and `x509MintSelfSigned` takes one. The scalar is copied out of the DER once, after the structure is known to be sound, straight into the `Secret` that owns it; a key the public-key check refuses is wiped before `null` is answered; and every block `pemToDer` decoded, of either label and whatever the answer, is wiped before the parse returns — a volatile `llvm.memset` no optimiser removes (`tests/run.js`, "nish:secret: the wipe survives opt -O2"). **What is still not reached**: the PEM text itself, which is the caller's string, and a string in the language is immutable and cannot be zeroed; read a key with `readFileBytesSync` and keep the text short-lived. `crypto_x509`, `_audit`, `_malformed` and `_f64` answer as before through `tests/link/crypto_x509/plain.ts`, which reads the parsed key back through `expose`. |
 | X509-8 | Low | `std/crypto/x509.ts:988` (`x509Pkcs8Key`), reached from `x509ParseP256PrivateKey` | A version-1 OneAsymmetricKey's outer `[1]` public key (RFC 5958 §2, `[1] IMPLICIT BIT STRING`) was stepped over unread: neither checked as a DER BIT STRING nor compared with the key's own point, although `x509ParseP256PrivateKey` promises `null` for "a stored public key that is not the key's own" and the embedded SEC1 key's `[1]` already got both checks. No wrong key could result, since the scalar is what is returned and every public key is derived from it. | Fixed: the field is read as a BIT STRING (unused-bits octet 0, then the point) through `x509DerBitStringOctets` and must equal the 65-octet uncompressed point `p256PublicKey` derives from the scalar. `crypto_x509_audit`, block X509-8: another key's point, an empty `[1]`, 8 and 1 unused bits, and a 64-octet point answer `null`; the key's own point, and no outer key, still read. |
+| X509-9 | Low | `std/crypto/x509.ts:1319` (`x509MintExtensions`), `:1338` (`x509MintSelfSigned`) | The minted certificate carried no `[3] extensions`, on the reading that the W3C WebTransport text requires none. Chromium requires one: `WebTransportFingerprintProofVerifier` parses the certificate with quiche's `CertificateView::ParseSingleCertificate` before it compares the pinned hash, and that answers null when the extensions are absent (`quiche/quic/core/crypto/certificate_view.cc:395`, at quiche 62826931, the revision Chromium 141's `DEPS` pins; every extension must also be `SEQUENCE { OID, BOOLEAN OPTIONAL, OCTET STRING }`, `:413`–`:432`, and subjectAltName is read only when present, `:434`). So Chrome refused every minted certificate with CERTIFICATE_VERIFY_FAILED (alert 46), while an OpenSSL certificate with one extension worked — found by the interop job's `chrome (minted certificate)` lane (#487). Low: the mint's stated purpose, a certificate `serverCertificateHashes` accepts, failed in Chromium, but nothing was accepted that should not have been. | Fixed: the TBS ends with a constant 34-octet block, basicConstraints (critical, cA FALSE) then keyUsage (critical, digitalSignature alone). No subjectAltName, since quiche does not ask for one. Key, signature algorithm and the 14-day cap are unchanged. `crypto_x509`, `extensionsChecks`: the block octet for octet with both critical flags, the round trip through `x509ParseCertificate`, the SHA-256 over the new DER, and the certificate from before the fix still parsing; OpenSSL 3.0.13 prints both extensions and verifies it as its own trust anchor, also with `-purpose sslserver`. The new golden DER and SHA-256 are in `crypto_x509` and `_f64`. Chrome accepting it live is the interop job's to show. |
 
 No finding reached Medium or above: nothing panicked, looped or allocated
 beyond the input's size, and no edited input produced a signature, key or
@@ -103,7 +107,7 @@ certificate that passes for the original.
 
 | Property | Pinned by |
 | --- | --- |
-| No malformed certificate, key, signature or PEM input panics, among 25,281 derived from every valid fixture | `tests/link/crypto_x509_malformed` (the process reaches its summary) |
+| No malformed certificate, key, signature or PEM input panics, among 25,701 derived from every valid fixture | `tests/link/crypto_x509_malformed` (the process reaches its summary) |
 | Every truncated certificate, key and signature DER is refused | `crypto_x509_malformed`: every "DER" line (truncations are counted among the refused) and `crypto_x509` "a truncated DER is refused" |
 | No edit to a certificate's framing, algorithm or signature encoding leaves one that reads back with the original TBS and verifies under the original issuer | `crypto_x509_malformed`: "golden / CA / leaf certificate DER" |
 | DER spells each ECDSA `r || s` one way: no edited ECDSA-Sig-Value decodes to the original's | `crypto_x509_malformed`: "golden / leaf signature DER" |
@@ -115,6 +119,7 @@ certificate that passes for the original.
 | Times must be a real date in RFC 5280's forms | `crypto_x509`: "month 13 is refused", the leap-day, 2049/2050 and 9999 round trips |
 | PEM is RFC 7468's strict form, base64 canonical | `crypto_x509` block "x509 pem", `crypto_x509_audit` block X509-1, X509-2 |
 | Private keys: P-256 only, scalar in [1, n), stored public key the key's own, one key only | `crypto_x509` block "x509 keys", `crypto_x509_audit` block X509-1 |
+| The mint writes basicConstraints (critical, cA FALSE) and keyUsage (critical, digitalSignature), so Chromium's quiche parses it (X509-9) | `crypto_x509` "x509 mint": the extension block octet for octet, read back, hashed |
 | The mint refuses days outside 1..14, times before 1970 or past 9999, empty, long or non-UTF-8 names, zero or over-long serials, and keys outside [1, n) | `crypto_x509` block "x509 mint", `crypto_x509_audit` block X509-3 |
 | What the parsers do not check is stated, and pinned | `crypto_x509_audit` block X509-5 |
 | Answers do not move under `--number-mode f64` | `crypto_x509_f64` |
