@@ -1,0 +1,12 @@
+PASS  aesKeyInto expands a 16-byte key into an 88-word schedule
+PASS  FIPS 197 C.1 (AES-128) under it
+PASS  aesKeyInto expands a 32-byte key into a 120-word schedule
+PASS  FIPS 197 C.3 (AES-256) under it
+PASS  the schedule and H are aesKey's, word for word, for both lengths
+PASS  an AES-GCM seal under it is the one under aesKey's
+PASS  a hundred expansions of each inside `using a = arena()` leave Arena.mark() where it was
+PASS  a 24-byte key is refused
+PASS  so is an empty one
+PASS  a 16-byte key into a 120-word schedule is refused
+PASS  and a 32-byte key into an 88-word one
+aes into: 11 passed, 0 failed, 0 skipped
