@@ -95,6 +95,8 @@ PASS  so a 17th is refused
 PASS  an ACK of the oldest frees its slot for the next
 PASS  evicting gives up the oldest still in flight, packet 1
 PASS  out of flight, with no congestion event
+PASS  reset empties every space and puts the estimate and the window back
+PASS  so the next connection records its packet 0 again, in slot 0
 PASS  the server's first flight goes out, and the network loses it
 PASS  with no RTT sample, its probe timeout is 333 + 4 × 166 ms after it
 PASS  there is room under the amplification limit for a probe
@@ -108,7 +110,7 @@ PASS  four chunks go in four packets
 PASS  an ACK of the last three loses the first, three below the largest
 PASS  the next packet carries its bytes again, at their offset
 PASS  the stream keeps its sent bytes while a packet in flight carries them
-PASS  once every one is acknowledged it lets them go
+PASS  once every one is acknowledged it lets them go, and their room in the buffer
 PASS  an ACK of the later packet alone sets a loss timer 45 ms after the earlier was sent
 PASS  RTT: latest 40, smoothed 40, rttvar 20
 PASS  at it the earlier packet is lost
@@ -129,7 +131,7 @@ PASS  after a handful of probes: the backoff keeps a black hole cheap
 PASS  a lost RETIRE_CONNECTION_ID goes again
 PASS  once, even when two packets in flight carried it
 PASS  after STOP_SENDING the stream's lost data is not sent again
-PASS  so the probe is a PING
+PASS  the probe carries the RESET_STREAM that answers STOP_SENDING (RFC 9000 §3.5), sent until acknowledged
 PASS  a lost PATH_RESPONSE is not sent again (RFC 9000 §13.3): the probe is a PING
 PASS  a lost NEW_CONNECTION_ID for an ID the client retired is not sent again; its replacement is
 PASS  a 2400-byte window lets two datagrams go, and holds the rest
@@ -144,4 +146,4 @@ PASS  ten full datagrams go at once: the initial window's burst
 PASS  the next waits 4 ms
 PASS  not a millisecond less
 PASS  and then goes
-quic recovery: 146 passed, 0 failed, 0 skipped
+quic recovery: 148 passed, 0 failed, 0 skipped

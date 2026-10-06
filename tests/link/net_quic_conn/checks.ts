@@ -9,7 +9,7 @@ import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_S
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { CLIENT_ODCID, CLIENT_SCID, QC_T0, QcClient, qcConnect, qcHello, qcParams } from "./client";
-import { QcFound, qcDefaultConfig, qcFind, qcFrameTypes, qcServer } from "./common";
+import { QcFound, qcDefaultConfig, qcFind, qcFoundCid, qcFrameTypes, qcServer } from "./common";
 import { quicConnRefusalChecks } from "./refusals";
 import { quicConnDataChecks } from "./data";
 
@@ -92,8 +92,8 @@ const handshakeChecks = (t: Suite): void => {
     "30 24 24 24"
   );
   const ncid: QcFound = qcFind(c.appPayloads, QUIC_FRAME_NEW_CONNECTION_ID);
-  t.ok("the first new ID is sequence 1, eight bytes, with a 16-byte reset token", ncid.found && ncid.frame.value === n64(1) && toI32(ncid.frame.connectionId.length) === 8);
-  t.ok("the server owns its new IDs", conn.ownsConnectionId(ncid.frame.connectionId) && conn.ownsConnectionId(c.serverScid));
+  t.ok("the first new ID is sequence 1, eight bytes, with a 16-byte reset token", ncid.found && ncid.frame.value === n64(1) && toI32(qcFoundCid(ncid).length) === 8);
+  t.ok("the server owns its new IDs", conn.ownsConnectionId(qcFoundCid(ncid)) && conn.ownsConnectionId(c.serverScid));
   t.ok("but no longer the original DCID", !conn.ownsConnectionId(fromHex(CLIENT_ODCID)));
   t.eqI32("the table holds four active local IDs", conn.cids.activeLocal(), n32(4));
   t.ok("nothing more is due", conn.takeDatagram(QC_T0) === null);

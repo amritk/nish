@@ -27,7 +27,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { QUIC_MAX_VARINT } from "nish/net/quic-packet"
-import { quicPushAck } from "nish/net/quic-frame"
+import { quicPushAck, quicPutAck } from "nish/net/quic-frame"
 
 /** The most disjoint ranges a `QuicAckRanges` keeps, and so the most an ACK frame it writes lists. */
 export const QUIC_ACK_MAX_RANGES: i32 = 32
@@ -177,5 +177,30 @@ export class QuicAckRanges {
     }
     this.ackPending = false
     return true
+  }
+
+  /**
+   * Writes the ACK frame `pushAck` appends into `buf` at `at`, before `end`,
+   * and clears `ackPending`. Answers the offset past it, or -1, writing
+   * nothing and leaving `ackPending` as it was, when nothing has been
+   * received or the frame does not fit.
+   */
+  putAck(buf: u8[], at: i32, end: i32, ackDelay: i64): i32 {
+    if (this.count === 0) {
+      return -1
+    }
+    const next: i32 = quicPutAck(buf, at, end, this.ranges, this.count, ackDelay)
+    if (next >= 0) {
+      this.ackPending = false
+    }
+    return next
+  }
+
+  /** Forgets every packet number, for a connection slot reused for another peer. */
+  clear(): void {
+    this.largest = -1
+    this.floor = -1
+    this.count = 0
+    this.ackPending = false
   }
 }

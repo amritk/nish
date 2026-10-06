@@ -92,7 +92,7 @@ PASS  an application close from the client drains too, keeping its code
 PASS  and the application cannot close it again
 PASS  release() discards the 1-RTT keys
 PASS  wiping the key bytes
-PASS  and both sides' stateless reset tokens, four issued and the client's one beside its first ID
+PASS  and every slot's stateless reset token: the four the server issued and the client's one
 PASS  and TLS's expected client Finished and the encoded transport parameters, which carry a token
 PASS  and the connection sends nothing more
 PASS  a first Initial in a datagram under 1200 bytes
@@ -134,6 +134,11 @@ PASS  nor does it sign anything
 PASS  the caller's entropy is wiped once it is copied
 PASS  limits outside what QuicServerConfig allows are refused the same way
 PASS  so is a negative idle timeout
+PASS  as are more than 1024 unidirectional or local streams, fewer than none, a DATAGRAM frame past 1500, or 2 GiB of stream buffers, past QUIC_CONN_MAX_STREAM_BUFFERS, with no buffers made
+PASS  each retired ID is replaced until 64 have been issued
+PASS  the client still holds four
+PASS  past that, a retired ID is not replaced
+PASS  and the connection carries on
 PASS  a 1-RTT packet with no frames is PROTOCOL_VIOLATION (§12.4): the connection closes
 PASS  a 1-RTT packet with no frames is PROTOCOL_VIOLATION (§12.4): and says so
 PASS  an unknown frame type is FRAME_ENCODING_ERROR: the connection closes
@@ -201,4 +206,4 @@ PASS  closed in an Initial and a Handshake packet
 PASS  each naming the frame
 PASS  while TLS waits for the signature nothing is sent
 PASS  an empty signature fails TLS with internal_error
-quic connection: 203 passed, 0 failed, 0 skipped
+quic connection: 208 passed, 0 failed, 0 skipped

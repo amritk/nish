@@ -30,6 +30,7 @@ import { QUIC_ACK_MAX_RANGES, QuicAckRanges } from "nish/net/quic-conn-ack";
 import { QuicCidEntry, QuicCidTable } from "nish/net/quic-conn-cid";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
+import { partsSlotChecks } from "./slots";
 
 /** 2^62 − 1, as a product: an `i64` literal past 2^53 is refused. */
 const MAX_VARINT: i64 = 1073741824 * 4294967296 - 1;
@@ -239,7 +240,7 @@ const partsAckChecks = (t: Suite): void => {
 
 /** The connection-ID table. */
 const partsCidChecks = (t: Suite): void => {
-  const ids = new QuicCidTable(n64(2));
+  const ids = new QuicCidTable(n64(2), n32(4));
   const none: u8[] = [];
   const c0: u8[] = fromHex("0000000000000000");
   const c1: u8[] = fromHex("1111111111111111");
@@ -253,18 +254,18 @@ const partsCidChecks = (t: Suite): void => {
     next.announced = true;
   }
   t.ok("and once it is, none is left", ids.nextUnannounced() === null);
-  t.eqI64("retiring a sequence number never issued is PROTOCOL_VIOLATION", ids.retireLocal(n64(2), c0), QUIC_ERROR_PROTOCOL_VIOLATION);
-  t.eqI64("so is a negative one", ids.retireLocal(n64(-1), c0), QUIC_ERROR_PROTOCOL_VIOLATION);
+  t.eqI64("retiring a sequence number never issued is PROTOCOL_VIOLATION", ids.retireLocal(n64(2), c0, n32(0), n32(8)), QUIC_ERROR_PROTOCOL_VIOLATION);
+  t.eqI64("so is a negative one", ids.retireLocal(n64(-1), c0, n32(0), n32(8)), QUIC_ERROR_PROTOCOL_VIOLATION);
   t.eqI64(
     "so is retiring the ID the packet was sent to (RFC 9000 §19.16)",
-    ids.retireLocal(n64(1), c1),
+    ids.retireLocal(n64(1), c1, n32(0), n32(8)),
     QUIC_ERROR_PROTOCOL_VIOLATION
   );
-  t.eqI64("retiring another is fine", ids.retireLocal(n64(1), c0), QUIC_ERROR_NO_ERROR);
+  t.eqI64("retiring another is fine", ids.retireLocal(n64(1), c0, n32(0), n32(8)), QUIC_ERROR_NO_ERROR);
   t.ok("and it is no longer owned", !ids.ownsLocal(c1) && ids.activeLocal() === 1);
-  t.eqI64("retiring it twice is fine too", ids.retireLocal(n64(1), c1), QUIC_ERROR_NO_ERROR);
+  t.eqI64("retiring it twice is fine too", ids.retireLocal(n64(1), c1, n32(0), n32(8)), QUIC_ERROR_NO_ERROR);
 
-  const peer = new QuicCidTable(n64(2));
+  const peer = new QuicCidTable(n64(2), n32(4));
   t.eqStr("before the peer gave an ID there is none to send to", toHex(peer.currentPeer()), "");
   t.eqI64("the peer's first SCID is sequence 0", peer.addPeer(n64(0), n64(0), fromHex("aa"), none), QUIC_ERROR_NO_ERROR);
   t.eqI64("a NEW_CONNECTION_ID adds sequence 1", peer.addPeer(n64(1), n64(0), fromHex("bb"), tok), QUIC_ERROR_NO_ERROR);
@@ -274,7 +275,7 @@ const partsCidChecks = (t: Suite): void => {
   t.eqI64("an ID under a second sequence number is too", peer.addPeer(n64(2), n64(0), fromHex("bb"), tok), QUIC_ERROR_PROTOCOL_VIOLATION);
   t.ok("two are active, and the oldest is the one sent to", peer.activePeer() === 2 && toHex(peer.currentPeer()) === "aa");
   const sentTo: string = toHex(peer.currentPeer());
-  const owedBefore: i32 = toI32(peer.retirePending.length);
+  const owedBefore: i32 = peer.retireCount;
   t.eqI64(
     "a third active ID passes the limit of 2: CONNECTION_ID_LIMIT_ERROR",
     peer.addPeer(n64(2), n64(0), fromHex("dd"), tok),
@@ -282,11 +283,11 @@ const partsCidChecks = (t: Suite): void => {
   );
   t.ok(
     "and the refused ID is not added: two are still active, with nothing more owed",
-    peer.activePeer() === 2 && toI32(peer.retirePending.length) === owedBefore
+    peer.activePeer() === 2 && peer.retireCount === owedBefore
   );
   t.eqStr("and the ID sent to is unchanged", toHex(peer.currentPeer()), sentTo);
 
-  const moving = new QuicCidTable(n64(2));
+  const moving = new QuicCidTable(n64(2), n32(4));
   moving.addPeer(n64(0), n64(0), fromHex("aa"), none);
   moving.addPeer(n64(1), n64(0), fromHex("bb"), tok);
   t.eqI64("Retire Prior To 2 retires both older IDs", moving.addPeer(n64(2), n64(2), fromHex("cc"), tok), QUIC_ERROR_NO_ERROR);
@@ -299,13 +300,13 @@ const partsCidChecks = (t: Suite): void => {
   moving.addPeer(n64(5), n64(5), fromHex("e5"), tok);
   t.eqI64("four queued retirements, twice the limit, are allowed", moving.addPeer(n64(6), n64(6), fromHex("e6"), tok), QUIC_ERROR_NO_ERROR);
   const before: string = toHex(moving.currentPeer());
-  const owed: i32 = toI32(moving.retirePending.length);
+  const owed: i32 = moving.retireCount;
   t.eqI64(
     "a fifth is CONNECTION_ID_LIMIT_ERROR (RFC 9000 §5.1.2)",
     moving.addPeer(n64(7), n64(7), fromHex("e7"), tok),
     QUIC_ERROR_CONNECTION_ID_LIMIT
   );
-  t.ok("and the refused frame leaves the table within its bounds", toI64(moving.activePeer()) <= n64(2) && toI32(moving.retirePending.length) === owed);
+  t.ok("and the refused frame leaves the table within its bounds", toI64(moving.activePeer()) <= n64(2) && moving.retireCount === owed);
   t.eqStr("with the ID sent to unchanged", toHex(moving.currentPeer()), before);
   moving.prune();
   t.eqStr("prune leaves it as it was", toHex(moving.currentPeer()), "e6");
@@ -317,5 +318,6 @@ export const quicConnPartsChecks = (): i32 => {
   partsParamChecks(t);
   partsAckChecks(t);
   partsCidChecks(t);
+  partsSlotChecks(t);
   return t.done();
 };

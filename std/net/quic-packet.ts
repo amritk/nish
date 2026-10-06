@@ -35,6 +35,15 @@
  * builders, whose inputs come from this side rather than from a peer, answer
  * `null` for an argument out of range.
  *
+ * **In place.** For a connection that allocates nothing per packet,
+ * `quicParseHeaderInto` reads a header as windows into the datagram, the
+ * `quicPut*` builders write a header into a caller's buffer, `quicSealInPlace`
+ * seals a packet where it lies, and `quicUnprotectHeader` and
+ * `quicDecryptPayload` open one storing only numbers into the `QuicPacket`
+ * they are given. The AEADs allocate; `quicSealInPlace` releases what they
+ * allocated before it answers, and the opening halves answer arrays the
+ * caller releases, inside its own arena block.
+ *
  * **Coalesced packets** (RFC 9000 §12.2) are split by length: a long header
  * carries its own Length, and `QuicHeader.end` is where the next packet in the
  * datagram starts. A short header has none, so it runs to the datagram's end.
@@ -183,6 +192,18 @@ export class QuicHeader {
   pnOffset: i32 = 0
   /** One past the packet's last byte, which is where the next coalesced packet starts. */
   end: i32 = 0
+  /**
+   * Where `dcid`, `scid` and `token` sit in the datagram, as far as the
+   * parse got. `quicParseHeaderInto` fills these and nothing else, so a
+   * connection reads a header with no copy; `quicParseHeader` copies the
+   * windows out into the arrays above.
+   */
+  dcidStart: i32 = 0
+  dcidLength: i32 = 0
+  scidStart: i32 = 0
+  scidLength: i32 = 0
+  tokenStart: i32 = 0
+  tokenLength: i32 = 0
 
   constructor() {
     this.dcid = []
@@ -318,16 +339,16 @@ export const quicVarintSize = (value: i64): i32 => {
 }
 
 /**
- * Appends `value` to `out` as a variable-length integer of exactly `size`
- * bytes, which may be longer than it needs (RFC 9000 §16 allows that, and a
- * Length field written before its packet is complete uses it). Answers
- * `false`, appending nothing, when `size` is not 1, 2, 4 or 8 or is too short
- * for `value`.
+ * Writes `value` into `buf[at .. at + size)` as a variable-length integer of
+ * exactly `size` bytes, which may be longer than it needs (RFC 9000 §16
+ * allows that, and a Length field written before its packet is complete uses
+ * it). Answers `at + size`, or -1, writing nothing, when `size` is not 1, 2,
+ * 4 or 8, is too short for `value`, or does not fit in `buf` from `at`.
  */
-export const quicVarintPushSized = (out: u8[], value: i64, size: i32): boolean => {
+export const quicVarintPut = (buf: u8[], at: i32, value: i64, size: i32): i32 => {
   const needed: i32 = quicVarintSize(value)
-  if (needed === 0 || size < needed) {
-    return false
+  if (needed === 0 || size < needed || at < 0 || at > toI32(buf.length) - size) {
+    return -1
   }
   // The two-bit prefix is log2 of the size: 0, 1, 2 or 3 for 1, 2, 4 or 8 bytes.
   let prefix: i32 = 0
@@ -338,17 +359,44 @@ export const quicVarintPushSized = (out: u8[], value: i64, size: i32): boolean =
   } else if (size === 8) {
     prefix = 3
   } else if (size !== 1) {
-    return false
+    return -1
   }
-  for (let k: i32 = size - 1; k >= 0; k -= 1) {
-    const shift: i64 = toI64(k) * 8
+  for (let k: i32 = 0; k < size; k += 1) {
+    const shift: i64 = toI64(size - 1 - k) * 8
     let b: i32 = toI32((value >> shift) & 255)
-    if (k === size - 1) {
+    if (k === 0) {
       b = b | (prefix << 6)
     }
-    out.push(toU8(b))
+    if (at + k < toI32(buf.length)) {
+      buf[at + k] = toU8(b)
+    }
   }
-  return true
+  return at + size
+}
+
+/**
+ * Appends `count` zero bytes to `out`, which a writer then fills in place
+ * with the `put` form of what it appends: one encoder serves both.
+ */
+export const quicPacketGrow = (out: u8[], count: i32): void => {
+  for (let k: i32 = 0; k < count; k += 1) {
+    out.push(toU8(0))
+  }
+}
+
+/**
+ * Appends `value` to `out` as a variable-length integer of exactly `size`
+ * bytes, as `quicVarintPut` writes it. Answers `false`, appending nothing,
+ * when `size` is not 1, 2, 4 or 8 or is too short for `value`.
+ */
+export const quicVarintPushSized = (out: u8[], value: i64, size: i32): boolean => {
+  const needed: i32 = quicVarintSize(value)
+  if (needed === 0 || size < needed || (size !== 1 && size !== 2 && size !== 4 && size !== 8)) {
+    return false
+  }
+  const at: i32 = toI32(out.length)
+  quicPacketGrow(out, size)
+  return quicVarintPut(out, at, value, size) >= 0
 }
 
 /**
@@ -450,27 +498,154 @@ export const quicPacketNumberDecode = (largestPn: i64, truncatedPn: i64, pnLengt
 /** Whether `cid` is a connection ID version 1 allows: 0 to 20 bytes. */
 const quicPacketCidFits = (cid: u8[]): boolean => toI32(cid.length) <= QUIC_MAX_CID_LENGTH
 
-/**
- * Appends what every version 1 long header starts with (RFC 9000 §17.2): the
- * first byte, the version, and each connection ID after its length.
- */
-const quicPacketPushLongPrefix = (out: u8[], first: i32, dcid: u8[], scid: u8[]): void => {
-  out.push(toU8(first))
-  out.push(toU8(0))
-  out.push(toU8(0))
-  out.push(toU8(0))
-  out.push(toU8(toI32(QUIC_VERSION_1)))
-  out.push(toU8(toI32(dcid.length)))
-  quicPacketAppend(out, dcid)
-  out.push(toU8(toI32(scid.length)))
-  quicPacketAppend(out, scid)
+/** Whether `length` bytes from the start of `cid` are a connection ID version 1 allows: 0 to 20 bytes, inside `cid`. */
+const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
+  length >= 0 && length <= QUIC_MAX_CID_LENGTH && length <= toI32(cid.length)
+
+/** Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows. */
+export const quicPacketCopy = (buf: u8[], at: i32, bytes: u8[], from: i32, length: i32): void => {
+  for (let k: i32 = 0; k < length; k += 1) {
+    if (at + k >= 0 && at + k < toI32(buf.length) && from + k >= 0 && from + k < toI32(bytes.length)) {
+      buf[at + k] = bytes[from + k]
+    }
+  }
 }
 
-/** Appends the low `pnLength` bytes of `packetNumber`, big-endian. */
-const quicPacketPushNumber = (out: u8[], packetNumber: i64, pnLength: i32): void => {
-  for (let k: i32 = pnLength - 1; k >= 0; k -= 1) {
-    out.push(toU8(toI32((packetNumber >> (toI64(k) * 8)) & 255)))
+/** Writes one byte at `at` when it is inside `buf`. */
+const quicPacketPutByte = (buf: u8[], at: i32, value: i32): void => {
+  if (at >= 0 && at < toI32(buf.length)) {
+    buf[at] = toU8(value)
   }
+}
+
+/**
+ * Writes what every version 1 long header starts with (RFC 9000 §17.2) into
+ * `buf` at `at`: the first byte, the version, and each connection ID (the
+ * first `dcidLength` and `scidLength` bytes of `dcid` and `scid`) after its
+ * length. Answers the offset past it; the caller has checked that it fits.
+ */
+const quicPacketPutLongPrefix = (
+  buf: u8[],
+  at: i32,
+  first: i32,
+  dcid: u8[],
+  dcidLength: i32,
+  scid: u8[],
+  scidLength: i32
+): i32 => {
+  const version: i32 = toI32(QUIC_VERSION_1)
+  quicPacketPutByte(buf, at, first)
+  quicPacketPutByte(buf, at + 1, (version >> 24) & 255)
+  quicPacketPutByte(buf, at + 2, (version >> 16) & 255)
+  quicPacketPutByte(buf, at + 3, (version >> 8) & 255)
+  quicPacketPutByte(buf, at + 4, version & 255)
+  quicPacketPutByte(buf, at + 5, dcidLength)
+  quicPacketCopy(buf, at + 6, dcid, 0, dcidLength)
+  const scidAt: i32 = at + 6 + dcidLength
+  quicPacketPutByte(buf, scidAt, scidLength)
+  quicPacketCopy(buf, scidAt + 1, scid, 0, scidLength)
+  return scidAt + 1 + scidLength
+}
+
+/** Writes the low `pnLength` bytes of `packetNumber` into `buf` at `at`, big-endian, and answers the offset past them. */
+const quicPacketPutNumber = (buf: u8[], at: i32, packetNumber: i64, pnLength: i32): i32 => {
+  for (let k: i32 = 0; k < pnLength; k += 1) {
+    if (at + k >= 0 && at + k < toI32(buf.length)) {
+      buf[at + k] = toU8(toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255))
+    }
+  }
+  return at + pnLength
+}
+
+/**
+ * The size of the long header `quicPutLongHeader` writes for these
+ * arguments, or 0 when it would refuse them (see `quicLongHeader`).
+ */
+export const quicLongHeaderSize = (
+  type: i32,
+  dcidLength: i32,
+  scidLength: i32,
+  tokenLength: i32,
+  packetNumber: i64,
+  pnLength: i32,
+  payloadLength: i32
+): i32 => {
+  if (
+    (type !== QUIC_PACKET_INITIAL && type !== QUIC_PACKET_ZERO_RTT && type !== QUIC_PACKET_HANDSHAKE) ||
+    (type !== QUIC_PACKET_INITIAL && tokenLength !== 0) ||
+    dcidLength < 0 ||
+    dcidLength > QUIC_MAX_CID_LENGTH ||
+    scidLength < 0 ||
+    scidLength > QUIC_MAX_CID_LENGTH ||
+    tokenLength < 0 ||
+    pnLength < 1 ||
+    pnLength > 4 ||
+    packetNumber < 0 ||
+    packetNumber > QUIC_MAX_VARINT ||
+    payloadLength < 0 ||
+    payloadLength > QUIC_MAX_LENGTH - pnLength - QUIC_AEAD_TAG_SIZE
+  ) {
+    return 0
+  }
+  const token: i32 = type === QUIC_PACKET_INITIAL ? quicVarintSize(toI64(tokenLength)) + tokenLength : 0
+  return 7 + dcidLength + scidLength + token + 2 + pnLength
+}
+
+/**
+ * Writes into `buf` at `at` the unprotected long header `quicLongHeader`
+ * answers, with the connection IDs the first `dcidLength` and `scidLength`
+ * bytes of `dcid` and `scid`, and answers the offset past it: where the
+ * payload goes. Answers -1, writing nothing, where `quicLongHeader` answers
+ * `null`, and for a header that does not fit in `buf` from `at`.
+ */
+export const quicPutLongHeader = (
+  buf: u8[],
+  at: i32,
+  type: i32,
+  dcid: u8[],
+  dcidLength: i32,
+  scid: u8[],
+  scidLength: i32,
+  token: u8[],
+  packetNumber: i64,
+  pnLength: i32,
+  payloadLength: i32
+): i32 => {
+  const tokenLength: i32 = toI32(token.length)
+  const size: i32 = quicLongHeaderSize(
+    type,
+    dcidLength,
+    scidLength,
+    tokenLength,
+    packetNumber,
+    pnLength,
+    payloadLength
+  )
+  if (
+    size === 0 ||
+    !quicPacketCidWindowFits(dcid, dcidLength) ||
+    !quicPacketCidWindowFits(scid, scidLength) ||
+    at < 0 ||
+    at > toI32(buf.length) - size
+  ) {
+    return -1
+  }
+  let cursor: i32 = quicPacketPutLongPrefix(
+    buf,
+    at,
+    (type << 4) | (pnLength - 1) | 0xc0,
+    dcid,
+    dcidLength,
+    scid,
+    scidLength
+  )
+  if (type === QUIC_PACKET_INITIAL) {
+    cursor = quicVarintPut(buf, cursor, toI64(tokenLength), quicVarintSize(toI64(tokenLength)))
+    quicPacketCopy(buf, cursor, token, 0, tokenLength)
+    cursor = cursor + tokenLength
+  }
+  cursor = quicVarintPut(buf, cursor, toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE), 2)
+  return quicPacketPutNumber(buf, cursor, packetNumber, pnLength)
 }
 
 /**
@@ -497,30 +672,74 @@ export const quicLongHeader = (
   pnLength: i32,
   payloadLength: i32
 ): u8[] | null => {
-  const tokenLength: i32 = toI32(token.length)
+  const dcidLength: i32 = toI32(dcid.length)
+  const scidLength: i32 = toI32(scid.length)
+  const size: i32 = quicLongHeaderSize(
+    type,
+    dcidLength,
+    scidLength,
+    toI32(token.length),
+    packetNumber,
+    pnLength,
+    payloadLength
+  )
+  if (size === 0) {
+    return null
+  }
+  const out: u8[] = new Array<u8>(size)
   if (
-    (type !== QUIC_PACKET_INITIAL && type !== QUIC_PACKET_ZERO_RTT && type !== QUIC_PACKET_HANDSHAKE) ||
-    (type !== QUIC_PACKET_INITIAL && tokenLength !== 0) ||
-    !quicPacketCidFits(dcid) ||
-    !quicPacketCidFits(scid) ||
+    quicPutLongHeader(
+      out,
+      0,
+      type,
+      dcid,
+      dcidLength,
+      scid,
+      scidLength,
+      token,
+      packetNumber,
+      pnLength,
+      payloadLength
+    ) < 0
+  ) {
+    return null
+  }
+  return out
+}
+
+/**
+ * Writes into `buf` at `at` the unprotected short header `quicShortHeader`
+ * answers, with the Destination Connection ID the first `dcidLength` bytes of
+ * `dcid`, and answers the offset past it. Answers -1, writing nothing, where
+ * `quicShortHeader` answers `null`, and for a header that does not fit.
+ */
+export const quicPutShortHeader = (
+  buf: u8[],
+  at: i32,
+  dcid: u8[],
+  dcidLength: i32,
+  spin: boolean,
+  keyPhase: boolean,
+  packetNumber: i64,
+  pnLength: i32
+): i32 => {
+  const size: i32 = 1 + dcidLength + pnLength
+  if (
+    !quicPacketCidWindowFits(dcid, dcidLength) ||
     pnLength < 1 ||
     pnLength > 4 ||
     packetNumber < 0 ||
     packetNumber > QUIC_MAX_VARINT ||
-    payloadLength < 0 ||
-    payloadLength > QUIC_MAX_LENGTH - pnLength - QUIC_AEAD_TAG_SIZE
+    at < 0 ||
+    at > toI32(buf.length) - size
   ) {
-    return null
+    return -1
   }
-  const out: u8[] = []
-  quicPacketPushLongPrefix(out, (type << 4) | (pnLength - 1) | 0xc0, dcid, scid)
-  if (type === QUIC_PACKET_INITIAL) {
-    quicVarintPush(out, toI64(tokenLength))
-    quicPacketAppend(out, token)
-  }
-  quicVarintPushSized(out, toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE), 2)
-  quicPacketPushNumber(out, packetNumber, pnLength)
-  return out
+  const spinBit: i32 = spin ? 0x20 : 0
+  const keyPhaseBit: i32 = keyPhase ? 0x04 : 0
+  buf[at] = toU8((pnLength - 1) | spinBit | keyPhaseBit | 0x40)
+  quicPacketCopy(buf, at + 1, dcid, 0, dcidLength)
+  return quicPacketPutNumber(buf, at + 1 + dcidLength, packetNumber, pnLength)
 }
 
 /**
@@ -537,66 +756,66 @@ export const quicShortHeader = (
   packetNumber: i64,
   pnLength: i32
 ): u8[] | null => {
-  if (
-    !quicPacketCidFits(dcid) ||
-    pnLength < 1 ||
-    pnLength > 4 ||
-    packetNumber < 0 ||
-    packetNumber > QUIC_MAX_VARINT
-  ) {
+  const dcidLength: i32 = toI32(dcid.length)
+  if (!quicPacketCidFits(dcid) || pnLength < 1 || pnLength > 4) {
     return null
   }
-  const out: u8[] = []
-  const spinBit: i32 = spin ? 0x20 : 0
-  const keyPhaseBit: i32 = keyPhase ? 0x04 : 0
-  out.push(toU8((pnLength - 1) | spinBit | keyPhaseBit | 0x40))
-  quicPacketAppend(out, dcid)
-  quicPacketPushNumber(out, packetNumber, pnLength)
+  const out: u8[] = new Array<u8>(1 + dcidLength + pnLength)
+  if (quicPutShortHeader(out, 0, dcid, dcidLength, spin, keyPhase, packetNumber, pnLength) < 0) {
+    return null
+  }
   return out
 }
 
-/** A header that stopped at `error`, with what it had read so far. */
-const quicPacketRefuse = (header: QuicHeader, error: i32): QuicHeader => {
+/** A header that stopped at `error`, with what it had read so far; answers the error. */
+const quicPacketRefuse = (header: QuicHeader, error: i32): i32 => {
   header.error = error
-  return header
+  return error
 }
 
 /**
- * Reads a one-byte connection-ID length at `at` and that many bytes after it
- * into `cid`, inside `[at, end)`. Answers the offset past the ID, or -1 when it
- * does not fit.
+ * Reads a one-byte connection-ID length at `at` inside `[at, end)`. Answers
+ * the length, or -1 when the length byte or the ID after it does not fit.
  */
-const quicPacketReadCid = (bytes: u8[], at: i32, end: i32, cid: u8[]): i32 => {
-  if (at >= end) {
+const quicPacketCidLength = (bytes: u8[], at: i32, end: i32): i32 => {
+  if (at < 0 || at >= end || at >= toI32(bytes.length)) {
     return -1
   }
   const length: i32 = toI32(bytes[at])
-  if (at + 1 + length > end) {
-    return -1
-  }
-  for (let k: i32 = at + 1; k < at + 1 + length; k += 1) {
-    if (k < toI32(bytes.length)) {
-      cid.push(bytes[k])
-    }
-  }
-  return at + 1 + length
+  return at + 1 + length > end ? -1 : length
 }
 
 /**
- * Parses the header of the packet starting at `datagram[at]`, which is how a
- * datagram of coalesced packets is walked: parse at 0, then at the answer's
- * `end`, until `end` is the datagram's length (RFC 9000 §12.2).
- * `shortDcidLength` is the length of the connection IDs this endpoint hands
- * out, which is the only way to know where a short header's DCID ends
- * (RFC 9000 §17.3.1); one outside 0 to 20 reads as `QUIC_ERR_TRUNCATED`.
- *
- * The answer's `error` says what stopped it; nothing a peer sends panics.
+ * Parses the header of the packet starting at `datagram[at]` into `header`,
+ * filling only its numbers and the windows of its connection IDs and token
+ * (`dcidStart`, `dcidLength` and the rest), so nothing is copied or
+ * allocated: the form a connection reads every packet with. Answers
+ * `header.error`. Every field is reset first, so one `QuicHeader` serves
+ * every packet; its `dcid`, `scid`, `token` and `retryTag` arrays are left
+ * as they were. The datagram is `datagram[at .. limit)`, so one buffer can
+ * hold several (a GRO receive); a `limit` past the array reads as its length.
+ * See `quicParseHeader` for what is read and refused.
  */
-export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): QuicHeader => {
-  const header: QuicHeader = new QuicHeader()
-  const end: i32 = toI32(datagram.length)
+export const quicParseHeaderInto = (
+  header: QuicHeader,
+  datagram: u8[],
+  at: i32,
+  limit: i32,
+  shortDcidLength: i32
+): i32 => {
+  const end: i32 = limit > toI32(datagram.length) ? toI32(datagram.length) : limit
+  header.error = QUIC_PACKET_OK
+  header.type = 0
+  header.version = 0
   header.start = at
   header.end = end
+  header.pnOffset = 0
+  header.dcidStart = 0
+  header.dcidLength = 0
+  header.scidStart = 0
+  header.scidLength = 0
+  header.tokenStart = 0
+  header.tokenLength = 0
   if (at < 0 || at >= end) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
@@ -609,9 +828,10 @@ export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): 
     if (shortDcidLength < 0 || shortDcidLength > QUIC_MAX_CID_LENGTH || at + 1 + shortDcidLength > end) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
-    header.dcid = quicPacketSlice(datagram, at + 1, at + 1 + shortDcidLength)
+    header.dcidStart = at + 1
+    header.dcidLength = shortDcidLength
     header.pnOffset = at + 1 + shortDcidLength
-    return header
+    return QUIC_PACKET_OK
   }
   if (at + 5 > end) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
@@ -623,21 +843,27 @@ export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): 
     }
   }
   header.version = version
-  const afterDcid: i32 = quicPacketReadCid(datagram, at + 5, end, header.dcid)
-  if (afterDcid < 0) {
+  const dcidLength: i32 = quicPacketCidLength(datagram, at + 5, end)
+  if (dcidLength < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
-  let cursor: i32 = quicPacketReadCid(datagram, afterDcid, end, header.scid)
-  if (cursor < 0) {
+  header.dcidStart = at + 6
+  header.dcidLength = dcidLength
+  const afterDcid: i32 = at + 6 + dcidLength
+  const scidLength: i32 = quicPacketCidLength(datagram, afterDcid, end)
+  if (scidLength < 0) {
     return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
   }
+  header.scidStart = afterDcid + 1
+  header.scidLength = scidLength
+  let cursor: i32 = afterDcid + 1 + scidLength
   if (version !== QUIC_VERSION_1) {
     return quicPacketRefuse(header, QUIC_ERR_VERSION)
   }
   if ((first & 0x40) === 0) {
     return quicPacketRefuse(header, QUIC_ERR_FIXED_BIT)
   }
-  if (!quicPacketCidFits(header.dcid) || !quicPacketCidFits(header.scid)) {
+  if (dcidLength > QUIC_MAX_CID_LENGTH || scidLength > QUIC_MAX_CID_LENGTH) {
     return quicPacketRefuse(header, QUIC_ERR_CID_LENGTH)
   }
   const type: i32 = (first >> 4) & 3
@@ -648,10 +874,10 @@ export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): 
     if (cursor + QUIC_RETRY_TAG_SIZE > end) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
-    header.token = quicPacketSlice(datagram, cursor, end - QUIC_RETRY_TAG_SIZE)
-    header.retryTag = quicPacketSlice(datagram, end - QUIC_RETRY_TAG_SIZE, end)
+    header.tokenStart = cursor
+    header.tokenLength = end - QUIC_RETRY_TAG_SIZE - cursor
     header.pnOffset = end - QUIC_RETRY_TAG_SIZE
-    return header
+    return QUIC_PACKET_OK
   }
   if (type === QUIC_PACKET_INITIAL) {
     const tokenLength: i64 = quicVarintRead(datagram, cursor, end)
@@ -662,9 +888,9 @@ export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): 
     if (tokenLength > toI64(end - cursor)) {
       return quicPacketRefuse(header, QUIC_ERR_TRUNCATED)
     }
-    const tokenEnd: i32 = cursor + toI32(tokenLength)
-    header.token = quicPacketSlice(datagram, cursor, tokenEnd)
-    cursor = tokenEnd
+    header.tokenStart = cursor
+    header.tokenLength = toI32(tokenLength)
+    cursor = cursor + toI32(tokenLength)
   }
   const length: i64 = quicVarintRead(datagram, cursor, end)
   if (length < 0) {
@@ -676,6 +902,30 @@ export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): 
   }
   header.pnOffset = cursor
   header.end = cursor + toI32(length)
+  return QUIC_PACKET_OK
+}
+
+/**
+ * Parses the header of the packet starting at `datagram[at]`, which is how a
+ * datagram of coalesced packets is walked: parse at 0, then at the answer's
+ * `end`, until `end` is the datagram's length (RFC 9000 §12.2).
+ * `shortDcidLength` is the length of the connection IDs this endpoint hands
+ * out, which is the only way to know where a short header's DCID ends
+ * (RFC 9000 §17.3.1); one outside 0 to 20 reads as `QUIC_ERR_TRUNCATED`.
+ * The connection IDs, the token and a Retry's tag are copied out into the
+ * answer's arrays; `quicParseHeaderInto` reads the same without a copy.
+ *
+ * The answer's `error` says what stopped it; nothing a peer sends panics.
+ */
+export const quicParseHeader = (datagram: u8[], at: i32, shortDcidLength: i32): QuicHeader => {
+  const header: QuicHeader = new QuicHeader()
+  quicParseHeaderInto(header, datagram, at, toI32(datagram.length), shortDcidLength)
+  header.dcid = quicPacketSlice(datagram, header.dcidStart, header.dcidStart + header.dcidLength)
+  header.scid = quicPacketSlice(datagram, header.scidStart, header.scidStart + header.scidLength)
+  header.token = quicPacketSlice(datagram, header.tokenStart, header.tokenStart + header.tokenLength)
+  if (header.type === QUIC_PACKET_RETRY && header.error === QUIC_PACKET_OK) {
+    header.retryTag = quicPacketSlice(datagram, header.end - QUIC_RETRY_TAG_SIZE, header.end)
+  }
   return header
 }
 
@@ -852,11 +1102,91 @@ const quicPacketOpen = (keys: QuicKeys, nonce: u8[], aad: u8[], sealed: u8[]): u
 }
 
 /**
+ * Protects one packet in place (RFC 9001 §5.3, §5.4.1). `buf[start ..
+ * start + headerLength)` is a header `quicPutLongHeader` or
+ * `quicPutShortHeader` wrote, ending with the packet number, and the
+ * `payloadLength` bytes after it are the frames; `packetNumber` is the full
+ * number the header's last bytes truncate. The payload is sealed where it
+ * lies, its tag written after it, and header protection put on: the answer
+ * is the offset past the tag, which is where the packet ends, or -1, with
+ * `buf` not to be sent, for anything `quicSealPacket` refuses and for a tag
+ * that does not fit in `buf`. The AEAD's temporaries are released before it
+ * answers, so sealing allocates nothing that outlives the call.
+ */
+export const quicSealInPlace = (
+  keys: QuicKeys,
+  buf: u8[],
+  start: i32,
+  headerLength: i32,
+  payloadLength: i32,
+  packetNumber: i64
+): i32 => {
+  const end: i32 = start + headerLength + payloadLength + QUIC_AEAD_TAG_SIZE
+  if (start < 0 || headerLength < 2 || payloadLength < 0 || end > toI32(buf.length) || end < start) {
+    return -1
+  }
+  const first: i32 = toI32(buf[start])
+  const pnLength: i32 = (first & 3) + 1
+  const pnOffset: i32 = start + headerLength - pnLength
+  if (
+    !quicPacketKeysUsable(keys) ||
+    pnOffset < start + 1 ||
+    pnLength + payloadLength < 4 ||
+    packetNumber < 0 ||
+    packetNumber > QUIC_MAX_VARINT
+  ) {
+    return -1
+  }
+  for (let k: i32 = 0; k < pnLength; k += 1) {
+    const want: i32 = toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255)
+    if (pnOffset + k < toI32(buf.length) && toI32(buf[pnOffset + k]) !== want) {
+      return -1
+    }
+  }
+  if (
+    (first & 0x80) !== 0 &&
+    quicVarintRead(buf, pnOffset - 2, pnOffset) !== toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE)
+  ) {
+    return -1
+  }
+  const payloadAt: i32 = start + headerLength
+  {
+    using _scope = arena()
+    const sealed: u8[] | null = quicPacketSeal(
+      keys,
+      quicPacketNonce(keys, packetNumber),
+      quicPacketSlice(buf, start, payloadAt),
+      quicPacketSlice(buf, payloadAt, payloadAt + payloadLength)
+    )
+    if (sealed === null || payloadAt + toI32(sealed.length) > toI32(buf.length)) {
+      return -1
+    }
+    buf.set(sealed, payloadAt)
+    const sampleAt: i32 = pnOffset + 4
+    const mask: u8[] | null = quicPacketMask(
+      keys,
+      quicPacketSlice(buf, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+    )
+    if (mask === null || toI32(mask.length) < 5) {
+      return -1
+    }
+    buf[start] = toU8(first ^ (toI32(mask[0]) & quicPacketProtectedBits(first)))
+    for (let k: i32 = 0; k < pnLength && k + 1 < toI32(mask.length); k += 1) {
+      if (pnOffset + k >= 0 && pnOffset + k < toI32(buf.length)) {
+        buf[pnOffset + k] = buf[pnOffset + k] ^ mask[k + 1]
+      }
+    }
+  }
+  return end
+}
+
+/**
  * Protects one packet (RFC 9001 §5.3, §5.4.1): `header` is what
  * `quicLongHeader` or `quicShortHeader` built, ending with the packet number,
  * and `packetNumber` is the full number its last bytes truncate. The answer
  * is the header under header protection followed by the AEAD-sealed payload
- * and its tag, ready to send or to coalesce.
+ * and its tag, ready to send or to coalesce; `quicSealInPlace` does the same
+ * in a caller's buffer.
  *
  * The header and the arguments are held to each other, because a packet that
  * disagrees with its own header is one the peer silently drops: the header's
@@ -874,62 +1204,91 @@ export const quicSealPacket = (
   payload: u8[]
 ): u8[] | null => {
   const headerLength: i32 = toI32(header.length)
-  if (headerLength < 2) {
-    return null
-  }
-  const first: i32 = toI32(header[0])
-  const pnLength: i32 = (first & 3) + 1
-  const pnOffset: i32 = headerLength - pnLength
   const payloadLength: i32 = toI32(payload.length)
-  if (
-    !quicPacketKeysUsable(keys) ||
-    pnOffset < 1 ||
-    pnLength + payloadLength < 4 ||
-    packetNumber < 0 ||
-    packetNumber > QUIC_MAX_VARINT
-  ) {
+  const packet: u8[] = new Array<u8>(headerLength + payloadLength + QUIC_AEAD_TAG_SIZE)
+  packet.set(header)
+  packet.set(payload, headerLength)
+  if (quicSealInPlace(keys, packet, 0, headerLength, payloadLength, packetNumber) < 0) {
     return null
-  }
-  for (let k: i32 = 0; k < pnLength; k += 1) {
-    const want: i32 = toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255)
-    if (pnOffset + k < headerLength && toI32(header[pnOffset + k]) !== want) {
-      return null
-    }
-  }
-  if (
-    (first & 0x80) !== 0 &&
-    quicVarintRead(header, pnOffset - 2, pnOffset) !== toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE)
-  ) {
-    return null
-  }
-  const sealed: u8[] | null = quicPacketSeal(keys, quicPacketNonce(keys, packetNumber), header, payload)
-  if (sealed === null) {
-    return null
-  }
-  const sealedLength: i32 = toI32(sealed.length)
-  const packet: u8[] = new Array<u8>(headerLength + sealedLength)
-  const packetLength: i32 = toI32(packet.length)
-  for (let k: i32 = 0; k < headerLength && k < packetLength; k += 1) {
-    packet[k] = header[k]
-  }
-  for (let k: i32 = 0; k < sealedLength && headerLength + k < packetLength; k += 1) {
-    if (headerLength + k >= 0) {
-      packet[headerLength + k] = sealed[k]
-    }
-  }
-  const sampleAt: i32 = pnOffset + 4
-  const mask: u8[] | null = quicPacketMask(
-    keys,
-    quicPacketSlice(packet, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
-  )
-  if (mask === null) {
-    return null
-  }
-  packet[0] = toU8(first ^ (toI32(mask[0]) & quicPacketProtectedBits(first)))
-  for (let k: i32 = 0; k < pnLength && k + 1 < toI32(mask.length); k += 1) {
-    packet[pnOffset + k] = packet[pnOffset + k] ^ mask[k + 1]
   }
   return packet
+}
+
+/**
+ * Removes header protection from the packet `header` describes (RFC 9001
+ * §5.4.1) without changing `datagram`: `packet`'s `error`, `firstByte`,
+ * `pnLength`, `packetNumber` and `keyPhase` are set, and the answer is the
+ * header in the clear, packet number included, which is the AEAD's
+ * associated data: empty when `error` is not `QUIC_PACKET_OK`. Only numbers
+ * are stored into `packet`, so a connection reuses one for every packet and
+ * the answer is its own to let go. See `quicRemoveHeaderProtection`.
+ */
+export const quicUnprotectHeader = (
+  keys: QuicKeys,
+  datagram: u8[],
+  header: QuicHeader,
+  largestPn: i64,
+  packet: QuicPacket
+): u8[] => {
+  packet.error = QUIC_PACKET_OK
+  packet.firstByte = 0
+  packet.pnLength = 0
+  packet.packetNumber = 0
+  packet.keyPhase = false
+  const datagramLength: i32 = toI32(datagram.length)
+  if (header.error !== QUIC_PACKET_OK) {
+    packet.error = header.error
+    return []
+  }
+  if (header.type === QUIC_PACKET_RETRY) {
+    packet.error = QUIC_ERR_NOT_PROTECTED
+    return []
+  }
+  if (!quicPacketKeysUsable(keys)) {
+    packet.error = QUIC_ERR_KEYS
+    return []
+  }
+  const pnOffset: i32 = header.pnOffset
+  const sampleAt: i32 = pnOffset + 4
+  if (
+    header.start < 0 ||
+    header.start >= pnOffset ||
+    header.end > datagramLength ||
+    sampleAt + QUIC_SAMPLE_SIZE > header.end
+  ) {
+    packet.error = QUIC_ERR_SAMPLE
+    return []
+  }
+  const mask: u8[] | null = quicPacketMask(
+    keys,
+    quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+  )
+  if (mask === null || toI32(mask.length) < 5) {
+    packet.error = QUIC_ERR_KEYS
+    return []
+  }
+  const protectedFirst: i32 = toI32(datagram[header.start])
+  const long: boolean = (protectedFirst & 0x80) !== 0
+  const first: i32 = protectedFirst ^ (toI32(mask[0]) & quicPacketProtectedBits(protectedFirst))
+  const pnLength: i32 = (first & 3) + 1
+  // The sample check above put 20 bytes after `pnOffset` inside the packet,
+  // so the packet number's at most 4 are there too.
+  const clear: u8[] = quicPacketSlice(datagram, header.start, pnOffset + pnLength)
+  clear[0] = toU8(first)
+  let truncated: i64 = 0
+  for (let k: i32 = 0; k < pnLength; k += 1) {
+    const at: i32 = pnOffset - header.start + k
+    if (at >= 0 && at < toI32(clear.length) && k + 1 < toI32(mask.length)) {
+      const b: u8 = clear[at] ^ mask[k + 1]
+      clear[at] = b
+      truncated = (truncated << 8) | toI64(b)
+    }
+  }
+  packet.firstByte = first
+  packet.pnLength = pnLength
+  packet.packetNumber = quicPacketNumberDecode(largestPn, truncated, pnLength)
+  packet.keyPhase = !long && (first & 0x04) !== 0
+  return clear
 }
 
 /**
@@ -953,61 +1312,46 @@ export const quicRemoveHeaderProtection = (
   largestPn: i64
 ): QuicPacket => {
   const packet: QuicPacket = new QuicPacket()
-  const datagramLength: i32 = toI32(datagram.length)
-  if (header.error !== QUIC_PACKET_OK) {
-    packet.error = header.error
-    return packet
-  }
-  if (header.type === QUIC_PACKET_RETRY) {
-    packet.error = QUIC_ERR_NOT_PROTECTED
-    return packet
+  packet.header = quicUnprotectHeader(keys, datagram, header, largestPn, packet)
+  return packet
+}
+
+/**
+ * Decrypts the payload of the packet `header` describes, whose header in the
+ * clear `quicUnprotectHeader` answered as `clear` (RFC 9001 §5.3), without
+ * changing `datagram`. Sets `packet.error` as `quicDecryptPacket` does and
+ * answers the plaintext frames, or `null` when they did not authenticate
+ * (or `packet` was already in error). Only numbers are stored into `packet`.
+ */
+export const quicDecryptPayload = (
+  keys: QuicKeys,
+  datagram: u8[],
+  header: QuicHeader,
+  clear: u8[],
+  packet: QuicPacket
+): u8[] | null => {
+  if (packet.error !== QUIC_PACKET_OK) {
+    return null
   }
   if (!quicPacketKeysUsable(keys)) {
     packet.error = QUIC_ERR_KEYS
-    return packet
+    return null
   }
-  const pnOffset: i32 = header.pnOffset
-  const sampleAt: i32 = pnOffset + 4
-  if (
-    header.start < 0 ||
-    header.start >= pnOffset ||
-    header.end > datagramLength ||
-    sampleAt + QUIC_SAMPLE_SIZE > header.end
-  ) {
-    packet.error = QUIC_ERR_SAMPLE
-    return packet
-  }
-  const mask: u8[] | null = quicPacketMask(
+  const payloadStart: i32 = header.start + toI32(clear.length)
+  const plain: u8[] | null = quicPacketOpen(
     keys,
-    quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+    quicPacketNonce(keys, packet.packetNumber),
+    clear,
+    quicPacketSlice(datagram, payloadStart, header.end)
   )
-  if (mask === null || toI32(mask.length) < 5) {
-    packet.error = QUIC_ERR_KEYS
-    return packet
+  if (plain === null) {
+    packet.error = QUIC_ERR_DECRYPT
+    return null
   }
-  const protectedFirst: i32 = toI32(datagram[header.start])
-  const long: boolean = (protectedFirst & 0x80) !== 0
-  const first: i32 = protectedFirst ^ (toI32(mask[0]) & quicPacketProtectedBits(protectedFirst))
-  const pnLength: i32 = (first & 3) + 1
-  // The sample check above put 20 bytes after `pnOffset` inside the packet,
-  // so the packet number's at most 4 are there too.
-  const clear: u8[] = quicPacketSlice(datagram, header.start, pnOffset + pnLength)
-  clear[0] = toU8(first)
-  let truncated: i64 = 0
-  for (let k: i32 = 0; k < pnLength; k += 1) {
-    const at: i32 = pnOffset - header.start + k
-    if (at >= 0 && at < toI32(clear.length) && k + 1 < toI32(mask.length)) {
-      const b: u8 = clear[at] ^ mask[k + 1]
-      clear[at] = b
-      truncated = (truncated << 8) | toI64(b)
-    }
+  if ((packet.firstByte & quicPacketReservedBits(packet.firstByte)) !== 0) {
+    packet.error = QUIC_ERR_RESERVED_BITS
   }
-  packet.firstByte = first
-  packet.pnLength = pnLength
-  packet.packetNumber = quicPacketNumberDecode(largestPn, truncated, pnLength)
-  packet.keyPhase = !long && (first & 0x04) !== 0
-  packet.header = clear
-  return packet
+  return plain
 }
 
 /**
@@ -1026,29 +1370,11 @@ export const quicDecryptPacket = (
   header: QuicHeader,
   packet: QuicPacket
 ): boolean => {
-  if (packet.error !== QUIC_PACKET_OK) {
-    return false
-  }
-  if (!quicPacketKeysUsable(keys)) {
-    packet.error = QUIC_ERR_KEYS
-    return false
-  }
-  const payloadStart: i32 = header.start + toI32(packet.header.length)
-  const sealed: u8[] = quicPacketSlice(datagram, payloadStart, header.end)
-  const plain: u8[] | null = quicPacketOpen(
-    keys,
-    quicPacketNonce(keys, packet.packetNumber),
-    packet.header,
-    sealed
-  )
+  const plain: u8[] | null = quicDecryptPayload(keys, datagram, header, packet.header, packet)
   if (plain === null) {
-    packet.error = QUIC_ERR_DECRYPT
     return false
   }
   packet.payload = plain
-  if ((packet.firstByte & quicPacketReservedBits(packet.firstByte)) !== 0) {
-    packet.error = QUIC_ERR_RESERVED_BITS
-  }
   return true
 }
 
@@ -1114,8 +1440,10 @@ export const quicRetryPacket = (
   ) {
     return null
   }
-  const out: u8[] = []
-  quicPacketPushLongPrefix(out, unused | 0xf0, dcid, scid)
+  const dcidLength: i32 = toI32(dcid.length)
+  const scidLength: i32 = toI32(scid.length)
+  const out: u8[] = new Array<u8>(7 + dcidLength + scidLength)
+  quicPacketPutLongPrefix(out, 0, unused | 0xf0, dcid, dcidLength, scid, scidLength)
   quicPacketAppend(out, token)
   const tag: u8[] | null = quicRetryIntegrityTag(odcid, out)
   if (tag === null) {
