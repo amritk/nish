@@ -173,6 +173,18 @@ PASS  its field answered
 PASS  a literal past the limit is refused too
 PASS  with nothing answered
 PASS  and no reason, since it is not a refusal
+PASS  a Huffman value that fits the limit exactly decodes
+PASS  and is answered whole
+PASS  a byte less and it is past the limit
+PASS  with nothing kept in its bytes
+PASS  a Huffman literal name and value at the limit decode
+PASS  a Huffman literal name past the limit is refused
+PASS  a Huffman value past the limit after its name is refused
+PASS  the hostile section names :path and codes its value in 1,000 bytes
+PASS  a small section warms the decoder
+PASS  a 1,600-byte Huffman value is past a limit of 64
+PASS  and the decoder kept none of it: the arena did not move
+PASS  the next section still decodes
 PASS  a limit of 0 still takes a section with no fields
 PASS  and refuses one field
 PASS  an empty section: QPACK_DECOMPRESSION_FAILED
@@ -327,4 +339,4 @@ PASS  the encoder still writes sections
 PASS  a thousand and one pairs of sections decoded, four fields each
 PASS  the last section decoded
 PASS  a thousand passes of both sides after the first allocate nothing
-qpack: 329 passed, 0 failed, 0 skipped
+qpack: 341 passed, 0 failed, 0 skipped

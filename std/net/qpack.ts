@@ -172,6 +172,9 @@ const QPACK_INTEGER_TRUNCATED: i64 = -1
 /** What `qpackReadInteger` answers for an integer past `QPACK_MAX_INTEGER`. */
 const QPACK_INTEGER_OVERFLOW: i64 = -2
 
+/** What `qpackReadString` answers for a string that would take the section past its limit. */
+const QPACK_STRING_PAST_LIMIT: i32 = -1
+
 /**
  * Appendix A's names, by index. A `switch` rather than a table because a
  * module constant cannot be an array
@@ -637,11 +640,43 @@ const qpackReadInteger = (d: QpackDecoder, src: u8[], prefixBits: i32): i64 => {
 }
 
 /**
+ * How many symbols the Huffman code in `src[off, off + len)` spells, found by
+ * walking `h`'s canonical tables the way `hpackHuffmanDecode` does but writing
+ * nothing. An EOS inside the string is counted as a symbol, so the answer is
+ * never below what the decode will write; whether the string is well formed
+ * is the decode's to say.
+ */
+const qpackHuffmanSymbols = (h: HpackHuffman, src: u8[], off: i32, len: i32): i64 => {
+  let code: i32 = 0
+  let bits: i32 = 0
+  let count: i64 = 0
+  const end: i32 = off + len
+  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
+    const byte: i32 = toI32(src[i])
+    for (let k: i32 = 7; k >= 0; k -= 1) {
+      code = (code << 1) | ((byte >> k) & 1)
+      bits += 1
+      if (bits >= 5 && bits < toI32(h.firstCode.length)) {
+        const at: i32 = code - h.firstCode[bits]
+        if (at >= 0 && at < h.countAt[bits]) {
+          count += toI64(1)
+          code = 0
+          bits = 0
+        }
+      }
+    }
+  }
+  return count
+}
+
+/**
  * Reads a §4.1.2 string literal with a `prefixBits`-bit prefix at `d.at` and
  * appends its octets to `d.bytes`, answering a `QPACK_REASON_*`, `NONE` when
- * it read one. The length is checked against what the section has left
- * before anything is read, so a Huffman string costs at most 8/5 of the
- * bytes the section spent on it.
+ * it read one, or `QPACK_STRING_PAST_LIMIT`. The length is checked against
+ * what the section has left, and the octets against `d.room`, before anything
+ * is appended: a Huffman string decodes to at most 8/5 of its length, and only
+ * one that could pass the room is counted first, so `bytes` never grows past
+ * the field-section limit however a peer spells its strings.
  */
 const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
   if (!qpackHasByte(d, src)) {
@@ -657,14 +692,27 @@ const qpackReadString = (d: QpackDecoder, src: u8[], prefixBits: i32): i32 => {
     return QPACK_REASON_TRUNCATED
   }
   const start: i32 = d.at
-  const end: i32 = start + toI32(n)
-  d.at = end
+  const length: i32 = toI32(n)
+  d.at = start + length
+  let octets: i64 = n
   if (huffman) {
-    return hpackHuffmanDecode(d.huffman, src, start, end - start, d.bytes) === HPACK_OK
-      ? QPACK_REASON_NONE
-      : QPACK_REASON_HUFFMAN
+    octets = (n * toI64(8)) / toI64(5)
+    if (octets > d.room) {
+      octets = qpackHuffmanSymbols(d.huffman, src, start, length)
+    }
   }
-  qpackPushBytes(d.bytes, src, start, end - start)
+  if (octets > d.room) {
+    return QPACK_STRING_PAST_LIMIT
+  }
+  const before: i32 = toI32(d.bytes.length)
+  if (huffman) {
+    if (hpackHuffmanDecode(d.huffman, src, start, length, d.bytes) !== HPACK_OK) {
+      return QPACK_REASON_HUFFMAN
+    }
+  } else {
+    qpackPushBytes(d.bytes, src, start, length)
+  }
+  d.room -= toI64(d.bytes.length) - toI64(before)
   return QPACK_REASON_NONE
 }
 
@@ -695,6 +743,12 @@ export class QpackDecoder {
   capacityInstructions: i32
   /** How many fields the last `decode` answered. */
   count: i32
+  /**
+   * What the section being decoded may still add to `bytes` and its fields'
+   * overhead before it is past `maxFieldSectionSize`: every append is checked
+   * against it first, so a section past the limit never grows `bytes`.
+   */
+  room: i64
   /** Where the next read of the section being decoded starts, and where it ends. */
   at: i32
   end: i32
@@ -715,6 +769,7 @@ export class QpackDecoder {
     this.valueLength = []
     this.neverIndexed = []
     this.count = 0
+    this.room = 0
     this.at = 0
     this.end = 0
   }
@@ -800,6 +855,26 @@ export class QpackDecoder {
     this.count = 0
   }
 
+  /**
+   * Takes `cost` from what the section has room for and answers true, or
+   * answers false and takes nothing when the section would pass its limit.
+   */
+  take(cost: i64): boolean {
+    if (cost > this.room) {
+      return false
+    }
+    this.room -= cost
+    return true
+  }
+
+  /** The answer for a string read: `QPACK_OK`, past the limit, or the refusal `status` names. */
+  stringResult(status: i32): i64 {
+    if (status === QPACK_STRING_PAST_LIMIT) {
+      return QPACK_SECTION_TOO_LARGE
+    }
+    return status === QPACK_REASON_NONE ? QPACK_OK : this.refuse(status)
+  }
+
   /** Records `reason` and answers QPACK_DECOMPRESSION_FAILED. */
   refuse(reason: i32): i64 {
     this.reason = reason
@@ -847,7 +922,7 @@ export class QpackDecoder {
     if (negative) {
       return this.refuse(QPACK_REASON_BASE)
     }
-    let size: i64 = 0
+    this.room = toI64(this.maxFieldSectionSize)
     while (qpackHasByte(this, src)) {
       const b: i32 = toI32(src[this.at])
       let neverIndexed: boolean = false
@@ -867,9 +942,14 @@ export class QpackDecoder {
         if (index >= toI64(QPACK_STATIC_LENGTH)) {
           return this.refuse(QPACK_REASON_STATIC_INDEX)
         }
-        qpackPushText(this.bytes, qpackStaticName(toI32(index)))
+        const name: string = qpackStaticName(toI32(index))
+        const value: string = qpackStaticValue(toI32(index))
+        if (!this.take(toI64(QPACK_FIELD_OVERHEAD) + toI64(name.length) + toI64(value.length))) {
+          return QPACK_SECTION_TOO_LARGE
+        }
+        qpackPushText(this.bytes, name)
         valueStart = toI32(this.bytes.length)
-        qpackPushText(this.bytes, qpackStaticValue(toI32(index)))
+        qpackPushText(this.bytes, value)
       } else if ((b & 64) !== 0) {
         // Literal Field Line with Name Reference (§4.5.4): `01 N T index(4+)`.
         if ((b & 16) === 0) {
@@ -883,13 +963,20 @@ export class QpackDecoder {
         if (index >= toI64(QPACK_STATIC_LENGTH)) {
           return this.refuse(QPACK_REASON_STATIC_INDEX)
         }
-        qpackPushText(this.bytes, qpackStaticName(toI32(index)))
+        const name: string = qpackStaticName(toI32(index))
+        if (!this.take(toI64(QPACK_FIELD_OVERHEAD) + toI64(name.length))) {
+          return QPACK_SECTION_TOO_LARGE
+        }
+        qpackPushText(this.bytes, name)
       } else if ((b & 32) !== 0) {
         // Literal Field Line with Literal Name (§4.5.6): `001 N H length(3+)`.
         neverIndexed = (b & 16) !== 0
-        const status: i32 = qpackReadString(this, src, 4)
-        if (status !== QPACK_REASON_NONE) {
-          return this.refuse(status)
+        if (!this.take(toI64(QPACK_FIELD_OVERHEAD))) {
+          return QPACK_SECTION_TOO_LARGE
+        }
+        const name: i64 = this.stringResult(qpackReadString(this, src, 4))
+        if (name !== QPACK_OK) {
+          return name
         }
       } else {
         // `0001` is an Indexed Field Line with Post-Base Index (§4.5.3) and
@@ -899,14 +986,10 @@ export class QpackDecoder {
       }
       if (valueStart < 0) {
         valueStart = toI32(this.bytes.length)
-        const status: i32 = qpackReadString(this, src, 8)
-        if (status !== QPACK_REASON_NONE) {
-          return this.refuse(status)
+        const value: i64 = this.stringResult(qpackReadString(this, src, 8))
+        if (value !== QPACK_OK) {
+          return value
         }
-      }
-      size += toI64(this.bytes.length) - toI64(nameStart) + toI64(QPACK_FIELD_OVERHEAD)
-      if (size > toI64(this.maxFieldSectionSize)) {
-        return QPACK_SECTION_TOO_LARGE
       }
       this.addField(nameStart, valueStart, neverIndexed)
     }

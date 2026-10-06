@@ -483,6 +483,47 @@ const limitChecks = (t: Suite): void => {
   );
   t.eqI32("with nothing answered", dec.count, toI32(0));
   t.eqI32("and no reason, since it is not a refusal", dec.reason, QPACK_REASON_NONE);
+  // Huffman strings are held to the limit before they are decoded. RFC 7541
+  // C.4.1's `www.example.com` is 12 coded bytes, which could decode to 19, so
+  // at the edge the decoder counts its 15 symbols rather than trusting 8/5.
+  // As `:authority` the field costs 10 + 15 + 32 = 57.
+  const exact: i32 = 57;
+  const fits = new QpackDecoder(exact);
+  t.eqI64("a Huffman value that fits the limit exactly decodes", decodeHex(fits, "0000508cf1e3c2e5f23a6ba0ab90f4ff"), QPACK_OK);
+  t.eqStr("and is answered whole", decodedDump(fits), ":authority: www.example.com");
+  const short: i32 = 56;
+  const over = new QpackDecoder(short);
+  t.eqI64("a byte less and it is past the limit", decodeHex(over, "0000508cf1e3c2e5f23a6ba0ab90f4ff"), QPACK_SECTION_TOO_LARGE);
+  t.eqI32("with nothing kept in its bytes", toI32(over.bytes.length), toI32(0));
+  // B.3's custom-key: custom-value with both strings Huffman-coded costs
+  // 10 + 12 + 32 = 54; a limit of 41 refuses the name, 53 the value.
+  const both: i32 = 54;
+  t.eqI64("a Huffman literal name and value at the limit decode", decodeHex(new QpackDecoder(both), "00002f0125a849e95ba97d7f8925a849e95bb8e8b4bf"), QPACK_OK);
+  const nameShort: i32 = 41;
+  t.eqI64("a Huffman literal name past the limit is refused", decodeHex(new QpackDecoder(nameShort), "00002f0125a849e95ba97d7f8925a849e95bb8e8b4bf"), QPACK_SECTION_TOO_LARGE);
+  const valueShort: i32 = 53;
+  t.eqI64("a Huffman value past the limit after its name is refused", decodeHex(new QpackDecoder(valueShort), "00002f0125a849e95ba97d7f8925a849e95bb8e8b4bf"), QPACK_SECTION_TOO_LARGE);
+
+  // What a hostile section can make the decoder keep: 1,600 `a`s coded in
+  // 1,000 bytes, against a limit of 64. Refused before decoding, it leaves
+  // `Arena.used()` where a small section left it: the decoder's arrays do not
+  // grow to hold a string they then drop.
+  const small: i32 = 64;
+  const guarded = new QpackDecoder(small);
+  const value: u8[] = bytesOf(repeated("a", 1600));
+  const hostile: u8[] = [];
+  const enc = new QpackEncoder();
+  const start: i32 = 0;
+  const path: u8[] = bytesOf(":path");
+  enc.beginSection(hostile);
+  enc.encodeField(hostile, path, start, toI32(path.length), value, start, toI32(value.length), false, true);
+  t.eqStr("the hostile section names :path and codes its value in 1,000 bytes", toHex(hostile).substring(0, 12), "000051ffe906");
+  t.eqI64("a small section warms the decoder", decodeHex(guarded, "0000c1"), QPACK_OK);
+  const before: i64 = Arena.used();
+  t.eqI64("a 1,600-byte Huffman value is past a limit of 64", guarded.decode(hostile, start, toI32(hostile.length)), QPACK_SECTION_TOO_LARGE);
+  t.eqI64("and the decoder kept none of it: the arena did not move", Arena.used() - before, toI64(0));
+  t.eqI64("the next section still decodes", decodeHex(guarded, "0000c1"), QPACK_OK);
+
   const none: i32 = 0;
   const empty = new QpackDecoder(none);
   t.eqI64("a limit of 0 still takes a section with no fields", decodeHex(empty, "0000"), QPACK_OK);
