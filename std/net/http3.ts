@@ -122,7 +122,6 @@ import {
   H3_FRAME_DATA,
   H3_FRAME_ERROR,
   H3_FRAME_GOAWAY,
-  H3_FRAME_HEADER_MAX,
   H3_FRAME_HEADERS,
   H3_FRAME_MAX_PUSH_ID,
   H3_FRAME_PUSH_PROMISE,
@@ -1383,7 +1382,17 @@ export class Http3Connection {
       this.statusValue[2] = toU8(H3_DIGIT_ZERO + (status % ten))
       const nameLength: i32 = toI32(this.statusName.length)
       const valueLength: i32 = toI32(this.statusValue.length)
-      this.encoder.encodeField(out, this.statusName, H3_ZERO, nameLength, this.statusValue, H3_ZERO, valueLength, false, true)
+      this.encoder.encodeField(
+        out,
+        this.statusName,
+        H3_ZERO,
+        nameLength,
+        this.statusValue,
+        H3_ZERO,
+        valueLength,
+        false,
+        true
+      )
       size = toI64(nameLength + valueLength + QPACK_FIELD_OVERHEAD)
     }
     const n: i32 = toI32(names.length)

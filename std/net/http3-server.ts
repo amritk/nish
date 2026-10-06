@@ -100,9 +100,6 @@ export const H3_SERVER_ANSWER_INTERVAL: i64 = 100
 /** The address form `nish:net` reads and writes. */
 const H3_SERVER_ADDRESS: i32 = 18
 
-/** What `udpRecvFrom` and `udpSendTo` answer when the socket has nothing, or no room. */
-const H3_SERVER_WOULD_BLOCK: i32 = -11
-
 /** What `udpSendTo` answers where the platform has no segmentation offload. */
 const H3_SERVER_NO_GSO: i32 = -95
 
@@ -891,4 +888,3 @@ export class Http3Server {
     return this.wheel.next(now)
   }
 }
-
