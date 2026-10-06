@@ -27,8 +27,8 @@
  * `readable`, which is where a closed or failed socket is noticed.
  *
  * **Slots, sized at start-up.** The constructor allocates every connection's
- * buffers — about a hundred kilobytes each, the largest record twice over in
- * each direction — and `accept` hands the next connection a free slot and
+ * buffers — about 136 KB of resident memory each, the largest record twice
+ * over in each direction and the handshake's own state (TLS-3) — and `accept` hands the next connection a free slot and
  * reuses it once the program `close`s it (WP34 N9). When every slot is busy
  * a new connection is accepted and closed at once, so the listener does not
  * stay readable; the program sees `TLS_TCP_POOL_FULL`. Each slot keeps its

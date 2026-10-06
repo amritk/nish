@@ -10,7 +10,9 @@
 //   2. A production handshake — ChaCha20-Poly1305, the P-256 leaf — through
 //      the same kind of slot, with a ClientHello padded past the server's
 //      first input buffer so that the first handshake grows it: after that
-//      first one, `Arena.mark()` does not move at all.
+//      first one, `Arena.mark()` does not move at all. Then a thousand rounds
+//      of a HelloRetryRequest, a restart and the same plain handshake, which
+//      shows `restart` undoes the retry and its transcript.
 //   3. An AES-256-GCM-SHA384 handshake over loopback through `TlsTcpServer`'s slot pool,
 //      a Nish client on plain `nish:net` sending recorded bytes: accept,
 //      handshake, close, a thousand times, and `Arena.mark()` does not move.
@@ -22,7 +24,8 @@
 // nothing of their own. The P-256 signature is the caller's and is made once,
 // since `p256SignSha256` stores what it allocates.
 //
-// Then the refusals the slot's own entry points add: a restart with
+// Then `restart` zeroing every secret array a handshake filled, and the
+// refusals the slot's own entry points add: a restart with
 // randomness of the wrong length, and the in-place key derivations asked for
 // a suite or a length they do not know.
 import { Suite } from "nish/testing";
@@ -42,7 +45,15 @@ import {
   tcpListen,
 } from "nish:net";
 import { HkdfScratch } from "nish/crypto/hkdf";
-import { TLS_STATE_FAILED, TlsServer, TlsServerConfig, tlsSignEcdsaP256 } from "nish/net/tls";
+import {
+  TLS_LEVEL_HANDSHAKE,
+  TLS_LEVEL_INITIAL,
+  TLS_STATE_CONNECTED,
+  TLS_STATE_FAILED,
+  TlsServer,
+  TlsServerConfig,
+  tlsSignEcdsaP256,
+} from "nish/net/tls";
 import {
   TLS_ALERT_INTERNAL_ERROR,
   TLS_GROUP_X25519,
@@ -65,7 +76,13 @@ import {
 } from "nish/net/tls/record-server";
 import { TlsTcpServer } from "nish/net/tls-tcp";
 import { rfc8448Config } from "../net_tls_rfc8448/checks";
-import { rfc8448RsaPssSignature, rfc8448ServerPrivate, rfc8448ServerRandom } from "../net_tls_rfc8448/trace";
+import {
+  rfc8448ClientFinished,
+  rfc8448ClientHello,
+  rfc8448RsaPssSignature,
+  rfc8448ServerPrivate,
+  rfc8448ServerRandom,
+} from "../net_tls_rfc8448/trace";
 import {
   rfc8448ClientFinishedRecord,
   rfc8448ClientHelloRecord,
@@ -83,8 +100,8 @@ import {
   extSupportedVersions,
   extension,
 } from "../net_tls_common/client";
-import { Opened, ZERO, drain, feed, filled, join, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
-import { clearRecord, clientKeysFor, splitRecords } from "../net_tls_record_common/client";
+import { Opened, ZERO, allZero, drain, feed, filled, join, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import { clearRecord, clientKeysFor, recordHello, splitRecords } from "../net_tls_record_common/client";
 
 /** How many handshakes each run makes. */
 const ROUNDS: i32 = 1000;
@@ -433,6 +450,50 @@ export const memoryChecks = (): i32 => {
   );
   t.ok("and after it Arena.mark() did not move: the handshake allocates nothing that outlives it", slotAfter === slotMark);
 
+  // --- 2b. A HelloRetryRequest, then a restart, then a plain handshake, in one slot ---
+  // The retry leaves `retried` set and the transcript replaced by
+  // `message_hash`; `restart` must undo both, or the plain handshake that
+  // follows is answered under the wrong transcript and its bytes differ.
+  const retryHello: u8[] = clearRecord(recordHello([TLS_CHACHA20_POLY1305_SHA256], false, true));
+  refill(slotKey, padded.key);
+  slotTls.restart(padded.random, slotKey);
+  slot.start(slotTls);
+  feed(slot, retryHello);
+  const retryAnswer: u8[] = drain(slot);
+  t.ok("a ClientHello with no x25519 share is answered with a HelloRetryRequest", slotTls.retried && toI32(retryAnswer.length) > 0 && toI32(retryAnswer[0]) === 22);
+  let retryExact: i32 = 0;
+  let retryMark: i64 = 0;
+  for (let round: i32 = 0; round < ROUNDS; round++) {
+    if (round === 1) {
+      retryMark = Arena.mark();
+    }
+    refill(slotKey, padded.key);
+    slotTls.restart(padded.random, slotKey);
+    slot.start(slotTls);
+    feed(slot, retryHello);
+    const retried: boolean = slotTls.retried && sends(slot, retryAnswer);
+    refill(slotKey, padded.key);
+    slotTls.restart(padded.random, slotKey);
+    const reset: boolean = !slotTls.retried;
+    slot.start(slotTls);
+    feed(slot, padded.hello);
+    slot.sign(padded.signature);
+    const flight: boolean = sends(slot, padded.serverFlight);
+    feed(slot, padded.finish);
+    const open: boolean = slot.state === TLS_RECORD_STATE_OPEN && slot.peerClosed;
+    slot.close();
+    if (retried && reset && flight && open && sends(slot, padded.serverClose)) {
+      retryExact = retryExact + 1;
+    }
+  }
+  const retryAfter: i64 = Arena.mark();
+  t.eqI32(
+    "a thousand rounds of a HelloRetryRequest, a restart and a plain handshake in one slot: every plain one the recorded bytes",
+    retryExact,
+    ROUNDS
+  );
+  t.ok("and after the first round Arena.mark() did not move", retryAfter === retryMark);
+
   // --- 3. Over loopback, through TlsTcpServer's slot pool ---------------------------------
   const wired: Recorded = record(TLS_AES_256_GCM_SHA384, toI32(16));
   const w = new Wire(wired.config);
@@ -453,6 +514,31 @@ export const memoryChecks = (): i32 => {
   t.eqI32("every slot is free again", w.server.busy(), ZERO);
   netClose(w.listener);
   netClose(w.loop);
+
+  // --- restart wipes what the last connection left ---------------------------------------------
+  // A TlsServer driven on its own, with no record layer to wipe as it goes:
+  // after its handshake its secret arrays hold the trace's secrets, and
+  // `restart` must zero every one of both hashes' before the next connection.
+  const loneKey: u8[] = new Array<u8>(32);
+  refill(loneKey, traceKey);
+  const lone = new TlsServer(rfc8448Config(), traceRandom, loneKey);
+  lone.receive(TLS_LEVEL_INITIAL, rfc8448ClientHello(), ZERO, toI32(rfc8448ClientHello().length));
+  lone.sign(traceSignature);
+  lone.receive(TLS_LEVEL_HANDSHAKE, rfc8448ClientFinished(), ZERO, toI32(rfc8448ClientFinished().length));
+  let held256: i32 = 0;
+  for (const a of lone.secrets256) {
+    held256 = held256 + (allZero(a) ? 0 : 1);
+  }
+  t.ok("a TlsServer through RFC 8448's handshake holds its secrets in its own arrays", lone.state === TLS_STATE_CONNECTED && held256 >= 5);
+  lone.restart(traceRandom, loneKey);
+  let left: i32 = 0;
+  for (const a of lone.secrets256) {
+    left = left + (allZero(a) ? 0 : 1);
+  }
+  for (const a of lone.secrets384) {
+    left = left + (allZero(a) ? 0 : 1);
+  }
+  t.eqI32("and restart zeroes every array of secrets256 and secrets384", left, ZERO);
 
   // --- The slot's own refusals ------------------------------------------------------------
   const none: u8[] = [];

@@ -196,7 +196,7 @@ test or another transport. The program is the loop: there are no callbacks,
 so each call answers the slot's interest and the program re-arms the
 descriptor with `pollModify(loop, tls.fd(slot), wants & 3, slot)`, signs on
 `TLS_RECORD_SIGN`, reads on `TLS_RECORD_DATA` and calls `close(slot)` on
-`TLS_RECORD_DONE`. A slot's buffers — about a hundred kilobytes — are
+`TLS_RECORD_DONE`. A slot's buffers — about 136 KB of resident memory, measured over a 400-slot pool, with the handshake's own state in them — are
 allocated once, and after its handshake a connection allocates nothing that
 outlives a record. The handshake keeps its state in the slot, which `accept`
 restarts, and a KeyUpdate installs its keys in place, so neither leaves
