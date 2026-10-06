@@ -343,7 +343,11 @@ export const tlsListHas = (list: i32[], value: i32): boolean => list.indexOf(val
 
 /** Whether the 16-bit values `data[at .. at + length)` hold `value`. */
 export const tlsWindowHasU16 = (data: u8[], at: i32, length: i32, value: i32): boolean => {
-  for (let k: i32 = at; k + 1 < at + length && k >= 0 && k + 1 < toI32(data.length); k += 2) {
+  for (
+    let k: i32 = at;
+    k + 1 < at + length && k >= 0 && k < toI32(data.length) && k + 1 < toI32(data.length);
+    k += 2
+  ) {
     if (((toI32(data[k]) << 8) | toI32(data[k + 1])) === value) {
       return true
     }
@@ -618,7 +622,11 @@ const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
 /** The 16-bit values of `data[at .. at + length)`, in a fresh list. */
 const tlsCopyU16Window = (data: u8[], at: i32, length: i32): i32[] => {
   const out: i32[] = []
-  for (let k: i32 = at; k + 1 < at + length && k >= 0 && k + 1 < toI32(data.length); k += 2) {
+  for (
+    let k: i32 = at;
+    k + 1 < at + length && k >= 0 && k < toI32(data.length) && k + 1 < toI32(data.length);
+    k += 2
+  ) {
     out.push((toI32(data[k]) << 8) | toI32(data[k + 1]))
   }
   return out
@@ -659,7 +667,12 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   // The key shares, ALPN names and extension types, walked again; the read
   // above has checked every length these loops follow.
   let at: i32 = view.sharesAt
-  while (at + 4 <= view.sharesAt + view.sharesLength && at >= 0 && at + 3 < toI32(data.length)) {
+  while (
+    at + 4 <= view.sharesAt + view.sharesLength &&
+    at >= 0 &&
+    at < toI32(data.length) &&
+    at + 3 < toI32(data.length)
+  ) {
     hello.shareGroups.push((toI32(data[at]) << 8) | toI32(data[at + 1]))
     at = at + 4 + ((toI32(data[at + 2]) << 8) | toI32(data[at + 3]))
   }
@@ -670,7 +683,12 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
     at = at + 1 + n
   }
   at = view.extensionsAt
-  while (at + 4 <= view.extensionsAt + view.extensionsLength && at >= 0 && at + 3 < toI32(data.length)) {
+  while (
+    at + 4 <= view.extensionsAt + view.extensionsLength &&
+    at >= 0 &&
+    at < toI32(data.length) &&
+    at + 3 < toI32(data.length)
+  ) {
     hello.extensionTypes.push((toI32(data[at]) << 8) | toI32(data[at + 1]))
     at = at + 4 + ((toI32(data[at + 2]) << 8) | toI32(data[at + 3]))
   }

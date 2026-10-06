@@ -226,7 +226,11 @@ const tlsBytesSpell = (data: u8[], at: i32, length: i32, text: string): boolean 
   if (toI32(text.length) !== length) {
     return false
   }
-  for (let k: i32 = 0; k < length && at + k >= 0 && at + k < toI32(data.length); k++) {
+  for (
+    let k: i32 = 0;
+    k < length && k < toI32(text.length) && at + k >= 0 && at + k < toI32(data.length);
+    k++
+  ) {
     if (toI32(data[at + k]) !== toI32(text.charCodeAt(k))) {
       return false
     }
@@ -544,17 +548,8 @@ const tlsFlightCapacity = (config: TlsServerConfig): i32 => {
  */
 export class TlsServer {
   config: TlsServerConfig
-  state: i32 = 0
-  /** The alert the server failed with, or 0. */
-  alert: i32 = 0
   serverRandom: u8[]
   ephemeralPrivate: u8[]
-
-  /** The negotiated cipher suite, or 0 before the first ClientHello is read. */
-  suite: i32 = 0
-  hashLength: i32 = 0
-  /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
-  retried: boolean = false
   /** The client's `host_name`, or empty. */
   serverName: string = ""
   /** The ALPN protocol chosen, one of the configuration's, or empty. */
@@ -563,18 +558,13 @@ export class TlsServer {
   lastServerName: string = ""
   /** The client's `quic_transport_parameters`, opaque; empty unless the carrier is QUIC. */
   clientTransportParameters: u8[]
-
   transcript: TlsTranscript
   /** The bytes received at the current level and not yet a whole message: `input[0 .. inputLength)`. */
   input: u8[]
-  inputLength: i32 = 0
   /** What the server has written at the Initial level and not handed on: `outputInitial[0 .. outputInitialLength)`. */
   outputInitial: u8[]
-  outputInitialLength: i32 = 0
   /** What the server has written at the Handshake level and not handed on: `outputHandshake[0 .. outputHandshakeLength)`. */
   outputHandshake: u8[]
-  outputHandshakeLength: i32 = 0
-
   handshakeSecret: u8[]
   clientHandshakeSecret: u8[]
   serverHandshakeSecret: u8[]
@@ -586,9 +576,6 @@ export class TlsServer {
   toBeSigned: u8[]
   /** The client Finished's `verify_data`, known once the server's Finished is written. */
   expectedClientFinished: u8[]
-
-  /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
-  configFits: boolean = false
   /** The empty array every secret field points at until its secret is derived. */
   none: u8[]
   /** The arrays the secret fields point into: `TLS_SECRET_COUNT` of each hash's lengths. */
@@ -604,6 +591,19 @@ export class TlsServer {
   serverPublic: u8[]
   /** A transcript hash on its way into the schedule: HashLen bytes of it. */
   hashes: u8[]
+  state: i32 = 0
+  /** The alert the server failed with, or 0. */
+  alert: i32 = 0
+  /** The negotiated cipher suite, or 0 before the first ClientHello is read. */
+  suite: i32 = 0
+  hashLength: i32 = 0
+  inputLength: i32 = 0
+  outputInitialLength: i32 = 0
+  outputHandshakeLength: i32 = 0
+  /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
+  retried: boolean = false
+  /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
+  configFits: boolean = false
 
   /**
    * A server for one connection under `config`, with the 32-byte server
@@ -753,7 +753,7 @@ export class TlsServer {
       return
     }
     const grown: u8[] = new Array<u8>(need)
-    for (let k: i32 = 0; k < held && k < capacity && k < need; k++) {
+    for (let k: i32 = 0; k < held && k < toI32(buffer.length) && k < toI32(grown.length); k++) {
       grown[k] = buffer[k]
     }
     if (initial) {
@@ -853,7 +853,11 @@ export class TlsServer {
   chooseSuite(hello: TlsClientHelloView): i32 {
     const data: u8[] = hello.data
     const end: i32 = hello.suitesAt + hello.suitesLength
-    for (let k: i32 = hello.suitesAt; k + 1 < end && k >= 0 && k + 1 < toI32(data.length); k += 2) {
+    for (
+      let k: i32 = hello.suitesAt;
+      k + 1 < end && k >= 0 && k < toI32(data.length) && k + 1 < toI32(data.length);
+      k += 2
+    ) {
       const suite: i32 = (toI32(data[k]) << 8) | toI32(data[k + 1])
       if (tlsSuiteHashLength(suite) > 0) {
         return suite
@@ -1010,7 +1014,11 @@ export class TlsServer {
     this.takeServerName(hello)
     if (this.config.quic) {
       const parameters: u8[] = new Array<u8>(hello.quicLength)
-      for (let k: i32 = 0; k < hello.quicLength && hello.quicAt + k < toI32(data.length); k++) {
+      for (
+        let k: i32 = 0;
+        k < toI32(parameters.length) && hello.quicAt + k >= 0 && hello.quicAt + k < toI32(data.length);
+        k++
+      ) {
         parameters[k] = data[hello.quicAt + k]
       }
       this.clientTransportParameters = parameters
