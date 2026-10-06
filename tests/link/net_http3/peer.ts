@@ -37,9 +37,7 @@ import {
   H3_STREAM_QPACK_DECODER,
   H3_STREAM_QPACK_ENCODER,
   Http3FrameHeader,
-  h3PutFrameHeader,
   h3PutSettings,
-  h3PutVarint,
   h3ReadFrameHeader,
 } from "nish/net/http3-frame";
 import {
@@ -58,7 +56,8 @@ import {
 } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
-import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
+import { bytesOf, fromHex, sameBytes, textOf } from "../crypto_x509/hex";
+import { quicVarintPush } from "nish/net/quic-packet";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
 import {
@@ -175,15 +174,7 @@ export const h3Pattern = (count: i32): u8[] => {
 };
 
 /** Whether `bytes` is `h3Pattern(bytes.length)`. */
-export const h3IsPattern = (bytes: u8[]): boolean => {
-  const want: u8[] = h3Pattern(toI32(bytes.length));
-  for (let k: i32 = 0; k < toI32(bytes.length) && k < toI32(want.length); k++) {
-    if (bytes[k] !== want[k]) {
-      return false;
-    }
-  }
-  return true;
-};
+export const h3IsPattern = (bytes: u8[]): boolean => sameBytes(bytes, h3Pattern(toI32(bytes.length)));
 
 /** A field section of `names` and `values`, QPACK-encoded the way the client's encoder does. */
 export const h3Section = (enc: QpackEncoder, names: string[], values: string[]): u8[] => {
@@ -199,12 +190,9 @@ export const h3Section = (enc: QpackEncoder, names: string[], values: string[]):
 
 /** A frame of `type` carrying `payload`, as bytes. */
 export const h3Frame = (type: i64, payload: u8[]): u8[] => {
-  const head: u8[] = new Array<u8>(16);
-  const n: i32 = h3PutFrameHeader(head, n32(0), n32(16), type, toI64(toI32(payload.length)));
   const out: u8[] = [];
-  for (let k: i32 = 0; k < n; k++) {
-    out.push(head[k]);
-  }
+  quicVarintPush(out, type);
+  quicVarintPush(out, toI64(toI32(payload.length)));
   for (const b of payload) {
     out.push(b);
   }
@@ -213,12 +201,8 @@ export const h3Frame = (type: i64, payload: u8[]): u8[] => {
 
 /** A varint, as bytes. */
 export const h3Varint = (value: i64): u8[] => {
-  const buf: u8[] = new Array<u8>(8);
-  const n: i32 = h3PutVarint(buf, n32(0), n32(8), value);
   const out: u8[] = [];
-  for (let k: i32 = 0; k < n; k++) {
-    out.push(buf[k]);
-  }
+  quicVarintPush(out, value);
   return out;
 };
 

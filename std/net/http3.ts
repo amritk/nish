@@ -47,6 +47,10 @@
  * when it took less, `H3_WRITABLE` names the stream once acknowledgements free
  * room. HEADERS and trailers go whole or not at all (`H3_AGAIN`).
  *
+ * **ALPN.** A QUIC connection whose handshake chose anything but `h3` is
+ * closed with CRYPTO_ERROR no_application_protocol (0x0178) on the first
+ * `next()` after it connects, before any HTTP/3 byte (§3.1).
+ *
  * **Streams** (§6). The connection opens its control stream, sends SETTINGS
  * first on it (SETTINGS_QPACK_MAX_TABLE_CAPACITY 0, SETTINGS_QPACK_BLOCKED_STREAMS
  * 0 and SETTINGS_MAX_FIELD_SECTION_SIZE), and opens its QPACK encoder and
@@ -146,6 +150,8 @@ import {
   H3_STREAM_QPACK_ENCODER,
   Http3FrameHeader,
   Http3Settings,
+  h3CheckWindow,
+  h3Count,
   h3FrameHeaderSize,
   h3PutFrameHeader,
   h3PutIdFrame,
@@ -156,6 +162,7 @@ import {
   h3ReadSettings,
   h3ReadVarint,
   h3ReservedHttp2Frame,
+  h3VarintLength,
 } from "nish/net/http3-frame"
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic"
 import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET, QuicStream } from "nish/net/quic-stream"
@@ -192,6 +199,9 @@ export const H3_CLOSED: i32 = -32
 /** A field section past what the client takes, or past a stream's buffer: Linux's EMSGSIZE. */
 export const H3_TOO_LARGE: i32 = -90
 
+/** CRYPTO_ERROR with TLS's no_application_protocol alert (RFC 9001 §4.8): a handshake that did not choose `h3`. */
+export const H3_NO_APPLICATION_PROTOCOL: i64 = 0x0178
+
 /** The largest control-stream frame read whole: SETTINGS, GOAWAY, MAX_PUSH_ID, CANCEL_PUSH. */
 export const H3_CONTROL_FRAME_MAX: i32 = 1024
 
@@ -212,7 +222,6 @@ const H3_FLAG_DELIVERED: i32 = 1
 const H3_FLAG_HEADERS_SENT: i32 = 2
 const H3_FLAG_SEND_DONE: i32 = 4
 const H3_FLAG_RECV_DONE: i32 = 8
-const H3_FLAG_STOP_NOTED: i32 = 16
 const H3_FLAG_BLOCKED: i32 = 32
 const H3_FLAG_COUNTED: i32 = 64
 
@@ -272,17 +281,17 @@ const http3CheckCap = (what: string, value: i32, low: i32, high: i32): void => {
   }
 }
 
-/** Panics unless `[off, off + len)` lies inside `buf`. */
-const http3CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
-  }
-}
-
 /** Empties `bytes`, keeping its storage for the next fill. */
 const http3Empty = (bytes: u8[]): void => {
   while (toI32(bytes.length) > 0) {
     bytes.pop()
+  }
+}
+
+/** Empties `list`, keeping its storage for the next fill. */
+const http3EmptyList = (list: u8[][]): void => {
+  while (toI32(list.length) > 0) {
+    list.pop()
   }
 }
 
@@ -291,9 +300,6 @@ const http3IsRequest = (id: i64): boolean => (id & 3) === 0
 
 /** The smaller of two `i64`s. */
 const http3Min = (a: i64, b: i64): i64 => (a < b ? a : b)
-
-/** `count` plus one, saturating at 2^31 - 1. */
-const http3Count = (count: i32): i32 => (count < 2147483647 ? count + 1 : count)
 
 /**
  * One HTTP/3 connection, server side, over `quic`. The fields after the
@@ -385,8 +391,7 @@ export class Http3Connection {
   rejected: i32 = 0
   tooLarge: i32 = 0
   streamErrors: i32 = 0
-  /** Whether this side's three streams are open and typed, and the client's SETTINGS have arrived. */
-  started: boolean = false
+  /** Whether the client's SETTINGS have arrived. */
   settingsSeen: boolean = false
   /** Whether H3_RESET came from the client. */
   resetByPeer: boolean = false
@@ -507,7 +512,6 @@ export class Http3Connection {
     this.rejected = 0
     this.tooLarge = 0
     this.streamErrors = 0
-    this.started = false
     this.settingsSeen = false
     this.resetByPeer = false
   }
@@ -586,7 +590,6 @@ export class Http3Connection {
         return
       }
     }
-    this.started = true
   }
 
   /**
@@ -606,7 +609,12 @@ export class Http3Connection {
     if (this.quic.state !== QUIC_STATE_CONNECTED) {
       return H3_NEED_MORE
     }
-    if (!this.started) {
+    if (this.ownDecoder < 0) {
+      // RFC 9114 §3.1: HTTP/3 only where the handshake chose it.
+      if (this.quic.alpn !== H3_ALPN) {
+        this.quic.fail(H3_NO_APPLICATION_PROTOCOL, toI64(0))
+        return this.fail(H3_NO_APPLICATION_PROTOCOL)
+      }
       this.start()
     }
     while (this.state !== H3_STATE_FAILED) {
@@ -672,7 +680,7 @@ export class Http3Connection {
       this.quic.streamStopSending(id, H3_REQUEST_REJECTED)
       this.flags[k] = H3_FLAG_SEND_DONE
       this.phase[k] = H3_PHASE_DISCARD
-      this.rejected = http3Count(this.rejected)
+      this.rejected = h3Count(this.rejected)
       return
     }
     this.flags[k] = H3_FLAG_COUNTED
@@ -704,19 +712,30 @@ export class Http3Connection {
   }
 
   /**
-   * Reads a frame header of stream `id` a byte at a time into slot `k`'s
-   * `head`, so a header split across STREAM frames costs nothing to keep.
-   * Answers 1 with `header` filled, 0 when more is needed, or the
-   * `QUIC_STREAM_*` answer that ended the read.
+   * Reads a frame header of stream `id` into slot `k`'s `head`, a varint at
+   * a time — its first byte, which says its size, then the rest — so a
+   * header split across STREAM frames costs nothing to keep. Answers 1 with
+   * `header` filled, 0 when more is needed, or the `QUIC_STREAM_*` answer
+   * that ended the read.
    */
   readHeader(k: i32, id: i64): i32 {
     const base: i32 = k * H3_HEAD
     while (this.headLen[k] < H3_HEAD) {
-      const n: i32 = this.quic.streamRead(id, this.head, base + this.headLen[k], H3_ONE)
-      if (n !== 1) {
+      const have: i32 = this.headLen[k]
+      // The type's size from its first byte, then the length's from its.
+      let need: i32 = 1
+      if (have > 0) {
+        const typeSize: i32 = h3VarintLength(this.head, base)
+        need = have < typeSize ? typeSize - have : 1
+        if (have > typeSize) {
+          need = typeSize + h3VarintLength(this.head, base + typeSize) - have
+        }
+      }
+      const n: i32 = this.quic.streamRead(id, this.head, base + have, need)
+      if (n <= 0) {
         return n
       }
-      this.headLen[k] = this.headLen[k] + 1
+      this.headLen[k] = have + n
       if (h3ReadFrameHeader(this.header, this.head, base, this.headLen[k]) > 0) {
         this.headLen[k] = 0
         return 1
@@ -941,10 +960,9 @@ export class Http3Connection {
     const stream: QuicStream = this.quic.streams.slots[k]
     while (this.state !== H3_STATE_FAILED) {
       const phase: i32 = this.phase[k]
-      if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_STOP_NOTED) === 0) {
+      if (stream.stopCode >= 0 && (this.flags[k] & H3_FLAG_SEND_DONE) === 0) {
         // The client stopped the response (QUIC answered with RESET_STREAM, §3.5 of RFC 9000).
-        const told: boolean = (this.flags[k] & (H3_FLAG_DELIVERED | H3_FLAG_SEND_DONE)) === H3_FLAG_DELIVERED
-        this.flags[k] = this.flags[k] | H3_FLAG_STOP_NOTED
+        const told: boolean = (this.flags[k] & H3_FLAG_DELIVERED) !== 0
         this.mark(k, H3_FLAG_SEND_DONE)
         if (told) {
           if (phase !== H3_PHASE_DONE) {
@@ -1139,12 +1157,8 @@ export class Http3Connection {
   /** Copies the decoder's fields into the connection's own arrays and the lists `fields` reads. */
   copyFields(): void {
     const d: QpackDecoder = this.decoder
-    while (toI32(this.nameList.length) > 0) {
-      this.nameList.pop()
-    }
-    while (toI32(this.valueList.length) > 0) {
-      this.valueList.pop()
-    }
+    http3EmptyList(this.nameList)
+    http3EmptyList(this.valueList)
     this.poolUsed.fill(H3_ZERO)
     for (let i: i32 = 0; i < d.count; i++) {
       this.nameList.push(this.copyOf(d, d.nameStart[i], d.nameLength[i]))
@@ -1169,14 +1183,15 @@ export class Http3Connection {
     const pool: u8[][] = this.pools[j]
     const used: i32 = this.poolUsed[j]
     if (used >= toI32(pool.length)) {
-      const fresh: u8[] = new Array<u8>(1 << j)
-      http3Empty(fresh)
-      pool.push(fresh)
+      // Made with room for the class, then emptied below like any reused one.
+      pool.push(new Array<u8>(1 << j))
     }
     this.poolUsed[j] = used + 1
     const out: u8[] = pool[used]
     http3Empty(out)
-    for (let k: i32 = start; k < start + length && k >= 0 && k < toI32(d.bytes.length); k++) {
+    const from: i32 = start > 0 ? start : H3_ZERO
+    const end: i32 = start + length < toI32(d.bytes.length) ? start + length : toI32(d.bytes.length)
+    for (let k: i32 = from; k < end; k++) {
       out.push(d.bytes[k])
     }
     return out
@@ -1202,13 +1217,13 @@ export class Http3Connection {
     if (phase === H3_PHASE_HEADERS || phase === H3_PHASE_SKIP) {
       // §4.1.1: the stream ended before a whole request.
       this.abandon(k, id, H3_REQUEST_INCOMPLETE)
-      this.streamErrors = http3Count(this.streamErrors)
+      this.streamErrors = h3Count(this.streamErrors)
       return H3_NEED_MORE
     }
     if (this.contentLength[k] >= 0 && this.dataTotal[k] !== this.contentLength[k]) {
       // §4.1.2: the body is shorter than its content-length.
       this.abandon(k, id, H3_MESSAGE_ERROR)
-      this.streamErrors = http3Count(this.streamErrors)
+      this.streamErrors = h3Count(this.streamErrors)
       return this.resetEvent(id, H3_MESSAGE_ERROR, false)
     }
     this.stream = id
@@ -1225,7 +1240,7 @@ export class Http3Connection {
 
   /** A stream error (§8): the request is reset both ways with `code`, and the program told when it knew the request. */
   streamError(k: i32, id: i64, code: i64): i32 {
-    this.streamErrors = http3Count(this.streamErrors)
+    this.streamErrors = h3Count(this.streamErrors)
     this.abandon(k, id, code)
     this.quic.streamStopSending(id, code)
     this.phase[k] = H3_PHASE_DISCARD
@@ -1249,12 +1264,10 @@ export class Http3Connection {
    * §4.1.2). The program never sees it.
    */
   answerTooLarge(k: i32, id: i64): i32 {
-    this.tooLarge = http3Count(this.tooLarge)
+    this.tooLarge = h3Count(this.tooLarge)
     const empty: u8[][] = this.nameList
-    while (toI32(empty.length) > 0) {
-      empty.pop()
-    }
-    if (this.writeHead(k, id, H3_STATUS_TOO_LARGE, empty, empty, true, true) !== 0) {
+    http3EmptyList(empty)
+    if (this.writeHead(k, id, H3_STATUS_TOO_LARGE, empty, empty, true) !== 0) {
       this.abandon(k, id, H3_EXCESSIVE_LOAD)
     }
     this.quic.streamStopSending(id, H3_NO_ERROR)
@@ -1370,24 +1383,16 @@ export class Http3Connection {
   }
 
   /**
-   * Encodes `:status` (when `withStatus`) and `names`/`values` into a HEADERS
+   * Encodes `:status` (unless it is 0, for trailers) and `names`/`values` into a HEADERS
    * frame and writes it whole to stream `id`, with the FIN when `fin`.
    * Answers 0, H3_AGAIN, or H3_TOO_LARGE.
    */
-  writeHead(
-    k: i32,
-    id: i64,
-    status: i32,
-    names: u8[][],
-    values: u8[][],
-    fin: boolean,
-    withStatus: boolean
-  ): i32 {
+  writeHead(k: i32, id: i64, status: i32, names: u8[][], values: u8[][], fin: boolean): i32 {
     const out: u8[] = this.encoded
     http3Empty(out)
     this.encoder.beginSection(out)
     let size: i64 = 0
-    if (withStatus) {
+    if (status > 0) {
       const ten: i32 = 10
       this.statusValue[0] = toU8(H3_DIGIT_ZERO + status / (ten * ten))
       this.statusValue[1] = toU8(H3_DIGIT_ZERO + ((status / ten) % ten))
@@ -1467,7 +1472,7 @@ export class Http3Connection {
     ) {
       return H3_INVALID
     }
-    return this.writeHead(k, id, status, names, values, endStream, true)
+    return this.writeHead(k, id, status, names, values, endStream)
   }
 
   /**
@@ -1487,7 +1492,7 @@ export class Http3Connection {
     ) {
       return H3_INVALID
     }
-    return this.writeHead(k, id, H3_ZERO, names, values, true, false)
+    return this.writeHead(k, id, H3_ZERO, names, values, true)
   }
 
   /**
@@ -1501,7 +1506,7 @@ export class Http3Connection {
    * short the DATA frame the last call started.
    */
   writeData(id: i64, buf: u8[], off: i32, len: i32, endStream: boolean): i32 {
-    http3CheckWindow("Http3Connection.writeData", buf, off, len)
+    h3CheckWindow("Http3Connection.writeData", buf, off, len)
     const k: i32 = this.writeSlot(id)
     if (k < 0) {
       return H3_CLOSED

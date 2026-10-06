@@ -52,6 +52,12 @@
  * module's private functions share the importing program's flat symbol
  * namespace (`docs/wp26-stdlib.md` §3e).
  */
+import {
+  QPACK_DECODER_STREAM,
+  QPACK_ENCODER_STREAM,
+  QPACK_SETTINGS_BLOCKED_STREAMS,
+  QPACK_SETTINGS_MAX_TABLE_CAPACITY,
+} from "nish/net/qpack"
 import { quicVarintLength, quicVarintPut, quicVarintRead, quicVarintSize } from "nish/net/quic-packet"
 
 // ---- Frame types (§7.2, §11.2.1) ------------------------------------------------
@@ -78,18 +84,18 @@ export const H3_STREAM_CONTROL: i64 = 0x00
 /** A push stream, which only a server opens. */
 export const H3_STREAM_PUSH: i64 = 0x01
 /** QPACK's encoder stream. */
-export const H3_STREAM_QPACK_ENCODER: i64 = 0x02
+export const H3_STREAM_QPACK_ENCODER: i64 = QPACK_ENCODER_STREAM
 /** QPACK's decoder stream. */
-export const H3_STREAM_QPACK_DECODER: i64 = 0x03
+export const H3_STREAM_QPACK_DECODER: i64 = QPACK_DECODER_STREAM
 
 // ---- Settings (§7.2.4.1, RFC 9204 §5) -------------------------------------------
 
 /** SETTINGS_QPACK_MAX_TABLE_CAPACITY. */
-export const H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY: i64 = 0x01
+export const H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY: i64 = QPACK_SETTINGS_MAX_TABLE_CAPACITY
 /** SETTINGS_MAX_FIELD_SECTION_SIZE: the largest field section the sender takes, as §4.2.2 counts it. */
 export const H3_SETTINGS_MAX_FIELD_SECTION_SIZE: i64 = 0x06
 /** SETTINGS_QPACK_BLOCKED_STREAMS. */
-export const H3_SETTINGS_QPACK_BLOCKED_STREAMS: i64 = 0x07
+export const H3_SETTINGS_QPACK_BLOCKED_STREAMS: i64 = QPACK_SETTINGS_BLOCKED_STREAMS
 
 /** How many identifiers `Http3Settings` keeps that it does not understand. */
 export const H3_SETTINGS_KEEP: i32 = 8
@@ -128,14 +134,10 @@ const H3_FRAME_SEEN_BLOCKED: i32 = 4
 const H3_FRAME_NONE: i64 = -1
 const H3_FRAME_ZERO: i32 = 0
 
-/**
- * One frame header as `h3ReadFrameHeader` read it: the type, the payload's
- * length, and how many bytes the two varints took.
- */
+/** One frame header as `h3ReadFrameHeader` read it: the type and the payload's length. */
 export class Http3FrameHeader {
   type: i64 = 0
   length: i64 = 0
-  size: i32 = 0
 }
 
 /**
@@ -222,11 +224,14 @@ export class Http3Settings {
 }
 
 /** Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake. */
-const h3FrameCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
+export const h3CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
   if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
     panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
   }
 }
+
+/** `count` plus one, saturating at 2^31 - 1: every counter a peer drives. */
+export const h3Count = (count: i32): i32 => (count < 2147483647 ? count + 1 : count)
 
 /** Whether `[at, end)` is a usable place to write in `buf`. */
 const h3FrameRoom = (buf: u8[], at: i32, end: i32): boolean =>
@@ -268,7 +273,7 @@ export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
  * type is allowed where it arrived is the stream's question.
  */
 export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 => {
-  h3FrameCheckWindow("h3ReadFrameHeader", buf, off, len)
+  h3CheckWindow("h3ReadFrameHeader", buf, off, len)
   const end: i32 = off + len
   const type: i64 = quicVarintRead(buf, off, end)
   if (type < 0) {
@@ -281,8 +286,7 @@ export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len:
   }
   h.type = type
   h.length = length
-  h.size = at + quicVarintLength(buf, at) - off
-  return h.size
+  return at + quicVarintLength(buf, at) - off
 }
 
 /** Writes a frame header of `type` and `length` at `buf[at]`, before `end`; answers the offset past it, or -1. */
@@ -308,7 +312,7 @@ export const h3Greased = (value: i64): boolean => value >= 0x21 && (value - 0x21
  * identifier (§7.2.4).
  */
 export const h3ReadSettings = (s: Http3Settings, buf: u8[], off: i32, len: i32): i64 => {
-  h3FrameCheckWindow("h3ReadSettings", buf, off, len)
+  h3CheckWindow("h3ReadSettings", buf, off, len)
   s.reset()
   const end: i32 = off + len
   let at: i32 = off
@@ -382,7 +386,7 @@ export const h3PutIdFrame = (buf: u8[], at: i32, end: i32, type: i64, id: i64): 
  * varint, which is H3_FRAME_ERROR (§7.1).
  */
 export const h3ReadIdPayload = (buf: u8[], off: i32, len: i32): i64 => {
-  h3FrameCheckWindow("h3ReadIdPayload", buf, off, len)
+  h3CheckWindow("h3ReadIdPayload", buf, off, len)
   const id: i64 = quicVarintRead(buf, off, off + len)
   return id >= 0 && quicVarintLength(buf, off) === len ? id : H3_FRAME_NONE
 }

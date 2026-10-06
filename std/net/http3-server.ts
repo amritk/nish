@@ -31,9 +31,9 @@
  * and counted, and the client's own timers retry.
  *
  * **ALPN.** The QUIC configuration's ALPN list is what the TLS handshake
- * offers; a connection whose handshake chose anything but `h3` is closed with
- * CRYPTO_ERROR no_application_protocol (0x0178) and never reaches its
- * `Http3Connection` (RFC 9114 §3.1).
+ * offers; a connection whose handshake chose anything but `h3` is closed by
+ * its `Http3Connection`, before a byte of HTTP/3, with CRYPTO_ERROR
+ * no_application_protocol (0x0178; RFC 9114 §3.1).
  *
  * **Sending.** `flush` writes each touched slot's datagrams with
  * `quicListenerTakeFlight`, a paced flight at a time in one `udpSendTo` with
@@ -63,14 +63,13 @@
  */
 import { udpRecvFrom, udpSendTo } from "nish:net"
 import { Secret } from "nish:secret"
-import { H3_ALPN, Http3Config, Http3Connection } from "nish/net/http3"
-import { H3_NO_ERROR } from "nish/net/http3-frame"
+import { Http3Config, Http3Connection } from "nish/net/http3"
+import { H3_NO_ERROR, h3Count } from "nish/net/http3-frame"
 import {
   QUIC_CONN_CID_LENGTH,
   QUIC_CONN_DATAGRAM_SIZE,
   QUIC_CONN_ENTROPY_SIZE,
   QUIC_CONN_LOCAL_CIDS,
-  QUIC_STATE_CONNECTED,
   QuicConnection,
   QuicServerConfig,
 } from "nish/net/quic"
@@ -106,9 +105,6 @@ const H3_SERVER_NO_GSO: i32 = -95
 /** The largest datagram read: a GRO receive of up to 64 KB. */
 const H3_SERVER_RECEIVE_SIZE: i32 = 65536
 
-/** CRYPTO_ERROR with TLS's no_application_protocol alert (RFC 9001 §4.8, RFC 7301 §3.2). */
-const H3_SERVER_NO_ALPN: i64 = 0x0178
-
 /** Index entries per slot: its local connection IDs, then the client's original DCID. */
 const H3_SERVER_KEYS: i32 = QUIC_CONN_LOCAL_CIDS + 1
 
@@ -123,9 +119,6 @@ const H3_SERVER_MASK: i64 = 0x7fffffffffff
 /** A slot's states. */
 const H3_SERVER_FREE: i32 = 0
 const H3_SERVER_BUSY: i32 = 1
-
-/** `count` plus one, saturating at 2^31 - 1. */
-const http3ServerCount = (count: i32): i32 => (count < 2147483647 ? count + 1 : count)
 
 /** The bucket of `time` on the wheel. */
 const http3ServerBucket = (time: i64): i32 => toI32(time % toI64(H3_SERVER_WHEEL))
@@ -647,7 +640,7 @@ export class Http3Server {
     }
     this.state[slot] = H3_SERVER_BUSY
     this.signatures[slot] = H3_SERVER_NONE
-    this.accepted = http3ServerCount(this.accepted)
+    this.accepted = h3Count(this.accepted)
     this.serve(slot, buf, at, len, now, key)
   }
 
@@ -668,7 +661,7 @@ export class Http3Server {
     if ((first & 0x80) === 0) {
       return len > QUIC_LISTENER_MIN_RESET && this.takeAnswer(now)
     }
-    if (len < QUIC_CONN_DATAGRAM_SIZE || len < 6) {
+    if (len < QUIC_CONN_DATAGRAM_SIZE) {
       return false
     }
     let version: i32 = 0
@@ -682,7 +675,7 @@ export class Http3Server {
       return false
     }
     if (this.freeCount <= 0) {
-      this.refused = http3ServerCount(this.refused)
+      this.refused = h3Count(this.refused)
       return false
     }
     return true
@@ -707,7 +700,7 @@ export class Http3Server {
       this.answerRefilled = this.answerRefilled + earned * H3_SERVER_ANSWER_INTERVAL
     }
     if (this.answerBudget <= 0) {
-      this.limited = http3ServerCount(this.limited)
+      this.limited = h3Count(this.limited)
       return false
     }
     this.answerBudget = this.answerBudget - 1
@@ -725,9 +718,6 @@ export class Http3Server {
         quic.sign(signature)
       }
     }
-    if (quic.state === QUIC_STATE_CONNECTED && quic.alpn !== H3_ALPN) {
-      quic.fail(H3_SERVER_NO_ALPN, toI64(0))
-    }
     this.refile(slot)
     this.touch(slot)
   }
@@ -744,10 +734,8 @@ export class Http3Server {
       return
     }
     this.signatures[slot] = signature
+    this.unindex(slot)
     const first: i32 = slot * H3_SERVER_KEYS
-    for (let j: i32 = 0; j < H3_SERVER_KEYS; j++) {
-      this.index.remove(first + j)
-    }
     for (let j: i32 = 0; j < QUIC_CONN_LOCAL_CIDS && j < toI32(quic.cids.local.length); j++) {
       const entry = quic.cids.local[j]
       if (entry.used) {
@@ -771,7 +759,7 @@ export class Http3Server {
       return true
     }
     if (sent !== H3_SERVER_NO_GSO || segment <= 0) {
-      this.sendErrors = http3ServerCount(this.sendErrors)
+      this.sendErrors = h3Count(this.sendErrors)
       return false
     }
     // No segmentation offload here: one datagram at a time.
@@ -779,7 +767,7 @@ export class Http3Server {
     while (p < at + len) {
       const n: i32 = at + len - p < segment ? at + len - p : segment
       if (udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, H3_SERVER_ZERO) < 0) {
-        this.sendErrors = http3ServerCount(this.sendErrors)
+        this.sendErrors = h3Count(this.sendErrors)
         return false
       }
       p = p + n
@@ -846,12 +834,17 @@ export class Http3Server {
     this.wheel.file(slot, due, now)
   }
 
-  /** Frees `slot`: its IDs leave the index and its timer the wheel. */
-  release(slot: i32): void {
+  /** Takes every one of `slot`'s connection IDs out of the index. */
+  unindex(slot: i32): void {
     const first: i32 = slot * H3_SERVER_KEYS
     for (let j: i32 = 0; j < H3_SERVER_KEYS; j++) {
       this.index.remove(first + j)
     }
+  }
+
+  /** Frees `slot`: its IDs leave the index and its timer the wheel. */
+  release(slot: i32): void {
+    this.unindex(slot)
     this.wheel.unfile(slot)
     this.quics[slot].release()
     this.state[slot] = H3_SERVER_FREE
