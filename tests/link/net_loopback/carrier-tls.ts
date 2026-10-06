@@ -65,8 +65,8 @@ export const tlsChecks = (t: Suite): void => {
   t.eqStr("tls: the client's close_notify is answered with the server's", c.awaitAlert(), "1 0");
   t.ok("tls: the server saw the client's close and closed the socket", lp.awaitEnd(c.index) && lp.echo.peerCloses === 1 && lp.awaitClosed(toI32(1)) && lp.busy() === 0);
 
-  const first = new LbMeter(false);
-  const second = new LbMeter(false);
+  const first = new LbMeter(true);
+  const second = new LbMeter(true);
   const third = new LbMeter(true);
   const all: boolean = tlsWholeConnection(lp, first) && tlsWholeConnection(lp, second) && tlsWholeConnection(lp, third);
   t.ok("tls: three more connections through the slot, each handshaken, echoed and closed", all && lp.busy() === 0);
