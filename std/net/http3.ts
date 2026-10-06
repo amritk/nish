@@ -505,9 +505,14 @@ export class Http3Connection {
     return H3_ERROR
   }
 
-  /** Whether this side sent GOAWAY and every request it took has finished both ways: the carrier may close. */
+  /**
+   * Whether this side sent GOAWAY and every request it took has finished
+   * both ways, every byte of each response acknowledged: the carrier may
+   * close the connection.
+   */
   isDone(): boolean {
-    return this.goawayId >= 0 && this.live === 0
+    const streams = this.quic.streams
+    return this.goawayId >= 0 && this.live === 0 && streams.peerBidiClosed >= streams.peerBidiOpened
   }
 
   /** Writes `buf[0 .. n)` to this side's new stream `id` whole, as its first bytes; answers whether it took them. */
