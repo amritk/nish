@@ -135,6 +135,8 @@ PASS  MAX_STREAMS from the client lets the next open, 7
 PASS  two of the server's are open, its own limit: the next is QUIC_STREAM_ERR_LIMIT
 PASS  a finished stream of the server's arrives
 PASS  and once acknowledged leaves its slot: the next opens, 11
+PASS  a stream's first 100 bytes go out in one frame
+PASS  with every byte it would send again acknowledged, the next packet carries its 50 new bytes, not nothing
 PASS  connected
 PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no arena memory
 PASS  and the echo is all there: 32,000 bytes sent back
@@ -142,4 +144,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
-quic streams: 144 passed, 0 failed, 0 skipped
+quic streams: 146 passed, 0 failed, 0 skipped

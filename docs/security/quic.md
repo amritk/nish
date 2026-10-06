@@ -260,6 +260,10 @@ twins) are unchanged, byte for byte, with all of it in.
   receive is handed to a connection segment by segment in place.
 - **Nothing is kept per packet, and the slot does not grow** (`arena.ts`,
   `datagram.ts`): see QUIC-3 for the figures.
+- **A resend range acknowledged before it went again does not stall the
+  stream** (`resend.ts`): `putNextChunk` clears it and sends the stream's new
+  bytes in the same packet, where it used to answer none and leave a flight
+  empty (H3-7 in [http3.md](http3.md), fixed here at its source).
 - **A handshake keeps its state in the slot** (`tests/link/net_quic_memory`,
   and `_f64`): connection after connection through one reset slot, under
   each of the three suites, keeps only `TlsServer`'s copy of the client's
