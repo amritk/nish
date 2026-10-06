@@ -676,9 +676,9 @@ export class QuicStreams {
     const local: boolean = quicStreamIsLocal(id)
     const uni: boolean = quicStreamIsUni(id)
     const buffer: i64 = toI64(this.bufferSize)
-    // This side's credit: a whole buffer, for every stream it receives on;
-    // on its own bidirectional streams only when it opens any (`localStreams`).
-    const recvLimit: i64 = local ? (uni ? QUIC_STREAM_ZERO : buffer) : buffer
+    // This side's credit: a whole buffer, for every stream it receives on,
+    // and none on its own unidirectional streams, which it only sends on.
+    const recvLimit: i64 = local && uni ? QUIC_STREAM_ZERO : buffer
     let sendLimit: i64 = this.peerBidiLocalCredit
     if (local) {
       sendLimit = uni ? this.peerUniCredit : this.peerBidiRemoteCredit

@@ -139,7 +139,6 @@
  * structure; nothing here is ported from another implementation. Private
  * names carry the `quicConn` prefix (`docs/wp26-stdlib.md` §3e).
  */
-import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256 } from "nish/crypto/hmac"
 import {
   QUIC_AEAD_AES_128_GCM,
@@ -185,7 +184,6 @@ import {
   QUIC_FRAME_CRYPTO,
   QUIC_FRAME_DATAGRAM,
   QUIC_FRAME_DATAGRAM_LENGTH,
-  QUIC_FRAME_DATA_BLOCKED,
   QUIC_FRAME_HANDSHAKE_DONE,
   QUIC_FRAME_MAX_DATA,
   QUIC_FRAME_MAX_STREAM_DATA,
@@ -201,8 +199,6 @@ import {
   QUIC_FRAME_STOP_SENDING,
   QUIC_FRAME_STREAM,
   QUIC_FRAME_STREAM_DATA_BLOCKED,
-  QUIC_FRAME_STREAMS_BLOCKED_BIDI,
-  QUIC_FRAME_STREAMS_BLOCKED_UNI,
   QUIC_PATH_DATA_SIZE,
   QUIC_RESET_TOKEN_SIZE,
   QuicFrame,
@@ -492,7 +488,9 @@ class QuicConnReassembly {
   /** Whether the byte in ring slot `s` arrived and is not yet handed out. */
   arrived(s: i32): boolean {
     const at: i32 = s >> 3
-    return at >= 0 && at < toI32(this.have.length) && (toI32(this.have[at]) & (QUIC_CONN_BIT << (s & 7))) !== 0
+    return (
+      at >= 0 && at < toI32(this.have.length) && (toI32(this.have[at]) & (QUIC_CONN_BIT << (s & 7))) !== 0
+    )
   }
 
   /** Marks ring slot `s` as holding a byte, or not. */
@@ -1394,7 +1392,16 @@ export class QuicConnection {
     const none: u8[] = this.none
     const resetToken: u8[] = quicStatelessResetToken(this.config.statelessResetKey, this.localScid)
     this.cids.addLocal(this.localScid, resetToken)
-    this.cids.addPeerAt(QUIC_CONN_NONE, QUIC_CONN_NONE, this.peerScid, QUIC_CONN_FROM, this.peerScidLength, none, QUIC_CONN_FROM, false)
+    this.cids.addPeerAt(
+      QUIC_CONN_NONE,
+      QUIC_CONN_NONE,
+      this.peerScid,
+      QUIC_CONN_FROM,
+      this.peerScidLength,
+      none,
+      QUIC_CONN_FROM,
+      false
+    )
     // §8.1.2: a Retry token the listener checked has validated the address.
     this.addressValidated = this.retried
 
@@ -1491,7 +1498,7 @@ export class QuicConnection {
     this.phasePending = -1
     let outcome: i32 = QUIC_CONN_OPEN_DROPPED
     {
-      using a = arena()
+      using _scope = arena()
       outcome = this.openScoped(buf, header, space, keys)
     }
     if (outcome === QUIC_CONN_OPEN_DROPPED) {
@@ -1725,7 +1732,13 @@ export class QuicConnection {
    * does not parse and a frame the packet type may not carry close the
    * connection (RFC 9000 §12.4).
    */
-  receiveFrames(space: QuicConnSpace, packetType: i32, payload: u8[], buf: u8[], header: QuicHeader): boolean {
+  receiveFrames(
+    space: QuicConnSpace,
+    packetType: i32,
+    payload: u8[],
+    buf: u8[],
+    header: QuicHeader
+  ): boolean {
     const end: i32 = toI32(payload.length)
     if (end === 0) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, QUIC_CONN_NONE)
@@ -2048,7 +2061,12 @@ export class QuicConnection {
       if (n === 0) {
         return
       }
-      const alert: i32 = tls.receive(reassembly.level, reassembly.ring, reassembly.slot(reassembly.delivered), n)
+      const alert: i32 = tls.receive(
+        reassembly.level,
+        reassembly.ring,
+        reassembly.slot(reassembly.delivered),
+        n
+      )
       reassembly.consume(n)
       if (alert !== 0) {
         this.fail(QUIC_ERROR_CRYPTO + toI64(alert), toI64(QUIC_FRAME_CRYPTO))
@@ -2067,7 +2085,10 @@ export class QuicConnection {
     const size: i64 = toI64(frame.end - frameStart)
     if (this.config.maxDatagramFrameSize === 0 || size > this.config.maxDatagramFrameSize) {
       // `fin` is how the frame says it was 0x31, the type with a Length.
-      this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(frame.fin ? QUIC_FRAME_DATAGRAM_LENGTH : QUIC_FRAME_DATAGRAM))
+      this.fail(
+        QUIC_ERROR_PROTOCOL_VIOLATION,
+        toI64(frame.fin ? QUIC_FRAME_DATAGRAM_LENGTH : QUIC_FRAME_DATAGRAM)
+      )
       return
     }
     this.datagramsIn.push(payload, frame.dataStart, frame.dataLength)
@@ -2085,7 +2106,12 @@ export class QuicConnection {
     const base: i32 = ((this.pathHead + this.pathCount) % 4) * QUIC_PATH_DATA_SIZE
     for (let k: i32 = 0; k < QUIC_PATH_DATA_SIZE; k += 1) {
       const from: i32 = frame.dataStart + k
-      if (base + k >= 0 && base + k < toI32(this.pathData.length) && from >= 0 && from < toI32(payload.length)) {
+      if (
+        base + k >= 0 &&
+        base + k < toI32(this.pathData.length) &&
+        from >= 0 &&
+        from < toI32(payload.length)
+      ) {
         this.pathData[base + k] = payload[from]
       }
     }
@@ -2659,7 +2685,7 @@ export class QuicConnection {
     }
     let n: i32 = 0
     if (this.state === QUIC_STATE_CLOSING) {
-      using a = arena()
+      using _scope = arena()
       n = this.takeCloseInto(out, at)
       return n
     }
@@ -2672,7 +2698,7 @@ export class QuicConnection {
       return 0
     }
     {
-      using a = arena()
+      using _scope = arena()
       n = this.buildDatagram(out, at)
     }
     return n
@@ -2716,7 +2742,13 @@ export class QuicConnection {
       const elicit: boolean = space.probe || (open && !sent.full())
       const headerLength: i32 = overhead - QUIC_AEAD_TAG_SIZE
       const payloadStart: i32 = position + headerLength
-      let payloadEnd: i32 = this.buildPayloadInto(space, out, payloadStart, payloadStart + remaining - overhead, elicit)
+      let payloadEnd: i32 = this.buildPayloadInto(
+        space,
+        out,
+        payloadStart,
+        payloadStart + remaining - overhead,
+        elicit
+      )
       if (payloadEnd <= payloadStart) {
         continue
       }
@@ -2869,7 +2901,15 @@ export class QuicConnection {
     if (n <= 0) {
       return at
     }
-    const next: i32 = quicPutCrypto(out, at, end, space.cryptoOutOffset, space.cryptoOut, space.cryptoOutHead, n)
+    const next: i32 = quicPutCrypto(
+      out,
+      at,
+      end,
+      space.cryptoOutOffset,
+      space.cryptoOut,
+      space.cryptoOutHead,
+      n
+    )
     if (next < 0) {
       return at
     }
@@ -2894,7 +2934,11 @@ export class QuicConnection {
     }
     // RETIRE_CONNECTION_ID is at most 9 bytes, NEW_CONNECTION_ID with an
     // 8-byte ID at most 42, PATH_RESPONSE 9.
-    while (this.cids.retireCount > 0 && end - at >= 9 && space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL) {
+    while (
+      this.cids.retireCount > 0 &&
+      end - at >= 9 &&
+      space.controlCount(space.staging) < QUIC_CONN_PACKET_CONTROL
+    ) {
       const sequence: i64 = this.cids.takeRetire()
       at = quicPutValue(out, at, end, QUIC_FRAME_RETIRE_CONNECTION_ID, sequence)
       space.stageControl(QUIC_CONN_CONTROL_RETIRE, sequence)
@@ -3095,8 +3139,24 @@ export class QuicConnection {
       const room: i32 = limit - QUIC_AEAD_TAG_SIZE
       let payloadEnd: i32 =
         level === TLS_LEVEL_APPLICATION || !this.errorIsApplication
-          ? quicPutConnectionClose(out, payloadStart, room, this.errorIsApplication, this.error, this.errorFrameType, this.none)
-          : quicPutConnectionClose(out, payloadStart, room, false, QUIC_ERROR_APPLICATION, QUIC_CONN_NONE, this.none)
+          ? quicPutConnectionClose(
+              out,
+              payloadStart,
+              room,
+              this.errorIsApplication,
+              this.error,
+              this.errorFrameType,
+              this.none
+            )
+          : quicPutConnectionClose(
+              out,
+              payloadStart,
+              room,
+              false,
+              QUIC_ERROR_APPLICATION,
+              QUIC_CONN_NONE,
+              this.none
+            )
       if (payloadEnd < 0) {
         continue
       }

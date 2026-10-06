@@ -1,7 +1,7 @@
 /**
- * `nish/net/quic-frame` — the frames of QUIC version 1 (RFC 9000 §19), read
- * from a decrypted packet payload and written into one, and the transport
- * error codes a connection closes with (§20.1).
+ * `nish/net/quic-frame` — the frames of QUIC version 1 (RFC 9000 §19) and
+ * RFC 9221's DATAGRAM, read from a decrypted packet payload and written into
+ * one, and the transport error codes a connection closes with (§20.1).
  *
  *     import { QuicFrame, quicParseFrame, quicPushAck, QUIC_FRAME_CRYPTO } from "nish/net/quic-frame";
  *
@@ -14,8 +14,9 @@
  *       at = frame.end;
  *     }
  *
- * **Every frame type of RFC 9000 is read**, 0x00 to 0x1e, so a type outside
- * that range is the one parse error a well-formed packet cannot produce. What
+ * **Every frame type of RFC 9000 is read**, 0x00 to 0x1e, and RFC 9221's
+ * DATAGRAM, 0x30 and 0x31, so a type outside those is the one parse error a
+ * well-formed packet cannot produce. What
  * a frame *means* is `nish/net/quic`'s: this module checks only what §19 says
  * of the encoding itself, and answers the transport error the RFC names for
  * each break — `QUIC_ERROR_FRAME_ENCODING` for a truncated field, a length
@@ -26,20 +27,25 @@
  * it needs (§12.4). Every read is bounds-checked against the window the caller
  * gives, so nothing a peer sends can make this module panic.
  *
- * **No copy of the bulk.** A CRYPTO or STREAM frame's data, a NEW_TOKEN's
- * token, a PATH_CHALLENGE's eight bytes and a CONNECTION_CLOSE's reason are
- * left in the payload and described by `dataStart` and `dataLength`, so a
- * connection reassembles straight from the packet. One `QuicFrame` is reused
- * for every frame of every packet: `quicParseFrame` overwrites every field it
- * reads and resets the rest.
+ * **No copy of the bulk.** A CRYPTO, STREAM or DATAGRAM frame's data, a
+ * NEW_TOKEN's token, a PATH_CHALLENGE's eight bytes and a CONNECTION_CLOSE's
+ * reason are left in the payload and described by `dataStart` and
+ * `dataLength`, and a NEW_CONNECTION_ID's ID and token by windows of their
+ * own, so a connection reassembles straight from the packet. One `QuicFrame`
+ * is reused for every frame of every packet: `quicParseFrame` overwrites
+ * every field it reads and resets the rest, and stores nothing but numbers,
+ * so a payload made inside an arena block can be read inside it.
  *
- * **The writers** append one frame to an array and answer whether they could:
- * `false`, with nothing appended, for a value no varint holds or a window
- * outside the array given. Their inputs are this endpoint's own, never a
- * peer's. `quicFrameAllowed` is RFC 9000 §12.4's table of which frames each
- * packet type may carry.
+ * **The writers** come in two forms. A `put` writer writes one frame into a
+ * caller's buffer at an offset, before an end, and answers the offset past
+ * it, or -1 with nothing written; a `push` writer appends one to an array
+ * and answers whether it could, by growing the array and calling the `put`
+ * form, so each frame has one encoder. Either refuses a value no varint
+ * holds or a window outside the array given. Their inputs are this
+ * endpoint's own, never a peer's. `quicFrameAllowed` is RFC 9000 §12.4's
+ * table of which frames each packet type may carry.
  *
- * Written from RFC 9000 §12.4, §19 and §20, in this module's own structure;
+ * Written from RFC 9000 §12.4, §19 and §20 and RFC 9221 §4, in this module's own structure;
  * nothing here is ported from another implementation. Private names carry the
  * `quicFrame` prefix because a `std/` module's private functions share the
  * importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e).
@@ -703,7 +709,14 @@ export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 
  * `ackDelay` already scaled by this endpoint's exponent. Answers -1, writing
  * nothing, where `quicAckSize` answers 0 or the frame does not fit.
  */
-export const quicPutAck = (buf: u8[], at: i32, end: i32, ranges: i64[], rangeCount: i32, ackDelay: i64): i32 => {
+export const quicPutAck = (
+  buf: u8[],
+  at: i32,
+  end: i32,
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64
+): i32 => {
   const size: i32 = quicAckSize(ranges, rangeCount, ackDelay)
   if (!quicFrameRoom(buf, at, end, size)) {
     return -1
@@ -913,7 +926,14 @@ export const quicPushValue = (out: u8[], type: i32, value: i64): boolean => {
  * Writes a MAX_STREAM_DATA or STREAM_DATA_BLOCKED frame: the stream ID and
  * the limit. Answers -1 for another type, a value no varint holds, or no room.
  */
-export const quicPutStreamValue = (buf: u8[], at: i32, end: i32, type: i32, streamId: i64, value: i64): i32 => {
+export const quicPutStreamValue = (
+  buf: u8[],
+  at: i32,
+  end: i32,
+  type: i32,
+  streamId: i64,
+  value: i64
+): i32 => {
   if (
     (type !== QUIC_FRAME_MAX_STREAM_DATA && type !== QUIC_FRAME_STREAM_DATA_BLOCKED) ||
     quicVarintSize(streamId) === 0 ||
@@ -1002,7 +1022,18 @@ export const quicPushNewConnectionId = (
     return false
   }
   const at: i32 = quicFrameGrow(out, size)
-  return quicPutNewConnectionId(out, at, at + size, sequence, retirePriorTo, connectionId, cidLength, resetToken) >= 0
+  return (
+    quicPutNewConnectionId(
+      out,
+      at,
+      at + size,
+      sequence,
+      retirePriorTo,
+      connectionId,
+      cidLength,
+      resetToken
+    ) >= 0
+  )
 }
 
 /**
@@ -1051,7 +1082,8 @@ export const quicPutStreamError = (
   if (!quicFrameVarints3(streamId, errorCode, reset ? finalSize : 0)) {
     return -1
   }
-  const size: i32 = 1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + (reset ? quicVarintSize(finalSize) : 0)
+  const size: i32 =
+    1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + (reset ? quicVarintSize(finalSize) : 0)
   if (!quicFrameRoom(buf, at, end, size)) {
     return -1
   }
@@ -1070,7 +1102,8 @@ export const quicPushStreamError = (out: u8[], streamId: i64, errorCode: i64, fi
   if (!quicFrameVarints3(streamId, errorCode, reset ? finalSize : 0)) {
     return false
   }
-  const size: i32 = 1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + (reset ? quicVarintSize(finalSize) : 0)
+  const size: i32 =
+    1 + quicVarintSize(streamId) + quicVarintSize(errorCode) + (reset ? quicVarintSize(finalSize) : 0)
   const at: i32 = quicFrameGrow(out, size)
   return quicPutStreamError(out, at, at + size, streamId, errorCode, finalSize) >= 0
 }
@@ -1110,7 +1143,11 @@ export const quicPutConnectionClose = (
   if (!quicFrameRoom(buf, at, end, size)) {
     return -1
   }
-  let cursor: i32 = quicFramePutByte(buf, at, application ? QUIC_FRAME_CONNECTION_CLOSE_APP : QUIC_FRAME_CONNECTION_CLOSE)
+  let cursor: i32 = quicFramePutByte(
+    buf,
+    at,
+    application ? QUIC_FRAME_CONNECTION_CLOSE_APP : QUIC_FRAME_CONNECTION_CLOSE
+  )
   cursor = quicFramePutVarint(buf, cursor, errorCode)
   if (!application) {
     cursor = quicFramePutVarint(buf, cursor, frameType)
@@ -1167,7 +1204,11 @@ export const quicPutDatagram = (buf: u8[], at: i32, end: i32, data: u8[], from: 
   if (!quicFrameWindowFits(data, from, length) || !quicFrameRoom(buf, at, end, quicDatagramSize(length))) {
     return -1
   }
-  const cursor: i32 = quicFramePutVarint(buf, quicFramePutByte(buf, at, QUIC_FRAME_DATAGRAM_LENGTH), toI64(length))
+  const cursor: i32 = quicFramePutVarint(
+    buf,
+    quicFramePutByte(buf, at, QUIC_FRAME_DATAGRAM_LENGTH),
+    toI64(length)
+  )
   quicFrameCopyInto(buf, cursor, data, from, length)
   return cursor + length
 }

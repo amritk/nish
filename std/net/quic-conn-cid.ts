@@ -336,7 +336,11 @@ export class QuicCidTable {
         active += 1
       }
     }
-    if (active > this.limit || pending > this.limit * 2 || pending > toI64(toI32(this.retirePending.length))) {
+    if (
+      active > this.limit ||
+      pending > this.limit * 2 ||
+      pending > toI64(toI32(this.retirePending.length))
+    ) {
       return QUIC_ERROR_CONNECTION_ID_LIMIT
     }
     this.peerRetirePriorTo = priorTo

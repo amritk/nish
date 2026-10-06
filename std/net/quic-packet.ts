@@ -35,6 +35,15 @@
  * builders, whose inputs come from this side rather than from a peer, answer
  * `null` for an argument out of range.
  *
+ * **In place.** For a connection that allocates nothing per packet,
+ * `quicParseHeaderInto` reads a header as windows into the datagram, the
+ * `quicPut*` builders write a header into a caller's buffer, `quicSealInPlace`
+ * seals a packet where it lies, and `quicUnprotectHeader` and
+ * `quicDecryptPayload` open one storing only numbers into the `QuicPacket`
+ * they are given. The AEADs allocate; `quicSealInPlace` releases what they
+ * allocated before it answers, and the opening halves answer arrays the
+ * caller releases, inside its own arena block.
+ *
  * **Coalesced packets** (RFC 9000 §12.2) are split by length: a long header
  * carries its own Length, and `QuicHeader.end` is where the next packet in the
  * datagram starts. A short header has none, so it runs to the datagram's end.
@@ -594,7 +603,15 @@ export const quicPutLongHeader = (
   payloadLength: i32
 ): i32 => {
   const tokenLength: i32 = toI32(token.length)
-  const size: i32 = quicLongHeaderSize(type, dcidLength, scidLength, tokenLength, packetNumber, pnLength, payloadLength)
+  const size: i32 = quicLongHeaderSize(
+    type,
+    dcidLength,
+    scidLength,
+    tokenLength,
+    packetNumber,
+    pnLength,
+    payloadLength
+  )
   if (
     size === 0 ||
     !quicPacketCidWindowFits(dcid, dcidLength) ||
@@ -604,7 +621,15 @@ export const quicPutLongHeader = (
   ) {
     return -1
   }
-  let cursor: i32 = quicPacketPutLongPrefix(buf, at, (type << 4) | (pnLength - 1) | 0xc0, dcid, dcidLength, scid, scidLength)
+  let cursor: i32 = quicPacketPutLongPrefix(
+    buf,
+    at,
+    (type << 4) | (pnLength - 1) | 0xc0,
+    dcid,
+    dcidLength,
+    scid,
+    scidLength
+  )
   if (type === QUIC_PACKET_INITIAL) {
     cursor = quicVarintPut(buf, cursor, toI64(tokenLength), quicVarintSize(toI64(tokenLength)))
     quicPacketPutBytes(buf, cursor, token, tokenLength)
@@ -654,8 +679,19 @@ export const quicLongHeader = (
   }
   const out: u8[] = new Array<u8>(size)
   if (
-    quicPutLongHeader(out, 0, type, dcid, dcidLength, scid, scidLength, token, packetNumber, pnLength, payloadLength) <
-    0
+    quicPutLongHeader(
+      out,
+      0,
+      type,
+      dcid,
+      dcidLength,
+      scid,
+      scidLength,
+      token,
+      packetNumber,
+      pnLength,
+      payloadLength
+    ) < 0
   ) {
     return null
   }
@@ -1106,7 +1142,7 @@ export const quicSealInPlace = (
   }
   const payloadAt: i32 = start + headerLength
   {
-    using a = arena()
+    using _scope = arena()
     const sealed: u8[] | null = quicPacketSeal(
       keys,
       quicPacketNonce(keys, packetNumber),
@@ -1122,7 +1158,10 @@ export const quicSealInPlace = (
       }
     }
     const sampleAt: i32 = pnOffset + 4
-    const mask: u8[] | null = quicPacketMask(keys, quicPacketSlice(buf, sampleAt, sampleAt + QUIC_SAMPLE_SIZE))
+    const mask: u8[] | null = quicPacketMask(
+      keys,
+      quicPacketSlice(buf, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+    )
     if (mask === null || toI32(mask.length) < 5) {
       return -1
     }
@@ -1216,7 +1255,10 @@ export const quicUnprotectHeader = (
     packet.error = QUIC_ERR_SAMPLE
     return none
   }
-  const mask: u8[] | null = quicPacketMask(keys, quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE))
+  const mask: u8[] | null = quicPacketMask(
+    keys,
+    quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
+  )
   if (mask === null || toI32(mask.length) < 5) {
     packet.error = QUIC_ERR_KEYS
     return none
