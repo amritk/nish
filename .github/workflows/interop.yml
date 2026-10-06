@@ -151,9 +151,12 @@ jobs:
           CLIENT: ${{ matrix.client }}
         working-directory: ${{ runner.temp }}/qir
         run: |
+          docker version --format 'docker {{.Server.Version}}'
+          docker compose version
           start=$(date +%s)
           status=0
-          "$RUNNER_TEMP/venv/bin/python" run.py -s nish -c "$CLIENT" -t "$RUNNER_CASES" \
+          # -d: the runner prints what docker compose said when a step fails.
+          "$RUNNER_TEMP/venv/bin/python" run.py -d -s nish -c "$CLIENT" -t "$RUNNER_CASES" \
             -l "$RUNNER_TEMP/logs" -j "$RUNNER_TEMP/result.json" || status=$?
           echo "runner exit $status after $(( $(date +%s) - start )) s"
           python3 "$GITHUB_WORKSPACE/tests/interop/runner-verdict.py" "$RUNNER_TEMP/result.json" "$RUNNER_CASES"
@@ -234,7 +237,8 @@ jobs:
 
       - name: GET and POST over HTTP/3 and HTTP/2
         run: |
-          curl_in() { docker run --rm --network host --entrypoint curl "$CURL" "$@"; }
+          # A minute for each call: a transfer that stalls fails here, not at the job's timeout.
+          curl_in() { docker run --rm --network host --entrypoint curl "$CURL" --max-time 60 "$@"; }
           want="$(sha256sum < "$RUNNER_TEMP/www/file")"
           fail=0
           check() {
