@@ -13,7 +13,7 @@ import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { QuicServerConfig } from "nish/net/quic";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
-import { H3_ALPN, H3_END, H3_ERROR, H3_NEED_MORE, Http3Config, Http3Connection } from "nish/net/http3";
+import { H3_ALPN, H3_END, H3_ERROR, H3_NEED_MORE, Http3Connection } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
 import { QpackEncoder } from "nish/net/qpack";
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
@@ -27,6 +27,7 @@ import {
   CLIENT_ENCODER,
   H3Limits,
   H3Peer,
+  h3Config,
   H3Response,
   h3Cat,
   h3ClientSettings,
@@ -57,7 +58,7 @@ export class LoopServer {
   constructor(quicConfig: QuicServerConfig, slots: i32, port: i32) {
     const fd: i32 = udpBind("127.0.0.1", port, n32(0));
     this.port = netLocalPort(fd);
-    this.server = new Http3Server(quicConfig, new Http3Config(), fd, slots, listenerEntropy());
+    this.server = new Http3Server(quicConfig, h3Config(), fd, slots, listenerEntropy());
   }
 }
 
@@ -90,6 +91,28 @@ const exchange = (t: Suite): void => {
   t.eqStr("with every request finished the server closes: H3_NO_ERROR", `${p.closeApp} 0x${p.closeCode}`, `true 0x${H3_NO_ERROR}`);
   t.eqI32("and frees the slot", loop.server.busy(), n32(0));
   t.eqI32("having accepted one connection", loop.server.accepted, n32(1));
+};
+
+/** A connection the program closes while its pacer has no credit still sends its CONNECTION_CLOSE before the slot is freed. */
+const closeUnpaced = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  const p: H3Peer = h3WireConnect(loop.server, loop.port, limits);
+  p.open(n64(-1));
+  p.settle();
+  const slot: i32 = n32(0);
+  const quic = loop.server.quic(slot);
+  // Spend the pacer's credit, as a long flight just sent would.
+  quic.recovery.onPaced(p.c.now, n32(1000000));
+  t.ok("the pacer has no credit for a datagram", quic.recovery.pacerDelay(p.c.now, n32(1200)) > n64(0));
+  quic.close(H3_NO_ERROR);
+  loop.server.touch(slot);
+  loop.server.flush(p.c.now);
+  const wire = p.wire;
+  if (wire !== null) {
+    p.pump(wire);
+  }
+  t.eqStr("the close goes all the same, and the slot is freed", `${p.closeApp} ${p.closeCode} ${loop.server.busy()}`, `true ${H3_NO_ERROR} 0`);
 };
 
 /** A handshake that chose another protocol than h3 never reaches HTTP/3 (RFC 9114 §3.1). */
@@ -361,6 +384,7 @@ const reused = (t: Suite): void => {
 /** Every check of this file. */
 export const loopbackChecks = (t: Suite): void => {
   exchange(t);
+  closeUnpaced(t);
   flood(t);
   alpn(t);
   full(t);

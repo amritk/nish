@@ -159,6 +159,7 @@ import {
 } from "nish/net/http3-frame"
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic"
 import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET, QuicStream } from "nish/net/quic-stream"
+import { quicVarintPut } from "nish/net/quic-packet"
 
 /** The ALPN protocol identifier of HTTP/3 (RFC 9114 §3.1). */
 export const H3_ALPN: string = "h3"
@@ -392,13 +393,25 @@ export class Http3Connection {
 
   /**
    * A connection under `config` over `quic`, whose configuration must let a
-   * HEADERS frame of `maxFieldSectionSize` fit a stream's buffer, and let
+   * HEADERS frame of `maxFieldSectionSize` fit half a stream's buffer, and
+   * one on every request stream fit half the connection's window, and let
    * the client open the three unidirectional streams it needs and this side
    * open its own three (§6.2). A cap out of range panics.
    */
   constructor(config: Http3Config, quic: QuicConnection) {
     const buffer: i32 = quic.streams.bufferSize
-    http3CheckCap("maxFieldSectionSize", config.maxFieldSectionSize, 1, buffer - H3_HEAD)
+    // A HEADERS frame is read once all of it is in the stream's buffer, and QUIC
+    // gives more credit only once half a buffer has been read, so the frame
+    // may be at most half a buffer, its header aside, or it could stall.
+    http3CheckCap("maxFieldSectionSize", config.maxFieldSectionSize, 1, buffer / 2 - H3_HEAD)
+    // The connection's credit too: every request stream may hold a HEADERS
+    // frame not yet whole, and QUIC raises MAX_DATA once half the window is read.
+    const held: i64 = quic.streams.maxBidi * toI64(config.maxFieldSectionSize + H3_HEAD) * toI64(2)
+    if (quic.streams.windowData < held) {
+      panic(
+        `Http3Connection: a connection window of ${quic.streams.windowData}, under the ${held} that ${quic.streams.maxBidi} request streams' field sections need`
+      )
+    }
     http3CheckCap("bodyChunk", config.bodyChunk, 1, H3_MAX_CHUNK)
     http3CheckCap("writeChunk", config.writeChunk, 1, H3_MAX_CHUNK)
     http3CheckCap("the QUIC unidirectional stream limit", toI32(quic.streams.maxUni), 3, 1024)
@@ -1326,33 +1339,32 @@ export class Http3Connection {
    * so that QUIC names the stream again once acknowledgements free room.
    */
   arm(k: i32, id: i64): void {
-    const room: i64 = this.quic.streams.slots[k].room()
+    const stream: QuicStream = this.quic.streams.slots[k]
+    const room: i64 = stream.room()
     this.mark(k, H3_FLAG_BLOCKED)
-    if (room <= 0) {
-      // Nothing fits: a write that takes nothing asks QUIC for the event.
-      this.quic.streamWrite(id, this.zeros, H3_ZERO, H3_ONE, false)
-      return
+    if (room > 0) {
+      // A reserved frame of exactly `room` bytes: its type, its length in
+      // the varint size that makes the sum come out (RFC 9000 §16 lets a
+      // varint be longer than it needs), and zeros. One byte of room cannot
+      // hold a frame, so it takes the type and owes the length.
+      let size: i32 = 1
+      if (room > 65) {
+        size = 2
+      }
+      if (room > 16386) {
+        size = 4
+      }
+      const payload: i64 = room > 1 ? room - toI64(1 + size) : toI64(0)
+      this.scratch[0] = toU8(H3_FILLER_TYPE)
+      const n: i32 = quicVarintPut(this.scratch, H3_ONE, payload, size)
+      this.owe(k, this.scratch, n)
+      this.fillLeft[k] = payload
+      if (!this.drain(k, id)) {
+        return
+      }
     }
-    let payload: i64 = room - 2
-    if (room > 65) {
-      payload = room - 3
-    }
-    if (room > 16386) {
-      payload = room - 5
-    }
-    if (payload < 0) {
-      payload = 0
-    }
-    const n: i32 = h3PutFrameHeader(
-      this.scratch,
-      H3_ZERO,
-      toI32(this.scratch.length),
-      toI64(H3_FILLER_TYPE),
-      payload
-    )
-    this.owe(k, this.scratch, n)
-    this.fillLeft[k] = payload
-    if (this.drain(k, id)) {
+    // The room is filled: a write that takes nothing asks QUIC for the event.
+    if (stream.room() === toI64(0)) {
       this.quic.streamWrite(id, this.zeros, H3_ZERO, H3_ONE, false)
     }
   }
@@ -1482,8 +1494,9 @@ export class Http3Connection {
    * Writes up to `len` bytes of `buf` from `off` as the response body of
    * stream `id`, in DATA frames of at most `writeChunk`, and ends the stream
    * when `endStream` and every byte was taken. Answers how many bytes it
-   * took — fewer than `len` when the send buffer filled, and H3_WRITABLE
-   * then names the stream when it has room — or H3_AGAIN when it took none;
+   * took — fewer than `len` only when the send buffer filled, and
+   * H3_WRITABLE then names the stream once it has room — or H3_AGAIN when it
+   * took none;
    * H3_CLOSED, or H3_INVALID before the head or when `endStream` would cut
    * short the DATA frame the last call started.
    */
@@ -1500,37 +1513,50 @@ export class Http3Connection {
       this.mark(k, H3_FLAG_BLOCKED)
       return H3_AGAIN
     }
-    if (this.dataLeft[k] === 0) {
-      if (len === 0) {
-        if (endStream) {
-          this.quic.streamWrite(id, this.zeros, H3_ZERO, H3_ZERO, true)
-          this.mark(k, H3_FLAG_SEND_DONE)
+    if (len === 0) {
+      if (endStream && this.dataLeft[k] === 0) {
+        this.quic.streamWrite(id, this.zeros, H3_ZERO, H3_ZERO, true)
+        this.mark(k, H3_FLAG_SEND_DONE)
+      }
+      return 0
+    }
+    // DATA frame after DATA frame, until every byte is taken or the send buffer is full.
+    let total: i32 = 0
+    while (total < len) {
+      if (this.dataLeft[k] === 0) {
+        const rest: i32 = len - total
+        const frame: i64 = toI64(rest < this.config.writeChunk ? rest : this.config.writeChunk)
+        const n: i32 = h3PutFrameHeader(
+          this.scratch,
+          H3_ZERO,
+          toI32(this.scratch.length),
+          H3_FRAME_DATA,
+          frame
+        )
+        this.owe(k, this.scratch, n)
+        this.dataLeft[k] = frame
+        if (!this.drain(k, id)) {
+          this.mark(k, H3_FLAG_BLOCKED)
+          break
         }
-        return 0
       }
-      const frame: i64 = toI64(len < this.config.writeChunk ? len : this.config.writeChunk)
-      const n: i32 = h3PutFrameHeader(this.scratch, H3_ZERO, toI32(this.scratch.length), H3_FRAME_DATA, frame)
-      this.owe(k, this.scratch, n)
-      this.dataLeft[k] = frame
-      if (!this.drain(k, id)) {
+      const take: i32 = toI32(http3Min(toI64(len - total), this.dataLeft[k]))
+      const fin: boolean = endStream && total + take === len && toI64(take) === this.dataLeft[k]
+      const n: i32 = this.quic.streamWrite(id, buf, off + total, take, fin)
+      if (n < 0) {
+        return total > 0 ? total : H3_CLOSED
+      }
+      this.dataLeft[k] = this.dataLeft[k] - toI64(n)
+      total = total + n
+      if (n < take) {
         this.mark(k, H3_FLAG_BLOCKED)
-        return H3_AGAIN
+        break
+      }
+      if (fin) {
+        this.mark(k, H3_FLAG_SEND_DONE)
       }
     }
-    const take: i32 = toI32(http3Min(toI64(len), this.dataLeft[k]))
-    const fin: boolean = endStream && take === len && toI64(take) === this.dataLeft[k]
-    const n: i32 = this.quic.streamWrite(id, buf, off, take, fin)
-    if (n < 0) {
-      return H3_CLOSED
-    }
-    this.dataLeft[k] = this.dataLeft[k] - toI64(n)
-    if (n < take) {
-      this.mark(k, H3_FLAG_BLOCKED)
-    }
-    if (fin && n === take) {
-      this.mark(k, H3_FLAG_SEND_DONE)
-    }
-    return n > 0 || take === 0 ? n : H3_AGAIN
+    return total > 0 ? total : H3_AGAIN
   }
 
   /**
@@ -1555,8 +1581,9 @@ export class Http3Connection {
    * Sends GOAWAY (§5.2): the client's requests on streams below the ID it
    * names — every stream the client has opened so far — are processed, and
    * any it opens from there on is refused with H3_REQUEST_REJECTED. A second
-   * call never raises the ID. Answers 0, or H3_AGAIN before this side's
-   * control stream is open.
+   * call never raises the ID, and sends nothing when the ID has not fallen.
+   * Answers 0, or H3_AGAIN before this side's control stream is open or while
+   * it has no room for the frame.
    */
   goaway(): i32 {
     if (this.ownControl < 0 || this.state === H3_STATE_FAILED) {
@@ -1566,10 +1593,17 @@ export class Http3Connection {
     if (this.goawayId >= 0 && id > this.goawayId) {
       id = this.goawayId
     }
+    if (id === this.goawayId) {
+      // The client has this ID already: nothing new to say.
+      return 0
+    }
     const n: i32 = h3PutIdFrame(this.scratch, H3_ZERO, toI32(this.scratch.length), H3_FRAME_GOAWAY, id)
-    if (this.quic.streamWrite(this.ownControl, this.scratch, H3_ZERO, n, false) !== n) {
+    const k: i32 = this.quic.streams.slotOf(this.ownControl)
+    // Whole or not at all: half a GOAWAY on the control stream would be a frame error.
+    if (k < 0 || k >= toI32(this.quic.streams.slots.length) || this.quic.streams.slots[k].room() < toI64(n)) {
       return H3_AGAIN
     }
+    this.quic.streamWrite(this.ownControl, this.scratch, H3_ZERO, n, false)
     this.goawayId = id
     return 0
   }

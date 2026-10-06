@@ -98,6 +98,17 @@ export class H3Limits {
   alpn: string = "h3";
 }
 
+/**
+ * The HTTP/3 configuration every check uses: the defaults, with a
+ * field-section cap of 8,192, which half of the 32 KiB stream buffers of
+ * `H3Limits` can hold with a frame header (the constructor checks it).
+ */
+export const h3Config = (): Http3Config => {
+  const config = new Http3Config();
+  config.maxFieldSectionSize = n32(8192);
+  return config;
+};
+
 /** The QUIC configuration of `limits`, offering `h3`. */
 export const h3QuicConfig = (limits: H3Limits): QuicServerConfig => {
   const chain: u8[][] = [leafCertificate()];
@@ -899,11 +910,11 @@ export const h3WireConnect = (server: Http3Server, port: i32, limits: H3Limits):
 
 /** An HTTP/3 connection over a QUIC connection that has not started. */
 export const h3Fresh = (): Http3Connection =>
-  new Http3Connection(new Http3Config(), new QuicConnection(h3QuicConfig(new H3Limits()), fixedEntropy()));
+  new Http3Connection(h3Config(), new QuicConnection(h3QuicConfig(new H3Limits()), fixedEntropy()));
 
 /** A connected pair with the client's streams open and SETTINGS sent, on the defaults. */
 export const h3Ready = (): H3Peer => {
-  const p: H3Peer = h3Connect(new H3Limits(), new Http3Config());
+  const p: H3Peer = h3Connect(new H3Limits(), h3Config());
   p.open(n64(-1));
   p.settle();
   return p;

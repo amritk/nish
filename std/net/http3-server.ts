@@ -372,7 +372,9 @@ export class Http3Wheel {
 
   /** Milliseconds from `now` to the first filled bucket, at most the horizon, or -1 when none is. */
   next(now: i64): i32 {
-    const from: i64 = this.cursor < 0 || this.cursor > now ? now : this.cursor
+    // From the cursor: a bucket before it has run, and one at `now` after a
+    // tick is the horizon's, a full turn of the wheel away.
+    const from: i64 = this.cursor < 0 ? now : this.cursor
     const end: i64 = from + toI64(H3_SERVER_WHEEL)
     let time: i64 = from
     while (time < end) {
@@ -827,6 +829,11 @@ export class Http3Server {
       }
     }
     if (quic.closed()) {
+      // The CONNECTION_CLOSE goes whatever the pacer says: nothing follows it.
+      const n: i32 = quic.takeDatagramInto(this.tx, H3_SERVER_ZERO, now)
+      if (n > 0) {
+        this.send(this.tx, H3_SERVER_ZERO, n, to, H3_SERVER_ZERO)
+      }
       this.release(slot)
       return
     }
@@ -859,6 +866,11 @@ export class Http3Server {
     const wheel: Http3Wheel = this.wheel
     if (wheel.cursor < 0) {
       wheel.cursor = now
+    }
+    // Late by more than a turn: every bucket is run once, from a turn ago, so a
+    // slot filed again lands after `now` and not behind the cursor.
+    if (now - wheel.cursor >= toI64(H3_SERVER_WHEEL)) {
+      wheel.cursor = now - toI64(H3_SERVER_WHEEL - 1)
     }
     let steps: i32 = 0
     while (wheel.cursor <= now && steps < H3_SERVER_WHEEL) {

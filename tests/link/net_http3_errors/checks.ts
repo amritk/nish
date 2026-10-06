@@ -31,11 +31,11 @@ import {
   H3_STREAM_QPACK_ENCODER,
 } from "nish/net/http3-frame";
 import { QPACK_DECODER_STREAM_ERROR, QPACK_DECOMPRESSION_FAILED, QPACK_ENCODER_STREAM_ERROR } from "nish/net/qpack";
-import { Http3Config } from "nish/net/http3";
 import { quicPushStreamError } from "nish/net/quic-frame";
 import { bytesOf, fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import {
+  h3Config,
   CLIENT_CONTROL,
   CLIENT_DECODER,
   CLIENT_ENCODER,
@@ -69,7 +69,7 @@ const closedWith = (t: Suite, name: string, p: H3Peer, want: i64): void => {
 };
 
 /** A connection whose client has not opened its own streams yet. */
-const bare = (): H3Peer => h3Connect(new H3Limits(), new Http3Config());
+const bare = (): H3Peer => h3Connect(new H3Limits(), h3Config());
 
 /** A STOP_SENDING from the client for the server's stream `id`. */
 const stopServer = (p: H3Peer, id: i64): void => {

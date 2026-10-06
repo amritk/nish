@@ -16,10 +16,11 @@ import {
   H3_REQUEST_INCOMPLETE,
   H3_STREAM_CREATION_ERROR,
 } from "nish/net/http3-frame";
-import { H3_AGAIN, H3_CLOSED, H3_INVALID, H3_TOO_LARGE, Http3Config } from "nish/net/http3";
+import { H3_AGAIN, H3_CLOSED, H3_INVALID, H3_TOO_LARGE } from "nish/net/http3";
 import { bytesOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import {
+  h3Config,
   H3Limits,
   H3Peer,
   H3Response,
@@ -119,7 +120,7 @@ const lengths = (t: Suite): void => {
 const unknown = (t: Suite): void => {
   const limits = new H3Limits();
   limits.maxStreamsUni = n64(8);
-  const p: H3Peer = h3Connect(limits, new Http3Config());
+  const p: H3Peer = h3Connect(limits, h3Config());
   p.open(n64(-1));
   p.settle();
   const body: u8[] = h3Pattern(n32(3000));
@@ -151,14 +152,14 @@ const unknown = (t: Suite): void => {
 /** A field section past SETTINGS_MAX_FIELD_SECTION_SIZE is answered with a 431 (§4.2.2); trailers past it are reset. */
 const tooLarge = (t: Suite): void => {
   const p: H3Peer = h3Ready();
-  // `x` is seven bits in Huffman, so 20,000 of them are a HEADERS frame of about 17,500 bytes, past the 16,384 the frame may be.
+  // `x` is seven bits in Huffman, so 20,000 of them are a HEADERS frame of about 17,500 bytes, past the 8,192 the frame may be.
   p.send(n64(0), p.headers("GET", "/hello", ["x-big"], [repeat("x", n32(20000))]), false);
   p.settle();
   const r: H3Response = p.response(n64(0));
   t.ok("a HEADERS frame past the limit: skipped, answered 431 with the FIN", r.status === "431" && r.fin && r.whole);
   t.eqI64("and the rest of the request asked to stop, with H3_NO_ERROR (§4.1.2)", p.stream(n64(0)).stop, H3_NO_ERROR);
-  // `a` is five bits, so 20,000 of them fit the frame, and the section decodes past the limit.
-  p.send(n64(4), p.headers("GET", "/hello", ["x-big"], [repeat("a", n32(20000))]), true);
+  // `a` is five bits, so 12,000 of them fit the frame, and the section decodes past the limit.
+  p.send(n64(4), p.headers("GET", "/hello", ["x-big"], [repeat("a", n32(12000))]), true);
   p.settle();
   t.eqStr("a section that fits its frame but not the limit once decoded: 431 too", p.response(n64(4)).status, "431");
   t.ok("the program saw neither", toI32(p.log.length) === n32(0) && p.h3.tooLarge === n32(2));
@@ -166,7 +167,7 @@ const tooLarge = (t: Suite): void => {
   p.send(n64(8), h3Cat([p.headers("POST", "/echo", ["content-length"], ["0"]), huge]), true);
   p.settle();
   h3Logged(t, "trailers past the limit: the request was the program's, so H3_RESET with H3_EXCESSIVE_LOAD", p, ["request 8 POST /echo", "reset 8 0x107"]);
-  const wide: u8[] = h3Frame(H3_FRAME_HEADERS, h3Section(p.enc, ["x-big"], [repeat("a", n32(20000))]));
+  const wide: u8[] = h3Frame(H3_FRAME_HEADERS, h3Section(p.enc, ["x-big"], [repeat("a", n32(12000))]));
   p.send(n64(12), h3Cat([p.headers("POST", "/echo", ["content-length"], ["0"]), wide]), true);
   p.settle();
   h3Logged(t, "and trailers past it once decoded", p, ["request 12 POST /echo", "reset 12 0x107"]);
@@ -181,7 +182,7 @@ const tooLarge = (t: Suite): void => {
 
 /** The client's SETTINGS_MAX_FIELD_SECTION_SIZE bounds the server's responses. */
 const peerLimit = (t: Suite): void => {
-  const p: H3Peer = h3Connect(new H3Limits(), new Http3Config());
+  const p: H3Peer = h3Connect(new H3Limits(), h3Config());
   p.open(n64(100));
   p.settle();
   t.eqI64("the client's limit is read from its SETTINGS", p.h3.peer.maxFieldSectionSize, n64(100));
@@ -197,7 +198,7 @@ const peerLimit = (t: Suite): void => {
 /** What the write calls refuse, and how a held-back write resumes. */
 const writes = (t: Suite): void => {
   const p: H3Peer = h3Ready();
-  for (let k: i32 = 0; k < 4; k++) {
+  for (let k: i32 = 0; k < 6; k++) {
     p.get(toI64(k * 4), "/hold");
   }
   p.settle();
@@ -252,21 +253,28 @@ const writes = (t: Suite): void => {
   p.settle();
   t.eqI64("the client sees RESET_STREAM with the code", p.stream(n64(4)).reset, H3_REQUEST_CANCELLED);
   t.ok("and the stream takes nothing more", p.h3.reset(n64(4), H3_REQUEST_CANCELLED) === H3_CLOSED && p.h3.respond(n64(4), n32(200), none, none, true) === H3_CLOSED);
-  t.eqI32("trailers on a stream with no room wait", trailersAt(p, n64(8), n32(1)), n32(0));
-  t.eqI32("so do trailers on one with none at all", trailersAt(p, n64(12), n32(0)), n32(0));
-  const eight: H3Response = p.response(n64(8));
-  const twelve: H3Response = p.response(n64(12));
-  t.ok("each arrives after its body, the padding the server wrote to be told of room skipped as an unknown frame", eight.trailers === "x-done: 1" && twelve.trailers === "x-done: 1" && eight.whole && twelve.whole && eight.fin && twelve.fin);
+  t.eqI32("trailers on a stream with no room wait", trailersAt(p, n64(8), n32(1), n32(1)), n32(0));
+  t.eqI32("so do trailers on one with none at all", trailersAt(p, n64(12), n32(0), n32(1)), n32(0));
+  // 66 bytes is where a filler's one-byte length runs out: its length takes two bytes, 63 written as 40 3f.
+  t.eqI32("and on one with 66 bytes, the filler's length written long to fill it exactly", trailersAt(p, n64(16), n32(66), n32(100)), n32(0));
+  t.eqI32("and on one with 300", trailersAt(p, n64(20), n32(300), n32(400)), n32(0));
+  let padded: boolean = true;
+  for (let k: i32 = 2; k < 6; k++) {
+    const r: H3Response = p.response(toI64(k * 4));
+    padded = padded && r.trailers.startsWith("x-done: ~") && r.whole && r.fin && toI32(r.body.length) > n32(16384);
+  }
+  t.ok("each arrives after its body, the padding the server wrote to be told of room skipped as an unknown frame", padded);
   p.settle();
   t.eqI32("every request finished", p.h3.live, n32(0));
 };
 
 /**
  * Responds on held stream `id` and fills its send buffer to leave `left`
- * bytes, then writes trailers: H3_AGAIN, then once acknowledgements free
+ * bytes, then writes trailers with a value of `valueLength` bytes, too
+ * many for that room: H3_AGAIN, then once acknowledgements free
  * room and H3_WRITABLE comes, 0. Answers the second call's answer.
  */
-const trailersAt = (p: H3Peer, id: i64, left: i32): i32 => {
+const trailersAt = (p: H3Peer, id: i64, left: i32, valueLength: i32): i32 => {
   const none: u8[][] = [];
   const buf: u8[] = h3Pattern(n32(40000));
   p.h3.respond(id, n32(200), none, none, false);
@@ -279,7 +287,7 @@ const trailersAt = (p: H3Peer, id: i64, left: i32): i32 => {
   const fill: i32 = toI32(s.room()) - left - 3;
   p.h3.writeData(id, buf, n32(16384), fill, false);
   const names: u8[][] = [bytesOf("x-done")];
-  const values: u8[][] = [bytesOf("1")];
+  const values: u8[][] = [bytesOf(repeat("~", valueLength))];
   const first: i32 = p.h3.writeTrailers(id, names, values);
   if (first !== H3_AGAIN || toI32(s.room()) !== n32(0)) {
     return n32(-2);

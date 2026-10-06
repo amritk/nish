@@ -28,9 +28,9 @@ import {
 /** The server's control stream carries its type and SETTINGS, and its QPACK streams their types (§6.2.1, RFC 9204 §4.2). */
 const setup = (t: Suite): void => {
   const p: H3Peer = h3Ready();
-  // 00 is the control stream's type; 04 09 SETTINGS, then QPACK_MAX_TABLE_CAPACITY 0,
-  // QPACK_BLOCKED_STREAMS 0, and MAX_FIELD_SECTION_SIZE 16,384 as 80 00 40 00.
-  t.eqStr("the server's control stream: its type, then SETTINGS first", toHex(p.stream(SERVER_CONTROL).data), "000409010007000680004000");
+  // 00 is the control stream's type; 04 07 SETTINGS, then QPACK_MAX_TABLE_CAPACITY 0,
+  // QPACK_BLOCKED_STREAMS 0, and MAX_FIELD_SECTION_SIZE 8,192 as 60 00.
+  t.eqStr("the server's control stream: its type, then SETTINGS first", toHex(p.stream(SERVER_CONTROL).data), "00040701000700066000");
   t.eqStr("its QPACK encoder stream: its type, and nothing at capacity 0", toHex(p.stream(n64(7)).data), "02");
   t.eqStr("its QPACK decoder stream likewise", toHex(p.stream(n64(11)).data), "03");
   t.ok("none of the three ends", !p.stream(SERVER_CONTROL).fin && !p.stream(n64(7)).fin && !p.stream(n64(11)).fin);
@@ -145,7 +145,7 @@ const goaway = (t: Suite): void => {
   p.settle();
   t.eqI32("three requests held, then GOAWAY", p.h3.goaway(), n32(0));
   p.settle();
-  t.eqStr("it names stream 12, the first the client has not opened: 07 01 0c", toHex(p.stream(SERVER_CONTROL).data).slice(n32(24)), "07010c");
+  t.eqStr("it names stream 12, the first the client has not opened: 07 01 0c", toHex(p.stream(SERVER_CONTROL).data).slice(n32(20)), "07010c");
   t.ok("with those three still open", p.h3.live === n32(3) && !p.h3.isDone());
   const none: string[] = [];
   p.send(n64(12), p.headers("GET", "/hello", none, none), false);
@@ -166,7 +166,7 @@ const goaway = (t: Suite): void => {
   t.ok("and with every response acknowledged, the connection is done", p.h3.isDone());
   t.eqI32("a second GOAWAY", p.h3.goaway(), n32(0));
   p.settle();
-  t.eqStr("never raises the ID", toHex(p.stream(SERVER_CONTROL).data).slice(n32(24)), "07010c07010c");
+  t.eqStr("never raises the ID, and with nothing new to say sends nothing", toHex(p.stream(SERVER_CONTROL).data).slice(n32(20)), "07010c");
 };
 
 /** The client's own GOAWAY, MAX_PUSH_ID and CANCEL_PUSH: a server that never pushes checks them and goes on (§5.2, §7.2.7, §7.2.3). */
@@ -210,6 +210,20 @@ const cancelled = (t: Suite): void => {
   t.eqI64("and the connection lives", p.closeCode, n64(-1));
 };
 
+/** One `writeData` call longer than a DATA frame: it goes on frame after frame until the buffer is full, not one frame and a short count with no event to follow. */
+const oneCall = (t: Suite): void => {
+  const p: H3Peer = h3Ready();
+  p.get(n64(0), "/hold");
+  p.settle();
+  const none: u8[][] = [];
+  p.h3.respond(n64(0), n32(200), none, none, false);
+  const body: u8[] = h3Pattern(n32(20000));
+  t.eqI32("20,000 bytes and the FIN in one call: all of them taken", p.h3.writeData(n64(0), body, n32(0), n32(20000), true), n32(20000));
+  p.settle();
+  const r: H3Response = p.response(n64(0));
+  t.ok("as two DATA frames, 16,384 and 3,616, and the FIN", r.frames === n32(2) && r.largest === n32(16384) && toI32(r.body.length) === n32(20000) && h3IsPattern(r.body) && r.fin);
+};
+
 /** Every check of this file. */
 export const requestChecks = (t: Suite): void => {
   setup(t);
@@ -220,4 +234,5 @@ export const requestChecks = (t: Suite): void => {
   goaway(t);
   clientFrames(t);
   cancelled(t);
+  oneCall(t);
 };

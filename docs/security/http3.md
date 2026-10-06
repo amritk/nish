@@ -164,11 +164,17 @@ literals (RFC 9204 §7.1.3), and the encoder never inserts.
 bytes reaches the program at most 16,384 bytes at a time while the client
 never sends past the credit QUIC gave it, and comes back whole through a
 32 KiB send buffer, in DATA frames of at most `writeChunk`, H3_WRITABLE
-naming the stream each time acknowledgements free room. A HEADERS frame that
-must go whole and does not fit pads the buffer with a reserved frame the
-client skips, so that QUIC names the stream once there is room (`arm`); the
-trailers on a stream with 1 byte and with 0 bytes of room both arrive after
-their body, the padding skipped.
+naming the stream each time acknowledgements free room. One `writeData` of
+20,000 bytes goes as two frames and is taken whole: a call answers short only
+when the buffer filled, so the event the program waits for always comes. A
+HEADERS frame that must go whole and does not fit pads the buffer with a
+reserved frame the client skips, sized to fill the room exactly — its length
+written in a longer varint where the shortest would leave a byte over, as
+RFC 9000 §16 allows — so that QUIC names the stream once there is room
+(`arm`); trailers on streams with 0, 1, 66 and 300 bytes of room all arrive
+after their body, the padding skipped (66 is where the shortest length would
+have left a stray byte in the stream). A GOAWAY goes whole or not at all, and
+not again when its ID has not fallen.
 
 **Concurrency** (`net_http3`): twelve requests open at once, ended in reverse;
 two large responses interleaved; each whole.
@@ -182,13 +188,20 @@ no_application_protocol (0x0178) before any HTTP/3 byte, and its slot freed
 datagrams of H3-3 dropped for nothing. The connection-ID index keeps every ID
 found across removals in the middle of probe runs, never files one twice or
 one over 20 bytes; the timer wheel answers the earliest deadline, files one
-past its horizon at the horizon and again when it comes round, and runs at
-most its 2,048 buckets in one `tick`.
+past its horizon at the horizon and again when it comes round (a whole turn
+away after a tick, never "due now", so the loop does not spin), and runs at
+most its 2,048 buckets in one `tick`, from a turn ago when it is called late.
+A connection closed while its pacer has no credit still sends its
+CONNECTION_CLOSE before the slot is freed.
 
 **Caps, all fixed at start-up** (`Http3Config`, the QUIC configuration, the
 pool's size): the field section (`maxFieldSectionSize`, 16,384, which must fit
-a QUIC stream buffer with a frame header — checked when the connection is made
-— and sizes the section buffer and the decoder's limit), the body chunk
+half a QUIC stream buffer with a frame header — checked when the connection
+is made, since a HEADERS frame is read once all of it is in and QUIC raises a
+stream's credit only once half a buffer is read, so a larger frame could stall
+— and sizes the section buffer and the decoder's limit; the QUIC
+connection's window must likewise hold one such frame on every request
+stream twice over), the body chunk
 (`bodyChunk`, 16,384, the `data` buffer), the DATA frame written
 (`writeChunk`, 16,384), a control frame (`H3_CONTROL_FRAME_MAX`, 1,024 bytes),
 the unknown settings kept (`H3_SETTINGS_KEEP`, 8), the client's unidirectional

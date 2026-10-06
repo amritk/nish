@@ -15,6 +15,7 @@ PASS  and is taken from the cursor's bucket
 PASS  leaving none there
 PASS  a deadline past the horizon is filed at the horizon, to be filed again then
 PASS  keeping the deadline it was filed for
+PASS  after a tick, a deadline at the horizon is a whole turn away, not due now
 PASS  a slot with no deadline is filed nowhere
 PASS  a deadline two words of buckets away
 PASS  a handshake across loopback, through the listener into a slot
@@ -25,6 +26,8 @@ PASS  GOAWAY
 PASS  with every request finished the server closes: H3_NO_ERROR
 PASS  and frees the slot
 PASS  having accepted one connection
+PASS  the pacer has no credit for a datagram
+PASS  the close goes all the same, and the slot is freed
 PASS  a short header too short for a reset, a long one short of a full Initial, a Handshake packet no slot owns: dropped, keeping nothing
 PASS  sixteen answers at once: eight stateless resets and eight Version Negotiations
 PASS  past the budget each is dropped before the listener, and counted
@@ -39,4 +42,4 @@ PASS  five connections through one slot, each closed after its GOAWAY
 PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
-http3 server: 41 passed, 0 failed, 0 skipped
+http3 server: 44 passed, 0 failed, 0 skipped

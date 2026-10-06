@@ -15,7 +15,7 @@ import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { H3_FRAME_DATA, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
-import { H3_END, H3_ERROR, H3_NEED_MORE, Http3Config, Http3Connection } from "nish/net/http3";
+import { H3_END, H3_ERROR, H3_NEED_MORE, Http3Connection } from "nish/net/http3";
 import { QpackEncoder } from "nish/net/qpack";
 import { bytesOf, fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -23,7 +23,7 @@ import { leafPrivate } from "../net_tls_common/server";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcShort } from "../net_quic_conn/client";
 import { NqMeter, nqMeteredDrain, nqMeteredReceive } from "../net_quic_stream/arena";
-import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Cat, h3ClientSettings, h3Frame, h3Hello, h3Pattern, h3QuicConfig, h3Section, h3Varint } from "./peer";
+import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Config, h3Cat, h3ClientSettings, h3Frame, h3Hello, h3Pattern, h3QuicConfig, h3Section, h3Varint } from "./peer";
 
 /** One server slot and what its application answers with, made once. */
 class ArenaServer {
@@ -38,7 +38,7 @@ class ArenaServer {
 
   constructor(limits: H3Limits) {
     this.conn = new QuicConnection(h3QuicConfig(limits), fixedEntropy());
-    this.h3 = new Http3Connection(new Http3Config(), this.conn);
+    this.h3 = new Http3Connection(h3Config(), this.conn);
     this.names = [bytesOf("content-type"), bytesOf("server")];
     this.values = [bytesOf("application/octet-stream"), bytesOf("nish")];
     this.body = h3Pattern(n32(1000));

@@ -39,7 +39,7 @@ PASS  before the program sees either
 PASS  the three in flight finish normally
 PASS  and with every response acknowledged, the connection is done
 PASS  a second GOAWAY
-PASS  never raises the ID
+PASS  never raises the ID, and with nothing new to say sends nothing
 PASS  MAX_PUSH_ID 5, then CANCEL_PUSH of push 3: no error
 PASS  the client's GOAWAY reaches the program, its push ID with it, and again
 PASS  and requests go on
@@ -50,6 +50,8 @@ PASS  RESET_STREAM alone: the program is told, and the server abandons its respo
 PASS  STOP_SENDING alone: H3_RESET with its code, and QUIC's RESET_STREAM answering it
 PASS  every one of them finished
 PASS  and the connection lives
+PASS  20,000 bytes and the FIN in one call: all of them taken
+PASS  as two DATA frames, 16,384 and 3,616, and the FIN
 PASS  no :path, an uppercase name, connection, transfer-encoding, a pseudo-header after a field, :protocol off, :status, a host that disagrees, a bad content-length, te: gzip, :method twice: each reset both ways with H3_MESSAGE_ERROR
 PASS  none reached the program
 PASS  and the connection carries on
@@ -100,6 +102,8 @@ PASS  the client sees RESET_STREAM with the code
 PASS  and the stream takes nothing more
 PASS  trailers on a stream with no room wait
 PASS  so do trailers on one with none at all
+PASS  and on one with 66 bytes, the filler's length written long to fill it exactly
+PASS  and on one with 300
 PASS  each arrives after its body, the padding the server wrote to be told of room skipped as an unknown frame
 PASS  every request finished
 PASS  connected
@@ -113,4 +117,4 @@ PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
 PASS  and from the second on, each handshake keeps exactly as much: nothing in the slot grows
-http3: 115 passed, 0 failed, 0 skipped
+http3: 119 passed, 0 failed, 0 skipped

@@ -1,6 +1,6 @@
 // The caps of an `Http3Connection` are the program's, fixed at start-up, and
-// a HEADERS frame of `maxFieldSectionSize` has to fit one QUIC stream's
-// buffer, or the frame could never be read whole. So a cap past the buffer is
+// a HEADERS frame of `maxFieldSectionSize` has to fit half of one QUIC
+// stream's buffer, or QUIC's credit could stall the frame before it is whole. So a cap past the buffer is
 // the program's mistake and panics when the connection is made, with
 //
 //     Http3Connection: maxFieldSectionSize of 32768, outside 1 to 32752
@@ -13,7 +13,9 @@ import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { H3Limits, h3QuicConfig } from "../net_http3/peer";
 
 export const main = (): i32 => {
-  const quic = new QuicConnection(h3QuicConfig(new H3Limits()), fixedEntropy());
+  const limits = new H3Limits();
+  limits.maxStreamData = toI64(65536);
+  const quic = new QuicConnection(h3QuicConfig(limits), fixedEntropy());
   const config = new Http3Config();
   console.log(`the defaults make a connection: ${new Http3Connection(config, quic).state === 0}`);
   config.maxFieldSectionSize = 32768;

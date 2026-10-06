@@ -75,6 +75,10 @@ const wheel = (t: Suite): void => {
   w.file(n32(0), n64(61000), n64(1000));
   t.eqI32("a deadline past the horizon is filed at the horizon, to be filed again then", w.next(n64(1000)), H3_SERVER_WHEEL - 1);
   t.eqI64("keeping the deadline it was filed for", w.dueAt[0], n64(61000));
+  // After a tick the cursor is a millisecond ahead of `now`: the horizon's bucket is then `now`'s, a full turn away, not due.
+  w.cursor = n64(1001);
+  w.file(n32(0), n64(61000), n64(1000));
+  t.eqI32("after a tick, a deadline at the horizon is a whole turn away, not due now", w.next(n64(1000)), H3_SERVER_WHEEL);
   w.file(n32(0), n64(-1), n64(1000));
   t.eqI32("a slot with no deadline is filed nowhere", w.next(n64(1000)), n32(-1));
   // 64 buckets to a word of the bitmap: a deadline in the third word is found past two empty ones.
