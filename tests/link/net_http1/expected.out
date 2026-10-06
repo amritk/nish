@@ -1,29 +1,29 @@
 PASS  two pipelined GETs on a kept-alive connection: transcript
-PASS  two pipelined GETs on a kept-alive connection: the same cut at every byte and fed a byte at a time
+PASS  two pipelined GETs on a kept-alive connection: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  a POST with Content-Length, field names lowered and values trimmed: transcript
-PASS  a POST with Content-Length, field names lowered and values trimmed: the same cut at every byte and fed a byte at a time
+PASS  a POST with Content-Length, field names lowered and values trimmed: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  a chunked POST with an extension and a trailer, then a GET: transcript
-PASS  a chunked POST with an extension and a trailer, then a GET: the same cut at every byte and fed a byte at a time
+PASS  a chunked POST with an extension and a trailer, then a GET: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  an HTTP/1.0 request closes, and what follows it is not read: transcript
-PASS  an HTTP/1.0 request closes, and what follows it is not read: the same cut at every byte and fed a byte at a time
+PASS  an HTTP/1.0 request closes, and what follows it is not read: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  HTTP/1.0 with keep-alive, an empty line before the next request, and Connection: close: transcript
-PASS  HTTP/1.0 with keep-alive, an empty line before the next request, and Connection: close: the same cut at every byte and fed a byte at a time
+PASS  HTTP/1.0 with keep-alive, an empty line before the next request, and Connection: close: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  a WebSocket upgrade, and the bytes after it: transcript
-PASS  a WebSocket upgrade, and the bytes after it: the same cut at every byte and fed a byte at a time
+PASS  a WebSocket upgrade, and the bytes after it: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  a body that has not all arrived: transcript
-PASS  a body that has not all arrived: the same cut at every byte and fed a byte at a time
+PASS  a body that has not all arrived: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  smuggling: Content-Length and Transfer-Encoding together: transcript
-PASS  smuggling: Content-Length and Transfer-Encoding together: the same cut at every byte and fed a byte at a time
+PASS  smuggling: Content-Length and Transfer-Encoding together: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  smuggling: Content-Length twice, after a good request: transcript
-PASS  smuggling: Content-Length twice, after a good request: the same cut at every byte and fed a byte at a time
+PASS  smuggling: Content-Length twice, after a good request: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  smuggling: an obs-fold continuing Transfer-Encoding: transcript
-PASS  smuggling: an obs-fold continuing Transfer-Encoding: the same cut at every byte and fed a byte at a time
+PASS  smuggling: an obs-fold continuing Transfer-Encoding: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  smuggling: a bare LF ending a field line: transcript
-PASS  smuggling: a bare LF ending a field line: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a bare LF ending a field line: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  smuggling: a chunk size written as 0x5: transcript
-PASS  smuggling: a chunk size written as 0x5: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a chunk size written as 0x5: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  smuggling: chunk data longer than its size: transcript
-PASS  smuggling: chunk data longer than its size: the same cut at every byte and fed a byte at a time
+PASS  smuggling: chunk data longer than its size: the same cut at every byte, kept as text or as spans, and fed a byte at a time
 PASS  a 1.2 KB header section grows the buffer and is read whole
 PASS  its last field arrives intact
 PASS  forty pipelined requests fed seven bytes at a time give forty heads
@@ -159,4 +159,38 @@ PASS  5000 bytes round-trip in 256-byte chunks
 PASS  5000 bytes round-trip in 4096-byte chunks
 PASS  5000 bytes round-trip in 5000-byte chunks
 PASS  an empty chunked body round-trips
-http1: 161 passed, 0 failed, 0 skipped
+PASS  a parser that keeps no text reads the head
+PASS  methodIs and targetIs compare exactly
+PASS  and the text fields stay empty
+PASS  headerIndex is case-insensitive
+PASS  headerIndex answers -1 for a field that is not there
+PASS  headerIs compares the value exactly
+PASS  header() still answers a string, from the spans
+PASS  upgradeIs folds case
+PASS  the upgrade request ends
+PASS  and buffered() counts what follows it
+PASS  upgradeIs needs the one protocol alone
+PASS  upgradeIs is false without an upgrade
+PASS  maxChunk caps each body event
+PASS  restart() forgets the last request
+PASS  and reads the next connection's first request
+PASS  restart() clears a refusal too
+PASS  http1WriteResponseHead writes the head at its offset, with the Connection field last
+PASS  and a chunked head with no Connection field
+PASS  a buffer exactly the head's size holds it
+PASS  one byte short is HTTP1_NO_ROOM, and nothing is written
+PASS  an offset past the buffer is HTTP1_NO_ROOM
+PASS  refused: a Connection field beside the server's
+PASS  refused: a CR in the connection value
+PASS  refused: a LF in a value's octets
+PASS  refused: a name that is not a token
+PASS  refused: the caller's Transfer-Encoding
+PASS  refused: names and values of different lengths
+PASS  refused: status 600
+PASS  refused: 204 with a length
+PASS  refused: a reason with a LF
+PASS  http1WriteChunk writes the chunk at its offset
+PASS  an empty chunk writes nothing
+PASS  a chunk that just fits is written
+PASS  one byte further on it is HTTP1_NO_ROOM
+http1: 195 passed, 0 failed, 0 skipped

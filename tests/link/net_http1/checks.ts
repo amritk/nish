@@ -27,9 +27,13 @@ import {
   HTTP1_NO_BODY,
   HTTP1_UPGRADE,
   Http1Parser,
+  HTTP1_NO_ROOM,
+  HTTP1_REFUSED,
   http1Chunk,
   http1LastChunk,
   http1ResponseHead,
+  http1WriteChunk,
+  http1WriteResponseHead,
 } from "nish/net/http1";
 
 /** The bytes of a string, which in the language is bytes already. */
@@ -73,12 +77,35 @@ const describeHead = (p: Http1Parser): string => {
   return `${p.method} ${p.target} 1.${p.minor} ${keep} ${framing} up=${p.upgrade} [${fields.join("; ")}]`;
 };
 
+/**
+ * The same line as `describeHead`, read from the spans of a parser that keeps
+ * no text: what proves that `keepText = false` loses nothing.
+ */
+const describeSpans = (p: Http1Parser): string => {
+  const fields: string[] = [];
+  const upgrades: string[] = [];
+  for (let i: i32 = 0; i < p.headerCount; i += 1) {
+    const name: string = textOf(p.head, p.spans[4 * i], p.spans[4 * i + 1] - p.spans[4 * i]);
+    const value: string = textOf(p.head, p.spans[4 * i + 2], p.spans[4 * i + 3] - p.spans[4 * i + 2]);
+    fields.push(`${name}=${value}`);
+    if (name === "upgrade") {
+      upgrades.push(value);
+    }
+  }
+  const keep: string = p.keepAlive ? "keep" : "close";
+  const framing: string = p.chunked ? "chunked" : `length ${p.contentLength}`;
+  const method: string = textOf(p.head, p.methodStart, p.methodEnd - p.methodStart);
+  const target: string = textOf(p.head, p.targetStart, p.targetEnd - p.targetStart);
+  const up: string = p.upgrading ? upgrades.join(", ") : "";
+  return `${method} ${target} 1.${p.minor} ${keep} ${framing} up=${up} [${fields.join("; ")}]`;
+};
+
 /** Pulls events until the parser wants more input or has stopped. */
 const drain = (p: Http1Parser, t: Transcript): void => {
   let e: i32 = p.next();
   while (e === HTTP1_HEAD || e === HTTP1_BODY || e === HTTP1_END) {
     if (e === HTTP1_HEAD) {
-      t.log.push(describeHead(p));
+      t.log.push(p.keepText ? describeHead(p) : describeSpans(p));
     } else if (e === HTTP1_BODY) {
       t.body.push(textOf(p.body, p.bodyOff, p.bodyLen));
     } else {
@@ -110,18 +137,25 @@ const finish = (p: Http1Parser, t: Transcript): string => {
   return t.log.join("\n");
 };
 
-/** The corpus's limits: a 64-byte target, 512 bytes and 16 fields of header, a 1024-byte body. */
-const corpusParser = (): Http1Parser => {
+/**
+ * The corpus's limits: a 64-byte target, 512 bytes and 16 fields of header, a
+ * 1024-byte body; the head kept as text, or only as spans.
+ */
+const corpusParserWith = (text: boolean): Http1Parser => {
   const maxTarget: i32 = 64;
   const maxHeaderBytes: i32 = 512;
   const maxHeaders: i32 = 16;
   const maxBody: i32 = 1024;
-  return new Http1Parser(maxTarget, maxHeaderBytes, maxHeaders, maxBody);
+  const p: Http1Parser = new Http1Parser(maxTarget, maxHeaderBytes, maxHeaders, maxBody);
+  p.keepText = text;
+  return p;
 };
 
-/** The transcript of `data` fed as `data[0 .. cut)` and then the rest. */
-const transcriptSplitAt = (data: u8[], cut: i32): string => {
-  const p: Http1Parser = corpusParser();
+const corpusParser = (): Http1Parser => corpusParserWith(true);
+
+/** The transcript of `data` fed as `data[0 .. cut)` and then the rest, by a parser that keeps the head as text or not. */
+const transcriptSplitAt = (data: u8[], cut: i32, text: boolean): string => {
+  const p: Http1Parser = corpusParserWith(text);
   const t: Transcript = new Transcript();
   const start: i32 = 0;
   p.feed(data, start, cut);
@@ -151,11 +185,12 @@ const transcriptByteByByte = (data: u8[]): string => {
 const firstBadCut = (text: string): i32 => {
   const data: u8[] = bytesOf(text);
   const n: i32 = toI32(data.length);
-  const whole: string = transcriptSplitAt(data, n);
+  const whole: string = transcriptSplitAt(data, n, true);
   for (let cut: i32 = 0; cut < n; cut += 1) {
-    // Each pass builds a parser and a transcript that nothing keeps.
+    // Each pass builds two parsers and their transcripts, which nothing keeps.
     const mark: i64 = Arena.mark();
-    const same: boolean = transcriptSplitAt(data, cut) === whole;
+    const same: boolean =
+      transcriptSplitAt(data, cut, true) === whole && transcriptSplitAt(data, cut, false) === whole;
     Arena.release(mark);
     if (!same) {
       return cut;
@@ -168,8 +203,8 @@ const firstBadCut = (text: string): i32 => {
 const corpusCase = (t: Suite, name: string, text: string, expected: string): void => {
   const none: i32 = -1;
   const data: u8[] = bytesOf(text);
-  t.eqStr(`${name}: transcript`, transcriptSplitAt(data, toI32(data.length)), expected);
-  t.eqI32(`${name}: the same cut at every byte and fed a byte at a time`, firstBadCut(text), none);
+  t.eqStr(`${name}: transcript`, transcriptSplitAt(data, toI32(data.length), true), expected);
+  t.eqI32(`${name}: the same cut at every byte, kept as text or as spans, and fed a byte at a time`, firstBadCut(text), none);
 };
 
 /** The refusal tests' limits: a 32-byte target, 256 bytes and 8 fields of header, a 64-byte body. */
@@ -696,6 +731,94 @@ export const http1Checks = (): i32 => {
   }
   const nothing: u8[] = [];
   t.eqStr("an empty chunked body round-trips", chunkedRoundTrip(nothing, ten), "same");
+
+  // --- The spans, and the writers into a caller's buffer ---------------------------
+  const spans: Http1Parser = corpusParserWith(false);
+  const asked: u8[] = bytesOf(
+    "GET /chat HTTP/1.1\r\nHost: a\r\nConnection: Upgrade\r\nUPGRADE: WebSocket\r\nSec-WebSocket-Version: 13\r\n\r\nleft"
+  );
+  spans.feed(asked, zero, toI32(asked.length));
+  t.eqI32("a parser that keeps no text reads the head", spans.next(), HTTP1_HEAD);
+  t.ok("methodIs and targetIs compare exactly", spans.methodIs("GET") && !spans.methodIs("get") && spans.targetIs("/chat") && !spans.targetIs("/cha"));
+  t.ok("and the text fields stay empty", spans.method === "" && spans.target === "" && toI32(spans.names.length) === 0);
+  const three: i32 = 3;
+  t.eqI32("headerIndex is case-insensitive", spans.headerIndex("Sec-WebSocket-VERSION"), three);
+  t.eqI32("headerIndex answers -1 for a field that is not there", spans.headerIndex("cookie"), toI32(-1));
+  t.ok("headerIs compares the value exactly", spans.headerIs("sec-websocket-version", "13") && !spans.headerIs("sec-websocket-version", "1") && !spans.headerIs("x-absent", ""));
+  t.eqStr("header() still answers a string, from the spans", spans.header("upgrade") === null ? "null" : "WebSocket", "WebSocket");
+  t.ok("upgradeIs folds case", spans.upgradeIs("websocket") && !spans.upgradeIs("h2c"));
+  t.eqI32("the upgrade request ends", spans.next(), HTTP1_END);
+  t.eqI32("and buffered() counts what follows it", spans.buffered(), toI32(4));
+  const twoUpgrades: Http1Parser = corpusParserWith(false);
+  const listed: u8[] = bytesOf("GET / HTTP/1.1\r\nHost: a\r\nConnection: upgrade\r\nUpgrade: websocket\r\nUpgrade: h2c\r\n\r\n");
+  twoUpgrades.feed(listed, zero, toI32(listed.length));
+  twoUpgrades.next();
+  t.ok("upgradeIs needs the one protocol alone", twoUpgrades.upgrading && !twoUpgrades.upgradeIs("websocket"));
+  const plain: Http1Parser = corpusParserWith(false);
+  const get: u8[] = bytesOf("GET / HTTP/1.1\r\nHost: a\r\n\r\n");
+  plain.feed(get, zero, toI32(get.length));
+  plain.next();
+  t.ok("upgradeIs is false without an upgrade", !plain.upgradeIs("websocket") && !plain.upgrading);
+
+  const capped: Http1Parser = corpusParserWith(false);
+  capped.maxChunk = 4;
+  const posted: u8[] = bytesOf("POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 10\r\n\r\n0123456789");
+  capped.feed(posted, zero, toI32(posted.length));
+  capped.next();
+  const pieces: string[] = [];
+  let piece: i32 = capped.next();
+  while (piece === HTTP1_BODY) {
+    pieces.push(textOf(capped.body, capped.bodyOff, capped.bodyLen));
+    piece = capped.next();
+  }
+  t.eqStr("maxChunk caps each body event", pieces.join("|"), "0123|4567|89");
+  capped.restart();
+  t.eqI32("restart() forgets the last request", capped.buffered(), zero);
+  capped.feed(get, zero, toI32(get.length));
+  t.ok("and reads the next connection's first request", capped.next() === HTTP1_HEAD && capped.targetIs("/"));
+  const refusing: Fed = fedWith("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n");
+  refusing.p.restart();
+  refusing.p.feed(get, zero, toI32(get.length));
+  t.eqI32("restart() clears a refusal too", refusing.p.next(), HTTP1_HEAD);
+
+  const out: u8[] = new Array<u8>(200);
+  const names: u8[][] = [bytesOf("Content-Type")];
+  const values: u8[][] = [bytesOf("text/plain")];
+  const at: i32 = 7;
+  const headEnd: i32 = http1WriteResponseHead(out, at, ok, "OK", names, values, five, "close");
+  t.eqStr(
+    "http1WriteResponseHead writes the head at its offset, with the Connection field last",
+    headEnd < 0 ? "refused" : textOf(out, at, headEnd - at),
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\nConnection: close\r\n\r\n"
+  );
+  const none: u8[][] = [];
+  const chunkedEnd: i32 = http1WriteResponseHead(out, zero, ok, "OK", none, none, HTTP1_CHUNKED, "");
+  t.eqStr("and a chunked head with no Connection field", textOf(out, zero, chunkedEnd), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+  const exact: u8[] = new Array<u8>(headEnd - at);
+  t.eqI32("a buffer exactly the head's size holds it", http1WriteResponseHead(exact, zero, ok, "OK", names, values, five, "close"), headEnd - at);
+  const short: u8[] = new Array<u8>(headEnd - at - 1);
+  short.fill(toU8(120));
+  t.ok(
+    "one byte short is HTTP1_NO_ROOM, and nothing is written",
+    http1WriteResponseHead(short, zero, ok, "OK", names, values, five, "close") === HTTP1_NO_ROOM && short[0] === toU8(120)
+  );
+  t.eqI32("an offset past the buffer is HTTP1_NO_ROOM", http1WriteResponseHead(out, toI32(201), ok, "OK", none, none, zero, ""), HTTP1_NO_ROOM);
+  t.eqI32("refused: a Connection field beside the server's", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("connection")], [bytesOf("x")], zero, "close"), HTTP1_REFUSED);
+  t.eqI32("refused: a CR in the connection value", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "close\r\nX: y"), HTTP1_REFUSED);
+  t.eqI32("refused: a LF in a value's octets", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [bytesOf("b\nc")], zero, ""), HTTP1_REFUSED);
+  t.eqI32("refused: a name that is not a token", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a b")], [bytesOf("c")], zero, ""), HTTP1_REFUSED);
+  t.eqI32("refused: the caller's Transfer-Encoding", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("Transfer-Encoding")], [bytesOf("gzip")], zero, ""), HTTP1_REFUSED);
+  t.eqI32("refused: names and values of different lengths", http1WriteResponseHead(out, zero, ok, "OK", names, none, zero, ""), HTTP1_REFUSED);
+  t.eqI32("refused: status 600", http1WriteResponseHead(out, zero, s600, "OK", none, none, zero, ""), HTTP1_REFUSED);
+  t.eqI32("refused: 204 with a length", http1WriteResponseHead(out, zero, noContent, "No Content", none, none, zero, ""), HTTP1_REFUSED);
+  t.eqI32("refused: a reason with a LF", http1WriteResponseHead(out, zero, ok, "O\nK", none, none, zero, ""), HTTP1_REFUSED);
+
+  const chunkEnd: i32 = http1WriteChunk(out, toI32(3), digits, one, seventeen);
+  t.eqStr("http1WriteChunk writes the chunk at its offset", textOf(out, toI32(3), chunkEnd - 3), "11\r\n123456789abcdefgh\r\n");
+  t.eqI32("an empty chunk writes nothing", http1WriteChunk(out, five, digits, zero, zero), five);
+  const tight: u8[] = new Array<u8>(15);
+  t.eqI32("a chunk that just fits is written", http1WriteChunk(tight, zero, digits, zero, ten), toI32(15));
+  t.eqI32("one byte further on it is HTTP1_NO_ROOM", http1WriteChunk(tight, one, digits, zero, ten), HTTP1_NO_ROOM);
 
   return t.done();
 };
