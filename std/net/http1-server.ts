@@ -1124,16 +1124,22 @@ export class Http1Server {
     return this.flush(slot)
   }
 
-  /** `slot`'s connection's next event; `H1_ERROR` for a free slot. What it wrote is sent once it stalls. */
+  /**
+   * `slot`'s connection's next event; `H1_ERROR` for a free slot. While a
+   * write is held back the output is sent first, so that the room it waits
+   * for is made here and `H1_WRITE` comes in the same pass; otherwise what
+   * the program writes in answer to one event and the next goes out together
+   * at `flush`, as one segment rather than several.
+   */
   next(slot: i32): i32 {
     if (!this.holds(slot)) {
       return H1_ERROR
     }
-    const event: i32 = this.connections[slot].next()
-    if (event === H1_NEED_MORE || event === H1_ERROR) {
-      this.flush(slot)
+    const conn: Http1Connection = this.connections[slot]
+    if (conn.writeHeld) {
+      this.send(slot)
     }
-    return event
+    return conn.next()
   }
 
   /**
@@ -1145,6 +1151,23 @@ export class Http1Server {
     if (!this.holds(slot)) {
       return H1_DONE
     }
+    const conn: Http1Connection = this.connections[slot]
+    this.send(slot)
+    if (conn.isDone()) {
+      return H1_DONE
+    }
+    let wants: i32 = 0
+    if (conn.inputRoom() > 0) {
+      wants = wants | H1_WANT_READ
+    }
+    if (conn.wantsWrite()) {
+      wants = wants | H1_WANT_WRITE
+    }
+    return wants
+  }
+
+  /** Writes what `slot`'s connection holds, which it holds, until the socket would block. */
+  send(slot: i32): void {
     const conn: Http1Connection = this.connections[slot]
     const fd: i32 = this.fds[slot]
     while (conn.wantsWrite()) {
@@ -1158,17 +1181,6 @@ export class Http1Server {
       conn.lastActive = monotonicNanos()
       conn.consume(n)
     }
-    if (conn.isDone()) {
-      return H1_DONE
-    }
-    let wants: i32 = 0
-    if (conn.inputRoom() > 0) {
-      wants = wants | H1_WANT_READ
-    }
-    if (conn.wantsWrite()) {
-      wants = wants | H1_WANT_WRITE
-    }
-    return wants
   }
 
   /** Closes `slot`'s socket, whatever is left unsent, and frees the slot. */
@@ -1312,11 +1324,11 @@ export class Http1TlsServer {
       }
       conn.feed(this.scratch, H1_ZERO, n)
     }
-    const event: i32 = conn.next()
-    if (event === H1_NEED_MORE || event === H1_ERROR) {
-      this.flush(slot)
+    // A held-back write finds its room here, as in `Http1Server.next`.
+    if (conn.writeHeld) {
+      this.send(slot)
     }
-    return event
+    return conn.next()
   }
 
   /**
@@ -1333,6 +1345,17 @@ export class Http1TlsServer {
       return this.tls.shutdown(slot)
     }
     const conn: Http1Connection = this.connections[slot]
+    this.send(slot)
+    if (conn.isDone()) {
+      return this.tls.shutdown(slot)
+    }
+    const wants: i32 = this.tls.interest(slot)
+    return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
+  }
+
+  /** Writes what `slot`'s connection holds into TLS, as far as TLS takes it. */
+  send(slot: i32): void {
+    const conn: Http1Connection = this.connections[slot]
     while (conn.wantsWrite()) {
       const n: i32 = this.tls.write(slot, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
       if (n <= 0) {
@@ -1341,11 +1364,6 @@ export class Http1TlsServer {
       conn.lastActive = monotonicNanos()
       conn.consume(n)
     }
-    if (conn.isDone()) {
-      return this.tls.shutdown(slot)
-    }
-    const wants: i32 = this.tls.interest(slot)
-    return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
   }
 
   /** Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does. */
