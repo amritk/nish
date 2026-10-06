@@ -25,6 +25,12 @@ PASS  GOAWAY
 PASS  with every request finished the server closes: H3_NO_ERROR
 PASS  and frees the slot
 PASS  having accepted one connection
+PASS  a short header too short for a reset, a long one short of a full Initial, a Handshake packet no slot owns: dropped, keeping nothing
+PASS  sixteen answers at once: eight stateless resets and eight Version Negotiations
+PASS  past the budget each is dropped before the listener, and counted
+PASS  keeping nothing
+PASS  a hundred milliseconds earn one more
+PASS  and no slot was taken
 PASS  a client that chose nish-echo is closed with CRYPTO_ERROR no_application_protocol
 PASS  and its slot freed
 PASS  the first takes the one slot
@@ -33,4 +39,4 @@ PASS  five connections through one slot, each closed after its GOAWAY
 PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
-http3 server: 35 passed, 0 failed, 0 skipped
+http3 server: 41 passed, 0 failed, 0 skipped

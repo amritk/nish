@@ -114,6 +114,70 @@ const full = (t: Suite): void => {
   t.ok("the second gets no answer, and is counted", toI32(second.c.datagrams.length) === n32(0) && loop.server.refused >= n32(1));
 };
 
+/** What one `receive` of the datagram `d`, sent from `fd`, keeps in the arena, measured in a fresh chunk. */
+const receiveCost = (loop: LoopServer, fd: i32, to: u8[], d: u8[], now: i64): i64 => {
+  udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const filler: u8[] = new Array<u8>(70000);
+  const before: i64 = Arena.used();
+  loop.server.receive(now, key);
+  const after: i64 = Arena.used();
+  wipe(key);
+  return after !== before && toI32(filler.length) > 0 ? after : n64(0);
+};
+
+/**
+ * Datagrams no slot owns (H3-3): what the listener would drop costs nothing,
+ * and the answers that start no connection — stateless resets, Version
+ * Negotiation — are held to the carrier's budget, past which they cost
+ * nothing either.
+ */
+const flood = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  const fd: i32 = udpBind("127.0.0.1", n32(0), n32(0));
+  const to: u8[] = new Array<u8>(18);
+  netAddress(to, "127.0.0.1", loop.port);
+  const tiny: u8[] = new Array<u8>(21);
+  tiny[0] = toU8(0x40);
+  const short: u8[] = new Array<u8>(60);
+  short[0] = toU8(0x41);
+  const truncated: u8[] = new Array<u8>(1199);
+  truncated[0] = toU8(0xc0);
+  truncated[4] = toU8(1);
+  truncated[5] = toU8(8);
+  const handshake: u8[] = new Array<u8>(1200);
+  handshake[0] = toU8(0xe0);
+  handshake[4] = toU8(1);
+  handshake[5] = toU8(8);
+  const other: u8[] = new Array<u8>(1200);
+  other[0] = toU8(0xc0);
+  other[1] = toU8(0x0a);
+  other[2] = toU8(0x0a);
+  other[3] = toU8(0x0a);
+  other[4] = toU8(0x0a);
+  other[5] = toU8(8);
+  let free: i64 = 0;
+  for (let k: i32 = 0; k < 20; k++) {
+    free = free + receiveCost(loop, fd, to, tiny, n64(1000)) + receiveCost(loop, fd, to, truncated, n64(1000)) + receiveCost(loop, fd, to, handshake, n64(1000));
+  }
+  t.eqI64("a short header too short for a reset, a long one short of a full Initial, a Handshake packet no slot owns: dropped, keeping nothing", free, n64(0));
+  for (let k: i32 = 0; k < 8; k++) {
+    receiveCost(loop, fd, to, short, n64(1000));
+    receiveCost(loop, fd, to, other, n64(1000));
+  }
+  t.ok("sixteen answers at once: eight stateless resets and eight Version Negotiations", loop.server.listener.resetsSent === n32(8) && loop.server.limited === n32(0));
+  let past: i64 = 0;
+  for (let k: i32 = 0; k < 20; k++) {
+    past = past + receiveCost(loop, fd, to, short, n64(1000)) + receiveCost(loop, fd, to, other, n64(1000));
+  }
+  t.ok("past the budget each is dropped before the listener, and counted", loop.server.limited === n32(40) && loop.server.listener.resetsSent === n32(8));
+  t.eqI64("keeping nothing", past, n64(0));
+  receiveCost(loop, fd, to, short, n64(1100));
+  t.eqI32("a hundred milliseconds earn one more", loop.server.listener.resetsSent, n32(9));
+  t.eqI32("and no slot was taken", loop.server.busy(), n32(0));
+};
+
 /** A client that only sends datagrams, for the arena check: no application of its own in the server's loop. */
 class Lean {
   loop: LoopServer;
@@ -297,6 +361,7 @@ const reused = (t: Suite): void => {
 /** Every check of this file. */
 export const loopbackChecks = (t: Suite): void => {
   exchange(t);
+  flood(t);
   alpn(t);
   full(t);
   reused(t);

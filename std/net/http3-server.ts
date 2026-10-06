@@ -93,6 +93,10 @@ export const H3_SERVER_WHEEL: i32 = 2048
 /** The most datagrams one `receive` reads, so one busy socket cannot hold the loop. */
 export const H3_SERVER_RECEIVE_BURST: i32 = 256
 
+/** The answers to datagrams no slot owns that may go at once, and the milliseconds that earn one more. */
+export const H3_SERVER_ANSWER_BURST: i32 = 16
+export const H3_SERVER_ANSWER_INTERVAL: i64 = 100
+
 /** The address form `nish:net` reads and writes. */
 const H3_SERVER_ADDRESS: i32 = 18
 
@@ -424,14 +428,19 @@ export class Http3Server {
   free: i32[]
   /** Per slot: 1 while on the ready ring, 2 while on the dirty stack. */
   queued: i32[]
+  /** When the answer budget was last topped up, -1 before the first answer. */
+  answerRefilled: i64 = -1
   fd: i32 = -1
   readyHead: i32 = 0
   readyCount: i32 = 0
   dirtyCount: i32 = 0
   freeCount: i32 = 0
-  /** Counters for a log or a test, saturating: connections accepted, datagrams dropped for want of a slot, sends that failed. */
+  /** What is left of the answer budget (see `answerRefilled`). */
+  answerBudget: i32 = 0
+  /** Counters for a log or a test, saturating: connections accepted, Initials dropped for want of a slot, datagrams past the answer budget, sends that failed. */
   accepted: i32 = 0
   refused: i32 = 0
+  limited: i32 = 0
   sendErrors: i32 = 0
 
   /**
@@ -606,7 +615,7 @@ export class Http3Server {
 
   /** A datagram no slot owns: the listener decides, and may make a connection in a free slot. */
   unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
-    if (!this.worthListening(buf, at, len)) {
+    if (!this.worthListening(buf, at, len, now)) {
       return
     }
     const datagram: u8[] = new Array<u8>(len)
@@ -652,11 +661,13 @@ export class Http3Server {
    * new connection answers (RFC 9000 §14.1, §6.1); version 0; a version 1
    * packet that is not an Initial, or whose DCID is under 8 bytes (§7.2);
    * and an Initial when no slot is free, which is counted in `refused`.
+   * A stateless reset and a Version Negotiation packet, the answers that do
+   * not start a connection, are also held to `takeAnswer`'s budget.
    */
-  worthListening(buf: u8[], at: i32, len: i32): boolean {
+  worthListening(buf: u8[], at: i32, len: i32, now: i64): boolean {
     const first: i32 = toI32(buf[at])
     if ((first & 0x80) === 0) {
-      return len > QUIC_LISTENER_MIN_RESET
+      return len > QUIC_LISTENER_MIN_RESET && this.takeAnswer(now)
     }
     if (len < QUIC_CONN_DATAGRAM_SIZE || len < 6) {
       return false
@@ -666,7 +677,7 @@ export class Http3Server {
       version = (version << 8) | toI32(buf[at + k])
     }
     if (version !== 1) {
-      return version !== 0
+      return version !== 0 && this.takeAnswer(now)
     }
     if ((first & 0x30) !== 0 || toI32(buf[at + 5]) < 8) {
       return false
@@ -675,6 +686,32 @@ export class Http3Server {
       this.refused = http3ServerCount(this.refused)
       return false
     }
+    return true
+  }
+
+  /**
+   * Takes one answer to a datagram no slot owns from the budget —
+   * `H3_SERVER_ANSWER_BURST` at once, then one per
+   * `H3_SERVER_ANSWER_INTERVAL` milliseconds — topping it up first. Past it
+   * the datagram is dropped before the listener sees it, so a flood of
+   * garbage costs nothing (H3-3); counted in `limited`.
+   */
+  takeAnswer(now: i64): boolean {
+    if (this.answerRefilled < 0 || now < this.answerRefilled) {
+      this.answerRefilled = now
+      this.answerBudget = H3_SERVER_ANSWER_BURST
+    }
+    const earned: i64 = (now - this.answerRefilled) / H3_SERVER_ANSWER_INTERVAL
+    if (earned > 0) {
+      const room: i64 = toI64(H3_SERVER_ANSWER_BURST - this.answerBudget)
+      this.answerBudget = this.answerBudget + toI32(earned < room ? earned : room)
+      this.answerRefilled = this.answerRefilled + earned * H3_SERVER_ANSWER_INTERVAL
+    }
+    if (this.answerBudget <= 0) {
+      this.limited = http3ServerCount(this.limited)
+      return false
+    }
+    this.answerBudget = this.answerBudget - 1
     return true
   }
 
