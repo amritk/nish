@@ -281,20 +281,11 @@ const http1ServerReason = (status: i32): string => {
   }
 }
 
-/** Whether `name` is one of the fields the server decides and a program may not send. */
-const http1ServerReserved = (name: u8[]): boolean => {
-  const n: i32 = toI32(name.length)
-  const words: string[] = ["connection", "upgrade", "keep-alive", "transfer-encoding", "content-length"]
-  for (const word of words) {
-    if (toI32(word.length) === n && http1ServerSameWord(name, word)) {
-      return true
-    }
-  }
-  return false
-}
-
-/** Whether `bytes` is `word`, which is lowercase and as long, in any ASCII case. */
+/** Whether `bytes` is `word`, which is lowercase, in any ASCII case. */
 const http1ServerSameWord = (bytes: u8[], word: string): boolean => {
+  if (toI32(bytes.length) !== toI32(word.length)) {
+    return false
+  }
   for (let k: i32 = 0; k < toI32(bytes.length) && k < toI32(word.length); k++) {
     let c: i32 = toI32(bytes[k])
     if (c >= 65 && c <= 90) {
@@ -306,6 +297,14 @@ const http1ServerSameWord = (bytes: u8[], word: string): boolean => {
   }
   return true
 }
+
+/** Whether `name` is one of the fields the server decides and a program may not send. */
+const http1ServerReserved = (name: u8[]): boolean =>
+  http1ServerSameWord(name, "connection") ||
+  http1ServerSameWord(name, "upgrade") ||
+  http1ServerSameWord(name, "keep-alive") ||
+  http1ServerSameWord(name, "transfer-encoding") ||
+  http1ServerSameWord(name, "content-length")
 
 /**
  * One connection's HTTP/1.1 server, sans-IO: bytes in through `feed`, events
