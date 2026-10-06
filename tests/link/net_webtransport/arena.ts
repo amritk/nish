@@ -179,8 +179,8 @@ const wtMeteredHandshake = (s: WtArenaServer, c: QcClient, limits: WtLimits, m: 
 const wtRound = (s: WtArenaServer, c: QcClient, round: i32, m: NqMeter): void => {
   const payload: u8[] = [];
   wtDatagramFrame(payload, h3Cat([h3Varint(n64(0)), h3Pattern(n32(300))]));
-  wtStreamFrame(payload, toI64(4 + round * 4), n64(0), h3Cat([h3Varint(H3_FRAME_WEBTRANSPORT_STREAM), h3Varint(n64(0)), h3Pattern(n32(200))]), true);
-  wtStreamFrame(payload, toI64(14 + round * 4), n64(0), h3Cat([h3Varint(H3_STREAM_WEBTRANSPORT), h3Varint(n64(0)), h3Pattern(n32(100))]), true);
+  wtStreamFrame(payload, n64(4) + toI64(round) * n64(4), n64(0), h3Cat([h3Varint(H3_FRAME_WEBTRANSPORT_STREAM), h3Varint(n64(0)), h3Pattern(n32(200))]), true);
+  wtStreamFrame(payload, n64(14) + toI64(round) * n64(4), n64(0), h3Cat([h3Varint(H3_STREAM_WEBTRANSPORT), h3Varint(n64(0)), h3Pattern(n32(100))]), true);
   wtMeteredPacket(s, c, payload, m);
 };
 

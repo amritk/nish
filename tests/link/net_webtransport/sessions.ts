@@ -67,24 +67,24 @@ const streams = (t: Suite): void => {
 const manyStreams = (t: Suite): void => {
   const p: WtPeer = wtReady(new WtLimits());
   for (let k: i32 = 0; k < 24; k++) {
-    p.bidi(toI64(4 + k * 4), n64(0), bytesOf(`bidi ${k}`), true);
+    p.bidi(n64(4) + toI64(k) * n64(4), n64(0), bytesOf(`bidi ${k}`), true);
     p.settle();
   }
   for (let k: i32 = 0; k < 12; k++) {
-    p.uni(toI64(14 + k * 4), n64(0), bytesOf(`uni ${k}`), true);
+    p.uni(n64(14) + toI64(k) * n64(4), n64(0), bytesOf(`uni ${k}`), true);
     p.settle();
   }
   p.settle();
   let bidi: i32 = 0;
   for (let k: i32 = 0; k < 24; k++) {
-    if (textOf(p.stream(toI64(4 + k * 4)).data) === `bidi ${k}` && p.stream(toI64(4 + k * 4)).fin) {
+    if (textOf(p.stream(n64(4) + toI64(k) * n64(4)).data) === `bidi ${k}` && p.stream(n64(4) + toI64(k) * n64(4)).fin) {
       bidi++;
     }
   }
   let uni: i32 = 0;
   for (let k: i32 = 0; k < 12; k++) {
-    const back: u8[] = p.stream(toI64(15 + k * 4)).data;
-    if (wtHexOf(back) === `405400${wtHexOf(bytesOf(`uni ${k}`))}` && p.stream(toI64(15 + k * 4)).fin) {
+    const back: u8[] = p.stream(n64(15) + toI64(k) * n64(4)).data;
+    if (wtHexOf(back) === `405400${wtHexOf(bytesOf(`uni ${k}`))}` && p.stream(n64(15) + toI64(k) * n64(4)).fin) {
       uni++;
     }
   }

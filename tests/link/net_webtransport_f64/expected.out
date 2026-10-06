@@ -1,0 +1,174 @@
+PASS  SETTINGS: QPACK 0 and 0, field sections 8,192, then extended CONNECT 1, HTTP datagrams 1, draft-02 WebTransport 1 and two sessions
+PASS  the client's WebTransport settings were read
+PASS  the session is answered 200 with the draft-02 header
+PASS  the CONNECT stream stays open
+PASS  the program saw the session
+PASS  its path and origin reached the program
+PASS  a datagram is echoed
+PASS  with its quarter stream ID first
+PASS  the most the server sends: a 1,200-byte packet's room less the quarter stream ID
+PASS  one at that size goes both ways whole
+PASS  one byte over is refused to the program
+PASS  unknown sessions have no room
+PASS  a bidirectional stream is echoed on itself
+PASS  with its FIN
+PASS  a unidirectional one comes back on the server's own, its type and session first
+PASS  each reached the program
+PASS  24 bidirectional streams on one session, more than QUIC lets be open at once, each echoed whole
+PASS  12 unidirectional ones, each echoed on a stream of the server's
+PASS  and the session holds none of them once each is done both ways
+PASS  the second session is accepted too
+PASS  each datagram reached its own session
+PASS  and each echo carries its session's quarter stream ID
+PASS  and each stream to its own
+PASS  their sessions are distinct slots
+PASS  a CONNECT before the client's SETTINGS is not read yet
+PASS  and becomes a session once they arrive
+PASS  streams for a session whose CONNECT has not arrived wait, unread
+PASS  and are taken once it is accepted
+PASS  whole
+PASS  a stream of a session not yet answered waits too
+PASS  its session's datagrams are dropped meanwhile
+PASS  counted
+PASS  the program accepts it
+PASS  and the waiting stream is served
+PASS  the server's first bidirectional stream
+PASS  takes a write
+PASS  which the client reads after the signal and the session ID
+PASS  the client's answer on it reaches the session
+PASS  as the stream's data and end
+PASS  the server finishes it
+PASS  FIN
+PASS  an empty HEADERS frame is two bytes
+PASS  the program is told the code and the reason
+PASS  the server finishes its half of the CONNECT stream
+PASS  the session's open stream is reset both ways with WT_SESSION_GONE
+PASS  its slot is still held until the client's half ends
+PASS  and free once it does
+PASS  a stream for the session once it is gone is refused with WT_SESSION_GONE (its whole stream in, so only reset)
+PASS  and so is a datagram: dropped
+PASS  a reason past 1,024 bytes is refused
+PASS  close
+PASS  CLOSE_WEBTRANSPORT_SESSION: type 0x2843, length 7, code 7, "bye"
+PASS  then the FIN
+PASS  the client's stream is asked to stop with WT_SESSION_GONE
+PASS  a second close finds no session
+PASS  the client's own CLOSE in answer ends it quietly, and the slot is free
+PASS  and the program was not told of a close it made
+PASS  a FIN alone closes the session with code 0 and no reason
+PASS  answered with the server's FIN
+PASS  and so does a reset
+PASS  each frees its slot
+PASS  the client's DRAIN_WEBTRANSPORT_SESSION reaches the program
+PASS  the server sends its own
+PASS  type 0x78ae as a four-byte varint, length 0
+PASS  and the session stays open
+PASS  an unknown capsule is skipped, and the session goes on
+PASS  draining an unknown session is refused
+PASS  application code 0 is the range's first
+PASS  0x1e skips the greased value it would land on
+PASS  and maps back
+PASS  the largest code maps back
+PASS  a greased value in the range is no code
+PASS  nor is one below it
+PASS  the client's reset reaches the program with its code mapped back
+PASS  an unmapped STOP_SENDING code, as wtransport sends one, keeps its HTTP/3 code
+PASS  the server resets its side
+PASS  and asks the client to stop
+PASS  each with the code mapped
+PASS  a stream stopped already cannot be stopped again
+PASS  nor written
+PASS  reasons are text
+PASS  a client whose SETTINGS lack SETTINGS_H3_DATAGRAM is answered 400
+PASS  the program never sees it, and the stream is asked to stop with H3_NO_ERROR
+PASS  one with HTTP datagrams but neither WebTransport setting is answered 400
+PASS  SETTINGS_WEBTRANSPORT_MAX_SESSIONS alone, as a draft-07 client sends it, is enough
+PASS  another :protocol is answered 501 (RFC 8441 §4)
+PASS  an :scheme other than https is answered 400
+PASS  a session past the cap of two is answered 429
+PASS  none of them reached the program
+PASS  an extended CONNECT without :path is malformed, reset both ways with H3_MESSAGE_ERROR
+PASS  a session the program refuses gets its status
+PASS  and the stream that waited for it is refused with WT_SESSION_GONE
+PASS  a plain request is the program's to answer
+PASS  and a stream that names it as its session is refused with WT_SESSION_GONE
+PASS  where SETTINGS_ENABLE_CONNECT_PROTOCOL was not sent, :protocol is malformed: H3_MESSAGE_ERROR (RFC 9220 §3)
+PASS  the server's SETTINGS carried no extended CONNECT
+PASS  extended CONNECT alone is advertised (0x08 = 1) and the request reaches the program
+PASS  a stream past the session's two is refused both ways with H3_REQUEST_REJECTED
+PASS  and the server may not open one past them
+PASS  one stream waits for session 12
+PASS  the next past the waiting room is refused with WT_BUFFERED_STREAM_REJECTED
+PASS  and the one that waited is taken
+PASS  SETTINGS_ENABLE_WEBTRANSPORT twice is H3_SETTINGS_ERROR
+PASS  SETTINGS_H3_DATAGRAM of 2 is H3_SETTINGS_ERROR (RFC 9297 §2.1.1)
+PASS  SETTINGS_ENABLE_CONNECT_PROTOCOL of 2 is H3_SETTINGS_ERROR (RFC 9220 §5)
+PASS  a stream naming a session that is no client bidirectional stream is H3_ID_ERROR
+PASS  the stream signal after a request's HEADERS is H3_FRAME_ERROR
+PASS  an empty datagram has no quarter stream ID: H3_DATAGRAM_ERROR
+PASS  a quarter stream ID of 2^60, a stream ID past 2^62, is H3_DATAGRAM_ERROR
+PASS  a datagram of an unknown session is dropped, counted, and the connection lives
+PASS  a datagram whose frame is the server's 1,200 bytes exactly arrives (too large to echo: the client takes less)
+PASS  one byte over is QUIC's PROTOCOL_VIOLATION
+PASS  a CLOSE shorter than its code resets the CONNECT stream with H3_DATAGRAM_ERROR
+PASS  and ends the session
+PASS  a CLOSE whose reason is past 1,024 bytes too
+PASS  one of exactly 1,024 is read
+PASS  a DRAIN with a payload is H3_DATAGRAM_ERROR
+PASS  anything after a CLOSE is H3_MESSAGE_ERROR (draft-02 §5): the server's half is finished already, so it asks the client to stop
+PASS  though the CLOSE itself was read
+PASS  a CONNECT stream that ends inside a capsule is H3_DATAGRAM_ERROR (RFC 9297 §3.3)
+PASS  and the session is over
+PASS  refuse with a status outside 400 to 599 is H3_INVALID
+PASS  accept of a session already accepted is H3_CLOSED
+PASS  refuse of one already accepted too
+PASS  accept of a stream that is no session
+PASS  a datagram for a session asked for but not answered
+PASS  a stream for it
+PASS  a close of it
+PASS  a write to no stream
+PASS  a reset of no stream
+PASS  a STOP_SENDING for no stream
+PASS  a write to the client's unidirectional stream, which has no side here
+PASS  the HTTP/3 layer will not let a stream it does not hold go
+PASS  nor refuse one that is no WebTransport stream
+PASS  nor write to one
+PASS  nor reset one
+PASS  nor stop reading a stream that is no request
+PASS  a whole DATA frame on a request with no head yet is H3_INVALID
+PASS  one past the stream's buffer is H3_TOO_LARGE
+PASS  one on no request is H3_CLOSED
+PASS  a ninth datagram while QUIC's eight wait to go is H3_AGAIN
+PASS  an HTTP/3 connection without WebTransport opens no WebTransport stream
+PASS  nor waits for a request's session
+PASS  GOAWAY
+PASS  a stream of a session after GOAWAY is still taken
+PASS  a request past it is refused with H3_REQUEST_REJECTED
+PASS  as is a stream that ends before its first frame
+PASS  two refused
+PASS  wtransport's SETTINGS are read: draft-02 and draft-07 WebTransport, HTTP datagrams, extended CONNECT
+PASS  its CONNECT is a session
+PASS  whose fields are wtransport's
+PASS  the server's SETTINGS, byte for byte
+PASS  its QPACK streams' types
+PASS  the 200, byte for byte: :status 200 by static index, sec-webtransport-http3-draft: draft02 as Huffman literals
+PASS  the datagram comes back as it went
+PASS  the bidirectional stream is echoed on itself
+PASS  the unidirectional one on the server's stream 15: 0x54, session 0, the bytes, FIN
+PASS  the program saw every part of it
+PASS  the server closes the session: 7, "bye"
+PASS  CLOSE_WEBTRANSPORT_SESSION in a DATA frame after the 200, byte for byte, and the FIN
+PASS  wtransport closes the connection with H3_NO_ERROR, and the program is told
+PASS  connected
+PASS  200 rounds on a warm session — a datagram and two streams in, each echoed, ACKs and credit — keep no arena memory
+PASS  and every datagram and stream was echoed
+PASS  the session holds no stream once each is done
+PASS  connected
+PASS  100 sessions through one slot, after 20 to warm it — CONNECT, a 200, a datagram each way, a CLOSE with a reason, both FINs — keep no arena memory
+PASS  each was accepted, echoed its datagram and closed
+PASS  and the slot is free
+PASS  five connections, one after another, through one slot
+PASS  each with its session, which the layer forgot at the restart
+PASS  resetting the slot keeps no arena memory
+PASS  after its handshake a connection keeps none: its streams, SETTINGS, a session, datagrams, streams, a close
+webtransport: 173 passed, 0 failed, 0 skipped

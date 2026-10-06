@@ -7,6 +7,7 @@
 import { Suite } from "nish/testing";
 import { wtArenaChecks } from "./arena";
 import { closingChecks } from "./closing";
+import { goldenChecks } from "./golden";
 import { refusalChecks } from "./refusals";
 import { sessionChecks } from "./sessions";
 
@@ -16,6 +17,7 @@ export const wtChecks = (): i32 => {
   sessionChecks(t);
   closingChecks(t);
   refusalChecks(t);
+  goldenChecks(t);
   wtArenaChecks(t);
   return t.done();
 };

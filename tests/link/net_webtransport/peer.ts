@@ -61,9 +61,8 @@ import {
   WebTransport,
   WebTransportConfig,
 } from "nish/net/webtransport";
-import { quicVarintPush } from "nish/net/quic-packet";
 import { leafCertificate } from "../net_tls_common/server";
-import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
+import { fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcShort } from "../net_quic_conn/client";
@@ -717,17 +716,3 @@ export const wtHexOf = (bytes: u8[]): string => {
   }
   return out;
 };
-
-/** Pushes `value` as a varint onto `out`. */
-export const wtPushVarint = (out: u8[], value: i64): void => {
-  quicVarintPush(out, value);
-};
-
-/** Pairs `H3_END` and a session in a log line, for the plain-request case. */
-export const wtPlainEnd = (id: i64): string => `plain ${H3_END} ${id}`;
-
-/** A stream ID the bytes of `bytes` spell, for a test that reads a server stream's header. */
-export const wtBytesText = (bytes: u8[]): string => textOf(bytes);
-
-/** A no-op that keeps the `bytesOf` import honest for checks that build payloads from text. */
-export const wtText = (text: string): u8[] => bytesOf(text);
