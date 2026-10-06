@@ -799,6 +799,7 @@ export class Http3Server {
       quic.close(H3_NO_ERROR)
     }
     const to: u8[] = this.addresses[slot]
+    let retried: boolean = false
     for (let guard: i32 = 0; guard < 64; guard++) {
       const n: i32 = quicListenerTakeFlight(
         quic,
@@ -808,6 +809,12 @@ export class Http3Server {
         toI32(this.tx.length),
         this.flight
       )
+      if (n <= 0 && !retried) {
+        // Asked once more: a stream whose lost bytes were all acknowledged
+        // since gives up its new ones in the packet that finds that out (H3-7).
+        retried = true
+        continue
+      }
       if (n <= 0) {
         break
       }
@@ -815,6 +822,7 @@ export class Http3Server {
       if (!this.send(this.tx, H3_SERVER_ZERO, n, to, segment)) {
         break
       }
+      retried = false
     }
     if (quic.closed()) {
       // The CONNECTION_CLOSE goes whatever the pacer says: nothing follows it.
@@ -826,10 +834,12 @@ export class Http3Server {
       return
     }
     this.refile(slot)
+    // The pacer answers a time, not a delay: the slot wakes at it when it
+    // comes before the connection's own deadline.
     let due: i64 = quic.deadline()
-    const pace: i32 = toI32(quicListenerPaceTime(quic, now))
-    if (pace > 0 && (due < 0 || now + toI64(pace) < due)) {
-      due = now + toI64(pace)
+    const paced: i64 = quicListenerPaceTime(quic, now)
+    if (paced > now && (due < 0 || paced < due)) {
+      due = paced
     }
     this.wheel.file(slot, due, now)
   }
