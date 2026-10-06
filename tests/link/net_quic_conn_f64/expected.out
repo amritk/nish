@@ -134,7 +134,7 @@ PASS  nor does it sign anything
 PASS  the caller's entropy is wiped once it is copied
 PASS  limits outside what QuicServerConfig allows are refused the same way
 PASS  so is a negative idle timeout
-PASS  as are more than 1024 unidirectional or local streams, fewer than none, or a DATAGRAM frame past 65535, with no buffers made
+PASS  as are more than 1024 unidirectional or local streams, fewer than none, a DATAGRAM frame past 1500, or 2 GiB of stream buffers, past QUIC_CONN_MAX_STREAM_BUFFERS, with no buffers made
 PASS  each retired ID is replaced until 64 have been issued
 PASS  the client still holds four
 PASS  past that, a retired ID is not replaced

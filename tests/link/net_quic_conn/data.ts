@@ -540,13 +540,14 @@ const constructorChecks = (t: Suite): void => {
   const local: QuicServerConfig = qcDefaultConfig();
   local.localStreams = n64(-1);
   const datagram: QuicServerConfig = qcDefaultConfig();
-  datagram.maxDatagramFrameSize = n64(65536);
+  datagram.maxDatagramFrameSize = n64(1501);
+  const buffers: QuicServerConfig = qcConfig(n64(65536), n64(1048576), n64(1024), n64(4));
   let newLimits: boolean = true;
-  for (const config of [uni, local, datagram]) {
+  for (const config of [uni, local, datagram, buffers]) {
     const conn = new QuicConnection(config, fixedEntropy());
     newLimits = newLimits && conn.error === QUIC_ERROR_INTERNAL && toI32(conn.streams.slots.length) === n32(0);
   }
-  t.ok("as are more than 1024 unidirectional or local streams, fewer than none, or a DATAGRAM frame past 65535, with no buffers made", newLimits);
+  t.ok("as are more than 1024 unidirectional or local streams, fewer than none, a DATAGRAM frame past 1500, or 2 GiB of stream buffers, past QUIC_CONN_MAX_STREAM_BUFFERS, with no buffers made", newLimits);
 };
 
 /**

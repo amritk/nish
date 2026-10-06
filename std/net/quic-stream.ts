@@ -169,6 +169,7 @@ const QUIC_STREAM_MAX_COUNT: i64 = 1073741824 * 1073741824
 /** A typed zero and one, since a bare literal is an `f64` under `--number-mode f64`. */
 const QUIC_STREAM_ZERO: i64 = 0
 const QUIC_STREAM_ONE: i32 = 1
+const QUIC_STREAM_NO_BYTES: i32 = 0
 
 /** Whether `id` is a stream this side, the server, opens: its low bit is 1. */
 export const quicStreamIsLocal = (id: i64): boolean => (id & 1) !== 0
@@ -286,7 +287,12 @@ export class QuicStream {
     if (this.sendState === QUIC_SEND_NONE || this.sendState >= QUIC_SEND_DATA_RECVD) {
       return false
     }
-    return this.resendLow >= 0 || this.sendNext < this.sendEnd || (this.finQueued && !this.finSent)
+    return (
+      this.resendLow >= 0 ||
+      this.resendFin ||
+      this.sendNext < this.sendEnd ||
+      (this.finQueued && !this.finSent)
+    )
   }
 
   /** Whether both sides are done, so the slot can be freed (§3.3). */
@@ -361,7 +367,8 @@ export class QuicStream {
         }
       }
     }
-    this.resendFin = this.resendFin || fin
+    // A FIN the peer acknowledged through another copy needs no resend.
+    this.resendFin = this.resendFin || (fin && !this.finAcked)
   }
 }
 
@@ -428,6 +435,8 @@ export class QuicStreams {
   /** Where the next packet's search for a stream to send starts, and how many it has looked at. */
   cursor: i32 = 0
   scanned: i32 = 0
+  /** Whether some stream may owe a control frame, so `putNextControl` looks at the slots at all. */
+  streamOwes: boolean = false
   /** What the connection owes: MAX_DATA, DATA_BLOCKED, MAX_STREAMS and STREAMS_BLOCKED of each type. */
   maxDataOwed: boolean = false
   dataBlockedOwed: boolean = false
@@ -496,6 +505,7 @@ export class QuicStreams {
     this.streamsBlockedUniAt = -1
     this.cursor = 0
     this.scanned = 0
+    this.streamOwes = false
     this.maxDataOwed = false
     this.dataBlockedOwed = false
     this.maxStreamsBidiOwed = false
@@ -1101,6 +1111,7 @@ export class QuicStreams {
     ) {
       stream.recvLimit = stream.recvRead + toI64(size)
       stream.maxDataOwed = true
+      this.streamOwes = true
     }
     // The read that finds nothing left past the FIN is the one that answers
     // the end, and only then is the side done: a slot is never freed under a
@@ -1128,6 +1139,7 @@ export class QuicStreams {
     stream.resetSentCode = code
     stream.resetFinal = stream.sendNext
     stream.resetOwed = true
+    this.streamOwes = true
     stream.resendLow = -1
     stream.resendHigh = -1
     stream.resendFin = false
@@ -1167,6 +1179,7 @@ export class QuicStreams {
     if (stream.stopSendingCode < 0) {
       stream.stopSendingCode = code
       stream.stopOwed = true
+      this.streamOwes = true
     }
     return QUIC_STREAM_OK
   }
@@ -1194,7 +1207,7 @@ export class QuicStreams {
         const stream: QuicStream = this.slots[k]
         if (stream.id >= 0 && stream.wantsToSend()) {
           const next: i32 =
-            stream.resendLow >= 0
+            stream.resendLow >= 0 || stream.resendFin
               ? this.putResend(stream, buf, at, end)
               : this.putNew(stream, k, buf, at, end)
           if (next > at) {
@@ -1206,40 +1219,74 @@ export class QuicStreams {
     return at
   }
 
-  /** One STREAM frame of `stream`'s lost bytes, skipping those acknowledged since; the FIN when it was lost and the rest fits. */
+  /**
+   * One STREAM frame of what `stream` lost: its lost bytes, skipping those
+   * acknowledged since, with the FIN only when they run to the final size
+   * (§4.5); or, with no bytes left to send again, a lost FIN alone, as a
+   * frame of no bytes at the final size.
+   */
   putResend(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
-    let low: i64 = stream.resendLow < stream.sendBase ? stream.sendBase : stream.resendLow
-    while (low < stream.resendHigh && quicStreamBit(stream.sendAcked, stream.at(low))) {
-      low = low + 1
+    if (stream.resendLow >= 0) {
+      let low: i64 = stream.resendLow < stream.sendBase ? stream.sendBase : stream.resendLow
+      while (low < stream.resendHigh && quicStreamBit(stream.sendAcked, stream.at(low))) {
+        low = low + 1
+      }
+      const want: i32 = toI32(stream.resendHigh - low)
+      if (want <= 0) {
+        stream.resendLow = -1
+        stream.resendHigh = -1
+      } else {
+        const room: i32 = end - at - quicStreamOverhead(stream.id, low, want)
+        if (room <= 0) {
+          return at
+        }
+        const n: i32 = room < want ? room : want
+        const fin: boolean = stream.resendFin && n === want && low + toI64(n) === stream.sendEnd
+        const next: i32 = quicPutStream(buf, at, end, stream.id, low, stream.sendBuf, stream.at(low), n, fin)
+        if (next < 0) {
+          return at
+        }
+        this.noteChunk(stream.id, low, n, fin)
+        if (n === want) {
+          stream.resendLow = -1
+          stream.resendHigh = -1
+        } else {
+          stream.resendLow = low + toI64(n)
+        }
+        if (fin) {
+          stream.resendFin = false
+        }
+        return next
+      }
     }
-    const want: i32 = toI32(stream.resendHigh - low)
-    if (want <= 0 && !stream.resendFin) {
-      stream.resendLow = -1
-      stream.resendHigh = -1
+    if (!stream.resendFin) {
       return at
     }
-    const room: i32 = end - at - quicStreamOverhead(stream.id, low, want)
-    if (room < 0 || (room === 0 && want > 0)) {
-      return at
-    }
-    const n: i32 = room < want ? room : want
-    const fin: boolean = stream.resendFin && n === want
-    const next: i32 = quicPutStream(buf, at, end, stream.id, low, stream.sendBuf, stream.at(low), n, fin)
+    const next: i32 = quicPutStream(
+      buf,
+      at,
+      end,
+      stream.id,
+      stream.sendEnd,
+      stream.sendBuf,
+      QUIC_STREAM_NO_BYTES,
+      QUIC_STREAM_NO_BYTES,
+      true
+    )
     if (next < 0) {
       return at
     }
-    this.lastId = stream.id
-    this.lastOffset = low
-    this.lastLength = n
-    this.lastFin = fin
-    if (n === want) {
-      stream.resendLow = -1
-      stream.resendHigh = -1
-      stream.resendFin = false
-    } else {
-      stream.resendLow = low + toI64(n)
-    }
+    this.noteChunk(stream.id, stream.sendEnd, QUIC_STREAM_NO_BYTES, true)
+    stream.resendFin = false
     return next
+  }
+
+  /** Describes the STREAM frame just written, for the packet's record. */
+  noteChunk(id: i64, offset: i64, length: i32, fin: boolean): void {
+    this.lastId = id
+    this.lastOffset = offset
+    this.lastLength = length
+    this.lastFin = fin
   }
 
   /**
@@ -1257,6 +1304,7 @@ export class QuicStreams {
     if (allowed < unsent) {
       if (streamCredit < unsent && stream.blockedAt !== stream.sendLimit) {
         stream.blockedOwed = true
+        this.streamOwes = true
       }
       if (connectionCredit < unsent && this.dataBlockedAt !== this.sendMaxData) {
         this.dataBlockedOwed = true
@@ -1287,10 +1335,7 @@ export class QuicStreams {
     if (next < 0) {
       return at
     }
-    this.lastId = stream.id
-    this.lastOffset = stream.sendNext
-    this.lastLength = n
-    this.lastFin = fin
+    this.noteChunk(stream.id, stream.sendNext, n, fin)
     stream.sendNext = stream.sendNext + toI64(n)
     this.sendTotal = this.sendTotal + toI64(n)
     if (fin) {
@@ -1364,15 +1409,26 @@ export class QuicStreams {
         return next
       }
     }
+    if (!this.streamOwes) {
+      return at
+    }
+    let fits: boolean = true
     for (const stream of this.slots) {
-      if (stream.id >= 0) {
+      if (
+        stream.id >= 0 &&
+        (stream.maxDataOwed || stream.blockedOwed || stream.resetOwed || stream.stopOwed)
+      ) {
         const next: i32 = this.putStreamControl(stream, buf, at, end)
         if (next > at) {
           this.lastValue = stream.id
           return next
         }
+        fits = false
       }
     }
+    // Only a look that found nothing owed at all clears the hint; one that
+    // found frames too large for the room leaves it for the next packet.
+    this.streamOwes = !fits
     return at
   }
 
@@ -1515,6 +1571,7 @@ export class QuicStreams {
     if (stream === null) {
       return
     }
+    this.streamOwes = true
     if (kind === QUIC_STREAM_CONTROL_MAX_STREAM_DATA) {
       stream.maxDataOwed = stream.recvState === QUIC_RECV_RECV
     } else if (kind === QUIC_STREAM_CONTROL_STREAM_DATA_BLOCKED) {
@@ -1524,32 +1581,5 @@ export class QuicStreams {
     } else if (kind === QUIC_STREAM_CONTROL_STOP_SENDING) {
       stream.stopOwed = stream.recvState < QUIC_RECV_DATA_RECVD
     }
-  }
-
-  /** Whether anything is owed or queued to send: a stream frame, or a control frame. */
-  wantsToSend(): boolean {
-    if (
-      this.maxDataOwed ||
-      this.dataBlockedOwed ||
-      this.maxStreamsBidiOwed ||
-      this.maxStreamsUniOwed ||
-      this.streamsBlockedBidiOwed ||
-      this.streamsBlockedUniOwed
-    ) {
-      return true
-    }
-    for (const stream of this.slots) {
-      if (
-        stream.id >= 0 &&
-        (stream.wantsToSend() ||
-          stream.maxDataOwed ||
-          stream.blockedOwed ||
-          stream.resetOwed ||
-          stream.stopOwed)
-      ) {
-        return true
-      }
-    }
-    return false
   }
 }

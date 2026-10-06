@@ -47,6 +47,15 @@ PASS  nothing to say yet
 PASS  the acknowledgement frees the room, and the stream comes up again
 PASS  the rest goes as room comes back
 PASS  and all of it arrives, in order
+PASS  the first 100 bytes go, and are lost
+PASS  the FIN alone, written after the next 100 arrived
+PASS  goes in a frame of no bytes, and is lost too
+PASS  the probe timeout sends the lost bytes and the lost FIN again, and the stream arrives whole
+PASS  and no frame put the FIN anywhere but the final size, 200
+PASS  and once all of it is acknowledged the sending side is Data Recvd (§3.1)
+PASS  a FIN alone goes, and is lost
+PASS  with no bytes left to resend, the FIN is sent again on its own
+PASS  at the final size, 100
 PASS  STREAM on the server's unidirectional stream is STREAM_STATE_ERROR (§19.8): the connection closes
 PASS  STREAM on the server's unidirectional stream is STREAM_STATE_ERROR (§19.8): and says so
 PASS  RESET_STREAM on it is too (§19.4): the connection closes
@@ -121,4 +130,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, each handshake through the slot keeps exactly as much: nothing in the slot grows
-quic streams: 123 passed, 0 failed, 0 skipped
+quic streams: 132 passed, 0 failed, 0 skipped

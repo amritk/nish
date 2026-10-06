@@ -23,6 +23,9 @@ PASS  the 1168 go in one datagram of at most 1200 bytes
 PASS  and arrive whole
 PASS  a client that takes no DATAGRAM frames gets none: QUIC_DATAGRAM_ERR_DISABLED
 PASS  and its maxDatagramPayload is 0
+PASS  a server that takes no DATAGRAM frames sends none either: QUIC_DATAGRAM_ERR_DISABLED
+PASS  a client whose limit is under an empty frame's 2 bytes gets a maxDatagramPayload of 0
+PASS  and even an empty datagram is QUIC_DATAGRAM_ERR_TOO_BIG
 PASS  nor does a connection before its handshake
 PASS  a ninth waiting is QUIC_DATAGRAM_ERR_FULL
 PASS  the eight go together
@@ -45,4 +48,4 @@ PASS  and the client opens them all: the stream arrives whole
 PASS  with the flight out and nothing new, the next flight is empty
 PASS  the server reads the three packets' stream from the GRO receive, in place
 PASS  having dropped none
-quic datagrams: 47 passed, 0 failed, 0 skipped
+quic datagrams: 50 passed, 0 failed, 0 skipped

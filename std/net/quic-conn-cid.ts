@@ -39,6 +39,7 @@
  * implementation. Private names carry the `quicCid` prefix
  * (`docs/wp26-stdlib.md` §3e).
  */
+import { timingSafeEqualAt } from "nish/crypto/ct"
 import {
   QUIC_ERROR_CONNECTION_ID_LIMIT,
   QUIC_ERROR_NO_ERROR,
@@ -70,17 +71,6 @@ export class QuicCidEntry {
     this.cid = new Array<u8>(QUIC_MAX_CID_LENGTH)
     this.resetToken = new Array<u8>(QUIC_RESET_TOKEN_SIZE)
   }
-}
-
-/** Whether `a[aAt .. aAt + length)` equals `b[bAt .. bAt + length)`, compared in constant time over `length`. */
-const quicCidSame = (a: u8[], aAt: i32, b: u8[], bAt: i32, length: i32): boolean => {
-  let diff: i32 = 0
-  for (let k: i32 = 0; k < length; k += 1) {
-    const x: i32 = aAt + k >= 0 && aAt + k < toI32(a.length) ? toI32(a[aAt + k]) : 256
-    const y: i32 = bAt + k >= 0 && bAt + k < toI32(b.length) ? toI32(b[bAt + k]) : 512
-    diff = diff | (x ^ y)
-  }
-  return diff === 0
 }
 
 /** Copies `length` bytes of `from` at `at` into the start of `to`, and zeroes the rest of `to`. */
@@ -227,7 +217,7 @@ export class QuicCidTable {
   ownsLocalAt(buf: u8[], at: i32, length: i32): boolean {
     let owned: boolean = false
     for (const entry of this.local) {
-      if (entry.used && entry.length === length && quicCidSame(entry.cid, 0, buf, at, length)) {
+      if (entry.used && entry.length === length && timingSafeEqualAt(entry.cid, 0, buf, at, length)) {
         owned = true
       }
     }
@@ -248,7 +238,7 @@ export class QuicCidTable {
     }
     for (const entry of this.local) {
       if (entry.used && entry.sequence === sequence) {
-        if (entry.length === length && quicCidSame(entry.cid, 0, buf, at, length)) {
+        if (entry.length === length && timingSafeEqualAt(entry.cid, 0, buf, at, length)) {
           return QUIC_ERROR_PROTOCOL_VIOLATION
         }
         quicCidClear(entry)
@@ -310,11 +300,12 @@ export class QuicCidTable {
       if (!entry.used) {
         continue
       }
-      const sameId: boolean = entry.length === cidLength && quicCidSame(entry.cid, 0, cid, cidAt, cidLength)
+      const sameId: boolean =
+        entry.length === cidLength && timingSafeEqualAt(entry.cid, 0, cid, cidAt, cidLength)
       if (entry.sequence === sequence) {
         const sameToken: boolean =
           entry.hasToken === hasToken &&
-          (!hasToken || quicCidSame(entry.resetToken, 0, token, tokenAt, QUIC_RESET_TOKEN_SIZE))
+          (!hasToken || timingSafeEqualAt(entry.resetToken, 0, token, tokenAt, QUIC_RESET_TOKEN_SIZE))
         return sameId && sameToken ? QUIC_ERROR_NO_ERROR : QUIC_ERROR_PROTOCOL_VIOLATION
       }
       if (sameId) {

@@ -164,6 +164,13 @@ const sendChecks = (t: Suite): void => {
   const off: NqPair = nqPair(offering(n64(0)));
   t.eqI32("a client that takes no DATAGRAM frames gets none: QUIC_DATAGRAM_ERR_DISABLED", off.conn.sendDatagram(exact, n32(0), n32(1)), QUIC_DATAGRAM_ERR_DISABLED);
   t.eqI32("and its maxDatagramPayload is 0", off.conn.maxDatagramPayload(), n32(0));
+  const oneWay = new NqLimits();
+  oneWay.clientDatagram = n64(200);
+  const silent: NqPair = nqPair(oneWay);
+  t.eqI32("a server that takes no DATAGRAM frames sends none either: QUIC_DATAGRAM_ERR_DISABLED", silent.conn.sendDatagram(exact, n32(0), n32(1)), QUIC_DATAGRAM_ERR_DISABLED);
+  const tiny: NqPair = nqPair(offering(n64(1)));
+  t.eqI32("a client whose limit is under an empty frame's 2 bytes gets a maxDatagramPayload of 0", tiny.conn.maxDatagramPayload(), n32(0));
+  t.eqI32("and even an empty datagram is QUIC_DATAGRAM_ERR_TOO_BIG", tiny.conn.sendDatagram(exact, n32(0), n32(0)), QUIC_DATAGRAM_ERR_TOO_BIG);
   const early = new QuicConnection(nqConfig(offering(n64(200))), fixedEntropy());
   t.eqI32("nor does a connection before its handshake", early.sendDatagram(exact, n32(0), n32(1)), QUIC_DATAGRAM_ERR_DISABLED);
 

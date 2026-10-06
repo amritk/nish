@@ -139,6 +139,7 @@
  * structure; nothing here is ported from another implementation. Private
  * names carry the `quicConn` prefix (`docs/wp26-stdlib.md` §3e).
  */
+import { timingSafeEqualAt } from "nish/crypto/ct"
 import { hmacSha256 } from "nish/crypto/hmac"
 import {
   QUIC_AEAD_AES_128_GCM,
@@ -235,7 +236,6 @@ import {
   QUIC_STREAM_END,
   QUIC_STREAM_ERR_FINISHED,
   QUIC_STREAM_ERR_FLOW,
-  QUIC_STREAM_ERR_RESET,
   QUIC_STREAM_ERR_STATE,
   QUIC_STREAM_ERR_UNKNOWN,
   QUIC_STREAM_OK,
@@ -285,6 +285,13 @@ export const QUIC_CONN_LOCAL_CIDS: i32 = 4
 export const QUIC_CONN_MAX_STREAM_DATA: i64 = 1048576
 /** The most streams of one kind a configuration may let the client open at once, or open itself. */
 export const QUIC_CONN_MAX_STREAMS: i64 = 1024
+/**
+ * The most bytes of stream buffer a configuration may make each connection
+ * hold: every stream slot (`maxStreamsBidi + maxStreamsUni + localStreams`)
+ * has `maxStreamData` bytes each way, made when the connection is, so a
+ * configuration past 64 MiB of them is refused rather than allocated.
+ */
+export const QUIC_CONN_MAX_STREAM_BUFFERS: i64 = 67108864
 /** The length of the configuration's static keys: the stateless reset key and the Retry token key. */
 export const QUIC_CONN_STATIC_KEY_SIZE: i32 = 32
 /**
@@ -327,8 +334,13 @@ export const QUIC_CONN_MAX_KEY_UPDATES: i32 = 64
 export const QUIC_CONN_MAX_ISSUED_CIDS: i64 = 64
 /** How many DATAGRAM payloads each way a connection holds, when it takes any. */
 export const QUIC_CONN_DATAGRAM_QUEUE: i32 = 8
-/** The largest `maxDatagramFrameSize` a configuration may advertise: any DATAGRAM frame of a 16-bit size. */
-export const QUIC_CONN_MAX_DATAGRAM_FRAME: i64 = 65535
+/**
+ * The largest `maxDatagramFrameSize` a configuration may advertise: 1500
+ * bytes, an Ethernet path's whole UDP payload, past which no DATAGRAM frame
+ * reaches a server on a real path. Each of the receive ring's entries is
+ * sized to what is advertised, so every frame taken is held.
+ */
+export const QUIC_CONN_MAX_DATAGRAM_FRAME: i64 = 1500
 
 // ---- States ---------------------------------------------------------------------
 
@@ -414,7 +426,8 @@ export interface QuicServerConfig {
   localStreams: i64
   /**
    * RFC 9221's `max_datagram_frame_size`: the largest DATAGRAM frame the
-   * server takes, 0 (none, and the parameter is not sent) to 65535.
+   * server takes, 0 (none, and the parameter is not sent) to 1500. The
+   * server sends DATAGRAM frames only when it takes them too.
    */
   maxDatagramFrameSize: i64
   /**
@@ -845,17 +858,6 @@ const quicConnCopyInto = (to: u8[], bytes: u8[], from: i32, length: i32): void =
   }
 }
 
-/** Whether `a[aAt .. aAt + length)` equals `b[0 .. length)`, compared in constant time over `length`. */
-const quicConnSameWindow = (a: u8[], aAt: i32, b: u8[], length: i32): boolean => {
-  let diff: i32 = 0
-  for (let k: i32 = 0; k < length; k += 1) {
-    const x: i32 = aAt + k >= 0 && aAt + k < toI32(a.length) ? toI32(a[aAt + k]) : 256
-    const y: i32 = k < toI32(b.length) ? toI32(b[k]) : 512
-    diff = diff | (x ^ y)
-  }
-  return diff === 0
-}
-
 /** The packet-protection AEAD that goes with a TLS 1.3 suite (RFC 9001 §5.3). */
 const quicConnAead = (suite: i32): i32 => {
   if (suite === TLS_AES_256_GCM_SHA384) {
@@ -912,6 +914,8 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.maxStreamsUni <= QUIC_CONN_MAX_STREAMS &&
   config.localStreams >= 0 &&
   config.localStreams <= QUIC_CONN_MAX_STREAMS &&
+  (config.maxStreamsBidi + config.maxStreamsUni + config.localStreams) * config.maxStreamData * 2 <=
+    QUIC_CONN_MAX_STREAM_BUFFERS &&
   config.maxDatagramFrameSize >= 0 &&
   config.maxDatagramFrameSize <= QUIC_CONN_MAX_DATAGRAM_FRAME &&
   config.maxData >= 0 &&
@@ -1082,7 +1086,10 @@ export class QuicConnection {
     // The rings are made only when DATAGRAM frames are offered at all.
     const datagrams: i32 = fits && config.maxDatagramFrameSize > 0 ? QUIC_CONN_DATAGRAM_QUEUE : 0
     this.datagramsOut = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_SIZE)
-    this.datagramsIn = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_SIZE)
+    this.datagramsIn = new QuicDatagramQueue(
+      datagrams,
+      fits ? toI32(config.maxDatagramFrameSize) : QUIC_CONN_FROM
+    )
     this.cryptoIn = new QuicConnReassembly(QUIC_CONN_CRYPTO_WINDOW)
     this.pathData = new Array<u8>(QUIC_PATH_DATA_SIZE * 4)
     this.frame = new QuicFrame()
@@ -1284,7 +1291,7 @@ export class QuicConnection {
       !this.handshakeComplete &&
       this.originalDcidLength > 0 &&
       length === this.originalDcidLength &&
-      quicConnSameWindow(buf, at, this.originalDcid, length)
+      timingSafeEqualAt(buf, at, this.originalDcid, QUIC_CONN_FROM, length)
     )
   }
 
@@ -1703,20 +1710,20 @@ export class QuicConnection {
     }
     if (
       header.scidLength !== this.peerScidLength ||
-      !quicConnSameWindow(buf, header.scidStart, this.peerScid, this.peerScidLength)
+      !timingSafeEqualAt(buf, header.scidStart, this.peerScid, QUIC_CONN_FROM, this.peerScidLength)
     ) {
       return false
     }
     if (
       header.dcidLength === QUIC_CONN_CID_LENGTH &&
-      quicConnSameWindow(buf, header.dcidStart, this.localScid, QUIC_CONN_CID_LENGTH)
+      timingSafeEqualAt(buf, header.dcidStart, this.localScid, QUIC_CONN_FROM, QUIC_CONN_CID_LENGTH)
     ) {
       return true
     }
     return (
       header.type === QUIC_PACKET_INITIAL &&
       header.dcidLength === this.originalDcidLength &&
-      quicConnSameWindow(buf, header.dcidStart, this.originalDcid, this.originalDcidLength)
+      timingSafeEqualAt(buf, header.dcidStart, this.originalDcid, QUIC_CONN_FROM, this.originalDcidLength)
     )
   }
 
@@ -2195,7 +2202,7 @@ export class QuicConnection {
     }
     if (
       toI32(p.initialScid.length) !== this.peerScidLength ||
-      !quicConnSameWindow(p.initialScid, 0, this.peerScid, this.peerScidLength)
+      !timingSafeEqualAt(p.initialScid, 0, this.peerScid, QUIC_CONN_FROM, this.peerScidLength)
     ) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(QUIC_FRAME_CRYPTO))
       return false
@@ -2536,10 +2543,8 @@ export class QuicConnection {
       if (n > 0 || end) {
         return new QuicStreamData(id, data, end)
       }
-      if (n === QUIC_STREAM_ERR_RESET) {
-        // Read once more so the reset is seen, which lets the stream finish.
-        this.streams.read(id, data, QUIC_CONN_FROM, QUIC_CONN_FROM)
-      }
+      // A reset stream answered QUIC_STREAM_ERR_RESET, which saw it and let
+      // it finish; there is nothing to hand over.
       id = this.streams.nextEvent()
     }
     return null
@@ -2582,38 +2587,52 @@ export class QuicConnection {
    * The largest DATAGRAM payload `sendDatagram` takes now: what fits the
    * client's `max_datagram_frame_size` with the frame's type and Length, and
    * a 1-RTT packet of `QUIC_CONN_DATAGRAM_SIZE` with the longest packet
-   * number; 0 when the client takes none.
+   * number; 0 when the client takes none, or the server sends none.
    */
   maxDatagramPayload(): i32 {
     const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
-    const cid: i32 = entry !== null ? entry.length : 0
+    const cid: i32 = entry !== null ? entry.length : QUIC_CONN_FROM
     let limit: i64 = toI64(QUIC_CONN_DATAGRAM_SIZE - 1 - cid - 4 - QUIC_AEAD_TAG_SIZE)
     if (this.peerMaxDatagramFrame < limit) {
       limit = this.peerMaxDatagramFrame
     }
-    if (limit <= 0 || toI32(this.datagramsOut.lengths.length) === 0) {
-      return 0
+    // The frame is its type, a Length of 1, 2 or 4 bytes, and the payload.
+    let payload: i64 = limit - 2
+    if (payload > 63) {
+      payload = limit - 3
     }
-    let payload: i32 = 0
-    while (toI64(quicDatagramSize(payload + 1)) <= limit && payload < this.datagramsOut.entrySize) {
-      payload += 1
+    if (payload > 16383) {
+      payload = limit - 5
     }
-    return payload
+    const entrySize: i64 = toI64(this.datagramsOut.entrySize)
+    if (payload > entrySize) {
+      payload = entrySize
+    }
+    return payload > 0 && this.datagramsOut.capacity() > 0 ? toI32(payload) : QUIC_CONN_FROM
   }
 
   /**
    * Queues `buf[from .. from + length)` as a DATAGRAM (RFC 9221) for the next
    * packet the congestion window allows; it is never sent again if lost.
    * Answers `QUIC_DATAGRAM_OK`, `QUIC_DATAGRAM_ERR_DISABLED` when not
-   * connected or the client takes none, `QUIC_DATAGRAM_ERR_TOO_BIG` past
-   * `maxDatagramPayload()`, or `QUIC_DATAGRAM_ERR_FULL` while the ring holds
-   * `QUIC_CONN_DATAGRAM_QUEUE` waiting.
+   * connected, the client takes none, or the server takes none and so sends
+   * none, `QUIC_DATAGRAM_ERR_TOO_BIG` for a frame past the client's limit or
+   * a payload past `maxDatagramPayload()`, or `QUIC_DATAGRAM_ERR_FULL` while
+   * the ring holds `QUIC_CONN_DATAGRAM_QUEUE` waiting.
    */
   sendDatagram(buf: u8[], from: i32, length: i32): i32 {
-    if (this.state !== QUIC_STATE_CONNECTED || this.peerMaxDatagramFrame === 0) {
+    if (
+      this.state !== QUIC_STATE_CONNECTED ||
+      this.peerMaxDatagramFrame === 0 ||
+      this.datagramsOut.capacity() === 0
+    ) {
       return QUIC_DATAGRAM_ERR_DISABLED
     }
-    if (length < 0 || length > this.maxDatagramPayload()) {
+    if (
+      length < 0 ||
+      toI64(quicDatagramSize(length)) > this.peerMaxDatagramFrame ||
+      length > this.maxDatagramPayload()
+    ) {
       return QUIC_DATAGRAM_ERR_TOO_BIG
     }
     if (this.datagramsOut.count >= this.datagramsOut.capacity()) {
@@ -2787,15 +2806,27 @@ export class QuicConnection {
       this.idleSince = this.now
       this.elicitingSent = true
     }
+    // A packet that cannot be sealed, which only keys `quicKeys` did not
+    // make cause, leaves the datagram unsendable: none of it goes.
     let total: i32 = 0
+    let sealed: boolean = true
     if (start0 >= 0) {
-      total = total + this.sealAt(this.initial, out, start0, end0)
+      const n: i32 = this.sealAt(this.initial, out, start0, end0)
+      sealed = sealed && n > 0
+      total = total + n
     }
     if (start1 >= 0) {
-      total = total + this.sealAt(this.handshake, out, start1, end1)
+      const n: i32 = this.sealAt(this.handshake, out, start1, end1)
+      sealed = sealed && n > 0
+      total = total + n
     }
     if (start2 >= 0) {
-      total = total + this.sealAt(this.application, out, start2, end2)
+      const n: i32 = this.sealAt(this.application, out, start2, end2)
+      sealed = sealed && n > 0
+      total = total + n
+    }
+    if (!sealed) {
+      return 0
     }
     this.bytesSent = this.bytesSent + toI64(total)
     return total
