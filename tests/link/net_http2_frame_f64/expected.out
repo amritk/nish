@@ -1,0 +1,63 @@
+PASS  eight bytes are not a header yet
+PASS  the reserved bit of a stream identifier is dropped (§4.1)
+PASS  a header is read before its payload is there, so its length is checked first
+PASS  http2WriteHeader writes the nine bytes and answers where the payload goes
+PASS  DATA, END_STREAM and PADDED, parses
+PASS  its content is the five bytes between the Pad Length and three bytes of padding
+PASS  and writes back to the same bytes
+PASS  unpadded DATA from a window of the source
+PASS  an exactly padded DATA has no content
+PASS  HEADERS with PRIORITY and END_HEADERS parses
+PASS  the priority fields are read — exclusive, on stream 1, weight 16 — and the fragment follows them
+PASS  HEADERS with END_STREAM, END_HEADERS and a zero-length pad, written
+PASS  and read back
+PASS  a writer never sets PRIORITY, whatever the flags say
+PASS  PRIORITY: stream 5 on 3, not exclusive, weight 256
+PASS  written back
+PASS  exclusive, weight 1
+PASS  RST_STREAM with CANCEL
+PASS  written back
+PASS  an unknown 32-bit code is kept whole
+PASS  SETTINGS with two settings parses
+PASS  and reads as HEADER_TABLE_SIZE 4096, ENABLE_PUSH 0
+PASS  written back
+PASS  an empty SETTINGS
+PASS  the acknowledgement
+PASS  which parses
+PASS  PUSH_PROMISE, padded, promising stream 2
+PASS  written back
+PASS  and unpadded
+PASS  PING
+PASS  written from a window of eight bytes
+PASS  and its acknowledgement
+PASS  GOAWAY: last stream 7, ENHANCE_YOUR_CALM, debug data
+PASS  written back
+PASS  WINDOW_UPDATE: the reserved bit dropped, 2^31 - 1
+PASS  written
+PASS  CONTINUATION with END_HEADERS
+PASS  written back
+PASS  a type this module does not know parses, to be ignored (§4.1)
+PASS  a frame that does not fit is refused and the buffer is left alone
+PASS  so for every writer
+PASS  a frame past SETTINGS_MAX_FRAME_SIZE: FRAME_SIZE_ERROR
+PASS  the same frame under a larger limit parses
+PASS  DATA, HEADERS, PRIORITY, RST_STREAM, PUSH_PROMISE and CONTINUATION on stream 0: PROTOCOL_ERROR
+PASS  SETTINGS, PING and GOAWAY on a stream: PROTOCOL_ERROR
+PASS  too short for its fixed fields, or the wrong length — padded DATA of 0, HEADERS with PRIORITY of 4, PUSH_PROMISE of 3, RST_STREAM of 3, SETTINGS of 5, a SETTINGS ACK of 6, PING of 7, GOAWAY of 7, WINDOW_UPDATE of 3 and 5: FRAME_SIZE_ERROR
+PASS  padding as long as the payload: PROTOCOL_ERROR (§6.1)
+PASS  padding past the fixed fields of a HEADERS: PROTOCOL_ERROR (§6.2)
+PASS  or of a PUSH_PROMISE
+PASS  a WINDOW_UPDATE of zero on the connection: PROTOCOL_ERROR (§6.9)
+PASS  a PRIORITY of the wrong length resets the stream with FRAME_SIZE_ERROR (§6.3)
+PASS  a PRIORITY on itself resets it with PROTOCOL_ERROR (§5.3.1)
+PASS  so does a HEADERS that depends on itself
+PASS  a WINDOW_UPDATE of zero on a stream resets it with PROTOCOL_ERROR (§6.9)
+PASS  and the next frame read clears it
+PASS  ENABLE_PUSH and ENABLE_CONNECT_PROTOCOL take 0 and 1, and nothing else: PROTOCOL_ERROR
+PASS  INITIAL_WINDOW_SIZE up to 2^31 - 1; past it, FLOW_CONTROL_ERROR
+PASS  MAX_FRAME_SIZE from 2^14 to 2^24 - 1; outside, PROTOCOL_ERROR
+PASS  HEADER_TABLE_SIZE takes any value, and an unknown setting is not an error
+PASS  the error codes of §7 are 0x0 to 0xd, in the RFC's order
+PASS  the settings are §6.5.2's identifiers and RFC 8441's 0x8, each six bytes
+PASS  a window starts at 65,535 and may reach 2^31 - 1; a header is nine bytes; PRIORITY is 0x2 and CONTINUATION 0x9
+http2 frames: 62 passed, 0 failed, 0 skipped

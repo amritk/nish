@@ -1,0 +1,61 @@
+PASS  a preface that is not HTTP/2's: PROTOCOL_ERROR
+PASS  the connection is spent: it takes and drops every byte, answers H2_ERROR again, and is done
+PASS  a first frame that is not SETTINGS: PROTOCOL_ERROR
+PASS  or that is a SETTINGS acknowledgement
+PASS  a frame past SETTINGS_MAX_FRAME_SIZE, refused from its header alone: FRAME_SIZE_ERROR
+PASS  DATA on stream 0: PROTOCOL_ERROR
+PASS  a SETTINGS of five bytes: FRAME_SIZE_ERROR
+PASS  a PING of seven: FRAME_SIZE_ERROR
+PASS  a WINDOW_UPDATE of zero on the connection: PROTOCOL_ERROR
+PASS  padding as long as the DATA it pads: PROTOCOL_ERROR
+PASS  after a connection error the program's writes answer H2_CLOSED and a GOAWAY of its own sends nothing
+PASS  a CONTINUATION with no header block open: PROTOCOL_ERROR
+PASS  any other frame inside a header block: PROTOCOL_ERROR
+PASS  a CONTINUATION on another stream: PROTOCOL_ERROR
+PASS  a header block HPACK cannot decode: COMPRESSION_ERROR
+PASS  a header block longer than maxHeaderBlock: ENHANCE_YOUR_CALM
+PASS  a header block in more than H2_MAX_FRAGMENTS frames: ENHANCE_YOUR_CALM
+PASS  an even stream identifier from a client: PROTOCOL_ERROR
+PASS  an identifier below one already opened, on a stream never seen: PROTOCOL_ERROR
+PASS  HEADERS on a stream that has closed: STREAM_CLOSED
+PASS  and on one the peer reset
+PASS  a connection error after the server's GOAWAY names the same last stream, never a higher one (§6.8)
+PASS  DATA on an even stream, which a server without push never opens, is on an idle stream: PROTOCOL_ERROR
+PASS  DATA on an idle stream: PROTOCOL_ERROR
+PASS  RST_STREAM on an idle stream: PROTOCOL_ERROR
+PASS  WINDOW_UPDATE on an idle stream: PROTOCOL_ERROR
+PASS  a PUSH_PROMISE from a client: PROTOCOL_ERROR
+PASS  more streams reset by the peer than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a stream the server finishes earns the budget back: a budget of one takes a reset after every answer
+PASS  DATA past the connection's window: FLOW_CONTROL_ERROR
+PASS  a WINDOW_UPDATE that takes the connection's window past 2^31 - 1: FLOW_CONTROL_ERROR
+PASS  SETTINGS_INITIAL_WINDOW_SIZE of 2^31: FLOW_CONTROL_ERROR
+PASS  SETTINGS_ENABLE_PUSH of 2: PROTOCOL_ERROR
+PASS  SETTINGS_MAX_FRAME_SIZE of 16,383: PROTOCOL_ERROR
+PASS  SETTINGS_ENABLE_CONNECT_PROTOCOL of 2: PROTOCOL_ERROR
+PASS  a SETTINGS_INITIAL_WINDOW_SIZE that takes an open stream's window past 2^31 - 1: FLOW_CONTROL_ERROR
+PASS  an uppercase field name: the stream is reset with PROTOCOL_ERROR, unseen
+PASS  a connection-specific field
+PASS  a request without :path
+PASS  a :protocol where extended CONNECT was not enabled
+PASS  a content-length of 5 on a request that ends with its headers
+PASS  a body shorter than its content-length: the program sees the stream reset
+PASS  a body longer than its content-length
+PASS  trailers without END_STREAM
+PASS  trailers with a pseudo-header
+PASS  trailers that end a body short of its content-length
+PASS  trailers whose HEADERS makes the stream depend on itself
+PASS  trailers past SETTINGS_MAX_HEADER_LIST_SIZE
+PASS  DATA after the peer ended the stream: STREAM_CLOSED
+PASS  HEADERS after it: STREAM_CLOSED
+PASS  DATA on a closed stream: STREAM_CLOSED, once; what follows is ignored
+PASS  a stream past SETTINGS_MAX_CONCURRENT_STREAMS: REFUSED_STREAM
+PASS  DATA past the stream's window: FLOW_CONTROL_ERROR
+PASS  a WINDOW_UPDATE that takes a stream's window past 2^31 - 1: FLOW_CONTROL_ERROR
+PASS  a WINDOW_UPDATE of zero on a stream: PROTOCOL_ERROR
+PASS  a PRIORITY of four bytes on an open stream: FRAME_SIZE_ERROR
+PASS  and on an idle one, which it does not open
+PASS  a PRIORITY that makes a stream depend on itself: PROTOCOL_ERROR
+PASS  so does a HEADERS, whose block is decoded all the same
+PASS  and the next stream reads
+http2 refusals: 60 passed, 0 failed, 0 skipped
