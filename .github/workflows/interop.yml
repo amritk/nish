@@ -1,0 +1,298 @@
+# The interop job (decision S2 of docs/wp34-hosting-cs.md): the Nish interop
+# server against independent implementations, beside `npm test` rather than
+# inside it. Each `tests/link/net_*` case proves its lane against recorded
+# exchanges replayed byte for byte; this proves that live third-party peers
+# agree with them.
+#
+# build:  the server image, tests/interop/server.dockerfile — Nish built from this
+#         checkout by the pinned seed with LLVM 18, compiling
+#         tests/link/net_interop_server — shared with every job below.
+# quic-interop-runner: the runner's server role against quic-go and ngtcp2:
+#         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
+#         handshakeloss (L1), transferloss (L2), blackhole (B) and http3.
+# h2spec: every h2spec case against the HTTP/2 server.
+# curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
+#         body each.
+# chrome: Playwright's Chromium opens a WebTransport session pinned by
+#         serverCertificateHashes and echoes a datagram and a bidirectional
+#         stream, with the certificate the server mints (nish/crypto/x509) and
+#         with one openssl makes.
+#
+# Every tool is pinned: actions by commit, images by digest, the runner by
+# commit, h2spec by release and SHA-256, Python packages by hash
+# (tests/interop/*-requirements.txt), tshark by package version. Nothing here
+# turns a failure green.
+name: Interop
+
+on:
+  pull_request:
+    paths:
+      - "std/net/**"
+      - "std/crypto/**"
+      - "tests/interop/**"
+      - "tests/link/net_interop_server*/**"
+      - ".github/workflows/interop.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interop-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The quic-interop-runner at a fixed commit, and the images it drives.
+  RUNNER_COMMIT: 740c05a10b61d65e8abd3ad38d60898004d335d9
+  SIMULATOR: martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9
+  QUIC_GO: martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
+  NGTCP2: ghcr.io/ngtcp2/ngtcp2-interop@sha256:bd635531dbe210e5d7138a08dc61c2da2d702670ff718e440b961860f5e18235
+  # The runner's cases, by the names its --json file gives them.
+  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3
+  # h2spec 2.6.0's release tarball and its SHA-256.
+  H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
+  H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318
+  # curl 8.17 with HTTP/3 (quiche) and HTTP/2.
+  CURL: ghcr.io/macbre/curl-http3@sha256:c3a360869a4e132180f458f83af2ce67b873b2302739eda27274dad4f62155f8
+  # Playwright 1.56.0's Python image: Chromium 141, the browser that Playwright release pins.
+  PLAYWRIGHT: mcr.microsoft.com/playwright/python:v1.56.0-noble@sha256:a7f6cf3ae520c9d670ad956572c13747ed5abdbba5123a01526f873ed1662528
+  # The server's ports when a job runs it on the host's network.
+  QUIC_PORT: "4433"
+  H1_PORT: "8080"
+  H1S_PORT: "8081"
+  H2_PORT: "8443"
+
+jobs:
+  build:
+    name: build the server image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Build tests/interop/server.dockerfile
+        run: docker build -f tests/interop/server.dockerfile -t nish-interop:ci .
+
+      - name: Save the image
+        run: docker save nish-interop:ci | gzip -1 > nish-interop.tar.gz
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nish-interop-image
+          path: nish-interop.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+
+  quic-interop-runner:
+    name: quic-interop-runner (${{ matrix.client }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        client: [quic-go, ngtcp2]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nish-interop-image
+
+      - name: Load the server image, pull the simulator and the client
+        env:
+          CLIENT: ${{ matrix.client }}
+        run: |
+          docker load --input nish-interop.tar.gz
+          # The runner's docker-compose.yml names the simulator by tag; the
+          # pinned digest is pulled and given that tag, so compose finds it.
+          docker pull "$SIMULATOR"
+          docker tag "$SIMULATOR" martenseemann/quic-network-simulator:latest
+          if [ "$CLIENT" = quic-go ]; then image="$QUIC_GO"; else image="$NGTCP2"; fi
+          docker pull "$image"
+          echo "CLIENT_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Enable IPv6 in Docker networks
+        run: sudo modprobe ip6table_filter
+
+      - name: Install tshark, which the runner reads the traces with
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tshark=4.2.2-1.1build3
+
+      - name: Fetch the runner at its pinned commit
+        run: |
+          git init -q "$RUNNER_TEMP/qir"
+          git -C "$RUNNER_TEMP/qir" fetch -q --depth 1 https://github.com/quic-interop/quic-interop-runner.git "$RUNNER_COMMIT"
+          git -C "$RUNNER_TEMP/qir" checkout -q FETCH_HEAD
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet --no-deps --require-hashes -r tests/interop/runner-requirements.txt
+
+      - name: Register the Nish server and the pinned client
+        env:
+          CLIENT: ${{ matrix.client }}
+        run: |
+          python3 - "$RUNNER_TEMP/qir/implementations_quic.json" <<'EOF'
+          import json, os, sys
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as f:
+              impls = json.load(f)
+          impls["nish"] = {"image": "nish-interop:ci", "url": "https://github.com/amritk/nish", "role": "server"}
+          impls[os.environ["CLIENT"]]["image"] = os.environ["CLIENT_IMAGE"]
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(impls, f, indent=2)
+          EOF
+
+      - name: Run the runner
+        env:
+          CLIENT: ${{ matrix.client }}
+        working-directory: ${{ runner.temp }}/qir
+        run: |
+          start=$(date +%s)
+          status=0
+          "$RUNNER_TEMP/venv/bin/python" run.py -s nish -c "$CLIENT" -t "$RUNNER_CASES" \
+            -l "$RUNNER_TEMP/logs" -j "$RUNNER_TEMP/result.json" || status=$?
+          echo "runner exit $status after $(( $(date +%s) - start )) s"
+          python3 "$GITHUB_WORKSPACE/tests/interop/runner-verdict.py" "$RUNNER_TEMP/result.json" "$RUNNER_CASES"
+
+      - name: Upload the runner's logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: runner-logs-${{ matrix.client }}
+          path: |
+            ${{ runner.temp }}/logs
+            ${{ runner.temp }}/result.json
+          retention-days: 7
+          if-no-files-found: warn
+
+  h2spec:
+    name: h2spec
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nish-interop-image
+
+      - name: Start the server
+        run: |
+          docker load --input nish-interop.tar.gz
+          docker run -d --name nish --network host --entrypoint /interop-server nish-interop:ci \
+            serve --port "$QUIC_PORT" --h1-port "$H1_PORT" --h1s-port "$H1S_PORT" --h2-port "$H2_PORT"
+          sleep 1
+          docker logs nish
+
+      - name: Fetch h2spec and check its SHA-256
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/h2spec.tar.gz" "$H2SPEC_URL"
+          echo "$H2SPEC_SHA256  $RUNNER_TEMP/h2spec.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/h2spec.tar.gz" -C "$RUNNER_TEMP" h2spec
+
+      - name: Run every h2spec case
+        run: |
+          # h2spec 2.6.0 was built with a Go that offers TLS 1.3 only when asked.
+          GODEBUG=tls13=1 "$RUNNER_TEMP/h2spec" -k -t -h 127.0.0.1 -p "$H2_PORT" -o 5 | tee "$RUNNER_TEMP/h2spec.txt"
+          tail -n 1 "$RUNNER_TEMP/h2spec.txt" | grep -E '^[0-9]+ tests, ([0-9]+) passed, 0 skipped, 0 failed$'
+
+      - name: The server's log
+        if: always()
+        run: docker logs nish
+
+  curl:
+    name: curl --http3 and --http2
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nish-interop-image
+
+      - name: Start the server on a directory with a 1 MB file
+        run: |
+          mkdir -p "$RUNNER_TEMP/www"
+          head -c 1048576 /dev/urandom > "$RUNNER_TEMP/www/file"
+          docker load --input nish-interop.tar.gz
+          docker pull "$CURL"
+          docker run -d --name nish --network host -v "$RUNNER_TEMP/www:/www:ro" --entrypoint /interop-server nish-interop:ci \
+            serve --www /www --port "$QUIC_PORT" --h1-port "$H1_PORT" --h1s-port "$H1S_PORT" --h2-port "$H2_PORT"
+          sleep 1
+          docker logs nish
+
+      - name: GET and POST over HTTP/3 and HTTP/2
+        run: |
+          curl_in() { docker run --rm --network host --entrypoint curl "$CURL" "$@"; }
+          want="$(sha256sum < "$RUNNER_TEMP/www/file")"
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1: got '$2', want '$3'"; fail=1; fi
+          }
+          check "curl --http3-only GET of the file" "$(curl_in -sSfk --http3-only "https://127.0.0.1:$QUIC_PORT/file" | sha256sum)" "$want"
+          check "curl --http3-only POST" "$(curl_in -sSfk --http3-only --data-binary 'a body of 21 bytes...' "https://127.0.0.1:$QUIC_PORT/post")" "received 21 bytes"
+          check "curl --http2 GET of the file" "$(curl_in -sSfk --http2 "https://127.0.0.1:$H2_PORT/file" | sha256sum)" "$want"
+          check "curl --http2 POST" "$(curl_in -sSfk --http2 --data-binary 'a body of 21 bytes...' "https://127.0.0.1:$H2_PORT/post")" "received 21 bytes"
+          check "curl --http2 says it spoke HTTP/2" "$(curl_in -sSk --http2 -o /dev/null -w '%{http_version}' "https://127.0.0.1:$H2_PORT/file")" "2"
+          check "curl --http3-only says it spoke HTTP/3" "$(curl_in -sSk --http3-only -o /dev/null -w '%{http_version}' "https://127.0.0.1:$QUIC_PORT/file")" "3"
+          exit "$fail"
+
+      - name: The server's log
+        if: always()
+        run: docker logs nish
+
+  chrome:
+    name: chrome WebTransport (${{ matrix.certificate }} certificate)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        certificate: [minted, openssl]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nish-interop-image
+
+      - name: Start the server
+        env:
+          CERTIFICATE: ${{ matrix.certificate }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out" "$RUNNER_TEMP/certs"
+          certs=""
+          if [ "$CERTIFICATE" = openssl ]; then
+            # The shape the runner's certs.sh makes: P-256, ten days, with extensions.
+            openssl ecparam -name prime256v1 -genkey -noout -out "$RUNNER_TEMP/certs/priv.key"
+            openssl req -x509 -sha256 -key "$RUNNER_TEMP/certs/priv.key" -out "$RUNNER_TEMP/certs/cert.pem" \
+              -days 10 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+            certs="--certs /certs"
+          fi
+          docker load --input nish-interop.tar.gz
+          docker pull "$PLAYWRIGHT"
+          # shellcheck disable=SC2086 # $certs is empty or two words
+          docker run -d --name nish --network host -v "$RUNNER_TEMP/out:/out" -v "$RUNNER_TEMP/certs:/certs:ro" \
+            --entrypoint /interop-server nish-interop:ci \
+            serve --port "$QUIC_PORT" --h1-port "$H1_PORT" --h1s-port "$H1S_PORT" --h2-port "$H2_PORT" \
+            --hash-file /out/hash $certs
+          sleep 1
+          docker logs nish
+
+      - name: Chromium opens a session and echoes a datagram and a stream
+        run: |
+          docker run --rm --network host --ipc host \
+            -v "$GITHUB_WORKSPACE/tests/interop:/interop:ro" -v "$RUNNER_TEMP/out:/out:ro" \
+            "$PLAYWRIGHT" sh -c "set -e
+              pip install --quiet --no-deps --require-hashes -r /interop/chrome-requirements.txt
+              python3 /interop/chrome-webtransport.py $H1_PORT $QUIC_PORT /out/hash"
+
+      - name: The server's log
+        if: always()
+        run: docker logs nish
