@@ -374,6 +374,25 @@ export class Http1Parser {
   }
 
   /**
+   * Puts the parser back as the constructor left it, for the next
+   * connection, keeping every buffer it has grown: a slot that is reused
+   * allocates nothing to start over.
+   */
+  restart(): void {
+    this.start = 0
+    this.end = 0
+    this.scan = 0
+    this.lineStart = 0
+    this.lineEnd = 0
+    this.bodyOff = 0
+    this.left = 0
+    this.status = 0
+    this.reason = ""
+    this.body = this.buf
+    http1StartRequest(this)
+  }
+
+  /**
    * After `HTTP1_UPGRADE`: the server answered without switching, so the
    * bytes that follow are the next HTTP request. Anywhere else it does nothing.
    */
