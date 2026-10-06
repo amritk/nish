@@ -16,11 +16,11 @@
  * during a renewal, or a key that is not the certificate's — keeps the
  * identity already serving (`RelayWatch`).
  *
- * One difference from tls.rs: `nish/crypto/x509` mints a certificate with no
- * extensions, so the self-signed one names `CN=localhost` and no
- * subjectAltName. `serverCertificateHashes` pins it by hash, not by name, so
- * the names a `--san` adds are printed and not written; Chrome accepting the
- * minted hash is K6's open gate (`docs/wp34-hosting-cs.md` §5).
+ * One difference from tls.rs: `nish/crypto/x509` mints a certificate whose
+ * only extensions are basicConstraints and keyUsage, the two Chromium needs
+ * before it compares a pinned hash (X509-9), so the self-signed one names
+ * `CN=localhost` and no subjectAltName. `serverCertificateHashes` pins it by
+ * hash, not by name, so the names a `--san` adds are printed and not written.
  *
  * The key is a `Secret` and so may not be a field (NL2430): each loader
  * answers it, and the caller holds it in a local and wipes it.

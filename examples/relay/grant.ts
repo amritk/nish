@@ -186,7 +186,7 @@ const grantPadHash = (key: u8[], pad: i32, data: u8[]): u8[] => {
 }
 
 /** HMAC-SHA-256 of `message` under `key` (RFC 2104), a key past a block hashed first (§2). */
-const grantHmac = (key: u8[], message: u8[]): u8[] => {
+export const grantHmac = (key: u8[], message: u8[]): u8[] => {
   if (toI32(key.length) > SHA256_BLOCK) {
     const hashed: u8[] = grantSha256(key)
     const tag: u8[] = grantHmac(hashed, message)

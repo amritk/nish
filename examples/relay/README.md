@@ -77,10 +77,11 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   main.rs's 3-second keep-alive, and `RelayConfig` refuses a stats interval
   past 3 s.
 - **The self-signed certificate names `CN=localhost` and no SAN**:
-  `nish/crypto/x509` mints no extensions, and `serverCertificateHashes` pins by
-  hash rather than by name, so `--san` values are used only for the
-  development-secret check. Whether Chrome accepts the minted hash is K6's
-  open gate (S2's interop job).
+  `nish/crypto/x509` mints basicConstraints and keyUsage alone, the
+  extensions Chromium needs before it compares a pinned hash (X509-9 in
+  [`docs/security/crypto-x509.md`](../../docs/security/crypto-x509.md)), and
+  `serverCertificateHashes` pins by hash rather than by name, so `--san`
+  values are used only for the development-secret check.
 - **The grant's JSON is stricter**: a fraction, an exponent, `true`, `null`
   or an array anywhere is refused, where serde reads them; `signGrant` writes
   none of them.

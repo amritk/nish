@@ -9,9 +9,9 @@ import { Suite } from "nish/testing";
 import { base64urlEncode } from "nish/crypto/base64url";
 import { hmacSha256 } from "nish/crypto/hmac";
 import { CLOSE_TOKEN_EXPIRED, CLOSE_TOKEN_INVALID } from "../../../examples/relay/frame";
-import { GRANT_OK, GrantVerifier, RelayGrant } from "../../../examples/relay/grant";
+import { GRANT_OK, GrantVerifier, RelayGrant, grantHmac } from "../../../examples/relay/grant";
 import { JSON_INTEGER, JSON_OBJECT, JSON_STRING, RELAY_JSON_LENGTH, RelayJson } from "../../../examples/relay/json";
-import { bytesOf } from "../crypto_x509/hex";
+import { bytesOf, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 
 /**
@@ -135,6 +135,12 @@ export const grantChecks = (t: Suite): void => {
   t.eqStr("a secret of 64 bytes", verdict(v, block, signGrant(payload('"10.0.0.1"', "1", "4102444800000"), longSecret.join("").substring(0, 64)), NOW, out), "ok 10.0.0.1:1");
   t.eqStr("and it is not the 100-byte one's", verdict(v, block, signGrant(payload('"10.0.0.1"', "1", "4102444800000"), longSecret.join("")), NOW, out), `${CLOSE_TOKEN_INVALID} bad signature`);
   wipe(block);
+
+  // The verifier's own HMAC-SHA-256 against RFC 4231 itself, not only against `nish/crypto/hmac`.
+  t.eqStr("RFC 4231 case 2: a key shorter than the output", toHex(grantHmac(bytesOf("Jefe"), bytesOf("what do ya want for nothing?"))), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+  const case6: u8[] = new Array<u8>(131);
+  case6.fill(toU8(0xaa));
+  t.eqStr("RFC 4231 case 6: a key of 131 bytes, hashed first", toHex(grantHmac(case6, bytesOf("Test Using Larger Than Block-Size Key - Hash Key First"))), "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54");
 
   jsonChecks(t);
   arenaCheck(t, v, key, out);

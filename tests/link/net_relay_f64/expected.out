@@ -79,6 +79,8 @@ PASS  one of 253 is a grant
 PASS  a secret of 100 bytes
 PASS  a secret of 64 bytes
 PASS  and it is not the 100-byte one's
+PASS  RFC 4231 case 2: a key shorter than the output
+PASS  RFC 4231 case 6: a key of 131 bytes, hashed first
 PASS  an object of a string, an integer and an object
 PASS  their kinds
 PASS  i64's largest integer
@@ -200,4 +202,4 @@ PASS  keep no arena memory in the relay
 PASS  a datagram to the upstream socket from another address is dropped and counted
 PASS  a stream the client opens is reset, and the session goes on
 PASS  a plain request is answered 404
-relay: 202 passed, 0 failed, 0 skipped
+relay: 204 passed, 0 failed, 0 skipped
