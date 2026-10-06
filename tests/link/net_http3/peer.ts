@@ -611,6 +611,10 @@ export class H3Peer {
     let at: i32 = 0;
     const total: i32 = toI32(bytes.length);
     for (let rounds: i32 = 0; rounds < 100000; rounds++) {
+      if (this.stream(id).stop >= 0) {
+        // The server asked the client to stop, and the client reset the stream: nothing more goes.
+        return false;
+      }
       const credit: i64 = this.credit(id);
       let n: i32 = total - at;
       if (n > CHUNK) {

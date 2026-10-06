@@ -4,11 +4,13 @@
 // refusals in `refusals.ts`, and the arena in `arena.ts`. The connection
 // errors are `tests/link/net_http3_errors`'s.
 import { Suite } from "nish/testing";
+import { refusalChecks } from "./refusals";
 import { requestChecks } from "./requests";
 
 /** Every check, in one suite. */
 export const http3Checks = (): i32 => {
   const t = new Suite("http3");
   requestChecks(t);
+  refusalChecks(t);
   return t.done();
 };
