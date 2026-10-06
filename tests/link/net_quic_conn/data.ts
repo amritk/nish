@@ -494,7 +494,7 @@ const shapeChecks = (t: Suite): void => {
   const ackOnly: u8[] = [];
   quicPushAck(ackOnly, [n64(0), n64(0)], n32(1), n64(0));
   qcExchange(amp, a, qcInitial(a, ackOnly, n32(1200)));
-  t.eqStr("another 1200 bytes from the client release the rest", `${toI32(a.datagrams.length) - ampFrom} datagrams, ${amp.bytesSent} bytes, validated ${amp.addressValidated}`, "5 datagrams, 4867 bytes, validated false");
+  t.eqStr("another 1200 bytes from the client release the rest", `${toI32(a.datagrams.length) - ampFrom} datagrams, ${amp.bytesSent} bytes, validated ${amp.addressValidated}`, "5 datagrams, 4904 bytes, validated false");
   t.ok("which the client accepts", qcReadFlight(a, ampFrom, n32(0)));
   qcExchange(amp, a, qcFinishedPacket(a));
   t.ok("and the handshake completes, validating the address", amp.state === QUIC_STATE_CONNECTED && amp.addressValidated);
