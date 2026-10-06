@@ -8,7 +8,6 @@ import {
   H1_AGAIN,
   H1_BODY,
   H1_END,
-  H1_ERROR,
   H1_REQUEST,
   H1_WRITE,
   H1_WS_CLOSE,
@@ -116,11 +115,9 @@ export class H1App {
   wsAt: i32[];
   wsBusy: boolean[];
   requests: i32 = 0;
-  messages: i32 = 0;
   fragments: i32 = 0;
-  /** The last WebSocket close status a slot reported, and the last H1_ERROR's. */
+  /** The last WebSocket close status a slot reported. */
   closeStatus: i32 = 0;
-  errorStatus: i32 = 0;
   /** A write the connection refused outright: never expected. */
   refusals: i32 = 0;
 
@@ -173,7 +170,6 @@ export class H1App {
         this.fragment(conn, slot);
       }
     } else if (event === H1_WS_MESSAGE) {
-      this.messages = this.messages + 1;
       this.wsOpcode[slot] = conn.opcode;
       this.wsLength[slot] = conn.dataLength;
       this.wsAt[slot] = 0;
@@ -181,8 +177,6 @@ export class H1App {
       this.fragment(conn, slot);
     } else if (event === H1_WS_CLOSE) {
       this.closeStatus = conn.status;
-    } else if (event === H1_ERROR) {
-      this.errorStatus = conn.status;
     }
   }
 
@@ -261,8 +255,9 @@ export class H2App {
   goaways: i32 = 0;
   resets: i32 = 0;
 
-  constructor() {
-    this.table = new EchoTable();
+  /** A program echoing up to `streams` streams at once; none for a loop that does not serve HTTP/2. */
+  constructor(streams: i32) {
+    this.table = new EchoTable(streams);
     this.names = [httpFieldBytes("content-type")];
     this.values = [httpFieldBytes("text/plain")];
     this.body = httpFieldBytes("hello over loopback\n");

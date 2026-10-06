@@ -8,11 +8,11 @@
 // larger than that waits on the client's refills, as every body larger than
 // the server's 65,535 bytes waits on the server's.
 import { Suite } from "nish/testing";
-import { H2_FLAG_END_STREAM, H2_FRAME_DATA, H2_FRAME_SETTINGS, H2_FRAME_WINDOW_UPDATE, H2_FLAG_ACK, Http2Frame, http2ParseFrame, http2ReadHeader, http2SettingCount, http2SettingId, http2SettingValue } from "nish/net/http2-frame";
+import { H2_FLAG_ACK, H2_FLAG_END_STREAM, H2_FRAME_DATA, H2_FRAME_SETTINGS, H2_FRAME_WINDOW_UPDATE, Http2Frame, http2ParseFrame, http2ReadHeader, http2SettingCount, http2SettingId, http2SettingValue, http2WriteData } from "nish/net/http2-frame";
 import { H2_ALPN } from "nish/net/http2-tls";
 import { ZERO, ascii, range } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
-import { FrameLog, Wire, getOf, postOf } from "../net_http2/peer";
+import { FrameLog, NO_PAD, Wire, getOf, postOf } from "../net_http2/peer";
 import { textOf } from "../crypto_x509/hex";
 import { CARRIER_H2, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
@@ -144,7 +144,7 @@ class H2Client {
           let n: i64 = toI64(total - sent[k]);
           n = Math.min(n, Math.min(toI64(16384), Math.min(this.connWindow, this.windows[s])));
           const last: boolean = sent[k] + toI32(n) === total;
-          this.wire.raw(this.dataFrame(streams[k], bodies[k], sent[k], toI32(n), last));
+          this.data(streams[k], bodies[k], sent[k], toI32(n), last);
           sent[k] = sent[k] + toI32(n);
           this.connWindow = this.connWindow - n;
           this.windows[s] = this.windows[s] - n;
@@ -165,17 +165,16 @@ class H2Client {
     return false;
   }
 
-  /** A DATA frame of `body[at .. at + n)` on `id`, with END_STREAM when `last`. */
-  dataFrame(id: i32, body: u8[], at: i32, n: i32, last: boolean): u8[] {
-    const out: u8[] = [toU8((n >> 16) & 255), toU8((n >> 8) & 255), toU8(n & 255), toU8(H2_FRAME_DATA), toU8(last ? H2_FLAG_END_STREAM : ZERO)];
-    out.push(toU8((id >> 24) & 127));
-    out.push(toU8((id >> 16) & 255));
-    out.push(toU8((id >> 8) & 255));
-    out.push(toU8(id & 255));
-    for (let k: i32 = 0; k < n; k++) {
-      out.push(body[at + k]);
-    }
-    return out;
+  /** Queues a DATA frame of `body[at .. at + n)` on `id`, with END_STREAM when `last`. */
+  data(id: i32, body: u8[], at: i32, n: i32, last: boolean): void {
+    this.wire.add(http2WriteData(this.wire.scratch, ZERO, id, body, at, n, last ? H2_FLAG_END_STREAM : ZERO, NO_PAD));
+  }
+
+  /** Sends `bytes` on the open stream 7, without END_STREAM, and answers its echo. */
+  echoOn7(bytes: u8[]): u8[] {
+    this.data(toI32(7), bytes, ZERO, toI32(bytes.length), false);
+    this.flush();
+    return this.awaitBody(toI32(7), toI32(bytes.length));
   }
 
   /** Reads until stream `id`'s echo holds `n` bytes or has ended; answers them, taken out. */
@@ -228,19 +227,13 @@ export const http2Checks = (t: Suite): void => {
   h.wire.headers(toI32(7), open, ZERO);
   h.flush();
   for (let k: i32 = 0; k < WARM; k++) {
-    const warm: u8[] = ascii(`warm ${k}`);
-    h.wire.raw(h.dataFrame(toI32(7), warm, ZERO, toI32(warm.length), false));
-    h.flush();
-    h.awaitBody(toI32(7), toI32(warm.length));
+    h.echoOn7(ascii(`warm ${k}`));
   }
   const rounds = new LbMeter(false);
   lp.meter = rounds;
   let intact: i32 = 0;
   for (let k: i32 = 0; k < ROUNDS; k++) {
-    const message: u8[] = ascii(roundText(k));
-    h.wire.raw(h.dataFrame(toI32(7), message, ZERO, toI32(message.length), false));
-    h.flush();
-    if (textOf(h.awaitBody(toI32(7), toI32(message.length))) === roundText(k)) {
+    if (textOf(h.echoOn7(ascii(roundText(k)))) === roundText(k)) {
       intact = intact + 1;
     }
   }
@@ -257,7 +250,7 @@ export const http2Checks = (t: Suite): void => {
   t.eqStr("http/2: a GET on a new stream of the warm connection", again, "hello over loopback\n");
   console.log(`http/2: that request kept ${request.kept} bytes (H2-1, HPACK's per header block)`);
 
-  h.wire.raw(h.dataFrame(toI32(7), ascii("end"), ZERO, toI32(3), true));
+  h.data(toI32(7), ascii("end"), ZERO, toI32(3), true);
   h.flush();
   h.awaitBody(toI32(7), toI32(3));
   h.wire.goaway(toI32(9), ZERO);

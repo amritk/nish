@@ -20,7 +20,7 @@
 // flush, and sleep until the next timer. Every wait is bounded: five seconds
 // without progress is a failure, never a hang.
 import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
-import { Secret, secret, wipe } from "nish:secret";
+import { Secret, wipe } from "nish:secret";
 import {
   QUIC_FRAME_CONNECTION_CLOSE,
   QUIC_FRAME_CONNECTION_CLOSE_APP,
@@ -56,12 +56,13 @@ import { H3_ERROR, H3_NEED_MORE, Http3Config, Http3Connection } from "nish/net/h
 import { Http3Server } from "nish/net/http3-server";
 import { WebTransport, WebTransportConfig } from "nish/net/webtransport";
 import { fromHex } from "../crypto_x509/hex";
+import { range } from "../net_tls_record_common/bytes";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { splitMessages } from "../net_tls_common/client";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
-import { LbMeter } from "./common";
+import { LbMeter, lbBegin, lbEnd, lbLeafKey } from "./common";
 import { H3App, QuicApp, WtApp } from "./udp-apps";
 
 /** Which carrier the loop's server runs. */
@@ -86,15 +87,6 @@ const lbListenerEntropy = (): u8[] => {
     out[k] = toU8(0x30 + k);
   }
   return out;
-};
-
-/** The P-256 leaf key as a fresh `Secret` for one call, which the caller wipes. */
-const lbLeafKey = (leaf: u8[]): Secret<u8[]> => {
-  const copy: u8[] = new Array<u8>(32);
-  for (let k: i32 = 0; k < 32; k++) {
-    copy[k] = leaf[k];
-  }
-  return secret(copy);
 };
 
 /**
@@ -129,7 +121,7 @@ export class QuicEchoServer {
     this.listener = new QuicListener(config, lbListenerEntropy());
     this.entropy = fixedEntropy();
     this.conn = new QuicConnection(config, this.entropy);
-    this.app = new QuicApp();
+    this.app = new QuicApp(n32(8));
     this.rx = new Array<u8>(65536);
     this.tx = new Array<u8>(QUIC_LISTENER_FLIGHT_MAX * QUIC_CONN_DATAGRAM_SIZE);
     this.from = new Array<u8>(18);
@@ -167,11 +159,10 @@ export class QuicEchoServer {
     if (dcidLength > QUIC_MAX_CID_LENGTH || dcidAt + dcidLength > at + len) {
       return;
     }
-    if (this.busy && this.conn.ownsConnectionIdAt(this.rx, dcidAt, dcidLength)) {
-      this.serveDatagram(at, len, now);
-      return;
-    }
     if (this.busy) {
+      if (this.conn.ownsConnectionIdAt(this.rx, dcidAt, dcidLength)) {
+        this.serveDatagram(at, len, now);
+      }
       return;
     }
     const copy: u8[] = new Array<u8>(len);
@@ -323,10 +314,7 @@ export class UdpClient {
       const type: i32 = (toI32(ee[at]) << 8) | toI32(ee[at + 1]);
       const length: i32 = (toI32(ee[at + 2]) << 8) | toI32(ee[at + 3]);
       if (type === 0x39) {
-        const body: u8[] = [];
-        for (let k: i32 = at + 4; k < at + 4 + length && k < toI32(ee.length); k++) {
-          body.push(ee[k]);
-        }
+        const body: u8[] = range(ee, at + 4, at + 4 + length);
         const p: QuicTransportParameters = quicParseTransportParameters(body, true);
         this.maxData = p.initialMaxData;
         this.maxStreamsBidi = p.initialMaxStreamsBidi;
@@ -390,11 +378,7 @@ export class UdpClient {
         } else if (f.type === QUIC_FRAME_MAX_STREAMS_UNI && f.value > this.maxStreamsUni) {
           this.maxStreamsUni = f.value;
         } else if (f.type === QUIC_FRAME_DATAGRAM) {
-          const d: u8[] = new Array<u8>(f.dataLength);
-          for (let k: i32 = 0; k < f.dataLength; k++) {
-            d[k] = payload[f.dataStart + k];
-          }
-          this.datagrams.push(d);
+          this.datagrams.push(range(payload, f.dataStart, f.dataStart + f.dataLength));
         } else if (f.type === QUIC_FRAME_CONNECTION_CLOSE || f.type === QUIC_FRAME_CONNECTION_CLOSE_APP) {
           this.closeCode = f.errorCode;
           this.closeApp = f.type === QUIC_FRAME_CONNECTION_CLOSE_APP;
@@ -410,13 +394,11 @@ export class UdpLoop {
   quic: QuicEchoServer | null = null;
   h3: Http3Server | null = null;
   wts: WebTransport[];
-  quicApp: QuicApp;
   h3App: H3App;
   wtApp: WtApp;
   client: UdpClient;
   ready: i32[];
   leaf: u8[];
-  none: u8[];
   /** The first thing that went wrong, or empty. */
   failure: string = "";
   /** While set, what every server call keeps in the arena (see `LbMeter`). */
@@ -433,17 +415,14 @@ export class UdpLoop {
     this.carrier = carrier;
     this.ready = new Array<i32>(8);
     this.leaf = leafPrivate();
-    this.none = [];
     this.wts = [];
     this.loop = pollCreate();
     this.serverFd = udpBind("127.0.0.1", n32(0), n32(0));
     this.port = netLocalPort(this.serverFd);
-    this.quicApp = new QuicApp();
-    this.h3App = new H3App();
-    this.wtApp = new WtApp();
+    this.h3App = new H3App(carrier === CARRIER_H3 ? n32(8) : n32(0));
+    this.wtApp = new WtApp(carrier === CARRIER_WT ? n32(8) : n32(0));
     if (carrier === CARRIER_QUIC) {
       const server = new QuicEchoServer(quicConfig, this.serverFd);
-      this.quicApp = server.app;
       this.quic = server;
     } else {
       const server = new Http3Server(quicConfig, h3Config, this.serverFd, slots, lbListenerEntropy());
@@ -473,20 +452,6 @@ export class UdpLoop {
     this.client = new UdpClient(this.port);
     pollAdd(this.loop, this.client.fd, n32(1), CLIENT);
     return this.client;
-  }
-
-  /** What the meter starts a measured call with; nothing while none is set. */
-  filler(): u8[] {
-    const m: LbMeter | null = this.meter;
-    return m !== null ? m.filler() : this.none;
-  }
-
-  /** While a meter is set, counts what the call since `before` kept. */
-  track(before: i64, filler: u8[]): void {
-    const m: LbMeter | null = this.meter;
-    if (m !== null) {
-      m.add(before, filler);
-    }
   }
 
   /** Milliseconds until the server has a timer to run, or -1. */
@@ -531,51 +496,45 @@ export class UdpLoop {
   /** The server's round at `now`: read the socket when it is readable, the program's turn, flush. */
   serverRound(now: i64, readable: boolean): void {
     const q: QuicEchoServer | null = this.quic;
+    const m: LbMeter | null = this.meter;
     if (q !== null) {
-      let filler: u8[] = this.filler();
-      let before: i64 = Arena.used();
       if (readable) {
+        lbBegin(m);
         q.receive(now);
+        lbEnd(m);
       }
-      this.track(before, filler);
-      filler = this.filler();
-      before = Arena.used();
+      lbBegin(m);
       q.serve();
-      this.track(before, filler);
-      filler = this.filler();
-      before = Arena.used();
+      lbEnd(m);
+      lbBegin(m);
       q.flush(now);
-      this.track(before, filler);
+      lbEnd(m);
       return;
     }
     const s: Http3Server | null = this.h3;
     if (s === null) {
       return;
     }
-    // `receive` borrows the leaf key as a `Secret`, which only a fresh value
-    // can be and no field can hold. The relay holds one as a local of its
-    // loop for its whole life; this loop is a method, so it makes the copy
-    // for each wake, outside the measured call.
-    const key: Secret<u8[]> = lbLeafKey(this.leaf);
-    let filler: u8[] = this.filler();
-    let before: i64 = Arena.used();
     if (readable) {
+      // `receive` borrows the leaf key as a `Secret`, which only a fresh value
+      // can be and no field can hold. The relay holds one as a local of its
+      // loop for its whole life; this loop is a method, so it makes the copy
+      // for each wake, outside the measured call.
+      const key: Secret<u8[]> = lbLeafKey(this.leaf);
+      lbBegin(m);
       s.receive(now, key);
+      lbEnd(m);
+      wipe(key);
     }
-    this.track(before, filler);
-    wipe(key);
-    filler = this.filler();
-    before = Arena.used();
+    lbBegin(m);
     s.tick(now);
-    this.track(before, filler);
-    filler = this.filler();
-    before = Arena.used();
+    lbEnd(m);
+    lbBegin(m);
     this.answer(s);
-    this.track(before, filler);
-    filler = this.filler();
-    before = Arena.used();
+    lbEnd(m);
+    lbBegin(m);
     s.flush(now);
-    this.track(before, filler);
+    lbEnd(m);
     for (let slot: i32 = 0; slot < s.size(); slot++) {
       if (!s.holds(slot)) {
         this.h3App.table.forget(slot);
@@ -616,13 +575,10 @@ export class UdpLoop {
       const segment: i32 = cl.meta[0] > 0 ? cl.meta[0] : n;
       for (let at: i32 = 0; at < n && segment > 0; at += segment) {
         const length: i32 = n - at < segment ? n - at : segment;
-        const datagram: u8[] = new Array<u8>(length);
-        for (let k: i32 = 0; k < length; k++) {
-          datagram[k] = cl.rx[at + k];
-        }
+        const datagram: u8[] = range(cl.rx, at, at + length);
         cl.c.datagrams.push(datagram);
         if (qcReceive(cl.c, datagram) === 0) {
-          console.log(`unopened datagram of ${length} (segment ${segment}, n ${n})`);
+          this.fail("the client could not open a datagram the server sent");
         }
         read++;
       }
@@ -745,6 +701,14 @@ export class UdpLoop {
     const none: u8[] = [];
     quicPushConnectionClose(payload, true, code, n64(0), none);
     this.packet(payload);
+  }
+
+  /** Sends `data` as one DATAGRAM frame and runs the loop until one more comes back: answers it, or an empty array on a timeout. */
+  datagramRoundTrip(data: u8[]): u8[] {
+    const base: i32 = toI32(this.client.datagrams.length);
+    this.sendQuicDatagram(data);
+    const none: u8[] = [];
+    return this.awaitDatagrams(base + 1) ? this.client.datagrams[base] : none;
   }
 
   /** Runs the loop until the client holds `n` datagrams; false on a timeout. */

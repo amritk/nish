@@ -12,7 +12,7 @@
 // per byte, so the whole of a server wake, carrier and program together, is
 // what the loop's `meter` measures. Every wait is bounded: five seconds without a wake
 // is a failure, never a hang.
-import { Secret, secret, wipe } from "nish:secret";
+import { Secret, wipe } from "nish:secret";
 import {
   connectResult,
   netAddress,
@@ -36,7 +36,7 @@ import { H2_ERROR, H2_NEED_MORE, Http2Config } from "nish/net/http2";
 import { leafPrivate, serverPrivate, tcpConfig } from "../net_tls_common/server";
 import { ZERO } from "../net_tls_record_common/bytes";
 import { CLIENTS, LISTENER, Peer } from "../net_tls_record_tcp/harness";
-import { LbMeter } from "./common";
+import { LbMeter, lbBegin, lbEnd, lbLeafKey } from "./common";
 import { EchoSlots, H1App, H2App } from "./apps";
 
 const WOULD_BLOCK: i32 = -11;
@@ -88,11 +88,9 @@ export class TcpLoop {
   /** The first thing that went wrong, or empty. */
   failure: string = "";
   accepted: i32 = 0;
-  refused: i32 = 0;
   closed: i32 = 0;
   /** While set, what every server wake — the accept, the carrier's calls and the program's answers — keeps in the arena. */
   meter: LbMeter | null = null;
-  none: u8[];
 
   constructor(carrier: i32) {
     this.carrier = carrier;
@@ -103,7 +101,6 @@ export class TcpLoop {
     this.randomBuffer = new Array<u8>(32);
     this.serverKey = serverPrivate();
     this.leafKey = leafPrivate();
-    this.none = [];
     this.loop = pollCreate();
     this.listener = tcpListen("127.0.0.1", ZERO, toI32(16));
     this.port = netLocalPort(this.listener);
@@ -113,7 +110,7 @@ export class TcpLoop {
     this.h2 = new Http2TlsServer(tcpConfig([H2_ALPN]), new Http2Config(), carrier === CARRIER_H2 ? this.listener : unused, carrier === CARRIER_H2 ? POOL : toI32(1));
     this.echo = new EchoSlots(POOL);
     this.h1App = new H1App(POOL);
-    this.h2App = new H2App();
+    this.h2App = new H2App(carrier === CARRIER_H2 ? toI32(8) : ZERO);
     pollAdd(this.loop, this.listener, toI32(1), LISTENER);
   }
 
@@ -202,8 +199,7 @@ export class TcpLoop {
         this.keyBuffer[k] = this.serverKey[k];
         this.randomBuffer[k] = toU8(0x40 + this.accepted);
       }
-      const filler: u8[] = this.filler();
-      const before: i64 = Arena.used();
+      lbBegin(this.meter);
       let slot: i32 = -1;
       if (this.carrier === CARRIER_TLS) {
         slot = this.tls.accept(this.randomBuffer, this.keyBuffer);
@@ -213,31 +209,16 @@ export class TcpLoop {
         slot = this.h2.accept(this.randomBuffer, this.keyBuffer);
       }
       if (slot >= 0) {
-        this.track(before, filler);
+        lbEnd(this.meter);
         this.accepted = this.accepted + 1;
         this.echo.reset(slot);
         this.h1App.reset(slot);
         this.h2App.table.forget(slot);
         pollAdd(this.loop, this.fd(slot), toI32(1), slot);
-      } else if (slot === TLS_TCP_POOL_FULL) {
-        this.refused = this.refused + 1;
-      } else {
+      } else if (slot !== TLS_TCP_POOL_FULL) {
+        // A connection the full pool shed is closed by accept; any other answer means none is waiting.
         return;
       }
-    }
-  }
-
-  /** What the meter starts a measured call with (see `LbMeter`); nothing while none is set. */
-  filler(): u8[] {
-    const m: LbMeter | null = this.meter;
-    return m !== null ? m.filler() : this.none;
-  }
-
-  /** While a meter is set, counts what the call since `before` kept. */
-  track(before: i64, filler: u8[]): void {
-    const m: LbMeter | null = this.meter;
-    if (m !== null) {
-      m.add(before, filler);
     }
   }
 
@@ -251,8 +232,7 @@ export class TcpLoop {
 
   /** A connection's descriptor is ready: the carrier's own wake. */
   serve(slot: i32, events: i32): void {
-    const filler: u8[] = this.filler();
-    const before: i64 = Arena.used();
+    lbBegin(this.meter);
     let wants: i32 = 0;
     let holds: boolean = false;
     let done: boolean = false;
@@ -269,7 +249,7 @@ export class TcpLoop {
       holds = this.h2.holds(slot);
       done = (wants & TLS_RECORD_DONE) !== 0;
     }
-    this.track(before, filler);
+    lbEnd(this.meter);
     if (!holds) {
       return;
     }
@@ -292,25 +272,11 @@ export class TcpLoop {
     this.closed = this.closed + 1;
   }
 
-  /**
-   * The leaf key as a `Secret` for one signature, which the caller wipes: a
-   * fresh copy, since `secret` takes only a value nothing else holds. What a
-   * server that keeps its key does per handshake, so it is counted with the
-   * server's wake.
-   */
-  leaf(): Secret<u8[]> {
-    const copy: u8[] = new Array<u8>(32);
-    for (let k: i32 = 0; k < 32; k++) {
-      copy[k] = this.leafKey[k];
-    }
-    return secret(copy);
-  }
-
   /** TLS over TCP: an echo of everything the client sends, held when the carrier cannot take it yet. */
   serveTls(slot: i32, events: i32): i32 {
     let wants: i32 = (events & 5) !== 0 ? this.tls.readable(slot) : this.tls.writable(slot);
     if ((wants & TLS_RECORD_SIGN) !== 0) {
-      const key: Secret<u8[]> = this.leaf();
+      const key: Secret<u8[]> = lbLeafKey(this.leafKey);
       wants = this.tls.signP256(slot, key);
       wipe(key);
     }
@@ -324,7 +290,7 @@ export class TcpLoop {
   serveH1(slot: i32, events: i32): i32 {
     const wants: i32 = (events & 5) !== 0 ? this.h1.readable(slot) : this.h1.writable(slot);
     if ((wants & TLS_RECORD_SIGN) !== 0) {
-      const key: Secret<u8[]> = this.leaf();
+      const key: Secret<u8[]> = lbLeafKey(this.leafKey);
       this.h1.signP256(slot, key);
       wipe(key);
     }
@@ -344,7 +310,7 @@ export class TcpLoop {
   serveH2(slot: i32, events: i32): i32 {
     const wants: i32 = (events & 5) !== 0 ? this.h2.readable(slot) : this.h2.writable(slot);
     if ((wants & TLS_RECORD_SIGN) !== 0) {
-      const key: Secret<u8[]> = this.leaf();
+      const key: Secret<u8[]> = lbLeafKey(this.leafKey);
       this.h2.signP256(slot, key);
       wipe(key);
     }

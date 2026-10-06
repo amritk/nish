@@ -1,5 +1,7 @@
 // What every carrier's checks share: how many rounds on a warm connection
-// the arena is measured over, after how many unmeasured ones.
+// the arena is measured over, after how many unmeasured ones, and how it is
+// measured.
+import { Secret, secret } from "nish:secret";
 
 /** Rounds after the warm-up, every server wake measured. */
 export const ROUNDS: i32 = 50;
@@ -32,40 +34,61 @@ export class LbMeter {
   kept: i64 = 0;
   startMark: i64 = 0;
   startUsed: i64 = 0;
+  /** The current call's filler and probe, held here so they live until `end`. */
+  filler: u8[];
   probe: u8[];
-  none: u8[];
   fresh: boolean = false;
 
   constructor(fresh: boolean) {
     this.fresh = fresh;
+    this.filler = [];
     this.probe = [];
-    this.none = [];
   }
 
-  /** Called before a measured call: the filler that starts it in a chunk of its own, kept alive until `add`; nothing when plain. */
-  filler(): u8[] {
-    if (!this.fresh) {
-      return this.none;
+  /** Before a measured call: when fresh, the filler and probe that start it at the head of a chunk of its own. */
+  begin(): void {
+    if (this.fresh) {
+      this.filler = new Array<u8>(70000);
+      this.probe = new Array<u8>(4096);
     }
-    const filler: u8[] = new Array<u8>(70000);
-    this.probe = new Array<u8>(4096);
     this.startMark = Arena.mark();
     this.startUsed = Arena.used();
-    return filler;
   }
 
-  /** Called after it: counts what the call since `before` kept. */
-  add(before: i64, filler: u8[]): void {
+  /** After it: counts what the call kept. */
+  end(): void {
     const used: i64 = Arena.used();
-    if (!this.fresh) {
-      this.kept = this.kept + (used - before);
-      return;
-    }
     const moved: i64 = Arena.mark() - this.startMark;
-    if (moved === used - this.startUsed && toI32(filler.length) > 0) {
-      this.kept = this.kept + moved;
+    if (!this.fresh || moved === used - this.startUsed) {
+      this.kept = this.kept + (used - this.startUsed);
     } else {
       this.kept = this.kept + (LB_CHUNK - this.startUsed) + used;
     }
   }
 }
+
+/** `m.begin()`, when a meter is set. */
+export const lbBegin = (m: LbMeter | null): void => {
+  if (m !== null) {
+    m.begin();
+  }
+};
+
+/** `m.end()`, when a meter is set. */
+export const lbEnd = (m: LbMeter | null): void => {
+  if (m !== null) {
+    m.end();
+  }
+};
+
+/** The band a whole QUIC connection's arena falls in while its handshake still keeps memory (H3-1): 80 to 128 KiB. */
+export const lbHandshakeBand = (kept: i64): boolean => kept >= toI64(81920) && kept <= toI64(131072);
+
+/** The P-256 leaf key as a fresh `Secret` for one call, which the caller wipes: `secret` takes only a value nothing else holds. */
+export const lbLeafKey = (leaf: u8[]): Secret<u8[]> => {
+  const copy: u8[] = new Array<u8>(32);
+  for (let k: i32 = 0; k < 32; k++) {
+    copy[k] = leaf[k];
+  }
+  return secret(copy);
+};

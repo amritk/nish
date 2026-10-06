@@ -18,7 +18,7 @@ import { ECHO_ALPN, echoConfig } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, qcHello, qcParams } from "../net_quic_conn/client";
 import { H3Peer, h3Fresh, h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { CARRIER_QUIC, QuicEchoServer, UdpLoop } from "./udp";
-import { LbMeter, ROUNDS, WARM, roundText } from "./common";
+import { LbMeter, ROUNDS, WARM, lbHandshakeBand, roundText } from "./common";
 
 /** The echo's configuration, with DATAGRAM frames of up to 1,200 bytes. */
 const quicLoopConfig = (): QuicServerConfig => {
@@ -62,8 +62,7 @@ const quicWholeConnection = (lp: UdpLoop, q: QuicEchoServer, m: LbMeter): boolea
   const shook: boolean = lp.connect(quicLoopHello());
   lp.sendStream(n64(0), bytesOf("one more"), true);
   const echoed: boolean = quicAwait(lp, p, n64(0), n32(8), true);
-  lp.sendQuicDatagram(bytesOf("one datagram"));
-  const datagram: boolean = lp.awaitDatagrams(n32(1));
+  const datagram: boolean = textOf(lp.datagramRoundTrip(bytesOf("one datagram"))) === "one datagram";
   q.conn.close(n64(9));
   const closed: boolean = lp.awaitClose() && lp.awaitIdle();
   lp.meter = null;
@@ -83,7 +82,7 @@ export const quicChecks = (t: Suite): void => {
   t.ok("quic: a handshake across loopback, through the listener into the slot", lp.connect(quicLoopHello()) && q.accepted === 1 && q.busy);
   t.ok(
     "quic: the client read the server's transport parameters from its EncryptedExtensions",
-    lp.client.maxData === n64(65536) && lp.client.initialBidi === n64(16384) && lp.client.maxStreamsBidi === n64(4)
+    lp.client.maxData === config.maxData && lp.client.initialBidi === config.maxStreamData && lp.client.maxStreamsBidi === config.maxStreamsBidi
   );
 
   lp.sendStream(n64(0), bytesOf("GET / over quic"), true);
@@ -98,16 +97,14 @@ export const quicChecks = (t: Suite): void => {
     lp.client.limits[lp.client.at(n64(4))] >= n64(100000) && lp.client.maxData >= n64(100000)
   );
 
-  lp.sendQuicDatagram(bytesOf("a datagram each way"));
-  t.ok("quic: a DATAGRAM is echoed as one", lp.awaitDatagrams(n32(1)) && textOf(lp.client.datagrams[0]) === "a datagram each way");
+  t.ok("quic: a DATAGRAM is echoed as one", textOf(lp.datagramRoundTrip(bytesOf("a datagram each way"))) === "a datagram each way");
 
   let expected: string = "";
   for (let k: i32 = 0; k < WARM; k++) {
     expected = `${expected}warm ${k};`;
     lp.sendStream(n64(8), bytesOf(`warm ${k};`), false);
-    lp.sendQuicDatagram(bytesOf(`warm ${k}`));
+    lp.datagramRoundTrip(bytesOf(`warm ${k}`));
     quicAwait(lp, p, n64(8), toI32(expected.length), false);
-    lp.awaitDatagrams(n32(2) + k);
   }
   const rounds = new LbMeter(false);
   lp.meter = rounds;
@@ -115,9 +112,9 @@ export const quicChecks = (t: Suite): void => {
   for (let k: i32 = 0; k < ROUNDS; k++) {
     expected = `${expected}${roundText(k)};`;
     lp.sendStream(n64(8), bytesOf(`${roundText(k)};`), false);
-    lp.sendQuicDatagram(bytesOf(roundText(k)));
+    const datagram: string = textOf(lp.datagramRoundTrip(bytesOf(roundText(k))));
     quicAwait(lp, p, n64(8), toI32(expected.length), false);
-    if (lp.awaitDatagrams(n32(2) + WARM + k) && textOf(lp.client.datagrams[1 + WARM + k]) === roundText(k)) {
+    if (datagram === roundText(k)) {
       datagrams = datagrams + 1;
     }
   }
@@ -130,19 +127,17 @@ export const quicChecks = (t: Suite): void => {
   t.ok("quic: as the client's close, the application's, with its code", q.lastClosedByPeer && q.lastErrorApp && q.lastError === n64(7));
 
   let all: boolean = true;
-  let low: i64 = n64(-1);
-  let high: i64 = n64(0);
+  let inBand: boolean = true;
   for (let k: i32 = 0; k < 3; k++) {
     const m = new LbMeter(true);
     all = quicWholeConnection(lp, q, m) && all;
-    low = low < 0 || m.kept < low ? m.kept : low;
-    high = m.kept > high ? m.kept : high;
+    inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("quic: three more connections through the slot, each closed by the server with code 9, which the client reads", all && q.accepted === 4);
   // The figure moves by a few kilobytes between connections (the listener's
   // state), so it is pinned as a band: a lane that closes H3-1 fails this
   // check rather than passing it silently.
-  t.ok("quic: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)", low >= n64(81920) && high <= n64(131072));
+  t.ok("quic: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)", inBand);
   t.eqI32("quic: no datagram was dropped by the program", q.app.dropped, n32(0));
   t.eqStr("quic: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

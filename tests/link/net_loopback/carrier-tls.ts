@@ -8,7 +8,7 @@ import { ascii } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { CARRIER_TLS, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
-import { textOf } from "../crypto_x509/hex";
+import { sameBytes } from "../crypto_x509/hex";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** One echo of `bytes` through client `c`; whether it came back whole. */
@@ -17,7 +17,7 @@ const tlsEchoed = (c: TlsClient, bytes: u8[]): boolean => {
   if (!c.awaitPlain(toI32(bytes.length))) {
     return false;
   }
-  return textOf(c.take(toI32(bytes.length))) === textOf(bytes);
+  return sameBytes(c.take(toI32(bytes.length)), bytes);
 };
 
 /** A connection from handshake to close, with one echo, under `m`; whether it all went as it should. */

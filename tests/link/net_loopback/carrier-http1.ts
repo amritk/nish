@@ -10,7 +10,7 @@ import { H1_ALPN } from "nish/net/http1-server";
 import { ascii, join } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { ClientReader } from "../net_http1_server/harness";
-import { textOf } from "../crypto_x509/hex";
+import { sameBytes } from "../crypto_x509/hex";
 import { CARRIER_H1, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
@@ -38,7 +38,7 @@ const h1Post = (body: u8[], close: boolean): u8[] => {
 const h1Echoed = (c: TlsClient, body: u8[]): boolean => {
   c.send(h1Post(body, false));
   const r: ClientReader = h1Response(c);
-  return r.done && r.status === 200 && r.has("Transfer-Encoding: chunked") && textOf(r.body) === textOf(body);
+  return r.done && r.status === 200 && r.has("Transfer-Encoding: chunked") && sameBytes(r.body, body);
 };
 
 /** Every check of the HTTP/1.1 carrier. */

@@ -9,7 +9,6 @@ import { QUIC_STREAM_END, QuicConnection } from "nish/net/quic";
 import {
   H3_DATA,
   H3_END,
-  H3_GOAWAY,
   H3_REQUEST,
   H3_RESET,
   H3_WRITABLE,
@@ -27,7 +26,8 @@ import {
   WebTransport,
 } from "nish/net/webtransport";
 import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
-import { ZERO } from "../net_tls_record_common/bytes";
+import { ZERO, range } from "../net_tls_record_common/bytes";
+import { textOf } from "../crypto_x509/hex";
 import { EchoTable } from "./echo-table";
 
 /**
@@ -38,13 +38,12 @@ import { EchoTable } from "./echo-table";
 export class QuicApp {
   table: EchoTable;
   datagram: u8[];
-  echoed: i64 = 0;
-  datagrams: i32 = 0;
   /** Datagrams that could not be queued: never expected. */
   dropped: i32 = 0;
 
-  constructor() {
-    this.table = new EchoTable();
+  /** A program echoing up to `streams` streams at once. */
+  constructor(streams: i32) {
+    this.table = new EchoTable(streams);
     this.datagram = new Array<u8>(1500);
   }
 
@@ -57,7 +56,6 @@ export class QuicApp {
     }
     let n: i32 = conn.readDatagram(this.datagram, ZERO, toI32(this.datagram.length));
     while (n >= 0) {
-      this.datagrams = this.datagrams + 1;
       if (conn.sendDatagram(this.datagram, ZERO, n) !== 0) {
         this.dropped = this.dropped + 1;
       }
@@ -82,7 +80,6 @@ export class QuicApp {
           return;
         }
         t.took(e, w);
-        this.echoed = this.echoed + toI64(w);
       }
       if (t.ended[e]) {
         // An empty write always fits, so this fails only on a stream already finished or reset: either way it is done.
@@ -117,12 +114,11 @@ export class H3App {
   values: u8[][];
   none: u8[][];
   hello: u8[];
-  requests: i32 = 0;
-  goaways: i32 = 0;
   resets: i32 = 0;
 
-  constructor() {
-    this.table = new EchoTable();
+  /** A program echoing up to `streams` streams at once; none for a loop that does not serve HTTP/3. */
+  constructor(streams: i32) {
+    this.table = new EchoTable(streams);
     this.names = [httpFieldBytes("content-type")];
     this.values = [httpFieldBytes("text/plain")];
     this.none = [];
@@ -134,7 +130,6 @@ export class H3App {
     const t: EchoTable = this.table;
     const id: i64 = h3.stream;
     if (event === H3_REQUEST) {
-      this.requests = this.requests + 1;
       if (httpFieldIs(h3.fields.path, "/hello")) {
         h3.respond(id, toI32(200), this.names, this.values, false);
         h3.writeData(id, this.hello, ZERO, toI32(this.hello.length), true);
@@ -166,8 +161,6 @@ export class H3App {
       if (e >= 0) {
         this.flush(h3, e);
       }
-    } else if (event === H3_GOAWAY) {
-      this.goaways = this.goaways + 1;
     } else if (event === H3_RESET) {
       this.resets = this.resets + 1;
       t.release(t.find(slot, id));
@@ -199,8 +192,6 @@ export class H3App {
  */
 export class WtApp {
   table: EchoTable;
-  datagrams: i32 = 0;
-  sessions: i32 = 0;
   /** The last session close: its code, its reason, and whether the client sent it. */
   closeCode: i64 = -1;
   closeReason: string = "";
@@ -208,20 +199,19 @@ export class WtApp {
   /** Writes the layer refused: never expected. */
   refusals: i32 = 0;
 
-  constructor() {
-    this.table = new EchoTable();
+  /** A program echoing up to `streams` streams at once; none for a loop that does not serve WebTransport. */
+  constructor(streams: i32) {
+    this.table = new EchoTable(streams);
   }
 
   /** Answers every event `wt`, the layer of slot `slot`, has. */
   serve(wt: WebTransport, slot: i32, event: i32): void {
     const t: EchoTable = this.table;
     if (event === WT_SESSION) {
-      this.sessions = this.sessions + 1;
       if (wt.accept(wt.sessionId) !== 0) {
         this.refusals = this.refusals + 1;
       }
     } else if (event === WT_DATAGRAM) {
-      this.datagrams = this.datagrams + 1;
       if (wt.sendDatagram(wt.sessionId, wt.data, wt.dataStart, wt.dataLength) !== 0) {
         this.refusals = this.refusals + 1;
       }
@@ -257,12 +247,8 @@ export class WtApp {
     } else if (event === WT_STREAM_RESET) {
       t.release(t.find(slot, wt.stream));
     } else if (event === WT_CLOSED) {
-      const reason: string[] = [];
-      for (let k: i32 = 0; k < wt.dataLength; k++) {
-        reason.push(String.fromCharCode(toI32(wt.data[wt.dataStart + k])));
-      }
       this.closeCode = wt.errorCode;
-      this.closeReason = reason.join("");
+      this.closeReason = textOf(range(wt.data, wt.dataStart, wt.dataStart + wt.dataLength));
       this.closedByPeer = wt.closedByPeer;
     }
   }

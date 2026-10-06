@@ -8,6 +8,7 @@
 import { Suite } from "nish/testing";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
 import { Http3Server } from "nish/net/http3-server";
+import { quicListenerPaceTime } from "nish/net/quic-listener";
 import { WebTransportConfig } from "nish/net/webtransport";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { bytesOf, textOf } from "../crypto_x509/hex";
@@ -30,7 +31,7 @@ import {
 } from "../net_http3/peer";
 import { CARRIER_H3, UdpLoop, lbNowMs } from "./udp";
 import { quicAwait } from "./carrier-quic";
-import { LbMeter, ROUNDS, WARM, roundText } from "./common";
+import { LbMeter, ROUNDS, WARM, lbHandshakeBand, roundText } from "./common";
 
 /** A connected client with its control and QPACK streams open; its reader, the HTTP/3 lane's peer, client half only. */
 const h3WireOpen = (lp: UdpLoop, s: Http3Server, limits: H3Limits): H3Peer => {
@@ -89,7 +90,7 @@ export const http3Checks = (t: Suite): void => {
   lp.meter = null;
   t.eqI32("http/3: fifty more requests, each on a new stream past the server's first sixteen, each echoed", intact, ROUNDS);
   t.ok(`http/3: and every server call kept ${rounds.kept} bytes over them`, rounds.kept === n64(0));
-  t.ok("http/3: the client waited on the server's MAX_STREAMS to open them", lp.client.maxStreamsBidi > n64(16));
+  t.ok("http/3: the client waited on the server's MAX_STREAMS to open them", lp.client.maxStreamsBidi > limits.maxStreamsBidi);
 
   // The pacer's credit spent, as a long flight just sent would: the carrier
   // must wake the slot when the pacer next allows a datagram, which
@@ -99,13 +100,17 @@ export const http3Checks = (t: Suite): void => {
   for (let k: i32 = 0; k < 1000 && quic.recovery.pacerDelay(now, n32(1200)) <= 0; k++) {
     quic.recovery.onPaced(now, n32(1200));
   }
-  const delay: i64 = quic.recovery.pacerDelay(now, n32(1200));
+  const wake: i64 = quicListenerPaceTime(quic, now) - now;
   s.touch(n32(0));
   s.flush(now);
+  // No other timer of the connection's may be due as soon, or the check
+  // would pass on that timer whatever the carrier did with the pacer's.
+  const due: i64 = quic.deadline();
+  const alone: boolean = due < 0 || due - now > wake + n64(1);
   const woken: i32 = s.timeout(now);
   t.ok(
     "http/3: a slot whose pacer has no credit left is woken when it has some, not at its idle deadline",
-    delay > 0 && woken >= 0 && toI64(woken) <= delay + n64(1)
+    wake > 0 && alone && woken >= 0 && toI64(woken) <= wake + n64(1)
   );
 
   s.connection(n32(0)).goaway();
@@ -114,8 +119,7 @@ export const http3Checks = (t: Suite): void => {
   t.ok("http/3: and the client reads H3_NO_ERROR, the application's", lp.client.closeCode === H3_NO_ERROR && lp.client.closeApp);
 
   let all: boolean = true;
-  let low: i64 = n64(-1);
-  let high: i64 = n64(0);
+  let inBand: boolean = true;
   for (let k: i32 = 0; k < 3; k++) {
     lp.newClient();
     const m = new LbMeter(true);
@@ -127,11 +131,10 @@ export const http3Checks = (t: Suite): void => {
     const idle: boolean = lp.awaitIdle();
     lp.meter = null;
     all = all && got && idle && s.quic(n32(0)).error === H3_NO_ERROR && s.quic(n32(0)).errorIsApplication;
-    low = low < 0 || m.kept < low ? m.kept : low;
-    high = m.kept > high ? m.kept : high;
+    inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("http/3: three more connections, each a GET and the client's CONNECTION_CLOSE with H3_NO_ERROR, which frees the slot", all && s.accepted === 4);
-  t.ok("http/3: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)", low >= n64(81920) && high <= n64(131072));
+  t.ok("http/3: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)", inBand);
   t.ok("http/3: the program held nothing it could not place", lp.h3App.table.overflows === 0 && lp.h3App.resets === 0);
   t.eqStr("http/3: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

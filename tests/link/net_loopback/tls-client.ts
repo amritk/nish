@@ -26,8 +26,6 @@ export class TlsClient {
   index: i32 = -1;
   read: TlsRecordProtection;
   write: TlsRecordProtection;
-  /** Whether the server's CertificateVerify and Finished both verified. */
-  verified: boolean = false;
   /** The alerts the server sent, as `level description`. */
   alerts: string[];
   /** Application data opened and not yet taken. */
@@ -41,7 +39,7 @@ export class TlsClient {
     this.plain = [];
   }
 
-  /** Connects and completes a TLS 1.3 handshake offering `alpn` (none when empty); false when anything went wrong. */
+  /** Connects and completes a TLS 1.3 handshake offering `alpn` (none when empty); false when anything went wrong, the server's CertificateVerify or Finished included. */
   handshake(alpn: string[]): boolean {
     this.index = this.lp.connect();
     if (this.index < 0) {
@@ -66,12 +64,11 @@ export class TlsClient {
     const keys = clientKeysFor(32, hello, helloBody);
     const flight: Opened = openOne(protectionFor(SUITE, keys.serverHandshake), this.lp.nextRecord(this.index));
     const view = clientFinish(32, hello, helloBody, flight.content, leafPublic());
-    this.verified = view.signatureVerifies && view.serverFinishedVerifies;
     keys.finishWith(flight.content);
     this.read.install(SUITE, keys.serverApplication);
     this.write.install(SUITE, keys.clientApplication);
     this.lp.send(this.index, sealOne(protectionFor(SUITE, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO));
-    return this.verified;
+    return view.signatureVerifies && view.serverFinishedVerifies;
   }
 
   /** Seals `bytes` into application-data records and sends them, running the loop while the socket is full. */

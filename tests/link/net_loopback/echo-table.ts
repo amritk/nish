@@ -7,8 +7,6 @@
 /** What one stream entry holds back: more than any stream's credit (HTTP/2's 65,535 bytes, QUIC's 32 KiB here), so it never fills. */
 const HELD: i32 = 131072;
 
-/** The streams being echoed at once, across every slot. */
-const ENTRIES: i32 = 16;
 
 /** One echoing stream per entry: its id (-1 when free), where its echo goes, what is held, and how far it has ended. */
 export class EchoTable {
@@ -23,16 +21,17 @@ export class EchoTable {
   /** Streams that found no free entry, and bytes that found no room: never expected. */
   overflows: i32 = 0;
 
-  constructor() {
+  /** A table of `entries` streams at once, across every slot: none for a program the loop does not run. */
+  constructor(entries: i32) {
     this.held = [];
-    this.ids = new Array<i64>(ENTRIES);
-    this.outs = new Array<i64>(ENTRIES);
-    this.slots = new Array<i32>(ENTRIES);
-    this.starts = new Array<i32>(ENTRIES);
-    this.lengths = new Array<i32>(ENTRIES);
-    this.ended = new Array<boolean>(ENTRIES);
+    this.ids = new Array<i64>(entries);
+    this.outs = new Array<i64>(entries);
+    this.slots = new Array<i32>(entries);
+    this.starts = new Array<i32>(entries);
+    this.lengths = new Array<i32>(entries);
+    this.ended = new Array<boolean>(entries);
     this.empty = [];
-    for (let k: i32 = 0; k < ENTRIES; k++) {
+    for (let k: i32 = 0; k < entries; k++) {
       this.held.push(new Array<u8>(HELD));
       this.ids[k] = toI64(-1);
     }
@@ -40,7 +39,7 @@ export class EchoTable {
 
   /** The entry of stream `id` on `slot`, or -1. */
   find(slot: i32, id: i64): i32 {
-    for (let k: i32 = 0; k < ENTRIES; k++) {
+    for (let k: i32 = 0; k < toI32(this.ids.length); k++) {
       if (this.ids[k] === id && this.slots[k] === slot) {
         return k;
       }
@@ -66,7 +65,7 @@ export class EchoTable {
 
   /** Any free entry, or -1. */
   findFree(): i32 {
-    for (let k: i32 = 0; k < ENTRIES; k++) {
+    for (let k: i32 = 0; k < toI32(this.ids.length); k++) {
       if (this.ids[k] < 0) {
         return k;
       }
@@ -83,7 +82,7 @@ export class EchoTable {
 
   /** Frees every entry of `slot`, whose connection is gone. */
   forget(slot: i32): void {
-    for (let k: i32 = 0; k < ENTRIES; k++) {
+    for (let k: i32 = 0; k < toI32(this.ids.length); k++) {
       if (this.slots[k] === slot) {
         this.ids[k] = toI64(-1);
       }
