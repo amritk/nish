@@ -597,7 +597,7 @@ const checkFixField = (t: Suite, cli: Cli): void => {
     true
   );
   t.contains("and leaves the file unfixed", readOrEmpty(unfixed), "return a == b;");
-  const targetFirst = cli.plain("fix_target_first", ["--target", "host", "--fix", unfixed]);
+  const targetFirst = cli.plain("fix_target_first", ["--target", "x86_64-unknown-linux-gnu", "--fix", unfixed]);
   t.eqI32("--target before --fix is refused too, exit 2", targetFirst.status, 2);
   t.eqBool(
     "naming --target",
