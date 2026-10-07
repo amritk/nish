@@ -605,11 +605,14 @@ const checkFixField = (t: Suite, cli: Cli): void => {
     true
   );
   t.contains("and the file is still unfixed", readOrEmpty(unfixed), "return a == b;");
-  // `-g` is one of the other flags only the emitter reads, refused the same way.
-  const withDebug = cli.plain("fix_debug", ["--fix", "-g", unfixed]);
-  t.eqI32("--fix with -g is a usage error, exit 2", withDebug.status, 2);
-  t.eqBool("naming -g", withDebug.stderr.startsWith("compile: `-g` cannot be used with --fix"), true);
-  t.contains("and the file is unfixed after it too", readOrEmpty(unfixed), "return a == b;");
+  // The other flags that shape only what a compile emits or links are refused
+  // the same way, each by name.
+  for (const flag of ["-g", "--threads", "--runtime-decls", "--plain"]) {
+    const refused = cli.plain(`fix${flag}`, ["--fix", flag, unfixed]);
+    t.eqI32(`--fix with ${flag} is a usage error, exit 2`, refused.status, 2);
+    t.eqBool(`naming ${flag}`, refused.stderr.startsWith(`compile: \`${flag}\` cannot be used with --fix`), true);
+    t.contains(`and the file is unfixed after ${flag}`, readOrEmpty(unfixed), "return a == b;");
+  }
 
   // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
   const underRun = cli.plain("fix_run", ["run", "--fix", copy]);

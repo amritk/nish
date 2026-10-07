@@ -433,12 +433,15 @@ export const main = (): number => {
   // binary, a sidecar or a dump — which neither `run` nor `--fix` writes, and
   // the first of the others `run` refuses (`--target`, `--fix`). Both are
   // refused once the whole line is read rather than wherever they appeared.
-  // `--fix` writes no IR either, so it refuses a flag that only shapes the IR
-  // (`--target`, `-g`, `--threads`, `--runtime-decls`, `--plain`: read by the
-  // emitter and nothing the check runs) as it refuses a product: `irFlag`
-  // keeps the first of those apart from `notForRun`, which `--fix` itself may
-  // already hold. `--no-stack-alloc` is not one: the escape analysis the check
-  // runs for its arena diagnostics reads it.
+  // `--fix` rewrites the sources and emits and links nothing, so it refuses a
+  // flag that shapes what a compile emits or links (`--target`, `-g`,
+  // `--threads`, `--runtime-decls`, `--plain`) as it refuses a product, rather
+  // than dropping it: whatever such a flag changes, the checker's answer to a
+  // wasm `--target` included, is for the compile that follows the fix.
+  // `irFlag` keeps the first of those apart from `notForRun`, which `--fix`
+  // itself may already hold. `--no-stack-alloc` is not one: the escape
+  // analysis the check runs for its arena diagnostics reads it, so it can
+  // change what `--fix` reports.
   let productFlag = ""
   let notForRun = ""
   let irFlag = ""
