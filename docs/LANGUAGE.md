@@ -5981,7 +5981,9 @@ by the caller.
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
   It only shapes the IR, so `--fix`, which writes none, refuses it with a usage
-  error (exit 2) rather than dropping it, as it refuses `-o` and `--link`.
+  error (exit 2) rather than dropping it, as it refuses `-o` and `--link`. It
+  refuses `-g`, `--threads`, `--runtime-decls` and `--plain` the same way,
+  because only the emitter reads them.
 - **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is a
   checked panic* above (`tests/cases/opt_nsw`, `opt_wrapping`,
   `ovf_repro_wrapping`). It reaches the entry package's modules only

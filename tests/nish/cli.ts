@@ -604,6 +604,12 @@ const checkFixField = (t: Suite, cli: Cli): void => {
     targetFirst.stderr.startsWith("compile: `--target` cannot be used with --fix"),
     true
   );
+  t.contains("and the file is still unfixed", readOrEmpty(unfixed), "return a == b;");
+  // `-g` is one of the other flags only the emitter reads, refused the same way.
+  const withDebug = cli.plain("fix_debug", ["--fix", "-g", unfixed]);
+  t.eqI32("--fix with -g is a usage error, exit 2", withDebug.status, 2);
+  t.eqBool("naming -g", withDebug.stderr.startsWith("compile: `-g` cannot be used with --fix"), true);
+  t.contains("and the file is unfixed after it too", readOrEmpty(unfixed), "return a == b;");
 
   // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
   const underRun = cli.plain("fix_run", ["run", "--fix", copy]);

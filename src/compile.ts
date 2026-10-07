@@ -434,8 +434,11 @@ export const main = (): number => {
   // the first of the others `run` refuses (`--target`, `--fix`). Both are
   // refused once the whole line is read rather than wherever they appeared.
   // `--fix` writes no IR either, so it refuses a flag that only shapes the IR
-  // (`--target`) as it refuses a product: `irFlag` keeps the first of those
-  // apart from `notForRun`, which `--fix` itself may already hold.
+  // (`--target`, `-g`, `--threads`, `--runtime-decls`, `--plain`: read by the
+  // emitter and nothing the check runs) as it refuses a product: `irFlag`
+  // keeps the first of those apart from `notForRun`, which `--fix` itself may
+  // already hold. `--no-stack-alloc` is not one: the escape analysis the check
+  // runs for its arena diagnostics reads it.
   let productFlag = ""
   let notForRun = ""
   let irFlag = ""
@@ -600,6 +603,7 @@ export const main = (): number => {
       notForRun = notForRun.length === 0 ? value : notForRun
       fix = true
     } else if (value === "--plain") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.optimizeAttributes = false
     } else if (value === "--strict-exports") {
       opts.strictExports = true
@@ -622,17 +626,20 @@ export const main = (): number => {
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false
     } else if (value === "--threads") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.threads = true
     } else if (value === "--no-warn-performance") {
       warnPerformance = false
     } else if (value === "--warn-portability") {
       opts.warnPortability = true
     } else if (value === "--runtime-decls") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.runtimeDecls = true
     } else if (value === "--range-reference") {
       // Not in the usage: the test hook `Options.rangeReference` describes.
       opts.rangeReference = true
     } else if (value === "-g") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.debugInfo = true
     } else if (value === "--json") {
       json = true
