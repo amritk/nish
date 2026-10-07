@@ -5872,6 +5872,21 @@ where its memory lives and when it is reused.
    - the function neither calls `Arena.mark`, `Arena.release` or
      `Arena.reset` itself nor reaches a callee that releases or resets.
 
+   A string pushed onto an array that is only joined is not stored into
+   memory. When a function binds a `string[]` local to its own fresh literal
+   or `new Array` and then uses it only as `parts.push(...)`,
+   `parts.join(...)` and `parts.length`, what it pushes is reachable only
+   through `parts`. `join` copies every part into a new string, so the
+   pushed values die with the frame, and a loop that calls the function keeps
+   its scope (`tests/cases/mem_join_parts_scope`: 1000 calls leave
+   `Arena.used()` where one call left it). Any other use of `parts` keeps the
+   pushed value stored, because it could hand a part back out: an element
+   read (`mem_join_parts_readback`), a `for...of` (`mem_join_parts_forof`),
+   passing `parts` to a function (`mem_join_parts_passed`), or a `parts` that
+   names another local's array (`mem_join_parts_alias`). Assigning or
+   returning `parts`, any other method on it, and an array the function did
+   not build itself count the same way.
+
    An element of an array whose elements are inline is the address of a slot
    in that array, so keeping one keeps the array: it is followed as the array
    in every rule above, and in the function rule too

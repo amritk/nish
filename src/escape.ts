@@ -44,6 +44,7 @@ import {
   isArenaCall,
   intrinsicType,
   isAssignmentOperator,
+  isAssignmentTarget,
   isJoinCall,
   isPushCall,
   isStringAllocCall,
@@ -80,6 +81,7 @@ import {
   N_STRING,
   N_SWITCH,
   N_THIS,
+  N_UNARY,
   N_VAR,
   N_VAR_DECL,
   N_WHILE,
@@ -656,9 +658,96 @@ class EscapeAnalysis {
       const captures = callee === null ? true : this.calleeCaptures(callee, found.index)
       return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true, captures)
     }
+    // Held by a local of this frame, as `x = <expr>` is below: not a fixed
+    // binding, and kept past the pass that pushed it, but not reachable by
+    // the caller.
+    if (this.pushedIntoJoinedParts(expr)) {
+      return new Outcome(FLOW_LEAKS, true, false)
+    }
     const target = this.assignedLocal(expr)
     const escapes = target === null ? true : this.localOutcome(target, visiting).escapes
     return new Outcome(FLOW_LEAKS, true, escapes)
+  }
+
+  /**
+   * `parts.push(expr)`, where `parts` is a `string[]` this function binds to
+   * a fresh array and then only pushes onto, joins and reads the length of.
+   *
+   * The pushed string is reachable only through `parts`'s elements, and
+   * nothing reads those but `join`, which copies every part into a string of
+   * its own (`emitJoin`) and is an allocation site analysed like any other. So
+   * once `parts` is out of reach the string is too, and nothing outside this
+   * frame can reach it: it `leaks` into `parts` as an assignment to a local
+   * does, but it does not `escape`. Without this a function that
+   * builds its answer from parts (`std/json.ts`'s `jsonUnescape`) lets an
+   * allocation out, and every loop that calls it loses its per-pass release
+   * (`LOOP_CALLEE_STORES`).
+   *
+   * The narrowness is the proof. Any other use of `parts` — `parts[i]`, a
+   * `for...of`, passing it, storing it, returning it, aliasing it, any other
+   * method — could hand a part back out, so each one keeps the conservative
+   * answer, and so does an array that is not this function's own literal or
+   * `new Array`, because an alias of it could be read where `parts` is not
+   * (`tests/cases/mem_join_parts_*`).
+   */
+  pushedIntoJoinedParts(expr: Node): boolean {
+    const program = this.unit.program
+    let node = expr
+    let list = this.unit.parents.parentOf(node)
+    while (list !== null && list.kind === N_PAREN) {
+      node = list
+      list = this.unit.parents.parentOf(node)
+    }
+    if (list === null || list.kind !== N_LIST) {
+      return false
+    }
+    const call = this.unit.parents.parentOf(list)
+    if (call === null || !isPushCall(program, this.table, call) || call.children[1] !== list) {
+      return false
+    }
+    const receiver = unwrapParens(call.children[0].children[0])
+    const v: Local | null = receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
+    if (
+      v === null ||
+      v.storage !== STORAGE_LOCAL ||
+      !this.table.isArray(v.type) ||
+      this.table.refOf(v.type) !== T_STRING
+    ) {
+      return false
+    }
+    const decl = this.declarationOf(v)
+    if (decl === null) {
+      return false
+    }
+    const init = unwrapParens(decl.children[2])
+    if ((init.kind !== N_ARRAY && init.kind !== N_NEW) || !this.ownsSite(v)) {
+      return false
+    }
+    for (const ref of this.refsOf(v)) {
+      if (!this.isPartsUse(ref)) {
+        return false
+      }
+    }
+    const visiting: Local[] = []
+    return this.localOutcome(v, visiting).flow === FLOW_LOCAL
+  }
+
+  /** `ref` is `parts.push(...)`, `parts.join(...)` or a read of `parts.length`, and nothing else. */
+  isPartsUse(ref: Node): boolean {
+    const program = this.unit.program
+    const access = this.unit.parents.parentOf(ref)
+    if (access === null || access.kind !== N_MEMBER || access.children[0] !== ref) {
+      return false
+    }
+    const above = this.unit.parents.parentOf(access)
+    if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+      return isPushCall(program, this.table, above) || isJoinCall(program, this.table, above)
+    }
+    return (
+      access.text === "length" &&
+      !isAssignmentTarget(above, access) &&
+      (above === null || above.kind !== N_UNARY || (above.text !== "++" && above.text !== "--"))
+    )
   }
 
   memoised(v: Local): Outcome | null {
