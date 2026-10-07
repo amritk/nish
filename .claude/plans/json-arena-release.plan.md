@@ -52,7 +52,7 @@ stages:
 - Any other use — index read, `for...of`, spread, passing `xs` to a call, assigning it, returning it, a closure capture — keeps today's behaviour (escapes). That is the whole safety argument: a string read back out with `parts[0]` and returned must stay alive.
 - The rolling freeze: `src/` may not use the new behaviour in its own source until the next release; nothing in `src/` needs to.
 - `docs/LANGUAGE.md` Memory model gains the rule; the cookbook gets the `parts + join` entry with its IR; `tests/self/goldens/checked*.txt` are regenerated with `node tests/self/goldens.js --update`, never hand-edited.
-- Owns: `src/escape.ts`, `src/attributes.ts` (only if the use classifier needs a helper), `tests/cases/mem_join_parts_*`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/cookbook/**`, `docs/IR_COOKBOOK.md`.
+- Owns: `src/escape.ts`, `src/attributes.ts` (only if the use classifier needs a helper), the `src/` files whose NL9011 count the change raises (widened 07:25Z, owner-approved — fix the loops, never raise a count), `tests/perf-baseline.json` (lowering only), `tests/cases/mem_join_parts_*`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/cookbook/**`, `docs/IR_COOKBOOK.md`.
 - Commit: `perf(codegen): ...`, with `Measured:` the jsonField loop's kept bytes before/after, `Tests:` the new goldens.
 
 ## Out of scope
