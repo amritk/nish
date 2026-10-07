@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 925 programs, 62971 dump lines.
+# 926 programs, 62985 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -55227,6 +55227,21 @@ function size(n: i32): i32 -> @size [exported]
   local 25:7 k: i32 (let)
   local 26:7 p: Cell | null (let)
   callee 26:11 chain -> @chain
+program docs/cookbook/mem-join-parts.ts
+module docs/cookbook/mem-join-parts.ts (entry)
+function spell(n: i32): string -> @spell
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 7:9 parts: string[] (const)
+  local 8:12 i: i32 (let)
+function measure(calls: i32): string -> @measure [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_arena_release nish_panic_overflow nish_str_from_i32 spell
+  stackSites=0 stackLocals=0
+  local 15:7 total: i32 (let)
+  local 16:12 i: i32 (let)
+  callee 17:21 spell -> @spell
 program docs/cookbook/mem-loop-scope.ts
 module docs/cookbook/mem-loop-scope.ts (entry)
 struct Box (class) size=4 align=4

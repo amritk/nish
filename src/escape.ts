@@ -44,7 +44,6 @@ import {
   isArenaCall,
   intrinsicType,
   isAssignmentOperator,
-  isAssignmentTarget,
   isJoinCall,
   isPushCall,
   isStringAllocCall,
@@ -81,7 +80,6 @@ import {
   N_STRING,
   N_SWITCH,
   N_THIS,
-  N_UNARY,
   N_VAR,
   N_VAR_DECL,
   N_WHILE,
@@ -692,11 +690,9 @@ class EscapeAnalysis {
    */
   pushedIntoJoinedParts(expr: Node): boolean {
     const program = this.unit.program
-    let node = expr
-    let list = this.unit.parents.parentOf(node)
+    let list = this.unit.parents.parentOf(expr)
     while (list !== null && list.kind === N_PAREN) {
-      node = list
-      list = this.unit.parents.parentOf(node)
+      list = this.unit.parents.parentOf(list)
     }
     if (list === null || list.kind !== N_LIST) {
       return false
@@ -720,7 +716,7 @@ class EscapeAnalysis {
       return false
     }
     const init = unwrapParens(decl.children[2])
-    if ((init.kind !== N_ARRAY && init.kind !== N_NEW) || !this.ownsSite(v)) {
+    if (init.kind !== N_ARRAY && init.kind !== N_NEW) {
       return false
     }
     for (const ref of this.refsOf(v)) {
@@ -732,7 +728,7 @@ class EscapeAnalysis {
     return this.localOutcome(v, visiting).flow === FLOW_LOCAL
   }
 
-  /** `ref` is `parts.push(...)`, `parts.join(...)` or a read of `parts.length`, and nothing else. */
+  /** `ref` is `parts.push(...)`, `parts.join(...)` or `parts.length`, and nothing else. */
   isPartsUse(ref: Node): boolean {
     const program = this.unit.program
     const access = this.unit.parents.parentOf(ref)
@@ -743,11 +739,8 @@ class EscapeAnalysis {
     if (above !== null && above.kind === N_CALL && above.children[0] === access) {
       return isPushCall(program, this.table, above) || isJoinCall(program, this.table, above)
     }
-    return (
-      access.text === "length" &&
-      !isAssignmentTarget(above, access) &&
-      (above === null || above.kind !== N_UNARY || (above.text !== "++" && above.text !== "--"))
-    )
+    // `parts.length = n` is refused for every array, so a `length` here is a read.
+    return access.text === "length"
   }
 
   memoised(v: Local): Outcome | null {
