@@ -85,11 +85,24 @@ Merge order: stage 1 first; stage 2 merges `main` and regenerates goldens before
 
 Both stages measure the way the original investigation did. The harness is not on `main`: it is commit `956506d` on the unmerged branch `ccr-ee7596b7-up0cqq` (`test(bench): benchmark std/json against popular JSON libraries`). To measure, a worker runs `git fetch origin ccr-ee7596b7-up0cqq && git checkout FETCH_HEAD -- bench/json docs/BENCHMARKS-json.md` and never commits those files. It builds `bench/json/json.ts` with `--profile speed`, runs it against `build/bench/json/input-100000.jsonl` and takes the best of 5, records peak RSS with `build/bench/json/rss`, and runs a 1,000-call `jsonField` loop that prints the `Arena.used()` delta. Baseline on `main`: 62 KB kept, 123 ms, 145 MB RSS.
 
+## Real-world evidence, not just the benchmark
+
+The `bench/json` harness and the 1,000-call loop show where the problem is. They are not the evidence that the change helps. Each PR also has to show the following, and a reviewer treats a change tuned to the harness as a blocking finding:
+
+- **No special cases for the harness.** No fast path keyed to the bench input's shape, key order, key lengths or field names, and no change whose only effect is on `bench/json`. The `std/json` stage must win (or break even) on shapes the harness does not contain: the compiler's own `--json` diagnostic lines (the use the `std/json` header names), objects with many keys where the wanted field is last, keys with escapes, and a miss where no key matches.
+- **Breadth for the compiler stage.** Count the NL9011 arena-loop warnings, and the loops left unscoped with the "callee stores" reason, across `std/` and `tests/` and in a build of `src/`, before and after. List which real functions newly get their per-pass release (`replaceAll` in `std/text`, `std/net/http1`, `std/net/websocket`, `std/crypto/base64url`, `std/crypto/x509` and any others that use `parts` + `join`). A rule that only frees `jsonUnescape` is too narrow to be worth its code; say so in the PR if that is what the count shows.
+- **A real program.** Time and peak RSS of the self-hosted compiler compiling `src/` (stage1 building itself), before and after. It is the largest Nish program in the repo and full of `parts` + `join`. Report it even if the change is flat; a regression is a finding.
+- **No regressions elsewhere.** `node bench/run.mjs --check` (instruction counts against `bench/instructions.json`) passes unchanged. If a count moves, explain it in the PR; never edit the baseline to get green.
+- **Honest measurement.** Inputs change on every iteration, results are folded into a printed checksum, best of 5 with the spread reported, and before and after built from the same commit apart from the change. A gain inside the noise is reported as no change.
+
 ## Acceptance criteria
 
 1. On merged `main`, a loop that calls `jsonField` 1,000 times on a string value and reads only `.length` keeps no more than 64 bytes of arena (`Arena.used()` delta), with `std/json`'s `parts` + `join` code left as it is.
 2. The same holds for a loop calling a user function that builds its result with a local `parts.push(...)` then `parts.join(...)`.
 3. A function that returns `parts[0]`, iterates `parts`, or hands `parts` to another function still prints the correct string after 1,000 loop passes (no use-after-release), and its loop keeps the release off.
-4. `jsonField` answers as before for escaped keys (`"a\nb"`, `"A"`) and when the key is a prefix of the name or the name is a prefix of the key.
+4. `jsonField` answers as before for escaped keys (`"a\nb"`, `"\u0041"`) and when the key is a prefix of the name or the name is a prefix of the key.
 5. The `bench/json` harness run against merged `main` is no slower than 123 ms and peaks below 145 MB RSS; the commit messages carry the measured figures in `Measured:` trailers.
 6. `docs/LANGUAGE.md` states when a pushed value does not escape, and the compiler built from merged `main` reaches its fixed point.
+7. Beyond `jsonUnescape`, at least one other real `parts` + `join` function in `std/` keeps its callers' per-pass release on merged `main`, and the merged PR lists every function that newly does.
+8. On merged `main`, `node bench/run.mjs --check` passes with `bench/instructions.json` unchanged, and the self-hosted compiler building `src/` is no slower and uses no more peak RSS than on the base commit, within measured noise.
+9. `jsonField` is no slower than on the base commit on shapes `bench/json` does not contain: a compiler `--json` diagnostic line, a 50-key object whose wanted field is last, and a miss.
