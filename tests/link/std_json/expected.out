@@ -19,6 +19,48 @@ PASS  the continuation byte
 PASS  a code point above it is three
 PASS  the lead byte of the three
 PASS  a `\u` with no hex digits is copied through
+PASS  an escaped newline in a key
+PASS  an escaped tab in a key
+PASS  an escaped carriage return in a key
+PASS  an escaped backspace in a key
+PASS  an escaped form feed in a key
+PASS  an escaped quote in a key
+PASS  an escaped backslash in a key
+PASS  an escaped solidus in a key
+PASS  an unknown escape in a key stands for its byte
+PASS  a one-byte `\u` in a key
+PASS  a two-byte `\u` in a key
+PASS  a three-byte `\u` in a key
+PASS  a broken `\u` in a key is copied through
+PASS  so is one cut short by the key's end
+PASS  an escape that decodes to another byte is not a match
+PASS  nor is the escape's own spelling
+PASS  a `\u` whose second byte differs
+PASS  a name that differs from a broken `\u`
+PASS  a name that stops inside a broken `\u`
+PASS  a name that stops inside a `\u`'s bytes
+PASS  a name that stops before an escape
+PASS  `\u007f`, the last one-byte code point
+PASS  and a byte one below it misses
+PASS  `\u0080`, the first two-byte one
+PASS  and its last byte one off misses
+PASS  `\u07ff`, the last two-byte one
+PASS  and its last byte one off misses
+PASS  `\u0800`, the first three-byte one
+PASS  and its last byte one off misses
+PASS  `\uffff`, the last one
+PASS  and its last byte one off misses
+PASS  an upper-case `\u00E9`
+PASS  and its last byte one off misses
+PASS  a lone surrogate `\ud83d` is three bytes
+PASS  and its last byte one off misses
+PASS  a key that is a prefix of the name is not that field
+PASS  nor is one that ends in an escape
+PASS  a name that is a prefix of the key is not that field
+PASS  nor is one that stops before the key's escape
+PASS  the key itself is found
+PASS  an escaped and a plain spelling are the same key
+PASS  a backslash before a NUL stands for itself
 PASS  a brace in a string closes nothing
 PASS  a nested object comes back as its text
 PASS  so does an array
@@ -47,4 +89,4 @@ PASS  an empty string
 PASS  a key with no value
 PASS  an unterminated string
 PASS  a truncated object still answers the field before the cut
-json: 49 passed, 0 failed, 0 skipped
+json: 91 passed, 0 failed, 0 skipped
