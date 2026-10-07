@@ -585,6 +585,43 @@ const checkFixField = (t: Suite, cli: Cli): void => {
   t.eqI32("--fix with -o is a usage error, exit 2", withOutput.status, 2);
   t.eqBool("and is refused as a compile", withOutput.stderr.startsWith("compile: "), true);
 
+  // `--fix` emits and links nothing, and what `--target` changes belongs to the
+  // compile that follows the fix, so it is refused like a product rather than
+  // dropped, whichever of the two comes first (#433).
+  const unfixed = `${WORK}/fix_target.ts`;
+  writeFileSync(unfixed, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
+  const withTarget = cli.plain("fix_target", [unfixed, "--fix", "--target", "wasm32-wasi"]);
+  t.eqI32("--fix with --target is a usage error, exit 2", withTarget.status, 2);
+  t.eqBool(
+    "refused as a compile, naming --target",
+    withTarget.stderr.startsWith("compile: `--target` cannot be used with --fix"),
+    true
+  );
+  t.contains("and leaves the file unfixed", readOrEmpty(unfixed), "return a == b;");
+  const targetFirst = cli.plain("fix_target_first", ["--target", "x86_64-unknown-linux-gnu", "--fix", unfixed]);
+  t.eqI32("--target before --fix is refused too, exit 2", targetFirst.status, 2);
+  t.eqBool(
+    "naming --target",
+    targetFirst.stderr.startsWith("compile: `--target` cannot be used with --fix"),
+    true
+  );
+  t.contains("and the file is still unfixed", readOrEmpty(unfixed), "return a == b;");
+  // The other flags that shape what a compile emits or links are refused the
+  // same way, each by name.
+  for (const flag of ["-g", "--threads", "--runtime-decls", "--plain"]) {
+    const refused = cli.plain(`fix${flag}`, ["--fix", flag, unfixed]);
+    t.eqI32(`--fix with ${flag} is a usage error, exit 2`, refused.status, 2);
+    t.eqBool(`naming ${flag}`, refused.stderr.startsWith(`compile: \`${flag}\` cannot be used with --fix`), true);
+    t.contains(`and the file is unfixed after ${flag}`, readOrEmpty(unfixed), "return a == b;");
+  }
+  // A flag the check reads still runs with `--fix`: `--no-stack-alloc` steers
+  // the escape analysis behind the arena diagnostics `--fix` reports.
+  const accepted = `${WORK}/fix_stack.ts`;
+  writeFileSync(accepted, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
+  const withStack = cli.plain("fix_no_stack_alloc", ["--fix", "--no-stack-alloc", accepted]);
+  t.eqI32("--fix with --no-stack-alloc is accepted, exit 0", withStack.status, 0);
+  t.contains("and fixes the file", readOrEmpty(accepted), "return a === b;");
+
   // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
   const underRun = cli.plain("fix_run", ["run", "--fix", copy]);
   t.eqI32("`nish run --fix` is a usage error, exit 2", underRun.status, 2);
