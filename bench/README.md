@@ -383,6 +383,11 @@ LLVM, so the check runs there on every push.
 
 ## Other files
 
+- `json/`: `std/json` against simdjson, yyjson, serde_json, gjson, cJSON,
+  `JSON.parse`, encoding/json and nlohmann/json, all pulling the same three
+  fields out of the same JSON Lines file (`node bench/json/run.mjs`). Not part
+  of this suite: its other columns are libraries rather than twins, and
+  [json/README.md](json/README.md) says how to install them.
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
   not part of this suite.
 - `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),
