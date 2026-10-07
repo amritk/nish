@@ -751,12 +751,21 @@ export class Compilation {
     const signaturesFailed = unit.signaturesFailed && !this.dumpOnly
     const dir = dirname(path)
     let ok = true
+    // There is one binding per imported name, and `unit.resolved` only learns a
+    // specifier that resolved, so `import { x, y } from "dep"` used to report a
+    // package or module that is not there once per name (#434). The bindings
+    // of one statement are pushed together (`src/declarations.ts`), so the
+    // statement that last failed is the only one whose siblings can follow.
+    let failedDecl: Node | null = null
     for (const imp of checker.program.imports) {
       // A builtin module has no file behind it; pass 1b binds it instead.
       if (isBuiltinSpecifier(imp.specifier)) {
         continue
       }
       if (unit.resolved.has(imp.specifier)) {
+        continue
+      }
+      if (failedDecl !== null && failedDecl === imp.decl) {
         continue
       }
       const found = this.resolveSpecifier(dir, imp.specifier)
@@ -773,6 +782,7 @@ export class Compilation {
           checker.ctx.errorAtSpecifier(imp.decl, found.error)
         }
         checker.ctx.errored = false
+        failedDecl = imp.decl
         continue
       }
       const target = found.path
@@ -784,6 +794,7 @@ export class Compilation {
             : `Cannot find module \`${imp.specifier}\` (looked for ${target})`
         )
         checker.ctx.errored = false
+        failedDecl = imp.decl
         continue
       }
       if (signaturesFailed) {
