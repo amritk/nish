@@ -60,6 +60,59 @@ export const main = (): number => {
   t.eqI32("the lead byte of the three", toI32(tick.charCodeAt(0)), 226);
   t.eqStr("a `\\u` with no hex digits is copied through", jsonCaseField(unicode, "broken"), "\\uZZZZ");
 
+  // A key is matched by its decoded bytes, compared where it stands: every
+  // escape a value can carry means the same in a key. A key whose decoded bytes
+  // differ from `name` at any point, including one byte into a two-byte `\u`,
+  // is not that field.
+  const keys =
+    '{"n\\nb":1,"t\\tb":2,"r\\rb":3,"b\\bb":4,"f\\fb":5,"q\\"b":6,"s\\\\b":7,"o\\/b":8,"x\\qb":9,"\\u0041":10,"\\u00e9":11,"\\u2713":12,"\\uZZ":13,"\\u12":14}';
+  t.eqStr("an escaped newline in a key", jsonCaseField(keys, "n\nb"), "1");
+  t.eqStr("an escaped tab in a key", jsonCaseField(keys, "t\tb"), "2");
+  t.eqStr("an escaped carriage return in a key", jsonCaseField(keys, "r\rb"), "3");
+  t.eqStr("an escaped backspace in a key", jsonCaseField(keys, `b${String.fromCharCode(8)}b`), "4");
+  t.eqStr("an escaped form feed in a key", jsonCaseField(keys, `f${String.fromCharCode(12)}b`), "5");
+  t.eqStr("an escaped quote in a key", jsonCaseField(keys, 'q"b'), "6");
+  t.eqStr("an escaped backslash in a key", jsonCaseField(keys, "s\\b"), "7");
+  t.eqStr("an escaped solidus in a key", jsonCaseField(keys, "o/b"), "8");
+  t.eqStr("an unknown escape in a key stands for its byte", jsonCaseField(keys, "xqb"), "9");
+  t.eqStr("a one-byte `\\u` in a key", jsonCaseField(keys, "A"), "10");
+  const acuteKey = `${String.fromCharCode(195)}${String.fromCharCode(169)}`;
+  t.eqStr("a two-byte `\\u` in a key", jsonCaseField(keys, acuteKey), "11");
+  const tickKey = `${String.fromCharCode(226)}${String.fromCharCode(156)}${String.fromCharCode(147)}`;
+  t.eqStr("a three-byte `\\u` in a key", jsonCaseField(keys, tickKey), "12");
+  t.eqStr("a broken `\\u` in a key is copied through", jsonCaseField(keys, "\\uZZ"), "13");
+  t.eqStr("so is one cut short by the key's end", jsonCaseField(keys, "\\u12"), "14");
+  t.eqStr("an escape that decodes to another byte is not a match", jsonCaseField(keys, "n\tb"), "<absent>");
+  t.eqStr("nor is the escape's own spelling", jsonCaseField(keys, "n\\nb"), "<absent>");
+  const acuteWrong = `${String.fromCharCode(195)}${String.fromCharCode(168)}`;
+  t.eqStr("a `\\u` whose second byte differs", jsonCaseField(keys, acuteWrong), "<absent>");
+  t.eqStr("a name that differs from a broken `\\u`", jsonCaseField(keys, "\\vZZ"), "<absent>");
+  t.eqStr("a name that stops inside a broken `\\u`", jsonCaseField(keys, "\\"), "<absent>");
+  t.eqStr("a name that stops inside a `\\u`'s bytes", jsonCaseField(keys, String.fromCharCode(195)), "<absent>");
+  t.eqStr("a name that stops before an escape", jsonCaseField(keys, "n"), "<absent>");
+
+  // Prefixes either way round, plain and escaped: a key that is a prefix of the
+  // name runs out first, and a name that is a prefix of the key does.
+  const prefixes = '{"ab":1,"c\\n":2,"de\\t":3}';
+  t.eqStr("a key that is a prefix of the name is not that field", jsonCaseField(prefixes, "abc"), "<absent>");
+  t.eqStr("nor is one that ends in an escape", jsonCaseField(prefixes, "c\nd"), "<absent>");
+  t.eqStr("a name that is a prefix of the key is not that field", jsonCaseField(prefixes, "a"), "<absent>");
+  t.eqStr("nor is one that stops before the key's escape", jsonCaseField(prefixes, "de"), "<absent>");
+  t.eqStr("the key itself is found", jsonCaseField(prefixes, "de\t"), "3");
+
+  // Two spellings of one key are one key, and the first answers.
+  t.eqStr("an escaped and a plain spelling are the same key", jsonCaseField('{"\\u0061":1,"a":2}', "a"), "1");
+  // A backslash with no letter after it stands for itself, as it does in a
+  // value. A key cannot end in one — the backslash would take the closing quote
+  // with it — but a NUL byte after it reads as no letter, so `\` then NUL
+  // decodes to a backslash and then the NUL.
+  const nul = String.fromCharCode(0);
+  t.eqStr(
+    "a backslash before a NUL stands for itself",
+    jsonCaseField(`{"k\\${nul}":1}`, `k\\${nul}`),
+    "1",
+  );
+
   // A closing brace inside a string ends nothing, and a nested value is stepped
   // over rather than searched: `inner` is not a field of this object.
   const awkward = '{"message":"a } b","nested":{"inner":1},"list":[1,{"deep":2}],"after":3}';
