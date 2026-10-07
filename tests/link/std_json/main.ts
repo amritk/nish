@@ -15,6 +15,9 @@ const jsonCaseField = (object: string, name: string): string => {
   return value === null ? "<absent>" : value;
 };
 
+/** One byte as a string, so a check can spell a name's UTF-8 byte by byte. */
+const byte = (code: i32): string => String.fromCharCode(code);
+
 export const main = (): number => {
   const t = new Suite("json");
 
@@ -90,6 +93,27 @@ export const main = (): number => {
   t.eqStr("a name that stops inside a broken `\\u`", jsonCaseField(keys, "\\"), "<absent>");
   t.eqStr("a name that stops inside a `\\u`'s bytes", jsonCaseField(keys, String.fromCharCode(195)), "<absent>");
   t.eqStr("a name that stops before an escape", jsonCaseField(keys, "n"), "<absent>");
+
+  // `\u` keys at each UTF-8 width boundary, an upper-case spelling and a lone
+  // surrogate, which is encoded as three bytes of its own. Each matches the
+  // bytes `jsonUtf8` builds, and a name whose last byte is one off misses:
+  // a threshold off by one encodes the boundary at the wrong width and fails
+  // the first check of its pair.
+  const widths = '{"\\u007f":1,"\\u0080":2,"\\u07ff":3,"\\u0800":4,"\\uffff":5,"\\u00E9":6,"\\ud83d":7}';
+  t.eqStr("`\\u007f`, the last one-byte code point", jsonCaseField(widths, byte(127)), "1");
+  t.eqStr("and a byte one below it misses", jsonCaseField(widths, byte(126)), "<absent>");
+  t.eqStr("`\\u0080`, the first two-byte one", jsonCaseField(widths, `${byte(194)}${byte(128)}`), "2");
+  t.eqStr("and its last byte one off misses", jsonCaseField(widths, `${byte(194)}${byte(129)}`), "<absent>");
+  t.eqStr("`\\u07ff`, the last two-byte one", jsonCaseField(widths, `${byte(223)}${byte(191)}`), "3");
+  t.eqStr("and its last byte one off misses", jsonCaseField(widths, `${byte(223)}${byte(190)}`), "<absent>");
+  t.eqStr("`\\u0800`, the first three-byte one", jsonCaseField(widths, `${byte(224)}${byte(160)}${byte(128)}`), "4");
+  t.eqStr("and its last byte one off misses", jsonCaseField(widths, `${byte(224)}${byte(160)}${byte(129)}`), "<absent>");
+  t.eqStr("`\\uffff`, the last one", jsonCaseField(widths, `${byte(239)}${byte(191)}${byte(191)}`), "5");
+  t.eqStr("and its last byte one off misses", jsonCaseField(widths, `${byte(239)}${byte(191)}${byte(190)}`), "<absent>");
+  t.eqStr("an upper-case `\\u00E9`", jsonCaseField(widths, `${byte(195)}${byte(169)}`), "6");
+  t.eqStr("and its last byte one off misses", jsonCaseField(widths, `${byte(195)}${byte(168)}`), "<absent>");
+  t.eqStr("a lone surrogate `\\ud83d` is three bytes", jsonCaseField(widths, `${byte(237)}${byte(160)}${byte(189)}`), "7");
+  t.eqStr("and its last byte one off misses", jsonCaseField(widths, `${byte(237)}${byte(160)}${byte(188)}`), "<absent>");
 
   // Prefixes either way round, plain and escaped: a key that is a prefix of the
   // name runs out first, and a name that is a prefix of the key does.

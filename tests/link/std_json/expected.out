@@ -40,6 +40,20 @@ PASS  a name that differs from a broken `\u`
 PASS  a name that stops inside a broken `\u`
 PASS  a name that stops inside a `\u`'s bytes
 PASS  a name that stops before an escape
+PASS  `\u007f`, the last one-byte code point
+PASS  and a byte one below it misses
+PASS  `\u0080`, the first two-byte one
+PASS  and its last byte one off misses
+PASS  `\u07ff`, the last two-byte one
+PASS  and its last byte one off misses
+PASS  `\u0800`, the first three-byte one
+PASS  and its last byte one off misses
+PASS  `\uffff`, the last one
+PASS  and its last byte one off misses
+PASS  an upper-case `\u00E9`
+PASS  and its last byte one off misses
+PASS  a lone surrogate `\ud83d` is three bytes
+PASS  and its last byte one off misses
 PASS  a key that is a prefix of the name is not that field
 PASS  nor is one that ends in an escape
 PASS  a name that is a prefix of the key is not that field
@@ -75,4 +89,4 @@ PASS  an empty string
 PASS  a key with no value
 PASS  an unterminated string
 PASS  a truncated object still answers the field before the cut
-json: 77 passed, 0 failed, 0 skipped
+json: 91 passed, 0 failed, 0 skipped
