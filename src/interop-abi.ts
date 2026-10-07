@@ -555,18 +555,15 @@ const noteResultTypes = (
   }
 }
 
-/** TypeScript source spelling of a signature, for comments and declarations. */
-export const tsSignature = (table: TypeTable, sig: FunctionSig): string => tsSignatureLine(table, sig, "", "")
-
 /**
- * `before`, the signature as `tsSignature` spells it, and `after`, as one
- * string: the whole line a sidecar shows a signature on.
+ * `before`, the TypeScript source spelling of `sig` (`name(a: number): void`),
+ * and `after`, as one string: the whole line a sidecar shows a signature on.
  *
  * The sidecar generators push one such line per function onto the text they
- * return, in a loop. Wrapping `tsSignature` in a template there left the
- * signature's own string under each kept line for as long as the text lives;
- * built here, the signature is scratch that the call's `nish_arena_keep`
- * reclaims, and the line is the only thing the call leaves behind.
+ * return, in a loop. A signature spelled on its own and wrapped in a template
+ * there stayed under each kept line for as long as the text lives; built
+ * here, it is scratch that the call's `nish_arena_keep` reclaims, and the line
+ * is the only thing the call leaves behind.
  */
 export const tsSignatureLine = (
   table: TypeTable,
