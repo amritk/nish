@@ -765,6 +765,7 @@ export class Compilation {
       if (unit.resolved.has(imp.specifier)) {
         continue
       }
+      // A one-slot memo, sound only while `collectImports` pushes a statement's bindings contiguously.
       if (failedDecl !== null && failedDecl === imp.decl) {
         continue
       }
