@@ -585,8 +585,9 @@ const checkFixField = (t: Suite, cli: Cli): void => {
   t.eqI32("--fix with -o is a usage error, exit 2", withOutput.status, 2);
   t.eqBool("and is refused as a compile", withOutput.stderr.startsWith("compile: "), true);
 
-  // `--target` only shapes the IR `--fix` never writes, so it is refused like
-  // a product rather than dropped, whichever of the two comes first (#433).
+  // `--fix` emits and links nothing, and what `--target` changes belongs to the
+  // compile that follows the fix, so it is refused like a product rather than
+  // dropped, whichever of the two comes first (#433).
   const unfixed = `${WORK}/fix_target.ts`;
   writeFileSync(unfixed, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
   const withTarget = cli.plain("fix_target", [unfixed, "--fix", "--target", "wasm32-wasi"]);
@@ -605,14 +606,21 @@ const checkFixField = (t: Suite, cli: Cli): void => {
     true
   );
   t.contains("and the file is still unfixed", readOrEmpty(unfixed), "return a == b;");
-  // The other flags that shape only what a compile emits or links are refused
-  // the same way, each by name.
+  // The other flags that shape what a compile emits or links are refused the
+  // same way, each by name.
   for (const flag of ["-g", "--threads", "--runtime-decls", "--plain"]) {
     const refused = cli.plain(`fix${flag}`, ["--fix", flag, unfixed]);
     t.eqI32(`--fix with ${flag} is a usage error, exit 2`, refused.status, 2);
     t.eqBool(`naming ${flag}`, refused.stderr.startsWith(`compile: \`${flag}\` cannot be used with --fix`), true);
     t.contains(`and the file is unfixed after ${flag}`, readOrEmpty(unfixed), "return a == b;");
   }
+  // A flag the check reads still runs with `--fix`: `--no-stack-alloc` steers
+  // the escape analysis behind the arena diagnostics `--fix` reports.
+  const accepted = `${WORK}/fix_stack.ts`;
+  writeFileSync(accepted, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
+  const withStack = cli.plain("fix_no_stack_alloc", ["--fix", "--no-stack-alloc", accepted]);
+  t.eqI32("--fix with --no-stack-alloc is accepted, exit 0", withStack.status, 0);
+  t.contains("and fixes the file", readOrEmpty(accepted), "return a === b;");
 
   // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
   const underRun = cli.plain("fix_run", ["run", "--fix", copy]);
