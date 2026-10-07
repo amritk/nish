@@ -556,14 +556,31 @@ const noteResultTypes = (
 }
 
 /** TypeScript source spelling of a signature, for comments and declarations. */
-export const tsSignature = (table: TypeTable, sig: FunctionSig): string => {
+export const tsSignature = (table: TypeTable, sig: FunctionSig): string => tsSignatureLine(table, sig, "", "")
+
+/**
+ * `before`, the signature as `tsSignature` spells it, and `after`, as one
+ * string: the whole line a sidecar shows a signature on.
+ *
+ * The sidecar generators push one such line per function onto the text they
+ * return, in a loop. Wrapping `tsSignature` in a template there left the
+ * signature's own string under each kept line for as long as the text lives;
+ * built here, the signature is scratch that the call's `nish_arena_keep`
+ * reclaims, and the line is the only thing the call leaves behind.
+ */
+export const tsSignatureLine = (
+  table: TypeTable,
+  sig: FunctionSig,
+  before: string,
+  after: string
+): string => {
   const params: string[] = []
   let i = 0
   while (i < sig.paramNames.length) {
     params.push(`${sig.paramNames[i]}: ${tsKeyword(table, sig.paramTypes[i])}`)
     i = i + 1
   }
-  return `${sig.sourceName}(${params.join(", ")}): ${tsKeyword(table, sig.returnType)}`
+  return `${before}${sig.sourceName}(${params.join(", ")}): ${tsKeyword(table, sig.returnType)}${after}`
 }
 
 /**
