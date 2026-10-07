@@ -585,6 +585,26 @@ const checkFixField = (t: Suite, cli: Cli): void => {
   t.eqI32("--fix with -o is a usage error, exit 2", withOutput.status, 2);
   t.eqBool("and is refused as a compile", withOutput.stderr.startsWith("compile: "), true);
 
+  // `--target` only shapes the IR `--fix` never writes, so it is refused like
+  // a product rather than dropped, whichever of the two comes first (#433).
+  const unfixed = `${WORK}/fix_target.ts`;
+  writeFileSync(unfixed, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
+  const withTarget = cli.plain("fix_target", [unfixed, "--fix", "--target", "wasm32-wasi"]);
+  t.eqI32("--fix with --target is a usage error, exit 2", withTarget.status, 2);
+  t.eqBool(
+    "refused as a compile, naming --target",
+    withTarget.stderr.startsWith("compile: `--target` cannot be used with --fix"),
+    true
+  );
+  t.contains("and leaves the file unfixed", readOrEmpty(unfixed), "return a == b;");
+  const targetFirst = cli.plain("fix_target_first", ["--target", "host", "--fix", unfixed]);
+  t.eqI32("--target before --fix is refused too, exit 2", targetFirst.status, 2);
+  t.eqBool(
+    "naming --target",
+    targetFirst.stderr.startsWith("compile: `--target` cannot be used with --fix"),
+    true
+  );
+
   // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
   const underRun = cli.plain("fix_run", ["run", "--fix", copy]);
   t.eqI32("`nish run --fix` is a usage error, exit 2", underRun.status, 2);

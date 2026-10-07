@@ -433,8 +433,12 @@ export const main = (): number => {
   // binary, a sidecar or a dump — which neither `run` nor `--fix` writes, and
   // the first of the others `run` refuses (`--target`, `--fix`). Both are
   // refused once the whole line is read rather than wherever they appeared.
+  // `--fix` writes no IR either, so it refuses a flag that only shapes the IR
+  // (`--target`) as it refuses a product: `irFlag` keeps the first of those
+  // apart from `notForRun`, which `--fix` itself may already hold.
   let productFlag = ""
   let notForRun = ""
+  let irFlag = ""
   let fix = false
   let runArgsFrom = process.argv.length
   const roots: string[] = []
@@ -505,6 +509,7 @@ export const main = (): number => {
       }
     } else if (value === "--target") {
       notForRun = notForRun.length === 0 ? value : notForRun
+      irFlag = irFlag.length === 0 ? value : irFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --target needs a triple")
@@ -694,9 +699,10 @@ export const main = (): number => {
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
-  if (fix && productFlag.length > 0) {
+  if (fix && (productFlag.length > 0 || irFlag.length > 0)) {
+    const refused = productFlag.length > 0 ? productFlag : irFlag
     console.error(
-      `compile: \`${productFlag}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
+      `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
     )
     return 2
   }
