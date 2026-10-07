@@ -5995,6 +5995,11 @@ by the caller.
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
+  It shapes what a compile emits and links, and `--fix`, which rewrites the
+  sources and emits and links nothing, refuses it with a usage error (exit 2)
+  rather than dropping it, as it refuses `-o` and `--link`: fix first, then
+  compile for the target. It refuses `-g`, `--threads`, `--runtime-decls` and
+  `--plain` the same way, for the same reason.
 - **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is a
   checked panic* above (`tests/cases/opt_nsw`, `opt_wrapping`,
   `ovf_repro_wrapping`). It reaches the entry package's modules only

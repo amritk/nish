@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 83 programs, 1913391 dump lines live, 83 distinct modules.
+# 83 programs, 1913393 dump lines live, 83 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/builtins.ts src/arrays.ts src/expressions.ts src/constants.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/options.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/builtins.ts src/expressions.ts src/constants.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/options.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/symbols.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -39085,170 +39085,172 @@ function main(): i32 -> @nish_main [exported entry]
   callee 425:22 libraryRoot -> @libraryRoot
   callee 426:28 simulatedUnlabelledBuiltin -> @simulatedUnlabelledBuiltin
   local 431:9 runMode: boolean (const)
-  local 436:7 productFlag: string (let)
-  local 437:7 notForRun: string (let)
-  local 438:7 fix: boolean (let)
-  local 439:7 runArgsFrom: i32 (let)
-  local 440:9 roots: string[] (const)
-  local 441:7 output: string (let)
-  local 442:7 link: string (let)
-  local 443:7 profile: string (let)
-  local 444:7 json: boolean (let)
-  local 445:7 emitChecked: boolean (let)
-  local 446:7 emitAst: boolean (let)
-  local 449:7 capabilitiesFile: string (let)
-  local 450:7 capabilitiesLine: boolean (let)
-  local 453:7 policyFlag: string (let)
-  local 454:7 allowed: i32 (let)
-  local 457:7 warnPerformance: boolean (let)
-  local 458:7 deprecationsOnly: boolean (let)
-  local 459:7 arg: i32 (let)
-  local 461:11 value: string (const)
-  local 468:13 mode: string (const)
-  callee 500:12 isProfile -> @isProfile
-  local 513:13 spec: string (const)
-  local 514:13 resolved: Target | null (const)
-  callee 514:24 resolveTarget -> @resolveTarget
-  callee 517:72 supportedTargets -> @supportedTargets
-  local 584:13 mask: i32 (const)
-  callee 584:20 capabilityListMask -> @capabilityListMask
-  callee 612:224 usageText -> @usageText
-  callee 646:19 usageText -> @usageText
-  callee 655:60 usageText -> @usageText
-  callee 672:19 usageText -> @usageText
-  local 677:13 refused: string (const)
-  local 720:9 both: i32 (const)
-  callee 723:21 capabilityNames -> @capabilityNames
-  local 731:9 refused: string (let)
-  local 780:11 problem: string (const)
-  callee 780:21 missingToolchain -> @missingToolchain
-  callee 782:7 reportToolchainFailure -> @reportToolchainFailure
-  callee 791:7 simulatedInternalError -> @simulatedInternalError
-  callee 792:12 internalErrorFor -> @internalErrorFor
-  local 799:11 outcome: FixOutcome (const)
-  callee 799:21 fixProgram -> @fixProgram
-  callee 801:7 reportLoadFailure -> @reportLoadFailure
-  callee 805:7 report -> @report
-  callee 808:5 reportDeprecations -> @reportDeprecations
-  callee 809:5 reportPerformance -> @reportPerformance
-  callee 810:5 reportPortability -> @reportPortability
-  local 814:9 compilation: Compilation (const)
-  callee 814:23 new Compilation -> @Compilation.constructor
-  callee 818:8 loadRoots -> @loadRoots
-  callee 819:5 reportLoadFailure -> @reportLoadFailure
-  local 835:16 unit: ModuleUnit (const)
-  callee 836:13 astText -> @astText
-  callee 840:8 Compilation.check -> @Compilation.check
-  callee 841:5 report -> @report
-  callee 844:3 reportDeprecations -> @reportDeprecations
-  callee 845:3 reportPerformance -> @reportPerformance
-  callee 846:3 reportPortability -> @reportPortability
-  callee 856:5 Compilation.entry -> @Compilation.entry
-  callee 859:58 Compilation.entry -> @Compilation.entry
-  callee 867:19 capabilitySummary -> @capabilitySummary
-  callee 870:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 873:5 writeCapabilityReport -> @writeCapabilityReport
-  callee 882:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 885:36 Compilation.panicsText -> @Compilation.panicsText
-  callee 891:11 checkedText -> @checkedText
-  local 897:9 anySidecar: boolean (const)
-  local 902:9 fns: ExternalFunction[] (const)
-  callee 902:48 externalFunctions -> @externalFunctions
-  callee 903:22 acceptsSidecars -> @acceptsSidecars
-  callee 903:51 cDeclared -> @cDeclared
-  callee 904:5 report -> @report
-  local 907:9 emitted: EmittedModule[] (const)
-  callee 907:19 Compilation.emit -> @Compilation.emit
-  callee 909:12 runProgram -> @runProgram
-  callee 911:7 basenameWithout -> @basenameWithout
-  local 919:9 stems: string[] (const)
-  local 920:9 paths: string[] (const)
-  local 923:14 module: EmittedModule (const)
-  local 927:9 outputs: string[] (const)
-  callee 927:19 planOutputs -> @planOutputs
-  local 932:7 i: i32 (let)
-  local 934:11 file: string (const)
-  callee 935:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 944:22 writeSidecars -> @writeSidecars
-  callee 950:10 linkProgram -> @linkProgram
+  local 445:7 productFlag: string (let)
+  local 446:7 notForRun: string (let)
+  local 447:7 irFlag: string (let)
+  local 448:7 fix: boolean (let)
+  local 449:7 runArgsFrom: i32 (let)
+  local 450:9 roots: string[] (const)
+  local 451:7 output: string (let)
+  local 452:7 link: string (let)
+  local 453:7 profile: string (let)
+  local 454:7 json: boolean (let)
+  local 455:7 emitChecked: boolean (let)
+  local 456:7 emitAst: boolean (let)
+  local 459:7 capabilitiesFile: string (let)
+  local 460:7 capabilitiesLine: boolean (let)
+  local 463:7 policyFlag: string (let)
+  local 464:7 allowed: i32 (let)
+  local 467:7 warnPerformance: boolean (let)
+  local 468:7 deprecationsOnly: boolean (let)
+  local 469:7 arg: i32 (let)
+  local 471:11 value: string (const)
+  local 478:13 mode: string (const)
+  callee 510:12 isProfile -> @isProfile
+  local 524:13 spec: string (const)
+  local 525:13 resolved: Target | null (const)
+  callee 525:24 resolveTarget -> @resolveTarget
+  callee 528:72 supportedTargets -> @supportedTargets
+  local 595:13 mask: i32 (const)
+  callee 595:20 capabilityListMask -> @capabilityListMask
+  callee 624:224 usageText -> @usageText
+  callee 661:19 usageText -> @usageText
+  callee 670:60 usageText -> @usageText
+  callee 687:19 usageText -> @usageText
+  local 692:13 refused: string (const)
+  local 713:11 refused: string (const)
+  local 736:9 both: i32 (const)
+  callee 739:21 capabilityNames -> @capabilityNames
+  local 747:9 refused: string (let)
+  local 796:11 problem: string (const)
+  callee 796:21 missingToolchain -> @missingToolchain
+  callee 798:7 reportToolchainFailure -> @reportToolchainFailure
+  callee 807:7 simulatedInternalError -> @simulatedInternalError
+  callee 808:12 internalErrorFor -> @internalErrorFor
+  local 815:11 outcome: FixOutcome (const)
+  callee 815:21 fixProgram -> @fixProgram
+  callee 817:7 reportLoadFailure -> @reportLoadFailure
+  callee 821:7 report -> @report
+  callee 824:5 reportDeprecations -> @reportDeprecations
+  callee 825:5 reportPerformance -> @reportPerformance
+  callee 826:5 reportPortability -> @reportPortability
+  local 830:9 compilation: Compilation (const)
+  callee 830:23 new Compilation -> @Compilation.constructor
+  callee 834:8 loadRoots -> @loadRoots
+  callee 835:5 reportLoadFailure -> @reportLoadFailure
+  local 851:16 unit: ModuleUnit (const)
+  callee 852:13 astText -> @astText
+  callee 856:8 Compilation.check -> @Compilation.check
+  callee 857:5 report -> @report
+  callee 860:3 reportDeprecations -> @reportDeprecations
+  callee 861:3 reportPerformance -> @reportPerformance
+  callee 862:3 reportPortability -> @reportPortability
+  callee 872:5 Compilation.entry -> @Compilation.entry
+  callee 875:58 Compilation.entry -> @Compilation.entry
+  callee 883:19 capabilitySummary -> @capabilitySummary
+  callee 886:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 889:5 writeCapabilityReport -> @writeCapabilityReport
+  callee 898:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 901:36 Compilation.panicsText -> @Compilation.panicsText
+  callee 907:11 checkedText -> @checkedText
+  local 913:9 anySidecar: boolean (const)
+  local 918:9 fns: ExternalFunction[] (const)
+  callee 918:48 externalFunctions -> @externalFunctions
+  callee 919:22 acceptsSidecars -> @acceptsSidecars
+  callee 919:51 cDeclared -> @cDeclared
+  callee 920:5 report -> @report
+  local 923:9 emitted: EmittedModule[] (const)
+  callee 923:19 Compilation.emit -> @Compilation.emit
+  callee 925:12 runProgram -> @runProgram
+  callee 927:7 basenameWithout -> @basenameWithout
+  local 935:9 stems: string[] (const)
+  local 936:9 paths: string[] (const)
+  local 939:14 module: EmittedModule (const)
+  local 943:9 outputs: string[] (const)
+  callee 943:19 planOutputs -> @planOutputs
+  local 948:7 i: i32 (let)
+  local 950:11 file: string (const)
+  callee 951:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 960:22 writeSidecars -> @writeSidecars
+  callee 966:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv nish_read_file_or_null nish_str_concat splitByte
   stackSites=0 stackLocals=0
-  local 977:9 pathVar: string | null (const)
-  local 981:9 entries: string[] (const)
-  callee 981:19 splitByte -> @splitByte
-  local 982:7 i: i32 (let)
-  local 984:11 entry: string (const)
-  local 985:11 dir: string (const)
-  local 986:11 candidate: string (const)
+  local 993:9 pathVar: string | null (const)
+  local 997:9 entries: string[] (const)
+  callee 997:19 splitByte -> @splitByte
+  local 998:7 i: i32 (let)
+  local 1000:11 entry: string (const)
+  local 1001:11 dir: string (const)
+  local 1002:11 candidate: string (const)
 function packageRootCandidates(): string[] -> @packageRootCandidates
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1054:5
+  sharedWrite: 1070:5
   calls: dirname nish_array_grow nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq programOnPath
   stackSites=0 stackLocals=0
-  local 1049:9 candidates: string[] (const)
-  local 1050:9 program: string (const)
-  local 1051:9 invoked: string (const)
-  callee 1051:46 programOnPath -> @programOnPath
-  local 1053:11 asInvoked: string (const)
-  callee 1053:26 dirname -> @dirname
-  local 1058:11 real: string | null (const)
-  local 1060:13 throughLink: string (const)
-  callee 1060:30 dirname -> @dirname
-  local 1064:13 here: string | null (const)
+  local 1065:9 candidates: string[] (const)
+  local 1066:9 program: string (const)
+  local 1067:9 invoked: string (const)
+  callee 1067:46 programOnPath -> @programOnPath
+  local 1069:11 asInvoked: string (const)
+  callee 1069:26 dirname -> @dirname
+  local 1074:11 real: string | null (const)
+  local 1076:13 throughLink: string (const)
+  callee 1076:30 dirname -> @dirname
+  local 1080:13 here: string | null (const)
 function packageRootIn(candidates: string[]): string -> @packageRootIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_or_null
   calls: nish_arena_mark nish_arena_release nish_read_file_or_null nish_str_concat
   pointer candidates: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1075:7 i: i32 (let)
-  local 1077:11 root: string (const)
+  local 1091:7 i: i32 (let)
+  local 1093:11 root: string (const)
 function packageRoot(): string -> @packageRoot
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via packageRootIn
   calls: packageRootCandidates packageRootIn
   stackSites=0 stackLocals=0
-  callee 1086:35 packageRootIn -> @packageRootIn
-  callee 1086:49 packageRootCandidates -> @packageRootCandidates
+  callee 1102:35 packageRootIn -> @packageRootIn
+  callee 1102:49 packageRootCandidates -> @packageRootCandidates
 function libraryRoot(): string -> @libraryRoot
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via packageRootCandidates
   calls: packageRootCandidates packageRootIn
   stackSites=0 stackLocals=0
-  local 1095:9 candidates: string[] (const)
-  callee 1095:22 packageRootCandidates -> @packageRootCandidates
-  local 1096:9 root: string (const)
-  callee 1096:16 packageRootIn -> @packageRootIn
+  local 1111:9 candidates: string[] (const)
+  callee 1111:22 packageRootCandidates -> @packageRootCandidates
+  local 1112:9 root: string (const)
+  callee 1112:16 packageRootIn -> @packageRootIn
 function runProgram(emitted: EmittedModule[], name: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, argsFrom: i32): i32 -> @runProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1157:3
+  sharedWrite: 1173:3
   escaping: argsFrom debugInfo json name profile threads
   calls: buildIntoCache cCompiler nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file packageRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex
   pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
   stackSites=0 stackLocals=0
-  local 1124:9 cacheRoot: string (const)
-  callee 1124:21 runCacheRoot -> @runCacheRoot
-  callee 1126:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1132:9 file: string (const)
-  callee 1132:16 runBinaryName -> @runBinaryName
-  local 1133:9 key: string (const)
-  callee 1133:15 runCacheKey -> @runCacheKey
-  callee 1133:42 packageRoot -> @packageRoot
-  callee 1133:86 cCompiler -> @cCompiler
-  local 1134:9 cacheEntry: string (const)
-  callee 1134:38 sha256Hex -> @sha256Hex
-  local 1135:9 binary: string (const)
-  local 1136:9 keyFile: string (const)
-  local 1137:9 stored: string | null (const)
-  local 1139:11 status: i32 (const)
-  callee 1139:20 buildIntoCache -> @buildIntoCache
-  local 1156:9 argv: string[] (const)
-  local 1158:7 i: i32 (let)
-  local 1163:9 status: i32 (const)
-  callee 1165:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1140:9 cacheRoot: string (const)
+  callee 1140:21 runCacheRoot -> @runCacheRoot
+  callee 1142:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1148:9 file: string (const)
+  callee 1148:16 runBinaryName -> @runBinaryName
+  local 1149:9 key: string (const)
+  callee 1149:15 runCacheKey -> @runCacheKey
+  callee 1149:42 packageRoot -> @packageRoot
+  callee 1149:86 cCompiler -> @cCompiler
+  local 1150:9 cacheEntry: string (const)
+  callee 1150:38 sha256Hex -> @sha256Hex
+  local 1151:9 binary: string (const)
+  local 1152:9 keyFile: string (const)
+  local 1153:9 stored: string | null (const)
+  local 1155:11 status: i32 (const)
+  callee 1155:20 buildIntoCache -> @buildIntoCache
+  local 1172:9 argv: string[] (const)
+  local 1174:7 i: i32 (let)
+  local 1179:9 status: i32 (const)
+  callee 1181:5 reportToolchainFailure -> @reportToolchainFailure
 function buildIntoCache(emitted: EmittedModule[], cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @buildIntoCache
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via missingToolchain
@@ -39256,56 +39258,56 @@ function buildIntoCache(emitted: EmittedModule[], cacheRoot: string, cacheEntry:
   calls: hexOfI64 linkProgram makeDirectory missingToolchain nish_array_grow nish_monotonic_nanos nish_spawn nish_spawn_to nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 1207:9 problem: string (const)
-  callee 1207:19 missingToolchain -> @missingToolchain
-  callee 1209:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 1212:8 makeDirectory -> @makeDirectory
-  callee 1213:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1216:9 privateRoot: string[] (const)
-  callee 1218:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1221:9 work: string (const)
-  callee 1221:37 hexOfI64 -> @hexOfI64
-  callee 1222:8 makeDirectory -> @makeDirectory
-  local 1226:9 outputs: string[] (const)
-  local 1227:14 module: EmittedModule (const)
-  local 1228:11 file: string (const)
-  local 1232:9 built: string (const)
-  local 1233:7 status: i32 (let)
-  callee 1233:16 linkProgram -> @linkProgram
-  local 1236:11 move: string[] (const)
-  callee 1238:7 reportToolchainFailure -> @reportToolchainFailure
-  local 1242:9 clean: string[] (const)
+  local 1223:9 problem: string (const)
+  callee 1223:19 missingToolchain -> @missingToolchain
+  callee 1225:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1228:8 makeDirectory -> @makeDirectory
+  callee 1229:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1232:9 privateRoot: string[] (const)
+  callee 1234:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1237:9 work: string (const)
+  callee 1237:37 hexOfI64 -> @hexOfI64
+  callee 1238:8 makeDirectory -> @makeDirectory
+  local 1242:9 outputs: string[] (const)
+  local 1243:14 module: EmittedModule (const)
+  local 1244:11 file: string (const)
+  local 1248:9 built: string (const)
+  local 1249:7 status: i32 (let)
+  callee 1249:16 linkProgram -> @linkProgram
+  local 1252:11 move: string[] (const)
+  callee 1254:7 reportToolchainFailure -> @reportToolchainFailure
+  local 1258:9 clean: string[] (const)
 function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1286:3
+  sharedWrite: 1302:3
   escaping: json link profile
   calls: makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot packageRootCandidates reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1270:9 root: string (const)
-  callee 1270:16 packageRoot -> @packageRoot
-  callee 1272:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 1273:58 packageRootCandidates -> @packageRootCandidates
-  callee 1278:8 makeDirectoryFor -> @makeDirectoryFor
-  local 1281:9 script: string (const)
-  local 1285:9 argv: string[] (const)
-  local 1292:14 file: string (const)
-  local 1312:9 status: i32 (const)
-  local 1314:11 why: string (const)
-  callee 1315:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1321:9 binary: string | null (const)
+  local 1286:9 root: string (const)
+  callee 1286:16 packageRoot -> @packageRoot
+  callee 1288:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1289:58 packageRootCandidates -> @packageRootCandidates
+  callee 1294:8 makeDirectoryFor -> @makeDirectoryFor
+  local 1297:9 script: string (const)
+  local 1301:9 argv: string[] (const)
+  local 1308:14 file: string (const)
+  local 1328:9 status: i32 (const)
+  local 1330:11 why: string (const)
+  callee 1331:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1337:9 binary: string | null (const)
 function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] -> @cDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1344:7
+  sharedWrite: 1360:7
   escaping: fns
   calls: napiBridges nish_array_grow
   pointer compilation: size=128 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1334:9 opts: Options (const)
-  local 1341:9 out: ExternalFunction[] (const)
-  local 1342:14 fn: ExternalFunction (const)
-  callee 1343:9 napiBridges -> @napiBridges
+  local 1350:9 opts: Options (const)
+  local 1357:9 out: ExternalFunction[] (const)
+  local 1358:14 fn: ExternalFunction (const)
+  callee 1359:9 napiBridges -> @napiBridges
 function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
@@ -39313,18 +39315,18 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   pointer compilation: size=128 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
-  local 1363:9 opts: Options (const)
-  callee 1365:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1368:36 generateHeader -> @generateHeader
-  callee 1372:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1375:33 generateDts -> @generateDts
-  local 1377:11 loader: string (const)
-  callee 1377:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 1378:27 generateWasmLoader -> @generateWasmLoader
-  callee 1382:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1385:34 generateNapiShim -> @generateNapiShim
-  callee 1389:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1392:39 generateNapiShim -> @generateNapiShim
+  local 1379:9 opts: Options (const)
+  callee 1381:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1384:36 generateHeader -> @generateHeader
+  callee 1388:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1391:33 generateDts -> @generateDts
+  local 1393:11 loader: string (const)
+  callee 1393:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 1394:27 generateWasmLoader -> @generateWasmLoader
+  callee 1398:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1401:34 generateNapiShim -> @generateNapiShim
+  callee 1405:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1408:39 generateNapiShim -> @generateNapiShim
 module src/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
