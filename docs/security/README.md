@@ -32,17 +32,22 @@ the record that found it. The notes below the table name each such finding.
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 3 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
-| TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 3 |
-| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 5 |
+| TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 3 |
+| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 6 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
-| **Total** | | | **3 / 10 / 10 / 66** | **0 / 1 / 2 / 13** |
+| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 |
+| HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
+| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 3 ⁷ |
+| WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| **Total** | | | **3 / 10 / 12 / 69** | **0 / 1 / 2 / 22** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
    by the runtime stage. The one source left, `join`, was closed with CG-3
    (#427, for #382) and is counted under it.
 2. CT-13 is High *if real* and is unconfirmed.
-3. CG-9 (Low) was fixed by the runtime stage as RT-7. K1-6, which the codegen
+3. CG-9 (Low) was fixed by the runtime stage as RT-7; the codegen record
+   counts CG-9 and the runtime record counts RT-7. K1-6, which the codegen
    record also lists, is counted once, under K1.
 4. RT-9 added the ownership primitives CLI-7 and CLI-9 need; it is counted as
    a fixed Low. RT-10, RT-11, RT-12 and RT-13 (Low) were left open by the
@@ -54,6 +59,11 @@ the record that found it. The notes below the table name each such finding.
    entry is named by a SHA-256.
 6. SC-17 (Low) is accepted rather than open, and is not counted: `curl … | sh`
    runs `install.sh` unverified, and the record says why that stands.
+7. H2-2, H3-4, WT-3, WT-4 and WT-5 (Low) are accepted, with the reason in
+   their records, and are not counted, as SC-17 is not. H2-3, H3-5 and WT-2
+   are open: the program owns the loop and the clock. WT-1 repeats H3-1 and
+   is counted in its own record. H3-2, H3-6 and H3-7 are closed and counted
+   as fixed.
 
 ## Open findings
 
@@ -64,8 +74,17 @@ only.
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
 | CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts` (`ladderStep`), `std/crypto/x25519.ts` | `ladderStep` measured \|t\| = 35–42 in one link layout of the timing driver and 1.4–2.9 in others. Not established as a leak or as an artefact | #378 |
-| TLS-3 | Medium | `std/net/tls.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | Each handshake leaves about 52 KB of arena memory behind until the arena is reset, so a long-running server grows with every connection a client opens. A KeyUpdate leaves its key derivation, 10,496 bytes when answered, bounded by a cap of 64 a connection (671,744 bytes); a record allocates nothing that outlives it | — |
-| QUIC-3 | Medium | `std/net/quic.ts` (`receive`, `takeDatagram`) | Every datagram read or written allocates from the arena and nothing is given back while the connection lives, so its memory grows with its peer's traffic; each buffer a peer fills is bounded, their sum over time is not | N9's slot discipline, with Q3 and Q4 |
+| H1-1 | Medium | `std/net/http1-server.ts` (`Http1Server.expire`, `Http1TlsServer.expire`, `Http1Connection.idle`) | The idle timeout counts from the last byte moved, so a client that sends one byte of its head every `idleTimeout` (slowloris) keeps its slot, and with every slot held new connections are shed. Memory stays bounded. The fix is a deadline for a whole head | — |
+| H2-1 | Medium | `std/net/http2.ts` (`endBlock`, `trailers`), `std/net/hpack.ts` (`HpackDecoder.decode`) | Each header block leaves memory in the arena until the program resets it: 664 bytes a request, so a client that sends requests in a loop grows the server. The way out is an HPACK decoder that decodes into storage the caller owns | — |
+| H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
+| H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
+| H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
+| H3-1 | Low | `std/net/http3-server.ts`, `std/net/quic.ts`, `std/net/tls.ts` | Each new connection's handshake leaves 89,288 bytes in the arena; it goes when HKDF and HMAC take caller-owned scratch. WT-1 repeats it | — |
+| H3-3 | Low | `std/net/http3-server.ts`, `std/net/quic-listener.ts` (`QuicListener.handle`) | What a datagram no slot owns can cost: 3,128 bytes for one answered with a stateless reset, past a budget of 16 at once and one per 100 ms | — |
+| H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
+| WT-1 | Low | `std/net/webtransport.ts`, `std/net/quic.ts`, `std/net/tls.ts` | The QUIC handshake's memory, as H3-1: nothing WebTransport does after a handshake allocates | — |
+| WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
+| QUIC-7 | Low | `std/net/quic-recovery.ts` (`onAck`), `std/net/quic.ts` (`receiveAck`) | An optimistic ACK is not detected: packet numbers are sent in order, so an ACK of one in flight cannot be told from a real one. The Application Data record of 128 packets in flight bounds the effect | — |
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
 | TLS-1 | Low | `std/net/tls.ts`, `std/net/tls/schedule.ts` | What `TlsServer` keeps in its fields (the caller's ephemeral key bytes, the handshake, traffic and exporter secrets) and the schedule's plain-bytes answers are not wiped. The ECDHE secret and the exchange's key copy are `Secret`s, wiped on every path | #430 |
