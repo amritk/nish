@@ -5885,7 +5885,12 @@ where its memory lives and when it is reused.
    passing `parts` to a function (`mem_join_parts_passed`), or a `parts` that
    names another local's array (`mem_join_parts_alias`). Assigning or
    returning `parts`, any other method on it, and an array the function did
-   not build itself count the same way.
+   not build itself count the same way. The rule is about what the function
+   allocates, not what it is handed: a *parameter* pushed onto `parts`
+   still counts as kept by the callee. So a loop that builds a string in a
+   pass and passes it to such a function (`jsonField(line, ...)` on a line
+   built in the pass, `replaceAll` on one) still has no scope. Passing it a
+   string older than the pass is what keeps the scope.
 
    An element of an array whose elements are inline is the address of a slot
    in that array, so keeping one keeps the array: it is followed as the array
