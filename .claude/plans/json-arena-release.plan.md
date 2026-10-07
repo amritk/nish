@@ -1,0 +1,95 @@
+---
+name: Free per-pass memory behind jsonField and the parts + join pattern
+overview: A loop that calls jsonField keeps about 62 bytes per call because jsonUnescape pushes substrings into a local parts array, and escape analysis treats that push as a store that disables the loop's per-pass arena release. Stage 1 stops jsonField copying every key it compares; stage 2 teaches src/escape.ts that a string pushed into a local array that is only joined does not escape.
+stages:
+  - id: json-key-compare
+    title: std/json — compare keys in place
+    goal: jsonField decides whether a key matches by comparing bytes of the object against name in place, without allocating the unescaped key
+    verification: npm run check && npm test (zero skips) && the std_json link test passes with new escaped-key cases
+    todos:
+      - id: json-key-match
+        content: Add a non-allocating jsonKeyEquals(object, at, end, name) to std/json.ts that decodes escapes on the fly and replace the jsonUnescape call on keys in jsonField — see std/json — compare keys in place
+        status: pending
+      - id: json-key-tests
+        content: Extend tests/link/std_json with escaped keys, a key that is a prefix of name, and a name that is a prefix of the key — see std/json — compare keys in place
+        status: pending
+      - id: json-key-measure
+        content: Measure jsonField time before and after on a timed loop with a printed checksum and put the figures in the commit's Measured trailer — see std/json — compare keys in place
+        status: pending
+  - id: escape-join-parts
+    title: escape analysis — a pushed string that is only joined does not escape
+    goal: A loop calling a function that builds its result with local parts.push(...) then parts.join(...) keeps its per-pass arena release, while any read-back of parts still counts as an escape
+    verification: npm run check && npm test (zero skips) && compiler fixed point reached && the new golden prints the same Arena.used() before and after 1000 calls
+    todos:
+      - id: escape-join-rule
+        content: Narrow the push rule in src/escape.ts so an argument pushed into a local array whose only uses are push, join and length is not noted as escaping — see Escape analysis — the join-only rule
+        status: pending
+      - id: escape-join-golden
+        content: Add a positive golden tests/cases/mem_join_parts_scope with .ll and .out showing Arena.used() unchanged across 1000 calls — see Tests
+        status: pending
+      - id: escape-join-negative
+        content: Add negative goldens where parts[0], a for-of over parts, or passing parts to a callee keeps the release off — see Tests
+        status: pending
+      - id: escape-join-docs
+        content: State the rule in docs/LANGUAGE.md Memory model and its cookbook entry, regenerate tests/self/goldens with goldens.js --update — see Escape analysis — the join-only rule
+        status: pending
+---
+
+## Context
+
+[`std/json.ts`](std/json.ts) `jsonUnescape` builds a decoded literal with a local `parts: string[]`, `parts.push(...)` and `parts.join("")`. [`src/escape.ts`](src/escape.ts) (the `for (const push of this.pushes)` block, ~line 838) notes the pushed value as escaping, so any loop calling `jsonField` gets `LOOP_CALLEE_STORES` and loses its per-pass arena release. Measured in scratch builds: 62 KB kept over 1,000 calls, against 16 bytes with escape decoding rewritten without the array. Separately, `jsonField` unescapes every key it walks past (line 376) just to compare it with `name`.
+
+## std/json — compare keys in place
+
+- New private `jsonKeyEquals(object, at, end, name): boolean` walks `object[at..end)` and `name` together, decoding `\n \t \r \b \f \uXXXX \" \\ \/` and the lenient default exactly as `jsonUnescape` does, and returns false on the first mismatch. A `\uXXXX` compares against the UTF-8 bytes `jsonUtf8` would produce, without building them.
+- `jsonField` calls it instead of `jsonUnescape` for keys. Value decoding is unchanged.
+- Owns: `std/json.ts`, `tests/link/std_json/**`.
+- Commit: `perf(std): compare JSON keys in place in jsonField`, with `Measured:` figures.
+
+## Escape analysis — the join-only rule
+
+- Rule: a value pushed into array `xs` does not escape when `xs` is a local this function allocated (`ownsSite`), flows `local`, and every other use of `xs` is `xs.push(...)`, `xs.join(...)` or `xs.length`. The join result is a fresh allocation and is analysed as it is today.
+- Any other use — index read, `for...of`, spread, passing `xs` to a call, assigning it, returning it, a closure capture — keeps today's behaviour (escapes). That is the whole safety argument: a string read back out with `parts[0]` and returned must stay alive.
+- The rolling freeze: `src/` may not use the new behaviour in its own source until the next release; nothing in `src/` needs to.
+- `docs/LANGUAGE.md` Memory model gains the rule; the cookbook gets the `parts + join` entry with its IR; `tests/self/goldens/checked*.txt` are regenerated with `node tests/self/goldens.js --update`, never hand-edited.
+- Owns: `src/escape.ts`, `src/attributes.ts` (only if the use classifier needs a helper), `tests/cases/mem_join_parts_*`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/cookbook/**`, `docs/IR_COOKBOOK.md`.
+- Commit: `perf(codegen): ...`, with `Measured:` the jsonField loop's kept bytes before/after, `Tests:` the new goldens.
+
+## Out of scope
+
+- Rewriting `replaceAll` in `std/text` or any other `parts + join` user: stage 2 fixes them all by fixing the analysis.
+- Following arrays through calls or element reads in general.
+- `jsonUnescape`'s value path.
+
+## Tests
+
+| Case | Shape | Expect |
+|---|---|---|
+| `mem_join_parts_scope` | loop calls `f()` that does local `parts.push(sub)` ×n, `return parts.join("")`; prints `Arena.used()` delta | delta 0 (or a constant), `.ll` shows mark/release in the loop |
+| `mem_join_parts_readback` | `f` returns `parts[0]` | release absent; output correct |
+| `mem_join_parts_forof` | `f` iterates `parts` and returns an element | release absent |
+| `mem_join_parts_passed` | `f` passes `parts` to a callee | release absent |
+| `tests/link/std_json` | escaped keys, prefix keys | same answers as before |
+
+## Verification
+
+```
+npm run check
+npm test            # read the skip count: undegraded means zero skips
+node tests/self/goldens.js --update   # stage 2 only, then read the diff
+```
+
+Merge order: stage 1 first; stage 2 merges `main` and regenerates goldens before its own merge. The two may be developed concurrently — their `Owns` sets are disjoint.
+
+## Measurement
+
+Both stages measure the way the original investigation did. The harness is not on `main`: it is commit `956506d` on the unmerged branch `ccr-ee7596b7-up0cqq` (`test(bench): benchmark std/json against popular JSON libraries`). To measure, a worker runs `git fetch origin ccr-ee7596b7-up0cqq && git checkout FETCH_HEAD -- bench/json docs/BENCHMARKS-json.md` and never commits those files. It builds `bench/json/json.ts` with `--profile speed`, runs it against `build/bench/json/input-100000.jsonl` and takes the best of 5, records peak RSS with `build/bench/json/rss`, and runs a 1,000-call `jsonField` loop that prints the `Arena.used()` delta. Baseline on `main`: 62 KB kept, 123 ms, 145 MB RSS.
+
+## Acceptance criteria
+
+1. On merged `main`, a loop that calls `jsonField` 1,000 times on a string value and reads only `.length` keeps no more than 64 bytes of arena (`Arena.used()` delta), with `std/json`'s `parts` + `join` code left as it is.
+2. The same holds for a loop calling a user function that builds its result with a local `parts.push(...)` then `parts.join(...)`.
+3. A function that returns `parts[0]`, iterates `parts`, or hands `parts` to another function still prints the correct string after 1,000 loop passes (no use-after-release), and its loop keeps the release off.
+4. `jsonField` answers as before for escaped keys (`"a\nb"`, `"A"`) and when the key is a prefix of the name or the name is a prefix of the key.
+5. The `bench/json` harness run against merged `main` is no slower than 123 ms and peaks below 145 MB RSS; the commit messages carry the measured figures in `Measured:` trailers.
+6. `docs/LANGUAGE.md` states when a pushed value does not escape, and the compiler built from merged `main` reaches its fixed point.
