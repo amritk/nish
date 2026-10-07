@@ -1,0 +1,1 @@
+{"file":"tests/link/package_not_nish_names/main.ts","line":6,"column":25,"endLine":6,"endColumn":30,"severity":"error","code":"NL3020","message":"Package `dep` has no Nish entry point: its `exports` gave this compiler no file to compile for `.`, because that entry declares none of the conditions this compiler compiles source from (`nish`, `nish-i32`, `nish-f64`)"}
