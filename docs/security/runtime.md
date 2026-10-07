@@ -164,7 +164,8 @@ A finding is any of these, reachable through a runtime entry point:
   `__builtin_strlen`, so the header still includes no libc header and still
   compiles for wasm32.
 - `docs/security/codegen.md`: CG-9 is fixed (RT-7), and the runtime sources
-  of CG-3 are closed (RT-1, RT-2); only `join` remains.
+  of CG-3 are closed (RT-1, RT-2); only `join` remains. *Since #427 `join` is
+  bounded too, so none remains.*
 - `docs/security/cli.md`: CLI-6 is fixed in the runtime (RT-4) and reaches
   the compiler with the next release. CLI-7 and CLI-9 have their primitives
   (RT-9).
