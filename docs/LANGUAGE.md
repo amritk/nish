@@ -5882,10 +5882,11 @@ where its memory lives and when it is reused.
    `Arena.used()` where one call left it). Any other use of `parts` keeps the
    pushed value stored, because it could hand a part back out: an element
    read (`mem_join_parts_readback`), a `for...of` (`mem_join_parts_forof`),
-   passing `parts` to a function (`mem_join_parts_passed`), or a `parts` that
+   passing `parts` to a function (`mem_join_parts_passed`), another method on
+   it, such as `parts.pop()` (`mem_join_parts_method`), or a `parts` that
    names another local's array (`mem_join_parts_alias`). Assigning or
-   returning `parts`, any other method on it, and an array the function did
-   not build itself count the same way. The rule is about what the function
+   returning `parts`, and an array the function did not build itself, count
+   the same way. The rule is about what the function
    allocates, not what it is handed: a *parameter* pushed onto `parts`
    still counts as kept by the callee. So a loop that builds a string in a
    pass and passes it to such a function (`jsonField(line, ...)` on a line

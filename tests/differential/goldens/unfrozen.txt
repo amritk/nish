@@ -201,6 +201,7 @@ cases/mem_callee_scope_return added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_tree added after R6: no rewriter to freeze it with
 cases/mem_join_parts_alias added after R6: no rewriter to freeze it with
 cases/mem_join_parts_forof added after R6: no rewriter to freeze it with
+cases/mem_join_parts_method added after R6: no rewriter to freeze it with
 cases/mem_join_parts_passed added after R6: no rewriter to freeze it with
 cases/mem_join_parts_readback added after R6: no rewriter to freeze it with
 cases/mem_join_parts_scope added after R6: no rewriter to freeze it with
