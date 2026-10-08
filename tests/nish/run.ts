@@ -1,12 +1,14 @@
 /**
  * The golden-case runner, in Nish.
  *
- *     build/nish-runner [substring] [--compiler <nish>]
+ *     build/nish-runner [substring] [--compiler <nish>] [--shard <i>/<n>]
  *
  * The compiler under test defaults to `build/nish`, what `npm run build` leaves
  * behind; `--compiler <nish>` names another. A Node entry point (`.js`, `.mjs`,
  * `.cjs`) runs under `node` and anything else directly, the rule
- * `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`.
+ * `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`. `--shard <i>/<n>` runs the
+`i`th of `n` slices of the selected cases and link programs, dealt round-robin
+over one list, so `n` CI jobs share the corpus between them.
  *
  * `tests/run.js` is the suite of record and this is not a replacement for it: it
  * covers section A, the golden cases in `tests/cases/`, and the `tests/link/`
@@ -631,6 +633,12 @@ export const main = (): number => {
   // and `--compiler <nish>` anywhere around it.
   let filter = "";
   let compiler = DEFAULT_CLI;
+  // `--shard <i>/<n>`: this run takes every `n`th selected program, starting
+  // from the `i`th, counting cases and link programs as one list. Dealt rather
+  // than cut into runs, so the slow `crypto_*` link programs land in different
+  // slices instead of all in the last one.
+  let shard: i32 = 1;
+  let shards: i32 = 1;
   let i = 1;
   while (i < process.argv.length) {
     if (process.argv[i] === "--compiler") {
@@ -638,6 +646,20 @@ export const main = (): number => {
         panic("--compiler needs a path");
       }
       compiler = process.argv[i + 1];
+      i = i + 2;
+    } else if (process.argv[i] === "--shard") {
+      if (i + 1 >= process.argv.length) {
+        panic("--shard needs <i>/<n>");
+      }
+      const spec = process.argv[i + 1];
+      const slash = spec.indexOf("/");
+      shard = slash > 0 ? parseInt(spec.substring(0, slash)) : 0;
+      shards = slash > 0 ? parseInt(spec.substring(slash + 1)) : 0;
+      // `parseInt` answers 0 for no digits, so one range check refuses a
+      // missing number as well as one out of range.
+      if (shards < 1 || shard < 1 || shard > shards) {
+        panic(`--shard wants <i>/<n> with 1 <= i <= n, not ${spec}`);
+      }
       i = i + 2;
     } else {
       filter = process.argv[i];
@@ -683,8 +705,15 @@ export const main = (): number => {
   }
 
   const slow = new Slowest();
+  // The position in the selected list, which decides the shard: counted after
+  // the filter, so a filtered run still splits evenly.
+  let dealt: i32 = 0;
   for (const name of caseNames()) {
     if (filter.length > 0 && name.indexOf(filter) < 0) {
+      continue;
+    }
+    dealt += 1;
+    if ((dealt - 1) % shards !== shard - 1) {
       continue;
     }
     const at = monotonicNanos();
@@ -697,6 +726,10 @@ export const main = (): number => {
   } else {
     for (const name of linkNames()) {
       if (filter.length > 0 && name.indexOf(filter) < 0) {
+        continue;
+      }
+      dealt += 1;
+      if ((dealt - 1) % shards !== shard - 1) {
         continue;
       }
       const at = monotonicNanos();
