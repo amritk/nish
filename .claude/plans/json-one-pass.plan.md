@@ -107,7 +107,7 @@ A proposal note in the shape of the other `docs/wpN-*.md` plans, written from th
 
 - No tuning to `bench/json`'s generator: every change must help any JSON with strings, not this input's shape.
 - Each perf PR reports, before and after on the same machine: `bench/json` (harness from branch `ccr-ee7596b7-up0cqq` @ 956506d, checked out, never committed); a compiler `--json` diagnostic line; a 50-key object with the wanted field last; a miss; a line with short strings only (the case where a call per string could lose).
-- `node bench/run.mjs --check` passes with `bench/instructions.json` unchanged, and `tests/perf-baseline.json` is never raised.
+- `node bench/run.mjs --instructions --check` passes with `bench/instructions.json` unchanged, and `tests/perf-baseline.json` is never raised.
 - Noise is reported honestly: medians of at least 7 runs, and a loss on any shape is stated, not hidden.
 
 ## Measurement
@@ -136,5 +136,5 @@ node tests/self/goldens.js --update   # stage 1 only, then read the diff
 4. A loop calling `jsonFields` 1,000 times keeps its per-pass arena release (no NL9011 raised, `Arena.used()` flat).
 5. On `bench/json`, `jsonFields` on merged `main` beats gjson's recorded 118 ms by a clear margin and is at or below typed serde's 82 ms on the same machine, and `jsonField` ×3 is no slower than before stage 3. Figures are in the `Measured:` trailers.
 6. On the non-benchmark shapes — a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only — neither `jsonField` nor `jsonFields` is slower than on base.
-7. `node bench/run.mjs --check` passes with `bench/instructions.json` unchanged, `tests/perf-baseline.json` is not raised, and the compiler reaches its fixed point.
+7. `node bench/run.mjs --instructions --check` passes with `bench/instructions.json` unchanged, `tests/perf-baseline.json` is not raised, and the compiler reaches its fixed point.
 8. `docs/wp38-simd.md` exists and states the current state, at least three options with their costs, a recommendation with ordered stages, the TypeScript and wasm reading, the `-march` policy, and the measured bar each stage must clear. `docs/MASTER_PLAN.md` lists WP38 as proposed, and `docs/README.md` links it.
