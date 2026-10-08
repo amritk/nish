@@ -59,6 +59,7 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
@@ -17999,12 +18000,16 @@ for.end.2:
   %148 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
   call void @fromMontgomery(%struct.nish_array* %148)
   %149 = load %struct.nish_array*, %struct.nish_array** %x.addr, align 8
-  %150 = call i8* @hexOfLimbs(%struct.nish_array* %149)
-  %151 = call i8* @nish_str_concat(i8* %150, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
-  %152 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
-  %153 = call i8* @hexOfLimbs(%struct.nish_array* %152)
-  %154 = call i8* @nish_str_concat(i8* %151, i8* %153)
-  ret i8* %154
+  %150 = call i64 @nish_arena_mark()
+  %151 = call i8* @hexOfLimbs(%struct.nish_array* %149)
+  %152 = call i8* @nish_arena_keep(i64 %150, i8* %151)
+  %153 = call i8* @nish_str_concat(i8* %152, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
+  %154 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
+  %155 = call i64 @nish_arena_mark()
+  %156 = call i8* @hexOfLimbs(%struct.nish_array* %154)
+  %157 = call i8* @nish_arena_keep(i64 %155, i8* %156)
+  %158 = call i8* @nish_str_concat(i8* %153, i8* %157)
+  ret i8* %158
 
 ovf.fail:
   call void @nish_panic_overflow(i32 1)
@@ -18052,8 +18057,10 @@ entry:
   %7 = call %struct.nish_array* @limbsOfHex(i8* %b)
   call void @p256FiatMul(%struct.nish_array* %5, %struct.nish_array* %6, %struct.nish_array* %7)
   %8 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %9 = call i8* @hexOfLimbs(%struct.nish_array* %8)
-  ret i8* %9
+  %9 = call i64 @nish_arena_mark()
+  %10 = call i8* @hexOfLimbs(%struct.nish_array* %8)
+  %11 = call i8* @nish_arena_keep(i64 %9, i8* %10)
+  ret i8* %11
 }
 
 define internal noundef nonnull align 8 i8* @squareHex(i8* noundef nonnull noalias readonly align 8 %a) #2 {
@@ -18075,8 +18082,10 @@ entry:
   %6 = call %struct.nish_array* @limbsOfHex(i8* %a)
   call void @p256FiatSquare(%struct.nish_array* %5, %struct.nish_array* %6)
   %7 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %8 = call i8* @hexOfLimbs(%struct.nish_array* %7)
-  ret i8* %8
+  %8 = call i64 @nish_arena_mark()
+  %9 = call i8* @hexOfLimbs(%struct.nish_array* %7)
+  %10 = call i8* @nish_arena_keep(i64 %8, i8* %9)
+  ret i8* %10
 }
 
 define internal noundef nonnull align 8 i8* @scalarMulHex(i8* noundef nonnull noalias readonly align 8 %a, i8* noundef nonnull noalias readonly align 8 %b) #2 {
@@ -18099,8 +18108,10 @@ entry:
   %7 = call %struct.nish_array* @limbsOfHex(i8* %b)
   call void @p256FiatScalarMul(%struct.nish_array* %5, %struct.nish_array* %6, %struct.nish_array* %7)
   %8 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %9 = call i8* @hexOfLimbs(%struct.nish_array* %8)
-  ret i8* %9
+  %9 = call i64 @nish_arena_mark()
+  %10 = call i8* @hexOfLimbs(%struct.nish_array* %8)
+  %11 = call i8* @nish_arena_keep(i64 %9, i8* %10)
+  ret i8* %11
 }
 
 define internal noundef i32 @knownAnswers() #2 {
@@ -18131,229 +18142,253 @@ entry:
   %0 = load i32, i32* %failed.addr, align 4
   %1 = load i8*, i8** %a.addr, align 8
   %2 = load i8*, i8** %b.addr, align 8
-  %3 = call i8* @mulHex(i8* %1, i8* %2)
-  %4 = call i32 @report(i8* bitcast ({ i64, [27 x i8] }* @.str.18 to i8*), i8* %3, i8* bitcast ({ i64, [65 x i8] }* @.str.19 to i8*))
-  %5 = add nsw i32 %0, %4
-  store i32 %5, i32* %failed.addr, align 4
-  %6 = load i32, i32* %failed.addr, align 4
-  %7 = load i8*, i8** %pMinus1.addr, align 8
-  %8 = load i8*, i8** %pMinus1.addr, align 8
-  %9 = call i8* @mulHex(i8* %7, i8* %8)
-  %10 = load i8*, i8** %pMinus1Squared.addr, align 8
-  %11 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.20 to i8*), i8* %9, i8* %10)
-  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %11)
-  %13 = extractvalue { i32, i1 } %12, 0
-  %14 = extractvalue { i32, i1 } %12, 1
-  br i1 %14, label %ovf.fail, label %ovf.ok
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i8* @mulHex(i8* %1, i8* %2)
+  %5 = call i8* @nish_arena_keep(i64 %3, i8* %4)
+  %6 = call i32 @report(i8* bitcast ({ i64, [27 x i8] }* @.str.18 to i8*), i8* %5, i8* bitcast ({ i64, [65 x i8] }* @.str.19 to i8*))
+  %7 = add nsw i32 %0, %6
+  store i32 %7, i32* %failed.addr, align 4
+  %8 = load i32, i32* %failed.addr, align 4
+  %9 = load i8*, i8** %pMinus1.addr, align 8
+  %10 = load i8*, i8** %pMinus1.addr, align 8
+  %11 = call i64 @nish_arena_mark()
+  %12 = call i8* @mulHex(i8* %9, i8* %10)
+  %13 = call i8* @nish_arena_keep(i64 %11, i8* %12)
+  %14 = load i8*, i8** %pMinus1Squared.addr, align 8
+  %15 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.20 to i8*), i8* %13, i8* %14)
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %15)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %13, i32* %failed.addr, align 4
-  %15 = load i32, i32* %failed.addr, align 4
-  %16 = load i8*, i8** %montOne.addr, align 8
-  %17 = load i8*, i8** %a.addr, align 8
-  %18 = call i8* @mulHex(i8* %16, i8* %17)
-  %19 = load i8*, i8** %a.addr, align 8
-  %20 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.21 to i8*), i8* %18, i8* %19)
-  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 %20)
-  %22 = extractvalue { i32, i1 } %21, 0
-  %23 = extractvalue { i32, i1 } %21, 1
-  br i1 %23, label %ovf.fail, label %ovf.ok.1
+  store i32 %17, i32* %failed.addr, align 4
+  %19 = load i32, i32* %failed.addr, align 4
+  %20 = load i8*, i8** %montOne.addr, align 8
+  %21 = load i8*, i8** %a.addr, align 8
+  %22 = call i64 @nish_arena_mark()
+  %23 = call i8* @mulHex(i8* %20, i8* %21)
+  %24 = call i8* @nish_arena_keep(i64 %22, i8* %23)
+  %25 = load i8*, i8** %a.addr, align 8
+  %26 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.21 to i8*), i8* %24, i8* %25)
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %26)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %22, i32* %failed.addr, align 4
-  %24 = load i32, i32* %failed.addr, align 4
-  %25 = load i8*, i8** %zero.addr, align 8
-  %26 = load i8*, i8** %a.addr, align 8
-  %27 = call i8* @mulHex(i8* %25, i8* %26)
-  %28 = load i8*, i8** %zero.addr, align 8
-  %29 = call i32 @report(i8* bitcast ({ i64, [34 x i8] }* @.str.22 to i8*), i8* %27, i8* %28)
-  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 %29)
-  %31 = extractvalue { i32, i1 } %30, 0
-  %32 = extractvalue { i32, i1 } %30, 1
-  br i1 %32, label %ovf.fail, label %ovf.ok.2
+  store i32 %28, i32* %failed.addr, align 4
+  %30 = load i32, i32* %failed.addr, align 4
+  %31 = load i8*, i8** %zero.addr, align 8
+  %32 = load i8*, i8** %a.addr, align 8
+  %33 = call i64 @nish_arena_mark()
+  %34 = call i8* @mulHex(i8* %31, i8* %32)
+  %35 = call i8* @nish_arena_keep(i64 %33, i8* %34)
+  %36 = load i8*, i8** %zero.addr, align 8
+  %37 = call i32 @report(i8* bitcast ({ i64, [34 x i8] }* @.str.22 to i8*), i8* %35, i8* %36)
+  %38 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %30, i32 %37)
+  %39 = extractvalue { i32, i1 } %38, 0
+  %40 = extractvalue { i32, i1 } %38, 1
+  br i1 %40, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  store i32 %31, i32* %failed.addr, align 4
-  %33 = load i8*, i8** %a.addr, align 8
-  %34 = call %struct.nish_array* @limbsOfHex(i8* %33)
-  store %struct.nish_array* %34, %struct.nish_array** %inPlace.addr, align 8
-  %35 = load %struct.nish_array*, %struct.nish_array** %inPlace.addr, align 8
-  %36 = load %struct.nish_array*, %struct.nish_array** %inPlace.addr, align 8
-  %37 = load i8*, i8** %b.addr, align 8
-  %38 = call %struct.nish_array* @limbsOfHex(i8* %37)
-  call void @p256FiatMul(%struct.nish_array* %35, %struct.nish_array* %36, %struct.nish_array* %38)
-  %39 = load i32, i32* %failed.addr, align 4
-  %40 = load %struct.nish_array*, %struct.nish_array** %inPlace.addr, align 8
-  %41 = call i8* @hexOfLimbs(%struct.nish_array* %40)
-  %42 = load i8*, i8** %a.addr, align 8
-  %43 = load i8*, i8** %b.addr, align 8
-  %44 = call i8* @mulHex(i8* %42, i8* %43)
-  %45 = call i32 @report(i8* bitcast ({ i64, [29 x i8] }* @.str.23 to i8*), i8* %41, i8* %44)
-  %46 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %39, i32 %45)
-  %47 = extractvalue { i32, i1 } %46, 0
-  %48 = extractvalue { i32, i1 } %46, 1
-  br i1 %48, label %ovf.fail, label %ovf.ok.3
+  store i32 %39, i32* %failed.addr, align 4
+  %41 = load i8*, i8** %a.addr, align 8
+  %42 = call %struct.nish_array* @limbsOfHex(i8* %41)
+  store %struct.nish_array* %42, %struct.nish_array** %inPlace.addr, align 8
+  %43 = load %struct.nish_array*, %struct.nish_array** %inPlace.addr, align 8
+  %44 = load %struct.nish_array*, %struct.nish_array** %inPlace.addr, align 8
+  %45 = load i8*, i8** %b.addr, align 8
+  %46 = call %struct.nish_array* @limbsOfHex(i8* %45)
+  call void @p256FiatMul(%struct.nish_array* %43, %struct.nish_array* %44, %struct.nish_array* %46)
+  %47 = load i32, i32* %failed.addr, align 4
+  %48 = load %struct.nish_array*, %struct.nish_array** %inPlace.addr, align 8
+  %49 = call i64 @nish_arena_mark()
+  %50 = call i8* @hexOfLimbs(%struct.nish_array* %48)
+  %51 = call i8* @nish_arena_keep(i64 %49, i8* %50)
+  %52 = load i8*, i8** %a.addr, align 8
+  %53 = load i8*, i8** %b.addr, align 8
+  %54 = call i64 @nish_arena_mark()
+  %55 = call i8* @mulHex(i8* %52, i8* %53)
+  %56 = call i8* @nish_arena_keep(i64 %54, i8* %55)
+  %57 = call i32 @report(i8* bitcast ({ i64, [29 x i8] }* @.str.23 to i8*), i8* %51, i8* %56)
+  %58 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %47, i32 %57)
+  %59 = extractvalue { i32, i1 } %58, 0
+  %60 = extractvalue { i32, i1 } %58, 1
+  br i1 %60, label %ovf.fail, label %ovf.ok.3
 
 ovf.ok.3:
-  store i32 %47, i32* %failed.addr, align 4
-  %49 = load i32, i32* %failed.addr, align 4
-  %50 = load i8*, i8** %a.addr, align 8
-  %51 = call i8* @squareHex(i8* %50)
-  %52 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.24 to i8*), i8* %51, i8* bitcast ({ i64, [65 x i8] }* @.str.25 to i8*))
-  %53 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %49, i32 %52)
-  %54 = extractvalue { i32, i1 } %53, 0
-  %55 = extractvalue { i32, i1 } %53, 1
-  br i1 %55, label %ovf.fail, label %ovf.ok.4
-
-ovf.ok.4:
-  store i32 %54, i32* %failed.addr, align 4
-  %56 = load i32, i32* %failed.addr, align 4
-  %57 = load i8*, i8** %pMinus1.addr, align 8
-  %58 = call i8* @squareHex(i8* %57)
-  %59 = load i8*, i8** %pMinus1Squared.addr, align 8
-  %60 = call i32 @report(i8* bitcast ({ i64, [36 x i8] }* @.str.26 to i8*), i8* %58, i8* %59)
-  %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %56, i32 %60)
-  %62 = extractvalue { i32, i1 } %61, 0
-  %63 = extractvalue { i32, i1 } %61, 1
-  br i1 %63, label %ovf.fail, label %ovf.ok.5
-
-ovf.ok.5:
-  store i32 %62, i32* %failed.addr, align 4
-  %64 = load i32, i32* %failed.addr, align 4
-  %65 = call i8* @scalarMulHex(i8* bitcast ({ i64, [65 x i8] }* @.str.28 to i8*), i8* bitcast ({ i64, [65 x i8] }* @.str.29 to i8*))
-  %66 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.27 to i8*), i8* %65, i8* bitcast ({ i64, [65 x i8] }* @.str.30 to i8*))
-  %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %64, i32 %66)
+  store i32 %59, i32* %failed.addr, align 4
+  %61 = load i32, i32* %failed.addr, align 4
+  %62 = load i8*, i8** %a.addr, align 8
+  %63 = call i64 @nish_arena_mark()
+  %64 = call i8* @squareHex(i8* %62)
+  %65 = call i8* @nish_arena_keep(i64 %63, i8* %64)
+  %66 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.24 to i8*), i8* %65, i8* bitcast ({ i64, [65 x i8] }* @.str.25 to i8*))
+  %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %61, i32 %66)
   %68 = extractvalue { i32, i1 } %67, 0
   %69 = extractvalue { i32, i1 } %67, 1
-  br i1 %69, label %ovf.fail, label %ovf.ok.6
+  br i1 %69, label %ovf.fail, label %ovf.ok.4
 
-ovf.ok.6:
+ovf.ok.4:
   store i32 %68, i32* %failed.addr, align 4
   %70 = load i32, i32* %failed.addr, align 4
-  %71 = load i8*, i8** %nMinus1.addr, align 8
-  %72 = load i8*, i8** %nMinus1.addr, align 8
-  %73 = call i8* @scalarMulHex(i8* %71, i8* %72)
-  %74 = call i32 @report(i8* bitcast ({ i64, [39 x i8] }* @.str.31 to i8*), i8* %73, i8* bitcast ({ i64, [65 x i8] }* @.str.32 to i8*))
-  %75 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %70, i32 %74)
-  %76 = extractvalue { i32, i1 } %75, 0
-  %77 = extractvalue { i32, i1 } %75, 1
-  br i1 %77, label %ovf.fail, label %ovf.ok.7
+  %71 = load i8*, i8** %pMinus1.addr, align 8
+  %72 = call i64 @nish_arena_mark()
+  %73 = call i8* @squareHex(i8* %71)
+  %74 = call i8* @nish_arena_keep(i64 %72, i8* %73)
+  %75 = load i8*, i8** %pMinus1Squared.addr, align 8
+  %76 = call i32 @report(i8* bitcast ({ i64, [36 x i8] }* @.str.26 to i8*), i8* %74, i8* %75)
+  %77 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %70, i32 %76)
+  %78 = extractvalue { i32, i1 } %77, 0
+  %79 = extractvalue { i32, i1 } %77, 1
+  br i1 %79, label %ovf.fail, label %ovf.ok.5
+
+ovf.ok.5:
+  store i32 %78, i32* %failed.addr, align 4
+  %80 = load i32, i32* %failed.addr, align 4
+  %81 = call i64 @nish_arena_mark()
+  %82 = call i8* @scalarMulHex(i8* bitcast ({ i64, [65 x i8] }* @.str.28 to i8*), i8* bitcast ({ i64, [65 x i8] }* @.str.29 to i8*))
+  %83 = call i8* @nish_arena_keep(i64 %81, i8* %82)
+  %84 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.27 to i8*), i8* %83, i8* bitcast ({ i64, [65 x i8] }* @.str.30 to i8*))
+  %85 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %80, i32 %84)
+  %86 = extractvalue { i32, i1 } %85, 0
+  %87 = extractvalue { i32, i1 } %85, 1
+  br i1 %87, label %ovf.fail, label %ovf.ok.6
+
+ovf.ok.6:
+  store i32 %86, i32* %failed.addr, align 4
+  %88 = load i32, i32* %failed.addr, align 4
+  %89 = load i8*, i8** %nMinus1.addr, align 8
+  %90 = load i8*, i8** %nMinus1.addr, align 8
+  %91 = call i64 @nish_arena_mark()
+  %92 = call i8* @scalarMulHex(i8* %89, i8* %90)
+  %93 = call i8* @nish_arena_keep(i64 %91, i8* %92)
+  %94 = call i32 @report(i8* bitcast ({ i64, [39 x i8] }* @.str.31 to i8*), i8* %93, i8* bitcast ({ i64, [65 x i8] }* @.str.32 to i8*))
+  %95 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %88, i32 %94)
+  %96 = extractvalue { i32, i1 } %95, 0
+  %97 = extractvalue { i32, i1 } %95, 1
+  br i1 %97, label %ovf.fail, label %ovf.ok.7
 
 ovf.ok.7:
-  store i32 %76, i32* %failed.addr, align 4
-  %78 = load i32, i32* %failed.addr, align 4
-  %79 = call i32 @p256FiatCmovznzU32(i32 0, i32 7, i32 9)
-  %80 = zext i32 %79 to i64
-  %81 = call i8* @nish_str_from_u64(i64 %80)
-  %82 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.33 to i8*), i8* %81, i8* bitcast ({ i64, [2 x i8] }* @.str.34 to i8*))
-  %83 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %78, i32 %82)
-  %84 = extractvalue { i32, i1 } %83, 0
-  %85 = extractvalue { i32, i1 } %83, 1
-  br i1 %85, label %ovf.fail, label %ovf.ok.8
+  store i32 %96, i32* %failed.addr, align 4
+  %98 = load i32, i32* %failed.addr, align 4
+  %99 = call i32 @p256FiatCmovznzU32(i32 0, i32 7, i32 9)
+  %100 = zext i32 %99 to i64
+  %101 = call i8* @nish_str_from_u64(i64 %100)
+  %102 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.33 to i8*), i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.34 to i8*))
+  %103 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %98, i32 %102)
+  %104 = extractvalue { i32, i1 } %103, 0
+  %105 = extractvalue { i32, i1 } %103, 1
+  br i1 %105, label %ovf.fail, label %ovf.ok.8
 
 ovf.ok.8:
-  store i32 %84, i32* %failed.addr, align 4
-  %86 = load i32, i32* %failed.addr, align 4
-  %87 = call i32 @p256FiatCmovznzU32(i32 1, i32 7, i32 9)
-  %88 = zext i32 %87 to i64
-  %89 = call i8* @nish_str_from_u64(i64 %88)
-  %90 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.35 to i8*), i8* %89, i8* bitcast ({ i64, [2 x i8] }* @.str.36 to i8*))
-  %91 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %86, i32 %90)
-  %92 = extractvalue { i32, i1 } %91, 0
-  %93 = extractvalue { i32, i1 } %91, 1
-  br i1 %93, label %ovf.fail, label %ovf.ok.9
+  store i32 %104, i32* %failed.addr, align 4
+  %106 = load i32, i32* %failed.addr, align 4
+  %107 = call i32 @p256FiatCmovznzU32(i32 1, i32 7, i32 9)
+  %108 = zext i32 %107 to i64
+  %109 = call i8* @nish_str_from_u64(i64 %108)
+  %110 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.35 to i8*), i8* %109, i8* bitcast ({ i64, [2 x i8] }* @.str.36 to i8*))
+  %111 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %106, i32 %110)
+  %112 = extractvalue { i32, i1 } %111, 0
+  %113 = extractvalue { i32, i1 } %111, 1
+  br i1 %113, label %ovf.fail, label %ovf.ok.9
 
 ovf.ok.9:
-  store i32 %92, i32* %failed.addr, align 4
-  %94 = load i32, i32* %failed.addr, align 4
-  %95 = call i32 @p256FiatCmovznzU32(i32 2147483648, i32 7, i32 9)
-  %96 = zext i32 %95 to i64
-  %97 = call i8* @nish_str_from_u64(i64 %96)
-  %98 = call i32 @report(i8* bitcast ({ i64, [44 x i8] }* @.str.37 to i8*), i8* %97, i8* bitcast ({ i64, [2 x i8] }* @.str.36 to i8*))
-  %99 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %94, i32 %98)
-  %100 = extractvalue { i32, i1 } %99, 0
-  %101 = extractvalue { i32, i1 } %99, 1
-  br i1 %101, label %ovf.fail, label %ovf.ok.10
+  store i32 %112, i32* %failed.addr, align 4
+  %114 = load i32, i32* %failed.addr, align 4
+  %115 = call i32 @p256FiatCmovznzU32(i32 2147483648, i32 7, i32 9)
+  %116 = zext i32 %115 to i64
+  %117 = call i8* @nish_str_from_u64(i64 %116)
+  %118 = call i32 @report(i8* bitcast ({ i64, [44 x i8] }* @.str.37 to i8*), i8* %117, i8* bitcast ({ i64, [2 x i8] }* @.str.36 to i8*))
+  %119 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %114, i32 %118)
+  %120 = extractvalue { i32, i1 } %119, 0
+  %121 = extractvalue { i32, i1 } %119, 1
+  br i1 %121, label %ovf.fail, label %ovf.ok.10
 
 ovf.ok.10:
-  store i32 %100, i32* %failed.addr, align 4
-  %102 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 24, i64* %102, align 8, !alias.scope !3, !noalias !4, !tbaa !13
-  %103 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 24, i64* %103, align 8, !alias.scope !3, !noalias !4, !tbaa !14
-  %104 = mul i64 24, 4
-  %105 = bitcast [24 x i32]* %arr.data to i8*
-  call void @llvm.memset.p0i8.i64(i8* align 8 %105, i8 0, i64 %104, i1 false), !alias.scope !4, !noalias !3
-  %106 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* %105, i8** %106, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  store i32 %120, i32* %failed.addr, align 4
+  %122 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 24, i64* %122, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %123 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 24, i64* %123, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %124 = mul i64 24, 4
+  %125 = bitcast [24 x i32]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %125, i8 0, i64 %124, i1 false), !alias.scope !4, !noalias !3
+  %126 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %125, i8** %126, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %table.addr, align 8
   store i32 0, i32* %i.addr, align 4
-  %107 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
-  %108 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %107, i64 0, i32 2
-  %109 = load i8*, i8** %108, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %127 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
+  %128 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %127, i64 0, i32 2
+  %129 = load i8*, i8** %128, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   br label %for.cond
 
 for.cond:
-  %110 = load i32, i32* %i.addr, align 4
-  %111 = icmp slt i32 %110, 24
-  br i1 %111, label %for.body, label %for.end
+  %130 = load i32, i32* %i.addr, align 4
+  %131 = icmp slt i32 %130, 24
+  br i1 %131, label %for.body, label %for.end
 
 for.body:
-  %112 = load i32, i32* %i.addr, align 4
-  %113 = sext i32 %112 to i64
-  %114 = load i32, i32* %i.addr, align 4
-  %115 = ashr i32 %114, 3
-  %116 = mul nsw i32 100, %115
-  %117 = load i32, i32* %i.addr, align 4
-  %118 = and i32 %117, 7
-  %119 = add nsw i32 %116, %118
-  %120 = bitcast i8* %109 to i32*
-  %121 = getelementptr inbounds i32, i32* %120, i64 %113
-  store i32 %119, i32* %121, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %132 = load i32, i32* %i.addr, align 4
+  %133 = sext i32 %132 to i64
+  %134 = load i32, i32* %i.addr, align 4
+  %135 = ashr i32 %134, 3
+  %136 = mul nsw i32 100, %135
+  %137 = load i32, i32* %i.addr, align 4
+  %138 = and i32 %137, 7
+  %139 = add nsw i32 %136, %138
+  %140 = bitcast i8* %129 to i32*
+  %141 = getelementptr inbounds i32, i32* %140, i64 %133
+  store i32 %139, i32* %141, align 4, !alias.scope !4, !noalias !3, !tbaa !12
   br label %for.inc
 
 for.inc:
-  %122 = load i32, i32* %i.addr, align 4
-  %123 = add nsw i32 %122, 1
-  store i32 %123, i32* %i.addr, align 4
+  %142 = load i32, i32* %i.addr, align 4
+  %143 = add nsw i32 %142, 1
+  store i32 %143, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %124 = load i8*, i8** %a.addr, align 8
-  %125 = call %struct.nish_array* @limbsOfHex(i8* %124)
-  store %struct.nish_array* %125, %struct.nish_array** %moved.addr, align 8
-  %126 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
-  %127 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
-  call void @p256TableMove(%struct.nish_array* %126, %struct.nish_array* %127, i32 8, i32 0)
-  %128 = load i32, i32* %failed.addr, align 4
-  %129 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
-  %130 = call i8* @hexOfLimbs(%struct.nish_array* %129)
-  %131 = load i8*, i8** %a.addr, align 8
-  %132 = call i32 @report(i8* bitcast ({ i64, [42 x i8] }* @.str.38 to i8*), i8* %130, i8* %131)
-  %133 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %128, i32 %132)
-  %134 = extractvalue { i32, i1 } %133, 0
-  %135 = extractvalue { i32, i1 } %133, 1
-  br i1 %135, label %ovf.fail, label %ovf.ok.11
+  %144 = load i8*, i8** %a.addr, align 8
+  %145 = call %struct.nish_array* @limbsOfHex(i8* %144)
+  store %struct.nish_array* %145, %struct.nish_array** %moved.addr, align 8
+  %146 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
+  %147 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
+  call void @p256TableMove(%struct.nish_array* %146, %struct.nish_array* %147, i32 8, i32 0)
+  %148 = load i32, i32* %failed.addr, align 4
+  %149 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
+  %150 = call i64 @nish_arena_mark()
+  %151 = call i8* @hexOfLimbs(%struct.nish_array* %149)
+  %152 = call i8* @nish_arena_keep(i64 %150, i8* %151)
+  %153 = load i8*, i8** %a.addr, align 8
+  %154 = call i32 @report(i8* bitcast ({ i64, [42 x i8] }* @.str.38 to i8*), i8* %152, i8* %153)
+  %155 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %148, i32 %154)
+  %156 = extractvalue { i32, i1 } %155, 0
+  %157 = extractvalue { i32, i1 } %155, 1
+  br i1 %157, label %ovf.fail, label %ovf.ok.11
 
 ovf.ok.11:
-  store i32 %134, i32* %failed.addr, align 4
-  %136 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
-  %137 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
-  call void @p256TableMove(%struct.nish_array* %136, %struct.nish_array* %137, i32 8, i32 1)
-  %138 = load i32, i32* %failed.addr, align 4
-  %139 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
-  %140 = call i8* @hexOfLimbs(%struct.nish_array* %139)
-  %141 = call i32 @report(i8* bitcast ({ i64, [51 x i8] }* @.str.39 to i8*), i8* %140, i8* bitcast ({ i64, [65 x i8] }* @.str.40 to i8*))
-  %142 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %138, i32 %141)
-  %143 = extractvalue { i32, i1 } %142, 0
-  %144 = extractvalue { i32, i1 } %142, 1
-  br i1 %144, label %ovf.fail, label %ovf.ok.12
+  store i32 %156, i32* %failed.addr, align 4
+  %158 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
+  %159 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
+  call void @p256TableMove(%struct.nish_array* %158, %struct.nish_array* %159, i32 8, i32 1)
+  %160 = load i32, i32* %failed.addr, align 4
+  %161 = load %struct.nish_array*, %struct.nish_array** %moved.addr, align 8
+  %162 = call i64 @nish_arena_mark()
+  %163 = call i8* @hexOfLimbs(%struct.nish_array* %161)
+  %164 = call i8* @nish_arena_keep(i64 %162, i8* %163)
+  %165 = call i32 @report(i8* bitcast ({ i64, [51 x i8] }* @.str.39 to i8*), i8* %164, i8* bitcast ({ i64, [65 x i8] }* @.str.40 to i8*))
+  %166 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %160, i32 %165)
+  %167 = extractvalue { i32, i1 } %166, 0
+  %168 = extractvalue { i32, i1 } %166, 1
+  br i1 %168, label %ovf.fail, label %ovf.ok.12
 
 ovf.ok.12:
-  store i32 %143, i32* %failed.addr, align 4
-  %145 = load i32, i32* %failed.addr, align 4
+  store i32 %167, i32* %failed.addr, align 4
+  %169 = load i32, i32* %failed.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %145
+  ret i32 %169
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -18369,62 +18404,68 @@ entry:
   %0 = call i32 @knownAnswers()
   store i32 %0, i32* %failed.addr, align 4
   %1 = load i32, i32* %failed.addr, align 4
-  %2 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.42 to i8*))
-  %3 = call i32 @report(i8* bitcast ({ i64, [26 x i8] }* @.str.41 to i8*), i8* %2, i8* bitcast ({ i64, [130 x i8] }* @.str.43 to i8*))
-  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %3)
-  %5 = extractvalue { i32, i1 } %4, 0
-  %6 = extractvalue { i32, i1 } %4, 1
-  br i1 %6, label %ovf.fail, label %ovf.ok
+  %2 = call i64 @nish_arena_mark()
+  %3 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.42 to i8*))
+  %4 = call i8* @nish_arena_keep(i64 %2, i8* %3)
+  %5 = call i32 @report(i8* bitcast ({ i64, [26 x i8] }* @.str.41 to i8*), i8* %4, i8* bitcast ({ i64, [130 x i8] }* @.str.43 to i8*))
+  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %5, i32* %failed.addr, align 4
-  %7 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.44 to i8*))
-  store i8* %7, i8** %sample.addr, align 8
-  %8 = load i32, i32* %failed.addr, align 4
-  %9 = load i8*, i8** %sample.addr, align 8
-  %10 = bitcast i8* %9 to i64*
-  %11 = load i64, i64* %10, align 8
-  %12 = call i64 @llvm.smin.i64(i64 64, i64 %11)
-  %13 = call i64 @llvm.smax.i64(i64 %12, i64 0)
-  %14 = call i64 @llvm.smin.i64(i64 0, i64 %13)
-  %15 = call i64 @llvm.smax.i64(i64 0, i64 %13)
-  %16 = sub i64 %15, %14
-  %17 = getelementptr inbounds i8, i8* %9, i64 8
-  %18 = getelementptr inbounds i8, i8* %17, i64 %14
-  %19 = call i8* @nish_str_new(i8* %18, i64 %16)
-  %20 = call i32 @report(i8* bitcast ({ i64, [47 x i8] }* @.str.45 to i8*), i8* %19, i8* bitcast ({ i64, [65 x i8] }* @.str.46 to i8*))
-  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %20)
-  %22 = extractvalue { i32, i1 } %21, 0
-  %23 = extractvalue { i32, i1 } %21, 1
-  br i1 %23, label %ovf.fail, label %ovf.ok.1
+  store i32 %7, i32* %failed.addr, align 4
+  %9 = call i64 @nish_arena_mark()
+  %10 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.44 to i8*))
+  %11 = call i8* @nish_arena_keep(i64 %9, i8* %10)
+  store i8* %11, i8** %sample.addr, align 8
+  %12 = load i32, i32* %failed.addr, align 4
+  %13 = load i8*, i8** %sample.addr, align 8
+  %14 = bitcast i8* %13 to i64*
+  %15 = load i64, i64* %14, align 8
+  %16 = call i64 @llvm.smin.i64(i64 64, i64 %15)
+  %17 = call i64 @llvm.smax.i64(i64 %16, i64 0)
+  %18 = call i64 @llvm.smin.i64(i64 0, i64 %17)
+  %19 = call i64 @llvm.smax.i64(i64 0, i64 %17)
+  %20 = sub i64 %19, %18
+  %21 = getelementptr inbounds i8, i8* %13, i64 8
+  %22 = getelementptr inbounds i8, i8* %21, i64 %18
+  %23 = call i8* @nish_str_new(i8* %22, i64 %20)
+  %24 = call i32 @report(i8* bitcast ({ i64, [47 x i8] }* @.str.45 to i8*), i8* %23, i8* bitcast ({ i64, [65 x i8] }* @.str.46 to i8*))
+  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %24)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %22, i32* %failed.addr, align 4
-  %24 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.47 to i8*))
-  store i8* %24, i8** %test.addr, align 8
-  %25 = load i32, i32* %failed.addr, align 4
-  %26 = load i8*, i8** %test.addr, align 8
-  %27 = bitcast i8* %26 to i64*
-  %28 = load i64, i64* %27, align 8
-  %29 = call i64 @llvm.smin.i64(i64 64, i64 %28)
-  %30 = call i64 @llvm.smax.i64(i64 %29, i64 0)
-  %31 = call i64 @llvm.smin.i64(i64 0, i64 %30)
-  %32 = call i64 @llvm.smax.i64(i64 0, i64 %30)
-  %33 = sub i64 %32, %31
-  %34 = getelementptr inbounds i8, i8* %26, i64 8
-  %35 = getelementptr inbounds i8, i8* %34, i64 %31
-  %36 = call i8* @nish_str_new(i8* %35, i64 %33)
-  %37 = call i32 @report(i8* bitcast ({ i64, [45 x i8] }* @.str.48 to i8*), i8* %36, i8* bitcast ({ i64, [65 x i8] }* @.str.49 to i8*))
-  %38 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %37)
-  %39 = extractvalue { i32, i1 } %38, 0
-  %40 = extractvalue { i32, i1 } %38, 1
-  br i1 %40, label %ovf.fail, label %ovf.ok.2
+  store i32 %26, i32* %failed.addr, align 4
+  %28 = call i64 @nish_arena_mark()
+  %29 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.47 to i8*))
+  %30 = call i8* @nish_arena_keep(i64 %28, i8* %29)
+  store i8* %30, i8** %test.addr, align 8
+  %31 = load i32, i32* %failed.addr, align 4
+  %32 = load i8*, i8** %test.addr, align 8
+  %33 = bitcast i8* %32 to i64*
+  %34 = load i64, i64* %33, align 8
+  %35 = call i64 @llvm.smin.i64(i64 64, i64 %34)
+  %36 = call i64 @llvm.smax.i64(i64 %35, i64 0)
+  %37 = call i64 @llvm.smin.i64(i64 0, i64 %36)
+  %38 = call i64 @llvm.smax.i64(i64 0, i64 %36)
+  %39 = sub i64 %38, %37
+  %40 = getelementptr inbounds i8, i8* %32, i64 8
+  %41 = getelementptr inbounds i8, i8* %40, i64 %37
+  %42 = call i8* @nish_str_new(i8* %41, i64 %39)
+  %43 = call i32 @report(i8* bitcast ({ i64, [45 x i8] }* @.str.48 to i8*), i8* %42, i8* bitcast ({ i64, [65 x i8] }* @.str.49 to i8*))
+  %44 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %43)
+  %45 = extractvalue { i32, i1 } %44, 0
+  %46 = extractvalue { i32, i1 } %44, 1
+  br i1 %46, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  store i32 %39, i32* %failed.addr, align 4
-  %41 = load i32, i32* %failed.addr, align 4
+  store i32 %45, i32* %failed.addr, align 4
+  %47 = load i32, i32* %failed.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %41
+  ret i32 %47
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

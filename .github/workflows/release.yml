@@ -63,8 +63,9 @@ on:
 # which takes the write token away from the jobs that do not publish -- and
 # `binaries` is the one worth taking it from, being `npm ci` and `brew install`
 # on as many machines as there are targets. The one exception is `lockfile`,
-# which pushes a branch and opens a pull request from it against main, so it
-# asks for `contents: write` and `pull-requests: write` and nothing else.
+# which pushes a branch, opens a pull request from it against main and merges
+# that pull request, so it asks for `contents: write` and `pull-requests: write`
+# and nothing else.
 #
 # What this does NOT do is keep third-party install code away from the write
 # token, because `release` still runs `npm ci` under it. What it no longer has
@@ -752,22 +753,29 @@ jobs:
   # ran before the publish and `npm ci` quietly drops an optional dependency
   # whose version the registry does not have yet; the next pull request to
   # merge main was the first thing to go red, and it carried the regenerated
-  # lockfile by hand. This job opens that pull request instead, and ci.yml's
-  # `lint` job keeps main red until it merges.
+  # lockfile by hand. This job opens that pull request instead and merges it
+  # itself, and ci.yml's `lint` job keeps main red until it lands.
+  #
+  # Merged here, not left for a human, because there is nothing in it to
+  # review: the lockfile is fully determined by the registry and the step
+  # that writes it checks it with `npm ls`. A pull request opened with
+  # GITHUB_TOKEN also starts no workflow, so it would wait with no checks at
+  # all -- after 0.17.0, #493 sat open like that while main stayed red, until
+  # an unrelated pull request carried the same lockfile by hand.
   #
   # Checked out at main rather than at the tag, because main is where the stale
   # lockfile is and where the pull request goes. The token arrangement and the
   # refusal handling are release-pr.yml's, for the same reasons given there.
   # Idempotent: a re-run whose lockfile already agrees succeeds without doing
-  # anything, and one whose pull request is already open refreshes the branch
-  # and succeeds without opening a second.
+  # anything, and one whose pull request is already open refreshes the branch,
+  # merges that one and does not open a second.
   lockfile:
     name: regenerate package-lock.json
     needs: [targets, npm]
     runs-on: ubuntu-latest
     permissions:
       contents: write # push the release/lockfile-v<version> branch
-      pull-requests: write # open the pull request from it
+      pull-requests: write # open the pull request from it and merge it
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -866,9 +874,11 @@ jobs:
 
           if existing="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" && [ -n "$existing" ]; then
             echo "::notice::the lockfile pull request for $v is already open: #$existing"
+            pr="$existing"
           elif out="$(gh pr create --head "$branch" --base main --title "$title" --body "$body" 2>&1)"; then
             echo "$out"
             echo "::notice::opened the lockfile pull request for $v"
+            pr="$(printf '%s\n' "$out" | tail -n 1)" # the URL gh prints last
           elif printf '%s' "$out" | grep -qF 'not permitted to create or approve pull requests'; then
             # The same repository switch release-pr.yml explains: the branch is
             # pushed, only the pull request is missing, and a release that has
@@ -879,4 +889,19 @@ jobs:
           else
             echo "$out" >&2
             exit 1
+          fi
+
+          # Squash-merged at once, pinned to the commit this job pushed so a
+          # branch that moved under it is not merged blind. A merge the
+          # repository refuses -- a branch rule this token cannot satisfy -- is
+          # a warning and not a red release: the publish is done, and the pull
+          # request is open for a human to merge.
+          if [ -n "${pr:-}" ]; then
+            if out="$(gh pr merge "$pr" --squash --delete-branch --match-head-commit "$(git rev-parse HEAD)" 2>&1)"; then
+              echo "$out"
+              echo "::notice::merged the lockfile pull request for $v"
+            else
+              echo "$out"
+              echo "::warning title=Lockfile pull request not merged::Opened the lockfile pull request for $v but could not merge it; merge $pr by hand."
+            fi
           fi

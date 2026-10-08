@@ -130,8 +130,10 @@ top-level field; both now walk both places, and a standing check compares the
 two files on every run. The platform packages' own lockfile entries (their
 `resolved` URL and `integrity`) cannot exist until they are published, so
 `release.yml`'s `lockfile` job opens a pull request with the regenerated
-lockfile after the publish, and CI's `lint` job checks `npm ls
---package-lock-only` everywhere except on the Release PR and on a tag.
+lockfile after the publish and squash-merges it itself, and CI's `lint` job
+checks `npm ls --package-lock-only` everywhere except on the Release PR and on
+a tag. Nobody merges a lockfile pull request by hand; one left open means the
+repository refused the job's merge, and its run says so in a warning.
 
 ## Release procedure
 
@@ -191,7 +193,7 @@ Releases ride a train; nothing is published from a developer machine.
    by default. A failed publish is fixed by re-running the job, which skips
    versions already on the registry. A package for a newly added platform must
    be published by hand once before trust can be set on it; the job names the
-   two commands. `lockfile` then opens the lockfile pull request.
+   two commands. `lockfile` then opens the lockfile pull request and merges it.
 
 If a release is wrong, delete the GitHub release and the tag, fix, and release
 a *new* patch version; never move a tag CI has already built. To preview the

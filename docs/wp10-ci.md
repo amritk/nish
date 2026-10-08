@@ -18,12 +18,12 @@ and #397 ended cancelled before that rule).
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point`, then the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/4)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/4` ([shards](#shards-and-time-limits)), then, in shard 1 only, the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
 | `test (macos-latest)` | — | **commented out** of the matrix, on six named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
-| `runner` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs the whole golden corpus through `tests/nish/run.ts`, the harness written in Nish. A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
+| `runner (shard <i>/4)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a quarter of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, with `--shard <i>/4`. A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags and on `release/next`), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
 Every job that compiles anything compiles with `src/`, built from the seed:
@@ -47,6 +47,31 @@ is a third count beside passed and skipped, honoured only under GitHub Actions
 on a host with a seed target, and a check fails if `test` asks for it while
 `bootstrap` has stopped running `--verify`. A local `npm test` always runs the
 fixed point.
+
+### Shards and time limits
+
+Every job stops at 15 minutes (`timeout-minutes`), and every LLVM install step
+at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
+limit: on #502 three jobs waited on one `apt-get update` fetch from
+archive.ubuntu.com from 19:22 to 01:22 and no test ran. apt has no timeout of
+its own, so every `apt-get` is also handed `$APT_OPTS` (30 s per connection,
+three retries) from the workflow's `env`.
+
+Two jobs took longer than 15 minutes unsplit, so each runs as four:
+
+- **`test`.** `node tests/run.js --shard <i>/<n>` splits the suite. Every shard
+  builds stage1 and runs everything before the `tests/link/` programs, which is
+  under two minutes. Shard 1 runs every section after them, together with the
+  link programs whose output a later check reads (`LINK_READ_LATER`). Shards 2
+  to `n` share the remaining link programs round-robin and stop once theirs are
+  done. What a shard leaves to another is counted as **delegated** and names the
+  shard that proves it, so no shard's summary claims checks it did not make.
+- **`runner`.** `build/nish-runner --shard <i>/<n>` deals the cases and link
+  programs the runner selects round-robin.
+
+A check in `tests/run.js` holds each job's `shard:` list to the `n` its
+`--shard` names. A list shorter than `n` would be a green run in which one
+shard's programs ran nowhere.
 
 ### The macOS `test` row
 
@@ -209,8 +234,17 @@ node scripts/ci-profile.mjs -- npm run test:nish
 
 Profile the **unfiltered** run: `node tests/run.js <substring>` measures
 nothing until `rm -rf build/test`, and `fs.existsSync` guards drop checks with
-no `SKIP` line (`.claude/testing.md`). Splitting `test` further would first
-need a `--section` mechanism in `tests/run.js` with honest skip counting.
+no `SKIP` line (`.claude/testing.md`). A shard is not a filter, which is why
+`--shard` cuts at a section boundary and delegates rather than filtering
+([shards](#shards-and-time-limits)).
+
+A newer measurement, per section rather than per check, on `e1449d5`: one
+unsharded local run of 2014 s spent 1305 s on the `tests/link/` programs, 344 s
+on WP14 self-hosting (its fixed point included, which CI delegates), 96 s on the
+WP13 differential and 56 s building stage1. Every other section took under
+35 s, and they came to 213 s together. CI's `test` step took 24 min 29 s on the
+same commit. The shard split follows from those numbers: the link programs are
+the part worth dealing out.
 
 ## Running the same steps locally
 
