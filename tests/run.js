@@ -12869,6 +12869,13 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // scope"): `T` here, `T | undefined` in lib.es5, the `pop` divergence above.
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
+    [
+      "mem_join_parts_method.ts",
+      // The join-only rule's method negative hands a part back with
+      // `parts.pop()` and keeps it as a `string`, because a popped part is the
+      // read-back the rule has to refuse: the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
   ])
   const acceptedCases = fs
     .readdirSync(casesDir)

@@ -34,7 +34,7 @@
 //                     string does not.
 
 import { Compilation } from "./compilation"
-import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignature } from "./interop-abi"
+import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignatureLine } from "./interop-abi"
 import { wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
 import { TypeTable } from "./types"
 
@@ -54,6 +54,10 @@ const rangeNote = (table: TypeTable, fn: ExternalFunction): string => {
   }
   return ranges.length > 0 ? `. Throws a RangeError unless ${ranges.join(" and ")}.` : ""
 }
+
+/** The doc comment above an export's declaration: its module, its signature and its range note, built as one line. */
+const docComment = (table: TypeTable, fn: ExternalFunction): string =>
+  tsSignatureLine(table, fn.sig, `  /** ${fn.unit.name}: `, `${rangeNote(table, fn)} */`)
 
 export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
   const table = compilation.table
@@ -96,10 +100,9 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
   // declarations get ahead of the loader once already.
   let count = 0
   for (const fn of fns) {
-    const source = tsSignature(table, fn.sig)
     const skip = wasmSkipReason(table, fn.sig)
     if (skip.length > 0) {
-      lines.push(`  // ${source}  -- not exported to JS: ${skip}`)
+      lines.push(tsSignatureLine(table, fn.sig, "  // ", `  -- not exported to JS: ${skip}`))
       continue
     }
     const params: string[] = []
@@ -109,7 +112,7 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
       i = i + 1
     }
     count = count + 1
-    lines.push(`  /** ${fn.unit.name}: ${source}${rangeNote(table, fn)} */`)
+    lines.push(docComment(table, fn))
     lines.push(
       `  ${jsExportName(fn.sig)}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
     )
