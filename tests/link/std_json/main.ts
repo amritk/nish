@@ -47,10 +47,13 @@ const agreeOn = (asked: JsonAsked, object: string, names: string[]): void => {
     return;
   }
   let k: i32 = 0;
-  while (k < toI32(names.length)) {
+  while (k < toI32(names.length) && k < toI32(values.length)) {
+    // Both read before the call, which is where the bounds proof forgets a length.
+    const got = values[k];
+    const name = names[k];
     asked.slots += 1;
-    if (!sameAnswer(values[k], jsonField(object, names[k])) && asked.disagreement.length === 0) {
-      asked.disagreement = `slot ${k}, ${names[k]}, in ${object}`;
+    if (!sameAnswer(got, jsonField(object, name)) && asked.disagreement.length === 0) {
+      asked.disagreement = `slot ${k}, ${name}, in ${object}`;
     }
     k += 1;
   }
@@ -315,6 +318,9 @@ export const main = (): number => {
   t.eqStr("a value that never ends answers nothing after it", jsonCaseFields(asked, nestedUnended, ["b", "a"]), "<absent>|<absent>");
   t.eqStr("a key with no colon answers nothing from there on", jsonCaseFields(asked, '{"a":1,"b" 2,"c":3}', ["c", "b", "a"]), "<absent>|<absent>|1");
   t.eqStr("text that is not an object answers nothing", jsonCaseFields(asked, "wrote build/main.ll", ["file", "code"]), "<absent>|<absent>");
+  // A colon with no value after it: the value is empty, and `jsonField` has
+  // always answered the empty string for it and read on past the comma.
+  t.eqStr("an empty value answers the empty string, and the scan reads on", jsonCaseFields(asked, '{"a":,"b":1}', ["b", "a"]), "1|");
   // Every name answers before the fault, so the scan has stopped by the time
   // it would reach it, and the fault changes nothing.
   t.eqStr("a fault after every name has answered changes nothing", jsonCaseFields(asked, '{"a":1,"b":2,"c', ["b", "a"]), "2|1");
@@ -323,7 +329,7 @@ export const main = (): number => {
   // The last object's names, then everything at once.
   agreeAndMove(asked, "");
   t.eqStr("jsonFields agrees with jsonField, slot for slot, on every object above", asked.disagreement, "");
-  t.eqI32("and it compared every slot asked", asked.slots, 214);
+  t.eqI32("and it compared every slot asked", asked.slots, 216);
 
   // 1,000 calls leave the arena where one call left it, because the function
   // around them takes back what they allocated when it returns. A loop's own
