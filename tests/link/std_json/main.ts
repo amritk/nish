@@ -37,14 +37,11 @@ const sameAnswer = (a: string | null, b: string | null): boolean => {
   return a === b;
 };
 
-/** Holds `jsonFields(object, names)` to `jsonField(object, names[k])` slot for slot. */
-const agreeOn = (asked: JsonAsked, object: string, names: string[]): void => {
+/** `jsonFields(object, names)`, after holding it to `jsonField(object, names[k])` slot for slot. */
+const agreeOn = (asked: JsonAsked, object: string, names: string[]): (string | null)[] => {
   const values = jsonFields(object, names);
-  if (toI32(values.length) !== toI32(names.length)) {
-    if (asked.disagreement.length === 0) {
-      asked.disagreement = `${values.length} slots for ${names.length} names in ${object}`;
-    }
-    return;
+  if (toI32(values.length) !== toI32(names.length) && asked.disagreement.length === 0) {
+    asked.disagreement = `${values.length} slots for ${names.length} names in ${object}`;
   }
   let k: i32 = 0;
   while (k < toI32(names.length) && k < toI32(values.length)) {
@@ -57,6 +54,7 @@ const agreeOn = (asked: JsonAsked, object: string, names: string[]): void => {
     }
     k += 1;
   }
+  return values;
 };
 
 /** Checks the names asked of the current object, as asked and reversed, then moves on to `object`. */
@@ -88,9 +86,8 @@ const jsonCaseField = (asked: JsonAsked, object: string, name: string): string =
 
 /** `jsonFields`' slots joined with `|`, each absent one as a marker, after holding them to `jsonField`. */
 const jsonCaseFields = (asked: JsonAsked, object: string, names: string[]): string => {
-  agreeOn(asked, object, names);
   const parts: string[] = [];
-  for (const value of jsonFields(object, names)) {
+  for (const value of agreeOn(asked, object, names)) {
     parts.push(value === null ? "<absent>" : value);
   }
   return parts.join("|");

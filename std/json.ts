@@ -52,11 +52,8 @@
  * array whose slot `k` is exactly what `jsonField(line, names[k])` answers —
  * absent, first-of-a-duplicate and malformed input included — because the two
  * share the step that reads one member (`jsonReadMember`) and stop at the same
- * one. The price is the array: each value is stored into it, which the escape
- * analysis does not follow, so a loop that calls `jsonFields` gets no per-pass
- * arena release of its own (LANGUAGE.md, "Memory model"). A function that
- * takes only strings and numbers still takes everything back when it returns,
- * and `jsonField` keeps the per-pass release, which is the trade a caller makes.
+ * one. Its array costs a loop that calls it the per-pass arena release, which
+ * `jsonField` keeps; `jsonFields`' own comment says what that means for a caller.
  *
  * Every offset here is a **byte** offset and every width is spelled, with each
  * length and byte a builtin answers read through `toI32` — `.length` and
