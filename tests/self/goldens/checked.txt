@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 927 programs, 63034 dump lines.
+# 928 programs, 63238 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -53514,6 +53514,211 @@ function Box<i32>.keep<string>(this: Box<i32>, other: string): i32 -> @Box$i32.k
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+program docs/cookbook/json-fields.ts
+module docs/cookbook/json-fields.ts (entry)
+import jsonFields from "nish/json" -> function @nish.jsonFields
+function summary(line: string): string -> @summary [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonFields
+  escaping: line
+  calls: nish.jsonFields nish_str_concat
+  stackSites=1 stackLocals=0
+  local 7:9 fields: string | null[] (const)
+  callee 7:18 jsonFields -> @nish.jsonFields
+  local 11:9 code: string | null (const)
+  local 12:9 at: string | null (const)
+  local 13:9 message: string | null (const)
+module std/json.ts [package nish]
+const JSON_BACKSPACE: i32 = 8
+const JSON_TAB: i32 = 9
+const JSON_NEWLINE: i32 = 10
+const JSON_FORM_FEED: i32 = 12
+const JSON_CARRIAGE_RETURN: i32 = 13
+const JSON_SPACE: i32 = 32
+const JSON_QUOTE: i32 = 34
+const JSON_COMMA: i32 = 44
+const JSON_COLON: i32 = 58
+const JSON_BACKSLASH: i32 = 92
+const JSON_LETTER_U: i32 = 117
+const JSON_OPEN_BRACKET: i32 = 91
+const JSON_CLOSE_BRACKET: i32 = 93
+const JSON_OPEN_BRACE: i32 = 123
+const JSON_CLOSE_BRACE: i32 = 125
+const JSON_UTF8_TWO_BYTE_LEAD: i32 = 192
+const JSON_UTF8_THREE_BYTE_LEAD: i32 = 224
+const JSON_UTF8_CONTINUATION: i32 = 128
+const JSON_UTF8_LOW_SIX: i32 = 63
+const JSON_UTF8_TWO_BYTE_FLOOR: i32 = 128
+const JSON_UTF8_THREE_BYTE_FLOOR: i32 = 2048
+const JSON_HEX_BASE: i32 = 16
+struct JsonMember (class) size=20 align=4
+  field keyAt: i32 index=0 offset=0 initialized
+  field keyEnd: i32 index=1 offset=4 initialized
+  field valueAt: i32 index=2 offset=8 initialized
+  field valueEnd: i32 index=3 offset=12 initialized
+  field next: i32 index=4 offset=16 initialized
+function jsonIsBlankByte(code: i32): boolean -> @nish.jsonIsBlankByte
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonSkipBlank(text: string, from: i32): i32 -> @nish.jsonSkipBlank
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  calls: nish.jsonIsBlankByte
+  stackSites=0 stackLocals=0
+  local 120:9 length: i32 (const)
+  local 121:7 i: i32 (let)
+  callee 122:24 jsonIsBlankByte -> @nish.jsonIsBlankByte
+function jsonEndOfString(text: string, at: i32): i32 -> @nish.jsonEndOfString
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 135:9 length: i32 (const)
+  local 139:7 i: i32 (let)
+  local 141:11 code: i32 (const)
+function jsonEndOfValue(text: string, at: i32): i32 -> @nish.jsonEndOfValue
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at text
+  calls: nish.jsonEndOfString nish.jsonIsBlankByte nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 170:9 length: i32 (const)
+  local 174:9 first: i32 (const)
+  callee 176:12 jsonEndOfString -> @nish.jsonEndOfString
+  local 179:9 depth: i32 (let)
+  local 180:9 inString: boolean (let)
+  local 181:9 i: i32 (let)
+  local 183:13 code: i32 (const)
+  local 210:7 i: i32 (let)
+  local 212:11 code: i32 (const)
+  callee 216:9 jsonIsBlankByte -> @nish.jsonIsBlankByte
+function jsonHexDigit(code: i32): i32 -> @nish.jsonHexDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonHex4(text: string, at: i32, end: i32): i32 -> @nish.jsonHex4
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonHexDigit nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 243:7 value: i32 (let)
+  local 244:7 i: i32 (let)
+  local 246:11 digit: i32 (const)
+  callee 246:24 jsonHexDigit -> @nish.jsonHexDigit
+function jsonUtf8(code: i32): string -> @nish.jsonUtf8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_new
+  stackSites=0 stackLocals=0
+  local 271:11 lead: string (const)
+  local 274:9 lead: string (const)
+  local 275:9 middle: string (const)
+function jsonUtf8Width(code: i32): i32 -> @nish.jsonUtf8Width
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonUtf8Byte(code: i32, width: i32, k: i32): i32 -> @nish.jsonUtf8Byte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: code
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function jsonUnescape(text: string, at: i32, end: i32): string -> @nish.jsonUnescape
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end text
+  calls: nish.jsonHex4 nish.jsonUtf8 nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_new
+  stackSites=1 stackLocals=1
+  local 328:7 i: i32 (let)
+  local 335:9 parts: string[] (const)
+  local 336:7 start: i32 (let)
+  local 352:11 letter: i32 (const)
+  local 369:13 code: i32 (const)
+  callee 369:25 jsonHex4 -> @nish.jsonHex4
+  callee 376:20 jsonUtf8 -> @nish.jsonUtf8
+function jsonNameHas(name: string, j: i32, code: i32): boolean -> @nish.jsonNameHas
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonKeyEquals(text: string, at: i32, end: i32, name: string): boolean -> @nish.jsonKeyEquals
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end name text
+  calls: nish.jsonHex4 nish.jsonNameHas nish.jsonUtf8Byte nish.jsonUtf8Width nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 415:7 i: i32 (let)
+  local 416:7 j: i32 (let)
+  local 418:11 code: i32 (const)
+  callee 420:12 jsonNameHas -> @nish.jsonNameHas
+  local 427:11 letter: i32 (const)
+  local 429:13 point: i32 (const)
+  callee 429:26 jsonHex4 -> @nish.jsonHex4
+  callee 431:14 jsonNameHas -> @nish.jsonNameHas
+  callee 431:55 jsonNameHas -> @nish.jsonNameHas
+  local 438:13 width: i32 (const)
+  callee 438:26 jsonUtf8Width -> @nish.jsonUtf8Width
+  local 439:11 k: i32 (let)
+  callee 441:14 jsonNameHas -> @nish.jsonNameHas
+  callee 441:39 jsonUtf8Byte -> @nish.jsonUtf8Byte
+  local 451:9 decoded: i32 (let)
+  callee 465:10 jsonNameHas -> @nish.jsonNameHas
+function jsonFirstKey(object: string): i32 -> @nish.jsonFirstKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: object
+  calls: nish.jsonSkipBlank nish_panic_index
+  stackSites=0 stackLocals=0
+  local 503:9 length: i32 (const)
+  local 504:9 i: i32 (const)
+  callee 504:18 jsonSkipBlank -> @nish.jsonSkipBlank
+  callee 508:10 jsonSkipBlank -> @nish.jsonSkipBlank
+function jsonReadMember(object: string, at: i32, member: JsonMember): boolean -> @nish.jsonReadMember
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 544:3
+  escaping: at object
+  calls: nish.jsonEndOfString nish.jsonEndOfValue nish.jsonSkipBlank
+  pointer member: size=20 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 523:9 length: i32 (const)
+  local 531:9 keyEnd: i32 (const)
+  callee 531:23 jsonEndOfString -> @nish.jsonEndOfString
+  local 535:9 colon: i32 (const)
+  callee 535:22 jsonSkipBlank -> @nish.jsonSkipBlank
+  local 539:9 valueAt: i32 (const)
+  callee 539:24 jsonSkipBlank -> @nish.jsonSkipBlank
+  local 540:9 valueEnd: i32 (const)
+  callee 540:25 jsonEndOfValue -> @nish.jsonEndOfValue
+  local 548:9 comma: i32 (const)
+  callee 548:22 jsonSkipBlank -> @nish.jsonSkipBlank
+  callee 552:19 jsonSkipBlank -> @nish.jsonSkipBlank
+function jsonValueText(object: string, member: JsonMember): string -> @nish.jsonValueText
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: object
+  calls: nish.jsonUnescape nish_panic_index nish_panic_overflow nish_str_new
+  pointer member: size=20 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 562:9 valueAt: i32 (const)
+  local 563:9 valueEnd: i32 (const)
+  callee 571:12 jsonUnescape -> @nish.jsonUnescape
+function jsonField(object: string, name: string): string | null -> @nish.jsonField [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonReadMember
+  escaping: name object
+  calls: nish.jsonFirstKey nish.jsonKeyEquals nish.jsonReadMember nish.jsonValueText
+  stackSites=1 stackLocals=1
+  local 591:9 member: JsonMember (const)
+  local 592:7 at: i32 (let)
+  callee 592:17 jsonFirstKey -> @nish.jsonFirstKey
+  callee 593:10 jsonReadMember -> @nish.jsonReadMember
+  callee 597:9 jsonKeyEquals -> @nish.jsonKeyEquals
+  callee 598:14 jsonValueText -> @nish.jsonValueText
+function jsonFields(object: string, names: string[]): string | null[] -> @nish.jsonFields [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 647:11
+  escaping: object
+  calls: nish.jsonFirstKey nish.jsonKeyEquals nish.jsonReadMember nish.jsonValueText nish_exit nish_panic_overflow nish_write
+  pointer names: size=0 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 627:9 count: i32 (const)
+  local 628:9 values: string | null[] (const)
+  local 629:9 member: JsonMember (const)
+  local 630:7 missing: i32 (let)
+  local 631:7 at: i32 (let)
+  callee 631:17 jsonFirstKey -> @nish.jsonFirstKey
+  callee 632:25 jsonReadMember -> @nish.jsonReadMember
+  local 635:9 text: string | null (let)
+  local 636:9 k: i32 (let)
+  callee 640:33 jsonKeyEquals -> @nish.jsonKeyEquals
+  callee 642:18 jsonValueText -> @nish.jsonValueText
 program docs/cookbook/map-fused-extras.ts
 module docs/cookbook/map-fused-extras.ts (entry)
 import getOrInsert from "nish/map" -> generic function getOrInsert
