@@ -66,8 +66,16 @@ permissions:
 # The path is outside the checkout on purpose. A cache directory inside
 # `github.workspace` is a tree the repository does not track, and `npm test`,
 # `docs/check-links.mjs` and `biome` all walk the tree.
+#
+# `APT_OPTS` is every `apt-get` call's network bound. apt waits on a stalled
+# mirror with no timeout of its own: on #502, three jobs fell back from the
+# Azure mirror to archive.ubuntu.com, sat on one `InRelease` fetch, and were
+# cancelled by GitHub's six-hour job limit with no test having run. Thirty
+# seconds per connection and three retries turn that into a failure inside the
+# install step's own five-minute limit, which is the one that names it.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
+  APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
 # A newer push to a pull request makes the older run's answer worthless, so
 # that run is cancelled. A push to main is never superseded that way: each one
@@ -83,8 +91,9 @@ concurrency:
 
 jobs:
   test:
-    name: test (${{ matrix.os }})
+    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -162,6 +171,13 @@ jobs:
         # cancelling the Linux row that says whether it is the platform or the
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the six checks above
+        # `npm test` is split four ways by `--shard` (tests/run.js, "Shards"):
+        # shard 1 runs every section, the tests/link programs aside, and the
+        # others share those programs, which are two thirds of the suite's
+        # wall clock. One unsharded run took 25 minutes; each shard is under
+        # ten. The `/4` in the Test step is this list's length, and a check in
+        # tests/run.js holds the two together.
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -172,8 +188,9 @@ jobs:
 
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
+          sudo apt-get $APT_OPTS update
           # wasi-libc and compiler-rt's wasm32 builtins are the WASI sysroot the
           # `wasi` profile links against (scripts/build.sh). Without them the
           # suite's wasi checks -- argv_echo under Node's WASI, the compiler as
@@ -181,7 +198,7 @@ jobs:
           # counted skips, "no WASI sysroot", and nothing here would notice a
           # runtime that stops building against wasi-libc, as runtime-os.c did
           # when it called a `realpath` wasi-libc does not have (#396).
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 valgrind \
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 valgrind \
             wasi-libc libclang-rt-18-dev-wasm32
           # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
           # plain names through a private bin dir placed ahead of /usr/bin so the
@@ -196,6 +213,7 @@ jobs:
 
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
+        timeout-minutes: 10
         run: |
           brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
@@ -250,8 +268,11 @@ jobs:
       - name: Test
         env:
           WASI_SYSROOT: /usr
-        run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point
+        run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard ${{ matrix.shard }}/4
 
+      # The steps from here on run in shard 1 only: each answers once for the
+      # commit, and every shard built the same compiler.
+      #
       # `build/nish` is what the steps after the suite drive: stage1, one
       # directory below the repository root, which is where its package root is
       # found from (`packageRoot` in src/compile.ts).
@@ -267,11 +288,13 @@ jobs:
       # here can hand it a stale one, and when the suite fails this step and
       # every step after it are skipped.
       - name: Keep the compiler the suite tested
+        if: matrix.shard == 1
         run: cp build/nish-test build/nish
 
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
       # run, the compiler this job built.
       - name: Smoke (build + run every example with a main, size profile)
+        if: matrix.shard == 1
         env:
           NISH: build/nish
         run: bash scripts/smoke.sh
@@ -281,6 +304,7 @@ jobs:
       # (the `internal` linkage of --strict-exports and the `nsw` defaults were
       # missing), so the staleness check is a gate rather than a chore.
       - name: Docs (IR cookbook up to date)
+        if: matrix.shard == 1
         env:
           NISH: build/nish
         run: bash docs/cookbook/regen.sh --check
@@ -291,6 +315,7 @@ jobs:
       # `npm test` checks it too -- this names it in its own step so a stale
       # registry reads as itself rather than as one failure among a thousand.
       - name: Diagnostic codes (registry up to date)
+        if: matrix.shard == 1
         run: node scripts/gen-diagnostic-codes.mjs --check
 
       # The other half of WP19 G2.4 -- every code provoked by a program, not
@@ -299,6 +324,7 @@ jobs:
       # `--require-coverage` and `--strict-refusals`.
 
       - name: Size report
+        if: matrix.shard == 1
         env:
           MATRIX_OS: ${{ matrix.os }}
         run: |
@@ -405,6 +431,7 @@ jobs:
   seeds:
     name: which seeds the last release attaches
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       rows: ${{ steps.pick.outputs.rows }}
       cmp: ${{ steps.pick.outputs.cmp }}
@@ -436,6 +463,7 @@ jobs:
     # and this job is grey rather than green.
     if: needs.seeds.outputs.rows != '[]'
     runs-on: ${{ matrix.seed.runner }}
+    timeout-minutes: 15
     strategy:
       # One platform's linker is not another's, so a failure on one row must
       # not cancel the row that would say whether it is the platform or the
@@ -458,9 +486,10 @@ jobs:
       # push, to emit one warning.
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
@@ -470,6 +499,7 @@ jobs:
 
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
+        timeout-minutes: 10
         run: |
           brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
@@ -576,6 +606,7 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
+    timeout-minutes: 15
     strategy:
       # x86_64 and aarch64 have different registers and different calling
       # conventions, so one row failing must not cancel the row that would say
@@ -596,9 +627,10 @@ jobs:
       # scripts/bootstrap.sh), so this job wants the toolchain for the same
       # reason `bootstrap` does rather than only to read IR.
       - name: Install LLVM 18 + lld
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
@@ -673,8 +705,16 @@ jobs:
   # with `test`, so it costs a runner rather than wall-clock time, and it spawns a
   # compiler per case, which is why `npm test` does not pay for it.
   runner:
-    name: the golden cases, in Nish
+    name: the golden cases, in Nish (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The runner walks the corpus one program at a time, twenty minutes in one
+    # job; `--shard` deals the programs four ways. The `/4` below is this
+    # list's length, and tests/run.js checks that the two agree.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -684,9 +724,10 @@ jobs:
           cache: npm
 
       - name: Install LLVM 18 + lld
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
@@ -713,13 +754,12 @@ jobs:
       # `bash -e`, without it, so the exit status of a pipeline would be `tee`'s
       # and a runner that answered 1 would still be a green step.
       # The runner is built by the compiler under test and handed it with
-      # `--compiler`; with no filter it walks the
-      # whole corpus.
+      # `--compiler`; with no filter it walks its shard of the whole corpus.
       - name: The corpus, through the Nish runner
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          build/nish-runner --compiler build/nish | tee "$RUNNER_TEMP/nish-runner.log"
+          build/nish-runner --compiler build/nish --shard ${{ matrix.shard }}/4 | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
@@ -730,6 +770,7 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 

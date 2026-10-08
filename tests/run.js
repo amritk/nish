@@ -498,6 +498,27 @@ if (RETIRED.length > 0) {
   process.exit(2)
 }
 
+// ---- Shards ------------------------------------------------------------------------
+//
+// `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
+// below are two thirds of the suite's wall clock and run one at a time. Every
+// shard builds the compiler and runs everything before the link programs, which
+// is under two minutes. Shard 1 then runs every section after them, and the
+// link programs a later section reads the output of (`LINK_READ_LATER`); the
+// other link programs are dealt round-robin to shards 2..n, each of which stops
+// once its share is done. What a shard leaves to another is a delegation, named
+// in its summary, and never a skip that reads as unproven or a check that
+// silently was not made. No `--shard`, or `--shard 1/1`, is the whole suite.
+const shardAt = process.argv.indexOf("--shard")
+const shardSpec = shardAt >= 0 ? (process.argv[shardAt + 1] ?? "") : "1/1"
+const [SHARD, SHARDS] = /^\d+\/\d+$/.test(shardSpec) ? shardSpec.split("/").map(Number) : [0, 0]
+if (SHARDS < 1 || SHARD < 1 || SHARD > SHARDS) {
+  console.error(`tests/run.js: --shard wants <i>/<n> with 1 <= i <= n, not ${shardSpec || "nothing"}`)
+  process.exit(2)
+}
+/** The CI job that proves what this shard leaves to shard `i`. */
+const shardJob = (i) => `the \`test\` job's shard ${i}/${SHARDS}`
+
 // ---- The compiler under test -----------------------------------------------------
 //
 // One stage1 for the whole run, linked by the seed: `--seed <nish>`, then
@@ -539,7 +560,9 @@ if (
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
 // case has finished before the next section starts, and the checks are
 // reported in corpus order, which keeps the output the same at any width.
-const only = withoutSeed(process.argv.slice(2)).find((arg) => !arg.startsWith("-"))
+const only = withoutSeed(process.argv.slice(2).filter((_, i) => i + 2 !== shardAt && i + 1 !== shardAt)).find(
+  (arg) => !arg.startsWith("-")
+)
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
@@ -3931,8 +3954,44 @@ const functionHeaders = (ir) => {
   return out
 }
 
+/**
+ * The link programs whose output a check after the loop reads: by path, from
+ * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
+ * those checks; a new check that reads another program's output adds its name
+ * here, or it reads nothing in a sharded run.
+ */
+const LINK_READ_LATER = [
+  "par_dst_short",
+  "range_export",
+  "range_export_dts",
+  "range_export_foreign",
+  "range_export_header",
+  "range_export_napi",
+  "range_export_napi_async",
+  "range_export_unproven",
+  "unsafe_flag_scope",
+]
+/** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
+const linkShard = (() => {
+  const shardOf = new Map()
+  let dealt = 0
+  for (const name of linkTests) {
+    if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
+      shardOf.set(name, 1)
+    } else {
+      shardOf.set(name, 2 + (dealt % (SHARDS - 1)))
+      dealt++
+    }
+  }
+  return (name) => shardOf.get(name)
+})()
+const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
+
 for (const name of linkTests) {
   if (only && !name.includes(only)) {
+    continue
+  }
+  if (linkShard(name) !== SHARD) {
     continue
   }
   const dir = path.join(linkDir, name)
@@ -4118,6 +4177,22 @@ for (const name of linkTests) {
     run.status === wantCode && String(run.stdout).trim() === wantOut,
     `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
   )
+}
+
+// The end of a sharded run's split: shard 1 names the link programs it dealt
+// away, and every other shard names everything after this point and stops.
+if (linkDealtAway.length > 0) {
+  const byShard = new Map()
+  for (const name of linkDealtAway) {
+    byShard.set(linkShard(name), (byShard.get(linkShard(name)) ?? 0) + 1)
+  }
+  for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
+    delegate(`${count} tests/link program(s)`, shardJob(i))
+  }
+}
+if (SHARD > 1) {
+  delegate("every section after the tests/link programs", shardJob(1))
+  summarise()
 }
 
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
@@ -7626,6 +7701,24 @@ if (!only || "nish-runner".includes(only)) {
       ran.status === 0 && / 0 failed, /.test(report),
       report + String(ran.stderr)
     )
+    // `--shard`, which CI's `runner` job splits the corpus with: two halves of
+    // the same selection pass between them exactly the checks the whole does,
+    // so no program is dropped or run twice. A spec outside 1..n is refused.
+    const passed = (args) => {
+      const r = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), ...args], { cwd: root })
+      const m = / (\d+) passed, 0 failed, /.exec(String(r.stdout))
+      return r.status === 0 && m ? Number(m[1]) : -1
+    }
+    const whole = passed([])
+    const halves = [passed(["--shard", "1/2"]), passed(["--shard", "2/2"])]
+    const refused = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), "--shard", "3/2"], {
+      cwd: root,
+    })
+    check(
+      "the Nish runner's --shard 1/2 and 2/2 pass the `pop` cases' checks between them, and 3/2 is refused",
+      whole > 0 && halves.every((n) => n > 0) && halves[0] + halves[1] === whole && refused.status !== 0,
+      `whole ${whole}, halves ${halves.join(" + ")}, 3/2 exited ${refused.status}`
+    )
   }
 }
 
@@ -10693,6 +10786,23 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
     `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
   )
+
+  // A sharded job runs `--shard ${{ matrix.shard }}/<n>` over a `shard:` list,
+  // and the two numbers are written apart. A list shorter than `n` is a green
+  // run in which the missing shard's programs ran nowhere; a longer one is a
+  // shard the suite refuses. So the list's length is held to `n`, for the
+  // suite's own job and for the Nish runner's.
+  for (const job of ["test", "runner"]) {
+    const text = ciJob(ciYmlText, job)
+    const list = /^\s+shard: \[([\d, ]+)\]$/m.exec(text)
+    const flag = /--shard \$\{\{ matrix\.shard \}\}\/(\d+)/.exec(text)
+    const shards = list ? list[1].split(",").map((n) => Number(n.trim())) : []
+    check(
+      `ci.yml: the \`${job}\` job's shard list is 1..n for the n its --shard names`,
+      flag !== null && shards.length === Number(flag[1]) && shards.every((n, i) => n === i + 1),
+      `shard list: ${list ? list[1] : "(none)"}, --shard .../${flag ? flag[1] : "(none)"}`
+    )
+  }
 
   // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts, and
   // this check is what stops that from drifting.
