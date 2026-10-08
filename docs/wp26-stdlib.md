@@ -141,6 +141,33 @@ module's private functions carry its own name** (`isTextBlankByte`,
 `quicFrame…`, `hpack…`), the way `src/manifest.ts`'s helpers are
 `manifest`-prefixed. Module constants are folded at their uses and are exempt.
 
+### 3f. A function is not a value, so `jsonFields` shares a step, not a loop
+
+`jsonField(object, name)` scans from the start of the object on every call, so
+a program that wants a diagnostic's `code`, `line` and `message` reads each line
+three times. `jsonFields(object, names)` reads it once and answers one slot per
+name, in the order of `names`; slot `k` is what `jsonField(object, names[k])`
+answers, in every case: a name that is not there, a duplicated key (the first
+wins), a name asked twice, and a malformed object, where both stop at the same
+member. It stops as soon as every name has answered.
+
+The JavaScript shape would be one scanner taking a callback per member. With no
+function values, the two readers instead share the step that reads one member:
+`jsonReadMember` fills a `JsonMember` — the key's bounds, the value's bounds and
+the next key — and answers whether there was a member to read, so each reader
+is a short loop over it and neither can find a member the other does not. The
+`JsonMember` never leaves its reader, so it is a stack slot, and the step adds
+no allocation to `jsonField`.
+
+What `jsonFields` adds is its answer. Each value is stored into the array it
+returns, and a stored allocation is where the escape analysis stops following
+one, so a loop that calls it is refused its per-pass release, and
+`using a = arena()` around the call is refused outright. A function whose
+parameters are only strings and numbers still takes everything back when it
+returns (`tests/link/std_json`: 1,000 calls leave `Arena.used()` where one
+left it); a loop that has to run in constant memory calls `jsonField`, which
+keeps the per-pass release. §7 item 8 is the open question.
+
 ## 4. The number-mode rule
 
 **A `std/` module spells its widths — `i32`, `i64`, `f64` — never `number`, and
@@ -208,3 +235,10 @@ named.
 6. **Whether the packaging check names every module. Answered: it asks the
    tree**, so a module cannot ship unchecked as the directory grows.
 7. **Whether WP18 collapses the assertion set. Answered: no** (§3c).
+8. **Whether a loop over `jsonFields` keeps its per-pass release.** Not today
+   (§3f). The values it stores go into an array the call itself allocated and
+   returns, and nothing older than the call can reach that array, so a store
+   into it might flow as "returned" rather than "stored". Whether it can
+   without loosening anything else the analysis proves is for that change to
+   show, in `src/escape.ts`; until then the per-pass release is `jsonField`'s
+   alone.
