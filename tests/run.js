@@ -7266,6 +7266,40 @@ if (!only) {
       host !== null && String(host.stdout).trim() === "add(2, 3) = 5",
       String(w.stderr) + (host ? String(host.stderr) : "")
     )
+
+    // Math.min and Math.max of a float are llvm.minnum / maxnum, which wasm32 lowers to
+    // libm's fmin, fmax, fminf and fmaxf. The freestanding profile has no libm, so until
+    // runtime-wasm.c supplied them a module using them did not link. Compiled here, with
+    // the wasm target, rather than read from section A's native build; the exports must
+    // answer what minnum answers natively, which the case's own `test()` counts.
+    const minmaxLl = path.join(buildDir, "math_minmax_float_wasm.ll")
+    const minmaxWasm = path.join(buildDir, "math_minmax_float.wasm")
+    const mc = spawnSync(
+      NISH,
+      [path.join(casesDir, "math_minmax_float.ts"), "--target", "wasm32-unknown-unknown", "-o", minmaxLl],
+      { cwd: root }
+    )
+    const ml =
+      mc.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", minmaxLl, "runtime/runtime-wasm.c", "-o", minmaxWasm, "--profile", "wasm"],
+            { cwd: root }
+          )
+        : mc
+    const probe = [
+      "const m = new WebAssembly.Module(require('fs').readFileSync(process.argv[1]))",
+      "const e = new WebAssembly.Instance(m, {}).exports",
+      "console.log([WebAssembly.Module.imports(m).length, e.test(), e.minF64(NaN, 1), e.minF64(1, NaN),",
+      "  e.maxF64(NaN, 2), e.minF64(NaN, NaN), e.minF64(2.5, -1), e.maxF64(-3, -7),",
+      "  e.minF32(NaN, 1.5), e.maxF32(0.25, NaN), e.minF32(3, 2)].join(' '))",
+    ].join("\n")
+    const mr = ml.status === 0 ? spawnSync("node", ["-e", probe, minmaxWasm], { cwd: root }) : null
+    check(
+      "wasm profile links Math.min/Math.max of f64 and f32, and they drop a NaN as minnum does natively",
+      mr !== null && String(mr.stdout).trim() === "0 9 1 1 2 NaN -1 -3 1.5 0.25 2",
+      String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
+    )
   }
 }
 
