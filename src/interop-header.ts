@@ -34,7 +34,7 @@ import {
   resultDefinitions,
   spaceAfter,
   tsKeyword,
-  tsSignature,
+  tsSignatureLine,
 } from "./interop-abi"
 import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program"
 import { isCollectionStruct } from "./generics"
@@ -184,6 +184,17 @@ const structFieldTypes = (compilation: Compilation): i32[] => {
   return out
 }
 
+/**
+ * The comment above a prototype: the signature, the reason and the name to
+ * call it by when the C name is an alias, and what each array holds, built as
+ * one line.
+ */
+const prototypeComment = (table: TypeTable, fn: ExternalFunction): string => {
+  const name = cFunctionName(fn.sig.name)
+  const alias = name.label.length > 0 ? ` (${cAliasReason(fn.sig)}: call it as ${name.ident})` : ""
+  return tsSignatureLine(table, fn.sig, "/* ", `${alias}${elementNotes(table, fn)} */`)
+}
+
 export const generateHeader = (
   compilation: Compilation,
   fns: ExternalFunction[],
@@ -229,21 +240,25 @@ export const generateHeader = (
       lastPath = fn.unit.name
       anyModule = true
     }
-    const source = tsSignature(table, fn.sig)
     if (fn.sig.name === "main") {
       lines.push(
-        `/* ${source}: not declared; a C host owns \`main\`. Export it to make it the process entry. */`
+        tsSignatureLine(
+          table,
+          fn.sig,
+          "/* ",
+          ": not declared; a C host owns `main`. Export it to make it the process entry. */"
+        )
       )
       continue
     }
     const proto = cPrototype(table, fn)
     if (proto.length === 0) {
-      lines.push(`/* ${source}: not declared; no C spelling for one of its types. */`)
+      lines.push(
+        tsSignatureLine(table, fn.sig, "/* ", ": not declared; no C spelling for one of its types. */")
+      )
       continue
     }
-    const name = cFunctionName(fn.sig.name)
-    const alias = name.label.length > 0 ? ` (${cAliasReason(fn.sig)}: call it as ${name.ident})` : ""
-    lines.push(`/* ${source}${alias}${elementNotes(table, fn)} */`)
+    lines.push(prototypeComment(table, fn))
     lines.push(`${proto};`)
   }
   if (!anyModule) {
