@@ -29,6 +29,7 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
@@ -2317,8 +2318,10 @@ for.inc:
 
 for.end:
   %33 = load %struct.nish_array*, %struct.nish_array** %k.addr, align 8
-  %34 = call i8* @toHex(%struct.nish_array* %33)
-  ret i8* %34
+  %34 = call i64 @nish_arena_mark()
+  %35 = call i8* @toHex(%struct.nish_array* %33)
+  %36 = call i8* @nish_arena_keep(i64 %34, i8* %35)
+  ret i8* %36
 }
 
 define noundef i32 @nish_main() #2 {
@@ -2330,49 +2333,57 @@ entry:
   %1 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.7 to i8*))
   %2 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.8 to i8*))
   %3 = call %struct.nish_array* @ladder(%struct.nish_array* %1, %struct.nish_array* %2)
-  %4 = call i8* @toHex(%struct.nish_array* %3)
-  %5 = call i32 @check(i8* bitcast ({ i64, [28 x i8] }* @.str.6 to i8*), i8* %4, i8* bitcast ({ i64, [65 x i8] }* @.str.9 to i8*))
-  %6 = add nsw i32 %0, %5
-  store i32 %6, i32* %failed.addr, align 4
-  %7 = load i32, i32* %failed.addr, align 4
-  %8 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.11 to i8*))
-  %9 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.12 to i8*))
-  %10 = call %struct.nish_array* @ladder(%struct.nish_array* %8, %struct.nish_array* %9)
-  %11 = call i8* @toHex(%struct.nish_array* %10)
-  %12 = call i32 @check(i8* bitcast ({ i64, [29 x i8] }* @.str.10 to i8*), i8* %11, i8* bitcast ({ i64, [65 x i8] }* @.str.13 to i8*))
-  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %12)
-  %14 = extractvalue { i32, i1 } %13, 0
-  %15 = extractvalue { i32, i1 } %13, 1
-  br i1 %15, label %ovf.fail, label %ovf.ok
+  %4 = call i64 @nish_arena_mark()
+  %5 = call i8* @toHex(%struct.nish_array* %3)
+  %6 = call i8* @nish_arena_keep(i64 %4, i8* %5)
+  %7 = call i32 @check(i8* bitcast ({ i64, [28 x i8] }* @.str.6 to i8*), i8* %6, i8* bitcast ({ i64, [65 x i8] }* @.str.9 to i8*))
+  %8 = add nsw i32 %0, %7
+  store i32 %8, i32* %failed.addr, align 4
+  %9 = load i32, i32* %failed.addr, align 4
+  %10 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.11 to i8*))
+  %11 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.12 to i8*))
+  %12 = call %struct.nish_array* @ladder(%struct.nish_array* %10, %struct.nish_array* %11)
+  %13 = call i64 @nish_arena_mark()
+  %14 = call i8* @toHex(%struct.nish_array* %12)
+  %15 = call i8* @nish_arena_keep(i64 %13, i8* %14)
+  %16 = call i32 @check(i8* bitcast ({ i64, [29 x i8] }* @.str.10 to i8*), i8* %15, i8* bitcast ({ i64, [65 x i8] }* @.str.13 to i8*))
+  %17 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %16)
+  %18 = extractvalue { i32, i1 } %17, 0
+  %19 = extractvalue { i32, i1 } %17, 1
+  br i1 %19, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %14, i32* %failed.addr, align 4
-  %16 = load i32, i32* %failed.addr, align 4
-  %17 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.15 to i8*))
-  %18 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.16 to i8*))
-  %19 = call %struct.nish_array* @ladder(%struct.nish_array* %17, %struct.nish_array* %18)
-  %20 = call i8* @toHex(%struct.nish_array* %19)
-  %21 = call i32 @check(i8* bitcast ({ i64, [34 x i8] }* @.str.14 to i8*), i8* %20, i8* bitcast ({ i64, [65 x i8] }* @.str.17 to i8*))
-  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %21)
-  %23 = extractvalue { i32, i1 } %22, 0
-  %24 = extractvalue { i32, i1 } %22, 1
-  br i1 %24, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  store i32 %23, i32* %failed.addr, align 4
-  %25 = load i32, i32* %failed.addr, align 4
-  %26 = call i8* @iterate(i32 1000)
-  %27 = call i32 @check(i8* bitcast ({ i64, [36 x i8] }* @.str.18 to i8*), i8* %26, i8* bitcast ({ i64, [65 x i8] }* @.str.19 to i8*))
-  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %27)
+  store i32 %18, i32* %failed.addr, align 4
+  %20 = load i32, i32* %failed.addr, align 4
+  %21 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.15 to i8*))
+  %22 = call %struct.nish_array* @fromHex(i8* bitcast ({ i64, [65 x i8] }* @.str.16 to i8*))
+  %23 = call %struct.nish_array* @ladder(%struct.nish_array* %21, %struct.nish_array* %22)
+  %24 = call i64 @nish_arena_mark()
+  %25 = call i8* @toHex(%struct.nish_array* %23)
+  %26 = call i8* @nish_arena_keep(i64 %24, i8* %25)
+  %27 = call i32 @check(i8* bitcast ({ i64, [34 x i8] }* @.str.14 to i8*), i8* %26, i8* bitcast ({ i64, [65 x i8] }* @.str.17 to i8*))
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %27)
   %29 = extractvalue { i32, i1 } %28, 0
   %30 = extractvalue { i32, i1 } %28, 1
-  br i1 %30, label %ovf.fail, label %ovf.ok.2
+  br i1 %30, label %ovf.fail, label %ovf.ok.1
 
-ovf.ok.2:
+ovf.ok.1:
   store i32 %29, i32* %failed.addr, align 4
   %31 = load i32, i32* %failed.addr, align 4
+  %32 = call i64 @nish_arena_mark()
+  %33 = call i8* @iterate(i32 1000)
+  %34 = call i8* @nish_arena_keep(i64 %32, i8* %33)
+  %35 = call i32 @check(i8* bitcast ({ i64, [36 x i8] }* @.str.18 to i8*), i8* %34, i8* bitcast ({ i64, [65 x i8] }* @.str.19 to i8*))
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %37, i32* %failed.addr, align 4
+  %39 = load i32, i32* %failed.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %31
+  ret i32 %39
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
