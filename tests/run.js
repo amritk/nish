@@ -4194,6 +4194,16 @@ if (SHARD > 1) {
   delegate("every section after the tests/link programs", shardJob(1))
   summarise()
 }
+// A name in `LINK_READ_LATER` that is no longer a program would pin nothing,
+// and the checks that read its output skip a file that is not there.
+if (!only) {
+  const gone = LINK_READ_LATER.filter((name) => !linkTests.includes(name))
+  check(
+    "every program LINK_READ_LATER keeps in shard 1 is a tests/link program",
+    gone.length === 0,
+    `not in tests/link: ${gone.join(", ")}`
+  )
+}
 
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
