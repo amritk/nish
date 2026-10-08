@@ -13,7 +13,7 @@
 // emits exactly, so both live beside the lowering they describe.
 
 import { Emitter } from "./emit"
-import { emitIndex, emitNumberFromI64, emitRangeCheck } from "./emit-arrays"
+import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck } from "./emit-arrays"
 import { templateParts } from "./emit-util"
 import { IRModule } from "./ir"
 import { N_TEMPLATE_TEXT, Node } from "./nodes"
@@ -290,6 +290,22 @@ const emitSubstring = (emitter: Emitter, expr: Node, str: string): string => {
 }
 
 /**
+ * The start of `s.indexOf(sub, from)` clamped into `[0, len]`. A literal `0`
+ * is in range for every string and is not clamped at all, as `substring`'s is
+ * not.
+ */
+const clampStart = (emitter: Emitter, value: string, type: i32, str: string): string => {
+  if (value === "0") {
+    return value
+  }
+  const len = loadStringLength(emitter, str)
+  if (isUnsigned(type)) {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("llvm.umin.i64")}(i64 ${value}, i64 ${len})`)
+  }
+  return clampToLength(emitter, value, len)
+}
+
+/**
  * `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1.
  *
  * This was an inline loop over `nish_str_at`, one probe per offset, to keep
@@ -297,11 +313,28 @@ const emitSubstring = (emitter: Emitter, expr: Node, str: string): string => {
  * byte-at-a-time scan, and the budget yields to a measured win, so it moved
  * into the runtime where the libc's vectorised routines can do it
  * (stage0's `src/codegen/emit/strings.ts` has the measurement).
+ *
+ * `s.indexOf(sub, from)` is the same search from `from`, which is converted
+ * as JavaScript's `ToIntegerOrInfinity` converts it (`emitOffset`: NaN is 0, a
+ * fraction truncates) and clamped into `[0, len]` here rather than in the
+ * runtime, where LLVM can fold the clamp of a literal or a proven offset away
+ * and `runtime.c` keeps its size budget. An unsigned `from` needs only the
+ * upper clamp, and must not have the signed one: a `u64` of 2^63 or more is
+ * past every end, not before the start.
  */
 const emitStringIndexOf = (emitter: Emitter, expr: Node, str: string): string => {
-  const sub = emitter.emitExpression(expr.children[1].children[0])
+  const args = expr.children[1]
+  const sub = emitter.emitExpression(args.children[0])
+  if (args.children.length === 1) {
+    const found = emitter.fn.emitValue(
+      `call i64 ${emitter.useRuntime("nish_str_index_of")}(i8* ${str}, i8* ${sub})`
+    )
+    return emitNumberFromI64(emitter, found, expr)
+  }
+  const value = emitOffset(emitter, args.children[1])
+  const from = clampStart(emitter, value, emitter.typeOf(args.children[1]), str)
   const found = emitter.fn.emitValue(
-    `call i64 ${emitter.useRuntime("nish_str_index_of")}(i8* ${str}, i8* ${sub})`
+    `call i64 ${emitter.useRuntime("nish_str_index_of_from")}(i8* ${str}, i8* ${sub}, i64 ${from})`
   )
   return emitNumberFromI64(emitter, found, expr)
 }
@@ -371,6 +404,9 @@ export const stringConstructCallees = (
     if (!uncheckedIndexing) {
       out.push("nish_panic_slice")
     }
+  } else if (name === "indexOf") {
+    out.push("nish_str_index_of")
+    out.push("nish_str_index_of_from")
   } else {
     out.push("nish_str_at")
   }

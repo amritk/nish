@@ -897,8 +897,14 @@ const checkStringMethod = (ctx: CheckContext, call: Node, access: Node, args: No
     return T_STRING
   }
   if (name === "indexOf") {
-    if (checkBuiltinArity(ctx, call, "indexOf", args, 1)) {
-      checkStringArgument(ctx, args.children[0], scope, "indexOf")
+    // The optional second argument is where the search starts, clamped into
+    // `[0, s.length]` by the emitter as JavaScript does (`emitStringIndexOf`).
+    if (count === 0 || count > 2) {
+      return ctx.errorType(call, `\`indexOf\` expects 1 or 2 arguments, got ${count}`)
+    }
+    checkStringArgument(ctx, args.children[0], scope, "indexOf")
+    if (count === 2) {
+      checkIndexArgument(ctx, args.children[1], scope, "indexOf")
     }
     return ctx.numberType()
   }
