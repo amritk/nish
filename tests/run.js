@@ -10787,7 +10787,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
   )
 
-  // A sharded job runs `--shard ${{ matrix.shard }}/<n>` over a `shard:` list,
+  // A sharded job runs `--shard "$SHARD/<n>"` over a `shard:` list,
   // and the two numbers are written apart. A list shorter than `n` is a green
   // run in which the missing shard's programs ran nowhere; a longer one is a
   // shard the suite refuses. So the list's length is held to `n`, for the
@@ -10795,7 +10795,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   for (const job of ["test", "runner"]) {
     const text = ciJob(ciYmlText, job)
     const list = /^\s+shard: \[([\d, ]+)\]$/m.exec(text)
-    const flag = /--shard \$\{\{ matrix\.shard \}\}\/(\d+)/.exec(text)
+    const flag = /^\s+SHARD: \$\{\{ matrix\.shard \}\}$/m.test(text) ? /--shard "\$SHARD\/(\d+)"/.exec(text) : null
     const shards = list ? list[1].split(",").map((n) => Number(n.trim())) : []
     check(
       `ci.yml: the \`${job}\` job's shard list is 1..n for the n its --shard names`,

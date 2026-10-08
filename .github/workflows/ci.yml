@@ -268,7 +268,8 @@ jobs:
       - name: Test
         env:
           WASI_SYSROOT: /usr
-        run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard ${{ matrix.shard }}/4
+          SHARD: ${{ matrix.shard }}
+        run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard "$SHARD/4"
 
       # The steps from here on run in shard 1 only: each answers once for the
       # commit, and every shard built the same compiler.
@@ -756,10 +757,12 @@ jobs:
       # The runner is built by the compiler under test and handed it with
       # `--compiler`; with no filter it walks its shard of the whole corpus.
       - name: The corpus, through the Nish runner
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          build/nish-runner --compiler build/nish --shard ${{ matrix.shard }}/4 | tee "$RUNNER_TEMP/nish-runner.log"
+          build/nish-runner --compiler build/nish --shard "$SHARD/4" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
