@@ -29,10 +29,12 @@ programs vector types. Keep the default target at the baseline CPU.** Five
 rules:
 
 1. **Runtime kernels come first (§3.1).** These are a few byte-search
-   primitives in `runtime/runtime.c`, written for the 16-byte vectors every
-   64-bit target has: SSE2 on x86-64, NEON on AArch64. Wider paths are chosen
-   at run time. Programs reach them through `std` functions that are ordinary
-   Nish loops. The compiler recognises those functions and swaps in the call,
+   primitives in a new runtime unit with its own size ceiling, written for the
+   16-byte vectors every 64-bit target has: SSE2 on x86-64, NEON on AArch64.
+   A wider path is chosen at run time, per kernel, on its first call.
+   Programs reach them through `std` functions that are ordinary Nish
+   loops. The compiler recognises such a function and replaces the one inner
+   call that walks the bytes with the kernel, keeping the rest of the body,
    the way it already does for `std/threads`. Under Node the loop runs, so the
    construct is class A.
 2. **The default target stays the baseline CPU (§5).** `--profile speed` does
@@ -154,7 +156,7 @@ the reasons.
 
 | | (a) Runtime kernels | (b) `nish:simd` types | (c) Target intrinsics | (d) Auto-vectorisation and `-march` |
 | --- | --- | --- | --- | --- |
-| Cost | S–M per kernel; the runtime budget | L: a type family, the checker, emitter, `nish.mjs` | L, and again for every ISA | S for a flag; ongoing for loop shapes |
+| Cost | S–M per kernel; a new runtime unit and its ceiling | L: a type family, the checker, emitter, `nish.mjs` | L, and again for every ISA | S for a flag; ongoing for loop shapes |
 | Buys | the byte scans of §2.2 | hand-written numeric and byte kernels | everything, on one ISA | ~10% on some float kernels (§2.3) |
 | Withdraws on 0.x | nothing | nothing (a new module) | nothing at first; a promise per ISA after | nothing as a flag; the default is not moved |
 | TS reading | A: the `std` loop | A, if integer lanes wrap by name | D, or an emulator | A: no source change |
@@ -164,8 +166,12 @@ the reasons.
 
 ### 3.1 (a) Runtime kernels, chosen at run time
 
-**What.** These are C functions in `runtime/runtime.c`, in the style of
-`nish_str_index_of`. Two candidates:
+**What.** These are C functions in the style of `nish_str_index_of`, in a new
+translation unit, `runtime/runtime-simd.c` (the name is open). They cannot go
+in `runtime/runtime.c`: its ceiling is 3,606 bytes and it measures 3,606
+([wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)), and wp7's
+rule is that a new surface gets its own unit and its own ceiling rather than
+borrowing room. Two candidates:
 
 1. **Find the first byte from a small set**, starting at an offset. For JSON
    the set is a quote and a backslash, or the structural bytes. For the lexer
@@ -177,35 +183,54 @@ the reasons.
    misses its bar (§7).
 
 A wider path (AVX2) is compiled with `__attribute__((target("avx2")))` and
-chosen once, when the program starts, with `__builtin_cpu_supports`. glibc's
-`memchr` and simdjson choose their paths at run time in the same way. The
-binary stays a baseline binary.
+chosen lazily, per kernel, on that kernel's first call. Each kernel is called
+through a pointer that starts at a resolver. The resolver asks
+`__builtin_cpu_supports` (after `__builtin_cpu_init`), stores the path it
+picks and calls it. A later call goes straight to the stored path. Nothing
+runs when the program starts, so a program that never calls a kernel pays
+nothing, in time or in instructions, and `bench/instructions.json` cannot
+move for it. glibc's `memchr` and simdjson also choose their paths at run
+time. The binary stays a baseline binary.
 
 **How a program reaches it.** Through a `std/text` function. Its working name
-is `indexOfAny(text, bytes, from)`, and the name is open. The function body is
-the plain Nish loop. The compiler recognises the function by module and name,
-and replaces the body with the runtime call. This is the same mechanism as
-`parallelMapInto` in `std/threads.ts`, whose sequential loop is what Node runs
-and whose chunk loop `src/emit-parallel.ts` replaces
+is `indexOfAny(text, bytes, from)`, and the name is open. The function checks
+its arguments and clamps `from`, then hands the walk itself to one inner
+function, the plain Nish loop over the bytes. The compiler recognises the
+exported function by module and name, replaces that one inner call with the
+kernel, and emits the rest of the body as written. So the argument checks and
+the answer at the edges are the `std` file's, whichever way the program is
+compiled. This is `std/threads.ts`'s mechanism. There the compiler replaces
+the one call that walks the range (`mapRange` in a map, `reduceBlocks` in a
+reduce) with the parallel region (`src/emit-parallel.ts`), and the length
+check and combine order stay as written
 ([wp29](wp29-thread-surface.md) §4.1).
 
 **TypeScript reading: class A.** Under Node the loop is the function, so
 nothing needs translating and `runtime/nish.mjs` gains nothing. A golden pins
 that the native and Node answers agree, as every builtin's does.
 
-**wasm and N-API.** `--profile wasi` compiles `runtime.c` against wasi-libc.
+**wasm and N-API.** `--profile wasi` compiles the runtime units against wasi-libc.
 The kernel there keeps a portable scalar fallback, or gets a `wasm_simd128.h`
 path under `-msimd128` (§5). `runtime-wasm.c` has no strings, so freestanding
 wasm has nothing to call it with. An N-API addon is built with the speed
 flags, so it gets the native kernel unchanged.
 
-**Cost.** Each kernel is runtime code, so it must fit the per-unit size budget
-that `tests/run.js` enforces ([wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)).
-It also needs tests that run the scalar, SSE2 or NEON, and AVX2 paths on the
-same inputs. The instruction gate pins glibc to its SSE2 routines
+**Cost.** The new unit costs what each of its siblings did:
+- a ceiling constant in `tests/run.js`, set at the next 256-byte boundary
+  above its first measurement, with a row in wp7's budget table and in
+  MASTER_PLAN §2's table of units. The AVX2 path and the resolver count
+  against that ceiling.
+- its place in `scripts/build.sh`'s list of the units that `runtime.c`
+  brings with it, for every profile that links strings, wasi included. The
+  compiler's `--link` hands `scripts/build.sh` only `runtime/runtime.c`
+  (`src/compile.ts`), so the pairing there is the one link change.
+- tests that run the scalar, SSE2 or NEON, and AVX2 paths on the same inputs.
+
+`-ffunction-sections -Wl,--gc-sections` drops it from a program that does not
+call it, as it does for the other units. The instruction gate pins glibc to its SSE2 routines
 (`PINNED_LIBC` in `bench/run.mjs`, [bench/README.md](../bench/README.md)), so
 the runtime's own choice of path needs a way to be pinned too, such as an
-environment variable read once. Otherwise a counted program's count depends
+environment variable the resolver reads. Otherwise a counted program's count depends
 on the host.
 
 **What it withdraws.** Nothing. It adds a `std` function, and every existing
@@ -383,7 +408,7 @@ the level it builds at.
 
 Every stage keeps [wp33](wp33-round-trip.md) §1 rule 6. The `.ll` goldens of
 programs that do not use the stage do not move, and `node bench/run.mjs
---check` passes with `bench/instructions.json` unchanged. Every figure comes
+--instructions --check` passes with `bench/instructions.json` unchanged. Every figure comes
 from the same machine, as a minimum and a median of at least seven runs, from
 a loop whose input changes on every iteration and whose answer is folded into
 a printed checksum.
