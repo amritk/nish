@@ -26,10 +26,11 @@ const SOAK_STALL_MS: i64 = 30000;
  * The resident set in bytes, from the second field of this process's
  * /proc/<pid>/statm (pages of 4 KiB), or -1. Read through `cat`, run by a
  * shell whose parent is this process: procfs reports a size of 0, which a
- * read sized by `stat` takes at its word.
+ * read sized by `stat` takes at its word. `argv` is `SOAK_STATM`'s, made
+ * once by the caller, so that a checkpoint can release all it allocates.
  */
-export const residentBytes = (scratch: string): i64 => {
-  if (spawnSyncTo(["sh", "-c", "cat /proc/$PPID/statm"], scratch, "") !== 0) {
+export const residentBytes = (argv: string[], scratch: string): i64 => {
+  if (spawnSyncTo(argv, scratch, "") !== 0) {
     return -1;
   }
   const text: string | null = readFileSyncOrNull(scratch);
@@ -53,9 +54,17 @@ export const residentBytes = (scratch: string): i64 => {
   return field === 1 ? value * 4096 : n64(-1);
 };
 
-/** One checkpoint line. */
-const checkpoint = (report: string, closed: i32, relay: Relay): void => {
-  appendFileSync(report, `at ${closed} mark ${Arena.mark()} used ${Arena.used()} rss ${residentBytes(`${report}.statm`)} live ${relay.live}\n`);
+/**
+ * One checkpoint line. The arena is read before anything is formatted, and
+ * the line, the shell's output and its parse are released before the relay
+ * runs again, so what the report measures is the relay's and not its own:
+ * an unreleased line kept 776 bytes a checkpoint.
+ */
+const checkpoint = (report: string, statm: string, argv: string[], closed: i32, relay: Relay): void => {
+  const mark: i64 = Arena.mark();
+  const used: i64 = Arena.used();
+  using a = arena();
+  appendFileSync(report, `at ${closed} mark ${mark} used ${used} rss ${residentBytes(argv, statm)} live ${relay.live}\n`);
 };
 
 /**
@@ -74,12 +83,15 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
   crypto.getRandomValues(entropy);
   const relay: Relay = rigRelay(config, fd, entropy);
   writeFileSync(report, "");
+  // Made before the first checkpoint, so that none of them allocates what outlives it.
+  const statm: string = `${report}.statm`;
+  const argv: string[] = ["sh", "-c", "cat /proc/$PPID/statm"];
   writeFileSync(portFile, `${netLocalPort(fd)}\n`);
   const key: Secret<u8[]> = secret(leafPrivate());
   const grantKey: Secret<u8[]> = secret(bytesOf(SECRET));
   const start: i64 = monotonicNanos() / 1000000;
   let next: i32 = every;
-  checkpoint(report, n32(0), relay);
+  checkpoint(report, statm, argv, n32(0), relay);
   let closed: i32 = 0;
   let progress: i64 = start;
   let seen: i32 = 0;
@@ -96,12 +108,12 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
       progress = now;
     }
     while (closed >= next) {
-      checkpoint(report, next, relay);
+      checkpoint(report, statm, argv, next, relay);
       next = next + every;
     }
   }
   if (closed >= total && total % every !== 0) {
-    checkpoint(report, total, relay);
+    checkpoint(report, statm, argv, total, relay);
   }
   wipe(key);
   wipe(grantKey);
