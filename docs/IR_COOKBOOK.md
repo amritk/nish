@@ -9671,6 +9671,113 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end str-slice -->
 
+### Searching from an offset
+
+`s.indexOf(sub, from)` is one call to `nish_str_index_of_from` and allocates
+nothing, so a scanner can find every match without cutting the string up:
+`count` below walks each occurrence by starting the next search past the last
+one. The start is clamped into `[0, len]` before the call, with the same
+`llvm.smin` / `llvm.smax` pair as `substring`'s bound (an unsigned start takes
+`llvm.umin` alone), and the runtime runs the search `s.indexOf(sub)` runs —
+`memchr` for a candidate first byte, `memcmp` to confirm it — from there; the
+one-argument form is that function from `0`. A literal `0` is in range for
+every string, so `count`'s first search is the call with no clamp at all.
+
+<!-- cookbook:begin str-index-of-from -->
+```ts
+const next = (s: string, sub: string, from: number): number => s.indexOf(sub, from)
+
+const count = (s: string, sub: string): number => {
+  let n = 0
+  let at = s.indexOf(sub, 0)
+  while (at >= 0) {
+    n = n + 1
+    at = s.indexOf(sub, at + sub.length)
+  }
+  return n
+}
+```
+
+```llvm
+declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare i64 @llvm.smin.i64(i64, i64) #4
+declare i64 @llvm.smax.i64(i64, i64) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+
+define internal noundef i32 @next(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub, i32 noundef %from) #0 {
+entry:
+  %0 = sext i32 %from to i64
+  %1 = bitcast i8* %s to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = call i64 @llvm.smin.i64(i64 %0, i64 %2)
+  %4 = call i64 @llvm.smax.i64(i64 %3, i64 0)
+  %5 = call i64 @nish_str_index_of_from(i8* %s, i8* %sub, i64 %4)
+  %6 = trunc i64 %5 to i32
+  ret i32 %6
+}
+
+define internal noundef i32 @count(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #1 {
+entry:
+  %n.addr = alloca i32, align 4
+  %at.addr = alloca i32, align 4
+  store i32 0, i32* %n.addr, align 4
+  %0 = call i64 @nish_str_index_of_from(i8* %s, i8* %sub, i64 0)
+  %1 = trunc i64 %0 to i32
+  store i32 %1, i32* %at.addr, align 4
+  br label %while.cond
+
+while.cond:
+  %2 = load i32, i32* %at.addr, align 4
+  %3 = icmp sge i32 %2, 0
+  br i1 %3, label %while.body, label %while.end
+
+while.body:
+  %4 = load i32, i32* %n.addr, align 4
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 1)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %n.addr, align 4
+  %8 = load i32, i32* %at.addr, align 4
+  %9 = bitcast i8* %sub to i64*
+  %10 = load i64, i64* %9, align 8
+  %11 = trunc i64 %10 to i32
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %11)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %15 = sext i32 %13 to i64
+  %16 = bitcast i8* %s to i64*
+  %17 = load i64, i64* %16, align 8
+  %18 = call i64 @llvm.smin.i64(i64 %15, i64 %17)
+  %19 = call i64 @llvm.smax.i64(i64 %18, i64 0)
+  %20 = call i64 @nish_str_index_of_from(i8* %s, i8* %sub, i64 %19)
+  %21 = trunc i64 %20 to i32
+  store i32 %21, i32* %at.addr, align 4
+  br label %while.cond
+
+while.end:
+  %22 = load i32, i32* %n.addr, align 4
+  ret i32 %22
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn memory(argmem: read) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end str-index-of-from -->
+
 ### Template literals
 
 Constant parts are interned, holes are converted (`nish_str_from_i32`, a
@@ -16919,6 +17026,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2

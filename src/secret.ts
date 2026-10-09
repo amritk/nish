@@ -1302,6 +1302,7 @@ export const isPureRuntime = (symbol: string): boolean =>
   symbol === "nish_str_eq" ||
   symbol === "nish_str_at" ||
   symbol === "nish_str_index_of" ||
+  symbol === "nish_str_index_of_from" ||
   symbol === "nish_str_len" ||
   symbol === "nish_str_from_i32" ||
   symbol === "nish_str_from_f64" ||
