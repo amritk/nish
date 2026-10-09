@@ -124,18 +124,73 @@ const jsonSkipBlank = (text: string, from: i32): i32 => {
 }
 
 /**
+ * How many bytes of a string body the scanners read one at a time before they
+ * hand the rest to `jsonClosingQuote`. A key or a short value ends inside
+ * them, and for those a call into the runtime costs more than the bytes do.
+ */
+const JSON_INLINE_SCAN: i32 = 16
+
+/**
+ * The index of the closing quote of a string body that has run on past the
+ * bytes the scanners read one at a time, searching from `start`, a byte no
+ * backslash has taken; `-1` when no quote closes it.
+ *
+ * The body is not walked: `indexOf` jumps to the next quote, which is one
+ * `memchr` in the runtime, and the run of backslashes just before that quote
+ * says whether it is escaped. The byte before the run is not a backslash — at
+ * the latest it is the opening quote — so the run starts where an escape can:
+ * an odd run ends in a backslash that takes this quote, and an even one is
+ * pairs of `\\` that leave it alone. The run may reach back past `start`, and
+ * that changes nothing: what lies before `start` ends on a byte no escape took,
+ * so any backslashes there are whole pairs. An escaped quote moves the search
+ * one byte past it, and the next run's count stops at that quote, so every
+ * backslash is counted once.
+ *
+ * The byte loops stay in the scanners rather than in here: most strings end
+ * in them and never make this call.
+ */
+const jsonClosingQuote = (text: string, start: i32): i32 => {
+  const length: i32 = toI32(text.length)
+  if (start < 0) {
+    return -1
+  }
+  let quote: i32 = toI32(text.indexOf('"', start))
+  // `quote >= start` is false for the `-1` of a miss.
+  while (quote >= start && quote < length) {
+    // The count stops at the opening quote at the latest, so `j >= 0` always
+    // holds, and `j < length` does because `j` starts below `quote`; both are
+    // spelled out because the bounds proof reads neither from a decrement of a
+    // callee's answer.
+    let j: i32 = quote - 1
+    while (j >= 0 && j < length && toI32(text.charCodeAt(j)) === JSON_BACKSLASH) {
+      j -= 1
+    }
+    if (((quote - 1 - j) & 1) === 0) {
+      return quote
+    }
+    quote = toI32(text.indexOf('"', quote + 1))
+  }
+  return -1
+}
+
+/**
  * The index just past the string literal whose opening quote is at `at`, or `-1`
  * when the quote is never closed. A backslash takes the byte after it with it,
  * which is all a scanner needs to know about escapes: `\"` cannot end the
- * literal and `\\` cannot make the next quote an escape.
+ * literal and `\\` cannot make the next quote an escape. The first
+ * `JSON_INLINE_SCAN` bytes are read here and the rest searched by
+ * `jsonClosingQuote`; the step over an escape can take the cursor one past
+ * them, which is still a byte no backslash has taken.
  */
 const jsonEndOfString = (text: string, at: i32): i32 => {
   const length: i32 = toI32(text.length)
   if (at < 0) {
     return -1
   }
+  const stop: i32 = at + 1 + JSON_INLINE_SCAN < length ? at + 1 + JSON_INLINE_SCAN : length
   let i: i32 = at + 1
-  while (i < length) {
+  // `i < length` follows from `i < stop`, and is there for the bounds proof.
+  while (i < stop && i < length) {
     const code: i32 = toI32(text.charCodeAt(i))
     if (code === JSON_BACKSLASH) {
       i += 2
@@ -146,7 +201,11 @@ const jsonEndOfString = (text: string, at: i32): i32 => {
     }
     i += 1
   }
-  return -1
+  if (i >= length) {
+    return -1
+  }
+  const quote: i32 = jsonClosingQuote(text, i)
+  return quote < 0 ? -1 : quote + 1
 }
 
 /**
@@ -159,10 +218,13 @@ const jsonEndOfString = (text: string, at: i32): i32 => {
  * ends at the first byte that cannot be part of it, which is the comma, the
  * closer or the blank that follows.
  *
- * The string skip inside an object is a flag in the one loop rather than a call
- * to `jsonEndOfString` that moves the cursor to wherever it answers: a cursor
- * that only ever steps forward keeps the lower bound the bounds proof needs,
- * and one assigned a callee's answer does not.
+ * A string value goes through the same loop as a string inside an object, and
+ * ends where its closing quote leaves the loop at depth zero. Each string is
+ * read as `jsonEndOfString` reads one, its first `JSON_INLINE_SCAN` bytes a
+ * byte at a time and the rest searched by `jsonClosingQuote`, and the byte loop
+ * is written out here rather than called: a call to `jsonEndOfString` from
+ * a second site is one LLVM stops inlining into `jsonReadMember`, and a call
+ * per string is what a line of short strings feels most.
  */
 const jsonEndOfValue = (text: string, at: i32): i32 => {
   const length: i32 = toI32(text.length)
@@ -170,30 +232,47 @@ const jsonEndOfValue = (text: string, at: i32): i32 => {
     return -1
   }
   const first: i32 = toI32(text.charCodeAt(at))
-  if (first === JSON_QUOTE) {
-    return jsonEndOfString(text, at)
-  }
-  if (first === JSON_OPEN_BRACE || first === JSON_OPEN_BRACKET) {
+  if (first === JSON_QUOTE || first === JSON_OPEN_BRACE || first === JSON_OPEN_BRACKET) {
     let depth: i32 = 0
-    let inString: boolean = false
     let i: i32 = at
-    while (i < length) {
+    // `i >= 0` always holds — `i` starts at `at` and only moves forward — and
+    // is in the test because a long string moves `i` to where
+    // `jsonClosingQuote` answers, and a cursor assigned a callee's answer is
+    // one the bounds proof stops following.
+    while (i >= 0 && i < length) {
       const code: i32 = toI32(text.charCodeAt(i))
-      if (inString) {
-        // `jsonEndOfString`'s rule: a backslash takes the byte after it along.
-        if (code === JSON_BACKSLASH) {
-          i += 2
-          continue
+      if (code === JSON_QUOTE) {
+        const stop: i32 = i + 1 + JSON_INLINE_SCAN < length ? i + 1 + JSON_INLINE_SCAN : length
+        let j: i32 = i + 1
+        let close: i32 = -1
+        while (j < stop && j < length) {
+          const inner: i32 = toI32(text.charCodeAt(j))
+          if (inner === JSON_BACKSLASH) {
+            j += 2
+            continue
+          }
+          if (inner === JSON_QUOTE) {
+            close = j
+            break
+          }
+          j += 1
         }
-        if (code === JSON_QUOTE) {
-          inString = false
+        if (close < 0) {
+          if (j >= length) {
+            return -1
+          }
+          close = jsonClosingQuote(text, j)
+          if (close < 0) {
+            return -1
+          }
         }
-        i += 1
+        if (depth === 0) {
+          return close + 1
+        }
+        i = close + 1
         continue
       }
-      if (code === JSON_QUOTE) {
-        inString = true
-      } else if (code === JSON_OPEN_BRACE || code === JSON_OPEN_BRACKET) {
+      if (code === JSON_OPEN_BRACE || code === JSON_OPEN_BRACKET) {
         depth += 1
       } else if (code === JSON_CLOSE_BRACE || code === JSON_CLOSE_BRACKET) {
         depth -= 1
@@ -317,7 +396,7 @@ const jsonUtf8Byte = (code: i32, width: i32, k: i32): i32 => {
  * reading of anything else.
  */
 const jsonUnescape = (text: string, at: i32, end: i32): string => {
-  // Both callers pass the inside of a literal `jsonEndOfString` found, so
+  // Both callers pass the inside of a literal the scanners found, so
   // `0 <= at` and `end <= text.length` always hold. Saying so here is what
   // proves every read below in range and drops the `substring` clamps.
   if (at < 0 || end > toI32(text.length)) {
