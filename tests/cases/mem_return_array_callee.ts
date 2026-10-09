@@ -59,16 +59,32 @@ export const main = (): void => {
   const a = new Log();
   const b = new Log();
   const c = new Log();
+  // One loop each, so that no negative is refused only because another is.
   let total = 0;
+  let viaAlias: string[] = [];
+  let viaChoice: string[] = [];
   for (let i = 0; i < 1000; i++) {
-    total = total + stored(a, i).length + passed(b, i).length + readBack(c, i).length;
-    total = total + aliased(i).length + either(i, []).length;
+    total = total + stored(a, i).length;
+  }
+  for (let i = 0; i < 1000; i++) {
+    total = total + passed(b, i).length;
+  }
+  for (let i = 0; i < 1000; i++) {
+    total = total + readBack(c, i).length;
+  }
+  for (let i = 0; i < 1000; i++) {
+    viaAlias = aliased(i);
+  }
+  for (let i = 0; i < 1000; i++) {
+    viaChoice = either(i, []);
   }
   console.log(`${churn()}`);
   console.log(total);
   console.log(a.items[0]);
   console.log(b.first);
   console.log(c.first);
+  console.log(viaAlias[0]);
+  console.log(viaChoice[0]);
 };
 
 // Reuse the arena above wherever the kept values live.

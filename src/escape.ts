@@ -1007,8 +1007,9 @@ class EscapeAnalysis {
         this.outcomeValues = []
       }
       const outcome = this.valueOutcome(site.node, fresh)
-      // A listing returned on is this function's own: its callers follow it too.
-      if (this.listing && outcome.flow === FLOW_RETURNED) {
+      // A listing returned on is this function's own: its callers follow it
+      // too. An element of one returned alone is a fresh string like any other.
+      if (this.listing && outcome.flow === FLOW_RETURNED && this.table.isArray(this.table.stripNull(this.sig.returnType))) {
         this.result.returnsFreshElements = true
       }
       this.listing = false
