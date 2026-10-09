@@ -238,81 +238,16 @@ const tlsBytesSpell = (data: u8[], at: i32, length: i32, text: string): boolean 
   return true
 }
 
-/** The minimal DER INTEGER for an unsigned big-endian magnitude: leading zeros dropped, one added when the top bit is set. */
-const tlsDerInteger = (magnitude: u8[]): u8[] => {
-  const body: u8[] = []
-  let leading: boolean = true
-  for (const b of magnitude) {
-    if (leading && toI32(b) === 0) {
-      continue
-    }
-    if (leading && toI32(b) >= 0x80) {
-      body.push(toU8(0))
-    }
-    leading = false
-    body.push(b)
-  }
-  // Zero is one zero octet, not an empty integer (X.690 §8.3.1).
-  if (toI32(body.length) === 0) {
-    body.push(toU8(0))
-  }
-  const out: u8[] = [toU8(0x02), toU8(toI32(body.length))]
-  for (const b of body) {
-    out.push(b)
-  }
-  return out
-}
-
-/**
- * An ECDSA signature `r || s` (32 bytes each, as `nish/crypto/p256` answers
- * it) as the DER `ECDSA-Sig-Value` a CertificateVerify carries (RFC 8446
- * §4.2.3), or `null` when `rs` is not 64 bytes.
- */
-export const tlsEcdsaDerSignature = (rs: u8[]): u8[] | null => {
-  if (toI32(rs.length) !== 64) {
-    return null
-  }
-  const r: u8[] = []
-  const s: u8[] = []
-  for (let k: i32 = 0; k < toI32(rs.length); k++) {
-    if (k < 32) {
-      r.push(rs[k])
-    } else {
-      s.push(rs[k])
-    }
-  }
-  const body: u8[] = tlsDerInteger(r)
-  for (const b of tlsDerInteger(s)) {
-    body.push(b)
-  }
-  // At most 2 * (2 + 33) = 70 bytes, so the length is one short-form byte.
-  const out: u8[] = [toU8(0x30), toU8(toI32(body.length))]
-  for (const b of body) {
-    out.push(b)
-  }
-  return out
-}
-
-/**
- * Signs a CertificateVerify input for `ecdsa_secp256r1_sha256` with the P-256
- * private key `priv`: `p256SignSha256` (RFC 6979's deterministic nonce), DER
- * encoded. `null` for a malformed key. The answer is what `TlsServer.sign`
- * takes. The key is borrowed, as every `Secret` parameter is: the caller made
- * it, and wipes it.
- */
-export const tlsSignEcdsaP256 = (priv: Secret<u8[]>, content: u8[]): u8[] | null => {
-  const rs: u8[] | null = p256SignSha256(priv, content)
-  if (rs === null) {
-    return null
-  }
-  return tlsEcdsaDerSignature(rs)
-}
-
 /** The shortest and longest DER `ECDSA-Sig-Value` of a P-256 signature: a SEQUENCE of two INTEGERs of 1 to 33 bytes. */
 const TLS_P256_DER_MIN: i32 = 8
 const TLS_P256_DER_MAX: i32 = 72
 
-/** The bytes `tlsDerInteger` writes for the 32-byte magnitude at `rs[at .. at + 32)`: leading zeros dropped, one added for a top bit. */
+/**
+ * The body length of the minimal DER INTEGER for the unsigned big-endian
+ * magnitude `rs[at .. at + 32)`: leading zeros dropped, one added when the top
+ * bit is set, and zero one zero octet rather than an empty integer (X.690
+ * §8.3.1).
+ */
 const tlsDerIntegerLength = (rs: u8[], at: i32): i32 => {
   let first: i32 = 0
   while (first < 31 && at + first >= 0 && at + first < toI32(rs.length) && toI32(rs[at + first]) === 0) {
@@ -322,7 +257,7 @@ const tlsDerIntegerLength = (rs: u8[], at: i32): i32 => {
   return 32 - first + (top ? 1 : 0)
 }
 
-/** `tlsDerInteger` of `rs[at .. at + 32)` written at `out[to ..)`, `length` its body; answers where it ends. */
+/** That INTEGER, of body length `length`, written at `out[to ..)`; answers where it ends. */
 const tlsDerIntegerInto = (out: u8[], to: i32, rs: u8[], at: i32, length: i32): i32 => {
   const end: i32 = to + 2 + length
   if (to < 0 || end > toI32(out.length)) {
@@ -339,6 +274,50 @@ const tlsDerIntegerInto = (out: u8[], to: i32, rs: u8[], at: i32, length: i32): 
     }
   }
   return end
+}
+
+/** The length of `rs`'s DER `ECDSA-Sig-Value`: the SEQUENCE's two bytes and two INTEGERs. */
+const tlsEcdsaDerLength = (rs: u8[]): i32 =>
+  6 + tlsDerIntegerLength(rs, TLS_FROM) + tlsDerIntegerLength(rs, 32)
+
+/** `rs`'s DER `ECDSA-Sig-Value` into all of `der`, which is `tlsEcdsaDerLength(rs)` bytes. At most 72, so the length is one short-form byte. */
+const tlsEcdsaDerInto = (der: u8[], rs: u8[]): void => {
+  if (toI32(der.length) < 2) {
+    return
+  }
+  der[0] = toU8(0x30)
+  der[1] = toU8(toI32(der.length) - 2)
+  const r: i32 = tlsDerIntegerLength(rs, TLS_FROM)
+  tlsDerIntegerInto(der, tlsDerIntegerInto(der, 2, rs, TLS_FROM, r), rs, 32, tlsDerIntegerLength(rs, 32))
+}
+
+/**
+ * An ECDSA signature `r || s` (32 bytes each, as `nish/crypto/p256` answers
+ * it) as the DER `ECDSA-Sig-Value` a CertificateVerify carries (RFC 8446
+ * §4.2.3), or `null` when `rs` is not 64 bytes.
+ */
+export const tlsEcdsaDerSignature = (rs: u8[]): u8[] | null => {
+  if (toI32(rs.length) !== 64) {
+    return null
+  }
+  const der: u8[] = new Array<u8>(tlsEcdsaDerLength(rs))
+  tlsEcdsaDerInto(der, rs)
+  return der
+}
+
+/**
+ * Signs a CertificateVerify input for `ecdsa_secp256r1_sha256` with the P-256
+ * private key `priv`: `p256SignSha256` (RFC 6979's deterministic nonce), DER
+ * encoded. `null` for a malformed key. The answer is what `TlsServer.sign`
+ * takes. The key is borrowed, as every `Secret` parameter is: the caller made
+ * it, and wipes it.
+ */
+export const tlsSignEcdsaP256 = (priv: Secret<u8[]>, content: u8[]): u8[] | null => {
+  const rs: u8[] | null = p256SignSha256(priv, content)
+  if (rs === null) {
+    return null
+  }
+  return tlsEcdsaDerSignature(rs)
 }
 
 /**
@@ -380,17 +359,12 @@ export class TlsP256Signer {
     ) {
       return null
     }
-    const rLength: i32 = tlsDerIntegerLength(this.rs, TLS_FROM)
-    const sLength: i32 = tlsDerIntegerLength(this.rs, 32)
-    const length: i32 = 6 + rLength + sLength
-    const at: i32 = length - TLS_P256_DER_MIN
+    const at: i32 = tlsEcdsaDerLength(this.rs) - TLS_P256_DER_MIN
     if (at < 0 || at >= toI32(this.ders.length)) {
       return null
     }
     const der: u8[] = this.ders[at]
-    der[0] = toU8(0x30)
-    der[1] = toU8(length - 2)
-    tlsDerIntegerInto(der, tlsDerIntegerInto(der, 2, this.rs, TLS_FROM, rLength), this.rs, 32, sLength)
+    tlsEcdsaDerInto(der, this.rs)
     return der
   }
 }

@@ -346,7 +346,7 @@ export const runSuite = (): i32 => {
   t.ok("the signature of 5 verifies under the digest n + 5", fiveSig !== null && p256Verify(pub, digestNPlusFive, fiveSig));
 
   // --- Signing over caller-owned scratch ------------------------------------------
-  scratchChecks(t, priv, `${SAMPLE_R}${SAMPLE_S}`, `${TEST_R}${TEST_S}`, N);
+  scratchChecks(t, priv, sample, test, `${SAMPLE_R}${SAMPLE_S}`, `${TEST_R}${TEST_S}`, N);
 
   return t.done();
 };

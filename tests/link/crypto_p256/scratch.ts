@@ -32,11 +32,17 @@ const pattern = (count: i32, seed: i32): u8[] => {
   return out;
 };
 
-/** The checks; `priv`, the two signatures and n are the suite's RFC 6979 A.2.5 values. */
-export const scratchChecks = (t: Suite, priv: u8[], sampleHex: string, testHex: string, nHex: string): void => {
+/** The checks; `priv`, the messages "sample" and "test", their signatures and n are the suite's RFC 6979 A.2.5 values. */
+export const scratchChecks = (
+  t: Suite,
+  priv: u8[],
+  sample: u8[],
+  test: u8[],
+  sampleHex: string,
+  testHex: string,
+  nHex: string
+): void => {
   const scratch = new P256SignScratch();
-  const sample: u8[] = [toU8(115), toU8(97), toU8(109), toU8(112), toU8(108), toU8(101)];
-  const test: u8[] = [toU8(116), toU8(101), toU8(115), toU8(116)];
 
   // --- RFC 6979 A.2.5 ---------------------------------------------------------
   t.eqStr("into scratch: A.2.5 SHA-256 \"sample\": r || s", toHex(signInto(scratch, priv, sample)), sampleHex);

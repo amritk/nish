@@ -89,7 +89,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, expose, exposeWith, wipe } from "nish:secret"
-import { Sha256, sha256 } from "nish/crypto/sha256"
+import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
@@ -4034,9 +4034,6 @@ const p256ScalarMult = (
   p: P256ProjectivePoint,
   s: P256PointScratch
 ): void => {
-  if (toI32(k.length) < 32) {
-    return
-  }
   p256ScalarMultWith(out, k, p, s, new Array<u32>(384), new P256ProjectivePoint(), new P256ProjectivePoint())
 }
 
@@ -4517,10 +4514,6 @@ export const p256VerifySha256 = (pub: u8[], msg: u8[], sig: u8[]): boolean =>
 /** The shift of a word's top byte, typed for `--number-mode f64`. */
 const P256_WORD_TOP: i32 = 24
 
-/** SHA-256's 64-byte block and 32-byte digest, typed for `--number-mode f64`. */
-const P256_SHA_BLOCK: i32 = 64
-const P256_SHA_SIZE: i32 = 32
-
 /** RFC 6979 §3.2 steps d and f hash `V || sep || x || h1`: 32 + 1 + 32 + 32 bytes. */
 const P256_NONCE_MESSAGE: i32 = 97
 
@@ -4542,7 +4535,7 @@ const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): voi
     toI32(w.length) >= 64 &&
     toI32(kt.length) >= 64 &&
     at >= 0 &&
-    at <= toI32(src.length) - P256_SHA_BLOCK
+    at <= toI32(src.length) - SHA256_BLOCK
   ) {
     for (let t: i32 = 0; t < 16; t++) {
       w[t] = p256LoadWord(src, at + 4 * t)
@@ -4618,9 +4611,9 @@ const p256ShaInto = (
     0x5be0cd19
   )
   let from: i32 = off
-  while (len - (from - off) >= P256_SHA_BLOCK) {
+  while (len - (from - off) >= SHA256_BLOCK) {
     p256ShaCompress(h, w, kt, data, from)
-    from = from + P256_SHA_BLOCK
+    from = from + SHA256_BLOCK
   }
   const rest: i32 = len - (from - off)
   const tailLength: i32 = toI32(tail.length)
@@ -4634,7 +4627,7 @@ const p256ShaInto = (
   if (rest >= 0 && rest < tailLength) {
     tail[rest] = 0x80
   }
-  const end: i32 = rest < P256_SHA_BLOCK - 8 ? P256_SHA_BLOCK : 2 * P256_SHA_BLOCK
+  const end: i32 = rest < SHA256_BLOCK - 8 ? SHA256_BLOCK : 2 * SHA256_BLOCK
   const bits: u64 = toU64(len) << 3
   for (let i: i32 = 0; i < 8; i++) {
     const j: i32 = end - 1 - i
@@ -4643,8 +4636,8 @@ const p256ShaInto = (
     }
   }
   p256ShaCompress(h, w, kt, tail, 0)
-  if (end > P256_SHA_BLOCK) {
-    p256ShaCompress(h, w, kt, tail, P256_SHA_BLOCK)
+  if (end > SHA256_BLOCK) {
+    p256ShaCompress(h, w, kt, tail, SHA256_BLOCK)
   }
   const outLength: i32 = toI32(out.length)
   for (let i: i32 = 0; i < 8 && i < toI32(h.length); i++) {
@@ -4679,20 +4672,20 @@ const p256HmacInto = (
   const blockLength: i32 = toI32(block.length)
   const keyLength: i32 = toI32(key.length)
   const messageLength: i32 = toI32(message.length)
-  if (blockLength < P256_SHA_BLOCK + len || keyLength > P256_SHA_BLOCK || len > messageLength) {
+  if (blockLength < SHA256_BLOCK + len || keyLength > SHA256_BLOCK || len > messageLength) {
     return
   }
-  for (let i: i32 = 0; i < P256_SHA_BLOCK && i < blockLength; i++) {
+  for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
     block[i] = i < keyLength ? key[i] ^ 0x36 : 0x36
   }
-  for (let i: i32 = 0; i < len && i < messageLength && P256_SHA_BLOCK + i < blockLength; i++) {
-    block[P256_SHA_BLOCK + i] = message[i]
+  for (let i: i32 = 0; i < len && i < messageLength && SHA256_BLOCK + i < blockLength; i++) {
+    block[SHA256_BLOCK + i] = message[i]
   }
-  p256ShaInto(block, P256_SHA_BLOCK, block, P256_FROM, P256_SHA_BLOCK + len, kt, h, w, tail)
-  for (let i: i32 = 0; i < P256_SHA_BLOCK && i < blockLength; i++) {
+  p256ShaInto(block, SHA256_BLOCK, block, P256_FROM, SHA256_BLOCK + len, kt, h, w, tail)
+  for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
     block[i] = i < keyLength ? key[i] ^ 0x5c : 0x5c
   }
-  p256ShaInto(out, P256_FROM, block, P256_FROM, P256_SHA_BLOCK + P256_SHA_SIZE, kt, h, w, tail)
+  p256ShaInto(out, P256_FROM, block, P256_FROM, SHA256_BLOCK + SHA256_SIZE, kt, h, w, tail)
   wipe(block)
   wipe(h)
   wipe(w)
@@ -4729,7 +4722,7 @@ export class P256SignScratch {
   tail: u8[]
   /** An HMAC key block and the message after it. */
   block: u8[]
-  /** `V || 0x00`, the message of RFC 6979 §3.2 step h.3. */
+  /** `V || sep`, where every key update's message starts (RFC 6979 §3.2 steps d, f and h.3). */
   message: u8[]
   /** RFC 6979's `K` and `V`; the last `V` is the nonce. */
   k: u8[]
@@ -4765,12 +4758,12 @@ export class P256SignScratch {
     ]
     this.hash = p256Limbs()
     this.schedule = new Array<u32>(64)
-    this.tail = new Array<u8>(2 * P256_SHA_BLOCK)
-    this.block = new Array<u8>(P256_SHA_BLOCK + P256_NONCE_MESSAGE)
-    this.message = new Array<u8>(P256_SHA_SIZE + 1)
-    this.k = new Array<u8>(P256_SHA_SIZE)
-    this.v = new Array<u8>(P256_SHA_SIZE)
-    this.h1 = new Array<u8>(P256_SHA_SIZE)
+    this.tail = new Array<u8>(2 * SHA256_BLOCK)
+    this.block = new Array<u8>(SHA256_BLOCK + P256_NONCE_MESSAGE)
+    this.message = new Array<u8>(SHA256_SIZE + 1)
+    this.k = new Array<u8>(SHA256_SIZE)
+    this.v = new Array<u8>(SHA256_SIZE)
+    this.h1 = new Array<u8>(SHA256_SIZE)
     this.z = p256Limbs()
     this.r = p256Limbs()
     this.x = p256Limbs()
@@ -4792,22 +4785,22 @@ const p256SignMac = (sc: P256SignScratch, out: u8[], message: u8[], len: i32): v
 
 /**
  * HMAC_K(V || sep || x || h1) for RFC 6979 §3.2 steps d and f, on the plain
- * key `x`, for `exposeWith` to run: the scratch is only read, the message and
- * the hashing's work arrays are fresh and wiped, and the new `K` is the answer.
+ * key `x`, for `exposeWith` to run: `V || sep` is the scratch's `message`,
+ * which is only read, as the rest of the scratch is; the message and the
+ * hashing's work arrays are fresh and wiped, and the new `K` is the answer.
  */
-const p256NonceKeyFrom = (priv: u8[], sc: P256SignScratch, sep: u8): u8[] => {
+const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
   const message: u8[] = new Array<u8>(P256_NONCE_MESSAGE)
-  p256CopyBytes(message, sc.v, P256_SHA_SIZE)
-  message[P256_SHA_SIZE] = sep
-  for (let i: i32 = 0; i < P256_SHA_SIZE && i < toI32(priv.length) && i < toI32(sc.h1.length); i++) {
-    const j: i32 = P256_SHA_SIZE + 1 + i
-    const l: i32 = j + P256_SHA_SIZE
+  p256CopyBytes(message, sc.message, SHA256_SIZE + 1)
+  for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(priv.length) && i < toI32(sc.h1.length); i++) {
+    const j: i32 = SHA256_SIZE + 1 + i
+    const l: i32 = j + SHA256_SIZE
     if (j >= 0 && l >= 0 && j < toI32(message.length) && l < toI32(message.length)) {
       message[j] = priv[i]
       message[l] = sc.h1[i]
     }
   }
-  const key: u8[] = new Array<u8>(P256_SHA_SIZE)
+  const key: u8[] = new Array<u8>(SHA256_SIZE)
   p256HmacInto(
     key,
     sc.k,
@@ -4816,18 +4809,12 @@ const p256NonceKeyFrom = (priv: u8[], sc: P256SignScratch, sep: u8): u8[] => {
     sc.kt,
     p256Limbs(),
     new Array<u32>(64),
-    new Array<u8>(2 * P256_SHA_BLOCK),
-    new Array<u8>(P256_SHA_BLOCK + P256_NONCE_MESSAGE)
+    new Array<u8>(2 * SHA256_BLOCK),
+    new Array<u8>(SHA256_BLOCK + P256_NONCE_MESSAGE)
   )
   wipe(message)
   return key
 }
-
-/** Step d's key update, separator 0x00. */
-const p256NonceKeyExposed0 = (priv: u8[], sc: P256SignScratch): u8[] => p256NonceKeyFrom(priv, sc, 0)
-
-/** Step f's key update, separator 0x01. */
-const p256NonceKeyExposed1 = (priv: u8[], sc: P256SignScratch): u8[] => p256NonceKeyFrom(priv, sc, 1)
 
 /**
  * `s = k^-1 (z + r d) mod n` on the plain key `d`, for `exposeWith` to run,
@@ -4848,11 +4835,17 @@ const p256SignSExposed = (priv: u8[], sc: P256SignScratch): u32[] => {
   return s
 }
 
+/** `sc.message = V || sep`, the start of every key update's message (RFC 6979 §3.2 steps d, f and h.3). */
+const p256NonceSeparated = (sc: P256SignScratch, sep: u8): void => {
+  p256CopyBytes(sc.message, sc.v, SHA256_SIZE)
+  sc.message[SHA256_SIZE] = sep
+}
+
 /** Steps d and f: `K` replaced by what the exposed step answers, which is wiped once copied. */
 const p256SignNonceKey = (sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): void => {
-  const next: u8[] =
-    sep === 0 ? exposeWith(priv, sc, p256NonceKeyExposed0) : exposeWith(priv, sc, p256NonceKeyExposed1)
-  p256CopyBytes(sc.k, next, P256_SHA_SIZE)
+  p256NonceSeparated(sc, sep)
+  const next: u8[] = exposeWith(priv, sc, p256NonceKeyExposed)
+  p256CopyBytes(sc.k, next, SHA256_SIZE)
   wipe(next)
 }
 
@@ -4879,7 +4872,7 @@ const p256WipeSignScratch = (sc: P256SignScratch): void => {
  * before it returns, as are the fresh arrays the key's own steps worked in.
  */
 export const p256SignSha256Into = (
-  scratch: P256SignScratch,
+  sc: P256SignScratch,
   priv: Secret<u8[]>,
   msg: u8[],
   off: i32,
@@ -4897,20 +4890,19 @@ export const p256SignSha256Into = (
   if (!expose(priv, p256ScalarInRange)) {
     return false
   }
-  const sc: P256SignScratch = scratch
   p256ShaInto(sc.h1, P256_FROM, msg, off, len, sc.kt, sc.hash, sc.schedule, sc.tail)
   p256DigestScalar(sc.z, sc.h1)
   p256LimbsToBytes(sc.h1, 0, sc.z)
-  for (let i: i32 = 0; i < P256_SHA_SIZE && i < toI32(sc.v.length) && i < toI32(sc.k.length); i++) {
+  for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(sc.v.length) && i < toI32(sc.k.length); i++) {
     sc.v[i] = 1
     sc.k[i] = 0
   }
   p256SignNonceKey(sc, priv, 0) // step d
-  p256SignMac(sc, sc.v, sc.v, P256_SHA_SIZE) // step e
+  p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step e
   p256SignNonceKey(sc, priv, 1) // step f
-  p256SignMac(sc, sc.v, sc.v, P256_SHA_SIZE) // step g
+  p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step g
   while (true) {
-    p256SignMac(sc, sc.v, sc.v, P256_SHA_SIZE) // step h.2
+    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step h.2
     if (p256ScalarInRange(sc.v)) {
       p256ScalarMultWith(sc.point, sc.v, sc.g, sc.points, sc.table, sc.acc, sc.entry)
       p256AffineX(sc.x, sc.point)
@@ -4927,9 +4919,8 @@ export const p256SignSha256Into = (
       }
     }
     // step h.3: K = HMAC_K(V || 0x00), then V = HMAC_K(V).
-    p256CopyBytes(sc.message, sc.v, P256_SHA_SIZE)
-    sc.message[P256_SHA_SIZE] = 0
-    p256SignMac(sc, sc.k, sc.message, P256_SHA_SIZE + 1)
-    p256SignMac(sc, sc.v, sc.v, P256_SHA_SIZE)
+    p256NonceSeparated(sc, 0)
+    p256SignMac(sc, sc.k, sc.message, SHA256_SIZE + 1)
+    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE)
   }
 }
