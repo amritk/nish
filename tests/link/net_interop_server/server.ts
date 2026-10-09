@@ -52,8 +52,14 @@ export class InteropOptions {
   h1Port: i32 = 0;
   h1sPort: i32 = 0;
   h2Port: i32 = 0;
-  /** QUIC connections served at once. */
-  slots: i32 = 8;
+  /**
+   * QUIC connections served at once. The runner's lossy cases open one
+   * connection per file, and a connection whose CONNECTION_CLOSE was lost
+   * keeps its slot until the idle timeout: with 8, eight of those refused
+   * every new connection for the rest of the 30 seconds. 64 covers the
+   * runner's 50 at about 6.6 MB of memory each (495 MB resident, 122 MB with 8).
+   */
+  slots: i32 = 64;
 }
 
 /** Milliseconds on the monotonic clock. */
