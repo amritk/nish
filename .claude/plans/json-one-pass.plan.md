@@ -72,6 +72,14 @@ stages:
       - id: esc-docs
         content: docs/LANGUAGE.md Memory model rule, docs/cookbook/mem-return-array.ts and its IR_COOKBOOK.md block; measure jsonFields on PR #509's branch with the rule (Measured trailer) — see Stage 5
         status: pending
+  - id: security-record
+    title: docs(security) — record #520's readdirSync fixes in CG-5
+    goal: docs/security/codegen.md records the four readdirSync listing use-after-frees #520 closes, the string-only boundary of the carried-element rule, and the conservative cg_sec_readdir_pass precision loss, each citing its golden
+    verification: npm run check && node docs/check-links.mjs && npm run lint
+    todos:
+      - id: sec-cg5
+        content: Update docs/security/codegen.md's CG-5 row (or add a row) per issue #522 — see Stage 6
+        status: pending
 ---
 
 ## Context
@@ -79,6 +87,13 @@ stages:
 `jsonField(object, name)` starts from the beginning of `object` on every call, so a caller that wants three fields scans each line three times. Inside each scan, string bodies — most of the bytes in a real line — are walked one `charCodeAt` at a time (`jsonEndOfString`, the `inString` branch of `jsonEndOfValue`). In the recorded cross-language report Nish was 122.7 ms on `bench/json` (gjson 118.3, typed serde 82.4, simdjson 36.8); after #499/#500 it is about 90–94 ms.
 
 The runtime already has a vectorised search: `s.indexOf(sub)` is one `nish_str_index_of` call that uses libc `memchr`. But `indexOf` takes no start position, and `substring` allocates and copies, so `std/json` cannot use it mid-string today. Stage 1 adds the start position.
+
+## Stage 6 — security record for #520 (added 2026-10-09T20:35Z at the owner's request: "do the rest of the PRs"; tracks #522)
+
+- Record in `docs/security/codegen.md` (CG-5 row, or a new row beside it): the four `readdirSync` listing escapes #520 closed (wrapper return, passed to a function, assigned to a returned local, stored into a field), pinned by `tests/cases/mem_return_array_readdir`; the string-only carried-element boundary pinned by `mem_return_array_nested`, and why arrays/objects are excluded; the conservative loss in `cg_sec_readdir_pass` (`@test` no longer releases at exit). Read #520's merged diff and #522 first; state only what the code and goldens show.
+- Owns: `docs/security/codegen.md`, `docs/security/README.md` (only if its index lists CG rows).
+- Commit: `docs(security): record the readdirSync listing fixes from #520 in CG-5`, closing #522.
+- Runs concurrently with stage 3; disjoint files.
 
 ## Stage 5 — escape analysis: a returned fresh array carries its elements (added 2026-10-09T07:11Z, owner-approved)
 
