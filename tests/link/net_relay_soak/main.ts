@@ -33,31 +33,34 @@ const SOAK_WAVE: i32 = 16;
  * each `SOAK_WARMUP` sessions). The arena check, exact to the byte, is what
  * catches a leak of the relay's own allocations, since every Nish allocation
  * is the arena's; the resident set watches what the arena does not hold — the
- * stack, the C runtime, a page the kernel faults in late — and it is grained
- * in 4 KiB pages. So it may grow by at most four pages over the whole run,
- * and in at most one checkpoint interval: a page touched once after warm-up
- * (a fault, not a leak) passes, while growth that recurs fails by its shape
- * whatever its total.
+ * stack, the C runtime, the heap under the arena — and it is grained in 4 KiB
+ * pages. It may grow in at most one checkpoint interval, which is the check
+ * that catches a leak: growth that recurs fails by its shape whatever its
+ * total. The total bounds that one step.
  *
- * Both read the anonymous part of the set, the pages no file backs, since
- * whatever the relay or its C runtime allocates is there. The file-backed
- * part is the relay's code and its libraries': a path that first runs past
- * warm-up (a retransmission, a STATS timer, when a loaded machine stretches a
- * session) faults in its code, and memory pressure from other processes
- * drops pages that fault back later, neither of which a session can leak. On
- * a shared CI runner the whole set once grew 278,528 bytes in one interval
- * with the arena exact; the report carries both parts, so the figures name
- * which one moved.
+ * The step is the arena's chunks: a scope that needs more than its chunk
+ * mallocs another of 64 KiB and frees it when it ends, and malloc keeps what
+ * it freed. A busier step after warm-up (more datagrams served at once on a
+ * loaded machine) needs a chunk more than any before it, and the set grows by
+ * that once, the arena back at the same offset. On shared CI runners it grew
+ * 90,112 and 278,528 bytes so, in one interval each; eight chunks, 512 KiB,
+ * is the bound.
+ *
+ * Both checks read the anonymous part of the set, the pages no file backs,
+ * where everything the relay and its C runtime allocate lives. The rest is
+ * its code and its libraries, which the kernel faults in and drops as it
+ * likes; the report carries both parts, so a failure's figures name which one
+ * moved.
  *
  * What each run can see outside the arena: `npm test`'s 2,000 sessions span
  * four intervals of 500. A steady leak of about 2 bytes a session or more
  * crosses two or more page boundaries in different intervals and fails the
- * shape (at about 8 bytes or more it grows every interval, and past 8 the
- * total too); one under about 2 bytes a session moves the set by a page at
- * most and is invisible there. The 100,000-session run spans 200 intervals
- * and sees 1 byte a session: 100,000 bytes, 24 pages, crossed in 24 of them.
+ * shape (at about 8 bytes or more it grows every interval); one under about
+ * 2 bytes a session moves the set by a page at most and is invisible there.
+ * The 100,000-session run spans 200 intervals and sees 1 byte a session:
+ * 100,000 bytes, 24 pages, crossed in 24 of them.
  */
-const SOAK_RSS_BOUND: i64 = 16384;
+const SOAK_RSS_BOUND: i64 = 524288;
 
 /** The decimal number `text` spells from `at`, or -1. */
 const numberAt = (text: string, at: i32): i64 => {
@@ -180,7 +183,7 @@ const drive = (t: Suite, total: i32, files: string): void => {
   } else {
     t.fail(flatArena, figures);
   }
-  // 0 over 100,000 sessions on the machine #515 was measured on; the bound is for a page faulted in once elsewhere.
+  // 0 over 100,000 sessions on the machine #515 was measured on; the bound is for one step to a new arena peak.
   const flatResident: string = `resident memory flat over ${total} sessions past warm-up, within ${SOAK_RSS_BOUND} bytes for the whole run`;
   if (field(warm, "anon") > 0 && resident <= SOAK_RSS_BOUND) {
     t.pass(flatResident);
