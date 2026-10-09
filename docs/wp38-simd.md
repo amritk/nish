@@ -1,17 +1,17 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: accepted; S0 and S1's kernel and surface landed, S2 and S4
-declined for now (tracking issue #516).** The owner took the decisions in §8
-on 2026-10-09, as recommended. S0's baselines are in §2.3 (#517). S1's kernel,
+**Status: accepted; S0 and S1's kernel and surface landed, S2 and S4 declined
+for now (tracking issue #516).** The owner took the decisions in §8 on
+2026-10-09, as recommended. S0's baselines are in §2.3 (#517). S1's kernel,
 `runtime/runtime-simd.c` (#518), and its `std/text` function, `indexOfAny`
 (#519), are built; moving `std/json` onto it, and the `bench/json` bar S1 is
 judged by, wait for #507. S2's `--cpu` flag is not built, because S0's figures
-miss its bar (§7). S4, the lexer on `indexOfAny`, is not built either,
-because the lexer is too small a part of the bootstrap to move it (§7). S3 has
-no flag, type or runtime symbol yet: it arrives with its stage, and its rule
-goes into [LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md)
-lists the work as additive. LANGUAGE.md stays normative and this note adds no rule to
-it; where they disagree, LANGUAGE.md wins.
+miss its bar (§7). S4, the lexer on `indexOfAny`, is not built either, because
+the lexer is too small a part of the bootstrap to move it (§7). S3 has no
+flag, type or runtime symbol yet: it arrives with its stage, and its rule goes
+into [LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists
+the work as additive. LANGUAGE.md stays normative and this note adds no rule
+to it; where they disagree, LANGUAGE.md wins.
 
 The question came from `bench/json`, the cross-language JSON benchmark of
 #507. In its recorded report Nish's `std/json` read three fields per line in
@@ -536,31 +536,32 @@ does not exist yet.
 
 **S4 is declined for now on its own bar.** The lexer is about 1% of the front
 end, and the front end's three runs about 2% of `scripts/bootstrap.sh
---verify`, so no change to the lexer can make the bootstrap measurably faster. The figures were
-taken at `308a8b1`, with stage2 built from the 0.18.0 seed, on a 4-vCPU cloud
-container (Intel Xeon at 2.10 GHz). `bench/lexer.ts` lexed `src/*.ts`
-concatenated: 2,804,018 bytes and 338,857 tokens, 41% of the bytes in comment
-lines. One lex took 10.33 ms at the minimum, about 270 MB/s, and 11.83 ms at
-the median (nine runs of 25 passes: the least minimum, and the median of the
-runs' medians). A spike put `skipTrivia`'s two comment loops on `indexOf`,
-which skips a line comment to the next `\n` and a block comment to the next
-`*/`. In alternating rounds it took 9.93 and 11.30 ms, about 4% faster, and
-its token stream was identical: `src/dump-tokens.ts` built both ways printed
-`cmp`-equal output. The rest of the lexer's time goes into identifiers,
-keywords, numbers and the strings each token builds. Those loops run *while* a
-byte is in a class rather than *until* one is found, so `indexOfAny` cannot
-help them. `build/nish src/compile.ts`, the front end and IR for all of `src/`,
-took 919 ms at the minimum and 1,046 ms at the median over fifteen runs, and
-913 and 1,026 ms with the spike: a difference well inside the runs' own spread
-of 913 to 1,538 ms. `scripts/bootstrap.sh --verify` reached its fixed point in
-135,556 ms. S0's 150,771 ms was taken on another machine, so what compares
-is each part's share of a run, not the times. The bootstrap runs the front end
-three times, once per stage, so the lexer is about 31 ms of it, 0.02%, and the
-spike would save about 1 ms. The spike was
-measured and reverted, and `src/` is unchanged. S4 reopens on a front-end
-profile that shows a scan-bound loop in `src/`, or on a bar restated in
-front-end time. The commands in `bench/lexer.ts`'s header reproduce the lexer
-figures.
+--verify`, so no change to the lexer can make the bootstrap measurably faster.
+The figures were taken at `308a8b1`, with stage2 built from the 0.18.0 seed,
+on a 4-vCPU cloud container (Intel Xeon at 2.10 GHz). `bench/lexer.ts` lexed
+`src/*.ts` concatenated, 2,804,018 bytes, and printed 338,856 tokens per pass;
+41% of the bytes are in comment lines. One lex took 9.82 ms at the minimum,
+about 285 MB/s, and 11.62 ms at the median (nine runs of 25 passes: the least
+minimum, and the median of the runs' medians). A spike put `skipTrivia`'s two
+comment loops on `indexOf`, which skips a line comment to the next `\n` and a
+block comment to the next `*/`. In alternating rounds it took 9.46 ms and
+10.50 ms, 4% faster at the minimum and 10% at the median, with the same
+checksum and token count. Its token stream was identical: `src/dump-tokens.ts`
+built both ways printed `cmp`-equal output. The rest of the lexer's time goes
+into identifiers, keywords, numbers and the strings each token builds. Those
+loops run *while* a byte is in a class rather than *until* one is found, so
+`indexOfAny` cannot help them. `build/nish src/compile.ts`, the front end and
+IR for all of `src/`, took 919 ms at the minimum and 1,046 ms at the median
+over fifteen runs, and 913 and 1,026 ms with the spike: a difference well
+inside the runs' own spread of 913 to 1,538 ms. `scripts/bootstrap.sh
+--verify` reached its fixed point in 135,556 ms. S0's 150,771 ms was taken on
+another machine, so what compares is each part's share of a run, not the
+times. The bootstrap runs the front end three times, once per stage, so the
+lexer is about 30 ms of it, 0.02%, and the spike would save about 1 ms. The
+spike was measured and reverted, and `src/` is unchanged. S4 reopens on a
+front-end profile that shows a scan-bound loop in `src/`, or on a bar restated
+in front-end time. `bench/lexer.ts`'s header gives the commands that reproduce
+the lexer's figures.
 
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 943 programs, 88172 dump lines.
+# 943 programs, 88185 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -81030,42 +81030,55 @@ import Lexer from "../src/lexer" -> struct Lexer
 import TOK_END from "../src/tokens" -> const TOK_END
 import TOK_ERROR from "../src/tokens" -> const TOK_ERROR
 const PASSES: i32 = 25
-function lexChecksum(text: string, sum: u32): u32 -> @lexChecksum
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.constructor
-  escaping: sum text
-  calls: Lexer.constructor Lexer.next nish_arena_mark nish_arena_release
+struct Tally (class) size=16 align=8
+  field sum: u32 index=0 offset=0 initialized
+  field tokens: i32 index=1 offset=4 initialized
+  field error: string index=2 offset=8 initialized
+  constructor -> @Tally.constructor
+function Tally.constructor(this: Tally, sum: u32): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: sum
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function lexPass(text: string, tally: Tally): void -> @lexPass
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 58:7
+  escaping: text
+  calls: Lexer.constructor Lexer.next nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer tally: size=16 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 31:9 lexer: Lexer (const)
-  callee 31:17 new Lexer -> @Lexer.constructor
-  local 32:7 folded: u32 (let)
-  callee 34:5 Lexer.next -> @Lexer.next
+  local 46:9 lexer: Lexer (const)
+  callee 46:17 new Lexer -> @Lexer.constructor
+  local 47:7 folded: u32 (let)
+  local 48:7 tokens: i32 (let)
+  callee 50:5 Lexer.next -> @Lexer.next
 function sortTimes(times: f64[]): void -> @sortTimes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 51:7
+  sharedWrite: 74:7
   calls: nish_panic_index
   pointer times: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 46:7 i: i32 (let)
-  local 48:11 time: f64 (const)
-  local 49:9 j: i32 (let)
+  local 69:7 i: i32 (let)
+  local 71:11 time: f64 (const)
+  local 72:9 j: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: lexChecksum nish_array_grow nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_read_file_or_null nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 nish_write sortTimes
-  stackSites=1 stackLocals=1
-  local 64:9 path: string (const)
-  local 65:9 source: string | null (const)
-  local 72:9 times: f64[] (const)
-  local 73:7 sum: u32 (let)
-  local 74:7 pass: i32 (let)
-  local 76:11 text: string (const)
-  local 77:11 start: i64 (const)
-  callee 78:11 lexChecksum -> @lexChecksum
-  callee 83:3 sortTimes -> @sortTimes
-  local 84:9 min: f64 (const)
-  local 85:9 median: f64 (const)
-  local 86:9 megabytes: f64 (const)
+  calls: Tally.constructor lexPass nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_read_file_or_null nish_str_concat nish_str_eq nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 nish_write sortTimes
+  stackSites=2 stackLocals=2
+  local 87:9 path: string (const)
+  local 88:9 source: string | null (const)
+  local 95:9 times: f64[] (const)
+  local 96:9 tally: Tally (const)
+  callee 96:17 new Tally -> @Tally.constructor
+  local 97:7 pass: i32 (let)
+  local 99:11 text: string (const)
+  local 100:11 start: i64 (const)
+  callee 101:5 lexPass -> @lexPass
+  callee 110:3 sortTimes -> @sortTimes
+  local 111:9 min: f64 (const)
+  local 112:9 median: f64 (const)
+  local 113:9 megabytes: f64 (const)
 module src/lexer.ts
 import StringBuilder from "./strings" -> struct StringBuilder
 import TOK_AMP from "./tokens" -> const TOK_AMP
