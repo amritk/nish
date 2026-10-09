@@ -186,35 +186,48 @@ rounds, so a slow stretch of the shared machine falls on both columns. The
 wider binary uses VEX encodings and `ymm` registers. It has no FMA, because the
 IR carries no `contract` flag. The baseline binary has neither.
 
-A second sample of fifteen alternating rounds, at the same commit, gave these
-gains (minimum, then median):
+Both samples were taken at `c4dd861`. In that version the wide build went
+first in four of the seven timed rounds, and in eight of the fifteen. The
+script now rounds the count up to even, so each build goes first in exactly
+half. A second sample of fifteen alternating rounds gave:
 
-- spectral: 21.3% and 14.8% (506.2 → 398.4 and 533.4 → 454.2 ms)
-- nbody: 2.2% and 4.1%
-- vec3: −1.2% and −1.0%
+| Benchmark | baseline min | x86-64-v3 min | gain | baseline median | x86-64-v3 median | gain |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| nbody | 1089.8 | 1066.0 | 2.2% | 1153.2 | 1106.4 | 4.1% |
+| vec3 | 406.8 | 411.5 | −1.2% | 423.6 | 427.9 | −1.0% |
+| spectral | 506.2 | 398.4 | 21.3% | 533.4 | 454.2 | 14.8% |
+
+The seven-round table above is S0's baseline: it follows §7's protocol, and
+it is the one later stages divide by. The verdict below is read from both
+samples, because they disagree on nbody and vec3. Neither one alone is enough
+to settle a difference of one or two percent. The two baseline columns
+differ by more than that between samples: spectral's baseline minimum was
+567.4 ms in one and 506.2 ms in the other.
 
 The first, unalternated run of this script, at `97210d5`, put spectral at 8.0%
-and nbody at −3.5%. That is the drift alternating removes, and it is why
-these rows replace it.
+and nbody at −3.5%. Alternating the two builds is meant to stop drift on the
+machine from landing on one column only, and these rows replace that run.
 
-**For S2's bar this is met, by spectral alone.** The bar is ≥10% at one level
-on at least one of nbody, vec3 or spectral, with no loss on the others. Per
+**For S2's bar the outcome is undecided.** The bar is ≥10% at one level on
+at least one of nbody, vec3 or spectral, with no loss on the others. Per
 benchmark:
 
-- **spectral meets it.** It gained 10.7% on the minimum and 14.7% on the
-  median here, and 21.3% and 14.8% in the second sample.
-- **nbody does not meet it, and does not lose.** It gained 4.1% and 0.2%
-  here, and 2.2% and 4.1% in the second sample.
-- **vec3 does not meet it, and shows no loss this machine can tell from
-  noise.** It changed by +2.7% and −0.3% here, and by −1.2% and −1.0% in the
-  second sample. Its sign flips between samples, and every figure is inside
-  the ±3.5% spread this machine shows between runs of one binary.
+- **spectral clears 10% in both alternating samples:** 10.7% on the minimum
+  and 14.7% on the median in the first, and 21.3% and 14.8% in the second.
+- **nbody does not lose.** It gained 4.1% and 0.2% in the first sample, and
+  2.2% and 4.1% in the second.
+- **vec3 shows a possible small loss, so "no loss on the others" is not
+  clearly met.** It is at or below zero in three of its four figures: −0.3%
+  on the median in the first sample, and −1.2% and −1.0% in the second. Only
+  its minimum changes sign between the samples (+2.7%, then −1.2%). Its
+  median is negative in both.
 
-So `s2-cpu` takes the branch that builds the flag. Its own PR re-measures
-vec3 at the level it ships, and treats a vec3 loss that is still there,
-outside that spread, as the "loss on the others" that withholds it. This
-matches what Rust's native column said above: a real gain on some programs,
-and next to nothing on the rest.
+The bar gives no tolerance, and this note does not add one. Whether a vec3
+change of −0.3% to −1.2% counts as a loss is the open question. The owner
+answers it, or `s2-cpu` does by measuring vec3 at the level it would ship. It
+is not settled here. What is settled is that a CPU level buys a real gain on
+one of the three, as Rust's native column showed above, and next to nothing on
+the other two.
 
 ---
 
