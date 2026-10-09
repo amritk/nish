@@ -1517,6 +1517,43 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end thread-scope -->
 
+### `nish/text`: `indexOfAny` on the runtime kernel
+
+`indexOfAny` is ordinary Nish in `std/text.ts`: its checks on the set, its
+clamp of `from`, and one call to the private walker `indexOfAnyFrom`, a loop
+over `charCodeAt` that is what runs under Node. In the module that is
+`nish/text` — the package is part of the test (`src/kernels.ts`) — that one
+call becomes the runtime kernel. The `i32` `from` widens to the kernel's `i64`
+and the answer narrows back, which loses nothing: a match is below the text's
+length and a miss is -1. The tail of `@nish.indexOfAny`, after the clamp:
+
+```llvm
+if.end.3:
+  %29 = load i32, i32* %start.addr, align 4
+  %30 = sext i32 %29 to i64
+  %31 = call i64 @nish_str_index_of_any(i8* %text, i8* %bytes, i64 %30)
+  %32 = trunc i64 %31 to i32
+  ret i32 %32
+}
+```
+
+and the kernel's declaration. It reads its two strings through `nocapture
+readonly` pointers; the one store it makes, the first call's choice of path
+into a static of `runtime-simd.c`'s own, is memory no Nish code can name, which
+is what `inaccessiblemem` says:
+
+```llvm
+declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #7
+
+attributes #7 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
+```
+
+`@nish.indexOfAnyFrom` is still defined, `internal` and called by nothing, and
+`opt` deletes it. The importing module sees `indexOfAny` as any other import.
+The whole of `text.ll` is `tests/link/std_text_index_of_any`'s golden; the same
+`std/text.ts` compiled as a root keeps `call i32 @indexOfAnyFrom(` and declares
+no kernel (`tests/run.js`, "kernels:").
+
 ### `Map` and `Set`: one probe, copied into the module
 
 `Map` and `Set` are generic classes in `std/collections.ts`, loaded because the

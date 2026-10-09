@@ -3971,6 +3971,9 @@ const LINK_READ_LATER = [
   "range_export_napi",
   "range_export_napi_async",
   "range_export_unproven",
+  "std_text_index_of_any_empty_set",
+  "std_text_index_of_any_long_set",
+  "std_text_index_of_any_non_ascii_set",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -4497,6 +4500,70 @@ for (const name of [
     run === null
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// WP38 S1: `indexOfAny` from `nish/text` is the runtime kernel natively and
+// the walker `std/text.ts` writes under Node, so the four programs that call it
+// print the same and exit the same both ways: the edges, and the three sets it
+// refuses. A refusal is a panic, whose message the link loop does not read, so
+// it is held here on both sides, from the binary the loop built.
+//
+// And the recognition is the package's, not the path's: `std/text.ts` compiled
+// as a root -- what the performance gate does -- is an ordinary module, so its
+// walker is called as written and the kernel is never declared.
+if (!only || "std_text_index_of_any".includes(only)) {
+  for (const [name, message] of [
+    ["std_text_index_of_any", ""],
+    ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+    ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+    ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
+  ]) {
+    const entry = path.join(linkDir, name, "main.ts")
+    if (!fs.existsSync(entry)) {
+      check(`link/${name}: indexOfAny-under-node`, false, `no such fixture: tests/link/${name}`)
+      continue
+    }
+    const run = spawnSync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--no-warnings",
+        "--import",
+        path.join(root, "runtime", "nish.mjs"),
+        "-e",
+        `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
+    const code = Number(fs.readFileSync(path.join(linkDir, name, "expected.code"), "utf8").trim())
+    check(
+      `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints${message ? `, "${message}"` : ""}`,
+      run.status === code && run.stdout === want && run.stderr.includes(message),
+      `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+    )
+    const exe = path.join(buildDir, "link", name, "app")
+    if (message && !HAS_CLANG) {
+      skip(`skipped: link/${name}: no clang, so there is no native binary to read the panic of`)
+    } else if (message) {
+      const native = spawnSync(exe, [], { encoding: "utf8" })
+      check(
+        `link/${name}: the native binary panics with "${message}"`,
+        native.status === 1 && native.stderr.includes(message),
+        fs.existsSync(exe) ? `exit ${native.status}\n${native.stderr}` : `no binary at ${exe}`
+      )
+    }
+  }
+  const rootText = path.join(buildDir, "std_text_root.ll")
+  const asRoot = spawnSync(NISH, ["std/text.ts", "-o", rootText], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(rootText, "utf8") : ""
+  check(
+    "kernels: std/text.ts compiled as a root is an ordinary module, so indexOfAny calls its walker and not the kernel",
+    asRoot.status === 0 &&
+      rootIr.includes("call i32 @indexOfAnyFrom(") &&
+      !rootIr.includes("nish_str_index_of_any"),
+    asRoot.status === 0 ? rootIr : asRoot.stderr
   )
 }
 

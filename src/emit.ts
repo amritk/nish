@@ -107,10 +107,11 @@ import {
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
-import { addStringConstant, emitTemplate } from "./emit-strings"
+import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
+import { isIndexOfAnyWalk } from "./kernels"
 import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
@@ -1382,6 +1383,11 @@ export class Emitter {
     const tail = this.marksTailCall(expr)
     if (tail) {
       this.emitScopeExit()
+    }
+    // WP38 S1: `nish/text`'s walk is the runtime kernel (`src/kernels.ts`),
+    // which allocates nothing, so there is no bracket to open.
+    if (isIndexOfAnyWalk(this.program, sig)) {
+      return emitIndexOfAnyKernel(this, operandValues)
     }
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 930 programs, 63113 dump lines.
+# 931 programs, 63250 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -56913,6 +56913,144 @@ function main(): i32 -> @nish_main [exported entry]
   local 163:11 param: i64 (const)
   local 164:11 field: i64 (const)
   local 165:11 hoisted: i64 (const)
+program bench/index-of-any.ts
+module bench/index-of-any.ts (entry)
+import monotonicNanos from "nish:process" -> builtin monotonicNanos
+import indexOfAny from "nish/text" -> function @nish.indexOfAny
+const HAYSTACK_BYTES: i32 = 1048576
+const MATCH_EVERY: i32 = 4099
+const ROUNDS: i32 = 200
+const SET: string = "\"\\"
+function walkFrom(text: string, bytes: string, from: i32): i32 -> @walkFrom
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  stackSites=0 stackLocals=0
+  local 28:9 length: i32 (const)
+  local 29:9 count: i32 (const)
+  local 30:7 i: i32 (let)
+  local 32:11 code: i32 (const)
+  local 33:9 j: i32 (let)
+function haystack(): string -> @haystack
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_new
+  stackSites=1 stackLocals=1
+  local 47:9 letters: string (const)
+  local 48:9 parts: string[] (const)
+  local 49:7 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: haystack nish.indexOfAny nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i64 walkFrom
+  stackSites=0 stackLocals=0
+  local 62:9 text: string (const)
+  callee 62:16 haystack -> @haystack
+  local 63:7 kernelSum: i64 (let)
+  local 64:9 kernelStart: i64 (const)
+  local 65:7 round: i32 (let)
+  local 67:9 at: i32 (let)
+  callee 67:19 indexOfAny -> @nish.indexOfAny
+  callee 71:12 indexOfAny -> @nish.indexOfAny
+  local 75:9 kernelNanos: i64 (const)
+  local 77:7 walkSum: i64 (let)
+  local 78:9 walkStart: i64 (const)
+  local 81:9 at: i32 (let)
+  callee 81:19 walkFrom -> @walkFrom
+  callee 85:12 walkFrom -> @walkFrom
+  local 89:9 walkNanos: i64 (const)
+  local 91:9 bytes: f64 (const)
+  local 92:9 kernelMs: f64 (const)
+  local 93:9 walkMs: f64 (const)
+module std/text.ts [package nish]
+const NEWLINE: i32 = 10
+const CARRIAGE_RETURN: i32 = 13
+const SPACE: i32 = 32
+const TAB: i32 = 9
+const INDEX_OF_ANY_MAX_SET: i32 = 16
+const NON_ASCII: i32 = 128
+function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function splitLines(text: string): string[] -> @nish.splitLines [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 69:9
+  calls: nish_array_grow nish_str_new
+  stackSites=0 stackLocals=0
+  local 58:9 length: i32 (const)
+  local 59:9 lines: string[] (const)
+  local 60:7 start: i32 (let)
+  local 61:7 i: i32 (let)
+function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 97:9
+  calls: nish.isTextBlankByte nish_array_grow nish_str_new
+  stackSites=0 stackLocals=0
+  local 88:9 length: i32 (const)
+  local 89:9 parts: string[] (const)
+  local 90:7 start: i32 (let)
+  local 91:7 i: i32 (let)
+  callee 93:9 isTextBlankByte -> @nish.isTextBlankByte
+function trimStart(text: string): string -> @nish.trimStart [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.isTextBlankByte nish_str_new
+  stackSites=0 stackLocals=0
+  local 113:9 length: i32 (const)
+  local 114:7 i: i32 (let)
+  callee 115:24 isTextBlankByte -> @nish.isTextBlankByte
+function trimEnd(text: string): string -> @nish.trimEnd [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.isTextBlankByte nish_panic_index nish_str_new
+  stackSites=0 stackLocals=0
+  local 123:7 end: i32 (let)
+  callee 124:21 isTextBlankByte -> @nish.isTextBlankByte
+function trim(text: string): string -> @nish.trim [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: text
+  calls: nish.trimEnd nish.trimStart
+  stackSites=0 stackLocals=0
+  callee 131:47 trimEnd -> @nish.trimEnd
+  callee 131:55 trimStart -> @nish.trimStart
+function contains(haystack: string, needle: string): boolean -> @nish.contains [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at
+  stackSites=0 stackLocals=0
+function replaceAll(text: string, needle: string, replacement: string): string -> @nish.replaceAll [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: text
+  calls: nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_at nish_str_new
+  stackSites=1 stackLocals=1
+  local 152:9 needleLength: i32 (const)
+  local 156:9 parts: string[] (const)
+  local 157:7 rest: string (let)
+  local 159:11 at: i32 (const)
+function firstDifference(left: string[], right: string[]): i32 -> @nish.firstDifference [exported]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer left: size=0 writesThrough=false captured=false
+  pointer right: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 180:9 leftLength: i32 (const)
+  local 181:9 rightLength: i32 (const)
+  local 182:7 i: i32 (let)
+function indexOfAny(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAny [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: bytes from text
+  calls: nish.indexOfAnyFrom nish_exit nish_write
+  stackSites=0 stackLocals=0
+  local 220:9 count: i32 (const)
+  local 224:7 j: i32 (let)
+  local 231:9 length: i32 (const)
+  local 232:7 start: i32 (let)
+  callee 239:10 indexOfAnyFrom -> @nish.indexOfAnyFrom
+function indexOfAnyFrom(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAnyFrom
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  stackSites=0 stackLocals=0
+  local 253:9 length: i32 (const)
+  local 254:9 count: i32 (const)
+  local 255:7 i: i32 (let)
+  local 259:11 code: i32 (const)
+  local 260:9 j: i32 (let)
 program bench/map-presize.ts
 module bench/map-presize.ts (entry)
 import reserve from "nish/map" -> generic function reserve

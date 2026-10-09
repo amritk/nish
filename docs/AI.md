@@ -1559,6 +1559,16 @@ kept in an array or a field wants named fields.
 Read a value with `m.get(k) ?? d`, and keep the keys in an array beside it when
 you need to walk them, since there is no iteration yet.
 
+**Find the next byte of a few** — `indexOfAny(text, bytes, from)` from
+`nish/text` answers the first index at or after `from` whose byte is one of
+`bytes`, or -1: the scan for the next `"` or `\\` in a JSON string, the next
+delimiter in a line. `bytes` holds 1 to 16 ASCII bytes and anything else
+panics; `from` is clamped to `[0, text.length]`. Natively it reads 16 or 32
+bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
+never call it on secret data, because its time says where the match is.
+(No block: a program importing `nish/text` writes two `.ll` files;
+`tests/link/std_text_index_of_any` is its program.)
+
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:
