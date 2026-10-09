@@ -1,10 +1,12 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: proposed, unbuilt.** Nothing in this note has a flag, a type or a
-runtime symbol yet, and no stage may start before the owner takes the
-decisions in §8. [MASTER_PLAN.md](MASTER_PLAN.md) lists it as additive and
-unscheduled. [LANGUAGE.md](LANGUAGE.md) stays normative and this note adds no
-rule to it; where they disagree, LANGUAGE.md wins.
+**Status: accepted; S0–S2 in progress (tracking issue #516).** The owner
+took the decisions in §8 on 2026-10-09, as recommended. S0's baselines are in
+§2.3. Nothing else in this note has a flag, a type or a runtime symbol yet:
+each one arrives with its stage, and its rule goes into
+[LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
+work as additive. LANGUAGE.md stays normative and this note adds no rule to
+it; where they disagree, LANGUAGE.md wins.
 
 The question came from `bench/json`, the cross-language JSON benchmark of
 #507. In its recorded report Nish's `std/json` read three fields per line in
@@ -22,7 +24,7 @@ ships.
 
 ---
 
-## 1. The decision, proposed
+## 1. The decision
 
 **Put vectors where the bytes are, behind ordinary functions, before giving
 programs vector types. Keep the default target at the baseline CPU.** Five
@@ -432,11 +434,16 @@ for S1, because S1's result says whether the byte half of S3 is needed at all.
 
 ---
 
-## 8. Decisions for the owner
+## 8. Decisions
 
-| # | Question | Options | Recommendation |
+The owner took all four on 2026-10-09, each as recommended. The reason
+beside each is the one the recommendation gave, and it is the reason the
+decision stands on: a stage that finds it untrue comes back here before it
+builds anything else.
+
+| # | Question | Options | Decided |
 | --- | --- | --- | --- |
-| Q1 | The SIMD surface | (a) runtime kernels behind `std`; (b) `nish:simd` types; (c) target intrinsics; (d) auto-vectorisation and a CPU flag | **(a) first, (d) beside it, (b) on its bar, (c) declined.** |
+| Q1 | The SIMD surface | (a) runtime kernels behind `std`; (b) `nish:simd` types; (c) target intrinsics; (d) auto-vectorisation and a CPU flag | **(a) first, (d) beside it, (b) on its bar, (c) declined.** (a) is S1, (d)'s flag is S2 and ships only on its bar, (b) is S3 and waits for S1's result (§7), and (c) is in §9. |
 | Q2 | The default target | baseline; a newer level (`x86-64-v2`); `native` | **Baseline.** Wider code is chosen at run time in the runtime, or by an opt-in flag. |
 | Q3 | Integer lanes in (b) | wrap, named so; trap, as scalars do | **Wrap, named so.** A trapping lane costs a mask reduction per operation, and wrapping by name keeps the reading class A. |
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |
