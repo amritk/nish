@@ -89,6 +89,24 @@ PASS  an empty string
 PASS  a key with no value
 PASS  an unterminated string
 PASS  a truncated object still answers the field before the cut
+PASS  a quote after 1 to 4 backslashes, in a value, a key and a nested string
+PASS  an escaped backslash across the 16th byte escapes nothing after it
+PASS  and the field after it is found
+PASS  a long string that ends at the end of input
+PASS  a long key that ends at the end of input has no value
+PASS  an unterminated long string
+PASS  one whose last quote is escaped
+PASS  one that ends in a lone backslash
+PASS  an unterminated long string in a nested value leaves it unended
+PASS  and nothing after it answers
+PASS  braces and brackets in a long string close nothing
+PASS  nor in a long nested string
+PASS  nor in a long string in an array
+PASS  and the field after them is found
+PASS  a long run of escaped quotes
+PASS  a long non-ASCII key and value
+PASS  a long non-ASCII nested string
+PASS  and the field after them is found
 PASS  no names answer no slots
 PASS  even of text that is not an object
 PASS  three fields of a diagnostic, in the order asked
@@ -119,4 +137,4 @@ PASS  1,000 jsonFields calls leave Arena.used() where one call left it
 PASS  and every call answered the same bytes
 PASS  a 1,000-pass jsonFields loop keeps Arena.used() flat on every pass
 PASS  a using arena() block may hold a jsonFields call, and takes back all it built
-json: 121 passed, 0 failed, 0 skipped
+json: 139 passed, 0 failed, 0 skipped

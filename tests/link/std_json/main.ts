@@ -162,6 +162,55 @@ const jsonFieldsInArena = (line: string): i64 => {
 /** One byte as a string, so a check can spell a name's UTF-8 byte by byte. */
 const byte = (code: i32): string => String.fromCharCode(code);
 
+/** `count` copies of `text`, end to end. */
+const repeated = (text: string, count: i32): string => {
+  const parts: string[] = [];
+  let k: i32 = 0;
+  while (k < count) {
+    parts.push(text);
+    k += 1;
+  }
+  return parts.join("");
+};
+
+/**
+ * Every backslash run of 1 to 4 before a quote, after each filler length in
+ * `fills`, as a value, a key and a string inside a nested value: the first
+ * disagreement as one line, or `""`. An odd run escapes the quote and an even
+ * one is escaped backslashes that leave it closing, so the expected answer is
+ * built from that rule rather than read from the reader under test.
+ */
+const backslashRuns = (asked: JsonAsked, fills: i32[]): string => {
+  for (const fill of fills) {
+    const filler = repeated("x", fill);
+    let run: i32 = 1;
+    while (run <= 4) {
+      const slashes = repeated("\\", run);
+      const half = repeated("\\", run >> 1);
+      // An even run closes the body at its quote; an odd one escapes it, and
+      // the body carries on to the quote after `y`.
+      const body = run % 2 === 0 ? `${filler}${slashes}` : `${filler}${slashes}"y`;
+      const decoded = run % 2 === 0 ? `${filler}${half}` : `${filler}${half}"y`;
+      const where = `${fill} bytes then ${run} backslashes`;
+      const value = `{"v":"${body}","n":1}`;
+      if (jsonCaseField(asked, value, "v") !== decoded || jsonCaseField(asked, value, "n") !== "1") {
+        return `a value of ${where}`;
+      }
+      const key = `{"${body}":2,"n":3}`;
+      if (jsonCaseField(asked, key, decoded) !== "2" || jsonCaseField(asked, key, "n") !== "3") {
+        return `a key of ${where}`;
+      }
+      const nested = `{"a":["${body}",{"b":"${body}"}],"n":4}`;
+      const raw = `["${body}",{"b":"${body}"}]`;
+      if (jsonCaseField(asked, nested, "a") !== raw || jsonCaseField(asked, nested, "n") !== "4") {
+        return `a nested string of ${where}`;
+      }
+      run += 1;
+    }
+  }
+  return "";
+};
+
 export const main = (): number => {
   const t = new Suite("json");
   const asked = new JsonAsked();
@@ -334,6 +383,42 @@ export const main = (): number => {
   t.eqStr("an unterminated string", jsonCaseField(asked, '{"a":"b', "a"), "<absent>");
   t.eqStr("a truncated object still answers the field before the cut", jsonCaseField(asked, '{"a":"b","c', "a"), "b");
 
+  // Strings longer than the 16 bytes the scanners read one at a time, whose
+  // closing quote is searched for rather than walked to. Every case answers
+  // what the byte-by-byte walk answered, run by run of backslashes and with
+  // the run before, at and past the point where the search takes over.
+  const fills: i32[] = [0, 1, 13, 14, 15, 16, 17, 18, 31, 32, 33, 40];
+  t.eqStr("a quote after 1 to 4 backslashes, in a value, a key and a nested string", backslashRuns(asked, fills), "");
+  // An escaped backslash that straddles the 16th byte: the step over it lands
+  // one past the bytes read one at a time, on the quote, and the search that
+  // starts there must still read the pair before it as escaping nothing.
+  const straddle = `{"v":"${repeated("x", 15)}\\\\","n":1}`;
+  t.eqStr("an escaped backslash across the 16th byte escapes nothing after it", jsonCaseField(asked, straddle, "v"), `${repeated("x", 15)}\\`);
+  t.eqStr("and the field after it is found", jsonCaseField(asked, straddle, "n"), "1");
+  const long = repeated("long text ", 4);
+  t.eqStr("a long string that ends at the end of input", jsonCaseField(asked, `{"a":"${long}"`, "a"), long);
+  t.eqStr("a long key that ends at the end of input has no value", jsonCaseField(asked, `{"${long}"`, long), "<absent>");
+  t.eqStr("an unterminated long string", jsonCaseField(asked, `{"a":"${long}`, "a"), "<absent>");
+  t.eqStr("one whose last quote is escaped", jsonCaseField(asked, `{"a":"${long}\\"`, "a"), "<absent>");
+  t.eqStr("one that ends in a lone backslash", jsonCaseField(asked, `{"a":"${long}\\`, "a"), "<absent>");
+  const longUnended = `{"a":["${long}],"b":1}`;
+  t.eqStr("an unterminated long string in a nested value leaves it unended", jsonCaseField(asked, longUnended, "a"), "<absent>");
+  t.eqStr("and nothing after it answers", jsonCaseField(asked, longUnended, "b"), "<absent>");
+  const longClosers = `{"m":"${long}} ] { [${long}","a":{"m":"${long}}]"},"l":["${long}]}","x"],"n":1}`;
+  t.eqStr("braces and brackets in a long string close nothing", jsonCaseField(asked, longClosers, "m"), `${long}} ] { [${long}`);
+  t.eqStr("nor in a long nested string", jsonCaseField(asked, longClosers, "a"), `{"m":"${long}}]"}`);
+  t.eqStr("nor in a long string in an array", jsonCaseField(asked, longClosers, "l"), `["${long}]}","x"]`);
+  t.eqStr("and the field after them is found", jsonCaseField(asked, longClosers, "n"), "1");
+  const quotes = repeated('\\"', 20);
+  t.eqStr("a long run of escaped quotes", jsonCaseField(asked, `{"q":"${quotes}","n":1}`, "q"), repeated('"', 20));
+  // Bytes above 0x7f, as UTF-8 puts them in a string: no byte of a multi-byte
+  // sequence is a quote or a backslash, so they are skipped like any other.
+  const accents = repeated(`${byte(195)}${byte(169)}${byte(226)}${byte(156)}${byte(147)}`, 8);
+  const nonAscii = `{"${accents}":"${accents}\\"${accents}","a":["${accents}"],"n":1}`;
+  t.eqStr("a long non-ASCII key and value", jsonCaseField(asked, nonAscii, accents), `${accents}"${accents}`);
+  t.eqStr("a long non-ASCII nested string", jsonCaseField(asked, nonAscii, "a"), `["${accents}"]`);
+  t.eqStr("and the field after them is found", jsonCaseField(asked, nonAscii, "n"), "1");
+
   // `jsonFields` on its own: several names in one scan. Each check also holds
   // its slots to `jsonField`, as every check above was.
   const none: string[] = [];
@@ -381,7 +466,7 @@ export const main = (): number => {
   // The last object's names, then everything at once.
   agreeAndMove(asked, "");
   t.eqStr("jsonFields agrees with jsonField, slot for slot, on every object above", asked.disagreement, "");
-  t.eqI32("and it compared every slot asked", asked.slots, 227);
+  t.eqI32("and it compared every slot asked", asked.slots, 837);
 
   // 1,000 calls leave the arena where one call left it, because the function
   // around them takes back what they allocated when it returns.
