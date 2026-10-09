@@ -89,7 +89,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, expose, exposeWith, wipe } from "nish:secret"
-import { Sha256, sha256 } from "nish/crypto/sha256"
+import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
@@ -3819,6 +3819,13 @@ const p256PointCopy = (out: P256ProjectivePoint, p: P256ProjectivePoint): void =
   p256Copy(out.z, p.z)
 }
 
+/** `p = (0 : 1 : 0)`, the identity, in place: what `new P256ProjectivePoint()` makes. */
+const p256SetIdentity = (p: P256ProjectivePoint): void => {
+  p256SetZero(p.x)
+  p256FiatSetOne(p.y)
+  p256SetZero(p.z)
+}
+
 /**
  * `out = p + q`, by Renes, Costello and Batina's Algorithm 4 (complete
  * addition for a = -3), step for step in the paper's order and with its names.
@@ -3957,10 +3964,15 @@ const p256TableStorePoint = (table: u32[], i: i32, p: P256ProjectivePoint): void
  * The window table: entry `i` is `i * p`, for `i` from 0 to 15. Built from
  * `p`, which is public here (G or a received key) and a secret only in that
  * it is about to be multiplied. Entry 0 is the identity and entry 1 is `p`;
- * each later one adds `p` to the one before.
+ * each later one adds `p` to the one before, in `acc`, which the caller owns.
  */
-const p256TableBuild = (table: u32[], p: P256ProjectivePoint, s: P256PointScratch): void => {
-  const acc = new P256ProjectivePoint()
+const p256TableBuild = (
+  table: u32[],
+  p: P256ProjectivePoint,
+  s: P256PointScratch,
+  acc: P256ProjectivePoint
+): void => {
+  p256SetIdentity(acc)
   p256TableStorePoint(table, 0, acc)
   p256PointCopy(acc, p)
   p256TableStorePoint(table, 1, acc)
@@ -4022,14 +4034,30 @@ const p256ScalarMult = (
   p: P256ProjectivePoint,
   s: P256PointScratch
 ): void => {
+  p256ScalarMultWith(out, k, p, s, new Array<u32>(384), new P256ProjectivePoint(), new P256ProjectivePoint())
+}
+
+/**
+ * `p256ScalarMult` in the caller's table (384 limbs) and points, so that it
+ * allocates nothing: what `P256SignScratch` signs with. The accumulator, the
+ * selected entry and the table follow the scalar's digits, and a signature's
+ * scalar is its nonce, so all three are wiped before it returns.
+ */
+const p256ScalarMultWith = (
+  out: P256ProjectivePoint,
+  k: u8[],
+  p: P256ProjectivePoint,
+  s: P256PointScratch,
+  table: u32[],
+  acc: P256ProjectivePoint,
+  entry: P256ProjectivePoint
+): void => {
   const kLength: i32 = toI32(k.length)
   if (kLength < 32) {
     return
   }
-  const table: u32[] = new Array<u32>(384)
-  p256TableBuild(table, p, s)
-  const acc = new P256ProjectivePoint()
-  const entry = new P256ProjectivePoint()
+  p256TableBuild(table, p, s, acc)
+  p256SetIdentity(acc)
   for (let i: i32 = 0; i < 64; i++) {
     // Digit i is the high nibble of byte i / 2 when i is even, the low when odd.
     const at: i32 = i >> 1
@@ -4043,8 +4071,6 @@ const p256ScalarMult = (
     p256PointAdd(acc, acc, entry, s)
   }
   p256PointCopy(out, acc)
-  // The accumulator and the selected entry follow the scalar's digits, and a
-  // signature's scalar is its nonce: both are wiped, and the table with them.
   wipe(table)
   p256WipePoint(acc)
   p256WipePoint(entry)
@@ -4461,3 +4487,440 @@ export const p256SignSha256 = (priv: Secret<u8[]>, msg: u8[]): u8[] | null => p2
 /** `p256Verify` of the SHA-256 of `msg`. */
 export const p256VerifySha256 = (pub: u8[], msg: u8[], sig: u8[]): boolean =>
   p256Verify(pub, sha256(msg), sig)
+
+// ---- Signing over caller-owned scratch --------------------------------------
+//
+// `p256SignSha256` makes its points, its point scratch and RFC 6979's hashers
+// with `new`, which stores fresh arrays into their fields, so it stores
+// allocations of its own: no automatic arena scope and no `using a = arena()`
+// block may release around it (docs/LANGUAGE.md, "`using a = arena()`",
+// NL2424), and every signature keeps what it made. `P256SignScratch` holds all
+// of that, made once, and `p256SignSha256Into` signs in it and writes `r || s`
+// into the caller's array, inside an arena block of its own: a signature keeps
+// nothing, and it is byte for byte `p256SignSha256`'s, because RFC 6979 is
+// deterministic.
+//
+// The private key is still read only inside `expose` / `exposeWith`, and a
+// function `exposeWith` runs may not write the argument it is handed (NL2450),
+// so the three steps that read the key — the range check, RFC 6979 §3.2 steps
+// d and f, and `s = k^-1 (z + r d)` — compute on fresh arrays, wipe them, and
+// answer a value the caller copies into the scratch. That is why the hashing
+// below is SHA-256 written out over plain arrays (FIPS 180-4) rather than
+// `Sha256` or `HmacSha256Scratch`: a hasher is an object whose state a step
+// inside `expose` would have to write. Everything else — the message hash,
+// steps e, g and h, the nonce's multiple of G and its inverse — runs on the
+// scratch outside `expose`, on values derived from the key but not the key.
+
+/** The shift of a word's top byte, typed for `--number-mode f64`. */
+const P256_WORD_TOP: i32 = 24
+
+/** RFC 6979 §3.2 steps d and f hash `V || sep || x || h1`: 32 + 1 + 32 + 32 bytes. */
+const P256_NONCE_MESSAGE: i32 = 97
+
+/** ROTR^n(x) of FIPS 180-4 §3.2, `0 < n < 32`. */
+const p256Rotr = (x: u32, n: u32): u32 => (x >>> n) | (x << (32 - n))
+
+/** The big-endian word at `buf[at .. at + 4)`; the caller has checked the window. */
+const p256LoadWord = (buf: u8[], at: i32): u32 =>
+  (toU32(buf[at]) << 24) | (toU32(buf[at + 1]) << 16) | (toU32(buf[at + 2]) << 8) | toU32(buf[at + 3])
+
+/**
+ * FIPS 180-4 §6.2.2 steps 1 to 4 for the block at `src[at .. at + 64)`, folded
+ * into the hash value `h` (8 words) with the schedule `w` (64 words) and the
+ * round constants `kt` (§4.2.2, 64 words), all the caller's.
+ */
+const p256ShaCompress = (h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): void => {
+  if (
+    toI32(h.length) >= 8 &&
+    toI32(w.length) >= 64 &&
+    toI32(kt.length) >= 64 &&
+    at >= 0 &&
+    at <= toI32(src.length) - SHA256_BLOCK
+  ) {
+    for (let t: i32 = 0; t < 16; t++) {
+      w[t] = p256LoadWord(src, at + 4 * t)
+    }
+    for (let t: i32 = 16; t < 64; t++) {
+      const w2: u32 = w[t - 2]
+      const w15: u32 = w[t - 15]
+      const sigma1: u32 = p256Rotr(w2, 17) ^ p256Rotr(w2, 19) ^ (w2 >>> 10)
+      const sigma0: u32 = p256Rotr(w15, 7) ^ p256Rotr(w15, 18) ^ (w15 >>> 3)
+      w[t] = sigma1 + w[t - 7] + sigma0 + w[t - 16]
+    }
+    let a: u32 = h[0]
+    let b: u32 = h[1]
+    let c: u32 = h[2]
+    let d: u32 = h[3]
+    let e: u32 = h[4]
+    let f: u32 = h[5]
+    let g: u32 = h[6]
+    let hh: u32 = h[7]
+    for (let t: i32 = 0; t < 64; t++) {
+      const bigSigma1: u32 = p256Rotr(e, 6) ^ p256Rotr(e, 11) ^ p256Rotr(e, 25)
+      const choose: u32 = (e & f) ^ (~e & g)
+      const t1: u32 = hh + bigSigma1 + choose + kt[t] + w[t]
+      const bigSigma0: u32 = p256Rotr(a, 2) ^ p256Rotr(a, 13) ^ p256Rotr(a, 22)
+      const majority: u32 = (a & b) ^ (a & c) ^ (b & c)
+      hh = g
+      g = f
+      f = e
+      e = d + t1
+      d = c
+      c = b
+      b = a
+      a = t1 + bigSigma0 + majority
+    }
+    h[0] += a
+    h[1] += b
+    h[2] += c
+    h[3] += d
+    h[4] += e
+    h[5] += f
+    h[6] += g
+    h[7] += hh
+  }
+}
+
+/**
+ * The SHA-256 of `data[off .. off + len)` into `out[at .. at + 32)`, on the
+ * caller's hash value `h`, schedule `w` and `tail` (128 bytes, where the last
+ * part block is padded as §5.1.1 says). Whole blocks are compressed where
+ * they lie, so the message is never copied. `out` may be `data`: the digest is
+ * written once every byte has been read. The caller has checked both windows.
+ */
+const p256ShaInto = (
+  out: u8[],
+  at: i32,
+  data: u8[],
+  off: i32,
+  len: i32,
+  kt: u32[],
+  h: u32[],
+  w: u32[],
+  tail: u8[]
+): void => {
+  p256SetLimbs(
+    h,
+    0x6a09e667,
+    0xbb67ae85,
+    0x3c6ef372,
+    0xa54ff53a,
+    0x510e527f,
+    0x9b05688c,
+    0x1f83d9ab,
+    0x5be0cd19
+  )
+  let from: i32 = off
+  while (len - (from - off) >= SHA256_BLOCK) {
+    p256ShaCompress(h, w, kt, data, from)
+    from = from + SHA256_BLOCK
+  }
+  const rest: i32 = len - (from - off)
+  const tailLength: i32 = toI32(tail.length)
+  const dataLength: i32 = toI32(data.length)
+  for (let i: i32 = 0; i < tailLength; i++) {
+    tail[i] = 0
+  }
+  for (let i: i32 = 0; i < rest && i < tailLength && from + i >= 0 && from + i < dataLength; i++) {
+    tail[i] = data[from + i]
+  }
+  if (rest >= 0 && rest < tailLength) {
+    tail[rest] = 0x80
+  }
+  const end: i32 = rest < SHA256_BLOCK - 8 ? SHA256_BLOCK : 2 * SHA256_BLOCK
+  const bits: u64 = toU64(len) << 3
+  for (let i: i32 = 0; i < 8; i++) {
+    const j: i32 = end - 1 - i
+    if (j >= 0 && j < tailLength) {
+      tail[j] = toU8(bits >>> toU64(8 * i))
+    }
+  }
+  p256ShaCompress(h, w, kt, tail, 0)
+  if (end > SHA256_BLOCK) {
+    p256ShaCompress(h, w, kt, tail, SHA256_BLOCK)
+  }
+  const outLength: i32 = toI32(out.length)
+  for (let i: i32 = 0; i < 8 && i < toI32(h.length); i++) {
+    const word: u32 = h[i]
+    for (let b: i32 = 0; b < 4; b++) {
+      const j: i32 = at + 4 * i + b
+      if (j >= 0 && j < outLength) {
+        out[j] = toU8(word >>> toU32(P256_WORD_TOP - 8 * b))
+      }
+    }
+  }
+}
+
+/**
+ * HMAC-SHA-256 (RFC 2104) keyed by the 32-byte `key` over `message[0 .. len)`,
+ * into `out[0 .. 32)`: the inner hash of `K XOR ipad || message` in `block`,
+ * its digest put where the outer hash of `K XOR opad || inner` reads it. `out`
+ * may be `key` or `message`, which are read first. Every work array the key
+ * reached — `block`, `h`, `w` and `tail` — is wiped before it returns (ECC-2).
+ */
+const p256HmacInto = (
+  out: u8[],
+  key: u8[],
+  message: u8[],
+  len: i32,
+  kt: u32[],
+  h: u32[],
+  w: u32[],
+  tail: u8[],
+  block: u8[]
+): void => {
+  const blockLength: i32 = toI32(block.length)
+  const keyLength: i32 = toI32(key.length)
+  const messageLength: i32 = toI32(message.length)
+  if (blockLength < SHA256_BLOCK + len || keyLength > SHA256_BLOCK || len > messageLength) {
+    panic("p256HmacInto: a key, message or block outside its bounds")
+  }
+  for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
+    block[i] = i < keyLength ? key[i] ^ 0x36 : 0x36
+  }
+  for (let i: i32 = 0; i < len && i < messageLength && SHA256_BLOCK + i < blockLength; i++) {
+    block[SHA256_BLOCK + i] = message[i]
+  }
+  p256ShaInto(block, SHA256_BLOCK, block, P256_FROM, SHA256_BLOCK + len, kt, h, w, tail)
+  for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
+    block[i] = i < keyLength ? key[i] ^ 0x5c : 0x5c
+  }
+  p256ShaInto(out, P256_FROM, block, P256_FROM, SHA256_BLOCK + SHA256_SIZE, kt, h, w, tail)
+  wipe(block)
+  wipe(h)
+  wipe(w)
+  wipe(tail)
+}
+
+/** `out[0 .. n) = from[0 .. n)`. */
+const p256CopyBytes = (out: u8[], from: u8[], n: i32): void => {
+  for (let i: i32 = 0; i < n && i < toI32(out.length) && i < toI32(from.length); i++) {
+    out[i] = from[i]
+  }
+}
+
+/** Whether `[at, at + len)` is a window inside an array of `length` elements. */
+const p256WindowFits = (length: i32, at: i32, len: i32): boolean => at >= 0 && len >= 0 && at <= length - len
+
+/**
+ * Everything `p256SignSha256Into` signs in, made once and reused: RFC 6979's
+ * `K` and `V`, the hashing's work arrays and round constants, the nonce's
+ * multiple of G with its window table and point scratch, and the scalars of
+ * the signature. One per signer, not per connection: signing is synchronous,
+ * and every secret it held is wiped before `p256SignSha256Into` returns.
+ *
+ *     const scratch = new P256SignScratch();            // once, outside the loop
+ *     const sig: u8[] = new Array<u8>(P256_SIGNATURE_SIZE);
+ *     const ok: boolean = p256SignSha256Into(scratch, priv, msg, 0, msg.length, sig, 0);
+ */
+export class P256SignScratch {
+  /** FIPS 180-4 §4.2.2's round constants. */
+  kt: u32[]
+  /** A SHA-256 hash value, schedule and padded tail. */
+  hash: u32[]
+  schedule: u32[]
+  tail: u8[]
+  /** An HMAC key block and the message after it. */
+  block: u8[]
+  /** `V || sep`, where every key update's message starts (RFC 6979 §3.2 steps d, f and h.3). */
+  message: u8[]
+  /** RFC 6979's `K` and `V`; the last `V` is the nonce. */
+  k: u8[]
+  v: u8[]
+  /** The message's digest, then int2octets of it mod n: RFC 6979's `h1`. */
+  h1: u8[]
+  /** The digest mod n, `r`, the nonce point's affine x, and `k^-1` in the Montgomery domain. */
+  z: u32[]
+  r: u32[]
+  x: u32[]
+  kM: u32[]
+  /** The order n and R^2 mod n. */
+  n: u32[]
+  r2: u32[]
+  /** G, then the nonce's multiple of it, its accumulator and table entry, its table and point scratch. */
+  g: P256ProjectivePoint
+  point: P256ProjectivePoint
+  acc: P256ProjectivePoint
+  entry: P256ProjectivePoint
+  table: u32[]
+  points: P256PointScratch
+
+  constructor() {
+    this.kt = [
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+    ]
+    this.hash = p256Limbs()
+    this.schedule = new Array<u32>(64)
+    this.tail = new Array<u8>(2 * SHA256_BLOCK)
+    this.block = new Array<u8>(SHA256_BLOCK + P256_NONCE_MESSAGE)
+    this.message = new Array<u8>(SHA256_SIZE + 1)
+    this.k = new Array<u8>(SHA256_SIZE)
+    this.v = new Array<u8>(SHA256_SIZE)
+    this.h1 = new Array<u8>(SHA256_SIZE)
+    this.z = p256Limbs()
+    this.r = p256Limbs()
+    this.x = p256Limbs()
+    this.kM = p256Limbs()
+    this.n = p256Order()
+    this.r2 = p256ScalarR2()
+    this.g = p256Generator()
+    this.point = new P256ProjectivePoint()
+    this.acc = new P256ProjectivePoint()
+    this.entry = new P256ProjectivePoint()
+    this.table = new Array<u32>(384)
+    this.points = new P256PointScratch()
+  }
+}
+
+/** `out = HMAC_K(message[0 .. len))` with the scratch's `K` and work arrays. */
+const p256SignMac = (sc: P256SignScratch, out: u8[], message: u8[], len: i32): void =>
+  p256HmacInto(out, sc.k, message, len, sc.kt, sc.hash, sc.schedule, sc.tail, sc.block)
+
+/**
+ * HMAC_K(V || sep || x || h1) for RFC 6979 §3.2 steps d and f, on the plain
+ * key `x`, for `exposeWith` to run: `V || sep` is the scratch's `message`,
+ * which is only read, as the rest of the scratch is; the message and the
+ * hashing's work arrays are fresh and wiped, and the new `K` is the answer.
+ */
+const p256NonceKeyExposed = (priv: u8[], sc: P256SignScratch): u8[] => {
+  const message: u8[] = new Array<u8>(P256_NONCE_MESSAGE)
+  p256CopyBytes(message, sc.message, SHA256_SIZE + 1)
+  for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(priv.length) && i < toI32(sc.h1.length); i++) {
+    const j: i32 = SHA256_SIZE + 1 + i
+    const l: i32 = j + SHA256_SIZE
+    if (j >= 0 && l >= 0 && j < toI32(message.length) && l < toI32(message.length)) {
+      message[j] = priv[i]
+      message[l] = sc.h1[i]
+    }
+  }
+  const key: u8[] = new Array<u8>(SHA256_SIZE)
+  p256HmacInto(
+    key,
+    sc.k,
+    message,
+    P256_NONCE_MESSAGE,
+    sc.kt,
+    p256Limbs(),
+    new Array<u32>(64),
+    new Array<u8>(2 * SHA256_BLOCK),
+    new Array<u8>(SHA256_BLOCK + P256_NONCE_MESSAGE)
+  )
+  wipe(message)
+  return key
+}
+
+/**
+ * `s = k^-1 (z + r d) mod n` on the plain key `d`, for `exposeWith` to run,
+ * with `p256SignScalar`'s arithmetic: `d` taken into the Montgomery domain,
+ * multiplied by the plain `r`, `z` added, and the sum multiplied by `k^-1`,
+ * which is in the Montgomery domain, so `s` comes out plain. The key's limbs
+ * are wiped; `s` is half of the signature, and public.
+ */
+const p256SignSExposed = (priv: u8[], sc: P256SignScratch): u32[] => {
+  const dM: u32[] = p256Limbs()
+  p256LimbsFromBytes(dM, priv, 0)
+  p256FiatScalarMul(dM, dM, sc.r2)
+  const s: u32[] = p256Limbs()
+  p256FiatScalarMul(s, sc.r, dM)
+  p256FiatScalarAdd(s, s, sc.z)
+  p256FiatScalarMul(s, s, sc.kM)
+  wipe(dM)
+  return s
+}
+
+/** `sc.message = V || sep`, the start of every key update's message (RFC 6979 §3.2 steps d, f and h.3). */
+const p256NonceSeparated = (sc: P256SignScratch, sep: u8): void => {
+  p256CopyBytes(sc.message, sc.v, SHA256_SIZE)
+  sc.message[SHA256_SIZE] = sep
+}
+
+/** Steps d and f: `K` replaced by what the exposed step answers, which is wiped once copied. */
+const p256SignNonceKey = (sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): void => {
+  p256NonceSeparated(sc, sep)
+  const next: u8[] = exposeWith(priv, sc, p256NonceKeyExposed)
+  p256CopyBytes(sc.k, next, SHA256_SIZE)
+  wipe(next)
+}
+
+/** Zero every secret the scratch held: `K`, `V`, `k^-1`, the nonce point and its scratch (ECC-2). */
+const p256WipeSignScratch = (sc: P256SignScratch): void => {
+  wipe(sc.k)
+  wipe(sc.v)
+  wipe(sc.message)
+  wipe(sc.kM)
+  p256WipePoint(sc.point)
+  p256WipeScratch(sc.points)
+}
+
+/**
+ * `p256SignSha256` of `msg[off .. off + len)` in `scratch`, written as `r || s`
+ * at `out[at .. at + 64)`: the same 64 bytes `p256SignSha256` answers for the
+ * same key and message. Answers `false`, writing nothing, for a private key
+ * `p256PublicKey` would refuse. A message or signature window outside its
+ * array panics before anything is read.
+ *
+ * It runs inside an arena block of its own and stores nothing, so a signature
+ * leaves the arena where it was; every secret the scratch held — RFC 6979's
+ * `K` and `V`, the nonce's inverse, its point and the point scratch — is wiped
+ * before it returns, as are the fresh arrays the key's own steps worked in.
+ */
+export const p256SignSha256Into = (
+  sc: P256SignScratch,
+  priv: Secret<u8[]>,
+  msg: u8[],
+  off: i32,
+  len: i32,
+  out: u8[],
+  at: i32
+): boolean => {
+  if (!p256WindowFits(toI32(msg.length), off, len)) {
+    panic("p256SignSha256Into: the message window is outside its array")
+  }
+  if (!p256WindowFits(toI32(out.length), at, P256_SIGNATURE_SIZE)) {
+    panic("p256SignSha256Into: the signature window is outside its array")
+  }
+  using _scope = arena()
+  if (!expose(priv, p256ScalarInRange)) {
+    return false
+  }
+  p256ShaInto(sc.h1, P256_FROM, msg, off, len, sc.kt, sc.hash, sc.schedule, sc.tail)
+  p256DigestScalar(sc.z, sc.h1)
+  p256LimbsToBytes(sc.h1, 0, sc.z)
+  for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(sc.v.length) && i < toI32(sc.k.length); i++) {
+    sc.v[i] = 1
+    sc.k[i] = 0
+  }
+  p256SignNonceKey(sc, priv, 0) // step d
+  p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step e
+  p256SignNonceKey(sc, priv, 1) // step f
+  p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step g
+  while (true) {
+    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE) // step h.2
+    if (p256ScalarInRange(sc.v)) {
+      p256ScalarMultWith(sc.point, sc.v, sc.g, sc.points, sc.table, sc.acc, sc.entry)
+      p256AffineX(sc.x, sc.point)
+      p256ReduceOnce(sc.r, sc.x, sc.n)
+      p256LimbsFromBytes(sc.kM, sc.v, 0)
+      p256FiatScalarMul(sc.kM, sc.kM, sc.r2)
+      p256ScalarInvert(sc.kM, sc.kM)
+      const s: u32[] = exposeWith(priv, sc, p256SignSExposed)
+      if (p256FiatNonzero(sc.r) !== 0 && p256FiatNonzero(s) !== 0) {
+        p256LimbsToBytes(out, at, sc.r)
+        p256LimbsToBytes(out, at + 32, s)
+        p256WipeSignScratch(sc)
+        return true
+      }
+    }
+    // step h.3: K = HMAC_K(V || 0x00), then V = HMAC_K(V).
+    p256NonceSeparated(sc, 0)
+    p256SignMac(sc, sc.k, sc.message, SHA256_SIZE + 1)
+    p256SignMac(sc, sc.v, sc.v, SHA256_SIZE)
+  }
+}

@@ -15,14 +15,16 @@
 //      shows `restart` undoes the retry and its transcript.
 //   3. An AES-256-GCM-SHA384 handshake over loopback through `TlsTcpServer`'s slot pool,
 //      a Nish client on plain `nish:net` sending recorded bytes: accept,
-//      handshake, close, a thousand times, and `Arena.mark()` does not move.
+//      handshake, the P-256 signature made by `signP256` every time, close, a
+//      thousand times, and `Arena.mark()` does not move.
 //
 // The client's side of 2 and 3 is worked out once, by the record-layer
 // tests' client, and replayed: with the randomness and the signature the
 // same every time (RFC 6979 makes the P-256 signature deterministic), every
 // handshake is the same bytes, so the loops compare every byte and allocate
-// nothing of their own. The P-256 signature is the caller's and is made once,
-// since `p256SignSha256` stores what it allocates.
+// nothing of their own. In 1 and 2 the P-256 signature is the caller's and is
+// made once; in 3 `TlsTcpServer.signP256` makes it on every connection, in its
+// `TlsP256Signer`, which keeps nothing.
 //
 // Then `restart` zeroing every secret array a handshake filled, and the
 // refusals the slot's own entry points add: a restart with
@@ -45,6 +47,7 @@ import {
   tcpListen,
 } from "nish:net";
 import { HkdfScratch } from "nish/crypto/hkdf";
+import { sameBytes } from "../crypto_x509/hex";
 import {
   TLS_LEVEL_HANDSHAKE,
   TLS_LEVEL_INITIAL,
@@ -52,6 +55,7 @@ import {
   TLS_STATE_FAILED,
   TlsServer,
   TlsServerConfig,
+  TlsP256Signer,
   tlsSignEcdsaP256,
 } from "nish/net/tls";
 import {
@@ -296,11 +300,15 @@ const clientRead = (w: Wire, want: u8[]): void => {
   }
 };
 
-/** Drives the server's slot after its socket woke: sign when asked, read the client's close and close the slot. */
-const serveSlot = (w: Wire, r: Recorded, events: i32): void => {
+/**
+ * Drives the server's slot after its socket woke: sign with the leaf `key`
+ * when asked (`signP256`, so the signature is made on every connection; RFC
+ * 6979 makes it the recorded one), read the client's close and close the slot.
+ */
+const serveSlot = (w: Wire, events: i32, key: Secret<u8[]>): void => {
   let wants: i32 = (events & 5) !== 0 ? w.server.readable(w.slot) : w.server.writable(w.slot);
   if ((wants & TLS_RECORD_SIGN) !== 0) {
-    wants = w.server.sign(w.slot, r.signature);
+    wants = w.server.signP256(w.slot, key);
   }
   if ((wants & TLS_RECORD_DATA) !== 0 && w.server.read(w.slot, w.serverBuf, ZERO, toI32(w.serverBuf.length)) === 0) {
     w.server.close(w.slot);
@@ -312,7 +320,7 @@ const serveSlot = (w: Wire, r: Recorded, events: i32): void => {
 };
 
 /** One connection over loopback, the recorded handshake byte for byte; true when every byte matched and it ended cleanly. */
-const oneConnection = (w: Wire, r: Recorded): boolean => {
+const oneConnection = (w: Wire, r: Recorded, key: Secret<u8[]>): boolean => {
   w.client = tcpConnect(w.address);
   if (w.client < 0) {
     return false;
@@ -358,7 +366,7 @@ const oneConnection = (w: Wire, r: Recorded): boolean => {
           }
         }
       } else if (who >= SLOTS && w.slot >= 0 && w.server.holds(w.slot)) {
-        serveSlot(w, r, events);
+        serveSlot(w, events, key);
       }
     }
   }
@@ -499,21 +507,60 @@ export const memoryChecks = (): i32 => {
   const w = new Wire(wired.config);
   let wireExact: i32 = 0;
   let wireMark: i64 = 0;
+  const wireKey: Secret<u8[]> = secret(leafPrivate());
   for (let round: i32 = 0; round < ROUNDS; round++) {
     if (round === 1) {
       wireMark = Arena.mark();
     }
-    if (oneConnection(w, wired)) {
+    if (oneConnection(w, wired, wireKey)) {
       wireExact = wireExact + 1;
     }
   }
   const wireAfter: i64 = Arena.mark();
+  wipe(wireKey);
   t.ok("an AES-256-GCM-SHA384 handshake works out for the loopback run", toI32(wired.serverFlight.length) > 0 && toI32(wired.serverClose.length) > 0);
   t.eqI32("a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one", wireExact, ROUNDS);
-  t.ok("and after the first Arena.mark() did not move: accept, handshake and close reuse the slot", wireAfter === wireMark);
+  t.ok("and after the first Arena.mark() did not move: accept, handshake, signP256's ECDSA signature (9,312 bytes a connection before TlsP256Signer) and close reuse the slot", wireAfter === wireMark);
   t.eqI32("every slot is free again", w.server.busy(), ZERO);
   netClose(w.listener);
   netClose(w.loop);
+
+  // --- TlsP256Signer: tlsSignEcdsaP256's DER, keeping nothing ---------------------------------
+  // Three hundred CertificateVerify-sized inputs: the same bytes as
+  // `tlsSignEcdsaP256` every time, across every DER length they reach, and
+  // each `sign` measured on its own leaves `Arena.mark()` where it was.
+  const signer = new TlsP256Signer();
+  const signKey: Secret<u8[]> = secret(leafPrivate());
+  const content: u8[] = new Array<u8>(130);
+  let signedSame: i32 = 0;
+  let signMoved: i32 = 0;
+  let lengths: i32 = 0;
+  const seen: boolean[] = new Array<boolean>(80);
+  for (let n: i32 = 0; n < 300; n++) {
+    for (let k: i32 = 0; k < toI32(content.length); k++) {
+      content[k] = toU8((n * 131 + k * 7) & 255);
+    }
+    const mark: i64 = Arena.mark();
+    const der: u8[] | null = signer.sign(signKey, content);
+    const kept: boolean = Arena.mark() !== mark;
+    const reference: u8[] | null = tlsSignEcdsaP256(signKey, content);
+    signMoved = signMoved + (kept ? 1 : 0);
+    if (der !== null && reference !== null && sameBytes(der, reference)) {
+      signedSame = signedSame + 1;
+      const length: i32 = toI32(der.length);
+      if (length >= 0 && length < toI32(seen.length) && !seen[length]) {
+        seen[length] = true;
+        lengths = lengths + 1;
+      }
+    }
+  }
+  wipe(signKey);
+  t.eqI32("TlsP256Signer: three hundred signatures, each tlsSignEcdsaP256's DER byte for byte", signedSame, toI32(300));
+  t.ok(`across ${lengths} DER lengths`, lengths >= 3);
+  t.eqI32("and not one sign moved Arena.mark(): a signature keeps 0 bytes", signMoved, ZERO);
+  const shortKey: Secret<u8[]> = secret(new Array<u8>(31));
+  t.ok("a 31-byte key is refused with null", signer.sign(shortKey, content) === null);
+  wipe(shortKey);
 
   // --- restart wipes what the last connection left ---------------------------------------------
   // A TlsServer driven on its own, with no record layer to wipe as it goes:
