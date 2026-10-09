@@ -59,6 +59,7 @@ import {
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
+  N_FALSE,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
@@ -1477,9 +1478,9 @@ class PerfWalk {
    */
   declaredAllocates: boolean[]
   /**
-   * The assignments that run on every pass of the loop around them: each is
-   * a statement of its own at the top of a loop body that can come round
-   * again (`collectPassAssignments`). Only these can say "drops the value
+   * The assignments that run on every pass of the innermost loop around the
+   * walk: each is a statement of its own at the top of a loop body that can
+   * come round again (`walkLoopBody`). Only these can say "drops the value
    * the pass before gave it", because one in a branch may run once, as a
    * search loop's `found = ...` before its `break` does.
    */
@@ -1504,7 +1505,7 @@ class PerfWalk {
     this.passAssignments = []
   }
 
-  /** Whether `expr` is one of the assignments `collectPassAssignments` found. */
+  /** Whether `expr` is one of the innermost loop's `passAssignments`. */
   isPassAssignment(expr: Node): boolean {
     for (const assignment of this.passAssignments) {
       if (assignment === expr) {
@@ -2083,31 +2084,36 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   }
   if (node.kind === N_FOR) {
     walkPerformance(walk, node.children[0])
-    collectPassAssignments(walk, node.children[3])
     walk.loops.push(node)
     walkPerformance(walk, node.children[1])
     walkPerformance(walk, node.children[2])
-    walkPerformance(walk, node.children[3])
+    walkLoopBody(walk, node.children[3], false)
     walk.loops.pop()
     return
   }
   if (node.kind === N_FOR_OF) {
     walkPerformance(walk, node.children[1])
-    collectPassAssignments(walk, node.children[2])
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
-    walkPerformance(walk, node.children[2])
+    walkLoopBody(walk, node.children[2], false)
     walk.loops.pop()
     return
   }
   // `while` and `do` differ only in which of the two children comes first, and
   // both are walked in source order — which is the order the warnings come out
   // in, and stage0 walks the same tree in the same direction.
-  if (node.kind === N_WHILE || node.kind === N_DO) {
-    const bodyIndex: i32 = node.kind === N_WHILE ? 1 : 0
-    collectPassAssignments(walk, node.children[bodyIndex])
+  if (node.kind === N_WHILE) {
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
+    walkLoopBody(walk, node.children[1], false)
+    walk.loops.pop()
+    return
+  }
+  if (node.kind === N_DO) {
+    // `do { ... } while (false)` runs its body once, so nothing in it is
+    // replaced by a later pass.
+    walk.loops.push(node)
+    walkLoopBody(walk, node.children[0], unwrapPerfParens(node.children[1]).kind === N_FALSE)
     walkPerformance(walk, node.children[1])
     walk.loops.pop()
     return
@@ -2123,8 +2129,11 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   } else if (node.kind === N_BINARY) {
     if (node.text === "=") {
       checkStringAccumulation(walk, node)
-      checkArenaReassignment(walk, node)
-      checkPassDrop(walk, node)
+      if (isArenaReassignment(walk, node)) {
+        reportArenaReassignment(walk, node)
+      } else {
+        checkPassDrop(walk, node)
+      }
     }
     checkConstantOverflow(walk, node)
     checkShiftCount(walk, node)
@@ -2430,17 +2439,17 @@ const perfIsPointerType = (ctx: CheckContext, type: i32): boolean =>
 const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean => {
   if (node.kind === N_CALL) {
     for (const arg of node.children[1].children) {
-      if (isLocalRef(ctx, arg, local)) {
+      if (perfMayYieldLocal(ctx, arg, local)) {
         return true
       }
     }
-    return false
+    return perfReceiverMayBeKept(ctx, node.children[0], local)
   }
   // A constructor keeps what it is handed as readily as a call does: `head =
   // new Node(i, head)` stores the old list in the new node.
   if (node.kind === N_NEW) {
     for (const arg of node.children[2].children) {
-      if (isLocalRef(ctx, arg, local)) {
+      if (perfMayYieldLocal(ctx, arg, local)) {
         return true
       }
     }
@@ -2448,19 +2457,46 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
   }
   if (node.kind === N_ARRAY) {
     for (const element of node.children) {
-      if (isLocalRef(ctx, element, local)) {
+      if (perfMayYieldLocal(ctx, element, local)) {
         return true
       }
     }
     return false
   }
   if (node.kind === N_RETURN || node.kind === N_PROPERTY) {
-    return isLocalRef(ctx, node.children[0], local)
+    return perfMayYieldLocal(ctx, node.children[0], local)
   }
   if (node.kind === N_VAR_DECL) {
-    return isLocalRef(ctx, node.children[2], local)
+    return perfMayYieldLocal(ctx, node.children[2], local)
   }
-  return node.kind === N_BINARY && node.text === "=" && isLocalRef(ctx, node.children[1], local)
+  return node.kind === N_BINARY && node.text === "=" && perfMayYieldLocal(ctx, node.children[1], local)
+}
+
+/**
+ * Whether `expr` may evaluate to the value `local` holds: the local itself, or
+ * a conditional with it in either arm, so that `ks.push(i > 1 ? s : "z")`
+ * counts as keeping `s`.
+ */
+const perfMayYieldLocal = (ctx: CheckContext, expr: Node, local: Local): boolean => {
+  const e = unwrapPerfParens(expr)
+  if (e.kind === N_CONDITIONAL) {
+    return perfMayYieldLocal(ctx, e.children[1], local) || perfMayYieldLocal(ctx, e.children[2], local)
+  }
+  return isLocalRef(ctx, e, local)
+}
+
+/**
+ * A method called on `local` may keep its receiver, as `cur.attach(reg)` does
+ * when `attach` pushes `this`, and this walk cannot see into the method. A
+ * string's and an array's methods are the language's own and keep neither:
+ * they copy what they return.
+ */
+const perfReceiverMayBeKept = (ctx: CheckContext, callee: Node, local: Local): boolean => {
+  const c = unwrapPerfParens(callee)
+  if (c.kind !== N_MEMBER || !isLocalRef(ctx, c.children[0], local)) {
+    return false
+  }
+  return local.type !== T_STRING && !ctx.table.isArray(local.type)
 }
 
 /**
@@ -2504,45 +2540,58 @@ const perfScanForCapture = (
 }
 
 /**
- * `s = <an allocation>` where `s` is a local that was declared holding one
- * (NL9003). Split from the report below because the per-pass rule has to know
- * whether this one already speaks about the same assignment: one line gets one
- * warning. The guards are stage0's, in the same order.
+ * The local `expr` assigns, when it is one the two dropped-allocation rules
+ * ask about: a local that is not a parameter, of a type that names memory,
+ * given a value the checker can see allocating. `null` for anything else.
  */
-const isArenaReassignment = (walk: PerfWalk, expr: Node): boolean => {
+const perfDroppingTarget = (walk: PerfWalk, expr: Node): Local | null => {
   const left = expr.children[0]
   if (left.kind !== N_IDENT) {
-    return false
+    return null
   }
   const ctx = walk.ctx
   const target = ctx.program.nodeLocals[left.id]
   if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
+    return null
+  }
+  return perfAllocatesVisibly(ctx, expr.children[1]) ? target : null
+}
+
+/**
+ * `s = <an allocation>` where `s` is a local that was declared holding one
+ * (NL9003). Split from the report because the per-pass rule runs only when
+ * this one does not speak about the same assignment: one line gets one
+ * warning. The guards are stage0's, in the same order.
+ */
+const isArenaReassignment = (walk: PerfWalk, expr: Node): boolean => {
+  const target = perfDroppingTarget(walk, expr)
+  if (target === null || perfIsPointerType(walk.ctx, walk.sig.returnType)) {
     return false
   }
-  if (perfIsPointerType(ctx, walk.sig.returnType)) {
-    return false
-  }
-  if (isQuadraticAccumulation(walk, expr)) {
-    return false
-  }
-  if (!walk.declaredHoldingAllocation(target) || !perfAllocatesVisibly(ctx, expr.children[1])) {
+  if (isQuadraticAccumulation(walk, expr) || !walk.declaredHoldingAllocation(target)) {
     return false
   }
   return !perfHeldValueMayBeReachable(walk, expr, target)
 }
 
 /**
- * The assignments of `body` that run on every pass of its loop: each
- * `x = ...` that is a statement of its own at the body's top level. A body
- * whose top level ends the loop (`break`, `return`, `throw`) runs at most once,
- * so it contributes none: whatever it assigns is never replaced by a later pass.
+ * Walk a loop's body with `walk.passAssignments` set to the assignments that
+ * run on every one of its passes: each `x = ...` that is a statement of its own
+ * at the body's top level. A body whose top level ends the loop (`break`,
+ * `return`, `throw`) runs at most once, and so does one `once` says runs once,
+ * so it has none: whatever it assigns is never replaced by a later pass. The
+ * list is the innermost loop's alone, and the enclosing loop's comes back when
+ * the body is done.
  */
-const collectPassAssignments = (walk: PerfWalk, body: Node): void => {
+const walkLoopBody = (walk: PerfWalk, body: Node, once: boolean): void => {
+  const enclosing = walk.passAssignments
+  const assignments: Node[] = []
+  let loops = !once
   const statements: Node[] = []
   if (body.kind === N_BLOCK) {
     for (const statement of body.children) {
       if (statement.kind === N_BREAK || statement.kind === N_RETURN || statement.kind === N_THROW) {
-        return
+        loops = false
       }
       statements.push(statement)
     }
@@ -2550,14 +2599,17 @@ const collectPassAssignments = (walk: PerfWalk, body: Node): void => {
     statements.push(body)
   }
   for (const statement of statements) {
-    if (statement.kind !== N_EXPR_STMT) {
+    if (!loops || statement.kind !== N_EXPR_STMT) {
       continue
     }
     const expr = unwrapPerfParens(statement.children[0])
     if (expr.kind === N_BINARY && expr.text === "=") {
-      walk.passAssignments.push(expr)
+      assignments.push(expr)
     }
   }
+  walk.passAssignments = assignments
+  walkPerformance(walk, body)
+  walk.passAssignments = enclosing
 }
 
 /**
@@ -2579,24 +2631,15 @@ const checkPassDrop = (walk: PerfWalk, expr: Node): void => {
   if (walk.loops.length === 0 || !walk.isPassAssignment(expr)) {
     return
   }
-  const left = expr.children[0]
-  if (left.kind !== N_IDENT) {
+  const target = perfDroppingTarget(walk, expr)
+  if (target === null || walk.depthOf(target) >= walk.loops.length) {
+    return
+  }
+  if (isQuadraticAccumulation(walk, expr) || perfHeldValueMayBeReachable(walk, expr, target)) {
     return
   }
   const ctx = walk.ctx
-  const target = ctx.program.nodeLocals[left.id]
-  if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
-    return
-  }
-  if (walk.depthOf(target) >= walk.loops.length || !perfAllocatesVisibly(ctx, expr.children[1])) {
-    return
-  }
-  if (isQuadraticAccumulation(walk, expr) || isArenaReassignment(walk, expr)) {
-    return
-  }
-  if (perfHeldValueMayBeReachable(walk, expr, target)) {
-    return
-  }
+  const left = expr.children[0]
   ctx.performance(
     left,
     `\`${target.name}\` is given a new allocation on every pass of this loop and drops the one the pass before ` +
@@ -2607,13 +2650,10 @@ const checkPassDrop = (walk: PerfWalk, expr: Node): void => {
 }
 
 /**
- * `s = <an allocation>` where `s` is a local that was declared holding one.
- * Reported on the target, because the assignment is the thing to change.
+ * The NL9003 report for an assignment `isArenaReassignment` found. Reported on
+ * the target, because the assignment is the thing to change.
  */
-const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
-  if (!isArenaReassignment(walk, expr)) {
-    return
-  }
+const reportArenaReassignment = (walk: PerfWalk, expr: Node): void => {
   const left = expr.children[0]
   const target = walk.ctx.program.nodeLocals[left.id]
   if (target === null) {

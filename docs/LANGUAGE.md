@@ -6194,7 +6194,11 @@ by the caller.
     memory; when the value being dropped may already be reachable from
     somewhere else, which is a question of order — a capture anywhere in the
     enclosing loop, or one that finishes before the assignment starts, leaves
-    the old value reachable and the `const` rewrite inapplicable; or when the
+    the old value reachable and the `const` rewrite inapplicable (a capture is
+    the value passed to a call or a constructor, either arm of a conditional
+    included, a method called on it unless it is a string or an array, a
+    `return`, an element of an array or object literal, or the right-hand side
+    of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
     (`tests/cases/perf_arena_quiet`).
   - **an allocation dropped on every pass** (NL9016) — `x = <allocation>` as a
@@ -6212,12 +6216,13 @@ by the caller.
     values are this assignment's own; a line the rule above already reports is
     its alone. Not reported for an assignment inside a branch, which may run
     once, as a search loop's `found = ...` before its `break` does; in a body
-    whose top level ends the loop with `break`, `return` or `throw`, which runs
-    at most once; for a local declared inside the loop; when the assigned value
-    is not an allocation; or when a capture anywhere in the loop — a push, an
-    argument, a constructor argument, a field or element store, an array or
-    object literal — may keep the old value reachable, as
-    `head = new Node(i, head)` does (`tests/cases/perf_arena_pass_quiet`).
+    whose top level ends the loop with `break`, `return` or `throw`, or in a
+    `do ... while (false)`, either of which runs at most once; for a local
+    declared inside the loop; when the assigned value is not an allocation; or
+    when a capture anywhere in the loop, as the rule above counts one, may keep
+    the old value reachable, as `head = new Node(i, head)`,
+    `picks.push(i > 0 ? tag : "none")` and `cur.attach(reg)` do
+    (`tests/cases/perf_arena_pass_quiet`).
   - **a loop that leaves a callee's memory behind** — a call inside a loop to
     a function that leaves arena memory behind (it allocates, lets none of it
     escape, and has no scope of its own) whose result dies with the pass,
