@@ -58,6 +58,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime-host.c       clock, rng, signals (C, 0.8 KB)  │
 │    runtime/runtime-net.c        sockets (C, 2.3 KB)              │
 │    runtime/runtime-parallel.c   range partitioner (C, 0.3 KB)    │
+│    runtime/runtime-simd.c       vector byte search (C, 0.7 KB)   │
 │    scripts/build.sh             clang -O3/-Oz, LTO, gc-sections  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -89,6 +90,7 @@ Design rules that every WP must respect:
   | `runtime-parallel.c` | 286 (905 threaded) | 320 (1,024) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
+  | `runtime-simd.c` | 675 (2026-10-09) | 768 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
   functions it calls. [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)
