@@ -1057,6 +1057,10 @@ const buildCaseIn = (dir, name) => {
  * the arguments after it line up.
  */
 const runCaseUnderPrelude = (name, args) =>
+  runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
+
+/** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
+const runUnderPrelude = (entry, args) =>
   spawnSync(
     "node",
     [
@@ -1065,8 +1069,7 @@ const runCaseUnderPrelude = (name, args) =>
       "--import",
       path.join(root, "runtime", "nish.mjs"),
       "-e",
-      `const m = await import(${JSON.stringify(path.join(casesDir, `${name}.ts`))}); process.exit(m.main());`,
-      name,
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
       ...args,
     ],
     { cwd: root, encoding: "utf8" }
@@ -3956,6 +3959,13 @@ const functionHeaders = (ir) => {
   return out
 }
 
+/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
+const INDEX_OF_ANY_REFUSALS = [
+  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
+]
+
 /**
  * The link programs whose output a check after the loop reads: by path, from
  * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
@@ -3971,9 +3981,7 @@ const LINK_READ_LATER = [
   "range_export_napi",
   "range_export_napi_async",
   "range_export_unproven",
-  "std_text_index_of_any_empty_set",
-  "std_text_index_of_any_long_set",
-  "std_text_index_of_any_non_ascii_set",
+  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -4513,35 +4521,19 @@ for (const name of [
 // as a root -- what the performance gate does -- is an ordinary module, so its
 // walker is called as written and the kernel is never declared.
 if (!only || "std_text_index_of_any".includes(only)) {
-  for (const [name, message] of [
-    ["std_text_index_of_any", ""],
-    ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-    ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-    ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
-  ]) {
+  for (const [name, message] of [["std_text_index_of_any", ""], ...INDEX_OF_ANY_REFUSALS]) {
     const entry = path.join(linkDir, name, "main.ts")
     if (!fs.existsSync(entry)) {
       check(`link/${name}: indexOfAny-under-node`, false, `no such fixture: tests/link/${name}`)
       continue
     }
-    const run = spawnSync(
-      "node",
-      [
-        "--experimental-strip-types",
-        "--no-warnings",
-        "--import",
-        path.join(root, "runtime", "nish.mjs"),
-        "-e",
-        `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
+    const run = runUnderPrelude(entry, [])
     const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
     const code = Number(fs.readFileSync(path.join(linkDir, name, "expected.code"), "utf8").trim())
     check(
       `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints${message ? `, "${message}"` : ""}`,
       run.status === code && run.stdout === want && run.stderr.includes(message),
-      `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+      `--- native (expected.out)\n${want}--- node\n${shown(run)}`
     )
     const exe = path.join(buildDir, "link", name, "app")
     if (message && !HAS_CLANG) {
@@ -4551,7 +4543,7 @@ if (!only || "std_text_index_of_any".includes(only)) {
       check(
         `link/${name}: the native binary panics with "${message}"`,
         native.status === 1 && native.stderr.includes(message),
-        fs.existsSync(exe) ? `exit ${native.status}\n${native.stderr}` : `no binary at ${exe}`
+        fs.existsSync(exe) ? shown(native) : `no binary at ${exe}`
       )
     }
   }

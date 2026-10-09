@@ -17,9 +17,8 @@
 // than from the kernel: it reads its two strings and nothing else, which is
 // all the kernel does that a caller can see.
 
-import { CLI, STD_PREFIX } from "./branding"
 import { CheckedProgram, FunctionSig } from "./program"
-import { stdModuleName } from "./std-modules"
+import { isTextModule } from "./std-modules"
 
 /** The runtime symbol the walker's call becomes. */
 export const INDEX_OF_ANY_KERNEL: string = "nish_str_index_of_any"
@@ -27,22 +26,16 @@ export const INDEX_OF_ANY_KERNEL: string = "nish_str_index_of_any"
 /** The walker in `std/text.ts` whose one call is the kernel. */
 const INDEX_OF_ANY_WALK: string = "indexOfAnyFrom"
 
-/** `std/text.ts`: the name `nish/text` loads under. */
-const textModuleName = (): string => stdModuleName(`${STD_PREFIX}text`)
-
-/**
- * Whether `program` is the standard library's `std/text.ts`. The package is
- * part of the test, as it is for `nish/threads` (`isThreadsModule`): a
- * root-package file that happens to sit at `std/text.ts` is an ordinary
- * module, and its walker runs as it is written.
- */
-const isTextModule = (program: CheckedProgram): boolean =>
-  program.packageName === CLI && program.source.path === textModuleName()
-
 /**
  * Whether a call in `program` to `sig` is `indexOfAny`'s walk, lowered to
  * `INDEX_OF_ANY_KERNEL`. The walker is private to `nish/text`, so a call to it
- * can only be written there, and the caller's module is the one to test.
+ * can only be written there, and the caller's module is the one to test. The
+ * package is part of that test (`isTextModule`): a root-package file that
+ * happens to sit at `std/text.ts` is an ordinary module, and its walker runs
+ * as it is written.
  */
 export const isIndexOfAnyWalk = (program: CheckedProgram, sig: FunctionSig): boolean =>
-  sig.owner === null && sig.instance === null && sig.sourceName === INDEX_OF_ANY_WALK && isTextModule(program)
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.sourceName === INDEX_OF_ANY_WALK &&
+  isTextModule(program.packageName, program.source.path)
