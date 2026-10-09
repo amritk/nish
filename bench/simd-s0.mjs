@@ -176,9 +176,8 @@ const scanDriver = () => {
   return `// Written by bench/simd-s0.mjs: the S0 driver around bench/scan.ts.
 import { scanJson } from "./scan.ts"
 
-const PIECE: u8[] = [${piece}]
-
 export const main = (): i32 => {
+  const PIECE: u8[] = [${piece}]
   const size: i32 = ${SCAN_BYTES}
   const pieces: i32 = size / PIECE.length
   const bytes: u8[] = []
