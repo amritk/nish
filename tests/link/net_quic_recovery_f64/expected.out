@@ -146,4 +146,53 @@ PASS  ten full datagrams go at once: the initial window's burst
 PASS  the next waits 4 ms
 PASS  not a millisecond less
 PASS  and then goes
-quic recovery: 148 passed, 0 failed, 0 skipped
+PASS  the first flight is one datagram, and the network loses it
+PASS  the probe timeout is 997 ms after it
+PASS  the first probe goes out, and the network loses it too
+PASS  a second probe follows it at the same probe timeout
+PASS  and a third does not
+PASS  from the second alone the client completes the handshake, at the first probe timeout
+PASS  a probe timeout during the handshake sends one datagram
+PASS  and a second
+PASS  and no more
+PASS  the Initial of each carries the ServerHello, which elicits an ACK
+PASS  the client accepts the flight
+PASS  each datagram's Handshake packet carries CRYPTO data too
+PASS  and the handshake completes
+PASS  a repeated ClientHello brings the flight again at once
+PASS  its Initial carries the ServerHello
+PASS  in one datagram
+PASS  with no probe timeout
+PASS  a second before any ACK brings one more
+PASS  one
+PASS  with the ServerHello again
+PASS  which is QUIC_CONN_EARLY_RESENDS of them
+PASS  a third is answered
+PASS  with an ACK alone: the cap is reached
+PASS  and nothing more
+PASS  the client completes the handshake from an early copy
+PASS  a PING in an Initial is acknowledged
+PASS  but repeats nothing the server read, so the flight waits for the probe timeout
+PASS  and no early resend is spent
+PASS  a repeated ClientHello once the server's Initial is acknowledged brings no CRYPTO data
+PASS  nor spends an early resend
+PASS  a Handshake PING with the server's Handshake data unacknowledged
+PASS  brings that data again at once
+PASS  in one datagram
+PASS  one that acknowledges it all brings no CRYPTO data
+PASS  and spends no early resend
+PASS  the handshake completes
+PASS  1200 bytes in allow 3600 out, and the flight took 1200
+PASS  the first probe timeout's two datagrams fit what is left
+PASS  exactly
+PASS  so the server is blocked
+PASS  and arms no probe timeout while it is (RFC 9002 §6.2.2.1)
+PASS  so it has still sent nothing
+PASS  500 bytes of PADDING from the client unblock it
+PASS  and the second probe timeout, already past, fires
+PASS  and of its two datagrams the limit lets one go
+PASS  the server never sends more than three times what it received
+PASS  the other is still owed
+PASS  and goes once the client sends more
+PASS  still inside the limit
+quic recovery: 197 passed, 0 failed, 0 skipped
