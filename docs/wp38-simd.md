@@ -1,10 +1,12 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: proposed, unbuilt.** Nothing in this note has a flag, a type or a
-runtime symbol yet, and no stage may start before the owner takes the
-decisions in §8. [MASTER_PLAN.md](MASTER_PLAN.md) lists it as additive and
-unscheduled. [LANGUAGE.md](LANGUAGE.md) stays normative and this note adds no
-rule to it; where they disagree, LANGUAGE.md wins.
+**Status: accepted; S0–S2 in progress (tracking issue #516).** The owner
+took the decisions in §8 on 2026-10-09, as recommended. S0's baselines are in
+§2.3. Nothing else in this note has a flag, a type or a runtime symbol yet:
+each one arrives with its stage, and its rule goes into
+[LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
+work as additive. LANGUAGE.md stays normative and this note adds no rule to
+it; where they disagree, LANGUAGE.md wins.
 
 The question came from `bench/json`, the cross-language JSON benchmark of
 #507. In its recorded report Nish's `std/json` read three fields per line in
@@ -22,7 +24,7 @@ ships.
 
 ---
 
-## 1. The decision, proposed
+## 1. The decision
 
 **Put vectors where the bytes are, behind ordinary functions, before giving
 programs vector types. Keep the default target at the baseline CPU.** Five
@@ -144,6 +146,88 @@ The numeric side shows how much a wider target could buy, because
 Nish at the baseline already beats Rust `-O3` on three of the four. A wider
 target bought Rust about 10–12% on the two float kernels and nothing on the
 other two. So `-march` buys a little, and only on some programs (§3.4).
+
+#### S0: the baselines
+
+S0 measured these with `node bench/simd-s0.mjs`, with `main`'s compiler
+(`f772bd2`; the branch adds only this note and that script). The scan and
+bootstrap rows were taken at `97210d5`, and the `-march` rows at `c4dd861`,
+once the script ran the two builds in alternating rounds. Between those
+commits the script changed only in how it times, and in a comment. The machine
+was an `Intel(R) Xeon(R) Processor @ 2.10GHz` (lscpu: family 6, model 207; 4
+vCPUs under KVM; AVX2, FMA and AVX-512 present). Each row is seven runs after
+one warm-up, in ms. Every later bar in §7 is a ratio against this table, on
+this machine, so a stage that measures elsewhere re-runs the script there
+first.
+
+| Row | Build | min ms | median ms |
+| --- | --- | ---: | ---: |
+| `bench/json`, `jsonFields` | pending #507: its harness is on #507's benchmark branch, not on `main`, and S1 judges against it after #507's stage 3, so `s1-json` takes this row | — | — |
+| `bench/scan.ts`, 1,000 passes over 1 MiB | native, `--profile speed` | 1783.2 | 1942.9 |
+| `bench/scan.ts`, the same passes | freestanding wasm under Node 22, through `scanBatch` | 2334.6 | 2644.2 |
+| nbody | baseline | 1139.8 | 1195.8 |
+| nbody | `-march=x86-64-v3` | 1093.5 | 1193.5 |
+| vec3 | baseline | 420.0 | 439.1 |
+| vec3 | `-march=x86-64-v3` | 408.5 | 440.5 |
+| spectral | baseline | 567.4 | 634.4 |
+| spectral | `-march=x86-64-v3` | 506.6 | 541.0 |
+| `scripts/bootstrap.sh --verify` | seed to stage3 | 150771.2 | 153702.1 |
+
+The scan rows are about 590 MB/s natively and 450 MB/s as wasm. The wasm
+figure includes copying the document into linear memory on every pass, as
+any host must. Both print the same checksum. Each pass first turns the `1` of
+one more piece into a comma, so no pass scans the document the one before it
+did.
+
+The `-march=x86-64-v3` rows link the same `.ll` as the baseline rows. Only
+clang's CPU changes, for the module (through LTO) and for the runtime alike,
+and both binaries print the same checksum. The two binaries run in alternating
+rounds, so a slow stretch of the shared machine falls on both columns. The
+wider binary uses VEX encodings and `ymm` registers. It has no FMA, because the
+IR carries no `contract` flag. The baseline binary has neither.
+
+Both samples were taken at `c4dd861`. In that version the wide build went
+first in four of the seven timed rounds, and in eight of the fifteen. The
+script now rounds the count up to even, so each build goes first in exactly
+half. A second sample of fifteen alternating rounds gave:
+
+| Benchmark | baseline min | x86-64-v3 min | gain | baseline median | x86-64-v3 median | gain |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| nbody | 1089.8 | 1066.0 | 2.2% | 1153.2 | 1106.4 | 4.1% |
+| vec3 | 406.8 | 411.5 | −1.2% | 423.6 | 427.9 | −1.0% |
+| spectral | 506.2 | 398.4 | 21.3% | 533.4 | 454.2 | 14.8% |
+
+The seven-round table above is S0's baseline: it follows §7's protocol, and
+it is the one later stages divide by. The verdict below is read from both
+samples, because they disagree on nbody and vec3. Neither one alone is enough
+to settle a difference of one or two percent. The two baseline columns
+differ by more than that between samples: spectral's baseline minimum was
+567.4 ms in one and 506.2 ms in the other.
+
+The first, unalternated run of this script, at `97210d5`, put spectral at 8.0%
+and nbody at −3.5%. Alternating the two builds is meant to stop drift on the
+machine from landing on one column only, and these rows replace that run.
+
+**For S2's bar the outcome is undecided.** The bar is ≥10% at one level on
+at least one of nbody, vec3 or spectral, with no loss on the others. Per
+benchmark:
+
+- **spectral clears 10% in both alternating samples:** 10.7% on the minimum
+  and 14.7% on the median in the first, and 21.3% and 14.8% in the second.
+- **nbody does not lose.** It gained 4.1% and 0.2% in the first sample, and
+  2.2% and 4.1% in the second.
+- **vec3 shows a possible small loss, so "no loss on the others" is not
+  clearly met.** It is at or below zero in three of its four figures: −0.3%
+  on the median in the first sample, and −1.2% and −1.0% in the second. Only
+  its minimum changes sign between the samples (+2.7%, then −1.2%). Its
+  median is negative in both.
+
+The bar gives no tolerance, and this note does not add one. Whether a vec3
+change of −0.3% to −1.2% counts as a loss is the open question. The owner
+answers it, or `s2-cpu` does by measuring vec3 at the level it would ship. It
+is not settled here. What is settled is that a CPU level buys a real gain on
+one of the three, as Rust's native column showed above, and next to nothing on
+the other two.
 
 ---
 
@@ -418,7 +502,7 @@ a printed checksum.
 
 | Stage | What | Ships only if |
 | --- | --- | --- |
-| **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. |
+| **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Done**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, except `bench/json`, pending #507. |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than S0 on the same machine: from about 90 ms to about 60, between typed serde and yyjson. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. |
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). |
@@ -432,11 +516,16 @@ for S1, because S1's result says whether the byte half of S3 is needed at all.
 
 ---
 
-## 8. Decisions for the owner
+## 8. Decisions
 
-| # | Question | Options | Recommendation |
+The owner took all four on 2026-10-09, each as recommended. The reason
+beside each is the one the recommendation gave, and it is the reason the
+decision stands on: a stage that finds it untrue comes back here before it
+builds anything else.
+
+| # | Question | Options | Decided |
 | --- | --- | --- | --- |
-| Q1 | The SIMD surface | (a) runtime kernels behind `std`; (b) `nish:simd` types; (c) target intrinsics; (d) auto-vectorisation and a CPU flag | **(a) first, (d) beside it, (b) on its bar, (c) declined.** |
+| Q1 | The SIMD surface | (a) runtime kernels behind `std`; (b) `nish:simd` types; (c) target intrinsics; (d) auto-vectorisation and a CPU flag | **(a) first, (d) beside it, (b) on its bar, (c) declined.** (a) is S1, (d)'s flag is S2 and ships only on its bar, (b) is S3 and waits for S1's result (§7), and (c) is in §9. |
 | Q2 | The default target | baseline; a newer level (`x86-64-v2`); `native` | **Baseline.** Wider code is chosen at run time in the runtime, or by an opt-in flag. |
 | Q3 | Integer lanes in (b) | wrap, named so; trap, as scalars do | **Wrap, named so.** A trapping lane costs a mask reduction per operation, and wrapping by name keeps the reading class A. |
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |

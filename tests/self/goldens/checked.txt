@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 935 programs, 63401 dump lines.
+# 938 programs, 63476 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3907,7 +3907,7 @@ function double(n: i32): i32 -> @double
 function firstLine(path: string): string -> @firstLine
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file
-  calls: nish_read_file nish_str_at nish_str_new
+  calls: nish_read_file nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local 11:9 text: string (const)
   local 12:9 end: i32 (const)
@@ -43281,7 +43281,7 @@ function grows(calls: i32): string -> @grows
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_eq nish_str_new
+  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local 41:9 one: string (const)
   callee 41:15 grows -> @grows
@@ -43331,7 +43331,7 @@ function grows(rounds: i32): string -> @grows
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via grows
-  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_eq nish_str_new
+  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local 48:9 one: string (const)
   callee 48:15 grows -> @grows
@@ -44307,7 +44307,7 @@ function grows(calls: i32): string -> @grows
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via grows
-  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_eq nish_str_new
+  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local 50:9 one: string (const)
   callee 50:15 grows -> @grows
@@ -47922,7 +47922,7 @@ const GREETING: string = "hello there"
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_panic_index nish_panic_overflow nish_print nish_str_at nish_str_concat nish_str_from_i32
+  calls: nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from
   stackSites=1 stackLocals=1
   local 10:9 word: string (const)
   local 14:9 sizes: i32[] (const)
@@ -47946,7 +47946,7 @@ function room(name: string, column: i32): i32 -> @room
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Label.constructor describe nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_at nish_str_from_i32 room
+  calls: Label.constructor describe nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from room
   stackSites=2 stackLocals=2
   local 20:9 name: string (const)
   local 22:9 n: i32 (const)
@@ -47960,22 +47960,22 @@ module tests/cases/port_str_needle_step_printed.ts (entry)
 function printPos(line: string): void -> @printPos
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_from_i32
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
 function storePos(line: string, into: i32[]): void -> @storePos
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 13:3
-  calls: nish_array_grow nish_panic_overflow nish_str_at
+  calls: nish_array_grow nish_panic_overflow nish_str_index_of nish_str_index_of_from
   pointer into: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local 12:9 at: i32 (const)
 function afterColon(line: string): string -> @afterColon
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_at nish_str_new
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
 function afterGap(line: string): string -> @afterGap
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_at nish_str_new
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
@@ -48018,7 +48018,7 @@ module tests/cases/port_str_offset_roundtrip_quiet.ts (entry)
 function afterColon(line: string): string -> @afterColon
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: line
-  calls: nish_panic_overflow nish_str_at nish_str_new
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local 8:9 at: i32 (const)
 function countSpaces(text: string): i32 -> @countSpaces
@@ -48029,7 +48029,7 @@ function countSpaces(text: string): i32 -> @countSpaces
   local 17:7 i: i32 (let)
 function hasArrow(text: string): boolean -> @hasArrow
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_at
+  calls: nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
 function tail(text: string, from: i32): string -> @tail
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -48038,7 +48038,7 @@ function tail(text: string, from: i32): string -> @tail
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: afterColon countSpaces hasArrow nish_arena_mark nish_arena_release nish_print nish_str_at nish_str_from_i32 tail
+  calls: afterColon countSpaces hasArrow nish_arena_mark nish_arena_release nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from tail
   stackSites=0 stackLocals=0
   local 32:9 line: string (const)
   callee 33:15 afterColon -> @afterColon
@@ -50621,6 +50621,72 @@ function test(): f64 -> @test [exported]
   stackSites=0 stackLocals=0
   callee 6:29 len -> @len
   callee 8:10 len -> @len
+program tests/cases/str_index_of_from.ts
+module tests/cases/str_index_of_from.ts (entry)
+function find(s: string, sub: string, from: i32): i32 -> @find
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+function findF(s: string, sub: string, from: f64): i32 -> @findF
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+function findU(s: string, sub: string, from: u64): i32 -> @findU
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+function count(s: string, sub: string): i32 -> @count
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+  local 17:7 n: i32 (let)
+  local 18:7 at: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: count find findF findU nish_arena_mark nish_arena_release nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+  local 27:9 s: string (const)
+  callee 28:15 find -> @find
+  callee 29:15 find -> @find
+  callee 30:15 find -> @find
+  callee 31:15 find -> @find
+  callee 32:15 find -> @find
+  callee 33:15 find -> @find
+  callee 34:15 find -> @find
+  callee 35:15 find -> @find
+  callee 36:15 find -> @find
+  callee 37:15 find -> @find
+  callee 38:15 find -> @find
+  callee 39:15 find -> @find
+  callee 40:15 findF -> @findF
+  local 41:9 zero: f64 (const)
+  callee 42:15 findF -> @findF
+  local 43:9 step: u64 (const)
+  local 44:9 huge: u64 (const)
+  callee 45:15 findU -> @findU
+  callee 46:15 findU -> @findU
+  callee 48:15 count -> @count
+  callee 49:15 count -> @count
+program tests/cases/str_index_of_from_port.ts
+module tests/cases/str_index_of_from_port.ts (entry)
+function printSecond(line: string): void -> @printSecond
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+function afterSecond(line: string): string -> @afterSecond
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via printSecond
+  calls: afterSecond nish_arena_mark nish_arena_release nish_print printSecond
+  stackSites=0 stackLocals=0
+  local 14:9 line: string (const)
+  callee 15:3 printSecond -> @printSecond
+  callee 16:15 afterSecond -> @afterSecond
 program tests/cases/str_length.ts
 module tests/cases/str_length.ts (entry)
 function len(s: string): i32 -> @len
@@ -50669,7 +50735,7 @@ program tests/cases/str_search.ts
 module tests/cases/str_search.ts (entry)
 function find(s: string, needle: string): i32 -> @find
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_at
+  calls: nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
@@ -56232,6 +56298,18 @@ function report(): void -> @report
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
+program docs/cookbook/str-index-of-from.ts
+module docs/cookbook/str-index-of-from.ts (entry)
+function next(s: string, sub: string, from: i32): i32 -> @next
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+function count(s: string, sub: string): i32 -> @count
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+  local 4:7 n: i32 (let)
+  local 5:7 at: i32 (let)
 program docs/cookbook/str-literal.ts
 module docs/cookbook/str-literal.ts (entry)
 function greeting(): string -> @greeting
@@ -64152,12 +64230,12 @@ module tests/differential/corpus/str_methods.ts (entry)
 function show(s: string, cut: i32): void -> @show
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_at nish_str_concat nish_str_from_i32 nish_str_new
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_at nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via show
-  calls: nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_concat nish_str_from_i32 nish_str_new show
+  calls: nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new show
   stackSites=0 stackLocals=0
   callee 13:3 show -> @show
   callee 14:3 show -> @show
@@ -64187,7 +64265,7 @@ function show(s: string, cut: i32): void -> @show
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via show
-  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_panic_slice nish_print nish_str_at nish_str_new show
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_panic_slice nish_print nish_str_index_of nish_str_index_of_from nish_str_new show
   stackSites=0 stackLocals=0
   callee 11:3 show -> @show
   callee 12:3 show -> @show

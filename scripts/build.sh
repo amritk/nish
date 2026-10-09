@@ -3,13 +3,14 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is five translation units and is named as one: an input
+# The C runtime is six translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
 # threads, <dir>/runtime-host.c, the wall clock, entropy, file times and
-# signals, and <dir>/runtime-net.c, the sockets of `nish:net`. Each of those
-# files says why they are compiled and measured apart.
+# signals, <dir>/runtime-net.c, the sockets of `nish:net`, and
+# <dir>/runtime-simd.c, the byte searches that read a vector at a time. Each of
+# those files says why they are compiled and measured apart.
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
@@ -76,18 +77,21 @@ while [ $# -gt 0 ]; do
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,41p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
     *) inputs+=("$1"); shift ;;
   esac
 done
 [ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
 [ -n "$out" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is five translation units, and a caller names one: whoever passes
+# The runtime is six translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
-# <dir>/runtime-host.c and <dir>/runtime-net.c compiled beside it. They were one file until the operating-system half was split out
-# for its own size budget, and the parallel half followed for the same reason
-# (each file's header comment says why), and a link line is where those splits
+# <dir>/runtime-host.c, <dir>/runtime-net.c and <dir>/runtime-simd.c compiled
+# beside it, on every profile, wasi included: runtime-simd.c takes its scalar
+# path there unless the build adds -msimd128. They were one file until the
+# operating-system half was split out for its own size budget, and the parallel
+# half followed for the same reason (each file's header comment says why), and
+# a link line is where those splits
 # would otherwise leak: `nish --link` builds its command line in
 # src/compile.ts, the published package's recipe in every document and
 # README names runtime.c, and a user's own clang line does too. Pairing them
@@ -97,7 +101,7 @@ done
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
-      for half in runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c; do
+      for half in runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c runtime-simd.c; do
         side="${i%runtime.c}$half"
         have=0
         for j in "${inputs[@]}"; do

@@ -213,7 +213,7 @@ const sourceKind = (walk: PortabilityWalk, node: Node): i32 => {
  * still is: the step is no fact, but the printed offset is.
  */
 const needleSpan = (walk: PortabilityWalk, source: Node): f64 => {
-  if (source.kind !== N_CALL || source.children[1].children.length !== 1) {
+  if (source.kind !== N_CALL || source.children[1].children.length === 0) {
     return 0
   }
   const method = unwrapParens(source.children[0]).text
