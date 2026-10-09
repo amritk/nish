@@ -7,18 +7,26 @@
  * (§10.3). Sans-IO, like the rest of `nish/net`, and stateless in the sense
  * the RFC means: nothing it answers depends on any connection.
  *
- *     import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT } from "nish/net/quic-listener";
+ *     import { QuicListener, QuicListenerAnswer, QUIC_LISTEN_ACCEPT, QUIC_LISTENER_ANSWER_SIZE } from "nish/net/quic-listener";
  *
  *     const listener = new QuicListener(config, entropy);      // entropy: QUIC_LISTENER_ENTROPY_SIZE random bytes
- *     // For a datagram whose first packet no connection owns (`ownsConnectionId`):
- *     const answer: QuicListenerAnswer = listener.handle(datagram, fromAddress, now);
- *     if (answer.kind === QUIC_LISTEN_ACCEPT) {
+ *     const answer = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE);  // once, beside the listener
+ *     // For a datagram buf[at .. at + len) whose first packet no connection owns:
+ *     if (listener.handleWindow(buf, at, len, fromAddress, now, answer) === QUIC_LISTEN_ACCEPT) {
  *       const conn = new QuicConnection(config, connectionEntropy);
  *       if (answer.retried) { conn.acceptRetry(answer.originalDcid, answer.retryScid); }
- *       conn.receive(datagram, now);
+ *       conn.receiveWindow(buf, at, len, now);
  *     } else if (toI32(answer.reply.length) > 0) {
  *       … send answer.reply back to fromAddress …
  *     }
+ *
+ * **Nothing is kept per datagram** (H3-3 in `docs/security/http3.md`).
+ * `handleWindow` reads the datagram where it lies, its header parsed in
+ * place, and writes every answer into the caller's `QuicListenerAnswer`,
+ * whose arrays were given their room once; every MAC, key and seal is
+ * computed in scratch the listener made at start-up. `handle` is the same
+ * over a whole array, into an answer of its own each time, for a caller
+ * that keeps them.
  *
  * **Routing is the caller's.** The listener sees only datagrams the caller
  * could not hand to a live connection, and it must see only those: a stateless
@@ -39,7 +47,7 @@
  * server issued, is treated as no token at all (§8.1.3).
  *
  * **Stateless resets** (§10.3) end in the token `quicStatelessResetToken`
- * derives from the configuration's static key and the packet's connection
+ * derives (computed in place, by `quicConnResetTokenInto`) from the configuration's static key and the packet's connection
  * ID, so a server that restarted with the same key can end the connections
  * it lost. RFC 9000 §10.3 and §10.3.3 bound them, and each bound is held
  * here. A reset is sent only for a short header, and is always shorter than
@@ -95,8 +103,10 @@
  * ported from another implementation. Private names carry the
  * `quicListener` prefix (`docs/wp26-stdlib.md` §3e).
  */
-import { timingSafeEqual } from "nish/crypto/ct"
-import { hmacSha256 } from "nish/crypto/hmac"
+import { AesKey, aesGcmSeal, aesKeyInto } from "nish/crypto/aes"
+import { timingSafeEqualAt } from "nish/crypto/ct"
+import { HkdfScratch } from "nish/crypto/hkdf"
+import { HmacSha256Scratch } from "nish/crypto/hmac"
 import {
   QUIC_AEAD_AES_128_GCM,
   QUIC_ERR_VERSION,
@@ -104,26 +114,29 @@ import {
   QUIC_PACKET_INITIAL,
   QUIC_PACKET_OK,
   QUIC_PACKET_SHORT,
+  QUIC_RETRY_TAG_SIZE,
   QuicHeader,
-  QuicInitialSecrets,
   QuicKeys,
+  QuicKeysSlot,
   QuicPacket,
-  quicInitialSecrets,
-  quicKeys,
-  quicLongHeader,
-  quicOpenPacket,
-  quicParseHeader,
-  quicRetryPacket,
-  quicSealPacket,
+  quicDecryptPayload,
+  quicInitialSecretsInto,
+  quicKeysInto,
+  quicLongHeaderSize,
+  quicPacketCopy,
+  quicParseHeaderInto,
+  quicPutLongHeader,
+  quicSealInPlace,
+  quicUnprotectHeader,
 } from "nish/net/quic-packet"
-import { QUIC_ERROR_INVALID_TOKEN, QUIC_RESET_TOKEN_SIZE, quicPushConnectionClose } from "nish/net/quic-frame"
+import { QUIC_ERROR_INVALID_TOKEN, QUIC_RESET_TOKEN_SIZE, quicPutConnectionClose } from "nish/net/quic-frame"
 import {
   QUIC_CONN_CID_LENGTH,
   QUIC_CONN_DATAGRAM_SIZE,
   QUIC_CONN_STATIC_KEY_SIZE,
   QuicConnection,
   QuicServerConfig,
-  quicStatelessResetToken,
+  quicConnResetTokenInto,
 } from "nish/net/quic"
 
 // ---- What `handle` answers ----------------------------------------------------
@@ -165,12 +178,33 @@ const QUIC_LISTENER_TOKEN_MAC_SIZE: i32 = 16
 const QUIC_LISTENER_TOKEN_HEAD: i32 = 10
 /** Up to this datagram length a reset is exactly one byte shorter (RFC 9000 §10.3). */
 const QUIC_LISTENER_SHORT_TRIGGER: i32 = 43
+/** The generator's block, one HMAC-SHA256 tag: the bytes `refill` makes at a time. */
+const QUIC_LISTENER_POOL: i32 = 32
+/** The generator's message: its counter, eight bytes. */
+const QUIC_LISTENER_BLOCK: i32 = 8
+/** A typed 0, the start of a whole array, since a bare literal is an `f64` under `--number-mode f64`. */
+const QUIC_LISTENER_FROM: i32 = 0
 
 /**
- * What `QuicListener.handle` decided about one datagram: `kind` is a
- * `QUIC_LISTEN_*`, and `reply` the datagram to send back, empty when there is
- * none. For `QUIC_LISTEN_ACCEPT` after a Retry, `retried` is set and
+ * The largest answer the listener sends, and so the room `QuicListenerAnswer`
+ * makes for `reply`: a stateless reset is at most a full datagram (RFC 9000
+ * §10.3); a Version Negotiation packet, which echoes two IDs of up to 255
+ * bytes, a Retry and the INVALID_TOKEN close are all shorter.
+ */
+export const QUIC_LISTENER_ANSWER_SIZE: i32 = QUIC_CONN_DATAGRAM_SIZE
+
+/**
+ * What `QuicListener.handleWindow` decided about one datagram: `kind` is a
+ * `QUIC_LISTEN_*`, and `reply` the datagram to send back, empty when there
+ * is none. For `QUIC_LISTEN_ACCEPT` after a Retry, `retried` is set and
  * `originalDcid` and `retryScid` are what `QuicConnection.acceptRetry` takes.
+ *
+ * Make one once, with `QUIC_LISTENER_ANSWER_SIZE` as its `room`, and hand it
+ * to every `handleWindow`: the constructor gives `reply` that room and each
+ * ID 20 bytes, and each answer refills them in it, its length the answer's,
+ * so answering allocates nothing (H3-3). A smaller room still works, and
+ * grows the first time an answer needs more; `handle` makes each answer
+ * with exactly the room its reply takes.
  */
 export class QuicListenerAnswer {
   reply: u8[]
@@ -179,59 +213,66 @@ export class QuicListenerAnswer {
   kind: i32 = 0
   retried: boolean = false
 
-  constructor() {
-    this.reply = []
-    this.originalDcid = []
-    this.retryScid = []
+  constructor(room: i32) {
+    this.reply = quicListenerRoom(room > 0 ? room : 0)
+    this.originalDcid = quicListenerRoom(QUIC_MAX_CID_LENGTH)
+    this.retryScid = quicListenerRoom(QUIC_MAX_CID_LENGTH)
   }
 }
 
-/** The bytes `bytes[from .. from + length)`, copied into an array of exactly that size. */
-const quicListenerSlice = (bytes: u8[], from: i32, length: i32): u8[] => {
-  const out: u8[] = new Array<u8>(length)
-  const n: i32 = toI32(out.length)
-  for (let k: i32 = 0; k < n; k += 1) {
-    if (from + k >= 0 && from + k < toI32(bytes.length)) {
-      out[k] = bytes[from + k]
-    }
+/** An empty array with room for `size` bytes, so pushing up to that many allocates nothing. */
+const quicListenerRoom = (size: i32): u8[] => {
+  const out: u8[] = new Array<u8>(size)
+  while (out.length > 0) {
+    out.pop()
   }
   return out
 }
 
-/** Appends every byte of `bytes` to `out`. */
-const quicListenerAppend = (out: u8[], bytes: u8[]): void => {
-  for (const b of bytes) {
-    out.push(b)
+/** Sets `bytes`' length to `length` in the room it already has: popped, or pushed with zeros. */
+const quicListenerResize = (bytes: u8[], length: i32): void => {
+  while (toI32(bytes.length) > length) {
+    bytes.pop()
+  }
+  while (toI32(bytes.length) < length) {
+    bytes.push(toU8(0))
   }
 }
 
-/** Appends `value`'s low `size` bytes to `out`, big-endian. */
-const quicListenerPushNumber = (out: u8[], value: i64, size: i32): void => {
-  for (let k: i32 = size - 1; k >= 0; k -= 1) {
-    out.push(toU8(toI32((value >> (toI64(k) * 8)) & 255)))
+/** Puts `from[at .. at + length)` in `to`, resized to `length` in its own room. */
+const quicListenerRefill = (to: u8[], from: u8[], at: i32, length: i32): void => {
+  quicListenerResize(to, length)
+  quicPacketCopy(to, 0, from, at, length)
+}
+
+/** Writes `value`'s low `size` bytes into `buf` at `at`, big-endian. */
+const quicListenerPutNumber = (buf: u8[], at: i32, value: i64, size: i32): void => {
+  for (let k: i32 = 0; k < size; k += 1) {
+    if (at + k >= 0 && at + k < toI32(buf.length)) {
+      buf[at + k] = toU8(toI32((value >> (toI64(size - 1 - k) * 8)) & 255))
+    }
   }
 }
 
 /**
- * A Version Negotiation packet (RFC 9000 §17.2.1) answering a packet from
- * `scid` to `dcid`: the IDs swapped, version 0, and version 1 as the only one
- * supported. `unused` fills the first byte's low six bits, under the 0x40 the
- * RFC asks for so the packet looks like QUIC to a demultiplexer.
+ * RFC 9001 §5.8's fixed AES-128-GCM key and nonce for version 1's Retry
+ * integrity tag: the listener keeps the key expanded, so a Retry's tag is
+ * computed without `quicRetryIntegrityTag`'s expansion, which stores what it
+ * allocates and so cannot run in an arena block.
  *
- * TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this
- * belongs beside `quicRetryPacket` there, which this stage may not edit.
+ * TODO(WP34 Q1): `nish/net/quic-packet` holds the same two constants and
+ * should offer the tag over a kept key; this stage may not edit it.
  */
-const quicListenerVersionNegotiation = (dcid: u8[], scid: u8[], unused: i32): u8[] => {
-  const out: u8[] = []
-  out.push(toU8((unused & 0x3f) | 0xc0))
-  quicListenerPushNumber(out, 0, 4)
-  out.push(toU8(toI32(scid.length)))
-  quicListenerAppend(out, scid)
-  out.push(toU8(toI32(dcid.length)))
-  quicListenerAppend(out, dcid)
-  quicListenerPushNumber(out, 1, 4)
-  return out
-}
+const quicListenerRetryKey = (): u8[] => [
+  0xbe, 0x0c, 0x69, 0x0b, 0x9f, 0x66, 0x57, 0x5a, 0x1d, 0x76, 0x6b, 0x54, 0xe3, 0x68, 0xc8, 0x4e,
+]
+const quicListenerRetryNonce = (): u8[] => [
+  0x46, 0x15, 0x99, 0xd3, 0x5d, 0x63, 0x2b, 0xf2, 0x23, 0x98, 0x25, 0xbb,
+]
+
+/** Whether `[at, at + len)` is a window inside an array of `length` elements: `p256WindowFits`' test. */
+const quicListenerWindowFits = (length: i32, at: i32, len: i32): boolean =>
+  at >= 0 && len >= 0 && at <= length - len
 
 /**
  * The server's answers to datagrams no connection owns, under one
@@ -243,12 +284,42 @@ const quicListenerVersionNegotiation = (dcid: u8[], scid: u8[], unused: i32): u8
  * `QUIC_CONN_STATIC_KEY_SIZE` bytes, or whose `retryTokenLifetime` is outside
  * 1 to `QUIC_LISTENER_MAX_TOKEN_LIFETIME`, or entropy of another length, make
  * a listener that drops everything.
+ *
+ * Everything an answer is computed in is made here, once: the header a
+ * datagram is parsed into, the HMAC and HKDF scratch, the Initial secrets
+ * and key slots of the INVALID_TOKEN close, and the generator's block. So
+ * `handleWindow` reads the datagram where it lies and keeps nothing.
  */
 export class QuicListener {
   config: QuicServerConfig
   seed: u8[]
   /** Unpredictable bytes not yet used, from `poolHead`, and the counter the next block is made from. */
   pool: u8[]
+  /** The counter's eight bytes, the generator's HMAC message. */
+  block: u8[]
+  /** What `handleWindow` parses a datagram's header into, in place. */
+  header: QuicHeader
+  /** Every HMAC and HKDF the listener computes runs here; its `sha256` makes tokens, resets and the generator's blocks. */
+  kdf: HkdfScratch
+  /** A full HMAC-SHA256 tag, wiped once its 16 bytes are used. */
+  tag: u8[]
+  /** A Retry token MAC's length fields: the Retry SCID's one byte, the address's four. */
+  lengths: u8[]
+  /** The Initial secrets of an INVALID_TOKEN close, and its keys, both directions. */
+  initialClient: u8[]
+  initialServer: u8[]
+  readSlot: QuicKeysSlot
+  writeSlot: QuicKeysSlot
+  packet: QuicPacket
+  /** The client's SCID and the DCID it sent to, copied out for `quicPutLongHeader`, which reads IDs from 0. */
+  peerCid: u8[]
+  ownCid: u8[]
+  /** An empty array: the INVALID_TOKEN close's token and reason. */
+  none: u8[]
+  /** Version 1's fixed Retry key (RFC 9001 §5.8), expanded once. */
+  retryKey: AesKey
+  /** What `handle` answers into before it copies the answer out. */
+  spare: QuicListenerAnswer
   counter: i64 = 0
   /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
   now: i64 = 0
@@ -265,8 +336,26 @@ export class QuicListener {
   /** A listener under `config`; `entropy`'s `QUIC_LISTENER_ENTROPY_SIZE` bytes are copied, then wiped in the caller's array. */
   constructor(config: QuicServerConfig, entropy: u8[]) {
     this.config = config
-    this.seed = quicListenerSlice(entropy, 0, QUIC_LISTENER_ENTROPY_SIZE)
-    this.pool = []
+    this.seed = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE)
+    quicPacketCopy(this.seed, 0, entropy, 0, QUIC_LISTENER_ENTROPY_SIZE)
+    this.pool = new Array<u8>(QUIC_LISTENER_POOL)
+    this.poolHead = QUIC_LISTENER_POOL
+    this.block = new Array<u8>(QUIC_LISTENER_BLOCK)
+    this.header = new QuicHeader()
+    this.kdf = new HkdfScratch()
+    this.tag = new Array<u8>(QUIC_LISTENER_POOL)
+    this.lengths = new Array<u8>(5)
+    this.initialClient = new Array<u8>(32)
+    this.initialServer = new Array<u8>(32)
+    this.readSlot = new QuicKeysSlot()
+    this.writeSlot = new QuicKeysSlot()
+    this.packet = new QuicPacket()
+    this.peerCid = new Array<u8>(QUIC_MAX_CID_LENGTH)
+    this.ownCid = new Array<u8>(QUIC_MAX_CID_LENGTH)
+    this.none = []
+    this.spare = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE)
+    this.retryKey = new AesKey(10, new Array<u64>(88))
+    aesKeyInto(quicListenerRetryKey(), this.retryKey)
     this.usable =
       toI32(entropy.length) === QUIC_LISTENER_ENTROPY_SIZE &&
       toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE &&
@@ -276,218 +365,397 @@ export class QuicListener {
     secureZero(entropy)
   }
 
-  /** `count` unpredictable bytes: HMAC-SHA256 under the seed of a counter, a block at a time. */
-  random(count: i32): u8[] {
-    const out: u8[] = []
-    while (toI32(out.length) < count) {
-      if (this.poolHead >= toI32(this.pool.length)) {
-        secureZero(this.pool)
-        const block: u8[] = []
-        quicListenerPushNumber(block, this.counter, 8)
-        this.counter = this.counter + 1
-        this.pool = hmacSha256(this.seed, block)
-        this.poolHead = 0
-      }
-      if (this.poolHead >= 0 && this.poolHead < toI32(this.pool.length)) {
-        out.push(this.pool[this.poolHead])
-        this.pool[this.poolHead] = toU8(0)
-      }
-      this.poolHead = this.poolHead + 1
+  /**
+   * One unpredictable value in 0 to 255: the next byte of HMAC-SHA256 under
+   * the seed of a counter, a block at a time, each byte wiped once taken.
+   */
+  randomByte(): i32 {
+    if (this.poolHead >= QUIC_LISTENER_POOL) {
+      this.refill()
     }
-    return out
+    let b: i32 = 0
+    if (this.poolHead >= 0 && this.poolHead < toI32(this.pool.length)) {
+      b = toI32(this.pool[this.poolHead])
+      this.pool[this.poolHead] = toU8(0)
+    }
+    this.poolHead = this.poolHead + 1
+    return b
   }
 
-  /** One unpredictable value in 0 to 255. */
-  randomByte(): i32 {
-    const one: i32 = 1
-    const b: u8[] = this.random(one)
-    return toI32(b.length) > 0 ? toI32(b[0]) : 0
+  /** Writes `count` unpredictable bytes into `out` at `at`. */
+  randomInto(out: u8[], at: i32, count: i32): void {
+    for (let k: i32 = 0; k < count; k += 1) {
+      const b: i32 = this.randomByte()
+      if (at + k >= 0 && at + k < toI32(out.length)) {
+        out[at + k] = toU8(b)
+      }
+    }
+  }
+
+  /** The generator's next block, HMAC-SHA256 under the seed of the counter, into `pool`. */
+  refill(): void {
+    quicListenerPutNumber(this.block, 0, this.counter, QUIC_LISTENER_BLOCK)
+    this.counter = this.counter + 1
+    const mac: HmacSha256Scratch = this.kdf.sha256
+    {
+      using _scope = arena()
+      mac.begin(this.seed, QUIC_LISTENER_FROM, QUIC_LISTENER_ENTROPY_SIZE)
+      mac.update(this.block, QUIC_LISTENER_FROM, QUIC_LISTENER_BLOCK)
+      mac.finishInto(this.pool, QUIC_LISTENER_FROM)
+    }
+    mac.wipe()
+    this.poolHead = 0
   }
 
   /**
    * Decides what to answer a datagram whose first packet no connection
-   * owns, from `address` (the client's address as the caller's socket
-   * reports it, port included) at `now` (the caller's monotonic time in
-   * milliseconds). See the module header for the rules; nothing a peer sends
-   * makes it panic.
+   * owns, `datagram[at .. at + len)`, read where it lies, from `address`
+   * (the client's address as the caller's socket reports it, port included)
+   * at `now` (the caller's monotonic time in milliseconds), into `answer`,
+   * whose arrays are refilled in their own room. Answers `answer.kind`. See
+   * the module header for the rules; nothing a peer sends makes it panic,
+   * and nothing it does keeps arena memory. A window outside `datagram` is
+   * the caller's mistake, and panics.
    */
-  handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer {
-    const answer: QuicListenerAnswer = new QuicListenerAnswer()
+  handleWindow(datagram: u8[], at: i32, len: i32, address: u8[], now: i64, answer: QuicListenerAnswer): i32 {
+    if (!quicListenerWindowFits(toI32(datagram.length), at, len)) {
+      panic(
+        `QuicListener.handleWindow: the window [${at}, ${at} + ${len}) is outside a datagram of ${toI32(datagram.length)} bytes`
+      )
+    }
+    answer.kind = QUIC_LISTEN_DROP
+    answer.retried = false
+    quicListenerResize(answer.reply, 0)
+    quicListenerResize(answer.originalDcid, 0)
+    quicListenerResize(answer.retryScid, 0)
     if (now > this.now) {
       this.now = now
     }
     if (!this.usable) {
-      return answer
+      return answer.kind
     }
-    const n: i32 = toI32(datagram.length)
-    const header: QuicHeader = quicParseHeader(datagram, 0, QUIC_CONN_CID_LENGTH)
+    const header: QuicHeader = this.header
+    quicParseHeaderInto(header, datagram, at, at + len, QUIC_CONN_CID_LENGTH)
     if (header.error === QUIC_ERR_VERSION) {
       // §5.2.2: answer an unsupported version only in a datagram that could
       // start a connection, and §6.1: never a Version Negotiation packet.
-      if (header.version !== 0 && n >= QUIC_CONN_DATAGRAM_SIZE) {
-        answer.kind = QUIC_LISTEN_VERSION_NEGOTIATION
-        answer.reply = quicListenerVersionNegotiation(header.dcid, header.scid, this.randomByte())
+      if (header.version !== 0 && len >= QUIC_CONN_DATAGRAM_SIZE) {
+        this.versionNegotiation(answer, datagram, header)
       }
-      return answer
+      return answer.kind
     }
     if (header.error !== QUIC_PACKET_OK) {
-      return answer
+      return answer.kind
     }
     if (header.type === QUIC_PACKET_SHORT) {
-      return this.statelessReset(answer, n, header.dcid)
+      this.statelessReset(answer, len, datagram, header.dcidStart, header.dcidLength)
+      return answer.kind
     }
     // §14.1, §7.2, §5.2.2: only an Initial in a full-sized datagram, sent to
     // a DCID of at least 8 bytes, can start a connection; the rest is dropped.
-    if (header.type !== QUIC_PACKET_INITIAL || n < QUIC_CONN_DATAGRAM_SIZE || toI32(header.dcid.length) < 8) {
-      return answer
+    if (header.type !== QUIC_PACKET_INITIAL || len < QUIC_CONN_DATAGRAM_SIZE || header.dcidLength < 8) {
+      return answer.kind
     }
-    const token: u8[] = header.token
-    if (toI32(token.length) === 0 || toI32(token[0]) !== QUIC_LISTENER_TOKEN_MARKER) {
+    const tokenAt: i32 = header.tokenStart
+    if (header.tokenLength === 0 || toI32(datagram[tokenAt]) !== QUIC_LISTENER_TOKEN_MARKER) {
       if (!this.config.retry) {
         answer.kind = QUIC_LISTEN_ACCEPT
-        return answer
+        return answer.kind
       }
-      return this.retry(answer, header, address)
+      this.retry(answer, datagram, header, address)
+      return answer.kind
     }
-    if (this.tokenValid(token, header.dcid, address)) {
+    if (this.tokenValid(datagram, header, address)) {
       answer.kind = QUIC_LISTEN_ACCEPT
       answer.retried = true
-      answer.originalDcid = quicListenerSlice(
-        token,
-        QUIC_LISTENER_TOKEN_HEAD,
-        toI32(token[QUIC_LISTENER_TOKEN_HEAD - 1])
+      quicListenerRefill(
+        answer.originalDcid,
+        datagram,
+        tokenAt + QUIC_LISTENER_TOKEN_HEAD,
+        toI32(datagram[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1])
       )
-      answer.retryScid = header.dcid
-      return answer
+      quicListenerRefill(answer.retryScid, datagram, header.dcidStart, header.dcidLength)
+      return answer.kind
     }
-    return this.invalidToken(answer, datagram, header)
+    this.invalidToken(answer, datagram, header)
+    return answer.kind
   }
 
   /**
-   * The token's MAC over its own bytes before the MAC (`head`), the ID the
-   * client is to send to, and its address: what makes a token good for one
-   * address and one connection only.
+   * `handleWindow` over the whole of `datagram`, into an answer of its own,
+   * made with exactly the room its reply takes: for a caller that keeps each
+   * answer, at the cost of one `QuicListenerAnswer` a datagram. A carrier
+   * makes one answer and calls `handleWindow`.
    */
-  tokenMac(head: u8[], retryScid: u8[], address: u8[]): u8[] {
-    const message: u8[] = []
-    quicListenerAppend(message, head)
-    message.push(toU8(toI32(retryScid.length)))
-    quicListenerAppend(message, retryScid)
-    quicListenerPushNumber(message, toI64(toI32(address.length)), 4)
-    quicListenerAppend(message, address)
-    const mac: u8[] = hmacSha256(this.config.retryTokenKey, message)
-    const out: u8[] = quicListenerSlice(mac, 0, QUIC_LISTENER_TOKEN_MAC_SIZE)
-    secureZero(mac)
-    return out
-  }
-
-  /** A Retry token for the client at `address`, whose first Initial went to `odcid`, now told to send to `retryScid`. */
-  issueToken(odcid: u8[], retryScid: u8[], address: u8[]): u8[] {
-    const token: u8[] = []
-    token.push(toU8(QUIC_LISTENER_TOKEN_MARKER))
-    quicListenerPushNumber(token, this.now, 8)
-    token.push(toU8(toI32(odcid.length)))
-    quicListenerAppend(token, odcid)
-    quicListenerAppend(token, this.tokenMac(token, retryScid, address))
-    return token
+  handle(datagram: u8[], address: u8[], now: i64): QuicListenerAnswer {
+    const spare: QuicListenerAnswer = this.spare
+    this.handleWindow(datagram, QUIC_LISTENER_FROM, toI32(datagram.length), address, now, spare)
+    const answer: QuicListenerAnswer = new QuicListenerAnswer(toI32(spare.reply.length))
+    answer.kind = spare.kind
+    answer.retried = spare.retried
+    quicListenerRefill(answer.reply, spare.reply, QUIC_LISTENER_FROM, toI32(spare.reply.length))
+    quicListenerRefill(
+      answer.originalDcid,
+      spare.originalDcid,
+      QUIC_LISTENER_FROM,
+      toI32(spare.originalDcid.length)
+    )
+    quicListenerRefill(answer.retryScid, spare.retryScid, QUIC_LISTENER_FROM, toI32(spare.retryScid.length))
+    return answer
   }
 
   /**
-   * Whether `token` is one this listener issued for the client at `address`
-   * that was told to send to `dcid`, and still within its lifetime: the
-   * lengths add up, the MAC matches (compared in constant time), and it was
-   * issued no later than now and less than `retryTokenLifetime` ago.
+   * A Version Negotiation packet (RFC 9000 §17.2.1) into `answer`, answering
+   * a packet from the SCID `header` read to its DCID: the IDs swapped,
+   * version 0, and version 1 as the only one supported. A random byte fills
+   * the first byte's low six bits, under the 0x40 the RFC asks for so the
+   * packet looks like QUIC to a demultiplexer. Each ID is at most 255 bytes,
+   * so the packet is at most 521, inside `reply`'s room.
+   *
+   * TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this
+   * belongs beside `quicRetryPacket` there, which this stage may not edit.
    */
-  tokenValid(token: u8[], dcid: u8[], address: u8[]): boolean {
-    const length: i32 = toI32(token.length)
+  versionNegotiation(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
+    const unused: i32 = this.randomByte()
+    const dcidLength: i32 = header.dcidLength
+    const scidLength: i32 = header.scidLength
+    const reply: u8[] = answer.reply
+    quicListenerResize(reply, 11 + dcidLength + scidLength)
+    reply[0] = toU8((unused & 0x3f) | 0xc0)
+    quicListenerPutNumber(reply, 1, 0, 4)
+    reply[5] = toU8(scidLength)
+    quicPacketCopy(reply, 6, datagram, header.scidStart, scidLength)
+    const dcidAt: i32 = 6 + scidLength
+    quicListenerPutNumber(reply, dcidAt, toI64(dcidLength), 1)
+    quicPacketCopy(reply, dcidAt + 1, datagram, header.dcidStart, dcidLength)
+    quicListenerPutNumber(reply, dcidAt + 1 + dcidLength, 1, 4)
+    answer.kind = QUIC_LISTEN_VERSION_NEGOTIATION
+  }
+
+  /**
+   * The token MAC over `head[headAt .. headAt + headLength)`, the token's
+   * own bytes before its MAC, the ID the client is to send to
+   * (`scid[scidAt .. scidAt + scidLength)`) and its address, into `tag`:
+   * what makes a token good for one address and one connection only. Its
+   * first `QUIC_LISTENER_TOKEN_MAC_SIZE` bytes are the token's MAC; the
+   * caller wipes `tag` once it has used them.
+   */
+  tokenMac(
+    head: u8[],
+    headAt: i32,
+    headLength: i32,
+    scid: u8[],
+    scidAt: i32,
+    scidLength: i32,
+    address: u8[]
+  ): void {
+    const mac: HmacSha256Scratch = this.kdf.sha256
+    const lengths: u8[] = this.lengths
+    const one: i32 = 1
+    const four: i32 = 4
+    quicListenerPutNumber(lengths, QUIC_LISTENER_FROM, toI64(scidLength), one)
+    quicListenerPutNumber(lengths, one, toI64(toI32(address.length)), four)
+    {
+      using _scope = arena()
+      mac.begin(this.config.retryTokenKey, QUIC_LISTENER_FROM, toI32(this.config.retryTokenKey.length))
+      mac.update(head, headAt, headLength)
+      mac.update(lengths, QUIC_LISTENER_FROM, one)
+      mac.update(scid, scidAt, scidLength)
+      mac.update(lengths, one, four)
+      mac.update(address, QUIC_LISTENER_FROM, toI32(address.length))
+      mac.finishInto(this.tag, QUIC_LISTENER_FROM)
+    }
+    mac.wipe()
+  }
+
+  /**
+   * Whether the token `header` read is one this listener issued for the
+   * client at `address` that was told to send to the DCID `header` read,
+   * and still within its lifetime: the lengths add up, the MAC matches
+   * (compared in constant time), and it was issued no later than now and
+   * less than `retryTokenLifetime` ago. The token is read in `datagram`.
+   */
+  tokenValid(datagram: u8[], header: QuicHeader, address: u8[]): boolean {
+    const tokenAt: i32 = header.tokenStart
+    const length: i32 = header.tokenLength
     if (length < QUIC_LISTENER_TOKEN_HEAD + QUIC_LISTENER_TOKEN_MAC_SIZE) {
       return false
     }
-    const odcidLength: i32 = toI32(token[QUIC_LISTENER_TOKEN_HEAD - 1])
+    const odcidLength: i32 = toI32(datagram[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1])
     const head: i32 = QUIC_LISTENER_TOKEN_HEAD + odcidLength
     if (odcidLength > QUIC_MAX_CID_LENGTH || head + QUIC_LISTENER_TOKEN_MAC_SIZE !== length) {
       return false
     }
-    const mac: u8[] = this.tokenMac(quicListenerSlice(token, 0, head), dcid, address)
-    if (!timingSafeEqual(mac, quicListenerSlice(token, head, QUIC_LISTENER_TOKEN_MAC_SIZE))) {
+    this.tokenMac(datagram, tokenAt, head, datagram, header.dcidStart, header.dcidLength, address)
+    const same: boolean = timingSafeEqualAt(
+      this.tag,
+      0,
+      datagram,
+      tokenAt + head,
+      QUIC_LISTENER_TOKEN_MAC_SIZE
+    )
+    secureZero(this.tag)
+    if (!same) {
       return false
     }
     let issued: i64 = 0
     for (let k: i32 = 1; k < QUIC_LISTENER_TOKEN_HEAD - 1; k += 1) {
-      if (k < toI32(token.length)) {
-        issued = (issued << 8) | toI64(token[k])
-      }
+      issued = (issued << 8) | toI64(datagram[tokenAt + k])
     }
     return issued <= this.now && this.now - issued < this.config.retryTokenLifetime
   }
 
   /**
-   * A Retry for the client's first Initial (RFC 9000 §8.1.2): a new
-   * connection ID for the client to send to, and a token binding it, the
-   * original DCID and the client's address to now.
+   * A Retry for the client's first Initial (RFC 9000 §8.1.2, §17.2.5) into
+   * `answer`: a new connection ID for the client to send to, and a token
+   * binding it, the original DCID and the client's address to now — a
+   * marker byte, the time, the DCID, then the MAC — under the integrity tag
+   * of RFC 9001 §5.8. Each part is written where it goes in `reply`.
    */
-  retry(answer: QuicListenerAnswer, header: QuicHeader, address: u8[]): QuicListenerAnswer {
-    const retryScid: u8[] = this.random(QUIC_CONN_CID_LENGTH)
-    const token: u8[] = this.issueToken(header.dcid, retryScid, address)
-    const packet: u8[] | null = quicRetryPacket(
-      header.scid,
-      retryScid,
-      token,
-      header.dcid,
-      this.randomByte() & 15
-    )
-    if (packet !== null) {
+  retry(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void {
+    const scidLength: i32 = header.scidLength
+    const odcidLength: i32 = header.dcidLength
+    const retryScidAt: i32 = 7 + scidLength
+    const tokenAt: i32 = retryScidAt + QUIC_CONN_CID_LENGTH
+    const macAt: i32 = tokenAt + QUIC_LISTENER_TOKEN_HEAD + odcidLength
+    const tagAt: i32 = macAt + QUIC_LISTENER_TOKEN_MAC_SIZE
+    const reply: u8[] = answer.reply
+    quicListenerResize(reply, tagAt + QUIC_RETRY_TAG_SIZE)
+    this.randomInto(reply, retryScidAt, QUIC_CONN_CID_LENGTH)
+    reply[tokenAt] = toU8(QUIC_LISTENER_TOKEN_MARKER)
+    quicListenerPutNumber(reply, tokenAt + 1, this.now, 8)
+    reply[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1] = toU8(odcidLength)
+    quicPacketCopy(reply, tokenAt + QUIC_LISTENER_TOKEN_HEAD, datagram, header.dcidStart, odcidLength)
+    this.tokenMac(reply, tokenAt, macAt - tokenAt, reply, retryScidAt, QUIC_CONN_CID_LENGTH, address)
+    quicPacketCopy(reply, macAt, this.tag, 0, QUIC_LISTENER_TOKEN_MAC_SIZE)
+    secureZero(this.tag)
+    reply[0] = toU8((this.randomByte() & 15) | 0xf0)
+    quicListenerPutNumber(reply, 1, 1, 4)
+    reply[5] = toU8(scidLength)
+    quicPacketCopy(reply, 6, datagram, header.scidStart, scidLength)
+    reply[retryScidAt - 1] = toU8(QUIC_CONN_CID_LENGTH)
+    if (this.retryTag(reply, tagAt, datagram, header.dcidStart, odcidLength)) {
       answer.kind = QUIC_LISTEN_RETRY
-      answer.reply = packet
+    } else {
+      quicListenerResize(reply, 0)
     }
-    return answer
+  }
+
+  /**
+   * The Retry integrity tag (RFC 9001 §5.8) over the pseudo-packet — the
+   * original DCID `datagram[odcidAt .. odcidAt + odcidLength)`, its length
+   * first, then `reply[0 .. tagAt)` — written at `reply[tagAt]`: AES-128-GCM
+   * under the listener's copy of version 1's fixed key, over nothing. The
+   * pseudo-packet and the AEAD's temporaries go with the arena block.
+   * Answers whether it was made.
+   */
+  retryTag(reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean {
+    using _scope = arena()
+    const pseudo: u8[] = new Array<u8>(1 + odcidLength + tagAt)
+    quicListenerPutNumber(pseudo, 0, toI64(odcidLength), 1)
+    quicPacketCopy(pseudo, 1, datagram, odcidAt, odcidLength)
+    quicPacketCopy(pseudo, 1 + odcidLength, reply, 0, tagAt)
+    const plain: u8[] = []
+    const tag: u8[] | null = aesGcmSeal(this.retryKey, quicListenerRetryNonce(), pseudo, plain)
+    if (tag === null || toI32(tag.length) !== QUIC_RETRY_TAG_SIZE) {
+      return false
+    }
+    quicPacketCopy(reply, tagAt, tag, 0, QUIC_RETRY_TAG_SIZE)
+    return true
   }
 
   /**
    * The answer to an Initial carrying an invalid Retry token (RFC 9000
-   * §8.1.2): an Initial with CONNECTION_CLOSE and INVALID_TOKEN, under the
-   * Initial keys of the DCID the client sent to, from that DCID. It is sent
-   * only when the client's Initial authenticates, so it answers a client and
-   * not noise; it is far smaller than the datagram it answers.
+   * §8.1.2), into `answer`: an Initial with CONNECTION_CLOSE and
+   * INVALID_TOKEN, under the Initial keys of the DCID the client sent to,
+   * from that DCID. It is sent only when the client's Initial
+   * authenticates, so it answers a client and not noise; it is far smaller
+   * than the datagram it answers. The keys are derived into the listener's
+   * own slots, the Initial is opened in an arena block, and the close is
+   * written and sealed in `reply`.
    */
-  invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): QuicListenerAnswer {
-    const secrets: QuicInitialSecrets | null = quicInitialSecrets(header.dcid)
-    if (secrets === null) {
-      return answer
+  invalidToken(answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader): void {
+    const secrets: boolean = quicInitialSecretsInto(
+      this.kdf,
+      datagram,
+      header.dcidStart,
+      header.dcidLength,
+      this.initialClient,
+      this.initialServer
+    )
+    if (!secrets) {
+      return
     }
-    const read: QuicKeys | null = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client)
-    if (read === null) {
-      return answer
+    const read: QuicKeys | null = quicKeysInto(
+      this.kdf,
+      this.readSlot,
+      QUIC_AEAD_AES_128_GCM,
+      this.initialClient
+    )
+    if (read === null || !this.opens(read, datagram, header)) {
+      return
     }
-    const opened: QuicPacket = quicOpenPacket(read, datagram, header, -1)
     // The write keys are derived only for an Initial that opened, so a forged
     // token on noise costs one derivation, not two.
-    const write: QuicKeys | null =
-      opened.error === QUIC_PACKET_OK ? quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server) : null
-    if (write === null) {
-      return answer
-    }
-    const payload: u8[] = []
-    const none: u8[] = []
-    quicPushConnectionClose(payload, false, QUIC_ERROR_INVALID_TOKEN, 0, none)
-    const first: u8[] | null = quicLongHeader(
-      QUIC_PACKET_INITIAL,
-      header.scid,
-      header.dcid,
-      none,
-      0,
-      1,
-      toI32(payload.length)
+    const write: QuicKeys | null = quicKeysInto(
+      this.kdf,
+      this.writeSlot,
+      QUIC_AEAD_AES_128_GCM,
+      this.initialServer
     )
-    if (first === null) {
-      return answer
+    if (write === null) {
+      return
     }
-    const packet: u8[] | null = quicSealPacket(write, first, 0, payload)
-    if (packet !== null) {
+    const peer: i32 = header.scidLength
+    const own: i32 = header.dcidLength
+    quicPacketCopy(this.peerCid, 0, datagram, header.scidStart, peer)
+    quicPacketCopy(this.ownCid, 0, datagram, header.dcidStart, own)
+    const reply: u8[] = answer.reply
+    quicListenerResize(reply, QUIC_LISTENER_ANSWER_SIZE)
+    const headerLength: i32 = quicLongHeaderSize(QUIC_PACKET_INITIAL, peer, own, 0, 0, 1, 0)
+    const frameEnd: i32 = quicPutConnectionClose(
+      reply,
+      headerLength,
+      QUIC_LISTENER_ANSWER_SIZE,
+      false,
+      QUIC_ERROR_INVALID_TOKEN,
+      0,
+      this.none
+    )
+    const payloadLength: i32 = frameEnd - headerLength
+    const put: i32 =
+      headerLength > 0 && frameEnd > 0
+        ? quicPutLongHeader(
+            reply,
+            0,
+            QUIC_PACKET_INITIAL,
+            this.peerCid,
+            peer,
+            this.ownCid,
+            own,
+            this.none,
+            0,
+            1,
+            payloadLength
+          )
+        : -1
+    const end: i32 =
+      put === headerLength ? quicSealInPlace(write, reply, 0, headerLength, payloadLength, 0) : -1
+    if (end > 0) {
+      quicListenerResize(reply, end)
       answer.kind = QUIC_LISTEN_INVALID_TOKEN
-      answer.reply = packet
+    } else {
+      quicListenerResize(reply, 0)
     }
-    return answer
+  }
+
+  /** Whether the Initial `header` read in `datagram` opens under `read`; what opening it allocates goes with the arena block. */
+  opens(read: QuicKeys, datagram: u8[], header: QuicHeader): boolean {
+    using _scope = arena()
+    const packet: QuicPacket = this.packet
+    const clear: u8[] = quicUnprotectHeader(read, datagram, header, -1, packet)
+    const payload: u8[] | null = quicDecryptPayload(read, datagram, header, clear, packet)
+    return payload !== null && packet.error === QUIC_PACKET_OK
   }
 
   /** Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. */
@@ -512,34 +780,42 @@ export class QuicListener {
   }
 
   /**
-   * A stateless reset answering an `n`-byte datagram sent to `dcid` (RFC
-   * 9000 §10.3): a short-header first byte, unpredictable bytes, and the
-   * token for `dcid`. It is one byte shorter than a datagram of up to 43
-   * bytes and between 43 bytes and one byte short of the datagram (at most
-   * 1200) otherwise, so it is always shorter; a datagram too short for that
-   * to leave 21 bytes, or one past the rate limit, gets nothing.
+   * A stateless reset into `answer`, answering an `n`-byte datagram sent to
+   * the ID `datagram[dcidAt .. dcidAt + dcidLength)` (RFC 9000 §10.3): a
+   * short-header first byte, unpredictable bytes, and the token for that
+   * ID, computed in place by `quicConnResetTokenInto`. It is one byte
+   * shorter than a datagram of up to 43 bytes and between 43 bytes and one
+   * byte short of the datagram (at most 1200) otherwise, so it is always
+   * shorter; a datagram too short for that to leave 21 bytes, or one past
+   * the rate limit, gets nothing.
    */
-  statelessReset(answer: QuicListenerAnswer, n: i32, dcid: u8[]): QuicListenerAnswer {
+  statelessReset(answer: QuicListenerAnswer, n: i32, datagram: u8[], dcidAt: i32, dcidLength: i32): void {
     if (n <= QUIC_LISTENER_MIN_RESET || !this.takeReset()) {
-      return answer
+      return
     }
     let size: i32 = n - 1
     if (n > QUIC_LISTENER_SHORT_TRIGGER) {
       const most: i32 = n - 1 < QUIC_CONN_DATAGRAM_SIZE ? n - 1 : QUIC_CONN_DATAGRAM_SIZE
       const span: i32 = most - QUIC_LISTENER_SHORT_TRIGGER + 1
-      const two: i32 = 2
-      const pick: u8[] = this.random(two)
-      const r: i32 = toI32(pick.length) > 1 ? (toI32(pick[0]) << 8) | toI32(pick[1]) : 0
+      const high: i32 = this.randomByte()
+      const r: i32 = (high << 8) | this.randomByte()
       size = QUIC_LISTENER_SHORT_TRIGGER + (span > 0 ? r % span : 0)
     }
-    const reply: u8[] = this.random(size - QUIC_RESET_TOKEN_SIZE)
-    if (toI32(reply.length) > 0) {
-      reply[0] = toU8((toI32(reply[0]) & 0x3f) | 0x40)
-    }
-    quicListenerAppend(reply, quicStatelessResetToken(this.config.statelessResetKey, dcid))
+    const reply: u8[] = answer.reply
+    const tokenAt: i32 = size - QUIC_RESET_TOKEN_SIZE
+    quicListenerResize(reply, size)
+    this.randomInto(reply, QUIC_LISTENER_FROM, tokenAt)
+    reply[0] = toU8((toI32(reply[0]) & 0x3f) | 0x40)
+    quicConnResetTokenInto(
+      this.kdf.sha256,
+      this.config.statelessResetKey,
+      datagram,
+      dcidAt,
+      dcidLength,
+      reply,
+      tokenAt
+    )
     answer.kind = QUIC_LISTEN_STATELESS_RESET
-    answer.reply = reply
-    return answer
   }
 }
 
