@@ -16,7 +16,7 @@ fixed here, and one lies outside this stage's files and stays open.
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`; `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyFrom`, `p256SignSExposed`) and `p256ScalarMultWith` |
+| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`; `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith` |
 | `std/crypto/x25519.ts` | `x25519`, `x25519Base`, and the field (`f25519*`), `f25519Decode` / `f25519Encode`, `f25519Invert` and `x25519Ladder` |
 | `tests/cases/ct_asm_p256.ts`, `tests/cases/ct_asm_x25519.ts` | the copies the constant-time disassembly check holds, compared here with the module functions they mirror |
 

@@ -4673,7 +4673,7 @@ const p256HmacInto = (
   const keyLength: i32 = toI32(key.length)
   const messageLength: i32 = toI32(message.length)
   if (blockLength < SHA256_BLOCK + len || keyLength > SHA256_BLOCK || len > messageLength) {
-    return
+    panic("p256HmacInto: a key, message or block outside its bounds")
   }
   for (let i: i32 = 0; i < SHA256_BLOCK && i < blockLength; i++) {
     block[i] = i < keyLength ? key[i] ^ 0x36 : 0x36
