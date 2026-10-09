@@ -129,6 +129,16 @@ export const isMapExtrasModule = (packageName: string, name: string): boolean =>
  */
 export const SECRET_STD_SPECIFIER: string = "nish/secret"
 
+/**
+ * `nish/text`: ordinary Nish but for one call, `indexOfAny`'s walk, which the
+ * emitter replaces with the runtime kernel (`src/kernels.ts`).
+ */
+const TEXT_SPECIFIER: string = "nish/text"
+
+/** Whether a module is the standard library's `std/text.ts`: the package is part of the test, as for `isCollectionsModule`. */
+export const isTextModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(TEXT_SPECIFIER)
+
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SECRET_STD_SPECIFIER)

@@ -2,14 +2,15 @@
 
 Nish modules written in Nish, for Nish programs to import. There is no magic
 here and — with four exceptions, `threads.ts`, `collections.ts`, `map.ts` and
-`secret.ts` — nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
+`secret.ts`, and one function, `text.ts`'s `indexOfAny` — nothing the compiler
+knows about: a module in this directory is an ordinary Nish source file, compiled as part of
 whatever program imports it, and subject to the same rules as `examples/` or
 `src/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
 
 | Module | What it is |
 | --- | --- |
 | [`testing.ts`](./testing.ts) | a test runner: a `Suite` a program drives with straight-line assertions, printing the `PASS` / `FAIL` / `SKIP` lines the repository's own harness prints, and answering the exit code |
-| [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, and `firstDifference` over two arrays of lines |
+| [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, `firstDifference` over two arrays of lines, and `indexOfAny(text, bytes, from)`, the first index at or after `from` whose byte is one of 1 to 16 ASCII `bytes`. Its walker is the meaning and what runs under Node; natively the compiler replaces the one call to it with the runtime kernel `nish_str_index_of_any`, which reads 16 or 32 bytes at a time and is variable-time ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#byte-search-indexofany-in-nishtext)). `tests/link/std_text_index_of_any*` are its programs |
 | [`json.ts`](./json.ts) | `jsonField(object, name)`: the value of one field of one flat JSON object, which is the shape the compiler's own `--json` diagnostics have. A reader and not a parser — it answers text, answers `null` for a field that is not there, and does not validate |
 | [`pair.ts`](./pair.ts) | `Pair<A, B>`: an interface with `first` and `second`, for a function that answers two values from one call. A type and nothing else — the caller writes an object literal at the return — and for returning two values rather than storing them side by side |
 | [`collections.ts`](./collections.ts) | the global `Map<K, V>` and `Set<T>`: insertion-ordered tables whose buckets carry a hash fingerprint beside the entry index and whose entries keep their full hash, so every `get`, `set`, `add`, `has` and `delete` is one probe. `get` is not a method here: its `V | undefined` never crosses a call, so the compiler lowers it to `probe` and, where the key was found, `valueAt`. Nor are `keys()` and `values()`: an iterator is not a value, so a `for...of` over one is lowered to `walkOpen`, `walkNext`, `keyAt` or `valueAt`, and `walkClose`, and a count of live walks defers compaction until no loop is walking the table. A program never imports it: naming `Map` or `Set` loads it, and the compiler emits what a module uses of it into that module ([`docs/wp32-map.md`](../docs/wp32-map.md), [`docs/LANGUAGE.md`](../docs/LANGUAGE.md#map-and-set)). Its `hashKey`, `sameKey` and `storedKey` are lowered by the compiler per key type |

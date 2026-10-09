@@ -1303,6 +1303,9 @@ export const isPureRuntime = (symbol: string): boolean =>
   symbol === "nish_str_at" ||
   symbol === "nish_str_index_of" ||
   symbol === "nish_str_index_of_from" ||
+  // Effect-pure, but variable-time: how long it takes says where the first
+  // match is, so `std/crypto` must not call `indexOfAny` on secret data.
+  symbol === "nish_str_index_of_any" ||
   symbol === "nish_str_len" ||
   symbol === "nish_str_from_i32" ||
   symbol === "nish_str_from_f64" ||

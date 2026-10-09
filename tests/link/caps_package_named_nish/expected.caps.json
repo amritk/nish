@@ -83,6 +83,18 @@
               ]
             },
             {
+              "name": "indexOfAny",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/text.ts:222:5", "proven": false },
+                { "kind": "index", "at": "std/text.ts:226:15", "proven": true },
+                { "kind": "panic", "at": "std/text.ts:227:7", "proven": false },
+                { "kind": "overflow", "at": "std/text.ts:229:5", "proven": true }
+              ]
+            },
+            {
               "name": "replaceAll",
               "exported": true,
               "capabilities": [],

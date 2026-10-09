@@ -1517,6 +1517,43 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end thread-scope -->
 
+### `nish/text`: `indexOfAny` on the runtime kernel
+
+`indexOfAny` is ordinary Nish in `std/text.ts`: its checks on the set, its
+clamp of `from`, and one call to the private walker `indexOfAnyFrom`, a loop
+over `charCodeAt` that is what runs under Node. In the module that is
+`nish/text` — the package is part of the test (`src/kernels.ts`) — that one
+call becomes the runtime kernel. The `i32` `from` widens to the kernel's `i64`
+and the answer narrows back, which loses nothing: a match is below the text's
+length and a miss is -1. The tail of `@nish.indexOfAny`, after the clamp:
+
+```llvm
+if.end.3:
+  %29 = load i32, i32* %start.addr, align 4
+  %30 = sext i32 %29 to i64
+  %31 = call i64 @nish_str_index_of_any(i8* %text, i8* %bytes, i64 %30)
+  %32 = trunc i64 %31 to i32
+  ret i32 %32
+}
+```
+
+and the kernel's declaration. It reads its two strings through `nocapture
+readonly` pointers; the one store it makes, the first call's choice of path
+into a static of `runtime-simd.c`'s own, is memory no Nish code can name, which
+is what `inaccessiblemem` says:
+
+```llvm
+declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #7
+
+attributes #7 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
+```
+
+`@nish.indexOfAnyFrom` is still defined, `internal` and called by nothing, and
+`opt` deletes it. The importing module sees `indexOfAny` as any other import.
+The whole of `text.ll` is `tests/link/std_text_index_of_any`'s golden; the same
+`std/text.ts` compiled as a root keeps `call i32 @indexOfAnyFrom(` and declares
+no kernel (`tests/run.js`, "kernels:").
+
 ### `Map` and `Set`: one probe, copied into the module
 
 `Map` and `Set` are generic classes in `std/collections.ts`, loaded because the
@@ -17026,6 +17063,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #5
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
@@ -17035,7 +17073,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare noundef double @nish_random() #2
-declare void @nish_exit(i32 noundef) #5
+declare void @nish_exit(i32 noundef) #6
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
@@ -17082,16 +17120,16 @@ declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
-declare void @nish_panic_div(i1 noundef zeroext) #6
-declare extern_weak void @nish_panic_overflow(i32 noundef) #6
+declare void @nish_panic_index(i64 noundef, i64 noundef) #7
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #7
+declare void @nish_panic_div(i1 noundef zeroext) #7
+declare extern_weak void @nish_panic_overflow(i32 noundef) #7
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #8 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -17125,8 +17163,9 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
+attributes #6 = { noreturn nounwind }
+attributes #7 = { nounwind noreturn cold }
+attributes #8 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end runtime-prelude -->
