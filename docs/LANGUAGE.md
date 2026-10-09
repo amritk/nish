@@ -5961,7 +5961,10 @@ where its memory lives and when it is reused.
    choice (`mem_return_array_callee`). An arrow captures nothing, so there is
    no capture to count. Inside the function the value is in memory all the
    same, so a loop whose pass stores into an `xs` declared outside it keeps
-   no pass scope.
+   no pass scope, and a `using a = arena()` block that stores into an `xs`
+   declared before it is refused as any store into older memory is. Only a
+   store that stands as its own statement is carried: an assignment's value is
+   its right-hand side, so `h.f = (xs[0] = v)` keeps `v` stored.
 
    The caller is what makes this sound. Such a call answers an array whose
    elements are as new as the call, so the caller follows them as the call

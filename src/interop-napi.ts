@@ -415,10 +415,6 @@ const napiRangeFailCall = (mode: i32, message: string): string => {
 }
 
 /**
- * Declaration and conversion lines for parameter `c` read from `argv[i]`.
- * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
- */
-/**
  * `napiReaderLines`, indented into `lines`. The lines are kept, so building
  * them inside the loop over the parameters is building what the loop keeps,
  * and the loop is told so once, here.
@@ -437,6 +433,10 @@ const pushReaderLines = (
   }
 }
 
+/**
+ * Declaration and conversion lines for parameter `c` read from `argv[i]`.
+ * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
+ */
 const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, json: boolean): string[] => {
   const lines: string[] = []
   switch (r.kind) {

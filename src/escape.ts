@@ -64,6 +64,7 @@ import {
   N_DEFAULT,
   N_DO,
   N_EMPTY,
+  N_EXPR_STMT,
   FLAG_USING,
   N_FOR,
   N_FOR_OF,
@@ -809,9 +810,12 @@ class EscapeAnalysis {
       return null
     }
     let receiver: Node | null = null
+    // An assignment's value is its right-hand side, so `h.f = (xs[0] = v)`
+    // stores `v` twice: only a store standing as its own statement is carried.
+    // A push answers the new length, a number, wherever it stands.
     if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === node) {
       const target = unwrapParens(parent.children[0])
-      if (target.kind === N_INDEX) {
+      if (target.kind === N_INDEX && this.standsAlone(parent)) {
         receiver = target.children[0]
       }
     } else if (parent.kind === N_LIST) {
@@ -839,6 +843,17 @@ class EscapeAnalysis {
     this.result.carriedStores.push(parent)
     this.result.carriers.push(v)
     return new Outcome(outcome.flow, false, false)
+  }
+
+  /** `node` is a statement's whole expression, so its value is dropped. */
+  standsAlone(node: Node): boolean {
+    let at = node
+    let parent = this.unit.parents.parentOf(at)
+    while (parent !== null && parent.kind === N_PAREN) {
+      at = parent
+      parent = this.unit.parents.parentOf(at)
+    }
+    return parent !== null && parent.kind === N_EXPR_STMT
   }
 
   /** `ref` is `xs[i] = v`, `xs.push(v)`, `xs.length`, a tested `xs[i]`, or `return xs`, and nothing else. */
