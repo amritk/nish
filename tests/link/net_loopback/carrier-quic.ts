@@ -135,9 +135,8 @@ export const quicChecks = (t: Suite): void => {
   }
   t.ok("quic: three more connections through the slot, each closed by the server with code 9, which the client reads", all && q.accepted === 4);
   // The figure moves by a few kilobytes between connections (the listener's
-  // state), so it is pinned as a band: a lane that closes H3-1 fails this
-  // check rather than passing it silently.
-  t.ok("quic: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)", inBand);
+  // answers around the close), so it is pinned as a band (`lbHandshakeBand`).
+  t.ok("quic: each keeps 1 to 6 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (H3-1, QUIC-3)", inBand);
   t.eqI32("quic: no datagram was dropped by the program", q.app.dropped, n32(0));
   t.eqStr("quic: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

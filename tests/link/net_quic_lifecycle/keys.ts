@@ -145,8 +145,17 @@ const lcBothWays = (t: Suite): void => {
   t.eqStr("a packet the network delayed, under the previous keys and numbered below the update, is still read (§6.5)", lcRead(conn), "late");
   t.ok("the server may not start an update while it keeps the previous keys", !conn.updateKeys());
   const previous: QuicKeys | null = conn.otherReadKeys;
+  const previousKey: u8[] = [];
+  if (previous !== null) {
+    for (const b of previous.key) {
+      previousKey.push(b);
+    }
+  }
   conn.handleTimer(c.now + conn.recovery.probeTimeout());
-  t.ok("a probe timeout later the previous keys are wiped and the next derived", conn.otherIsNext && previous !== null && lcAllZero(previous.key));
+  t.ok(
+    "a probe timeout later the previous keys are gone, the next derived over them in their slot",
+    conn.otherIsNext && previous !== null && toI32(previousKey.length) > 0 && !lcSameBytes(previous.key, previousKey)
+  );
   t.ok("but until the client acknowledges a packet of the new phase, still not", !conn.updateKeys());
 
   lcSend(conn, c, write1, c.appPn, lcAck(opened.pn));
@@ -197,6 +206,19 @@ const lcOrder = (t: Suite): void => {
   const step: i64 = Arena.used() - before;
   t.ok("a flipped Key Phase bit under the current keys is dropped, changing nothing", forged.dropped === dropped + 1 && !forged.readPhase && forged.otherIsNext && filled >= 0);
   t.ok("and derives nothing: under 2 KB of the arena, the cost of reading any packet", step >= toI64(0) && step < toI64(2048));
+};
+
+/** Whether `a` and `b` hold the same bytes. */
+const lcSameBytes = (a: u8[], b: u8[]): boolean => {
+  if (toI32(a.length) !== toI32(b.length)) {
+    return false;
+  }
+  for (let k: i32 = 0; k < toI32(a.length) && k < toI32(b.length); k++) {
+    if (a[k] !== b[k]) {
+      return false;
+    }
+  }
+  return true;
 };
 
 /** A ChaCha20-Poly1305 connection updates the same way: no AES schedule to keep. */
@@ -250,8 +272,8 @@ const lcCap = (t: Suite): void => {
   }
   t.eqI32(`all ${QUIC_CONN_MAX_KEY_UPDATES} of the client's updates are followed`, followed, QUIC_CONN_MAX_KEY_UPDATES);
   t.ok(
-    "each, its packet read and the next keys derived, leaves at most 12 KB in the arena, a ceiling over what QUIC-4 records",
-    crossed === 0 && filled > 0 && most > toI64(0) && most <= toI64(12288)
+    "each, its packet read and the next keys derived in the slot, leaves nothing in the arena (QUIC-4)",
+    crossed === 0 && filled > 0 && most === toI64(0)
   );
   write = lcNext(write);
   const last: u8[] = qcShortWith(c, write.keys, write.phase, c.appPn, fromHex("01"));

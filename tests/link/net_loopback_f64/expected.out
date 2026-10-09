@@ -59,7 +59,7 @@ PASS  quic: and every server call kept 0 bytes over them
 PASS  quic: the client's CONNECTION_CLOSE with code 7 reaches the server, which drains and frees the slot
 PASS  quic: as the client's close, the application's, with its code
 PASS  quic: three more connections through the slot, each closed by the server with code 9, which the client reads
-PASS  quic: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)
+PASS  quic: each keeps 1 to 6 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (H3-1, QUIC-3)
 PASS  quic: no datagram was dropped by the program
 PASS  quic: with nothing gone wrong in the loop
 PASS  http/3: a handshake across loopback through the listener into a slot, and the client's three streams
@@ -72,7 +72,7 @@ PASS  http/3: a slot whose pacer has no credit left is woken when it has some, n
 PASS  http/3: the server's GOAWAY: with every request done it closes the connection
 PASS  http/3: and the client reads H3_NO_ERROR, the application's
 PASS  http/3: three more connections, each a GET and the client's CONNECTION_CLOSE with H3_NO_ERROR, which frees the slot
-PASS  http/3: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)
+PASS  http/3: each keeps 1 to 6 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (H3-1)
 PASS  http/3: the program held nothing it could not place
 PASS  http/3: with nothing gone wrong in the loop
 PASS  webtransport: a handshake across loopback, and the client's streams under wtransport 0.7's SETTINGS
@@ -90,7 +90,7 @@ PASS  webtransport: the server closes it with code 9
 PASS  webtransport: the client reads its CLOSE_WEBTRANSPORT_SESSION, code and reason, and the CONNECT stream's end
 PASS  webtransport: the client's CONNECTION_CLOSE frees the slot
 PASS  webtransport: three more connections, each a session and a datagram, closed by the client
-PASS  webtransport: each keeps 80 to 128 KiB of arena from its Initial to its close (WT-1, H3-1's: the handshake's)
+PASS  webtransport: each keeps 1 to 6 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (WT-1, H3-1)
 PASS  webtransport: the program was refused nothing and held nothing it could not place
 PASS  webtransport: with nothing gone wrong in the loop
 net loopback: 92 passed, 0 failed, 0 skipped

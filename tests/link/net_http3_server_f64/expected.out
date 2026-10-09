@@ -48,5 +48,5 @@ PASS  five connections through one slot, each closed after its GOAWAY
 PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
-PASS  and the ECDSA signature is not among what it keeps: under 25,600 bytes, where it kept 34,504 or more before TlsP256Signer
+PASS  which is the listener's copy of the first Initial alone: 1 to 2 KiB, where it was 10,912 or more with the signature and about 100 KB before the slot
 http3 server: 51 passed, 0 failed, 0 skipped

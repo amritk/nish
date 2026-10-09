@@ -604,8 +604,9 @@ const tlsFlightCapacity = (config: TlsServerConfig): i32 => {
  * to the largest message when a ClientHello does not fit (once per slot);
  * the Handshake-level output, when a signature is longer than an ECDSA one;
  * the `serverName` string, made when the client's host name differs from the
- * last one this server held; and, over QUIC only, a copy of the client's
- * transport parameters (TLS-3).
+ * last one this server held; and, over QUIC only, the array the client's
+ * transport parameters are copied into, which grows only when a client's
+ * are longer than any before (TLS-3).
  */
 export class TlsServer {
   config: TlsServerConfig
@@ -619,6 +620,8 @@ export class TlsServer {
   lastServerName: string = ""
   /** The client's `quic_transport_parameters`, opaque; empty unless the carrier is QUIC. */
   clientTransportParameters: u8[]
+  /** The array `clientTransportParameters` points at once read, kept across `restart` and refilled in the room it has. */
+  clientParameters: u8[]
   transcript: TlsTranscript
   /** The bytes received at the current level and not yet a whole message: `input[0 .. inputLength)`. */
   input: u8[]
@@ -678,6 +681,7 @@ export class TlsServer {
     this.ephemeralPrivate = ephemeralPrivate
     this.none = []
     this.clientTransportParameters = this.none
+    this.clientParameters = []
     this.transcript = new TlsTranscript(0)
     this.configFits = tlsConfigFits(config)
     this.input = new Array<u8>(TLS_INPUT_START)
@@ -1074,13 +1078,17 @@ export class TlsServer {
     }
     this.takeServerName(hello)
     if (this.config.quic) {
-      const parameters: u8[] = new Array<u8>(hello.quicLength)
+      // Refilled in place, so a slot's handshakes keep nothing for it (QUIC-3).
+      const parameters: u8[] = this.clientParameters
+      while (parameters.length > 0) {
+        parameters.pop()
+      }
       for (
         let k: i32 = 0;
-        k < toI32(parameters.length) && hello.quicAt + k >= 0 && hello.quicAt + k < toI32(data.length);
+        k < hello.quicLength && hello.quicAt + k >= 0 && hello.quicAt + k < toI32(data.length);
         k++
       ) {
-        parameters[k] = data[hello.quicAt + k]
+        parameters.push(data[hello.quicAt + k])
       }
       this.clientTransportParameters = parameters
     }
