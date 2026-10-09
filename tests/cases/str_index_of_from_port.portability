@@ -1,0 +1,1 @@
+{"file":"tests/cases/str_index_of_from_port.ts","line":7,"column":15,"endLine":7,"endColumn":55,"severity":"portability","code":"NL8001","message":"`line.indexOf(\":\", line.indexOf(\":\") + 1)` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is printed"}

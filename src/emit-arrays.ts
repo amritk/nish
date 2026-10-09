@@ -1561,7 +1561,7 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
  * `i64` whose sign bit is set. `set`'s range check compares unsigned and
  * refuses it; `fill` has to know the type was unsigned (`relativeIndex`).
  */
-const emitOffset = (emitter: Emitter, expr: Node): string => {
+export const emitOffset = (emitter: Emitter, expr: Node): string => {
   const type = emitter.typeOf(expr)
   if (!isFloat(type)) {
     return emitIndex(emitter, expr)

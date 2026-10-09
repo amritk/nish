@@ -53,9 +53,9 @@
  * configuration's streams and buffers and the `Http3Config`'s field section,
  * body chunk and DATA frame. The constructor makes every slot's connections;
  * a datagram an established connection reads, and every datagram it sends,
- * allocates nothing. What does allocate is a new connection's — the listener's
- * work on a datagram no slot owns, and the QUIC handshake (TLS-3) —
- * `docs/security/http3.md` lists it.
+ * allocates nothing; nor does a datagram no slot owns, which the listener
+ * reads where it lies and answers into scratch made once, nor a handshake,
+ * whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
  *
  * Written from RFC 9114 §3 and RFC 9000 §5.2, not ported from another
  * implementation. Private names carry the `http3Server` prefix
@@ -76,6 +76,7 @@ import {
 import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
 import {
   QUIC_LISTEN_ACCEPT,
+  QUIC_LISTENER_ANSWER_SIZE,
   QUIC_LISTENER_FLIGHT_MAX,
   QUIC_LISTENER_MIN_RESET,
   QuicFlight,
@@ -84,7 +85,7 @@ import {
   quicListenerPaceTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener"
-import { tlsSignEcdsaP256 } from "nish/net/tls"
+import { TlsP256Signer } from "nish/net/tls"
 
 /** The timer wheel's buckets, one millisecond each: its horizon. */
 export const H3_SERVER_WHEEL: i32 = 2048
@@ -397,6 +398,8 @@ export class Http3Wheel {
 export class Http3Server {
   quicConfig: QuicServerConfig
   listener: QuicListener
+  /** What the listener answers into, made once: its reply and IDs are refilled in their own room. */
+  answer: QuicListenerAnswer
   quics: QuicConnection[]
   conns: Http3Connection[]
   index: Http3CidIndex
@@ -410,6 +413,8 @@ export class Http3Server {
   meta: i32[]
   entropy: u8[]
   flight: QuicFlight
+  /** Signs every slot's CertificateVerify in `serve`, one for the server, keeping nothing per signature. */
+  signer: TlsP256Signer
   /** Each slot's connection-ID index signature, so it is refiled only when its IDs changed. */
   signatures: i64[]
   state: i32[]
@@ -450,6 +455,7 @@ export class Http3Server {
     this.fd = fd
     this.index = new Http3CidIndex(size, listenerEntropy)
     this.listener = new QuicListener(quicConfig, listenerEntropy)
+    this.answer = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE)
     this.wheel = new Http3Wheel(size)
     this.quics = []
     this.conns = []
@@ -467,6 +473,7 @@ export class Http3Server {
     this.from = new Array<u8>(H3_SERVER_ADDRESS)
     this.meta = [H3_SERVER_ZERO, H3_SERVER_ZERO]
     this.flight = new QuicFlight()
+    this.signer = new TlsP256Signer()
     this.signatures = new Array<i64>(size)
     this.state = new Array<i32>(size)
     this.readyRing = new Array<i32>(size)
@@ -605,17 +612,17 @@ export class Http3Server {
     this.unowned(buf, at, len, address, now, key)
   }
 
-  /** A datagram no slot owns: the listener decides, and may make a connection in a free slot. */
+  /**
+   * A datagram no slot owns: the listener decides, reading it where it lies
+   * in `buf` and answering into `answer`, and may make a connection in a
+   * free slot, which reads the same window. Nothing is copied (H3-3).
+   */
   unowned(buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     if (!this.worthListening(buf, at, len, now)) {
       return
     }
-    const datagram: u8[] = new Array<u8>(len)
-    for (let k: i32 = 0; k < len && k < toI32(datagram.length) && at + k < toI32(buf.length); k++) {
-      datagram[k] = buf[at + k]
-    }
-    const answer: QuicListenerAnswer = this.listener.handle(datagram, address, now)
-    if (answer.kind !== QUIC_LISTEN_ACCEPT) {
+    const answer: QuicListenerAnswer = this.answer
+    if (this.listener.handleWindow(buf, at, len, address, now, answer) !== QUIC_LISTEN_ACCEPT) {
       const reply: i32 = toI32(answer.reply.length)
       if (reply > 0) {
         this.send(answer.reply, H3_SERVER_ZERO, reply, address, H3_SERVER_ZERO)
@@ -646,9 +653,8 @@ export class Http3Server {
 
   /**
    * Whether the listener could answer `buf[at .. at + len)` at all, read
-   * from its first bytes: what it would drop without a word, it costs
-   * nothing to drop here, before the copy and the parse the listener makes
-   * (H3-3). That is a short header too short for a stateless reset; a long
+   * from its first bytes: what it would drop without a word is dropped
+   * here, before the listener parses it. That is a short header too short for a stateless reset; a long
    * one shorter than a full Initial, which neither Version Negotiation nor a
    * new connection answers (RFC 9000 §14.1, §6.1); version 0; a version 1
    * packet that is not an Initial, or whose DCID is under 8 bytes (§7.2);
@@ -686,7 +692,7 @@ export class Http3Server {
    * `H3_SERVER_ANSWER_BURST` at once, then one per
    * `H3_SERVER_ANSWER_INTERVAL` milliseconds — topping it up first. Past it
    * the datagram is dropped before the listener sees it, so a flood of
-   * garbage costs nothing (H3-3); counted in `limited`.
+   * garbage costs no answer and no MAC past the budget (H3-3); counted in `limited`.
    */
   takeAnswer(now: i64): boolean {
     if (this.answerRefilled < 0 || now < this.answerRefilled) {
@@ -713,7 +719,7 @@ export class Http3Server {
     quic.receiveWindow(buf, at, len, now)
     const input: u8[] | null = quic.signatureInput()
     if (input !== null) {
-      const signature: u8[] | null = tlsSignEcdsaP256(key, input)
+      const signature: u8[] | null = this.signer.sign(key, input)
       if (signature !== null) {
         quic.sign(signature)
       }

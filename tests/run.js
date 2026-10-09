@@ -88,9 +88,10 @@ fs.mkdirSync(buildDir, { recursive: true })
  * The C runtime's translation units, as a direct `clang` line has to spell
  * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
  * system calls, `runtime-parallel.c` divides work across threads,
- * `runtime-host.c` holds the wall clock, entropy, file times and signals and
- * `runtime-net.c` the sockets of `nish:net`, split apart so that each carries
- * its own `.text*` budget (the `*_TEXT_BUDGET` constants below).
+ * `runtime-host.c` holds the wall clock, entropy, file times and signals,
+ * `runtime-net.c` the sockets of `nish:net` and `runtime-simd.c` the byte
+ * searches that read a vector at a time, split apart so that each carries its
+ * own `.text*` budget (the `*_TEXT_BUDGET` constants below).
  *
  * Named here rather than written out at each link so that a third unit is one
  * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
@@ -104,6 +105,7 @@ const RUNTIME_C = [
   "runtime/runtime-parallel.c",
   "runtime/runtime-host.c",
   "runtime/runtime-net.c",
+  "runtime/runtime-simd.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -7086,7 +7088,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c and runtime-net.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c, runtime-net.c and runtime-simd.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -7653,6 +7655,22 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * was set.
  */
 const NET_TEXT_BUDGET = 2304
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
+ * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`,
+ * its scalar, SSE2 and AVX2 paths, the CPU question and the resolver that picks one.
+ *
+ * Measured **675 bytes** on 2026-10-09 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 105, SSE2 189, AVX2 169, the resolver 203 (the `NISH_SIMD`
+ * pin and the `cpuid` question are inlined into it) and the entry point 9, the load
+ * and tail call through the stored path. The AVX2 path and the resolver count here
+ * because a binary that calls the kernel carries them whatever its CPU. A sixth
+ * translation unit rather than more of `runtime.c` because that file had one byte of
+ * `RUNTIME_TEXT_BUDGET` left, and the rule is a new file with its own measured
+ * ceiling, never a raised one. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_SIMD_TEXT_BUDGET = 768
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -7687,6 +7705,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       ],
       ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],
       ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
+      ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
     ]) {
       const name = path.basename(src)
       // The flags are in the check's name and in the object's, so the two rows for
@@ -7709,6 +7728,164 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         `${label}: .text* at -Oz fits the ${budget} byte budget`,
         cc.status === 0 && sections.length > 0 && total <= budget,
         sizeFailure(cc, sz, sections, total, breakdown, budget, constant)
+      )
+    }
+  }
+}
+
+// ---- WP38 S1: the vector kernels agree with a plain loop -----------------------------
+// runtime/runtime-simd.c answers one question three ways -- a scalar loop, the vectors
+// every machine of the target has, and AVX2 where the CPU has it -- and a program runs
+// whichever its machine picks, so a path that is wrong only on some machines is a bug
+// that ships. tests/simd/index-of-any.c includes the file, calls every path it has on
+// a seeded corpus (every match position of every length 0..300, 400,000 fuzzed
+// searches with sets of 1..16 bytes that favour 0x00 and the bytes at and above 0x80)
+// against a reference loop, and checks the resolver's pick for each `NISH_SIMD` value.
+// It runs natively, as wasm32-wasi with and without simd128 under Node's WASI when a
+// sysroot is installed, and as a static AArch64 binary when the host can run one
+// (binfmt_misc and qemu-user), which is how the NEON path runs on an x86-64 host. A
+// path the host cannot run is said, not skipped quietly: the driver's own line names
+// it, as the AVX2 path on a CPU without AVX2 is.
+if (!only || "simd".includes(only)) {
+  const simdDir = path.join(buildDir, "simd")
+  fs.mkdirSync(simdDir, { recursive: true })
+  const driver = "tests/simd/index-of-any.c"
+  const strict = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2"]
+  /** Build the driver with `flags` into `out`; the compile's result. */
+  const build = (flags, out) =>
+    spawnSync("clang", [...strict, ...flags, driver, "-o", out], { cwd: root, encoding: "utf8" })
+  /** The check on one run of the driver: exit 0 and its summary line, which is also the check's name. */
+  const judge = (label, cc, r) => {
+    const said = r === null ? "" : String(r.stdout ?? "").trim()
+    check(
+      `simd: ${label}: ${said.replace(/^index-of-any: /, "") || "the agreement driver"}`,
+      r !== null && r.status === 0 && /cases agree/.test(said),
+      cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
+    )
+  }
+  /** Build the driver with `flags` and run it with `run`. */
+  const agree = (label, flags, out, run) => {
+    const cc = build(flags, out)
+    judge(label, cc, cc.status === 0 ? run(out) : null)
+  }
+  agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), (exe) =>
+    spawnSync(exe, [], { encoding: "utf8" })
+  )
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    for (const [label, flags] of [
+      ["wasm32-wasi, the scalar base path", []],
+      ["wasm32-wasi -msimd128", ["-msimd128"]],
+    ]) {
+      agree(
+        label,
+        ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
+        path.join(simdDir, `index-of-any${flags.join("")}.wasm`),
+        (wasm) =>
+          spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+      )
+    }
+  } else {
+    skip("simd: no WASI sysroot (set WASI_SYSROOT): the wasm32 scalar and simd128 paths are not run")
+  }
+
+  // The NEON path, on a host that is not AArch64: a static cross link, run directly,
+  // which works where binfmt_misc hands an AArch64 binary to qemu-user. Whether a
+  // cross libc is installed is asked of a program with nothing in it, so that a
+  // host without one is a skip and a driver that does not compile is a failure.
+  if (process.arch !== "arm64") {
+    const a64 = path.join(simdDir, "index-of-any.aarch64")
+    const cross = ["--target=aarch64-linux-gnu", "-static", "-fuse-ld=lld"]
+    const empty = path.join(simdDir, "empty.c")
+    fs.writeFileSync(empty, "int main(void) { return 0; }\n")
+    const libc = spawnSync("clang", [...cross, empty, "-o", path.join(simdDir, "empty.aarch64")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (libc.status !== 0) {
+      // The probe needs clang's AArch64 backend, ld.lld and an AArch64 libc, so the
+      // reason is the linker's own first line rather than a guess at which is missing.
+      const why = String(libc.stderr).trim().split("\n")[0] || `clang exited ${libc.status}`
+      skip(
+        `simd: an empty program does not link statically for aarch64-linux-gnu here (${why}): the NEON path is not run`
+      )
+    } else {
+      const linked = build(cross, a64)
+      const r = linked.status === 0 ? spawnSync(a64, [], { encoding: "utf8" }) : null
+      // A binary the kernel cannot execute is not an error to spawnSync: it hands the
+      // file to /bin/sh, which fails on it. So the driver ran when it printed its own
+      // line (a summary or a FAIL) or died of a signal, and not otherwise.
+      const ran = r !== null && (r.signal !== null || /^(index-of-any:|FAIL )/m.test(String(r.stdout)))
+      if (linked.status !== 0 || ran) {
+        judge("aarch64 through binfmt, the NEON path", linked, r)
+      } else {
+        skip(
+          "simd: this host cannot run an AArch64 binary (no binfmt_misc entry for qemu-user): the NEON path is not run"
+        )
+      }
+    }
+  }
+
+  // Section GC: a program that never calls the kernel links none of the unit, and a
+  // program that does keeps it. Both go through scripts/build.sh's speed and size
+  // profiles, and the linker's map of the output says what survived, so LTO is part
+  // of the answer. libgcc's CPU probe (`cpuinfo.o`, `__cpu_model`) is in the list
+  // because it is the way this would fail quietly: once a link names it, its
+  // constructor runs at every start-up, which is why the unit asks `cpuid` itself
+  // (runtime/runtime-simd.c, `nish_cpu_has_avx2`).
+  if (process.platform !== "linux") {
+    skip(`simd section GC: read from an ELF link map, and this host is ${process.platform}`)
+  } else {
+    const helloLl = path.join(simdDir, "hello.ll")
+    const compiled = spawnSync(NISH, ["examples/hello.ts", "-o", helloLl], { cwd: root, encoding: "utf8" })
+    const kept = (input, out, profile) => {
+      const map = `${out}.map`
+      // build.sh hands an argument it does not know to clang with the inputs.
+      const b = spawnSync(
+        "bash",
+        ["scripts/build.sh", input, "runtime/runtime.c", `-Wl,-Map=${map}`, "-o", out, "--profile", profile],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (b.status !== 0) {
+        return { ok: false, names: [], why: b.stderr }
+      }
+      const names = fs
+        .readFileSync(map, "utf8")
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/).pop())
+        .filter((name) =>
+          /^(nish_any\w*|nish_str_index_of_any|nish_cpu_has_avx2|__cpu_model|__cpu_indicator_init)$/.test(
+            name
+          )
+        )
+      return { ok: true, names, why: "" }
+    }
+    for (const profile of ["speed", "size"]) {
+      const quiet =
+        compiled.status === 0
+          ? kept(helloLl, path.join(simdDir, `hello.${profile}`), profile)
+          : { ok: false, names: [], why: compiled.stderr }
+      const ctrlExe = path.join(simdDir, `calls-kernel.${profile}`)
+      const ctrl = kept("tests/simd/calls-kernel.c", ctrlExe, profile)
+      const ran = ctrl.ok ? spawnSync(ctrlExe, [], { encoding: "utf8" }) : null
+      const paths = ["nish_any_scalar", "nish_any_base", "nish_any_resolve"]
+      if (process.arch === "x64") {
+        paths.push("nish_any_avx2")
+      }
+      check(
+        `simd: --profile ${profile} drops all of runtime-simd.c from hello, and keeps every path in a program that calls it`,
+        quiet.ok &&
+          quiet.names.length === 0 &&
+          ctrl.ok &&
+          paths.every((f) => ctrl.names.includes(f)) &&
+          !ctrl.names.includes("__cpu_model") &&
+          ran !== null &&
+          String(ran.stdout) === "2\n",
+        `hello keeps: ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
+          `the control keeps: ${ctrl.names.join(" ")} ${ctrl.why}\nthe control printed: ${ran ? ran.stdout : "(not run)"}`
       )
     }
   }
@@ -13167,6 +13344,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // And the fifth (WP34 N5): without it every link of a program that
       // imports `nish:net` would fail to find `nish_tcp_listen` and the rest.
       "runtime/runtime-net.c",
+      // And the sixth (WP38 S1): build.sh pairs it with runtime.c, and a
+      // program that searches for a byte of a set calls into it.
+      "runtime/runtime-simd.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

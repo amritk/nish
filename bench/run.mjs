@@ -507,6 +507,16 @@ const PINNED_LIBC = [
   "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
 ].join(":")
 
+/**
+ * The runtime's own choice, pinned the same way. runtime/runtime-simd.c picks a
+ * scalar, a baseline vector or an AVX2 path on a kernel's first call, by the
+ * CPU it finds, and each path runs a different number of instructions for the
+ * same search. `base` is the SSE2 path every x86-64 machine has, as
+ * `PINNED_LIBC` is glibc's, so the count does not depend on whether the host
+ * has AVX2. A program that never calls a kernel never reads it.
+ */
+const PINNED_SIMD = "base"
+
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
 const change = (count, base) => (count - base) / base
 
@@ -516,8 +526,8 @@ const change = (count, base) => (count - base) / base
  * separates them from the program's own code in a stripped `--profile speed`
  * binary on a host without libc's debug symbols. They are about 120 thousand
  * of a count in the hundreds of millions. What varies with the host is pinned
- * instead: the child's environment is `PINNED_LIBC` and nothing else, and its
- * argv[0] is relative (`./fib`, run from its own directory), so neither the
+ * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD` and nothing
+ * else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
  * caller's variables nor the checkout's path reach the loader. bench/README.md
  * has the measurements that show what is left.
  */
@@ -535,7 +545,7 @@ const countInstructions = (valgrind, exe, args, name) => {
     ],
     {
       cwd: dir,
-      env: { GLIBC_TUNABLES: PINNED_LIBC },
+      env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: PINNED_SIMD },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }

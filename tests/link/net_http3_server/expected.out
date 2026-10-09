@@ -40,6 +40,11 @@ PASS  past the budget each is dropped before the listener, and counted
 PASS  keeping nothing
 PASS  a hundred milliseconds earn one more
 PASS  and no slot was taken
+PASS  a thousand stateless resets and a thousand Version Negotiations, each earned by 100 ms, none limited
+PASS  and a thousand more datagrams parsed and dropped: the arena's mark never moved
+PASS  past the budget, a thousand of each with the clock still: at most sixteen answered
+PASS  and the mark never moved either
+PASS  no slot was taken
 PASS  a client that chose nish-echo is closed with CRYPTO_ERROR no_application_protocol
 PASS  and its slot freed
 PASS  the first takes the one slot
@@ -47,6 +52,5 @@ PASS  the second gets no answer, and is counted
 PASS  five connections through one slot, each closed after its GOAWAY
 PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
-PASS  and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart
-PASS  which is the signature and the listener's copy of the first Initial: 10 to 12 KiB, where it was about 100 KB
-http3 server: 51 passed, 0 failed, 0 skipped
+PASS  and from the second on, each handshake through the listener into the slot keeps 0 bytes: from the first Initial to the close, nothing
+http3 server: 55 passed, 0 failed, 0 skipped

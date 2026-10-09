@@ -178,6 +178,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime-parallel.c -DNISH_THREADS=1` | the partitioner and a scope's tasks | 1,024 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 905 |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
+| `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
 
 **How the ceilings moved.**
 
@@ -195,6 +196,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-02 | security audit (length limits, `nish_cpath`, `O_NOFOLLOW`, RT-9, one cold `nish_oom`) | none moved |
 | 2026-10-03 | `nish_wipe` (#385): 3,583 → 3,604 | core 3,605 |
 | after 0.16.0 | `nish_panic_overflow` (#426): 3,606 | core 3,606 |
+| 2026-10-09 | `runtime-simd.c` (675), wp38 S1 | simd 768 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -223,6 +225,30 @@ files with any `runtime.c` it is handed, and `runtime.c` never calls into
 them, so a link line that names only `runtime.c` still builds a program that
 uses none of them. The freestanding `runtime/runtime-wasm.c` is a separate
 file and has no budget.
+
+### The vector unit
+
+`runtime/runtime-simd.c` (wp38 S1, [wp38-simd.md](wp38-simd.md) §3.1) holds
+the byte searches that read sixteen or thirty-two bytes at a time. Each one
+has a scalar path, a base path on the vectors every machine of the target has
+(SSE2 on x86-64, NEON on AArch64, simd128 on wasm only under `-msimd128`), and
+on x86-64 an AVX2 path compiled with `target("avx2")`. A kernel is called
+through a pointer that starts at its resolver, which picks a path on the first
+call; `NISH_SIMD=scalar|base|avx2` pins the pick, and `bench/run.mjs` sets
+`base` so that an instruction count does not depend on the host. Its 675
+bytes are the scalar path 105, SSE2 189, AVX2 169, the resolver 203 and the
+entry point 9.
+
+The resolver asks `cpuid` itself rather than calling
+`__builtin_cpu_supports`. That builtin reads libgcc's `__cpu_model`, and the
+object that defines it runs a constructor at start-up in every program whose
+link names it, kernel called or not: `examples/hello.ts` at `--profile speed`
+went from 4,712 bytes to 10,000 and ran 374 more instructions with it. With
+`cpuid.h`, which is inline assembly, hello measured byte-identical with and
+without the unit on 2026-10-09. What `tests/run.js` pins on every run
+(`node tests/run.js simd`) is the part of that which can regress: at the speed
+and size profiles, the link map of hello names no symbol of the unit and no
+libgcc CPU probe, while a program that calls the kernel keeps every path.
 
 ### Checked arithmetic
 

@@ -82,17 +82,22 @@ export const lbEnd = (m: LbMeter | null): void => {
 };
 
 /**
- * The band a whole QUIC connection's arena falls in, Initial to close, now
- * that the QUIC connection keeps its handshake in the slot (QUIC-3, H3-1):
- * 10 to 16 KiB, none of it the connection's. The program's P-256
- * signature is 9,248 to 9,376 bytes of it (`p256SignSha256` stores what it
- * allocates), the carrier's and the listener's copy of the first Initial
- * about 1.5 KB (H3-3), and in some runs 3,072 more, timing-dependent, as
- * the listener answers what arrives around the close (H3-3's class of
- * cost). Measured 10,848 to 14,392 over 18 runs. When the
- * signature leaves the arena this check fails, rather than passing silently.
+ * The most a whole QUIC connection keeps in the arena, Initial to close: 2
+ * KiB. Through `Http3Server` it keeps nothing — the QUIC connection keeps
+ * its handshake in the slot (QUIC-3, H3-1), the program signs in a
+ * `TlsP256Signer`, and the listener reads the first Initial where it lies
+ * and answers into scratch (H3-3) — so the HTTP/3 and WebTransport carriers
+ * measured 0 bytes in every connection over 20 runs, three connections a
+ * carrier each, and `net_http3_server` pins that 0 exactly. The bare-QUIC
+ * program of `udp.ts` still copies each datagram it hands the listener and
+ * calls `handle`, which makes an answer each time: 1,720 to 1,976 bytes, the
+ * same over those runs, and the whole of what remains. Before H3-3 the HTTP/3
+ * and WebTransport carriers kept 1,600 to 5,016 (the listener's copy of the
+ * Initial, and its answers around the close), and with the signature in the
+ * arena 10,848 to 14,392; either fails this check rather than passing
+ * silently.
  */
-export const lbHandshakeBand = (kept: i64): boolean => kept >= toI64(10240) && kept <= toI64(16384);
+export const lbHandshakeBand = (kept: i64): boolean => kept >= toI64(0) && kept <= toI64(2048);
 
 /** The P-256 leaf key as a fresh `Secret` for one call, which the caller wipes: `secret` takes only a value nothing else holds. */
 export const lbLeafKey = (leaf: u8[]): Secret<u8[]> => {

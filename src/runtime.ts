@@ -287,6 +287,14 @@ export class RuntimeTable {
     )
     this.add(
       new RuntimeFunction(
+        "nish_str_index_of_from",
+        `declare i64 @nish_str_index_of_from(${STR_NOCAP}, ${STR_NOCAP}, i64 noundef)`,
+        attrs3("nounwind", "willreturn", "memory(argmem: read)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
         "nish_str_len",
         `declare i64 @nish_str_len(${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
@@ -882,6 +890,9 @@ export class RuntimeTable {
     this.addIntrinsic("llvm.fabs.f32", "float", "float")
     this.addIntrinsic("llvm.minnum.f32", "float", "float, float")
     this.addIntrinsic("llvm.maxnum.f32", "float", "float, float")
+    // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
+    // does, rather than poison.
+    this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")
   }
 }
 

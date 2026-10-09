@@ -50,7 +50,7 @@ import {
   quicListenerTakeFlight,
 } from "nish/net/quic-listener";
 import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet";
-import { tlsSignEcdsaP256 } from "nish/net/tls";
+import { TlsP256Signer } from "nish/net/tls";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { H3_ERROR, H3_NEED_MORE, Http3Config, Http3Connection } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
@@ -99,6 +99,8 @@ const lbListenerEntropy = (): u8[] => {
 export class QuicEchoServer {
   listener: QuicListener;
   conn: QuicConnection;
+  /** Signs the CertificateVerify, keeping nothing per signature. */
+  signer: TlsP256Signer;
   app: QuicApp;
   rx: u8[];
   tx: u8[];
@@ -121,6 +123,7 @@ export class QuicEchoServer {
     this.listener = new QuicListener(config, lbListenerEntropy());
     this.entropy = fixedEntropy();
     this.conn = new QuicConnection(config, this.entropy);
+    this.signer = new TlsP256Signer();
     this.app = new QuicApp(n32(8));
     this.rx = new Array<u8>(65536);
     this.tx = new Array<u8>(QUIC_LISTENER_FLIGHT_MAX * QUIC_CONN_DATAGRAM_SIZE);
@@ -195,7 +198,7 @@ export class QuicEchoServer {
     const input: u8[] | null = this.conn.signatureInput();
     if (input !== null) {
       const key: Secret<u8[]> = lbLeafKey(this.leaf);
-      const signature: u8[] | null = tlsSignEcdsaP256(key, input);
+      const signature: u8[] | null = this.signer.sign(key, input);
       wipe(key);
       if (signature !== null) {
         this.conn.sign(signature);

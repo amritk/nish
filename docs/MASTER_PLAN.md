@@ -58,6 +58,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime-host.c       clock, rng, signals (C, 0.8 KB)  │
 │    runtime/runtime-net.c        sockets (C, 2.3 KB)              │
 │    runtime/runtime-parallel.c   range partitioner (C, 0.3 KB)    │
+│    runtime/runtime-simd.c       vector byte search (C, 0.7 KB)   │
 │    scripts/build.sh             clang -O3/-Oz, LTO, gc-sections  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -89,6 +90,7 @@ Design rules that every WP must respect:
   | `runtime-parallel.c` | 286 (905 threaded) | 320 (1,024) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
+  | `runtime-simd.c` | 675 (2026-10-09) | 768 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
   functions it calls. [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)
@@ -167,6 +169,7 @@ table with each message and the idiom to write instead.
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | **Decided:** arena + escape-analysed `alloca` (WP6), with `using a = arena()` as the explicit bracket (#420). Reference counting is not built. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
+| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level | [wp38](wp38-simd.md) §8 proposes: kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics. |
 
 ## 4. What exists today
 
@@ -246,6 +249,7 @@ is its plan. [README.md](README.md) indexes them.
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | proposed; no note yet | — |
+| 38 | SIMD | proposed | [wp38](wp38-simd.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -420,6 +424,13 @@ major. Whether it happens at all is still wp22 §10's open question.
   does not grow, so it fits a minor.
 - **WP27's later stages**, calling C beyond scalars and opaque pointers
   ([wp27-ffi.md](wp27-ffi.md)).
+- **WP38, SIMD** ([wp38-simd.md](wp38-simd.md)), proposed and unbuilt. It
+  starts with measurement (S0), then byte-search kernels in the runtime that
+  `std/json` and the lexer reach through an ordinary `std` function (S1),
+  with an opt-in CPU level (S2) and a `nish:simd` module of 128-bit vector
+  types (S3) each held to a measured bar. Every stage adds a function, a flag
+  or a module and withdraws nothing, so it fits a minor. It is not under Next,
+  because no stage may start before the owner takes its §8 decisions.
 
 #### Settled, with the note that settles it
 

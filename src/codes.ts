@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 583
+export const RULE_COUNT: i32 = 585
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -689,6 +689,8 @@ const diagnosticRules = (): string[] => [
   "NL2096",
   "` takes no type arguments: only a generic ",
   "NL2325",
+  "`Math.clz32` expects an i32 or a u32, got ",
+  "NL2460",
   "`substring` expects 1 or 2 arguments, got ",
   "NL2153",
   "Loose equality is forbidden; use === / !==",
@@ -727,6 +729,8 @@ const diagnosticRules = (): string[] => [
   "NL2002",
   "`for...of` declares exactly one variable",
   "NL2134",
+  "`indexOf` expects 1 or 2 arguments, got ",
+  "NL2461",
   "`try`/`catch`/`finally` is forbidden in ",
   "NL1033",
   "`var` is forbidden; use `let` or `const`",

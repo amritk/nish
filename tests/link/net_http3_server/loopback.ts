@@ -262,6 +262,68 @@ const flood = (t: Suite): void => {
   t.eqI32("and no slot was taken", loop.server.busy(), n32(0));
 };
 
+/**
+ * How far `count` receives of `d`, each sent from `fd` first, move
+ * `Arena.mark()`, the server's clock at `now` and moving `step` a datagram.
+ */
+const markMoved = (loop: LoopServer, fd: i32, to: u8[], d: u8[], count: i32, now: i64, step: i64): i64 => {
+  const key: Secret<u8[]> = secret(leafPrivate());
+  let moved: i64 = 0;
+  for (let k: i32 = 0; k < count; k++) {
+    udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
+    const before: i64 = Arena.mark();
+    loop.server.receive(now + toI64(k) * step, key);
+    moved = moved + (Arena.mark() - before);
+  }
+  wipe(key);
+  return moved;
+};
+
+/**
+ * A thousand datagrams of each kind no slot owns, within the answer budget
+ * and past it (H3-3): the listener reads each where it lies in the carrier's
+ * receive buffer and answers into the carrier's one `QuicListenerAnswer`, so
+ * the arena's mark never moves — where a stateless reset kept 3,128 bytes, a
+ * Version Negotiation 1,720 and a datagram parsed and dropped 456.
+ */
+const thousand = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  const fd: i32 = udpBind("127.0.0.1", n32(0), n32(0));
+  const to: u8[] = new Array<u8>(18);
+  netAddress(to, "127.0.0.1", loop.port);
+  const short: u8[] = new Array<u8>(60);
+  short[0] = toU8(0x41);
+  const other: u8[] = new Array<u8>(1200);
+  other[0] = toU8(0xc0);
+  other[1] = toU8(0x0a);
+  other[2] = toU8(0x0a);
+  other[3] = toU8(0x0a);
+  other[4] = toU8(0x0a);
+  other[5] = toU8(8);
+  // A full-sized Initial that does not parse: its token length runs past the datagram.
+  const dropped: u8[] = new Array<u8>(1200);
+  dropped[0] = toU8(0xc0);
+  dropped[4] = toU8(1);
+  dropped[5] = toU8(8);
+  dropped[15] = toU8(0x7f);
+  dropped[16] = toU8(0xff);
+  const n: i32 = n32(1000);
+  const step: i64 = n64(100);
+  let within: i64 = markMoved(loop, fd, to, short, n, n64(10000), step);
+  within = within + markMoved(loop, fd, to, other, n, n64(200000), step);
+  const answered: i32 = loop.server.listener.resetsSent;
+  within = within + markMoved(loop, fd, to, dropped, n, n64(400000), step);
+  t.ok("a thousand stateless resets and a thousand Version Negotiations, each earned by 100 ms, none limited", answered === n && loop.server.limited === n32(0));
+  t.eqI64("and a thousand more datagrams parsed and dropped: the arena's mark never moved", within, n64(0));
+  let past: i64 = markMoved(loop, fd, to, short, n, n64(600000), n64(0));
+  past = past + markMoved(loop, fd, to, other, n, n64(600000), n64(0));
+  past = past + markMoved(loop, fd, to, dropped, n, n64(600000), n64(0));
+  t.ok("past the budget, a thousand of each with the clock still: at most sixteen answered", loop.server.limited >= n32(2000) - n32(16));
+  t.eqI64("and the mark never moved either", past, n64(0));
+  t.eqI32("no slot was taken", loop.server.busy(), n32(0));
+};
+
 /** A client that only sends datagrams, for the arena check: no application of its own in the server's loop. */
 class Lean {
   loop: LoopServer;
@@ -368,10 +430,9 @@ const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
 
 /**
  * Connection after connection through a server of one slot: from the second
- * on, everything the server does after the handshake — the client's
- * streams, five requests, a GOAWAY, the close, the slot freed — keeps no
- * arena memory, and the handshake, through the listener and into the slot,
- * keeps exactly as much each time.
+ * on, nothing the server does keeps arena memory — neither the handshake,
+ * through the listener and into the slot, nor what follows it: the client's
+ * streams, five requests, a GOAWAY, the close, the slot freed.
  */
 const reused = (t: Suite): void => {
   const limits = new H3Limits();
@@ -424,23 +485,18 @@ const reused = (t: Suite): void => {
   t.ok("five connections through one slot, each closed after its GOAWAY", closed === n32(5) && loop.server.accepted === n32(5));
   t.eqI32("each served its five requests", answered, n32(25));
   t.eqI64("from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release", after, n64(0));
-  // The carrier draws real entropy for every connection, so a handshake's
-  // messages differ by a byte here and there (an ECDSA signature's DER length,
-  // a key share's), and so does what it keeps: a spread of a few dozen bytes,
-  // not a growth. Since the slot keeps the handshake's state (H3-1), what is
-  // left is the caller's and the carrier's, none of it the QUIC connection's:
-  // the P-256 signature, 9,248 to 9,376 bytes as its DER length is 70 to 72
-  // (`p256SignSha256` stores what it allocates, so no arena block may hold
-  // it), and the copy of the first Initial and its parse that the listener
-  // makes (H3-3). Before, each handshake kept about 100 KB.
-  let low: i64 = handshakes[1];
-  let high: i64 = handshakes[1];
-  for (let k: i32 = 2; k < toI32(handshakes.length); k++) {
-    low = handshakes[k] < low ? handshakes[k] : low;
-    high = handshakes[k] > high ? handshakes[k] : high;
+  // Since the slot keeps the handshake's state (H3-1), `serve` signs in the
+  // server's `TlsP256Signer`, and the listener reads the first Initial where
+  // it lies and answers into scratch (H3-3), a handshake through a reused
+  // slot keeps nothing at all. It kept 1,600 bytes while the carrier copied
+  // the Initial for the listener and the listener parsed it into arrays of
+  // its own, 10,912 or more with the signature made by `tlsSignEcdsaP256`,
+  // and about 100 KB before the slot.
+  let kept: i64 = 0;
+  for (let k: i32 = 1; k < toI32(handshakes.length); k++) {
+    kept = kept + handshakes[k];
   }
-  t.ok("and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart", low > n64(0) && high - low < n64(256));
-  t.ok("which is the signature and the listener's copy of the first Initial: 10 to 12 KiB, where it was about 100 KB", low >= n64(10240) && high <= n64(12288));
+  t.eqI64("and from the second on, each handshake through the listener into the slot keeps 0 bytes: from the first Initial to the close, nothing", kept, n64(0));
 };
 
 /** Every check of this file. */
@@ -449,6 +505,7 @@ export const loopbackChecks = (t: Suite): void => {
   closeUnpaced(t);
   quiet(t);
   flood(t);
+  thousand(t);
   alpn(t);
   full(t);
   reused(t);
