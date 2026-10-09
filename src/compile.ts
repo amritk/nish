@@ -433,8 +433,18 @@ export const main = (): number => {
   // binary, a sidecar or a dump — which neither `run` nor `--fix` writes, and
   // the first of the others `run` refuses (`--target`, `--fix`). Both are
   // refused once the whole line is read rather than wherever they appeared.
+  // `--fix` rewrites the sources and emits and links nothing, so it refuses a
+  // flag that shapes what a compile emits or links (`--target`, `-g`,
+  // `--threads`, `--runtime-decls`, `--plain`) as it refuses a product, rather
+  // than dropping it: whatever such a flag changes, the checker's answer to a
+  // wasm `--target` included, is for the compile that follows the fix.
+  // `irFlag` keeps the first of those apart from `notForRun`, which `--fix`
+  // itself may already hold. `--no-stack-alloc` is not one: the escape
+  // analysis the check runs for its arena diagnostics reads it, so it can
+  // change what `--fix` reports.
   let productFlag = ""
   let notForRun = ""
+  let irFlag = ""
   let fix = false
   let runArgsFrom = process.argv.length
   const roots: string[] = []
@@ -505,6 +515,7 @@ export const main = (): number => {
       }
     } else if (value === "--target") {
       notForRun = notForRun.length === 0 ? value : notForRun
+      irFlag = irFlag.length === 0 ? value : irFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --target needs a triple")
@@ -595,6 +606,7 @@ export const main = (): number => {
       notForRun = notForRun.length === 0 ? value : notForRun
       fix = true
     } else if (value === "--plain") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.optimizeAttributes = false
     } else if (value === "--strict-exports") {
       opts.strictExports = true
@@ -617,17 +629,20 @@ export const main = (): number => {
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false
     } else if (value === "--threads") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.threads = true
     } else if (value === "--no-warn-performance") {
       warnPerformance = false
     } else if (value === "--warn-portability") {
       opts.warnPortability = true
     } else if (value === "--runtime-decls") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.runtimeDecls = true
     } else if (value === "--range-reference") {
       // Not in the usage: the test hook `Options.rangeReference` describes.
       opts.rangeReference = true
     } else if (value === "-g") {
+      irFlag = irFlag.length === 0 ? value : irFlag
       opts.debugInfo = true
     } else if (value === "--json") {
       json = true
@@ -694,9 +709,10 @@ export const main = (): number => {
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
-  if (fix && productFlag.length > 0) {
+  if (fix && (productFlag.length > 0 || irFlag.length > 0)) {
+    const refused = productFlag.length > 0 ? productFlag : irFlag
     console.error(
-      `compile: \`${productFlag}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
+      `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
     )
     return 2
   }

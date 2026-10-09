@@ -1994,6 +1994,29 @@ export const capturedMessage = (name: string): string =>
   "function of its own and sees only its parameters and the module's top-level names, so it can capture nothing"
 
 /**
+ * Refuse `fn` against its parameter's function type once every type parameter
+ * is bound, and answer `false` for the caller to return. The message is built
+ * here rather than in `matchFunctionArguments`'s loop because it is built once,
+ * on the way out of that loop: the diagnostic keeps it, and no pass continues
+ * after it, so there is nothing for a pass to leave behind.
+ */
+const refuseResolvedMismatch = (
+  ctx: CheckContext,
+  arg: Node,
+  template: TemplateInfo,
+  index: i32,
+  fn: FunctionSig,
+  param: Node,
+  names: string[],
+  types: i32[],
+  returnType: i32
+): boolean => {
+  const wanted = functionTypeText(ctx.table, names, types, returnType)
+  refuseOnce(ctx, arg, mismatchMessage(ctx.table, template, index, fn, param, wanted))
+  return false
+}
+
+/**
  * Every function argument of a request against the function type its
  * parameter has once every type parameter is bound (WP29). They must agree
  * exactly — the body calls the callee with the parameter's types and reads
@@ -2039,12 +2062,7 @@ const matchFunctionArguments = (
       }
       same = same && canonicalArgument(table, fn.returnType) === canonicalArgument(table, returnType)
       if (!same) {
-        refuseOnce(
-          ctx,
-          args.children[i],
-          mismatchMessage(table, template, i, fn, param, functionTypeText(table, names, types, returnType))
-        )
-        return false
+        return refuseResolvedMismatch(ctx, args.children[i], template, i, fn, param, names, types, returnType)
       }
       k = k + 1
     }

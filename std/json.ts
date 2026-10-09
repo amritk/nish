@@ -53,14 +53,17 @@
  * (`docs/wp26-stdlib.md` §4).
  */
 
+const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9
 const JSON_NEWLINE: i32 = 10
+const JSON_FORM_FEED: i32 = 12
 const JSON_CARRIAGE_RETURN: i32 = 13
 const JSON_SPACE: i32 = 32
 const JSON_QUOTE: i32 = 34
 const JSON_COMMA: i32 = 44
 const JSON_COLON: i32 = 58
 const JSON_BACKSLASH: i32 = 92
+const JSON_LETTER_U: i32 = 117
 const JSON_OPEN_BRACKET: i32 = 91
 const JSON_CLOSE_BRACKET: i32 = 93
 const JSON_OPEN_BRACE: i32 = 123
@@ -261,6 +264,37 @@ const jsonUtf8 = (code: i32): string => {
   return `${lead}${middle}${String.fromCharCode(JSON_UTF8_CONTINUATION + (code & JSON_UTF8_LOW_SIX))}`
 }
 
+/** The number of bytes `jsonUtf8(code)` answers. */
+const jsonUtf8Width = (code: i32): i32 => {
+  if (code < JSON_UTF8_TWO_BYTE_FLOOR) {
+    return 1
+  }
+  if (code < JSON_UTF8_THREE_BYTE_FLOOR) {
+    return 2
+  }
+  return 3
+}
+
+/**
+ * Byte `k` of the `width` bytes `jsonUtf8(code)` answers: its arithmetic, one
+ * byte at a time, for a caller that compares the bytes rather than keeps them.
+ */
+const jsonUtf8Byte = (code: i32, width: i32, k: i32): i32 => {
+  if (width === 1) {
+    return code
+  }
+  if (k === 0) {
+    if (width === 2) {
+      return JSON_UTF8_TWO_BYTE_LEAD + (code >> 6)
+    }
+    return JSON_UTF8_THREE_BYTE_LEAD + (code >> 12)
+  }
+  if (k === width - 1) {
+    return JSON_UTF8_CONTINUATION + (code & JSON_UTF8_LOW_SIX)
+  }
+  return JSON_UTF8_CONTINUATION + ((code >> 6) & JSON_UTF8_LOW_SIX)
+}
+
 /**
  * The bytes of `text[at..end)` with the JSON escapes decoded — the body of a
  * string literal, without its quotes.
@@ -343,6 +377,95 @@ const jsonUnescape = (text: string, at: i32, end: i32): string => {
   return parts.join("")
 }
 
+/** Whether byte `j` of `name` is `code`; an index past either end is not. */
+const jsonNameHas = (name: string, j: i32, code: i32): boolean =>
+  j >= 0 && j < toI32(name.length) && toI32(name.charCodeAt(j)) === code
+
+/**
+ * Whether `jsonUnescape(text, at, end)` would answer `name`, decided without
+ * building it.
+ *
+ * `jsonField` asks this of every key it walks past, and almost every answer is
+ * no, so the question is answered the way it is asked: the literal and `name`
+ * are walked together, each escape decoded where it stands, and the first byte
+ * that differs ends the walk. Every escape reads as `jsonUnescape` reads it —
+ * the short forms, a `\u` as the bytes `jsonUtf8` would build, a broken `\u`
+ * as the two bytes `\u`, a backslash with no letter after it as itself, and
+ * any other escape as the byte it escapes — so a key matches here exactly when
+ * its decoded text would.
+ */
+const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean => {
+  // `jsonUnescape`'s guard, for the same reason: the one caller passes the
+  // inside of a literal `jsonEndOfString` found.
+  if (at < 0 || end > toI32(text.length)) {
+    return false
+  }
+  let i: i32 = at
+  let j: i32 = 0
+  while (i < end) {
+    const code: i32 = toI32(text.charCodeAt(i))
+    if (code !== JSON_BACKSLASH) {
+      if (!jsonNameHas(name, j, code)) {
+        return false
+      }
+      i += 1
+      j += 1
+      continue
+    }
+    const letter: i32 = i + 1 < end ? toI32(text.charCodeAt(i + 1)) : 0
+    if (letter === JSON_LETTER_U) {
+      const point: i32 = jsonHex4(text, i + 2, end)
+      if (point < 0) {
+        if (!jsonNameHas(name, j, JSON_BACKSLASH) || !jsonNameHas(name, j + 1, JSON_LETTER_U)) {
+          return false
+        }
+        i += 2
+        j += 2
+        continue
+      }
+      const width: i32 = jsonUtf8Width(point)
+      let k: i32 = 0
+      while (k < width) {
+        if (!jsonNameHas(name, j + k, jsonUtf8Byte(point, width, k))) {
+          return false
+        }
+        k += 1
+      }
+      i += 6
+      j += width
+      continue
+    }
+    // Every other escape decodes to one byte.
+    let decoded: i32 = letter
+    if (letter === 110) {
+      decoded = JSON_NEWLINE
+    } else if (letter === 116) {
+      decoded = JSON_TAB
+    } else if (letter === 114) {
+      decoded = JSON_CARRIAGE_RETURN
+    } else if (letter === 98) {
+      decoded = JSON_BACKSPACE
+    } else if (letter === 102) {
+      decoded = JSON_FORM_FEED
+    } else if (letter === 0) {
+      decoded = JSON_BACKSLASH
+    }
+    if (!jsonNameHas(name, j, decoded)) {
+      return false
+    }
+    // A backslash with no letter after it is one byte of the literal and every
+    // other escape two. The steps are constants rather than a variable because
+    // a cursor moved by a variable is one the bounds proof stops following.
+    if (letter === 0) {
+      i += 1
+    } else {
+      i += 2
+    }
+    j += 1
+  }
+  return j === toI32(name.length)
+}
+
 /**
  * The value of `name` in `object`, or `null` when the object does not have that
  * field.
@@ -369,11 +492,11 @@ export const jsonField = (object: string, name: string): string | null => {
   // is tested for `i < 0` beside `i >= length`: the pair is what lets each read
   // below go without a check.
   while (i >= 0 && i < length && toI32(object.charCodeAt(i)) === JSON_QUOTE) {
+    const keyAt: i32 = i + 1
     const keyEnd: i32 = jsonEndOfString(object, i)
     if (keyEnd < 0) {
       return null
     }
-    const key: string = jsonUnescape(object, i + 1, keyEnd - 1)
     i = jsonSkipBlank(object, keyEnd)
     if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COLON) {
       return null
@@ -386,7 +509,10 @@ export const jsonField = (object: string, name: string): string | null => {
     if (valueEnd < 0 || valueAt < 0 || valueAt >= length || valueEnd > toI32(object.length)) {
       return null
     }
-    if (key === name) {
+    // The key is compared where it stands rather than unescaped into a string
+    // first: every key before the one asked for is a no, and a no should not
+    // cost an allocation.
+    if (jsonKeyEquals(object, keyAt, keyEnd - 1, name)) {
       if (toI32(object.charCodeAt(valueAt)) === JSON_QUOTE) {
         return jsonUnescape(object, valueAt + 1, valueEnd - 1)
       }
