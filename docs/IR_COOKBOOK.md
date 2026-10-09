@@ -13939,6 +13939,316 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end mem-join-parts -->
 
+### A value returned in a fresh array
+
+A function that fills an array it allocated with strings it built and returns
+it — `values[k] = v` or `values.push(v)`, then `return values` — lets nothing
+out but the array: a stored value is reachable only through `values`, and
+nothing reads `values` but stores, pushes, `length`, a test of an element
+(`values[k] === null`) and the `return`. So the stored value is returned
+with the array rather than stored into memory, the function's
+`allocEscapes` stays false, and the loop that calls it keeps its per-pass
+release. The caller follows what it reads out of the array as the call
+itself, as it does a `readdirSync` listing. `fieldsOf`'s own loop stores
+into an array older than its pass, so that loop takes no pass scope: only
+`measure`'s does (`tests/cases/mem_return_array_scope`, and the `_callee`,
+`_caller`, `_readdir` and `_nested` negatives).
+
+<!-- cookbook:begin mem-return-array -->
+```ts
+// `fieldsOf` fills a fresh array with strings it built and returns it. Each
+// string is reachable only through `values`, which nothing reads but a
+// `=== null` test, `length` and the `return`, so the strings go to the caller
+// with the array and `fieldsOf` lets nothing else out. The caller follows the
+// elements it reads as the call itself, and nothing it reads outlives the
+// pass, so its loop keeps its per-pass release.
+const fieldsOf = (line: string, n: i32): (string | null)[] => {
+  const values: (string | null)[] = new Array<string | null>(n)
+  for (let k = 0; k < values.length; k++) {
+    if (values[k] === null && k < line.length) {
+      values[k] = line.substring(k, line.length)
+    }
+  }
+  return values
+}
+
+export const measure = (calls: i32): string => {
+  let total = 0
+  for (let i = 0; i < calls; i++) {
+    const last = fieldsOf(`line ${i}`, 3)[2]
+    if (last !== null) {
+      total = total + last.length
+    }
+  }
+  return `${total}`
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"line \00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare void @nish_exit(i32 noundef) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare i64 @llvm.smin.i64(i64, i64) #5
+declare i64 @llvm.smax.i64(i64, i64) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @fieldsOf(i8* noundef nonnull noalias readonly align 8 nocapture %line, i32 noundef %n) #0 {
+entry:
+  %values.addr = alloca %struct.nish_array*, align 8
+  %k.addr = alloca i32, align 4
+  %0 = sext i32 %n to i64
+  %1 = icmp ule i64 %0, 2147483647
+  br i1 %1, label %len.ok, label %len.fail
+
+len.fail:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+len.ok:
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = mul i64 %0, 8
+  %7 = call i8* @nish_alloc_struct(i64 %6)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %3, %struct.nish_array** %values.addr, align 8
+  store i32 0, i32* %k.addr, align 4
+  %9 = load %struct.nish_array*, %struct.nish_array** %values.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  br label %for.cond
+
+for.cond:
+  %14 = load i32, i32* %k.addr, align 4
+  %15 = trunc i64 %11 to i32
+  %16 = icmp slt i32 %14, %15
+  br i1 %16, label %for.body, label %for.end
+
+for.body:
+  %17 = load i32, i32* %k.addr, align 4
+  %18 = sext i32 %17 to i64
+  %19 = bitcast i8* %13 to i8**
+  %20 = getelementptr inbounds i8*, i8** %19, i64 %18
+  %21 = load i8*, i8** %20, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %22 = icmp eq i8* %21, null
+  br i1 %22, label %land.rhs, label %land.end
+
+land.rhs:
+  %23 = load i32, i32* %k.addr, align 4
+  %24 = bitcast i8* %line to i64*
+  %25 = load i64, i64* %24, align 8
+  %26 = trunc i64 %25 to i32
+  %27 = icmp slt i32 %23, %26
+  br label %land.end
+
+land.end:
+  %28 = phi i1 [ false, %for.body ], [ %27, %land.rhs ]
+  br i1 %28, label %if.then, label %if.end
+
+if.then:
+  %29 = load i32, i32* %k.addr, align 4
+  %30 = sext i32 %29 to i64
+  %31 = bitcast i8* %line to i64*
+  %32 = load i64, i64* %31, align 8
+  %33 = load i32, i32* %k.addr, align 4
+  %34 = sext i32 %33 to i64
+  %35 = bitcast i8* %line to i64*
+  %36 = load i64, i64* %35, align 8
+  %37 = trunc i64 %36 to i32
+  %38 = sext i32 %37 to i64
+  %39 = call i64 @llvm.smin.i64(i64 %38, i64 %32)
+  %40 = call i64 @llvm.smax.i64(i64 %39, i64 0)
+  %41 = call i64 @llvm.smin.i64(i64 %34, i64 %40)
+  %42 = call i64 @llvm.smax.i64(i64 %34, i64 %40)
+  %43 = sub i64 %42, %41
+  %44 = getelementptr inbounds i8, i8* %line, i64 8
+  %45 = getelementptr inbounds i8, i8* %44, i64 %41
+  %46 = call i8* @nish_str_new(i8* %45, i64 %43)
+  %47 = bitcast i8* %13 to i8**
+  %48 = getelementptr inbounds i8*, i8** %47, i64 %30
+  store i8* %46, i8** %48, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  br label %if.end
+
+if.end:
+  br label %for.inc
+
+for.inc:
+  %49 = load i32, i32* %k.addr, align 4
+  %50 = add nsw i32 %49, 1
+  store i32 %50, i32* %k.addr, align 4
+  br label %for.cond
+
+for.end:
+  %51 = load %struct.nish_array*, %struct.nish_array** %values.addr, align 8
+  ret %struct.nish_array* %51
+}
+
+define noundef nonnull align 8 i8* @measure(i32 noundef %calls) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %last.addr = alloca i8*, align 8
+  store i32 0, i32* %total.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %calls
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %3 = load i8*, i8** %2, align 8
+  %4 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = call i8* @nish_str_from_i32(i32 %6)
+  %8 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %7)
+  %9 = call %struct.nish_array* @fieldsOf(i8* %8, i32 3)
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = icmp ult i64 2, %11
+  br i1 %12, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 2, i64 %11)
+  unreachable
+
+bounds.ok:
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %15 = bitcast i8* %14 to i8**
+  %16 = getelementptr inbounds i8*, i8** %15, i64 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i8* %17, i8** %last.addr, align 8
+  %18 = load i8*, i8** %last.addr, align 8
+  %19 = icmp ne i8* %18, null
+  br i1 %19, label %if.then, label %if.end
+
+if.then:
+  %20 = load i32, i32* %total.addr, align 4
+  %21 = load i8*, i8** %last.addr, align 8
+  %22 = bitcast i8* %21 to i64*
+  %23 = load i64, i64* %22, align 8
+  %24 = trunc i64 %23 to i32
+  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %24)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %26, i32* %total.addr, align 4
+  br label %if.end
+
+if.end:
+  %28 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %29 = load i8*, i8** %28, align 8
+  %30 = icmp eq i8* %29, %3
+  br i1 %30, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %31 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %31, align 8
+  br label %pass.done
+
+pass.free:
+  %32 = ptrtoint i8* %3 to i64
+  %33 = add i64 %32, %5
+  call void @nish_arena_release(i64 %33)
+  br label %pass.done
+
+pass.done:
+  br label %for.inc
+
+for.inc:
+  %34 = load i32, i32* %i.addr, align 4
+  %35 = add nsw i32 %34, 1
+  store i32 %35, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %36 = load i32, i32* %total.addr, align 4
+  %37 = call i8* @nish_str_from_i32(i32 %36)
+  ret i8* %37
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { noreturn nounwind }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element ptr", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end mem-return-array -->
+
 ### A tail call, and the release ahead of it
 
 `sum` ends with its recursive call, so the call carries `tail`: the callee is

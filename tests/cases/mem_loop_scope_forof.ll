@@ -572,16 +572,18 @@ cond.end:
   %37 = call i8* @longest(%struct.nish_array* %35)
   %38 = call i8* @nish_arena_keep(i64 %36, i8* %37)
   store i8* %38, i8** %best.addr, align 8
-  %39 = call i8* @lastWord(i32 30)
-  store i8* %39, i8** %last.addr, align 8
-  %40 = call i32 @churn()
-  %41 = call i8* @nish_str_from_i32(i32 %40)
-  call void @nish_print(i8* %41)
-  %42 = load i8*, i8** %best.addr, align 8
-  %43 = call i8* @nish_str_concat(i8* %42, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
-  %44 = load i8*, i8** %last.addr, align 8
-  %45 = call i8* @nish_str_concat(i8* %43, i8* %44)
-  call void @nish_print(i8* %45)
+  %39 = call i64 @nish_arena_mark()
+  %40 = call i8* @lastWord(i32 30)
+  %41 = call i8* @nish_arena_keep(i64 %39, i8* %40)
+  store i8* %41, i8** %last.addr, align 8
+  %42 = call i32 @churn()
+  %43 = call i8* @nish_str_from_i32(i32 %42)
+  call void @nish_print(i8* %43)
+  %44 = load i8*, i8** %best.addr, align 8
+  %45 = call i8* @nish_str_concat(i8* %44, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %46 = load i8*, i8** %last.addr, align 8
+  %47 = call i8* @nish_str_concat(i8* %45, i8* %46)
+  call void @nish_print(i8* %47)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 

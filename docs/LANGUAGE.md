@@ -5947,6 +5947,41 @@ where its memory lives and when it is reused.
    built in the pass, `replaceAll` on one) still has no scope. Passing it a
    string older than the pass is what keeps the scope.
 
+   A value stored into an array that is returned with it is returned, not
+   stored. When a function binds a local `xs` to its own fresh literal or
+   `new Array` and uses it only as `xs[i] = v`, `xs.push(v)`, `xs.length`,
+   an element read that is only tested (`xs[i] === null`), and `return xs`
+   itself, what it stores is reachable only through `xs`, so it goes to the
+   caller with the array and the function lets nothing else out. Only a
+   string, or a `string | null`, is carried this way: an array or an object
+   holds pointers of its own, which no caller follows a level further down
+   (`mem_return_array_nested`). So a loop that calls it keeps its scope
+   (`tests/cases/mem_return_array_scope`: 1000 calls leave `Arena.used()`
+   where one call left it). Any other use of `xs` keeps
+   the stored value stored, because it could hand an element on: storing
+   `xs` into a field, passing it to a function, reading an element back and
+   keeping it, naming `xs` through another local, or returning it through a
+   choice (`mem_return_array_callee`). An arrow captures nothing, so there is
+   no capture to count. Inside the function the value is in memory all the
+   same, so a loop whose pass stores into an `xs` declared outside it keeps
+   no pass scope, and a `using a = arena()` block that stores into an `xs`
+   declared before it is refused as any store into older memory is. Only a
+   store that stands as its own statement is carried: an assignment's value is
+   its right-hand side, so `h.f = (xs[0] = v)` keeps `v` stored.
+
+   The caller is what makes this sound. Such a call answers an array whose
+   elements are as new as the call, so the caller follows them as the call
+   itself, as it follows a `readdirSync` listing's: an element read out of
+   it and a `for...of` variable over it are that call's, and a function that
+   returns the array on answers such an array in turn. Passing the array to a function, `pop`, and every method but
+   `length`, `join`, `indexOf` and `push` count as storing it, because each
+   could hand an element back where the analysis does not follow
+   (`mem_return_array_caller`). The same rules close four ways a listing's
+   name used to outlive a scope that released it: returned through a
+   function and kept by a pass, passed to a function that answers it,
+   assigned to a local that is returned, and stored into a field
+   (`mem_return_array_readdir`).
+
    An element of an array whose elements are inline is the address of a slot
    in that array, so keeping one keeps the array: it is followed as the array
    in every rule above, and in the function rule too
