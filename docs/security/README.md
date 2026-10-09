@@ -33,13 +33,13 @@ the record that found it. The notes below the table name each such finding.
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
 | TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 0 ⁹ | 0 / 0 / 0 / 3 |
-| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 6 |
+| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 5 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 ⁷ |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 5 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| **Total** ⁸ | | | **3 / 10 / 12 / 72** | **0 / 1 / 2 / 19** |
+| **Total** ⁸ | | | **3 / 10 / 12 / 74** | **0 / 1 / 2 / 18** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -98,7 +98,6 @@ only.
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`) | Handshake and 1-RTT traffic secrets and the keys derived from them are not wiped yet. The primitives are on `main` (`secureZero`, #417; `nish:secret`, #418) but this module does not use them yet; the Initial keys are public by construction | #430 |
 | QUIC-2 | Low | `std/net/quic.ts` (`QuicConnection`) | What a connection holds between calls: each level's packet keys until the level is discarded, the key-update secrets and the next generation's read keys, both sides' stateless reset tokens, and its `TlsServer`'s secrets and the connection-ID seed until `release()` or the idle timeout, which wipe them; a key update wipes the keys it replaces. The expanded AES key schedules and the HKDF and HMAC intermediates are not wiped | #430 |
-| QUIC-4 | Low | `std/net/quic.ts` (`notePhase`, `updateWriteKeys`, `prepareNextReadKeys`) | Each key update a client starts leaves its two key derivations in the arena, 11,200 bytes measured; a connection follows at most 64 and closes on the next with KEY_UPDATE_ERROR, so a client can make the server derive at most 716,800 bytes a connection this way | — |
 | QUIC-5 | Low | `std/net/quic.ts` (`QuicServerConfig`), `std/net/quic-listener.ts` (`QuicListener`) | The stateless reset key and Retry token key live in the caller's configuration, and the listener's seed in the listener, for the server's life, unwiped by either module | #430 |
 | QUIC-6 | Low | `std/net/quic.ts` | RFC 9001 §6.6's AEAD limits are not counted: no key update before 2^23 packets under one AES-GCM key, no AEAD_LIMIT_REACHED after too many failed opens | Q3 and Q4 |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
