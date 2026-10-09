@@ -391,10 +391,9 @@ major. Whether it happens at all is still wp22 §10's open question.
    server and WebSocket (H1), HTTP/2 (H2), QUIC with loss recovery, streams
    and datagrams (Q1 to Q4), HTTP/3 with QPACK (R1) and WebTransport (R2) —
    and the relay itself, `examples/relay/` (A1), with every cap, timeout and
-   close code of cs's, and the loopback suite across every carrier. Next: what
-   a session still keeps (about 1.7 KB since #492 and #512, all of it the
-   QUIC listener's, H3-3), which keeps N9's soak from going flat and is
-   `std/net`'s to remove; S2's interop job; moving the
+   close code of cs's and N9's soak flat (0 bytes a session over 100,000),
+   the loopback suite across every carrier, and S2's interop job. Next:
+   moving the
    key-holding structs onto `nish:secret` ([#430](https://github.com/amritk/nish/issues/430));
    and, now that 0.17.0 carries R2, the cs side: `services/relay` replaced,
    `boot-check`'s wire pass and `bench:offload` against the Rust relay. §5 of

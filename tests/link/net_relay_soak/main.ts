@@ -19,7 +19,7 @@ import { pollCreate, pollWait } from "nish:net";
 import { spawnSync } from "nish:process";
 import { writeError } from "nish:io";
 import { Suite } from "nish/testing";
-import { n32 } from "../net_quic_frame/typed";
+import { n32, n64 } from "../net_quic_frame/typed";
 import { echoSocket, wave } from "./drive";
 import { serve } from "./serve";
 
@@ -27,8 +27,6 @@ import { serve } from "./serve";
 const SOAK_WARMUP: i32 = 500;
 /** Sessions at once. */
 const SOAK_WAVE: i32 = 16;
-/** Resident growth allowed past warm-up: the allocator's own bookkeeping and page rounding, not a per-session cost. */
-const SOAK_RSS_TOLERANCE: i64 = 1048576;
 
 /** The decimal number `text` spells from `at`, or -1. */
 const numberAt = (text: string, at: i32): i64 => {
@@ -116,8 +114,9 @@ const drive = (t: Suite, total: i32, files: string): void => {
   } else {
     t.fail(flatArena, figures);
   }
-  const flatResident: string = `resident memory flat over ${total} sessions past warm-up, within ${SOAK_RSS_TOLERANCE} bytes`;
-  if (resident >= 0 && resident <= SOAK_RSS_TOLERANCE) {
+  // Exactly: once warm, the relay touches no page it had not touched (0 bytes over 100,000 sessions, #515).
+  const flatResident: string = `resident memory flat over ${total} sessions past warm-up: not one page more`;
+  if (field(warm, "rss") > 0 && resident === n64(0)) {
     t.pass(flatResident);
   } else {
     t.fail(flatResident, figures);

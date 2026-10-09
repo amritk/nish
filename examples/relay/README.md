@@ -61,9 +61,16 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   around verification cannot follow through `exposeWith`. What the wipe cannot
   reach is the option's string (`--secret` or `CS_RELAY_SECRET`), immutable
   for the process's life.
-- **Memory.** Every table is made at start-up; a datagram, a timer and a
-  session's whole life after its handshake allocate nothing
-  (`tests/link/net_relay`, "keep no arena memory in the relay"). The full-size
+- **Memory.** Every table is made at start-up, and nothing a session does
+  keeps memory, its handshake included: N9's soak
+  (`tests/link/net_relay_soak`) runs 100,000 sessions past a warm-up of 500
+  with the arena at the same chunk and offset and the resident set the same
+  to the byte at every checkpoint, 0 bytes a session. It took three `std`
+  changes to get there: a session kept 101,818 bytes before #492 (the QUIC
+  handshake's state, now in the slot), 10,983 before #512 (the
+  CertificateVerify signature, now over scratch) and 1,727 before #515 (the
+  QUIC listener's copy and parse of the first Initial, and its stateless
+  resets, now read in place and answered into scratch). The full-size
   pool, 4,160 QUIC slots, is about 754 MB resident at start, about 181 KB a
   slot. Measured one part at a time: the `QuicConnection` is 158 KB of it —
   about 90 KB fixed (its sent-packet rings, CRYPTO reassembly and three
@@ -113,21 +120,6 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   (no migration, RFC 9000 §9): `Http3Server` keeps the address of a
   connection's first datagram, so a client whose NAT rebinds mid-session loses
   its session, where quinn would validate the new path and keep it.
-- **The QUIC handshake's memory per connection** (H3-1 in
-  [`docs/security/http3.md`](../../docs/security/http3.md), WT-1 in
-  `webtransport.md`). Everything the relay does after a handshake allocates
-  nothing, but each session still leaves about **1.7 KB** in the arena, so
-  N9's soak (`tests/link/net_relay_soak`) is not yet flat: 1,727 bytes a
-  session over 100,000 past warm-up, the same from 10,000 to 50,000 as from
-  50,000 to 100,000. It was 101,818 before #492, which keeps the
-  handshake's TLS server, packet keys, Initial secrets, reset tokens and
-  connection IDs in the connection slot, and 10,983 before #512, which signs
-  the CertificateVerify over scratch. What is left is the QUIC listener's
-  (H3-3), not the relay's: 1,600 bytes a handshake for the carrier's copy of
-  the client's first Initial and the listener's parse of it, and about 120
-  more on average for the stateless resets it sends to packets that arrive
-  after a slot is freed (131 over 2,500 sessions, about 3,128 bytes each).
-  The listener reading a window and answering into scratch removes both.
 - **DATA down is at most 1,164 bytes.** `nish/net/quic` sends 1,200-byte
   packets and has no path MTU discovery, so after the quarter stream ID and the
   3-byte header 1,164 bytes of payload fit; a larger datagram from the game
@@ -150,5 +142,5 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   that panics, one program each.
 - [`tests/link/net_relay_soak`](../../tests/link/net_relay_soak): N9's
   acceptance, 2,000 sessions past a warm-up of 500 in `npm test`, and
-  `soak 100000` for the full run; it fails today on the handshake's memory
-  above.
+  `soak 100000` for the full run, both holding the arena and the resident
+  set to exactly 0 bytes of growth.
