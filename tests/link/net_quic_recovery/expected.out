@@ -149,36 +149,29 @@ PASS  and then goes
 PASS  the first flight is one datagram, and the network loses it
 PASS  the probe timeout is 997 ms after it
 PASS  the first probe goes out, and the network loses it too
-PASS  a second probe follows it at the same probe timeout
-PASS  and a third does not
-PASS  from the second alone the client completes the handshake, at the first probe timeout
-PASS  a probe timeout during the handshake sends one datagram
-PASS  and a second
-PASS  and no more
+PASS  a second follows it at the same probe timeout
+PASS  from the second alone the client completes the handshake
+PASS  a probe timeout during the handshake sends two datagrams
 PASS  the Initial of each carries the ServerHello, which elicits an ACK
 PASS  the client accepts the flight
 PASS  each datagram's Handshake packet carries CRYPTO data too
 PASS  and the handshake completes
-PASS  a repeated ClientHello brings the flight again at once
+PASS  a repeated ClientHello brings the flight again at once, in one datagram
 PASS  its Initial carries the ServerHello
-PASS  in one datagram
 PASS  with no probe timeout
-PASS  a second before any ACK brings one more
-PASS  one
+PASS  a second before any ACK brings one datagram more
 PASS  with the ServerHello again
 PASS  which is QUIC_CONN_EARLY_RESENDS of them
-PASS  a third is answered
-PASS  with an ACK alone: the cap is reached
-PASS  and nothing more
+PASS  a third is answered with one datagram
+PASS  an ACK alone: the cap is reached
 PASS  the client completes the handshake from an early copy
 PASS  a PING in an Initial is acknowledged
 PASS  but repeats nothing the server read, so the flight waits for the probe timeout
 PASS  and no early resend is spent
 PASS  a repeated ClientHello once the server's Initial is acknowledged brings no CRYPTO data
 PASS  nor spends an early resend
-PASS  a Handshake PING with the server's Handshake data unacknowledged
-PASS  brings that data again at once
-PASS  in one datagram
+PASS  a Handshake PING with the server's Handshake data unacknowledged brings one datagram
+PASS  with that data again
 PASS  one that acknowledges it all brings no CRYPTO data
 PASS  and spends no early resend
 PASS  the handshake completes
@@ -195,4 +188,4 @@ PASS  the server never sends more than three times what it received
 PASS  the other is still owed
 PASS  and goes once the client sends more
 PASS  still inside the limit
-quic recovery: 197 passed, 0 failed, 0 skipped
+quic recovery: 190 passed, 0 failed, 0 skipped

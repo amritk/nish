@@ -611,6 +611,12 @@ class QuicConnSpace {
    */
   cryptoOut: u8[]
   cryptoOutLength: i32 = 0
+  /**
+   * How many ack-eliciting probe packets this space still owes, which the
+   * window does not hold back: what a probe timeout asked for (RFC 9002
+   * §6.2.4), or an early resend (§6.2.3).
+   */
+  probes: i32 = 0
   cryptoOutOffset: i64 = 0
   /** How many CRYPTO bytes the client sent here that were handed to TLS, for a duplicate arriving after the next level started. */
   cryptoInDelivered: i64 = 0
@@ -645,12 +651,6 @@ class QuicConnSpace {
   builtEnd: i32 = 0
   /** The row the packet being built is described in: one past the last slot. */
   staging: i32 = 0
-  /**
-   * How many ack-eliciting probe packets this space still owes, which the
-   * window does not hold back: what a probe timeout asked for (RFC 9002
-   * §6.2.4), or an early resend (§6.2.3).
-   */
-  probes: i32 = 0
   /** Whether the keys were discarded (RFC 9001 §4.9): nothing is sent or received here again. */
   discarded: boolean = false
   /** Whether the packet being built elicits an acknowledgement, and so is recorded. */
@@ -2274,14 +2274,15 @@ export class QuicConnection {
    * datagram (`takeDatagramInto`).
    */
   resendEarly(level: i32): void {
-    const asked: QuicSentPackets | null = this.recovery.space(level)
     if (
-      asked === null ||
-      asked.inFlight === 0 ||
       this.earlyResends >= QUIC_CONN_EARLY_RESENDS ||
       this.initial.probes > 0 ||
       this.handshake.probes > 0
     ) {
+      return
+    }
+    const asked: QuicSentPackets | null = this.recovery.space(level)
+    if (asked === null || asked.inFlight === 0) {
       return
     }
     let queued: boolean = false
@@ -3411,7 +3412,7 @@ export class QuicConnection {
         // first took everything queued, the oldest — what it just carried —
         // goes again.
         if (space.probes > 0 && space.cryptoResendLow < 0) {
-          space.resendCrypto(space.cryptoOffset(slot), space.cryptoLength(slot))
+          this.requeue(space, slot)
         }
       }
     } else {
