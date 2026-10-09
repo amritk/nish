@@ -99,7 +99,8 @@ jobs:
     name: quic-interop-runner (${{ matrix.client }})
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Room for the runner twice: a run that crashed retries every case.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
