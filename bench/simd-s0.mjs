@@ -13,8 +13,8 @@
 //              file is a library, so a driver is written beside a copy of it:
 //              a 1 MiB document of balanced JSON objects is scanned SCAN_ROUNDS
 //              times, and each pass first turns one more piece's `1` into a
-//              comma, so no pass scans the document the last one did, and every answer is folded
-//              into the printed checksum. The wasm row drives the same rounds
+//              comma, so no pass scans the document the last one did, and
+//              every answer is folded into the printed checksum. The wasm row drives the same rounds
 //              through web/bytes-worker.mjs's `scanBatch`, so it also pays the
 //              copy into linear memory that any host pays, and must print the
 //              native row's checksum.
@@ -142,14 +142,18 @@ const timeRuns = (what, time) => {
  * Two builds timed against each other in alternating rounds, as
  * bench/README.md's in-process comparisons are, so a slow stretch of a shared
  * machine falls on both columns rather than on whichever ran second. One
- * warm-up of each, then `runs` rounds, each running both and swapping which
- * goes first. Both must print the same answer: [{ min, median, answer }, ...].
+ * warm-up of each, then `runs` rounds (rounded up to even), each running both
+ * and swapping which goes first. Both must print the same answer:
+ * [{ min, median, answer }, ...].
  */
 const timeAlternating = (what, a, b) => {
   const times = [[], []]
   let answer = null
-  for (let i = 0; i <= runs; i++) {
-    const order = i % 2 === 0 ? [0, 1] : [1, 0]
+  // An even count of timed rounds, counted from the first timed one, so each
+  // build goes first in exactly half of them: `--runs 7` times eight.
+  const rounds = runs + (runs % 2)
+  for (let i = 0; i <= rounds; i++) {
+    const order = i % 2 === 1 ? [0, 1] : [1, 0]
     for (const k of order) {
       const r = [a, b][k]()
       if (answer !== null && r.answer !== answer) {
@@ -340,7 +344,9 @@ const cpu = (() => {
     return "unknown"
   }
 })()
-console.log(`\n${runs} runs after one warm-up, at ${commit}, on ${cpu}`)
+console.log(
+  `\n${runs} runs after one warm-up (the -march rows: ${runs + (runs % 2)} alternating rounds), at ${commit}, on ${cpu}`
+)
 for (const name of ["nbody", "vec3", "spectral"]) {
   const b = results.find((r) => r.name === name && r.column === "baseline")
   const w = results.find((r) => r.name === name && r.column === MARCH)
