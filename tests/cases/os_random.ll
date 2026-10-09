@@ -14,6 +14,7 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -300,90 +301,98 @@ entry:
   %11 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
   call void @nish_random_fill(%struct.nish_array* %11)
   %12 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %13 = call i8* @hex(%struct.nish_array* %12)
-  %14 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
-  %15 = call i8* @hex(%struct.nish_array* %14)
-  %16 = call zeroext i1 @nish_str_eq(i8* %13, i8* %15)
-  %17 = xor i1 %16, true
-  %18 = select i1 %17, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
-  call void @nish_print(i8* %18)
-  %19 = fptosi double 0x0000000000000000 to i64
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 0
-  store i64 %19, i64* %20, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 1
-  store i64 %19, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %22 = bitcast [0 x i8]* %arr.data.2 to i8*
-  call void @llvm.memset.p0i8.i64(i8* align 8 %22, i8 0, i64 %19, i1 false), !alias.scope !4, !noalias !3
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 2
-  store i8* %22, i8** %23, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %13 = call i64 @nish_arena_mark()
+  %14 = call i8* @hex(%struct.nish_array* %12)
+  %15 = call i8* @nish_arena_keep(i64 %13, i8* %14)
+  %16 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %17 = call i64 @nish_arena_mark()
+  %18 = call i8* @hex(%struct.nish_array* %16)
+  %19 = call i8* @nish_arena_keep(i64 %17, i8* %18)
+  %20 = call zeroext i1 @nish_str_eq(i8* %15, i8* %19)
+  %21 = xor i1 %20, true
+  %22 = select i1 %21, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
+  call void @nish_print(i8* %22)
+  %23 = fptosi double 0x0000000000000000 to i64
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 0
+  store i64 %23, i64* %24, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 1
+  store i64 %23, i64* %25, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %26 = bitcast [0 x i8]* %arr.data.2 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %26, i8 0, i64 %23, i1 false), !alias.scope !4, !noalias !3
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 2
+  store i8* %26, i8** %27, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %arr.hdr.2, %struct.nish_array** %empty.addr, align 8
-  %24 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
-  call void @nish_random_fill(%struct.nish_array* %24)
-  %25 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
-  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 0
-  %27 = load i64, i64* %26, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %28 = sitofp i64 %27 to double
-  %29 = call i8* @nish_str_from_f64(double %28)
-  call void @nish_print(i8* %29)
-  %30 = fptosi double 0x40F0000000000000 to i64
-  %31 = call i8* @nish_alloc_struct(i64 24)
-  %32 = bitcast i8* %31 to %struct.nish_array*
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 0
-  store i64 %30, i64* %33, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 1
-  store i64 %30, i64* %34, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %35 = call i8* @nish_alloc_struct(i64 %30)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %35, i8 0, i64 %30, i1 false), !alias.scope !4, !noalias !3
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 2
-  store i8* %35, i8** %36, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  store %struct.nish_array* %32, %struct.nish_array** %most.addr, align 8
-  %37 = load %struct.nish_array*, %struct.nish_array** %most.addr, align 8
-  call void @nish_random_fill(%struct.nish_array* %37)
-  %38 = load %struct.nish_array*, %struct.nish_array** %most.addr, align 8
-  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 0
-  %40 = load i64, i64* %39, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %41 = sitofp i64 %40 to double
-  %42 = call i8* @nish_str_from_f64(double %41)
-  call void @nish_print(i8* %42)
-  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 0
-  store i64 4, i64* %43, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 1
-  store i64 4, i64* %44, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %45 = bitcast [4 x i8]* %arr.data.3 to i8*
-  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 2
-  store i8* %45, i8** %46, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %47 = bitcast i8* %45 to i8*
-  %48 = getelementptr inbounds i8, i8* %47, i64 0
-  store i8 0, i8* %48, align 1, !alias.scope !4, !noalias !3, !tbaa !14
-  %49 = getelementptr inbounds i8, i8* %47, i64 1
-  store i8 0, i8* %49, align 1, !alias.scope !4, !noalias !3, !tbaa !14
-  %50 = getelementptr inbounds i8, i8* %47, i64 2
-  store i8 0, i8* %50, align 1, !alias.scope !4, !noalias !3, !tbaa !14
-  %51 = getelementptr inbounds i8, i8* %47, i64 3
-  store i8 0, i8* %51, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %28 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
+  call void @nish_random_fill(%struct.nish_array* %28)
+  %29 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 0
+  %31 = load i64, i64* %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %32 = sitofp i64 %31 to double
+  %33 = call i8* @nish_str_from_f64(double %32)
+  call void @nish_print(i8* %33)
+  %34 = fptosi double 0x40F0000000000000 to i64
+  %35 = call i8* @nish_alloc_struct(i64 24)
+  %36 = bitcast i8* %35 to %struct.nish_array*
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
+  store i64 %34, i64* %37, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 1
+  store i64 %34, i64* %38, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %39 = call i8* @nish_alloc_struct(i64 %34)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %39, i8 0, i64 %34, i1 false), !alias.scope !4, !noalias !3
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 2
+  store i8* %39, i8** %40, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %36, %struct.nish_array** %most.addr, align 8
+  %41 = load %struct.nish_array*, %struct.nish_array** %most.addr, align 8
+  call void @nish_random_fill(%struct.nish_array* %41)
+  %42 = load %struct.nish_array*, %struct.nish_array** %most.addr, align 8
+  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 0
+  %44 = load i64, i64* %43, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %45 = sitofp i64 %44 to double
+  %46 = call i8* @nish_str_from_f64(double %45)
+  call void @nish_print(i8* %46)
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 0
+  store i64 4, i64* %47, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 1
+  store i64 4, i64* %48, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %49 = bitcast [4 x i8]* %arr.data.3 to i8*
+  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 2
+  store i8* %49, i8** %50, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %51 = bitcast i8* %49 to i8*
+  %52 = getelementptr inbounds i8, i8* %51, i64 0
+  store i8 0, i8* %52, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %53 = getelementptr inbounds i8, i8* %51, i64 1
+  store i8 0, i8* %53, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %54 = getelementptr inbounds i8, i8* %51, i64 2
+  store i8 0, i8* %54, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %55 = getelementptr inbounds i8, i8* %51, i64 3
+  store i8 0, i8* %55, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   store %struct.nish_array* %arr.hdr.3, %struct.nish_array** %key.addr, align 8
-  %52 = load %struct.nish_array*, %struct.nish_array** %key.addr, align 8
-  call void @nish_random_fill(%struct.nish_array* %52)
-  %53 = load %struct.nish_array*, %struct.nish_array** %key.addr, align 8
-  %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %53, i64 0, i32 0
-  %55 = load i64, i64* %54, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %56 = sitofp i64 %55 to double
-  %57 = call i8* @nish_str_from_f64(double %56)
-  call void @nish_print(i8* %57)
-  %58 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
-  %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %58, i64 0, i32 0
-  %60 = load i64, i64* %59, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %61 = sitofp i64 %60 to double
-  %62 = fcmp ogt double %61, 0x3FF0000000000000
-  br i1 %62, label %if.then, label %if.end
+  %56 = load %struct.nish_array*, %struct.nish_array** %key.addr, align 8
+  call void @nish_random_fill(%struct.nish_array* %56)
+  %57 = load %struct.nish_array*, %struct.nish_array** %key.addr, align 8
+  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 0
+  %59 = load i64, i64* %58, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %60 = sitofp i64 %59 to double
+  %61 = call i8* @nish_str_from_f64(double %60)
+  call void @nish_print(i8* %61)
+  %62 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
+  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %62, i64 0, i32 0
+  %64 = load i64, i64* %63, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %65 = sitofp i64 %64 to double
+  %66 = fcmp ogt double %65, 0x3FF0000000000000
+  br i1 %66, label %if.then, label %if.end
 
 if.then:
-  %63 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %64 = call i8* @hex(%struct.nish_array* %63)
-  call void @nish_print(i8* %64)
-  %65 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
-  %66 = call i8* @hex(%struct.nish_array* %65)
-  call void @nish_print(i8* %66)
+  %67 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
+  %68 = call i64 @nish_arena_mark()
+  %69 = call i8* @hex(%struct.nish_array* %67)
+  %70 = call i8* @nish_arena_keep(i64 %68, i8* %69)
+  call void @nish_print(i8* %70)
+  %71 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %72 = call i64 @nish_arena_mark()
+  %73 = call i8* @hex(%struct.nish_array* %71)
+  %74 = call i8* @nish_arena_keep(i64 %72, i8* %73)
+  call void @nish_print(i8* %74)
   br label %if.end
 
 if.end:

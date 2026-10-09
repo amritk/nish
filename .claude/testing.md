@@ -296,6 +296,7 @@ answers 1 when any check failed, and names its slowest cases from
 ```bash
 npm run test:nish                 # the whole corpus, about five minutes
 build/nish-runner pop             # only cases whose name contains "pop"
+build/nish-runner --shard 2/4     # the second of four round-robin slices, as CI runs it
 ```
 
 `npm test` builds it and runs it over the `pop` cases — one golden, one native
@@ -370,6 +371,7 @@ skips against a compiler that has no hook.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
+node tests/run.js --shard 2/4       # one of CI's four shards (docs/wp10-ci.md)
 npm run test:update                 # write missing .ll goldens and tests/self/goldens/
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --stage1 --count 200

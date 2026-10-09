@@ -32,13 +32,16 @@ run's stops) and `eq-missing-roots` (with two missing roots, the report names
 the first, as a plain run does). Each was checked by
 reverting the behaviour it pins and watching it fail.
 
-Two cases pin how the driver drops a fix that overlaps. `decl-fs-two-names`
-imports two names from a missing `fs`, so two NL3015s carry the same edit of
-the one specifier: the first is applied and the second dropped, in one round,
-and the specifier is rewritten once. `decl-export-list-twice` is a fix whose
-own edits overlap — `export { f, f }` asks for `export ` before `f` twice — so
-it is dropped whole every round and the file is left as it was. Each fails when
-its half of `acceptedEdits`'s overlap test is taken out.
+Two cases pin how the driver drops a fix that overlaps. `guard-two-receivers`
+has two NL9007s in one statement whose guards insert at the same offset: the
+first is applied and the second dropped as overlapping it, and the next round
+applies the other, so it takes two rounds. `decl-export-list-twice` is a fix
+whose own edits overlap — `export { f, f }` asks for `export ` before `f` twice
+— so it is dropped whole every round and the file is left as it was. Each fails
+when its half of `acceptedEdits`'s overlap test is taken out; the first half
+also fails the `unsafe-index-` directory cases, whose fixes share one import
+edit. `decl-fs-two-names` pinned the first half until #434: two names from a
+missing `fs` are one NL3015 now, not two carrying the same edit.
 
 The `guard-` cases are NL9007's, whose fix is a guard
 before the statement that ends in `panic`, which the bounds analysis credits.
