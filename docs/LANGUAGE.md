@@ -5894,6 +5894,35 @@ where its memory lives and when it is reused.
    built in the pass, `replaceAll` on one) still has no scope. Passing it a
    string older than the pass is what keeps the scope.
 
+   A value stored into an array that is returned with it is returned, not
+   stored. When a function binds a local `xs` to its own fresh literal or
+   `new Array` and uses it only as `xs[i] = v`, `xs.push(v)`, `xs.length`,
+   an element read that is only tested (`xs[i] === null`), and `return xs`
+   itself, what it stores is reachable only through `xs`, so it goes to the
+   caller with the array and the function lets nothing else out: a loop that
+   calls it keeps its scope (`tests/cases/mem_return_array_scope`: 1000 calls
+   leave `Arena.used()` where one call left it). Any other use of `xs` keeps
+   the stored value stored, because it could hand an element on: storing
+   `xs` into a field, passing it to a function, reading an element back and
+   keeping it, naming `xs` through another local, or returning it through a
+   choice (`mem_return_array_callee`). An arrow captures nothing, so there is
+   no capture to count. Inside the function the value is in memory all the
+   same, so a loop whose pass stores into an `xs` declared outside it keeps
+   no pass scope.
+
+   The caller is what makes this sound. Such a call answers an array whose
+   elements are as new as the call, so the caller follows them as the call
+   itself, as it follows a `readdirSync` listing's: an element read out of
+   it, a `for...of` variable over it, and an element of an element are that
+   call's, and a function that returns the array on answers such an array in
+   turn. Passing the array to a function, `pop`, and every method but
+   `length`, `join`, `indexOf` and `push` count as storing it, because each
+   could hand an element back where the analysis does not follow
+   (`mem_return_array_caller`). The same rules close three ways a listing's
+   name used to outlive a scope that released it: returned through a
+   function and kept by a pass, passed to a function that answers it, and
+   stored into a field (`mem_return_array_readdir`).
+
    An element of an array whose elements are inline is the address of a slot
    in that array, so keeping one keeps the array: it is followed as the array
    in every rule above, and in the function rule too

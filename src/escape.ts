@@ -39,6 +39,7 @@ import {
   yieldsInteriorPointer,
 } from "./attributes"
 import {
+  arrayMethodName,
   builtinNameOf,
   dottedName,
   isArenaCall,
@@ -138,10 +139,22 @@ const isAllocatingBuiltin = (name: string): boolean =>
  */
 const answersFreshElements = (name: string): boolean => name === "readdirSync"
 
-/** Whether `expr` is a call of such a builtin: a listing, whose elements are followed as the listing itself. */
-const isListingCall = (program: CheckedProgram, expr: Node): boolean => {
+/**
+ * Whether `expr` is a listing, whose elements are followed as the listing
+ * itself: a call of such a builtin, or of a function that returns an array
+ * holding elements allocated by the call (`FunctionFacts.returnsFreshElements`).
+ */
+const isListingCall = (program: CheckedProgram, facts: FactsTable, expr: Node): boolean => {
   const e = unwrapParens(expr)
-  return e.kind === N_CALL && answersFreshElements(builtinNameOf(program, e))
+  if (e.kind !== N_CALL) {
+    return false
+  }
+  const callee = program.nodeCallees[e.id]
+  if (callee === null) {
+    return answersFreshElements(builtinNameOf(program, e))
+  }
+  const g = facts.get(callee.name)
+  return g !== null && g.returnsFreshElements
 }
 
 export class EscapeResult {
@@ -161,6 +174,13 @@ export class EscapeResult {
   allocEscapes: boolean
   /** Some direct allocation is `returned`. */
   returnsAllocation: boolean
+  /**
+   * The array this function returns may hold elements allocated during the
+   * call: a value stored into a returned fresh array (`storedIntoReturnedArray`),
+   * or a listing returned on. Its callers follow those elements as the call
+   * itself (`isListingCall`).
+   */
+  returnsFreshElements: boolean
   /** Calls `Arena.reset` / `Arena.release` directly. */
   usesArenaControl: boolean
   /** Calls to pointer-returning user functions, with the flow of each result. */
@@ -189,10 +209,19 @@ export class EscapeResult {
   escapingNodes: Node[]
   /** Every site of this body that bumps the arena itself: an allocation that is not an alloca, a `push`, a logged number. */
   arenaNodes: Node[]
+  /**
+   * Every `xs[i] = v` and `xs.push(v)` whose value takes `xs`'s outcome
+   * (`storedIntoReturnedArray`), and its `xs`. The value is in memory all the
+   * same, so a pass or a block that did not declare `xs` may not release it.
+   */
+  carriedStores: Node[]
+  carriers: Local[]
 
   constructor(nodeCount: i32) {
     this.escapingNodes = []
     this.arenaNodes = []
+    this.carriedStores = []
+    this.carriers = []
     this.stackSites = new Array<boolean>(nodeCount)
     this.stackLocals = []
     this.stackParams = new StringSet()
@@ -200,6 +229,7 @@ export class EscapeResult {
     this.allocLeaks = false
     this.allocEscapes = false
     this.returnsAllocation = false
+    this.returnsFreshElements = false
     this.usesArenaControl = false
     this.callSites = []
     this.escapeSite = null
@@ -254,10 +284,13 @@ class Outcome {
 class FlowTarget {
   local: Local | null
   isReturn: boolean
+  /** Neither: the expression whose use decides, the value itself or what the walk followed it into. */
+  used: Node | null
 
   constructor(local: Local | null, isReturn: boolean) {
     this.local = local
     this.isReturn = isReturn
+    this.used = null
   }
 }
 
@@ -279,10 +312,11 @@ class EscapeAnalysis {
   /** WP17: this function hands its `Result` back in a register, not as a pointer. */
   returnsByValueResult: boolean
   /**
-   * The site being decided is a `readdirSync` listing (`isListingCall`), so an
-   * element read out of it, `xs[i]` or a `for...of` variable, flows as the
-   * site does. Its outcomes are memoised apart, because the same local read
-   * without it answers differently.
+   * The site being decided is a listing (`isListingCall`), so an element
+   * read out of it, `xs[i]` or a `for...of` variable, flows as the site does,
+   * and a use that could hand an element on unseen is an escape
+   * (`handsOutElements`). Its outcomes are memoised apart, because the same
+   * local read without it answers differently.
    */
   listing: boolean
   /** Memoised outcomes, keyed by local identity. */
@@ -579,7 +613,9 @@ class EscapeAnalysis {
       if ((parent.kind === N_FUNCTION || parent.kind === N_ARROW) && parent.children[3] === node) {
         return new FlowTarget(null, true)
       }
-      return new FlowTarget(null, false)
+      const neither = new FlowTarget(null, false)
+      neither.used = node
+      return neither
     }
   }
 
@@ -639,6 +675,10 @@ class EscapeAnalysis {
 
   useOutcome(expr: Node, visiting: Local[]): Outcome {
     const found = classifyUse(this.unit, this.table, expr)
+    const handsOn = found.kind === USE_ARGUMENT || found.kind === USE_READ || found.kind === USE_WRITE
+    if (this.listing && handsOn && this.handsOutElements(expr)) {
+      return new Outcome(FLOW_LEAKS, true, true)
+    }
     if (found.kind === USE_NONE || found.kind === USE_READ || found.kind === USE_WRITE) {
       return new Outcome(FLOW_LOCAL, true, false)
     }
@@ -661,6 +701,10 @@ class EscapeAnalysis {
     // the caller.
     if (this.pushedIntoJoinedParts(expr)) {
       return new Outcome(FLOW_LEAKS, true, false)
+    }
+    const carried = this.storedIntoReturnedArray(expr, visiting)
+    if (carried !== null) {
+      return carried
     }
     const target = this.assignedLocal(expr)
     const escapes = target === null ? true : this.localOutcome(target, visiting).escapes
@@ -701,22 +745,8 @@ class EscapeAnalysis {
     if (call === null || !isPushCall(program, this.table, call) || call.children[1] !== list) {
       return false
     }
-    const receiver = unwrapParens(call.children[0].children[0])
-    const v: Local | null = receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
-    if (
-      v === null ||
-      v.storage !== STORAGE_LOCAL ||
-      !this.table.isArray(v.type) ||
-      this.table.refOf(v.type) !== T_STRING
-    ) {
-      return false
-    }
-    const decl = this.declarationOf(v)
-    if (decl === null) {
-      return false
-    }
-    const init = unwrapParens(decl.children[2])
-    if (init.kind !== N_ARRAY && init.kind !== N_NEW) {
+    const v = this.freshArrayLocal(call.children[0].children[0])
+    if (v === null || this.table.refOf(v.type) !== T_STRING) {
       return false
     }
     for (const ref of this.refsOf(v)) {
@@ -726,6 +756,154 @@ class EscapeAnalysis {
     }
     const visiting: Local[] = []
     return this.localOutcome(v, visiting).flow === FLOW_LOCAL
+  }
+
+  /** `receiver` names a local of this function bound to its own array literal or `new Array`, or null. */
+  freshArrayLocal(receiver: Node): Local | null {
+    const e = unwrapParens(receiver)
+    const v: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    if (v === null || v.storage !== STORAGE_LOCAL || !this.table.isArray(v.type)) {
+      return null
+    }
+    const decl = this.declarationOf(v)
+    if (decl === null) {
+      return null
+    }
+    const init = unwrapParens(decl.children[2])
+    return init.kind === N_ARRAY || init.kind === N_NEW ? v : null
+  }
+
+  /**
+   * `xs[i] = expr` or `xs.push(expr)`, where `xs` is an array this function
+   * allocated and does nothing with but fill, test and return: the value
+   * takes `xs`'s own outcome rather than escaping into memory.
+   *
+   * The value is reachable only through `xs`'s elements, and every use of
+   * `xs` is an element store, a push, `.length`, an element read that is
+   * only tested (`xs[i] === null`), or `return xs` itself (`isCarrierUse`).
+   * None of them hands an element back out, so the value lives exactly as
+   * long as `xs` does: it dies with a `local` array, and it goes to the
+   * caller with a returned one, which is what `returnsFreshElements` tells
+   * the caller, whose analysis then follows the elements it reads out
+   * (`isListingCall`). Without this a function that fills and returns an
+   * array of fresh strings (`std/json.ts`'s `jsonFields`) lets an allocation
+   * out, and every loop that calls it loses its per-pass release
+   * (`LOOP_CALLEE_STORES`).
+   *
+   * As with `pushedIntoJoinedParts`, the narrowness is the proof: an alias,
+   * a field or another array holding `xs`, an argument, an element read that
+   * is kept, a compound store, or a `return` of anything but `xs` itself
+   * could hand an element on, and each keeps the conservative answer
+   * (`tests/cases/mem_return_array_*`). The outcome is never `stable`, so
+   * the value is never an alloca whose one slot every pass would share.
+   */
+  storedIntoReturnedArray(expr: Node, visiting: Local[]): Outcome | null {
+    const program = this.unit.program
+    let node = expr
+    let parent = this.unit.parents.parentOf(node)
+    while (parent !== null && parent.kind === N_PAREN) {
+      node = parent
+      parent = this.unit.parents.parentOf(node)
+    }
+    if (parent === null) {
+      return null
+    }
+    let receiver: Node | null = null
+    if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === node) {
+      const target = unwrapParens(parent.children[0])
+      if (target.kind === N_INDEX) {
+        receiver = target.children[0]
+      }
+    } else if (parent.kind === N_LIST) {
+      const call = this.unit.parents.parentOf(parent)
+      if (call !== null && isPushCall(program, this.table, call) && call.children[1] === parent) {
+        receiver = call.children[0].children[0]
+      }
+    }
+    const v: Local | null = receiver === null ? null : this.freshArrayLocal(receiver)
+    if (v === null) {
+      return null
+    }
+    for (const ref of this.refsOf(v)) {
+      if (!this.isCarrierUse(ref)) {
+        return null
+      }
+    }
+    const outcome = this.localOutcome(v, visiting)
+    if (outcome.escapes || outcome.flow === FLOW_LEAKS) {
+      return null
+    }
+    if (outcome.flow === FLOW_RETURNED) {
+      this.result.returnsFreshElements = true
+    }
+    this.result.carriedStores.push(parent)
+    this.result.carriers.push(v)
+    return new Outcome(outcome.flow, false, false)
+  }
+
+  /** `ref` is `xs[i] = v`, `xs.push(v)`, `xs.length`, a tested `xs[i]`, or `return xs`, and nothing else. */
+  isCarrierUse(ref: Node): boolean {
+    const program = this.unit.program
+    const access = this.unit.parents.parentOf(ref)
+    if (access === null) {
+      return false
+    }
+    if (access.kind === N_INDEX && access.children[0] === ref) {
+      const above = this.unit.parents.parentOf(access)
+      if (above !== null && above.kind === N_BINARY && above.text === "=" && above.children[0] === access) {
+        return true
+      }
+      return classifyUse(this.unit, this.table, access).kind === USE_NONE
+    }
+    if (access.kind === N_MEMBER && access.children[0] === ref) {
+      const above = this.unit.parents.parentOf(access)
+      if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+        return isPushCall(program, this.table, above)
+      }
+      // An assignment to `length` is refused for every array, so this is a read.
+      return access.text === "length"
+    }
+    let node = ref
+    let parent: Node | null = access
+    while (parent !== null && parent.kind === N_PAREN) {
+      node = parent
+      parent = this.unit.parents.parentOf(node)
+    }
+    return (
+      parent !== null &&
+      (parent.kind === N_RETURN ||
+        ((parent.kind === N_FUNCTION || parent.kind === N_ARROW) && parent.children[3] === node))
+    )
+  }
+
+  /**
+   * In a listing (`this.listing`), `expr` is an array whose elements may be
+   * new, and the use in front of it could hand one on where the walk does not
+   * follow: an argument (the callee may keep or return an element it reads),
+   * `pop`, or anything else but `.length`, `join`, `indexOf` and `push`. An
+   * element read, a `for...of`, a local and a `return` are followed already.
+   */
+  handsOutElements(expr: Node): boolean {
+    const program = this.unit.program
+    const type = program.nodeTypes[expr.id]
+    if (type < 0 || !this.table.isArray(this.table.stripNull(type))) {
+      return false
+    }
+    let node = expr
+    let access = this.unit.parents.parentOf(node)
+    while (access !== null && access.kind === N_PAREN) {
+      node = access
+      access = this.unit.parents.parentOf(node)
+    }
+    if (access === null || access.kind !== N_MEMBER || access.children[0] !== node) {
+      return true
+    }
+    const above = this.unit.parents.parentOf(access)
+    if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+      const method = arrayMethodName(program, this.table, above)
+      return method !== "join" && method !== "indexOf" && method !== "push"
+    }
+    return access.text !== "length"
   }
 
   /** `ref` is `parts.push(...)`, `parts.join(...)` or `parts.length`, and nothing else. */
@@ -808,7 +986,10 @@ class EscapeAnalysis {
     if (local !== null) {
       return this.localOutcome(local, visiting)
     }
-    return this.useOutcome(expr, visiting)
+    // A listing's element is followed out of the listing, so it is the
+    // element's use that decides (`holder.name = names[0]` stores it).
+    const used = target.used
+    return this.useOutcome(this.listing && used !== null ? used : expr, visiting)
   }
 
   // ---- Decisions ----------------------------------------------------------------------
@@ -820,12 +1001,16 @@ class EscapeAnalysis {
       // ordinary memo is set aside while it is decided, and comes back after.
       const memoLocals = this.outcomeLocals
       const memoValues = this.outcomeValues
-      this.listing = isListingCall(this.unit.program, site.node)
+      this.listing = isListingCall(this.unit.program, this.facts, site.node)
       if (this.listing) {
         this.outcomeLocals = []
         this.outcomeValues = []
       }
       const outcome = this.valueOutcome(site.node, fresh)
+      // A listing returned on is this function's own: its callers follow it too.
+      if (this.listing && outcome.flow === FLOW_RETURNED) {
+        this.result.returnsFreshElements = true
+      }
       this.listing = false
       this.outcomeLocals = memoLocals
       this.outcomeValues = memoValues
@@ -1318,7 +1503,7 @@ class PassWalk {
   /** `receiver` is a listing this pass made: the call itself, or one of the body's locals bound to one. */
   isPassListing(receiver: Node): boolean {
     const e = unwrapParens(receiver)
-    if (isListingCall(this.unit.program, e)) {
+    if (isListingCall(this.unit.program, this.facts, e)) {
       return true
     }
     const local: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
@@ -1336,6 +1521,23 @@ class PassWalk {
 
   declaredInPass(local: Local): boolean {
     return holdsLocal(this.locals, local)
+  }
+
+  /**
+   * A value stored into an array that is returned with it (`carriedStores`)
+   * is in memory older than the pass unless the pass declared the array, so
+   * it is a store like any other here. Called after `visit`, which records
+   * the pass's own locals.
+   */
+  refuseCarriedStores(f: FunctionFacts, start: i32, end: i32): void {
+    let i = 0
+    while (i < f.carriedStores.length) {
+      const store = f.carriedStores[i]
+      if (store.start >= start && store.end <= end && !this.declaredInPass(f.carriers[i])) {
+        this.refuse(LOOP_STORED, store, "")
+      }
+      i = i + 1
+    }
   }
 
   /**
@@ -1371,7 +1573,9 @@ class PassWalk {
       return true
     }
     if (e.kind === N_INDEX) {
-      if (this.isPassListing(e.children[0])) {
+      // An element of a listing's element (`rows[i][j]`) is as new as the listing.
+      const holder = unwrapParens(e.children[0])
+      if (this.isPassListing(holder) || (holder.kind === N_INDEX && !this.isOld(holder))) {
         return false
       }
       return !storesInlineElements(program, this.table, e.children[0]) || this.isOld(e.children[0])
@@ -1639,6 +1843,7 @@ const decidePass = (
     }
   }
   walk.visit(body)
+  walk.refuseCarriedStores(f, body.start, body.end)
   scope.scoped = scope.why === LOOP_NOTHING && walk.allocates
 }
 
@@ -1712,6 +1917,7 @@ const decideArenaBlock = (
       walk.refuse(LOOP_STORED, node, "")
     }
   }
+  walk.refuseCarriedStores(f, start, block.end)
   return scope
 }
 

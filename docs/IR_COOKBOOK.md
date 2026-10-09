@@ -13795,6 +13795,24 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end mem-join-parts -->
 
+### A value returned in a fresh array
+
+A function that fills an array it allocated with values it built and returns
+it — `values[k] = v` or `values.push(v)`, then `return values` — lets nothing
+out but the array: a stored value is reachable only through `values`, and
+nothing reads `values` but stores, pushes, `length`, a test of an element
+(`values[k] === null`) and the `return`. So the stored value is returned
+with the array rather than stored into memory, the function's
+`allocEscapes` stays false, and the loop that calls it keeps its per-pass
+release. The caller follows what it reads out of the array as the call
+itself, as it does a `readdirSync` listing. `fieldsOf`'s own loop stores
+into an array older than its pass, so that loop takes no pass scope: only
+`measure`'s does (`tests/cases/mem_return_array_scope`, and the `_callee`,
+`_caller` and `_readdir` negatives).
+
+<!-- cookbook:begin mem-return-array -->
+<!-- cookbook:end mem-return-array -->
+
 ### A tail call, and the release ahead of it
 
 `sum` ends with its recursive call, so the call carries `tail`: the callee is

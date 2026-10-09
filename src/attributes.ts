@@ -395,6 +395,8 @@ export class FunctionFacts {
   allocEscapes: boolean
   /** An allocation of this function is returned: the caller owns it, so no scope here. */
   returnsAllocation: boolean
+  /** The returned array may hold elements the call allocated (escape.ts, `isListingCall`). */
+  returnsFreshElements: boolean
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
   usesArenaControl: boolean
   /**
@@ -418,6 +420,9 @@ export class FunctionFacts {
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
   escapingNodes: Node[]
+  /** `EscapeResult.carriedStores` and `carriers`: the stores into a returned fresh array, and each array. */
+  carriedStores: Node[]
+  carriers: Local[]
   /** `EscapeResult.arenaNodes`: the sites that bump the arena themselves. */
   arenaNodes: Node[]
   /** Every loop of the body, and whether its passes are scoped. Decided after the scopes are settled. */
@@ -538,11 +543,14 @@ export class FunctionFacts {
     this.allocLeaks = false
     this.allocEscapes = false
     this.returnsAllocation = false
+    this.returnsFreshElements = false
     this.usesArenaControl = false
     this.readsArenaState = false
     this.opensArena = false
     this.callSites = []
     this.escapingNodes = []
+    this.carriedStores = []
+    this.carriers = []
     this.arenaNodes = []
     this.loopScopes = []
     this.contained = false
@@ -2096,9 +2104,12 @@ const collectFacts = (
     facts.allocLeaks = memory.allocLeaks
     facts.allocEscapes = memory.allocEscapes
     facts.returnsAllocation = memory.returnsAllocation
+    facts.returnsFreshElements = memory.returnsFreshElements
     facts.usesArenaControl = memory.usesArenaControl
     facts.callSites = memory.callSites
     facts.escapingNodes = memory.escapingNodes
+    facts.carriedStores = memory.carriedStores
+    facts.carriers = memory.carriers
     facts.arenaNodes = memory.arenaNodes
     facts.escapeSite = memory.escapeSite
     // The half of `contained` that needs no fixpoint; the other is added after it.
@@ -2295,6 +2306,56 @@ const markWipe = (facts: FunctionFacts): void => {
 // ---- The fixpoint ------------------------------------------------------------------------
 
 /**
+ * `analyzeEscapes` over one function. WP18: over the instantiation's own side
+ * tables, so `Box<i32>` being stack-allocated in one instantiation and
+ * arena-allocated in another is two answers rather than one.
+ */
+const analyzeInstanceEscapes = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  sig: FunctionSig,
+  known: FactsTable,
+  opts: Options
+): EscapeResult => {
+  const instance = sig.instance
+  if (instance !== null) {
+    unit.program.enterInstance(instance)
+  }
+  const result = analyzeEscapes(unit, table, sig, known, opts)
+  if (instance !== null) {
+    unit.program.leaveInstance()
+  }
+  return result
+}
+
+/** Record in `known` each function whose result now says it returns fresh elements; answer the new ones. */
+const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: FactsTable): StringSet => {
+  const added = new StringSet()
+  for (const sig of sigs) {
+    const result = escapes.get(sig.name)
+    const f = known.get(sig.name)
+    if (result !== null && f !== null && result.returnsFreshElements && !f.returnsFreshElements) {
+      f.returnsFreshElements = true
+      added.add(sig.name)
+    }
+  }
+  return added
+}
+
+/** `result`'s function calls one of `names` for a pointer. */
+const callsAnyOf = (result: EscapeResult | null, names: StringSet): boolean => {
+  if (result === null) {
+    return false
+  }
+  for (const site of result.callSites) {
+    if (names.has(site.callee)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * Gather per-function facts for a whole program, then propagate over the
  * (cross-module) call graph to a fixpoint: a function is as impure as the most
  * impure thing it calls, it is willreturn only if everything it calls is, and
@@ -2312,22 +2373,31 @@ export const analyzeFunctions = (
   const first = collectRound(units, table, opts, null, null)
   propagate(first, runtime)
   const escapes = new EscapeSet()
+  const owners: AnalysisUnit[] = []
+  const sigs: FunctionSig[] = []
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       if (sig.definedIn(unit.program.source)) {
-        // WP18: over the instantiation's own side tables, so `Box<i32>` being
-        // stack-allocated in one instantiation and arena-allocated in another
-        // is two answers rather than one.
-        const instance = sig.instance
-        if (instance !== null) {
-          unit.program.enterInstance(instance)
-        }
-        escapes.set(sig.name, analyzeEscapes(unit, table, sig, first, opts))
-        if (instance !== null) {
-          unit.program.leaveInstance()
-        }
+        owners.push(unit)
+        sigs.push(sig)
+        escapes.set(sig.name, analyzeInstanceEscapes(unit, table, sig, first, opts))
       }
     }
+  }
+  // A function that returns an array of fresh elements makes each call of it
+  // a listing its callers follow, and a caller that returns the listing on
+  // returns fresh elements in turn. The set only grows, so this settles; each
+  // round re-reads only the callers of what the last one added.
+  let added = markFreshElements(escapes, sigs, first)
+  while (added.size() > 0) {
+    let i = 0
+    while (i < sigs.length) {
+      if (callsAnyOf(escapes.get(sigs[i].name), added)) {
+        escapes.set(sigs[i].name, analyzeInstanceEscapes(owners[i], table, sigs[i], first, opts))
+      }
+      i = i + 1
+    }
+    added = markFreshElements(escapes, sigs, first)
   }
   // Round 2: the same facts with stack allocations applied, then the scope
   // decision. `first` carries round 1's fixpoint, which is what lets a
@@ -2524,6 +2594,11 @@ class EscapeSet {
   }
 
   set(name: string, result: EscapeResult): void {
+    const at = this.index.get(name, -1)
+    if (at >= 0) {
+      this.list[at] = result
+      return
+    }
     this.index.set(name, this.list.length)
     this.list.push(result)
   }
