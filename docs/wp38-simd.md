@@ -71,7 +71,7 @@ vectoriser finds in counted loops. The suite pins that it does:
 | An array sum vectorises with `--unchecked-indexing`, and the checked one only once inlined with a constant length, because LLVM 18's vectoriser does not take multi-exit loops | `tests/run.js`, the WP4 `arr_sum` checks; [wp4-arrays.md](wp4-arrays.md) |
 | An element loop vectorises once header and element accesses are in separate alias domains | `tests/run.js`, "arr_alias_domains: opt -O2 vectorises the element loop" (WP15 §2b) |
 | `--target host` gives the module a data layout, so `opt -O2` vectorises it without `-mtriple` | `tests/run.js`, "opt -O2 vectorises opt_target_triple without -mtriple" (WP9) |
-| A class field read once into a `const` before the loop vectorises; read on each pass, it does not (2.38x) | `bench/hoist-field.ts`, [bench/README.md](../bench/README.md) |
+| A loop over an array held in a class field compiles to the same loop, register for register, as one over a `const` copy, so it vectorises where that one does. Before the header hoist (#104) and property-path facts (#179) the field shape was 2.38x behind and did not vectorise | `tests/run.js`, "arr_header_hoist: @fieldScale's loop is @constScale's, register for register"; [wp15-performance.md](wp15-performance.md) §2c |
 
 At the baseline CPU those vectors fit 128-bit registers on x86-64. `scripts/build.sh`
 gives clang `-O3 -flto` under `--profile speed` and no `-march`. Its comment
@@ -399,8 +399,11 @@ the checker reads. A wipe cannot reach a vector register, though, so a vector
 holding key material would need a record in its area's audit, as ECC-2 and
 X509-7 have for scalars. `Secret<T>` does not take a vector until that record
 exists. (c) and (d) both leave the checker's reach: CT-16 is open for exactly
-that reason. Neither may apply to `std/crypto` until `tests/ct-asm.js` reads
-the level it builds at.
+that reason. So the `--cpu` flag of (d) ships only once `tests/ct-asm.js`
+reads each level the flag accepts (§7 S2). Refusing the flag for programs
+that import `std/crypto` is not offered instead: a package can reach
+`std/crypto` through another package, and the checker's reading, not an
+import rule, is what the constant-time promise rests on.
 
 ---
 
@@ -418,7 +421,7 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than S0 on the same machine: from about 90 ms to about 60, between typed serde and yyjson. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads that level, or the flag refuses a program that imports `std/crypto`. |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. |
 
