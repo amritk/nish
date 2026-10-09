@@ -318,6 +318,14 @@ export const main = (): number => {
   // A colon with no value after it: the value is empty, and `jsonField` has
   // always answered the empty string for it and read on past the comma.
   t.eqStr("an empty value answers the empty string, and the scan reads on", jsonCaseFields(asked, '{"a":,"b":1}', ["b", "a"]), "1|");
+
+  // The empty name. A key may be `""`, and the name `""` asks for exactly that
+  // key: it is the one name whose compare ends before it reads a byte.
+  t.eqStr("the empty name finds the empty key", jsonCaseField(asked, '{"":1,"a":2}', ""), "1");
+  t.eqStr("and is absent where no key is empty", jsonCaseField(asked, '{"a":1,"b":2}', ""), "<absent>");
+  t.eqStr("an empty key is not a field of any other name", jsonCaseField(asked, '{"":1}', "a"), "<absent>");
+  t.eqStr("the empty name beside others, asked twice", jsonCaseFields(asked, '{"a":1,"":2}', ["", "a", ""]), "2|1|2");
+  t.eqStr("and absent beside a name that answers", jsonCaseFields(asked, '{"a":1}', ["", "a"]), "<absent>|1");
   // Every name answers before the fault, so the scan has stopped by the time
   // it would reach it, and the fault changes nothing.
   t.eqStr("a fault after every name has answered changes nothing", jsonCaseFields(asked, '{"a":1,"b":2,"c', ["b", "a"]), "2|1");
@@ -326,7 +334,7 @@ export const main = (): number => {
   // The last object's names, then everything at once.
   agreeAndMove(asked, "");
   t.eqStr("jsonFields agrees with jsonField, slot for slot, on every object above", asked.disagreement, "");
-  t.eqI32("and it compared every slot asked", asked.slots, 216);
+  t.eqI32("and it compared every slot asked", asked.slots, 227);
 
   // 1,000 calls leave the arena where one call left it, because the function
   // around them takes back what they allocated when it returns. A loop's own

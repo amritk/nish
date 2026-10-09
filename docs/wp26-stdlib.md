@@ -161,12 +161,20 @@ no allocation to `jsonField`.
 
 What `jsonFields` adds is its answer. Each value is stored into the array it
 returns, and a stored allocation is where the escape analysis stops following
-one, so a loop that calls it is refused its per-pass release, and
-`using a = arena()` around the call is refused outright. A function whose
-parameters are only strings and numbers still takes everything back when it
-returns (`tests/link/std_json`: 1,000 calls leave `Arena.used()` where one
-left it); a loop that has to run in constant memory calls `jsonField`, which
-keeps the per-pass release. §7 item 8 is the open question.
+one, so a loop that calls it is refused its per-pass release. A
+`using a = arena()` block around the call is no way out: it refuses a call to
+a function that stores an allocation into memory, NL2424 in
+[LANGUAGE.md](LANGUAGE.md#using-a--arena) (`tests/cases/reject_using_arena_callee_stores`),
+and `jsonFields` is such a function. A function whose parameters are only
+strings and numbers still takes everything back when it returns
+(`tests/link/std_json`: 1,000 calls leave `Arena.used()` where one left it).
+`jsonField` keeps the per-pass release only for a line older than the pass:
+LANGUAGE.md's [Memory model](LANGUAGE.md#memory-model) says a loop that builds
+its line in the pass and hands it to `jsonField` "still has no scope". So a
+loop that has to run in constant memory over lines it did not build calls
+`jsonField`; one that builds each line in the pass gets no per-pass release
+from either reader.
+§7 item 8 is the open question.
 
 ## 4. The number-mode rule
 
@@ -241,4 +249,4 @@ named.
    into it might flow as "returned" rather than "stored". Whether it can
    without loosening anything else the analysis proves is for that change to
    show, in `src/escape.ts`; until then the per-pass release is `jsonField`'s
-   alone.
+   alone, and only on a line older than the pass (§3f).

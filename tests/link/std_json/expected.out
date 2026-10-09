@@ -106,10 +106,15 @@ PASS  a value that never ends answers nothing after it
 PASS  a key with no colon answers nothing from there on
 PASS  text that is not an object answers nothing
 PASS  an empty value answers the empty string, and the scan reads on
+PASS  the empty name finds the empty key
+PASS  and is absent where no key is empty
+PASS  an empty key is not a field of any other name
+PASS  the empty name beside others, asked twice
+PASS  and absent beside a name that answers
 PASS  a fault after every name has answered changes nothing
 PASS  nor does one after a name asked twice
 PASS  jsonFields agrees with jsonField, slot for slot, on every object above
 PASS  and it compared every slot asked
 PASS  1,000 jsonFields calls leave Arena.used() where one call left it
 PASS  and every call answered the same bytes
-json: 114 passed, 0 failed, 0 skipped
+json: 119 passed, 0 failed, 0 skipped
