@@ -149,12 +149,15 @@ other two. So `-march` buys a little, and only on some programs (§3.4).
 
 #### S0: the baselines
 
-S0 measured these with `node bench/simd-s0.mjs`, at commit `97210d5` (`main`
-at `f772bd2` plus this note and that script, so the compiler is `main`'s). The
-machine was an `Intel(R) Xeon(R) Processor @ 2.10GHz` (lscpu: family 6, model
-207; 4 vCPUs under KVM; AVX2, FMA and AVX-512 present). Each row is seven runs
-after one warm-up, in ms. Every later bar in §7 is a ratio against this table,
-on this machine, so a stage that measures elsewhere re-runs the script there
+S0 measured these with `node bench/simd-s0.mjs`, with `main`'s compiler
+(`f772bd2`; the branch adds only this note and that script). The scan and
+bootstrap rows were taken at `97210d5`, and the `-march` rows at `c4dd861`,
+once the script ran the two builds in alternating rounds. Between those
+commits the script changed only in how it times, and in a comment. The machine
+was an `Intel(R) Xeon(R) Processor @ 2.10GHz` (lscpu: family 6, model 207; 4
+vCPUs under KVM; AVX2, FMA and AVX-512 present). Each row is seven runs after
+one warm-up, in ms. Every later bar in §7 is a ratio against this table, on
+this machine, so a stage that measures elsewhere re-runs the script there
 first.
 
 | Row | Build | min ms | median ms |
@@ -162,34 +165,56 @@ first.
 | `bench/json`, `jsonFields` | pending #507: its harness is on #507's benchmark branch, not on `main`, and S1 judges against it after #507's stage 3, so `s1-json` takes this row | — | — |
 | `bench/scan.ts`, 1,000 passes over 1 MiB | native, `--profile speed` | 1783.2 | 1942.9 |
 | `bench/scan.ts`, the same passes | freestanding wasm under Node 22, through `scanBatch` | 2334.6 | 2644.2 |
-| nbody | baseline | 1078.2 | 1181.0 |
-| nbody | `-march=x86-64-v3` | 1115.7 | 1144.0 |
-| vec3 | baseline | 414.9 | 448.2 |
-| vec3 | `-march=x86-64-v3` | 409.7 | 434.5 |
-| spectral | baseline | 516.5 | 550.6 |
-| spectral | `-march=x86-64-v3` | 475.2 | 501.9 |
+| nbody | baseline | 1139.8 | 1195.8 |
+| nbody | `-march=x86-64-v3` | 1093.5 | 1193.5 |
+| vec3 | baseline | 420.0 | 439.1 |
+| vec3 | `-march=x86-64-v3` | 408.5 | 440.5 |
+| spectral | baseline | 567.4 | 634.4 |
+| spectral | `-march=x86-64-v3` | 506.6 | 541.0 |
 | `scripts/bootstrap.sh --verify` | seed to stage3 | 150771.2 | 153702.1 |
 
 The scan rows are about 590 MB/s natively and 450 MB/s as wasm. The wasm
 figure includes copying the document into linear memory on every pass, as
-any host must. Both print the same checksum. Each pass first flips one byte
-between a digit and a comma, so no pass repeats the one before it.
+any host must. Both print the same checksum. Each pass first turns the `1` of
+one more piece into a comma, so no pass scans the document the one before it
+did.
 
 The `-march=x86-64-v3` rows link the same `.ll` as the baseline rows. Only
 clang's CPU changes, for the module (through LTO) and for the runtime alike,
-and both binaries print the same checksum. The wider binary uses VEX
-encodings and `ymm` registers. It has no FMA, because the IR carries no
-`contract` flag. The baseline binary has neither.
+and both binaries print the same checksum. The two binaries run in alternating
+rounds, so a slow stretch of the shared machine falls on both columns. The
+wider binary uses VEX encodings and `ymm` registers. It has no FMA, because the
+IR carries no `contract` flag. The baseline binary has neither.
 
-**For S2's bar this is a miss on all three.** The bar is ≥10% at one level
-on at least one of nbody, vec3 or spectral, with no loss on the others.
-spectral gained 8.0% on the minimum (8.8% on the median). vec3 gained 1.3%
-(3.1%). nbody lost 3.5% on the minimum and gained 3.1% on the median, which
-is within this machine's run-to-run spread. None reaches 10%, so by this
-table `s2-cpu` records the decline in §7 and ships no flag. That holds unless
-a re-measurement on a quieter machine, with the same script, shows otherwise.
-This matches what Rust's native column said above: a little, and only on
-some programs.
+A second sample of fifteen alternating rounds, at the same commit, gave these
+gains (minimum, then median):
+
+- spectral: 21.3% and 14.8% (506.2 → 398.4 and 533.4 → 454.2 ms)
+- nbody: 2.2% and 4.1%
+- vec3: −1.2% and −1.0%
+
+The first, unalternated run of this script, at `97210d5`, put spectral at 8.0%
+and nbody at −3.5%. That is the drift alternating removes, and it is why
+these rows replace it.
+
+**For S2's bar this is met, by spectral alone.** The bar is ≥10% at one level
+on at least one of nbody, vec3 or spectral, with no loss on the others. Per
+benchmark:
+
+- **spectral meets it.** It gained 10.7% on the minimum and 14.7% on the
+  median here, and 21.3% and 14.8% in the second sample.
+- **nbody does not meet it, and does not lose.** It gained 4.1% and 0.2%
+  here, and 2.2% and 4.1% in the second sample.
+- **vec3 does not meet it, and shows no loss this machine can tell from
+  noise.** It changed by +2.7% and −0.3% here, and by −1.2% and −1.0% in the
+  second sample. Its sign flips between samples, and every figure is inside
+  the ±3.5% spread this machine shows between runs of one binary.
+
+So `s2-cpu` takes the branch that builds the flag. Its own PR re-measures
+vec3 at the level it ships, and treats a vec3 loss that is still there,
+outside that spread, as the "loss on the others" that withholds it. This
+matches what Rust's native column said above: a real gain on some programs,
+and next to nothing on the rest.
 
 ---
 
@@ -464,7 +489,7 @@ a printed checksum.
 
 | Stage | What | Ships only if |
 | --- | --- | --- |
-| **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Done**: [S0: the baselines](#s0-the-baselines), at `97210d5`, except `bench/json`, pending #507. |
+| **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Done**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, except `bench/json`, pending #507. |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than S0 on the same machine: from about 90 ms to about 60, between typed serde and yyjson. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. |
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). |
