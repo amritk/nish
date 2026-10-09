@@ -3,8 +3,9 @@
 // it. `listOf` returns the listing on, so a call of it is a listing too and
 // the name `keep` takes from one outlives the pass that made it; `firstOf`
 // is handed the listing and answers a name, which `pick` returns after its
-// own scope would have released it; and `log.name` keeps a name read out of
-// a listing in an object. Each name reads back intact after `churn` has
+// own scope would have released it; `named` assigns a name to a local and
+// returns the local; and `log.name` keeps a name read out of a listing in an
+// object. Each name reads back intact after `churn` has
 // reused every byte a wrong release would have freed.
 class Log {
   name: string;
@@ -34,6 +35,15 @@ const pick = (d: string): string => {
   return firstOf(names);
 };
 
+const named = (d: string): string => {
+  let name = "";
+  const names = readdirSync(d);
+  if (names !== null) {
+    name = names[0];
+  }
+  return name;
+};
+
 export const main = (): void => {
   mkdirSync("build");
   mkdirSync(dir);
@@ -50,10 +60,12 @@ export const main = (): void => {
     }
   }
   const picked = pick(dir);
+  const assigned = named(dir);
   console.log(`${churn()}`);
   console.log(keep);
   console.log(log.name);
   console.log(picked);
+  console.log(assigned);
 };
 
 // Reuse the arena above wherever the kept values live.

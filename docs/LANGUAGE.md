@@ -5918,10 +5918,11 @@ where its memory lives and when it is reused.
    turn. Passing the array to a function, `pop`, and every method but
    `length`, `join`, `indexOf` and `push` count as storing it, because each
    could hand an element back where the analysis does not follow
-   (`mem_return_array_caller`). The same rules close three ways a listing's
+   (`mem_return_array_caller`). The same rules close four ways a listing's
    name used to outlive a scope that released it: returned through a
-   function and kept by a pass, passed to a function that answers it, and
-   stored into a field (`mem_return_array_readdir`).
+   function and kept by a pass, passed to a function that answers it,
+   assigned to a local that is returned, and stored into a field
+   (`mem_return_array_readdir`).
 
    An element of an array whose elements are inline is the address of a slot
    in that array, so keeping one keeps the array: it is followed as the array
