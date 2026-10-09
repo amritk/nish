@@ -486,6 +486,10 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.max") {
     return emitMathMinMax(emitter, expr, "max")
   }
+  if (name === "Math.clz32") {
+    const x = emitter.emitExpression(firstArgument(expr))
+    return callIntrinsic(emitter, "llvm.ctlz.i32", "i32", `i32 ${x}, i1 false`)
+  }
   if (name === "Math.random") {
     return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_random")}()`)
   }
@@ -587,6 +591,10 @@ export const builtinCalleesNamed = (
   }
   if (name === "Math.max") {
     out.push(minMaxIntrinsic(table, "max", firstType))
+    return out
+  }
+  if (name === "Math.clz32") {
+    out.push("llvm.ctlz.i32")
     return out
   }
   if (name === "Math.random") {
