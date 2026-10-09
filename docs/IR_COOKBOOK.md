@@ -6583,6 +6583,163 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end map-fused-extras -->
 
+### `nish/json`: several fields in one scan
+
+`jsonFields(line, names)` (`std/json.ts`) reads a flat JSON object once and
+answers one slot per name, each what `jsonField(line, names[k])` would answer.
+It is an ordinary `std/` function, so here it is a `declare` of
+`@nish.jsonFields` and one call. The array literal of names is a stack slot,
+because `jsonFields` does not keep it, and the length test before the three
+reads is what proves them in range, so none of them carries a bounds check.
+
+<!-- cookbook:begin json-fields -->
+```ts
+// `jsonFields` from `nish/json`: three fields of a compiler `--json` line in
+// one scan of it. Slot `k` is what `jsonField(line, names[k])` would answer, so
+// an absent field is `null` in its slot and the others still answer.
+import { jsonFields } from "nish/json"
+
+export const summary = (line: string): string => {
+  const fields = jsonFields(line, ["code", "line", "message"])
+  if (toI32(fields.length) !== 3) {
+    return ""
+  }
+  const code = fields[0]
+  const at = fields[1]
+  const message = fields[2]
+  if (code === null || at === null || message === null) {
+    return "not a diagnostic"
+  }
+  return `${code} at line ${at}: ${message}`
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"code\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"line\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"message\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"not a diagnostic\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" at line \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c": \00" }, align 8
+
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.jsonFields(i8* noundef nonnull noalias readonly align 8, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef nonnull align 8 i8* @summary(i8* noundef nonnull noalias readonly align 8 %line) #0 {
+entry:
+  %fields.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i8*], align 8
+  %code.addr = alloca i8*, align 8
+  %at.addr = alloca i8*, align 8
+  %message.addr = alloca i8*, align 8
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [3 x i8*]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %2 to i8**
+  %5 = getelementptr inbounds i8*, i8** %4, i64 0
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8** %5, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %6 = getelementptr inbounds i8*, i8** %4, i64 1
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8** %6, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds i8*, i8** %4, i64 2
+  store i8* bitcast ({ i64, [8 x i8] }* @.str.2 to i8*), i8** %7, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %8 = call %struct.nish_array* @nish.jsonFields(i8* %line, %struct.nish_array* %arr.hdr)
+  store %struct.nish_array* %8, %struct.nish_array** %fields.addr, align 8
+  %9 = load %struct.nish_array*, %struct.nish_array** %fields.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = trunc i64 %11 to i32
+  %13 = icmp ne i32 %12, 3
+  br i1 %13, label %if.then, label %if.end
+
+if.then:
+  ret i8* bitcast ({ i64, [1 x i8] }* @.str.3 to i8*)
+
+if.end:
+  %14 = load %struct.nish_array*, %struct.nish_array** %fields.addr, align 8
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
+  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %17 = bitcast i8* %16 to i8**
+  %18 = getelementptr inbounds i8*, i8** %17, i64 0
+  %19 = load i8*, i8** %18, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i8* %19, i8** %code.addr, align 8
+  %20 = load %struct.nish_array*, %struct.nish_array** %fields.addr, align 8
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2
+  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %23 = bitcast i8* %22 to i8**
+  %24 = getelementptr inbounds i8*, i8** %23, i64 1
+  %25 = load i8*, i8** %24, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i8* %25, i8** %at.addr, align 8
+  %26 = load %struct.nish_array*, %struct.nish_array** %fields.addr, align 8
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2
+  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %29 = bitcast i8* %28 to i8**
+  %30 = getelementptr inbounds i8*, i8** %29, i64 2
+  %31 = load i8*, i8** %30, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i8* %31, i8** %message.addr, align 8
+  %32 = load i8*, i8** %code.addr, align 8
+  %33 = icmp eq i8* %32, null
+  br i1 %33, label %lor.end.1, label %lor.rhs.1
+
+lor.rhs.1:
+  %34 = load i8*, i8** %at.addr, align 8
+  %35 = icmp eq i8* %34, null
+  br label %lor.end.1
+
+lor.end.1:
+  %36 = phi i1 [ true, %if.end ], [ %35, %lor.rhs.1 ]
+  br i1 %36, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %37 = load i8*, i8** %message.addr, align 8
+  %38 = icmp eq i8* %37, null
+  br label %lor.end
+
+lor.end:
+  %39 = phi i1 [ true, %lor.end.1 ], [ %38, %lor.rhs ]
+  br i1 %39, label %if.then.1, label %if.end.1
+
+if.then.1:
+  ret i8* bitcast ({ i64, [17 x i8] }* @.str.4 to i8*)
+
+if.end.1:
+  %40 = load i8*, i8** %code.addr, align 8
+  %41 = call i8* @nish_str_concat(i8* %40, i8* bitcast ({ i64, [10 x i8] }* @.str.5 to i8*))
+  %42 = load i8*, i8** %at.addr, align 8
+  %43 = call i8* @nish_str_concat(i8* %41, i8* %42)
+  %44 = call i8* @nish_str_concat(i8* %43, i8* bitcast ({ i64, [3 x i8] }* @.str.6 to i8*))
+  %45 = load i8*, i8** %message.addr, align 8
+  %46 = call i8* @nish_str_concat(i8* %44, i8* %45)
+  ret i8* %46
+}
+
+attributes #0 = { nounwind }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element ptr", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end json-fields -->
+
 ## Types
 
 ### `i64` and the explicit conversions

@@ -141,6 +141,46 @@ module's private functions carry its own name** (`isTextBlankByte`,
 `quicFrame…`, `hpack…`), the way `src/manifest.ts`'s helpers are
 `manifest`-prefixed. Module constants are folded at their uses and are exempt.
 
+### 3f. A function is not a value, so `jsonFields` shares a step, not a loop
+
+`jsonField(object, name)` scans from the start of the object on every call, so
+a program that wants a diagnostic's `code`, `line` and `message` reads each line
+three times. `jsonFields(object, names)` reads it once and answers one slot per
+name, in the order of `names`; slot `k` is what `jsonField(object, names[k])`
+answers, in every case: a name that is not there, a duplicated key (the first
+wins), a name asked twice, and a malformed object, where both stop at the same
+member. It stops as soon as every name has answered, which saves time and
+nothing else: a slot is filled once, so reading on could change no answer, and
+no test can see the stop.
+
+The JavaScript shape would be one scanner taking a callback per member. With no
+function values, the two readers instead share the step that reads one member:
+`jsonReadMember` fills a `JsonMember` — the key's bounds, the value's bounds and
+the next key — and answers whether there was a member to read, so each reader
+is a short loop over it and neither can find a member the other does not. The
+`JsonMember` never leaves its reader, so it is a stack slot, and the step adds
+no allocation to `jsonField`.
+
+What `jsonFields` adds is its answer. Each value is stored into the array it
+allocates and returns, by a plain `values[k] = text` statement, and the array
+is otherwise only tested and returned. LANGUAGE.md's
+[Memory model](LANGUAGE.md#memory-model) carries such a value back to the
+caller with the array, as returned rather than stored, so a loop that calls
+`jsonFields` keeps its per-pass release and a `using a = arena()` block may
+hold the call. `tests/link/std_json` pins both: a 1,000-pass loop keeps
+`Arena.used()` flat on every pass, and a `using a = arena()` block around a
+call compiles, where NL2424 used to refuse it, and gives back all it built. Before that rule, each store counted as a store into
+memory, and a loop over `jsonFields` kept about 192 bytes per call on a
+`bench/json` line. The rule is narrow: reading `values` back, passing it to a
+function or storing it anywhere would lose it, so the function keeps the array
+to those uses.
+Both readers keep the per-pass release only for a line older than the pass:
+the Memory model says a loop that builds its line in the pass and hands it on
+"still has no scope". So a loop over lines it did not build runs in constant
+memory with either reader; one that builds each line in the pass gets no
+per-pass release from either.
+§7 item 8 records how the question was answered.
+
 ## 4. The number-mode rule
 
 **A `std/` module spells its widths — `i32`, `i64`, `f64` — never `number`, and
@@ -208,3 +248,10 @@ named.
 6. **Whether the packaging check names every module. Answered: it asks the
    tree**, so a module cannot ship unchecked as the directory grows.
 7. **Whether WP18 collapses the assertion set. Answered: no** (§3c).
+8. **Whether a loop over `jsonFields` keeps its per-pass release. Answered:
+   yes**, on a line older than the pass (§3f). The values it stores go into an
+   array the call itself allocated and returns, and nothing older than the
+   call can reach that array, so `src/escape.ts` now carries a store into it
+   as returned rather than stored (LANGUAGE.md, Memory model). On `bench/json`
+   that takes `jsonFields`' peak RSS from 105.5 to 88.1 MB, the same as
+   `jsonField` ×3.

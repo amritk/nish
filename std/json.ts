@@ -1,5 +1,5 @@
 /**
- * `std/json` — the value of one field of one flat JSON object.
+ * `std/json` — the value of a field, or of several, of one flat JSON object.
  *
  * It exists because the compiler's own machine-readable surface is JSON: under
  * `--json` every diagnostic is one flat object on a line of stdout, whose `code`
@@ -26,10 +26,10 @@
  *     whether the whole line was well-formed is asking a question this does not
  *     answer.
  *
- * There is one exported function on purpose. A `std/` module is compiled into
- * the program that imports it and the symbol namespace is flat
+ * There are two exported functions, and few on purpose. A `std/` module is
+ * compiled into the program that imports it and the symbol namespace is flat
  * (`std/README.md`), so every name here is a name its importer cannot use: the
- * helpers are `json`-prefixed and the reader is the only export. Splitting a
+ * helpers are `json`-prefixed and the readers are the only exports. Splitting a
  * stream into lines and picking the ones that start with `{` is two calls the
  * caller already has — `splitLines` from `std/text` and `startsWith` — and
  * duplicating them here would cost more names than it saves.
@@ -45,6 +45,16 @@
  *         panic("the compiler crashed");
  *       }
  *     }
+ *
+ * `jsonField` scans from the start of the line on every call, so a caller that
+ * wants three fields of each line reads each line three times. `jsonFields`
+ * reads it once: `jsonFields(line, ["code", "line", "message"])` answers an
+ * array whose slot `k` is exactly what `jsonField(line, names[k])` answers —
+ * absent, first-of-a-duplicate and malformed input included — because the two
+ * share the step that reads one member (`jsonReadMember`) and stop at the same
+ * one. Its array goes back to the caller with the values in it, so a loop that
+ * calls it keeps its per-pass arena release, as one calling `jsonField` does;
+ * `jsonFields`' own comment says when that holds.
  *
  * Every offset here is a **byte** offset and every width is spelled, with each
  * length and byte a builtin answers read through `toI32` — `.length` and
@@ -385,8 +395,8 @@ const jsonNameHas = (name: string, j: i32, code: i32): boolean =>
  * Whether `jsonUnescape(text, at, end)` would answer `name`, decided without
  * building it.
  *
- * `jsonField` asks this of every key it walks past, and almost every answer is
- * no, so the question is answered the way it is asked: the literal and `name`
+ * `jsonField` and `jsonFields` ask this of every key they walk past, and almost
+ * every answer is no, so the question is answered the way it is asked: the literal and `name`
  * are walked together, each escape decoded where it stands, and the first byte
  * that differs ends the walk. Every escape reads as `jsonUnescape` reads it —
  * the short forms, a `\u` as the bytes `jsonUtf8` would build, a broken `\u`
@@ -395,8 +405,8 @@ const jsonNameHas = (name: string, j: i32, code: i32): boolean =>
  * its decoded text would.
  */
 const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean => {
-  // `jsonUnescape`'s guard, for the same reason: the one caller passes the
-  // inside of a literal `jsonEndOfString` found.
+  // `jsonUnescape`'s guard, for the same reason: every caller passes the
+  // inside of a key `jsonReadMember` found with `jsonEndOfString`.
   if (at < 0 || end > toI32(text.length)) {
     return false
   }
@@ -467,6 +477,101 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
 }
 
 /**
+ * Where one member of an object lies, as `jsonReadMember` found it: the inside
+ * of its key literal, its value, and the opening quote of the key after it.
+ *
+ * It is a class so that one step can answer the four offsets together, and
+ * each reader allocates exactly one, which never leaves the reader: that is
+ * what keeps it a stack slot rather than an arena allocation.
+ */
+class JsonMember {
+  keyAt: i32 = 0
+  keyEnd: i32 = 0
+  valueAt: i32 = 0
+  valueEnd: i32 = 0
+  /** The opening quote of the next key, or `-1` when no comma follows the value. */
+  next: i32 = -1
+}
+
+/**
+ * The opening quote of the first key of `object`, or `-1` when `object` does
+ * not start, past any blanks, with a `{`.
+ */
+const jsonFirstKey = (object: string): i32 => {
+  const length: i32 = toI32(object.length)
+  const i: i32 = jsonSkipBlank(object, 0)
+  if (i >= length || toI32(object.charCodeAt(i)) !== JSON_OPEN_BRACE) {
+    return -1
+  }
+  return jsonSkipBlank(object, i + 1)
+}
+
+/**
+ * Reads the member whose key's opening quote is at `at` into `member`, and
+ * answers whether there was one.
+ *
+ * This is the per-key step `jsonField` and `jsonFields` share, so they cannot
+ * disagree about where a member ends: `false` for anything that is not a key,
+ * a colon and a whole value in that order, which is the point at which both
+ * stop. A value need not be followed by a comma — a truncated object still
+ * answers the fields before the cut — so a missing one only sets `next` to
+ * `-1`, and the read that follows answers `false`.
+ */
+const jsonReadMember = (object: string, at: i32, member: JsonMember): boolean => {
+  const length: i32 = toI32(object.length)
+  // `jsonSkipBlank` never answers a negative index for a non-negative one, but
+  // the bounds proof does not look inside a callee, so every cursor it answers
+  // is tested for `i < 0` beside `i >= length`: the pair is what lets each read
+  // below go without a check.
+  if (at < 0 || at >= length || toI32(object.charCodeAt(at)) !== JSON_QUOTE) {
+    return false
+  }
+  const keyEnd: i32 = jsonEndOfString(object, at)
+  if (keyEnd < 0) {
+    return false
+  }
+  const colon: i32 = jsonSkipBlank(object, keyEnd)
+  if (colon < 0 || colon >= length || toI32(object.charCodeAt(colon)) !== JSON_COLON) {
+    return false
+  }
+  const valueAt: i32 = jsonSkipBlank(object, colon + 1)
+  const valueEnd: i32 = jsonEndOfValue(object, valueAt)
+  if (valueEnd < 0) {
+    return false
+  }
+  member.keyAt = at + 1
+  member.keyEnd = keyEnd - 1
+  member.valueAt = valueAt
+  member.valueEnd = valueEnd
+  const comma: i32 = jsonSkipBlank(object, valueEnd)
+  if (comma < 0 || comma >= length || toI32(object.charCodeAt(comma)) !== JSON_COMMA) {
+    member.next = -1
+  } else {
+    member.next = jsonSkipBlank(object, comma + 1)
+  }
+  return true
+}
+
+/**
+ * The text a member's value answers: a string unquoted and unescaped, anything
+ * else as the bytes it was written with.
+ */
+const jsonValueText = (object: string, member: JsonMember): string => {
+  const valueAt: i32 = member.valueAt
+  const valueEnd: i32 = member.valueEnd
+  // `jsonReadMember` only fills in a value `jsonEndOfValue` ended, which starts
+  // inside the object and never ends past it, so this changes no answer: it is
+  // the range the value's first byte and its `substring` are proved in.
+  if (valueAt < 0 || valueAt >= valueEnd || valueEnd > toI32(object.length)) {
+    return ""
+  }
+  if (toI32(object.charCodeAt(valueAt)) === JSON_QUOTE) {
+    return jsonUnescape(object, valueAt + 1, valueEnd - 1)
+  }
+  return object.substring(valueAt, valueEnd)
+}
+
+/**
  * The value of `name` in `object`, or `null` when the object does not have that
  * field.
  *
@@ -481,48 +586,73 @@ const jsonKeyEquals = (text: string, at: i32, end: i32, name: string): boolean =
  * and it is the shape the compiler's `--json` line has.
  */
 export const jsonField = (object: string, name: string): string | null => {
-  const length: i32 = toI32(object.length)
-  let i: i32 = jsonSkipBlank(object, 0)
-  if (i >= length || toI32(object.charCodeAt(i)) !== JSON_OPEN_BRACE) {
-    return null
-  }
-  i = jsonSkipBlank(object, i + 1)
-  // `jsonSkipBlank` never answers a negative index for a non-negative one, but
-  // the bounds proof does not look inside a callee, so every cursor it answers
-  // is tested for `i < 0` beside `i >= length`: the pair is what lets each read
-  // below go without a check.
-  while (i >= 0 && i < length && toI32(object.charCodeAt(i)) === JSON_QUOTE) {
-    const keyAt: i32 = i + 1
-    const keyEnd: i32 = jsonEndOfString(object, i)
-    if (keyEnd < 0) {
-      return null
-    }
-    i = jsonSkipBlank(object, keyEnd)
-    if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COLON) {
-      return null
-    }
-    const valueAt: i32 = jsonSkipBlank(object, i + 1)
-    const valueEnd: i32 = jsonEndOfValue(object, valueAt)
-    // `jsonEndOfValue` answers `-1` for a `valueAt` outside the object and never
-    // answers past its end, so the last three tests change no answer: they are
-    // the range the value's first byte and its `substring` are proved in.
-    if (valueEnd < 0 || valueAt < 0 || valueAt >= length || valueEnd > toI32(object.length)) {
-      return null
-    }
+  const member: JsonMember = new JsonMember()
+  let at: i32 = jsonFirstKey(object)
+  while (jsonReadMember(object, at, member)) {
     // The key is compared where it stands rather than unescaped into a string
     // first: every key before the one asked for is a no, and a no should not
     // cost an allocation.
-    if (jsonKeyEquals(object, keyAt, keyEnd - 1, name)) {
-      if (toI32(object.charCodeAt(valueAt)) === JSON_QUOTE) {
-        return jsonUnescape(object, valueAt + 1, valueEnd - 1)
-      }
-      return object.substring(valueAt, valueEnd)
+    if (jsonKeyEquals(object, member.keyAt, member.keyEnd, name)) {
+      return jsonValueText(object, member)
     }
-    i = jsonSkipBlank(object, valueEnd)
-    if (i < 0 || i >= length || toI32(object.charCodeAt(i)) !== JSON_COMMA) {
-      return null
-    }
-    i = jsonSkipBlank(object, i + 1)
+    at = member.next
   }
   return null
+}
+
+/**
+ * The value of every one of `names` in `object`, in the order of `names`: slot
+ * `k` is exactly what `jsonField(object, names[k])` answers.
+ *
+ * It is for a caller that wants several fields of one line — a diagnostic's
+ * `code`, `line` and `message` — and would otherwise scan the line once per
+ * field. This scans it once, left to right, and stops as soon as every name has
+ * answered: a speed path and nothing more, since a slot is filled only once
+ * and reading on could change no answer. Each slot keeps the **first** field of its name, as `jsonField`
+ * does; a name asked for twice answers in both slots; and a malformed object
+ * answers in each slot what `jsonField` answers for that name, because both
+ * stop at the same member.
+ *
+ * The answer is a fresh array and the only allocation besides the values. Each
+ * value is stored into it by a plain `values[k] = text` statement, and the
+ * array is only stored into, tested and returned, so the values travel with
+ * the array: the call lets nothing else out (LANGUAGE.md, "Memory model", a
+ * value stored into an array that is returned with it). A loop calling this
+ * keeps its per-pass release on a line older than the pass, as `jsonField`'s
+ * does, and a `using a = arena()` block may hold the call. On a line built in
+ * the pass neither reader keeps the release (LANGUAGE.md, "Memory model").
+ * Reading `values` back, passing it to a function, or storing it anywhere
+ * before the return would undo this; `tests/link/std_json` pins the flat
+ * arena and the `using` block.
+ */
+export const jsonFields = (object: string, names: string[]): (string | null)[] => {
+  const count: i32 = toI32(names.length)
+  const values: (string | null)[] = new Array<string | null>(count)
+  const member: JsonMember = new JsonMember()
+  let missing: i32 = count
+  let at: i32 = jsonFirstKey(object)
+  while (missing > 0 && jsonReadMember(object, at, member)) {
+    // A value is built once per member however many names it answers, and
+    // only when one of them does.
+    let text: string | null = null
+    let k: i32 = 0
+    // Bounded by both lengths, which are the same, because the bounds proof
+    // follows each array by its own length and not by `count`.
+    while (k < toI32(values.length) && k < toI32(names.length)) {
+      if (values[k] === null && jsonKeyEquals(object, member.keyAt, member.keyEnd, names[k])) {
+        if (text === null) {
+          text = jsonValueText(object, member)
+        }
+        // Always true: the loop's own test. A call stands between it and the
+        // store, and a call is where the bounds proof forgets a length.
+        if (k < toI32(values.length)) {
+          values[k] = text
+        }
+        missing -= 1
+      }
+      k += 1
+    }
+    at = member.next
+  }
+  return values
 }

@@ -89,4 +89,34 @@ PASS  an empty string
 PASS  a key with no value
 PASS  an unterminated string
 PASS  a truncated object still answers the field before the cut
-json: 91 passed, 0 failed, 0 skipped
+PASS  no names answer no slots
+PASS  even of text that is not an object
+PASS  three fields of a diagnostic, in the order asked
+PASS  a name asked twice answers in both slots
+PASS  names that are not there are absent
+PASS  and present ones beside them still answer
+PASS  keys in the reverse order of the names
+PASS  and in no order at all
+PASS  the first of two fields of one name, in every slot that asks
+PASS  a key spelt with an escape is the same name
+PASS  a nested field is not a field
+PASS  a truncated object answers the fields before the cut
+PASS  a missing comma ends the object after the value it follows
+PASS  a value that never ends answers nothing after it
+PASS  a key with no colon answers nothing from there on
+PASS  text that is not an object answers nothing
+PASS  an empty value answers the empty string, and the scan reads on
+PASS  the empty name finds the empty key
+PASS  and is absent where no key is empty
+PASS  an empty key is not a field of any other name
+PASS  the empty name beside others, asked twice
+PASS  and absent beside a name that answers
+PASS  a fault after every answer leaves the answers
+PASS  and so does one after a name asked twice
+PASS  jsonFields agrees with jsonField, slot for slot, on every object above
+PASS  and it compared every slot asked
+PASS  1,000 jsonFields calls leave Arena.used() where one call left it
+PASS  and every call answered the same bytes
+PASS  a 1,000-pass jsonFields loop keeps Arena.used() flat on every pass
+PASS  a using arena() block may hold a jsonFields call, and takes back all it built
+json: 121 passed, 0 failed, 0 skipped
