@@ -2741,6 +2741,30 @@ if (!only || "performance".includes(only)) {
     drop.stderr
   )
 
+  // NL9016: a local declared outside a loop and handed a new allocation on
+  // every pass. `last` was declared holding a literal, which NL9003 lets go, so
+  // this is the drop nothing reported. The pointer-returning `lastLabel` warns
+  // as well, an inner loop warns for a local of the outer one, and `row`, which
+  // was declared holding an allocation, is NL9003's alone: one line, one warning.
+  const passDrop = compile("perf_arena_pass_drop", "perf_arena_pass_drop_report.ll")
+  const passDropLines = summaries(passDrop.stderr)
+  check(
+    "performance: an allocation dropped on every pass of a loop warns, and a line NL9003 reports stays NL9003's",
+    passDrop.status === 0 &&
+      passDropLines.length === 4 &&
+      positions(passDropLines) === "18:5,26:5,34:7,45:5" &&
+      passDropLines[1].includes(
+        "`last` is given a new allocation on every pass of this loop and drops the one the pass before gave it: " +
+          "nothing can reach that value again and nothing frees it while the loop runs, so memory grows with every " +
+          "pass. Declare `last` with `const` inside the loop when only its pass reads it, or keep what the last " +
+          "pass needs as numbers and build the value once after the loop"
+      ) &&
+      passDropLines[0].includes("`label` is given a new allocation on every pass") &&
+      passDropLines[2].includes("`at` is given a new allocation on every pass") &&
+      passDropLines[3].includes("`row` already holds an allocation and this one drops it"),
+    passDrop.stderr
+  )
+
   // The arithmetic rules. These are not advice about speed: each one is a
   // program that does not compute what it was written to compute, and the
   // message has to name the rewrite all the same.
@@ -2959,6 +2983,10 @@ if (!only || "performance".includes(only)) {
     "perf_alloc_quiet",
     "perf_overflow_quiet",
     "perf_arena_quiet",
+    // A search loop, a value kept in an array or in the node that replaces it,
+    // a local of the pass, an assignment of no allocation and a loop that runs
+    // once: none of them drops a value on every pass, so NL9016 is silent.
+    "perf_arena_pass_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that

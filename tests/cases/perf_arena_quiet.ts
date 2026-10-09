@@ -1,4 +1,24 @@
 // WP15 §8, the false-positive guards for the dropped-allocation warning.
+class Box {
+  inner: string;
+  constructor(inner: string) {
+    this.inner = inner;
+  }
+}
+
+class Chain {
+  prev: Chain | null;
+  constructor(prev: Chain | null) {
+    this.prev = prev;
+  }
+}
+
+class Wrap {
+  box: Box;
+  constructor(box: Box) {
+    this.box = box;
+  }
+}
 function build(n: i32): string {
   // The function hands the memory back, so its caller owns what it made and
   // there was never a scope here to lose (WP9's call-site reclaim is what
@@ -45,5 +65,26 @@ export function test(): number {
     row = "c" + "d";
   }
 
-  return b.length + what.length + s.length + build(1).length + plain.length + rows.length + row.length;
+  // Handed to the constructor of the value that replaces it, so the old value
+  // lives on inside the new one: a constructor argument is a capture.
+  let box = new Box(`${b}!`);
+  const wrapped = new Wrap(box);
+  box = new Box(wrapped.box.inner);
+
+  // Outside any loop the same holds for the assignment's own right-hand side:
+  // the new link keeps the old one.
+  let chain = new Chain(null);
+  chain = new Chain(chain);
+
+  return (
+    b.length +
+    what.length +
+    s.length +
+    build(1).length +
+    plain.length +
+    rows.length +
+    row.length +
+    box.inner.length +
+    (chain.prev !== null ? 1 : 0)
+  );
 }

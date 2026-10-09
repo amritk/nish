@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 943 programs, 88200 dump lines.
+# 945 programs, 88333 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -46919,26 +46919,160 @@ function main(): i32 -> @nish_main [exported entry]
   callee 65:15 drain -> @drain
   callee 66:15 collect -> @collect
   callee 67:15 quiet -> @quiet
+program tests/cases/perf_arena_pass_drop.ts
+module tests/cases/perf_arena_pass_drop.ts (entry)
+struct Point (class) size=4 align=4
+  field x: i32 index=0 offset=0
+  constructor -> @Point.constructor
+function Point.constructor(this: Point, x: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: x
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function lastLabel(n: i32): string -> @lastLabel
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 16:7 label: string (let)
+  local 17:12 i: i32 (let)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Point.constructor lastLabel nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 24:7 last: string (let)
+  local 25:12 i: i32 (let)
+  local 29:7 total: i32 (let)
+  local 30:12 round: i32 (let)
+  local 31:9 at: Point | null (let)
+  local 32:9 j: i32 (let)
+  callee 34:12 new Point -> @Point.constructor
+  local 43:7 row: i32[] (let)
+  local 44:12 i: i32 (let)
+  callee 47:45 lastLabel -> @lastLabel
+program tests/cases/perf_arena_pass_quiet.ts
+module tests/cases/perf_arena_pass_quiet.ts (entry)
+struct Registry (class) size=8 align=8
+  field items: Item[] index=0 offset=0
+  constructor -> @Registry.constructor
+struct Item (class) size=4 align=4
+  field id: i32 index=0 offset=0
+  constructor -> @Item.constructor
+  method attach -> @Item.attach
+struct Node (class) size=16 align=8
+  field value: i32 index=0 offset=0
+  field next: Node | null index=1 offset=8
+  constructor -> @Node.constructor
+function Registry.constructor(this: Registry): void -> @Registry.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Item.constructor(this: Item, id: i32): void -> @Item.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: id
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Item.attach(this: Item, r: Registry): void -> @Item.attach [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 17:5
+  escaping: this
+  calls: nish_array_grow
+  pointer this: size=4 writesThrough=true captured=true
+  pointer r: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Node.constructor(this: Node, value: i32, next: Node | null): void -> @Node.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: next value
+  pointer this: size=16 writesThrough=true captured=false
+  pointer next: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Item.attach
+  calls: Item.attach Item.constructor Node.constructor Registry.constructor nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
+  stackSites=4 stackLocals=4
+  local 31:9 words: string[] (const)
+  local 35:7 found: string (let)
+  local 36:14 w: string (const)
+  local 44:9 kept: string[] (const)
+  local 45:7 line: string (let)
+  local 46:14 w: string (const)
+  local 52:7 head: Node | null (let)
+  local 53:12 i: i32 (let)
+  callee 54:12 new Node -> @Node.constructor
+  local 58:7 lengths: i32 (let)
+  local 59:14 w: string (const)
+  local 60:9 piece: string (let)
+  local 66:7 pick: string (let)
+  local 67:12 i: i32 (let)
+  local 73:7 once: string (let)
+  local 80:9 picks: string[] (const)
+  local 81:7 tag: string (let)
+  local 82:12 i: i32 (let)
+  local 88:9 reg: Registry (const)
+  callee 88:15 new Registry -> @Registry.constructor
+  local 89:7 cur: Item (let)
+  callee 89:13 new Item -> @Item.constructor
+  local 90:12 i: i32 (let)
+  callee 91:11 new Item -> @Item.constructor
+  callee 92:5 Item.attach -> @Item.attach
+  local 96:7 single: string (let)
+  local 101:7 sum: i32 (let)
+  local 102:7 at: Node | null (let)
 program tests/cases/perf_arena_quiet.ts
 module tests/cases/perf_arena_quiet.ts (entry)
+struct Box (class) size=8 align=8
+  field inner: string index=0 offset=0
+  constructor -> @Box.constructor
+struct Chain (class) size=8 align=8
+  field prev: Chain | null index=0 offset=0
+  constructor -> @Chain.constructor
+struct Wrap (class) size=8 align=8
+  field box: Box index=0 offset=0
+  constructor -> @Wrap.constructor
+function Box.constructor(this: Box, inner: string): void -> @Box.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: inner
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Chain.constructor(this: Chain, prev: Chain | null): void -> @Chain.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: prev
+  pointer this: size=8 writesThrough=true captured=false
+  pointer prev: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Wrap.constructor(this: Wrap, box: Box): void -> @Wrap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: box
+  pointer this: size=8 writesThrough=true captured=false
+  pointer box: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
 function build(n: i32): string -> @build
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-  local 6:7 s: string (let)
+  local 26:7 s: string (let)
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: build nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_str_concat
-  stackSites=1 stackLocals=1
-  local 14:9 a: string (const)
-  local 15:9 b: string (const)
-  local 20:7 what: string (let)
-  local 29:7 s: string (let)
-  local 35:7 plain: string (let)
-  local 41:9 rows: string[] (const)
-  local 42:7 row: string (let)
-  local 43:12 i: i32 (let)
-  callee 48:46 build -> @build
+  calls: Box.constructor Chain.constructor Wrap.constructor build nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_str_concat
+  stackSites=2 stackLocals=2
+  local 34:9 a: string (const)
+  local 35:9 b: string (const)
+  local 40:7 what: string (let)
+  local 49:7 s: string (let)
+  local 55:7 plain: string (let)
+  local 61:9 rows: string[] (const)
+  local 62:7 row: string (let)
+  local 63:12 i: i32 (let)
+  local 70:7 box: Box (let)
+  callee 70:13 new Box -> @Box.constructor
+  local 71:9 wrapped: Wrap (const)
+  callee 71:19 new Wrap -> @Wrap.constructor
+  callee 72:9 new Box -> @Box.constructor
+  local 76:7 chain: Chain (let)
+  callee 76:15 new Chain -> @Chain.constructor
+  callee 77:11 new Chain -> @Chain.constructor
+  callee 83:5 build -> @build
 program tests/cases/perf_arena_using.ts
 module tests/cases/perf_arena_using.ts (entry)
 struct Log (class) size=16 align=8
@@ -47530,17 +47664,18 @@ program tests/cases/perf_str_concat_quiet.ts
 module tests/cases/perf_str_concat_quiet.ts (entry)
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_arena_release nish_panic_overflow nish_str_concat
-  stackSites=1 stackLocals=1
+  calls: nish_arena_release nish_array_grow nish_panic_overflow nish_str_concat
+  stackSites=2 stackLocals=2
   local 6:9 parts: string[] (const)
-  local 10:7 line: string (let)
-  local 11:14 part: string (const)
-  local 16:7 total: i32 (let)
-  local 17:12 i: i32 (let)
-  local 18:9 piece: string (let)
-  local 24:7 head: string (let)
-  local 29:7 seen: i32 (let)
-  local 30:14 x: string (const)
+  local 11:9 lines: string[] (const)
+  local 12:7 line: string (let)
+  local 13:14 part: string (const)
+  local 19:7 total: i32 (let)
+  local 20:12 i: i32 (let)
+  local 21:9 piece: string (let)
+  local 27:7 head: string (let)
+  local 32:7 seen: i32 (let)
+  local 33:14 x: string (const)
 program tests/cases/port_array_quiet.ts
 module tests/cases/port_array_quiet.ts (entry)
 const ZERO: i32 = 0

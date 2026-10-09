@@ -6152,7 +6152,7 @@ by the caller.
   checked when one of its instantiations is finished, and the padding rule below
   is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  The twelve below each name the rewrite; the class also holds NL9012, a
+  The thirteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
   ([Data parallelism](#data-parallelism-nishthreads)), and NL9014 and NL9015,
   the deprecated `--unchecked-indexing` and `--wrapping`
@@ -6194,9 +6194,35 @@ by the caller.
     memory; when the value being dropped may already be reachable from
     somewhere else, which is a question of order — a capture anywhere in the
     enclosing loop, or one that finishes before the assignment starts, leaves
-    the old value reachable and the `const` rewrite inapplicable; or when the
+    the old value reachable and the `const` rewrite inapplicable (a capture is
+    the value passed to a call or a constructor, either arm of a conditional
+    included, a method called on it unless it is a string or an array, a
+    `return`, an element of an array or object literal, or the right-hand side
+    of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
     (`tests/cases/perf_arena_quiet`).
+  - **an allocation dropped on every pass** (NL9016) — `x = <allocation>` as a
+    statement of its own at the top of a loop's body, where `x` is a local
+    declared outside that loop. Each pass drops the value the pass before gave
+    `x`, and nothing frees it while the loop runs: the pass cannot take a scope,
+    because its fresh value outlives it in `x`, and a
+    [`using a = arena()`](#using-a--arena) block refuses the same assignment
+    (NL2418). So memory grows with the number of passes; 10,000,000 passes of
+    `last = \`item ${i}\`` peaked at 392 MB where the rewrite peaks at 11 MB.
+    The hints are a `const` inside the loop when only the pass reads the value,
+    or numbers kept across passes and the value built once after the loop
+    (`tests/cases/perf_arena_pass_drop`). Reported whatever the local was
+    declared holding and whatever the function returns, since the dropped
+    values are this assignment's own; a line the rule above already reports is
+    its alone. Not reported for an assignment inside a branch, which may run
+    once, as a search loop's `found = ...` before its `break` does; in a body
+    whose top level ends the loop with `break`, `return` or `throw`, or in a
+    `do ... while (false)`, either of which runs at most once; for a local
+    declared inside the loop; when the assigned value is not an allocation; or
+    when a capture anywhere in the loop, as the rule above counts one, may keep
+    the old value reachable, as `head = new Node(i, head)`,
+    `picks.push(i > 0 ? tag : "none")` and `cur.attach(reg)` do
+    (`tests/cases/perf_arena_pass_quiet`).
   - **a loop that leaves a callee's memory behind** — a call inside a loop to
     a function that leaves arena memory behind (it allocates, lets none of it
     escape, and has no scope of its own) whose result dies with the pass,
