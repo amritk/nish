@@ -1224,7 +1224,8 @@ of `string | number | i64 | f64 | boolean` and are **statement position only**.
 
 **`Math`.** `sqrt` `floor` `ceil` `trunc` `sin` `cos` `exp` `log` (all `f64`
 argument, `f64` result), `pow(x, y)`, `round(x)`, `abs(x)` (any numeric type),
-`min(a, b)` / `max(a, b)` (exactly two, one type), `random()`, and the
+`min(a, b)` / `max(a, b)` (exactly two, one type), `clz32(x)` (an `i32` or `u32` in,
+the leading zero bits out, 0 to 32), `random()`, and the
 constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 `Math.sqrt(toF64(n))`.
 
