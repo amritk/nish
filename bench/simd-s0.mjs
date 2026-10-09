@@ -14,10 +14,10 @@
 //              a 1 MiB document of balanced JSON objects is scanned SCAN_ROUNDS
 //              times, and each pass first turns one more piece's `1` into a
 //              comma, so no pass scans the document the last one did, and
-//              every answer is folded into the printed checksum. The wasm row drives the same rounds
-//              through web/bytes-worker.mjs's `scanBatch`, so it also pays the
-//              copy into linear memory that any host pays, and must print the
-//              native row's checksum.
+//              every answer is folded into the printed checksum. The wasm row
+//              drives the same rounds through web/bytes-worker.mjs's
+//              `scanBatch`, so it also pays the copy into linear memory that
+//              any host pays, and must print the native row's checksum.
 //   nbody, vec3, spectral
 //              compiled once to a .ll with the flags in their .args sidecars,
 //              then linked twice from that same .ll: `scripts/build.sh --profile
