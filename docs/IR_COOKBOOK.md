@@ -13941,7 +13941,7 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 ### A value returned in a fresh array
 
-A function that fills an array it allocated with values it built and returns
+A function that fills an array it allocated with strings it built and returns
 it — `values[k] = v` or `values.push(v)`, then `return values` — lets nothing
 out but the array: a stored value is reachable only through `values`, and
 nothing reads `values` but stores, pushes, `length`, a test of an element
@@ -13952,7 +13952,7 @@ release. The caller follows what it reads out of the array as the call
 itself, as it does a `readdirSync` listing. `fieldsOf`'s own loop stores
 into an array older than its pass, so that loop takes no pass scope: only
 `measure`'s does (`tests/cases/mem_return_array_scope`, and the `_callee`,
-`_caller` and `_readdir` negatives).
+`_caller`, `_readdir` and `_nested` negatives).
 
 <!-- cookbook:begin mem-return-array -->
 ```ts

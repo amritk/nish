@@ -5972,9 +5972,8 @@ where its memory lives and when it is reused.
    The caller is what makes this sound. Such a call answers an array whose
    elements are as new as the call, so the caller follows them as the call
    itself, as it follows a `readdirSync` listing's: an element read out of
-   it, a `for...of` variable over it, and an element of an element are that
-   call's, and a function that returns the array on answers such an array in
-   turn. Passing the array to a function, `pop`, and every method but
+   it and a `for...of` variable over it are that call's, and a function that
+   returns the array on answers such an array in turn. Passing the array to a function, `pop`, and every method but
    `length`, `join`, `indexOf` and `push` count as storing it, because each
    could hand an element back where the analysis does not follow
    (`mem_return_array_caller`). The same rules close four ways a listing's
