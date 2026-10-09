@@ -1,0 +1,39 @@
+PASS  a minted certificate parses, a P-256 key signed with ecdsa-with-SHA256
+PASS  and its SHA-256 is 64 hex digits
+PASS  no cert.pem or priv.key where none is: no chain, no key
+PASS  the runner's server test cases are taken
+PASS  and resumption, 0-RTT and migration are not
+PASS  serve's flags are read
+PASS  an unknown flag is refused
+PASS  a flag with no value is refused
+PASS  a port past 65535 is refused
+usage: a port outside 0 to 65535
+PASS  serve exits 2 for a command line it cannot read
+unsupported test case zerortt
+PASS  127 for a test case it does not take, the runner's unsupported
+no P-256 key in tests/link/net_interop_server/www/priv.key
+PASS  3 for a certificate directory with nothing in it
+PASS  the server listens: QUIC, HTTP/1.1 plain and over TLS, HTTP/2
+PASS  HTTP/1.1: a GET of /hello
+PASS  HTTP/2: a TLS handshake offering h2, the server's signature and Finished verified
+PASS  a GET of the file: 200 and its bytes
+PASS  a GET of a file that is not there: 404
+PASS  hq-interop: the handshake through the listener into a slot, the server's flight verified
+PASS  a request answered and ended
+PASS  with the file's bytes
+PASS  a path that climbs out of www is answered with nothing
+PASS  HTTP/3: the handshake, ALPN h3
+PASS  a GET answered and ended
+PASS  200 with the file's bytes
+PASS  a POST answered and ended
+PASS  with how many bytes its body carried
+PASS  WebTransport: the handshake, DATAGRAM frames on
+PASS  an extended CONNECT is accepted: 200
+PASS  a datagram comes back
+PASS  echoed, under the session's quarter stream ID
+PASS  a bidirectional stream is echoed and ended
+PASS  byte for byte
+PASS  the application counted each: two hq requests, two HTTP/3, one session, one datagram, one stream
+bind failed: -98
+PASS  one QUIC port taken already: serve exits 1
+interop server: 34 passed, 0 failed, 0 skipped
