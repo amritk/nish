@@ -134,9 +134,10 @@ export const quicChecks = (t: Suite): void => {
     inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("quic: three more connections through the slot, each closed by the server with code 9, which the client reads", all && q.accepted === 4);
-  // The figure moves by a few kilobytes between connections (the listener's
-  // answers around the close), so it is pinned as a band (`lbHandshakeBand`).
-  t.ok("quic: each keeps 1 to 6 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (H3-1, QUIC-3)", inBand);
+  // The figure is this program's copy of the first Initial and `handle`'s
+  // answer, where the HTTP/3 carriers keep nothing, so one bound holds both
+  // (`lbHandshakeBand`).
+  t.ok("quic: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (H3-1, QUIC-3)", inBand);
   t.eqI32("quic: no datagram was dropped by the program", q.app.dropped, n32(0));
   t.eqStr("quic: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();
