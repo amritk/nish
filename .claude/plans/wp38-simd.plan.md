@@ -47,13 +47,22 @@ stages:
         content: Add bench/index-of-any.ts and measure kernel vs the unrecognised loop for the Measured trailer — see S1 surface
   - id: s1-json
     title: "perf(std): scan JSON structure and strings with indexOfAny"
-    goal: std/json's structure scan and string skip use indexOfAny, and bench/json with jsonFields is at least 1.5x faster than S0
-    verification: npm run check && npm test && npm run lint && npm run lint:dead
+    goal: std/json's structure scan and string skip use indexOfAny where it pays, answers stay byte-identical, and bench/json with jsonFields is measured against S0 (main @ f33139a) with the 1.5x bar recorded as met or missed
+    verification: npm run check && npm test && npm run lint && npm run lint:dead && node docs/check-links.mjs && node bench/run.mjs --instructions --check
     todos:
       - id: sj-move
-        content: Move jsonEndOfString, the in-string branch of jsonEndOfValue and the structure scan in std/json.ts onto indexOfAny — see S1 json
+        content: Move the structure scan of jsonEndOfValue (depth, braces, brackets, quotes), the blank skip between members and, where it measures faster, the string skip's inline window in std/json.ts onto indexOfAny — see S1 json
       - id: sj-measure
-        content: Measure bench/json (jsonFields) against S0 and the four non-benchmark shapes, and put the figures in the Measured trailer — see S1 json
+        content: Measure S0 (main @ f33139a) and the branch on one machine — bench/json jsonFields and jsonField x3, and the four non-benchmark shapes — and put the figures in the Measured trailer — see S1 json
+      - id: sj-doc
+        content: Fill docs/wp38-simd.md §2.3's bench/json S0 row with the commit and figures, and record S1's outcome (bar met or missed, by how much; S1b proposed if missed) in §2.3 and §7 — see S1 json
+  - id: s1-any-edge
+    title: "test(std): compare indexOfAny's byte offset on non-ASCII text natively and under wasi"
+    goal: The non-ASCII edge of indexOfAny compares where the match is, natively against --profile wasi, kept out of the Node comparison (closes #524)
+    verification: npm run check && npm test && npm run lint && npm run lint:dead
+    todos:
+      - id: ae-test
+        content: Print the non-ASCII byte offsets in a line the native and wasi builds compare and the Node comparison excludes, and wire it in tests/run.js — see S1 any edge
   - id: s2-cpu
     title: "feat(cli): an opt-in --cpu level, or the measurement that declines it"
     goal: Either an opt-in --cpu flag that clears wp38's 10% bar and that tests/ct-asm.js reads at every level, or a recorded decision not to ship it yet
@@ -75,7 +84,7 @@ stages:
 
 ## Sign-off
 
-Accepted by the owner on 2026-10-09: the plan, its acceptance criteria, and wp38 §8 as recommended — Q1 (a) runtime kernels first, (d) a CPU flag beside it, (b) on its bar, (c) declined; Q2 the baseline default target; Q3 integer lanes wrap, named so; Q4 128-bit only. `s1-json` is escalated as blocked on #507 if it cannot start before the run's deadline.
+Accepted by the owner on 2026-10-09: the plan, its acceptance criteria, and wp38 §8 as recommended — Q1 (a) runtime kernels first, (d) a CPU flag beside it, (b) on its bar, (c) declined; Q2 the baseline default target; Q3 integer lanes wrap, named so; Q4 128-bit only. `s1-json` is escalated as blocked on #507 if it cannot start before the run's deadline. **Resumed 2026-10-09T23:25Z** after #507 closed. The owner accepted: S0 = main @ f33139a measured in the PR; docs/wp38-simd.md added to s1-json's Owns; ship any gain with no shape slower even below 1.5x; S1b proposed only; and a new stage, s1-any-edge, for #524.
 
 ## Approach
 
@@ -125,7 +134,15 @@ Accepted by the owner on 2026-10-09: the plan, its acceptance criteria, and wp38
 
 ## S1 json
 
-Starts only after `s1-surface` **and** #507's `json-skip-strings` stage have merged and `bench/json` is on `main`. Moves the byte-wise scans of [std/json.ts](../../std/json.ts) onto `indexOfAny`. Bar: `bench/json` with `jsonFields` ≥1.5x faster than its S0 row, measured on one machine; none of #507's non-benchmark shapes slower (a compiler `--json` line, a 50-key object with the field last, a miss, short strings only). Missing the bar means the PR records the figures and S1b (block classifier) is proposed, not built.
+Starts only after `s1-surface` **and** #507's `json-skip-strings` stage have merged (both done: #519 d3d2ebf, #532 f33139a). Moves the byte-wise scans of [std/json.ts](../../std/json.ts) onto `indexOfAny`. `jsonField`'s and `jsonFields`' answers stay byte-identical: `tests/link/std_json` passes, and the same test file built against main's reader prints the same output.
+
+**S0 and the bar (owner, 2026-10-09T23:25Z).** S0 for `bench/json` is main @ `f33139a`, after #507's stage 3, measured by this stage on the same machine as the branch, so the 1.5x bar means `jsonFields` from about 74 ms to about 49 ms. `bench/json` is not on `main`: measure with the harness from branch `ccr-ee7596b7-up0cqq` @ `956506d`, checked out and never committed, as #532 did. Report S0 and the branch side by side: min and median of at least seven interleaved runs, and peak RSS, for `bench/json` (`jsonFields` and `jsonField` ×3) and #507's four non-benchmark shapes (a compiler `--json` line, a 50-key object with the field last, a miss, short strings only).
+
+**Shipping rule (owner, 2026-10-09T23:25Z).** The scan change ships when it is faster on `bench/json` and no non-benchmark shape is slower than S0, whether or not it reaches 1.5x. `docs/wp38-simd.md` §2.3 and §7 record whether the bar was met and by how much. If it was missed, they propose S1b (block classifier) without building it. If the change is not faster, or a shape gets slower and cannot be recovered, the PR becomes docs-only: it records the figures and proposes S1b.
+
+## S1 any edge
+
+Closes #524. `tests/link/std_text_index_of_any/main.ts` prints, for the non-ASCII edge, only *what* was found, because Node counts UTF-16 units where native and wasi count bytes. Add a check that prints the byte offsets of the non-ASCII matches and compares native against `--profile wasi`. It must stay out of the Node comparison, which keeps comparing what was found. Wire it in `tests/run.js` beside the existing wasi build of this test. A missing WASI sysroot skips it, as the existing check does. No change to `std/text.ts` or the kernel. Model: sonnet.
 
 ## S2
 
@@ -138,16 +155,17 @@ Starts after `s0-decide-measure` and `s1-surface` merge (it shares `scripts/buil
 | s0-decide-measure | `docs/wp38-simd.md`, `bench/simd-s0.mjs` | lead | — |
 | s1-kernel | `runtime/runtime-simd.c`, `runtime/nish.h`, `scripts/build.sh`, `bench/run.mjs`, `tests/run.js`, `tests/simd/**`, `.github/workflows/ci.yml`, `docs/wp7-runtime.md`, `docs/MASTER_PLAN.md`, `THIRD_PARTY_NOTICES.md` | lead | — |
 | s1-surface | `std/text.ts`, `std/README.md`, `src/kernels.ts`, `src/runtime.ts`, `src/emit.ts`, `src/emit-*.ts`, `tests/run.js`, `tests/link/std_text_index_of_any*/**`, `tests/link/caps_package_named_nish/expected.caps.json`, `src/secret.ts`, `src/std-modules.ts`, `src/run-cache.ts`, `tests/nish/run.ts`, `tests/cases/text_index_of_any*`, `tests/link/std_text_index_of_any/**`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/AI.md`, `bench/index-of-any.ts` | lead | s1-kernel |
-| s1-json | `std/json.ts`, `tests/link/std_json/**`, `tests/self/goldens/**` | lead | s1-surface, #507 stage 3 |
+| s1-json | `std/json.ts`, `tests/link/std_json/**`, `tests/self/goldens/**`, `docs/wp38-simd.md` | lead | s1-surface ✓, #507 stage 3 ✓ |
+| s1-any-edge | `tests/link/std_text_index_of_any/**`, `tests/run.js` | sonnet | s1-surface ✓ |
 | s2-cpu | `src/options.ts`, `src/compile.ts`, `src/capability-report.ts`, `src/target.ts`, `scripts/build.sh`, `tests/ct-asm.js`, `tests/run.js`, `tests/cases/cli_cpu*`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/wp38-simd.md`, `docs/MASTER_PLAN.md`, `docs/README.md` | lead | s0-decide-measure, s1-surface |
 
 ## Out of scope
 
-- S1b (block classifier) — only if `s1-json` misses its bar.
+- S1b (block classifier): proposed in wp38 §7 if `s1-json` misses its bar, and not built in this run (owner, 2026-10-09T23:25Z).
 - S3 `nish:simd` vector types — the doc gates it on S1's result; a separate run.
 - S4 the lexer on `indexOfAny` — needs the release after S1 (rolling freeze).
 - Target intrinsics (declined), a wider default target (declined), `-ffast-math` (declined).
-- Any change to `s.indexOf` or `runtime/runtime.c` (json-one-pass owns them).
+- Any change to `s.indexOf`, `runtime/runtime.c` or `runtime/runtime-simd.c`.
 
 ## Verification
 
