@@ -257,9 +257,10 @@ _Bool nish_str_at(const nish_str *s, int64_t at, const nish_str *sub) {
    `s.indexOf(sub)` is it from 0: one loop, not two. The compiler clamps `from`
    into [0, s.length] first, as JavaScript does, with `llvm.smin`/`smax` where
    LLVM can fold them, so the clamp costs this file nothing; an empty needle
-   answers that clamped `from`. A caller that skips the clamp gets -1 for a
-   `from` past the end (a negative one reads as one) and never a read outside
-   the string. */
+   answers that clamped `from`. The clamp is a precondition: a caller that
+   skips it never reads outside the string, but gets -1 for a non-empty needle
+   (a negative `from` reads as one past the end) and `from` itself, unchanged,
+   for an empty one. */
 int64_t nish_str_index_of_from(const nish_str *s, const nish_str *sub, int64_t from) {
   uint64_t at = (uint64_t)from;
   if (sub->len == 0) return from;
