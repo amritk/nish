@@ -139,6 +139,11 @@ bool nish_str_at(const nish_str *s, int64_t at, const nish_str *sub);
 /* `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1. An empty
    needle answers 0 and one longer than `s` answers -1, as in JavaScript. */
 int64_t nish_str_index_of(const nish_str *s, const nish_str *sub);
+/* `s.indexOf(sub, from)`: the same search from byte `from`, which must already
+   be clamped into [0, s->len]; an empty needle answers `from`. Outside that
+   range nothing outside `s` is read: a non-empty needle answers -1 and an
+   empty one answers `from` unchanged. */
+int64_t nish_str_index_of_from(const nish_str *s, const nish_str *sub, int64_t from);
 /* First index i >= from with s[i] in set, or -1.
    from is already clamped to [0, len] by the caller; set holds 1..16 bytes.
    It lives in runtime/runtime-simd.c, which picks a scalar, a baseline vector
