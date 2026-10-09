@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 929 programs, 85813 dump lines.
+# 929 programs, 86189 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51549,6 +51549,29 @@ function exposeWith<u8[], u8[], u8[] | null, p256SignExposed>(s: Secret<u8[]>, a
   pointer arg: size=0 writesThrough=false captured=false passedTo=nish.p256SignExposed#1
   stackSites=0 stackLocals=0
   callee 52:93 p256SignExposed -> @nish.p256SignExposed
+function exposeWith<u8[], P256SignScratch, u8[], p256NonceKeyExposed>(s: Secret<u8[]>, arg: P256SignScratch, f: void): u8[] -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256NonceKeyExposed
+  calls: nish.p256NonceKeyExposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=168 writesThrough=false captured=false passedTo=nish.p256NonceKeyExposed#1
+  stackSites=0 stackLocals=0
+  callee 52:93 p256NonceKeyExposed -> @nish.p256NonceKeyExposed
+function expose<u8[], boolean, p256ScalarInRange>(s: Secret<u8[]>, f: void): boolean -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256ScalarInRange
+  calls: nish.p256ScalarInRange
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 49:70 p256ScalarInRange -> @nish.p256ScalarInRange
+function exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed>(s: Secret<u8[]>, arg: P256SignScratch, f: void): u32[] -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SignSExposed
+  calls: nish.p256SignSExposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=168 writesThrough=false captured=false passedTo=nish.p256SignSExposed#1
+  stackSites=0 stackLocals=0
+  callee 52:93 p256SignSExposed -> @nish.p256SignSExposed
 function wipe<i64[]>(_target: i64[]): void -> @nish.wipe$arr.i64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via llvm.memset.p0i8.i64
@@ -59547,7 +59570,10 @@ import hkdfExtractSha256 from "nish/crypto/hkdf" -> function @nish.hkdfExtractSh
 import hkdfExtractSha384 from "nish/crypto/hkdf" -> function @nish.hkdfExtractSha384
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import SHA384_SIZE from "nish/crypto/sha512" -> const SHA384_SIZE
+import P256SignScratch from "nish/crypto/p256" -> struct P256SignScratch
+import P256_SIGNATURE_SIZE from "nish/crypto/p256" -> const P256_SIGNATURE_SIZE
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
+import p256SignSha256Into from "nish/crypto/p256" -> function @nish.p256SignSha256Into
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
 import timingSafeEqualAt from "nish/crypto/ct" -> function @nish.timingSafeEqualAt
 import X25519_SIZE from "nish/crypto/x25519" -> const X25519_SIZE
@@ -59597,6 +59623,8 @@ const TLS_MAX_HANDSHAKE_MESSAGE: i32 = 65536 [exported]
 const TLS_SSL3_VERSION: i32 = 768
 const TLS_FROM: i32 = 0
 const TLS_MAX_U24: i32 = 16777215
+const TLS_P256_DER_MIN: i32 = 8
+const TLS_P256_DER_MAX: i32 = 72
 const TLS_DERIVED_SALT_SHA256: string = "6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba"
 const TLS_DERIVED_SALT_SHA384: string = "1591dac5cbbf0330a4a84de9c753330e92d01f0a88214b4464972fd668049e93e52f2b16fad922fdc0584478428f282b"
 const TLS_INPUT_START: i32 = 2048
@@ -59619,6 +59647,12 @@ struct TlsServerConfig (interface) size=40 align=8 exported
   field extraExtensions: u8[] index=3 offset=24
   field signatureScheme: i32 index=4 offset=32
   field quic: boolean index=5 offset=36
+struct TlsP256Signer (class) size=24 align=8 exported
+  field scratch: P256SignScratch index=0 offset=0
+  field rs: u8[] index=1 offset=8
+  field ders: u8[][] index=2 offset=16
+  constructor -> @nish.TlsP256Signer.constructor
+  method sign -> @nish.TlsP256Signer.sign
 struct TlsExchangeWords (class) size=152 align=8
   field key0: u64 index=0 offset=0 initialized
   field key1: u64 index=1 offset=8 initialized
@@ -59717,32 +59751,53 @@ function tlsBytesSpell(data: u8[], at: i32, length: i32, text: string): boolean 
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 230:9 k: i32 (let)
-function tlsDerInteger(magnitude: u8[]): u8[] -> @nish.tlsDerInteger
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 261:5
-  calls: nish_array_grow
-  pointer magnitude: size=0 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  local 243:9 body: u8[] (const)
-  local 244:7 leading: boolean (let)
-  local 245:14 b: u8 (const)
-  local 259:9 out: u8[] (const)
-  local 260:14 b: u8 (const)
-function tlsEcdsaDerSignature(rs: u8[]): u8[] | null -> @nish.tlsEcdsaDerSignature [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 286:5
-  calls: nish.tlsDerInteger nish_array_grow
+function tlsDerIntegerLength(rs: u8[], at: i32): i32 -> @nish.tlsDerIntegerLength
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
   pointer rs: size=0 writesThrough=false captured=false
-  stackSites=2 stackLocals=2
-  local 275:9 r: u8[] (const)
-  local 276:9 s: u8[] (const)
-  local 277:12 k: i32 (let)
-  local 284:9 body: u8[] (const)
-  callee 284:22 tlsDerInteger -> @nish.tlsDerInteger
-  local 285:14 b: u8 (const)
-  callee 285:19 tlsDerInteger -> @nish.tlsDerInteger
-  local 289:9 out: u8[] (const)
-  local 290:14 b: u8 (const)
+  stackSites=0 stackLocals=0
+  local 252:7 first: i32 (let)
+  local 256:9 top: boolean (const)
+function tlsDerIntegerInto(out: u8[], to: i32, rs: u8[], at: i32, length: i32): i32 -> @nish.tlsDerIntegerInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 266:3
+  escaping: to
+  calls: nish_panic_index nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false
+  pointer rs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 262:9 end: i32 (const)
+  local 268:12 k: i32 (let)
+  local 270:11 from: i32 (const)
+  local 271:11 j: i32 (const)
+function tlsEcdsaDerLength(rs: u8[]): i32 -> @nish.tlsEcdsaDerLength
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.tlsDerIntegerLength nish_panic_overflow
+  pointer rs: size=0 writesThrough=false captured=false passedTo=nish.tlsDerIntegerLength#0 nish.tlsDerIntegerLength#0
+  stackSites=0 stackLocals=0
+  callee 281:7 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  callee 281:43 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+function tlsEcdsaDerInto(der: u8[], rs: u8[]): void -> @nish.tlsEcdsaDerInto
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 288:3
+  calls: nish.tlsDerIntegerInto nish.tlsDerIntegerLength
+  pointer der: size=0 writesThrough=true captured=false passedTo=nish.tlsDerIntegerInto#0 nish.tlsDerIntegerInto#0
+  pointer rs: size=0 writesThrough=false captured=false passedTo=nish.tlsDerIntegerLength#0 nish.tlsDerIntegerInto#2 nish.tlsDerIntegerInto#2 nish.tlsDerIntegerLength#0
+  stackSites=0 stackLocals=0
+  local 290:9 r: i32 (const)
+  callee 290:18 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  callee 291:3 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
+  callee 291:26 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
+  callee 291:78 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+function tlsEcdsaDerSignature(rs: u8[]): u8[] | null -> @nish.tlsEcdsaDerSignature [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish.tlsEcdsaDerInto nish.tlsEcdsaDerLength nish_exit nish_write
+  pointer rs: size=0 writesThrough=false captured=false passedTo=nish.tlsEcdsaDerLength#0 nish.tlsEcdsaDerInto#1
+  stackSites=0 stackLocals=0
+  local 303:9 der: u8[] (const)
+  callee 303:35 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
+  callee 304:3 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
 function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.tlsSignEcdsaP256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSha256
@@ -59750,118 +59805,139 @@ function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @ni
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256#0
   pointer content: size=0 writesThrough=false captured=false passedTo=nish.p256SignSha256#1
   stackSites=0 stackLocals=0
-  local 304:9 rs: u8[] | null (const)
-  callee 304:27 p256SignSha256 -> @nish.p256SignSha256
-  callee 308:10 tlsEcdsaDerSignature -> @nish.tlsEcdsaDerSignature
+  local 316:9 rs: u8[] | null (const)
+  callee 316:27 p256SignSha256 -> @nish.p256SignSha256
+  callee 320:10 tlsEcdsaDerSignature -> @nish.tlsEcdsaDerSignature
+function TlsP256Signer.constructor(this: TlsP256Signer): void -> @nish.TlsP256Signer.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 346:7
+  calls: nish.P256SignScratch.constructor nish_alloc_struct nish_array_grow nish_exit nish_panic_overflow nish_write
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 342:20 new P256SignScratch -> @nish.P256SignScratch.constructor
+  local 345:14 length: i32 (let)
+function TlsP256Signer.sign(this: TlsP256Signer, priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.TlsP256Signer.sign [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SignSha256Into
+  calls: nish.p256SignSha256Into nish.tlsEcdsaDerInto nish.tlsEcdsaDerLength nish_panic_overflow
+  pointer this: size=24 writesThrough=false captured=false
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256Into#1
+  pointer content: size=0 writesThrough=false captured=false passedTo=nish.p256SignSha256Into#2
+  stackSites=0 stackLocals=0
+  callee 358:8 p256SignSha256Into -> @nish.p256SignSha256Into
+  local 362:11 at: i32 (const)
+  callee 362:21 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
+  local 366:11 der: u8[] (const)
+  callee 367:5 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
 function tlsIsZeroSecret(shared: u8[]): boolean -> @nish.tlsIsZeroSecret
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: nish.timingSafeEqual nish_arena_mark nish_arena_release nish_exit nish_write
   pointer shared: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqual#0
   stackSites=0 stackLocals=0
-  callee 312:52 timingSafeEqual -> @nish.timingSafeEqual
+  callee 373:52 timingSafeEqual -> @nish.timingSafeEqual
 function tlsHexBytes(text: string): u8[] -> @nish.tlsHexBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: text
   calls: nish.tlsHexInto nish_exit nish_write
   stackSites=0 stackLocals=0
-  local 328:9 out: u8[] (const)
-  callee 329:3 tlsHexInto -> @nish.tlsHexInto
+  local 389:9 out: u8[] (const)
+  callee 390:3 tlsHexInto -> @nish.tlsHexInto
 function tlsHandshakeFromEcdhe256(ecdhe: u8[]): u8[] -> @nish.tlsHandshakeFromEcdhe256
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha256
   calls: nish.hkdfExtractSha256 nish.tlsHexBytes
   pointer ecdhe: size=0 writesThrough=false captured=false passedTo=nish.hkdfExtractSha256#1
   stackSites=0 stackLocals=0
-  callee 335:3 hkdfExtractSha256 -> @nish.hkdfExtractSha256
-  callee 335:21 tlsHexBytes -> @nish.tlsHexBytes
+  callee 396:3 hkdfExtractSha256 -> @nish.hkdfExtractSha256
+  callee 396:21 tlsHexBytes -> @nish.tlsHexBytes
 function tlsHandshakeFromEcdhe384(ecdhe: u8[]): u8[] -> @nish.tlsHandshakeFromEcdhe384
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha384
   calls: nish.hkdfExtractSha384 nish.tlsHexBytes
   pointer ecdhe: size=0 writesThrough=false captured=false passedTo=nish.hkdfExtractSha384#1
   stackSites=0 stackLocals=0
-  callee 339:3 hkdfExtractSha384 -> @nish.hkdfExtractSha384
-  callee 339:21 tlsHexBytes -> @nish.tlsHexBytes
+  callee 400:3 hkdfExtractSha384 -> @nish.hkdfExtractSha384
+  callee 400:21 tlsHexBytes -> @nish.tlsHexBytes
 function tlsSecretAt(level: i32, handshake: u8[], application: u8[]): u8[] | null -> @nish.tlsSecretAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: application handshake
   pointer handshake: size=0 writesThrough=true captured=true
   pointer application: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 343:9 chosen: u8[] (const)
+  local 404:9 chosen: u8[] (const)
 function tlsWordAt(b: u8[], at: i32): u64 -> @nish.tlsWordAt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 398:7 v: u64 (let)
-  local 399:12 k: i32 (let)
-  local 400:11 byte: u64 (const)
+  local 459:7 v: u64 (let)
+  local 460:12 k: i32 (let)
+  local 461:11 byte: u64 (const)
 function tlsWordInto(b: u8[], at: i32, v: u64): void -> @nish.tlsWordInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 411:7
+  sharedWrite: 472:7
   calls: nish_panic_index
   pointer b: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 408:12 k: i32 (let)
-  local 409:11 shift: i32 (const)
+  local 469:12 k: i32 (let)
+  local 470:11 shift: i32 (const)
 function tlsExchange(w: TlsExchangeWords): i32 -> @nish.tlsExchange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 434:3
+  sharedWrite: 495:3
   calls: nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256 nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384 nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret nish.secret$arr.u8 nish.tlsWordAt nish.tlsWordInto nish.wipe$$Secret$arr.u8 nish.x25519 nish.x25519Base nish_arena_mark nish_arena_release nish_exit nish_wipe nish_write
   pointer w: size=152 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 429:9 raw: u8[] (const)
-  callee 430:3 tlsWordInto -> @nish.tlsWordInto
-  callee 431:3 tlsWordInto -> @nish.tlsWordInto
-  callee 432:3 tlsWordInto -> @nish.tlsWordInto
-  callee 433:3 tlsWordInto -> @nish.tlsWordInto
-  local 438:9 share: u8[] (const)
-  callee 439:3 tlsWordInto -> @nish.tlsWordInto
-  callee 440:3 tlsWordInto -> @nish.tlsWordInto
-  callee 441:3 tlsWordInto -> @nish.tlsWordInto
-  callee 442:3 tlsWordInto -> @nish.tlsWordInto
-  local 443:9 key: Secret<u8[]> (const)
-  callee 443:29 secret<u8[]> -> @nish.secret$arr.u8
-  local 444:9 serverPublic: u8[] | null (const)
-  callee 444:37 x25519Base -> @nish.x25519Base
-  local 445:9 shared: Secret<u8[]> | null (const)
-  callee 445:39 x25519 -> @nish.x25519
-  callee 446:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee 453:32 expose<u8[], boolean, tlsIsZeroSecret> -> @nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret
-  callee 454:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  local 457:9 handshake: u8[] (const)
-  callee 459:9 expose<u8[], u8[], tlsHandshakeFromEcdhe384> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384
-  callee 460:9 expose<u8[], u8[], tlsHandshakeFromEcdhe256> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256
-  callee 461:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee 462:15 tlsWordAt -> @nish.tlsWordAt
-  callee 463:15 tlsWordAt -> @nish.tlsWordAt
-  callee 464:15 tlsWordAt -> @nish.tlsWordAt
-  callee 465:15 tlsWordAt -> @nish.tlsWordAt
-  callee 466:15 tlsWordAt -> @nish.tlsWordAt
-  callee 467:15 tlsWordAt -> @nish.tlsWordAt
-  callee 468:15 tlsWordAt -> @nish.tlsWordAt
-  callee 469:15 tlsWordAt -> @nish.tlsWordAt
-  callee 470:15 tlsWordAt -> @nish.tlsWordAt
-  callee 471:15 tlsWordAt -> @nish.tlsWordAt
+  local 490:9 raw: u8[] (const)
+  callee 491:3 tlsWordInto -> @nish.tlsWordInto
+  callee 492:3 tlsWordInto -> @nish.tlsWordInto
+  callee 493:3 tlsWordInto -> @nish.tlsWordInto
+  callee 494:3 tlsWordInto -> @nish.tlsWordInto
+  local 499:9 share: u8[] (const)
+  callee 500:3 tlsWordInto -> @nish.tlsWordInto
+  callee 501:3 tlsWordInto -> @nish.tlsWordInto
+  callee 502:3 tlsWordInto -> @nish.tlsWordInto
+  callee 503:3 tlsWordInto -> @nish.tlsWordInto
+  local 504:9 key: Secret<u8[]> (const)
+  callee 504:29 secret<u8[]> -> @nish.secret$arr.u8
+  local 505:9 serverPublic: u8[] | null (const)
+  callee 505:37 x25519Base -> @nish.x25519Base
+  local 506:9 shared: Secret<u8[]> | null (const)
+  callee 506:39 x25519 -> @nish.x25519
+  callee 507:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 514:32 expose<u8[], boolean, tlsIsZeroSecret> -> @nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret
+  callee 515:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local 518:9 handshake: u8[] (const)
+  callee 520:9 expose<u8[], u8[], tlsHandshakeFromEcdhe384> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384
+  callee 521:9 expose<u8[], u8[], tlsHandshakeFromEcdhe256> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256
+  callee 522:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 523:15 tlsWordAt -> @nish.tlsWordAt
+  callee 524:15 tlsWordAt -> @nish.tlsWordAt
+  callee 525:15 tlsWordAt -> @nish.tlsWordAt
+  callee 526:15 tlsWordAt -> @nish.tlsWordAt
+  callee 527:15 tlsWordAt -> @nish.tlsWordAt
+  callee 528:15 tlsWordAt -> @nish.tlsWordAt
+  callee 529:15 tlsWordAt -> @nish.tlsWordAt
+  callee 530:15 tlsWordAt -> @nish.tlsWordAt
+  callee 531:15 tlsWordAt -> @nish.tlsWordAt
+  callee 532:15 tlsWordAt -> @nish.tlsWordAt
 function tlsFlightCapacity(config: TlsServerConfig): i32 -> @nish.tlsFlightCapacity
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsWriteEncryptedExtensions
   calls: nish.tlsWriteCertificate nish.tlsWriteEncryptedExtensions nish_panic_overflow
   pointer config: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 505:9 none: u8[] (const)
-  local 506:7 longest: string (let)
-  local 507:14 protocol: string (const)
-  local 512:9 extensions: i32 (const)
-  callee 512:27 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  local 520:9 certificate: i32 (const)
-  callee 520:28 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  local 566:9 none: u8[] (const)
+  local 567:7 longest: string (let)
+  local 568:14 protocol: string (const)
+  local 573:9 extensions: i32 (const)
+  callee 573:27 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  local 581:9 certificate: i32 (const)
+  callee 581:28 tlsWriteCertificate -> @nish.tlsWriteCertificate
 function TlsServer.constructor(this: TlsServer, config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[]): void -> @nish.TlsServer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 633:7
+  sharedWrite: 694:7
   escaping: config ephemeralPrivate serverRandom
   calls: nish.HkdfScratch.constructor nish.TlsClientHelloView.constructor nish.TlsServer.restart nish.TlsTranscript.constructor nish.tlsConfigFits nish.tlsFlightCapacity nish_alloc_struct nish_array_grow nish_exit nish_panic_overflow nish_write
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.restart#0
@@ -59869,27 +59945,27 @@ function TlsServer.constructor(this: TlsServer, config: TlsServerConfig, serverR
   pointer serverRandom: size=0 writesThrough=true captured=true passedTo=nish.TlsServer.restart#1
   pointer ephemeralPrivate: size=0 writesThrough=true captured=true passedTo=nish.TlsServer.restart#2
   stackSites=0 stackLocals=0
-  callee 624:23 new TlsTranscript -> @nish.TlsTranscript.constructor
-  callee 625:23 tlsConfigFits -> @nish.tlsConfigFits
-  callee 628:60 tlsFlightCapacity -> @nish.tlsFlightCapacity
-  local 631:14 k: i32 (let)
-  local 632:13 extra: i32 (const)
-  callee 636:18 new TlsClientHelloView -> @nish.TlsClientHelloView.constructor
-  callee 637:16 new HkdfScratch -> @nish.HkdfScratch.constructor
-  callee 649:5 TlsServer.restart -> @nish.TlsServer.restart
+  callee 685:23 new TlsTranscript -> @nish.TlsTranscript.constructor
+  callee 686:23 tlsConfigFits -> @nish.tlsConfigFits
+  callee 689:60 tlsFlightCapacity -> @nish.tlsFlightCapacity
+  local 692:14 k: i32 (let)
+  local 693:13 extra: i32 (const)
+  callee 697:18 new TlsClientHelloView -> @nish.TlsClientHelloView.constructor
+  callee 698:16 new HkdfScratch -> @nish.HkdfScratch.constructor
+  callee 710:5 TlsServer.restart -> @nish.TlsServer.restart
 function TlsServer.restart(this: TlsServer, serverRandom: u8[], ephemeralPrivate: u8[]): void -> @nish.TlsServer.restart [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 662:5
+  sharedWrite: 723:5
   escaping: ephemeralPrivate serverRandom
   calls: nish_panic_index nish_wipe
   pointer this: size=256 writesThrough=true captured=false
   pointer serverRandom: size=0 writesThrough=true captured=true
   pointer ephemeralPrivate: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 675:14 k: i32 (let)
+  local 736:14 k: i32 (let)
 function TlsServer.fail(this: TlsServer, alert: i32): i32 -> @nish.TlsServer.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 699:5
+  sharedWrite: 760:5
   escaping: alert
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -59898,55 +59974,55 @@ function TlsServer.secretArray(this: TlsServer, index: i32): u8[] -> @nish.TlsSe
   escaping: index
   pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 706:11 pool: u8[][] (const)
+  local 767:11 pool: u8[][] (const)
 function TlsServer.expectedLevel(this: TlsServer): i32 -> @nish.TlsServer.expectedLevel [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.reserveInput(this: TlsServer, need: i32): void -> @nish.TlsServer.reserveInput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 740:7
+  sharedWrite: 801:7
   calls: nish_exit nish_panic_overflow nish_write
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 729:11 capacity: i32 (const)
-  local 733:9 size: i32 (let)
-  local 737:11 most: i32 (const)
-  local 738:11 grown: u8[] (const)
-  local 739:14 k: i32 (let)
+  local 790:11 capacity: i32 (const)
+  local 794:9 size: i32 (let)
+  local 798:11 most: i32 (const)
+  local 799:11 grown: u8[] (const)
+  local 800:14 k: i32 (let)
 function TlsServer.reserveOutput(this: TlsServer, level: i32, need: i32): void -> @nish.TlsServer.reserveOutput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 761:7
+  sharedWrite: 822:7
   escaping: need
   calls: nish_exit nish_write
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 752:11 initial: boolean (const)
-  local 753:11 buffer: u8[] (const)
-  local 754:11 held: i32 (const)
-  local 755:11 capacity: i32 (const)
-  local 759:11 grown: u8[] (const)
-  local 760:14 k: i32 (let)
+  local 813:11 initial: boolean (const)
+  local 814:11 buffer: u8[] (const)
+  local 815:11 held: i32 (const)
+  local 816:11 capacity: i32 (const)
+  local 820:11 grown: u8[] (const)
+  local 821:14 k: i32 (let)
 function TlsServer.receive(this: TlsServer, level: i32, data: u8[], off: i32, len: i32): i32 -> @nish.TlsServer.receive [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 808:7
+  sharedWrite: 869:7
   calls: nish.TlsServer.expectedLevel nish.TlsServer.fail nish.TlsServer.handleMessage nish.TlsServer.reserveInput nish_panic_index nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.expectedLevel#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.reserveInput#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.handleMessage#0 nish.TlsServer.fail#0
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 789:14 TlsServer.fail -> @nish.TlsServer.fail
-  callee 794:19 TlsServer.expectedLevel -> @nish.TlsServer.expectedLevel
-  callee 795:14 TlsServer.fail -> @nish.TlsServer.fail
-  callee 800:14 TlsServer.fail -> @nish.TlsServer.fail
-  callee 802:5 TlsServer.reserveInput -> @nish.TlsServer.reserveInput
-  local 804:11 k: i32 (let)
-  local 816:11 length: i32 (const)
-  callee 818:14 TlsServer.fail -> @nish.TlsServer.fail
-  local 820:11 whole: i32 (const)
-  callee 825:14 TlsServer.fail -> @nish.TlsServer.fail
-  local 830:11 alert: i32 (const)
-  callee 830:24 TlsServer.handleMessage -> @nish.TlsServer.handleMessage
-  callee 832:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 850:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 855:19 TlsServer.expectedLevel -> @nish.TlsServer.expectedLevel
+  callee 856:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 861:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 863:5 TlsServer.reserveInput -> @nish.TlsServer.reserveInput
+  local 865:11 k: i32 (let)
+  local 877:11 length: i32 (const)
+  callee 879:14 TlsServer.fail -> @nish.TlsServer.fail
+  local 881:11 whole: i32 (const)
+  callee 886:14 TlsServer.fail -> @nish.TlsServer.fail
+  local 891:11 alert: i32 (const)
+  callee 891:24 TlsServer.handleMessage -> @nish.TlsServer.handleMessage
+  callee 893:14 TlsServer.fail -> @nish.TlsServer.fail
 function TlsServer.handleMessage(this: TlsServer, length: i32): i32 -> @nish.TlsServer.handleMessage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsServer.handleClientHello
@@ -59954,213 +60030,213 @@ function TlsServer.handleMessage(this: TlsServer, length: i32): i32 -> @nish.Tls
   calls: nish.TlsServer.handleClientHello nish.TlsServer.handleFinished nish_panic_index
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.handleClientHello#0 nish.TlsServer.handleFinished#0
   stackSites=0 stackLocals=0
-  local 843:11 type: i32 (const)
-  callee 846:11 TlsServer.handleClientHello -> @nish.TlsServer.handleClientHello
-  callee 849:46 TlsServer.handleFinished -> @nish.TlsServer.handleFinished
+  local 904:11 type: i32 (const)
+  callee 907:11 TlsServer.handleClientHello -> @nish.TlsServer.handleClientHello
+  callee 910:46 TlsServer.handleFinished -> @nish.TlsServer.handleFinished
 function TlsServer.chooseSuite(this: TlsServer, hello: TlsClientHelloView): i32 -> @nish.TlsServer.chooseSuite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsSuiteHashLength nish_panic_index nish_panic_overflow
   pointer this: size=256 writesThrough=false captured=false
   pointer hello: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 858:11 data: u8[] (const)
-  local 859:11 end: i32 (const)
-  local 861:11 k: i32 (let)
-  local 865:13 suite: i32 (const)
-  callee 866:11 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  local 919:11 data: u8[] (const)
+  local 920:11 end: i32 (const)
+  local 922:11 k: i32 (let)
+  local 926:13 suite: i32 (const)
+  callee 927:11 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
 function TlsServer.chooseAlpn(this: TlsServer, hello: TlsClientHelloView): i32 -> @nish.TlsServer.chooseAlpn [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 879:5
+  sharedWrite: 940:5
   calls: nish.tlsBytesSpell nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false
   pointer hello: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 881:13 data: u8[] (const)
-  local 882:13 end: i32 (const)
-  local 883:18 protocol: string (const)
-  local 884:13 at: i32 (let)
-  local 886:17 n: i32 (const)
-  callee 887:15 tlsBytesSpell -> @nish.tlsBytesSpell
+  local 942:13 data: u8[] (const)
+  local 943:13 end: i32 (const)
+  local 944:18 protocol: string (const)
+  local 945:13 at: i32 (let)
+  local 947:17 n: i32 (const)
+  callee 948:15 tlsBytesSpell -> @nish.tlsBytesSpell
 function TlsServer.takeServerName(this: TlsServer, hello: TlsClientHelloView): void -> @nish.TlsServer.takeServerName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 906:7
+  sharedWrite: 967:7
   calls: nish.tlsBytesSpell nish.tlsWindowString
   pointer this: size=256 writesThrough=true captured=false
   pointer hello: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 909:10 tlsBytesSpell -> @nish.tlsBytesSpell
-  callee 910:29 tlsWindowString -> @nish.tlsWindowString
+  callee 970:10 tlsBytesSpell -> @nish.tlsBytesSpell
+  callee 971:29 tlsWindowString -> @nish.tlsWindowString
 function TlsServer.handleClientHello(this: TlsServer, length: i32): i32 -> @nish.TlsServer.handleClientHello [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 971:7
+  sharedWrite: 1032:7
   escaping: length
   calls: nish.TlsServer.chooseAlpn nish.TlsServer.chooseSuite nish.TlsServer.exchangeKeys nish.TlsServer.reserveOutput nish.TlsServer.sent nish.TlsServer.takeServerName nish.TlsServer.writeServerFlight nish.TlsTranscript.reset nish.TlsTranscript.restartWithMessageHash nish.TlsTranscript.update nish.tlsReadClientHello nish.tlsSuiteHashLength nish.tlsWindowHasU16 nish.tlsWriteHelloRetryRequest nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.chooseSuite#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.sent#0 nish.TlsServer.chooseAlpn#0 nish.TlsServer.takeServerName#0 nish.TlsServer.exchangeKeys#0 nish.TlsServer.writeServerFlight#0
   stackSites=1 stackLocals=1
-  local 924:11 hello: TlsClientHelloView (const)
-  local 925:11 data: u8[] (const)
-  callee 926:5 tlsReadClientHello -> @nish.tlsReadClientHello
-  callee 940:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  local 947:11 suite: i32 (const)
-  callee 947:24 TlsServer.chooseSuite -> @nish.TlsServer.chooseSuite
-  callee 964:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  callee 967:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  callee 972:25 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
-  callee 973:7 TlsTranscript.reset -> @nish.TlsTranscript.reset
-  callee 975:5 TlsTranscript.update -> @nish.TlsTranscript.update
-  local 983:13 none: u8[] (const)
-  callee 984:7 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 986:9 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  local 996:13 _scope: i64 (const)
-  callee 997:7 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
-  local 998:13 at: i32 (const)
-  local 999:13 end: i32 (const)
-  callee 999:24 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  callee 1008:7 TlsServer.sent -> @nish.TlsServer.sent
-  local 1014:11 alpnAlert: i32 (const)
-  callee 1014:28 TlsServer.chooseAlpn -> @nish.TlsServer.chooseAlpn
-  callee 1018:5 TlsServer.takeServerName -> @nish.TlsServer.takeServerName
-  local 1021:13 parameters: u8[] (const)
-  local 1026:13 k: i32 (let)
-  local 1034:11 exchangeAlert: i32 (const)
-  callee 1034:32 TlsServer.exchangeKeys -> @nish.TlsServer.exchangeKeys
-  callee 1038:5 TlsServer.writeServerFlight -> @nish.TlsServer.writeServerFlight
+  local 985:11 hello: TlsClientHelloView (const)
+  local 986:11 data: u8[] (const)
+  callee 987:5 tlsReadClientHello -> @nish.tlsReadClientHello
+  callee 1001:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  local 1008:11 suite: i32 (const)
+  callee 1008:24 TlsServer.chooseSuite -> @nish.TlsServer.chooseSuite
+  callee 1025:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  callee 1028:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  callee 1033:25 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  callee 1034:7 TlsTranscript.reset -> @nish.TlsTranscript.reset
+  callee 1036:5 TlsTranscript.update -> @nish.TlsTranscript.update
+  local 1044:13 none: u8[] (const)
+  callee 1045:7 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1047:9 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  local 1057:13 _scope: i64 (const)
+  callee 1058:7 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
+  local 1059:13 at: i32 (const)
+  local 1060:13 end: i32 (const)
+  callee 1060:24 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  callee 1069:7 TlsServer.sent -> @nish.TlsServer.sent
+  local 1075:11 alpnAlert: i32 (const)
+  callee 1075:28 TlsServer.chooseAlpn -> @nish.TlsServer.chooseAlpn
+  callee 1079:5 TlsServer.takeServerName -> @nish.TlsServer.takeServerName
+  local 1082:13 parameters: u8[] (const)
+  local 1087:13 k: i32 (let)
+  local 1095:11 exchangeAlert: i32 (const)
+  callee 1095:32 TlsServer.exchangeKeys -> @nish.TlsServer.exchangeKeys
+  callee 1099:5 TlsServer.writeServerFlight -> @nish.TlsServer.writeServerFlight
 function TlsServer.exchangeKeys(this: TlsServer): i32 -> @nish.TlsServer.exchangeKeys [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1055:5
+  sharedWrite: 1116:5
   calls: nish.TlsServer.secretArray nish.tlsExchange nish.tlsWordAt nish.tlsWordInto nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.secretArray#0
   stackSites=0 stackLocals=0
-  local 1051:11 w: TlsExchangeWords (const)
-  local 1052:11 key: u8[] (const)
-  local 1053:11 share: u8[] (const)
-  local 1054:11 at: i32 (const)
-  callee 1055:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1056:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1057:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1058:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1059:16 tlsWordAt -> @nish.tlsWordAt
-  callee 1060:16 tlsWordAt -> @nish.tlsWordAt
-  callee 1061:16 tlsWordAt -> @nish.tlsWordAt
-  callee 1062:16 tlsWordAt -> @nish.tlsWordAt
-  local 1064:11 alert: i32 (const)
-  callee 1064:24 tlsExchange -> @nish.tlsExchange
-  local 1068:11 pub: u8[] (const)
-  callee 1069:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1070:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1071:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1072:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1073:28 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  local 1074:11 handshake: u8[] (const)
-  callee 1075:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1076:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1077:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1078:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1079:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1080:5 tlsWordInto -> @nish.tlsWordInto
+  local 1112:11 w: TlsExchangeWords (const)
+  local 1113:11 key: u8[] (const)
+  local 1114:11 share: u8[] (const)
+  local 1115:11 at: i32 (const)
+  callee 1116:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1117:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1118:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1119:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1120:16 tlsWordAt -> @nish.tlsWordAt
+  callee 1121:16 tlsWordAt -> @nish.tlsWordAt
+  callee 1122:16 tlsWordAt -> @nish.tlsWordAt
+  callee 1123:16 tlsWordAt -> @nish.tlsWordAt
+  local 1125:11 alert: i32 (const)
+  callee 1125:24 tlsExchange -> @nish.tlsExchange
+  local 1129:11 pub: u8[] (const)
+  callee 1130:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1131:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1132:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1133:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1134:28 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1135:11 handshake: u8[] (const)
+  callee 1136:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1137:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1138:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1139:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1140:5 tlsWordInto -> @nish.tlsWordInto
+  callee 1141:5 tlsWordInto -> @nish.tlsWordInto
 function TlsServer.writeServerFlight(this: TlsServer): void -> @nish.TlsServer.writeServerFlight [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1128:5
+  sharedWrite: 1189:5
   calls: nish.TlsServer.reserveOutput nish.TlsServer.secretArray nish.TlsServer.sent nish.TlsTranscript.hashInto nish.tlsDeriveSecretInto nish.tlsWriteCertificate nish.tlsWriteCertificateVerifyContent nish.tlsWriteEncryptedExtensions nish.tlsWriteServerHello nish_arena_release
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.reserveOutput#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0
   stackSites=1 stackLocals=1
-  local 1096:11 hello: TlsClientHelloView (const)
-  local 1097:11 h: i32 (const)
-  local 1101:11 none: u8[] (const)
-  callee 1102:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1104:7 tlsWriteServerHello -> @nish.tlsWriteServerHello
-  local 1115:11 extensionsEnd: i32 (const)
-  callee 1115:32 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  callee 1123:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1125:7 tlsWriteCertificate -> @nish.tlsWriteCertificate
-  callee 1128:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1129:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1130:23 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  local 1131:11 _scope: i64 (const)
-  local 1132:11 helloAt: i32 (const)
-  local 1133:11 helloEnd: i32 (const)
-  callee 1133:27 tlsWriteServerHello -> @nish.tlsWriteServerHello
-  callee 1143:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1145:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1146:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1155:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  local 1165:11 extensionsAt: i32 (const)
-  local 1166:11 written: i32 (const)
-  callee 1166:26 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  callee 1174:5 TlsServer.sent -> @nish.TlsServer.sent
-  local 1175:11 certificateEnd: i32 (const)
-  callee 1175:33 tlsWriteCertificate -> @nish.tlsWriteCertificate
-  callee 1180:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1182:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1183:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
+  local 1157:11 hello: TlsClientHelloView (const)
+  local 1158:11 h: i32 (const)
+  local 1162:11 none: u8[] (const)
+  callee 1163:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1165:7 tlsWriteServerHello -> @nish.tlsWriteServerHello
+  local 1176:11 extensionsEnd: i32 (const)
+  callee 1176:32 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  callee 1184:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1186:7 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  callee 1189:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1190:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1191:23 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1192:11 _scope: i64 (const)
+  local 1193:11 helloAt: i32 (const)
+  local 1194:11 helloEnd: i32 (const)
+  callee 1194:27 tlsWriteServerHello -> @nish.tlsWriteServerHello
+  callee 1204:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1206:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1207:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1216:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  local 1226:11 extensionsAt: i32 (const)
+  local 1227:11 written: i32 (const)
+  callee 1227:26 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  callee 1235:5 TlsServer.sent -> @nish.TlsServer.sent
+  local 1236:11 certificateEnd: i32 (const)
+  callee 1236:33 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  callee 1241:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1243:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1244:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
 function TlsServer.signatureInput(this: TlsServer): u8[] | null -> @nish.TlsServer.signatureInput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.sign(this: TlsServer, signature: u8[]): i32 -> @nish.TlsServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1217:5
+  sharedWrite: 1278:5
   calls: nish.TlsServer.fail nish.TlsServer.reserveOutput nish.TlsServer.secretArray nish.TlsServer.sent nish.TlsTranscript.hashInto nish.tlsDeriveSecretInto nish.tlsFinishedVerifyDataInto nish.tlsMasterSecretInto nish.tlsWriteCertificateVerify nish.tlsWriteFinished nish_arena_release nish_exit nish_panic_overflow nish_wipe nish_write
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteCertificateVerify#3
   stackSites=0 stackLocals=0
-  local 1210:11 signatureLength: i32 (const)
-  callee 1212:14 TlsServer.fail -> @nish.TlsServer.fail
-  local 1214:11 h: i32 (const)
-  callee 1215:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1217:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1218:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1219:27 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1220:35 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  local 1221:11 _scope: i64 (const)
-  local 1222:11 verifyAt: i32 (const)
-  local 1223:11 verifyEnd: i32 (const)
-  callee 1223:28 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
-  callee 1229:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1230:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1232:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
-  local 1241:11 finishedEnd: i32 (const)
-  callee 1241:30 tlsWriteFinished -> @nish.tlsWriteFinished
-  callee 1248:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1250:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  local 1251:11 master: u8[] (const)
-  callee 1252:5 tlsMasterSecretInto -> @nish.tlsMasterSecretInto
-  callee 1253:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1262:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1271:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1272:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
+  local 1271:11 signatureLength: i32 (const)
+  callee 1273:14 TlsServer.fail -> @nish.TlsServer.fail
+  local 1275:11 h: i32 (const)
+  callee 1276:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1278:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1279:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1280:27 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1281:35 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1282:11 _scope: i64 (const)
+  local 1283:11 verifyAt: i32 (const)
+  local 1284:11 verifyEnd: i32 (const)
+  callee 1284:28 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
+  callee 1290:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1291:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1293:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
+  local 1302:11 finishedEnd: i32 (const)
+  callee 1302:30 tlsWriteFinished -> @nish.tlsWriteFinished
+  callee 1309:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1311:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  local 1312:11 master: u8[] (const)
+  callee 1313:5 tlsMasterSecretInto -> @nish.tlsMasterSecretInto
+  callee 1314:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1323:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1332:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1333:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
 function TlsServer.handleFinished(this: TlsServer, length: i32): i32 -> @nish.TlsServer.handleFinished [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1302:5
+  sharedWrite: 1363:5
   calls: nish.TlsTranscript.update nish.timingSafeEqualAt nish_panic_overflow nish_wipe
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1297:10 timingSafeEqualAt -> @nish.timingSafeEqualAt
-  callee 1300:5 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 1358:10 timingSafeEqualAt -> @nish.timingSafeEqualAt
+  callee 1361:5 TlsTranscript.update -> @nish.TlsTranscript.update
 function TlsServer.sent(this: TlsServer, level: i32, at: i32, end: i32): void -> @nish.TlsServer.sent [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1315:7
+  sharedWrite: 1376:7
   escaping: at end
   calls: nish.TlsTranscript.update nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1314:7 TlsTranscript.update -> @nish.TlsTranscript.update
-  callee 1317:7 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 1375:7 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 1378:7 TlsTranscript.update -> @nish.TlsTranscript.update
 function TlsServer.takeOutput(this: TlsServer, level: i32): u8[] -> @nish.TlsServer.takeOutput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1335:11
+  sharedWrite: 1396:11
   escaping: level
   calls: nish_exit nish_write
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1330:11 none: u8[] (const)
-  local 1333:15 out: u8[] (const)
-  local 1334:18 k: i32 (let)
-  local 1341:15 out: u8[] (const)
-  local 1342:18 k: i32 (let)
+  local 1391:11 none: u8[] (const)
+  local 1394:15 out: u8[] (const)
+  local 1395:18 k: i32 (let)
+  local 1402:15 out: u8[] (const)
+  local 1403:18 k: i32 (let)
 function TlsServer.clearOutput(this: TlsServer, level: i32): void -> @nish.TlsServer.clearOutput [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1357:7
+  sharedWrite: 1418:7
   pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function TlsServer.readSecret(this: TlsServer, level: i32): u8[] | null -> @nish.TlsServer.readSecret [exported method]
@@ -60169,19 +60245,21 @@ function TlsServer.readSecret(this: TlsServer, level: i32): u8[] | null -> @nish
   calls: nish.tlsSecretAt
   pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1369:12 tlsSecretAt -> @nish.tlsSecretAt
+  callee 1430:12 tlsSecretAt -> @nish.tlsSecretAt
 function TlsServer.writeSecret(this: TlsServer, level: i32): u8[] | null -> @nish.TlsServer.writeSecret [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: level
   calls: nish.tlsSecretAt
   pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1374:12 tlsSecretAt -> @nish.tlsSecretAt
+  callee 1435:12 tlsSecretAt -> @nish.tlsSecretAt
 module std/crypto/p256.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose
 import exposeWith from "nish:secret" -> generic function exposeWith
 import wipe from "nish:secret" -> generic function wipe
+import SHA256_BLOCK from "nish/crypto/sha256" -> const SHA256_BLOCK
+import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import Sha256 from "nish/crypto/sha256" -> struct Sha256
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
@@ -60190,6 +60268,8 @@ const P256_POINT_SIZE: i32 = 65 [exported]
 const P256_SIGNATURE_SIZE: i32 = 64 [exported]
 const P256_FROM: i32 = 0
 const P256_ENTRY: i32 = 24
+const P256_WORD_TOP: i32 = 24
+const P256_NONCE_MESSAGE: i32 = 97
 struct P256ProjectivePoint (class) size=24 align=8
   field x: u32[] index=0 offset=0
   field y: u32[] index=1 offset=8
@@ -60204,6 +60284,29 @@ struct P256PointScratch (class) size=56 align=8
   field sum: P256ProjectivePoint index=5 offset=40
   field b: u32[] index=6 offset=48
   constructor -> @nish.P256PointScratch.constructor
+struct P256SignScratch (class) size=168 align=8 exported
+  field kt: u32[] index=0 offset=0
+  field hash: u32[] index=1 offset=8
+  field schedule: u32[] index=2 offset=16
+  field tail: u8[] index=3 offset=24
+  field block: u8[] index=4 offset=32
+  field message: u8[] index=5 offset=40
+  field k: u8[] index=6 offset=48
+  field v: u8[] index=7 offset=56
+  field h1: u8[] index=8 offset=64
+  field z: u32[] index=9 offset=72
+  field r: u32[] index=10 offset=80
+  field x: u32[] index=11 offset=88
+  field kM: u32[] index=12 offset=96
+  field n: u32[] index=13 offset=104
+  field r2: u32[] index=14 offset=112
+  field g: P256ProjectivePoint index=15 offset=120
+  field point: P256ProjectivePoint index=16 offset=128
+  field acc: P256ProjectivePoint index=17 offset=136
+  field entry: P256ProjectivePoint index=18 offset=144
+  field table: u32[] index=19 offset=152
+  field points: P256PointScratch index=20 offset=160
+  constructor -> @nish.P256SignScratch.constructor
 function p256FiatAddcarryxU32(arg1: u32, arg2: u32, arg3: u32): u64 -> @nish.p256FiatAddcarryxU32
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -64697,8 +64800,9 @@ function p256LimbsFromBytes(out: u32[], bytes: u8[], at: i32): void -> @nish.p25
   local 3642:14 b: i32 (let)
   local 3643:13 j: i32 (const)
 function p256LimbsToBytes(out: u8[], at: i32, a: u32[]): void -> @nish.p256LimbsToBytes
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 3663:9
+  calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -64831,6 +64935,15 @@ function p256PointCopy(out: P256ProjectivePoint, p: P256ProjectivePoint): void -
   callee 3817:3 p256Copy -> @nish.p256Copy
   callee 3818:3 p256Copy -> @nish.p256Copy
   callee 3819:3 p256Copy -> @nish.p256Copy
+function p256SetIdentity(p: P256ProjectivePoint): void -> @nish.p256SetIdentity
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SetZero
+  calls: nish.p256FiatSetOne nish.p256SetZero
+  pointer p: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 3824:3 p256SetZero -> @nish.p256SetZero
+  callee 3825:3 p256FiatSetOne -> @nish.p256FiatSetOne
+  callee 3826:3 p256SetZero -> @nish.p256SetZero
 function p256PointAdd(out: P256ProjectivePoint, p: P256ProjectivePoint, q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointAdd
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatMul
@@ -64840,58 +64953,58 @@ function p256PointAdd(out: P256ProjectivePoint, p: P256ProjectivePoint, q: P256P
   pointer q: size=24 writesThrough=false captured=false
   pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 3833:9 t0: u32[] (const)
-  local 3834:9 t1: u32[] (const)
-  local 3835:9 t2: u32[] (const)
-  local 3836:9 t3: u32[] (const)
-  local 3837:9 t4: u32[] (const)
-  local 3838:9 x3: u32[] (const)
-  local 3839:9 y3: u32[] (const)
-  local 3840:9 z3: u32[] (const)
-  callee 3841:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3842:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3843:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3844:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3845:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3846:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3847:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3848:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3849:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3850:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3851:3 p256FiatMul -> @nish.p256FiatMul
+  local 3840:9 t0: u32[] (const)
+  local 3841:9 t1: u32[] (const)
+  local 3842:9 t2: u32[] (const)
+  local 3843:9 t3: u32[] (const)
+  local 3844:9 t4: u32[] (const)
+  local 3845:9 x3: u32[] (const)
+  local 3846:9 y3: u32[] (const)
+  local 3847:9 z3: u32[] (const)
+  callee 3848:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3849:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3850:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3851:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3852:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3853:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3853:3 p256FiatMul -> @nish.p256FiatMul
   callee 3854:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3855:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3856:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3855:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3856:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3857:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3858:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3859:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3858:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3859:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3860:3 p256FiatSub -> @nish.p256FiatSub
   callee 3861:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3862:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3863:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3863:3 p256FiatMul -> @nish.p256FiatMul
   callee 3864:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3865:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3866:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3867:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3868:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3869:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3870:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3865:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3866:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3867:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3868:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3869:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3870:3 p256FiatSub -> @nish.p256FiatSub
   callee 3871:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3872:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3872:3 p256FiatMul -> @nish.p256FiatMul
   callee 3873:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3874:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3875:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3876:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3877:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3874:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3875:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3876:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3877:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3878:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3879:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3880:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3881:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3879:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3880:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3881:3 p256FiatSub -> @nish.p256FiatSub
   callee 3882:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3883:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3884:3 p256PointCopy -> @nish.p256PointCopy
+  callee 3883:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3884:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3885:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3886:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3887:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3888:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3889:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3890:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3891:3 p256PointCopy -> @nish.p256PointCopy
 function p256PointDouble(out: P256ProjectivePoint, p: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointDouble
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatSquare
@@ -64900,56 +65013,56 @@ function p256PointDouble(out: P256ProjectivePoint, p: P256ProjectivePoint, s: P2
   pointer p: size=24 writesThrough=false captured=false
   pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 3892:9 t0: u32[] (const)
-  local 3893:9 t1: u32[] (const)
-  local 3894:9 t2: u32[] (const)
-  local 3895:9 t3: u32[] (const)
-  local 3896:9 x3: u32[] (const)
-  local 3897:9 y3: u32[] (const)
-  local 3898:9 z3: u32[] (const)
-  callee 3899:3 p256FiatSquare -> @nish.p256FiatSquare
-  callee 3900:3 p256FiatSquare -> @nish.p256FiatSquare
-  callee 3901:3 p256FiatSquare -> @nish.p256FiatSquare
-  callee 3902:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3903:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3904:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3905:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3906:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3907:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3908:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3909:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3910:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3911:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3912:3 p256FiatMul -> @nish.p256FiatMul
+  local 3899:9 t0: u32[] (const)
+  local 3900:9 t1: u32[] (const)
+  local 3901:9 t2: u32[] (const)
+  local 3902:9 t3: u32[] (const)
+  local 3903:9 x3: u32[] (const)
+  local 3904:9 y3: u32[] (const)
+  local 3905:9 z3: u32[] (const)
+  callee 3906:3 p256FiatSquare -> @nish.p256FiatSquare
+  callee 3907:3 p256FiatSquare -> @nish.p256FiatSquare
+  callee 3908:3 p256FiatSquare -> @nish.p256FiatSquare
+  callee 3909:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3910:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3911:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3912:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3913:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3914:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3914:3 p256FiatSub -> @nish.p256FiatSub
   callee 3915:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3916:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3916:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3917:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3918:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3919:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3920:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3918:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3919:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3920:3 p256FiatMul -> @nish.p256FiatMul
   callee 3921:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3922:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3923:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3924:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3925:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3926:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3923:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3924:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3925:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3926:3 p256FiatAdd -> @nish.p256FiatAdd
   callee 3927:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3928:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3929:3 p256FiatSub -> @nish.p256FiatSub
-  callee 3930:3 p256FiatMul -> @nish.p256FiatMul
-  callee 3931:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3928:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3929:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3930:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3931:3 p256FiatMul -> @nish.p256FiatMul
   callee 3932:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 3933:3 p256PointCopy -> @nish.p256PointCopy
+  callee 3933:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3934:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3935:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3936:3 p256FiatSub -> @nish.p256FiatSub
+  callee 3937:3 p256FiatMul -> @nish.p256FiatMul
+  callee 3938:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3939:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 3940:3 p256PointCopy -> @nish.p256PointCopy
 function p256TableStore(table: u32[], at: i32, a: u32[]): void -> @nish.p256TableStore
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 3945:5
+  sharedWrite: 3952:5
   calls: nish_panic_index
   pointer table: size=0 writesThrough=true captured=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 3944:12 i: i32 (let)
+  local 3951:12 i: i32 (let)
 function p256TableStorePoint(table: u32[], i: i32, p: P256ProjectivePoint): void -> @nish.p256TableStorePoint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256TableStore
@@ -64957,42 +65070,42 @@ function p256TableStorePoint(table: u32[], i: i32, p: P256ProjectivePoint): void
   pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableStore#0 nish.p256TableStore#0 nish.p256TableStore#0
   pointer p: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 3951:3 p256TableStore -> @nish.p256TableStore
-  callee 3952:3 p256TableStore -> @nish.p256TableStore
-  callee 3953:3 p256TableStore -> @nish.p256TableStore
-function p256TableBuild(table: u32[], p: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256TableBuild
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.P256ProjectivePoint.constructor
-  calls: nish.P256ProjectivePoint.constructor nish.p256PointAdd nish.p256PointCopy nish.p256TableStorePoint
+  callee 3958:3 p256TableStore -> @nish.p256TableStore
+  callee 3959:3 p256TableStore -> @nish.p256TableStore
+  callee 3960:3 p256TableStore -> @nish.p256TableStore
+function p256TableBuild(table: u32[], p: P256ProjectivePoint, s: P256PointScratch, acc: P256ProjectivePoint): void -> @nish.p256TableBuild
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SetIdentity
+  calls: nish.p256PointAdd nish.p256PointCopy nish.p256SetIdentity nish.p256TableStorePoint
   pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableStorePoint#0 nish.p256TableStorePoint#0 nish.p256TableStorePoint#0
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#1 nish.p256PointAdd#2
   pointer s: size=56 writesThrough=false captured=false passedTo=nish.p256PointAdd#3
-  stackSites=1 stackLocals=1
-  local 3963:9 acc: P256ProjectivePoint (const)
-  callee 3963:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee 3964:3 p256TableStorePoint -> @nish.p256TableStorePoint
-  callee 3965:3 p256PointCopy -> @nish.p256PointCopy
-  callee 3966:3 p256TableStorePoint -> @nish.p256TableStorePoint
-  local 3967:12 i: i32 (let)
-  callee 3968:5 p256PointAdd -> @nish.p256PointAdd
-  callee 3969:5 p256TableStorePoint -> @nish.p256TableStorePoint
+  pointer acc: size=24 writesThrough=false captured=false passedTo=nish.p256SetIdentity#0 nish.p256TableStorePoint#2 nish.p256PointCopy#0 nish.p256TableStorePoint#2 nish.p256PointAdd#0 nish.p256PointAdd#1 nish.p256TableStorePoint#2
+  stackSites=0 stackLocals=0
+  callee 3975:3 p256SetIdentity -> @nish.p256SetIdentity
+  callee 3976:3 p256TableStorePoint -> @nish.p256TableStorePoint
+  callee 3977:3 p256PointCopy -> @nish.p256PointCopy
+  callee 3978:3 p256TableStorePoint -> @nish.p256TableStorePoint
+  local 3979:12 i: i32 (let)
+  callee 3980:5 p256PointAdd -> @nish.p256PointAdd
+  callee 3981:5 p256TableStorePoint -> @nish.p256TableStorePoint
 function p256TableMove(out: u32[], table: u32[], at: i32, hit: u32): void -> @nish.p256TableMove
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 3983:3
+  sharedWrite: 3995:3
   escaping: hit
   calls: nish.p256FiatCmovznzU32 nish_panic_index
   pointer out: size=0 writesThrough=true captured=false
   pointer table: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 3979:9 p: u32 (const)
-  callee 3983:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3984:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3985:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3986:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3987:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3988:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3989:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-  callee 3990:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  local 3991:9 p: u32 (const)
+  callee 3995:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 3996:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 3997:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 3998:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 3999:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 4000:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 4001:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
+  callee 4002:12 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
 function p256TableSelect(out: P256ProjectivePoint, table: u32[], digit: u32): void -> @nish.p256TableSelect
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SetZero
@@ -65000,58 +65113,69 @@ function p256TableSelect(out: P256ProjectivePoint, table: u32[], digit: u32): vo
   pointer out: size=24 writesThrough=false captured=false
   pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableMove#1 nish.p256TableMove#1 nish.p256TableMove#1
   stackSites=0 stackLocals=0
-  callee 4000:3 p256SetZero -> @nish.p256SetZero
-  callee 4001:3 p256SetZero -> @nish.p256SetZero
-  callee 4002:3 p256SetZero -> @nish.p256SetZero
-  local 4003:12 i: i32 (let)
-  local 4004:11 hit: u32 (const)
-  callee 4005:5 p256TableMove -> @nish.p256TableMove
-  callee 4006:5 p256TableMove -> @nish.p256TableMove
-  callee 4007:5 p256TableMove -> @nish.p256TableMove
+  callee 4012:3 p256SetZero -> @nish.p256SetZero
+  callee 4013:3 p256SetZero -> @nish.p256SetZero
+  callee 4014:3 p256SetZero -> @nish.p256SetZero
+  local 4015:12 i: i32 (let)
+  local 4016:11 hit: u32 (const)
+  callee 4017:5 p256TableMove -> @nish.p256TableMove
+  callee 4018:5 p256TableMove -> @nish.p256TableMove
+  callee 4019:5 p256TableMove -> @nish.p256TableMove
 function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256ScalarMult
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256ScalarMultWith
+  calls: nish.P256ProjectivePoint.constructor nish.p256ScalarMultWith
+  pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256ScalarMultWith#0
+  pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarMultWith#1
+  pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256ScalarMultWith#2
+  pointer s: size=56 writesThrough=false captured=false passedTo=nish.p256ScalarMultWith#3
+  stackSites=3 stackLocals=0
+  callee 4037:3 p256ScalarMultWith -> @nish.p256ScalarMultWith
+  callee 4037:57 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee 4037:84 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+function p256ScalarMultWith(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoint, s: P256PointScratch, table: u32[], acc: P256ProjectivePoint, entry: P256ProjectivePoint): void -> @nish.p256ScalarMultWith
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256TableBuild
-  calls: nish.P256ProjectivePoint.constructor nish.p256PointAdd nish.p256PointCopy nish.p256PointDouble nish.p256TableBuild nish.p256TableSelect nish.p256WipePoint nish.wipe$arr.u32
+  calls: nish.p256PointAdd nish.p256PointCopy nish.p256PointDouble nish.p256SetIdentity nish.p256TableBuild nish.p256TableSelect nish.p256WipePoint nish.wipe$arr.u32
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#0
   pointer k: size=0 writesThrough=false captured=false
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256TableBuild#1
   pointer s: size=56 writesThrough=false captured=false passedTo=nish.p256TableBuild#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointAdd#3
-  stackSites=3 stackLocals=3
-  local 4025:9 kLength: i32 (const)
-  local 4029:9 table: u32[] (const)
-  callee 4030:3 p256TableBuild -> @nish.p256TableBuild
-  local 4031:9 acc: P256ProjectivePoint (const)
-  callee 4031:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  local 4032:9 entry: P256ProjectivePoint (const)
-  callee 4032:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  local 4033:12 i: i32 (let)
-  local 4035:11 at: i32 (const)
-  local 4036:11 byte: u32 (const)
-  local 4037:11 digit: u32 (const)
-  callee 4038:5 p256PointDouble -> @nish.p256PointDouble
-  callee 4039:5 p256PointDouble -> @nish.p256PointDouble
-  callee 4040:5 p256PointDouble -> @nish.p256PointDouble
-  callee 4041:5 p256PointDouble -> @nish.p256PointDouble
-  callee 4042:5 p256TableSelect -> @nish.p256TableSelect
-  callee 4043:5 p256PointAdd -> @nish.p256PointAdd
-  callee 4045:3 p256PointCopy -> @nish.p256PointCopy
-  callee 4048:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee 4049:3 p256WipePoint -> @nish.p256WipePoint
-  callee 4050:3 p256WipePoint -> @nish.p256WipePoint
+  pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableBuild#0 nish.p256TableSelect#1 nish.wipe$arr.u32#0
+  pointer acc: size=24 writesThrough=false captured=false passedTo=nish.p256TableBuild#3 nish.p256SetIdentity#0 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointAdd#0 nish.p256PointAdd#1 nish.p256PointCopy#1 nish.p256WipePoint#0
+  pointer entry: size=24 writesThrough=false captured=false passedTo=nish.p256TableSelect#0 nish.p256PointAdd#2 nish.p256WipePoint#0
+  stackSites=0 stackLocals=0
+  local 4055:9 kLength: i32 (const)
+  callee 4059:3 p256TableBuild -> @nish.p256TableBuild
+  callee 4060:3 p256SetIdentity -> @nish.p256SetIdentity
+  local 4061:12 i: i32 (let)
+  local 4063:11 at: i32 (const)
+  local 4064:11 byte: u32 (const)
+  local 4065:11 digit: u32 (const)
+  callee 4066:5 p256PointDouble -> @nish.p256PointDouble
+  callee 4067:5 p256PointDouble -> @nish.p256PointDouble
+  callee 4068:5 p256PointDouble -> @nish.p256PointDouble
+  callee 4069:5 p256PointDouble -> @nish.p256PointDouble
+  callee 4070:5 p256TableSelect -> @nish.p256TableSelect
+  callee 4071:5 p256PointAdd -> @nish.p256PointAdd
+  callee 4073:3 p256PointCopy -> @nish.p256PointCopy
+  callee 4074:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4075:3 p256WipePoint -> @nish.p256WipePoint
+  callee 4076:3 p256WipePoint -> @nish.p256WipePoint
 function p256Generator(): P256ProjectivePoint -> @nish.p256Generator
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nish.P256ProjectivePoint.constructor
   calls: nish.P256ProjectivePoint.constructor nish.p256FiatMul nish.p256FiatSetOne nish.p256FieldR2 nish.p256SetLimbs nish_alloc_struct
   stackSites=0 stackLocals=0
-  local 4055:9 g: P256ProjectivePoint (const)
-  callee 4055:13 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  local 4056:9 r2: u32[] (const)
-  callee 4056:21 p256FieldR2 -> @nish.p256FieldR2
-  callee 4057:3 p256SetLimbs -> @nish.p256SetLimbs
-  callee 4068:3 p256SetLimbs -> @nish.p256SetLimbs
-  callee 4079:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4080:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4081:3 p256FiatSetOne -> @nish.p256FiatSetOne
+  local 4081:9 g: P256ProjectivePoint (const)
+  callee 4081:13 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  local 4082:9 r2: u32[] (const)
+  callee 4082:21 p256FieldR2 -> @nish.p256FieldR2
+  callee 4083:3 p256SetLimbs -> @nish.p256SetLimbs
+  callee 4094:3 p256SetLimbs -> @nish.p256SetLimbs
+  callee 4105:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4106:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4107:3 p256FiatSetOne -> @nish.p256FiatSetOne
 function p256AffineX(x: u32[], p: P256ProjectivePoint): void -> @nish.p256AffineX
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FieldInvert
@@ -65059,84 +65183,84 @@ function p256AffineX(x: u32[], p: P256ProjectivePoint): void -> @nish.p256Affine
   pointer x: size=0 writesThrough=true captured=false passedTo=nish.p256FiatMul#0 nish.p256FiatMul#0 nish.p256FiatMul#1
   pointer p: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4091:9 zInverse: u32[] (const)
-  callee 4091:27 p256Limbs -> @nish.p256Limbs
-  callee 4092:3 p256FieldInvert -> @nish.p256FieldInvert
-  callee 4093:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4094:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4094:21 p256PlainOne -> @nish.p256PlainOne
+  local 4117:9 zInverse: u32[] (const)
+  callee 4117:27 p256Limbs -> @nish.p256Limbs
+  callee 4118:3 p256FieldInvert -> @nish.p256FieldInvert
+  callee 4119:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4120:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4120:21 p256PlainOne -> @nish.p256PlainOne
 function p256DecodePoint(bytes: u8[]): P256ProjectivePoint | null -> @nish.p256DecodePoint
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Prime
   calls: nish.P256ProjectivePoint.constructor nish.p256Below nish.p256CurveB nish.p256FiatAdd nish.p256FiatMul nish.p256FiatNonzero nish.p256FiatSetOne nish.p256FiatSquare nish.p256FiatSub nish.p256FieldR2 nish.p256Limbs nish.p256LimbsFromBytes nish.p256Prime nish_alloc_struct
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.p256LimbsFromBytes#1 nish.p256LimbsFromBytes#1
   stackSites=0 stackLocals=0
-  local 4110:9 prime: u32[] (const)
-  callee 4110:24 p256Prime -> @nish.p256Prime
-  local 4111:9 r2: u32[] (const)
-  callee 4111:21 p256FieldR2 -> @nish.p256FieldR2
-  local 4112:9 p: P256ProjectivePoint (const)
-  callee 4112:13 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee 4113:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4114:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4115:7 p256Below -> @nish.p256Below
-  callee 4115:38 p256Below -> @nish.p256Below
-  callee 4118:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4119:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4120:3 p256FiatSetOne -> @nish.p256FiatSetOne
-  local 4122:9 lhs: u32[] (const)
-  callee 4122:22 p256Limbs -> @nish.p256Limbs
-  local 4123:9 rhs: u32[] (const)
-  callee 4123:22 p256Limbs -> @nish.p256Limbs
-  local 4124:9 t: u32[] (const)
-  callee 4124:20 p256Limbs -> @nish.p256Limbs
-  callee 4125:3 p256FiatSquare -> @nish.p256FiatSquare
-  callee 4126:3 p256FiatSquare -> @nish.p256FiatSquare
-  callee 4127:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4128:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 4129:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 4130:3 p256FiatSub -> @nish.p256FiatSub
-  callee 4131:3 p256FiatAdd -> @nish.p256FiatAdd
-  callee 4131:25 p256CurveB -> @nish.p256CurveB
-  callee 4132:3 p256FiatSub -> @nish.p256FiatSub
-  callee 4133:7 p256FiatNonzero -> @nish.p256FiatNonzero
+  local 4136:9 prime: u32[] (const)
+  callee 4136:24 p256Prime -> @nish.p256Prime
+  local 4137:9 r2: u32[] (const)
+  callee 4137:21 p256FieldR2 -> @nish.p256FieldR2
+  local 4138:9 p: P256ProjectivePoint (const)
+  callee 4138:13 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee 4139:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4140:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4141:7 p256Below -> @nish.p256Below
+  callee 4141:38 p256Below -> @nish.p256Below
+  callee 4144:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4145:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4146:3 p256FiatSetOne -> @nish.p256FiatSetOne
+  local 4148:9 lhs: u32[] (const)
+  callee 4148:22 p256Limbs -> @nish.p256Limbs
+  local 4149:9 rhs: u32[] (const)
+  callee 4149:22 p256Limbs -> @nish.p256Limbs
+  local 4150:9 t: u32[] (const)
+  callee 4150:20 p256Limbs -> @nish.p256Limbs
+  callee 4151:3 p256FiatSquare -> @nish.p256FiatSquare
+  callee 4152:3 p256FiatSquare -> @nish.p256FiatSquare
+  callee 4153:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4154:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 4155:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 4156:3 p256FiatSub -> @nish.p256FiatSub
+  callee 4157:3 p256FiatAdd -> @nish.p256FiatAdd
+  callee 4157:25 p256CurveB -> @nish.p256CurveB
+  callee 4158:3 p256FiatSub -> @nish.p256FiatSub
+  callee 4159:7 p256FiatNonzero -> @nish.p256FiatNonzero
 function p256EncodePoint(p: P256ProjectivePoint): u8[] -> @nish.p256EncodePoint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4151:3
+  sharedWrite: 4177:3
   calls: nish.p256FiatMul nish.p256FieldInvert nish.p256Limbs nish.p256LimbsToBytes nish.p256PlainOne
   pointer p: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4141:9 zInverse: u32[] (const)
-  callee 4141:27 p256Limbs -> @nish.p256Limbs
-  local 4142:9 one: u32[] (const)
-  callee 4142:22 p256PlainOne -> @nish.p256PlainOne
-  local 4143:9 x: u32[] (const)
-  callee 4143:20 p256Limbs -> @nish.p256Limbs
-  local 4144:9 y: u32[] (const)
-  callee 4144:20 p256Limbs -> @nish.p256Limbs
-  callee 4145:3 p256FieldInvert -> @nish.p256FieldInvert
-  callee 4146:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4147:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4148:3 p256FiatMul -> @nish.p256FiatMul
-  callee 4149:3 p256FiatMul -> @nish.p256FiatMul
-  local 4150:9 out: u8[] (const)
-  callee 4152:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee 4153:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local 4167:9 zInverse: u32[] (const)
+  callee 4167:27 p256Limbs -> @nish.p256Limbs
+  local 4168:9 one: u32[] (const)
+  callee 4168:22 p256PlainOne -> @nish.p256PlainOne
+  local 4169:9 x: u32[] (const)
+  callee 4169:20 p256Limbs -> @nish.p256Limbs
+  local 4170:9 y: u32[] (const)
+  callee 4170:20 p256Limbs -> @nish.p256Limbs
+  callee 4171:3 p256FieldInvert -> @nish.p256FieldInvert
+  callee 4172:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4173:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4174:3 p256FiatMul -> @nish.p256FiatMul
+  callee 4175:3 p256FiatMul -> @nish.p256FiatMul
+  local 4176:9 out: u8[] (const)
+  callee 4178:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4179:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
 function p256ScalarInRange(bytes: u8[]): boolean -> @nish.p256ScalarInRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256LimbsFromBytes
   calls: nish.p256Below nish.p256FiatNonzero nish.p256Limbs nish.p256LimbsFromBytes nish.p256Order nish.wipe$arr.u32 nish_arena_mark nish_arena_release
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.p256LimbsFromBytes#1
   stackSites=0 stackLocals=0
-  local 4166:9 a: u32[] (const)
-  callee 4166:20 p256Limbs -> @nish.p256Limbs
-  callee 4167:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  local 4168:9 below: u32 (const)
-  callee 4168:22 p256Below -> @nish.p256Below
-  callee 4168:35 p256Order -> @nish.p256Order
-  local 4169:9 zero: u32 (const)
-  callee 4169:26 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee 4170:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  local 4192:9 a: u32[] (const)
+  callee 4192:20 p256Limbs -> @nish.p256Limbs
+  callee 4193:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  local 4194:9 below: u32 (const)
+  callee 4194:22 p256Below -> @nish.p256Below
+  callee 4194:35 p256Order -> @nish.p256Order
+  local 4195:9 zero: u32 (const)
+  callee 4195:26 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee 4196:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function p256DigestScalar(out: u32[], digest: u8[]): void -> @nish.p256DigestScalar
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256LimbsFromBytes
@@ -65144,35 +65268,35 @@ function p256DigestScalar(out: u32[], digest: u8[]): void -> @nish.p256DigestSca
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256ReduceOnce#0
   pointer digest: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 4181:9 length: i32 (const)
-  local 4182:9 bytes: u8[] (const)
-  local 4183:9 take: i32 (const)
-  local 4184:9 skip: i32 (const)
-  local 4185:12 i: i32 (let)
-  local 4188:9 a: u32[] (const)
-  callee 4188:20 p256Limbs -> @nish.p256Limbs
-  callee 4189:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4190:3 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee 4190:26 p256Order -> @nish.p256Order
+  local 4207:9 length: i32 (const)
+  local 4208:9 bytes: u8[] (const)
+  local 4209:9 take: i32 (const)
+  local 4210:9 skip: i32 (const)
+  local 4211:12 i: i32 (let)
+  local 4214:9 a: u32[] (const)
+  callee 4214:20 p256Limbs -> @nish.p256Limbs
+  callee 4215:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4216:3 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee 4216:26 p256Order -> @nish.p256Order
 function p256PadBlock(k: u8[], pad: u8): u8[] -> @nish.p256PadBlock
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4200:7
+  sharedWrite: 4226:7
   escaping: pad
   pointer k: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4195:9 out: u8[] (const)
-  local 4196:9 outLength: i32 (const)
-  local 4197:9 keyLength: i32 (const)
-  local 4198:12 i: i32 (let)
+  local 4221:9 out: u8[] (const)
+  local 4222:9 outLength: i32 (const)
+  local 4223:9 keyLength: i32 (const)
+  local 4224:12 i: i32 (let)
 function p256WipeHash(h: Sha256): void -> @nish.p256WipeHash
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u32
   calls: nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer h: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 4210:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee 4211:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4212:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4236:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4237:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4238:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function p256Mac(k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] -> @nish.p256Mac
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PadBlock
@@ -65183,30 +65307,30 @@ function p256Mac(k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] -> @nish.p25
   pointer c: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
   pointer d: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
   stackSites=2 stackLocals=2
-  local 4224:9 ipad: u8[] (const)
-  callee 4224:22 p256PadBlock -> @nish.p256PadBlock
-  local 4225:9 opad: u8[] (const)
-  callee 4225:22 p256PadBlock -> @nish.p256PadBlock
-  local 4226:9 inner: Sha256 (const)
-  callee 4226:17 new Sha256 -> @nish.Sha256.constructor
-  callee 4227:3 Sha256.update -> @nish.Sha256.update
-  callee 4228:3 Sha256.update -> @nish.Sha256.update
-  callee 4229:3 Sha256.update -> @nish.Sha256.update
-  callee 4230:3 Sha256.update -> @nish.Sha256.update
-  callee 4231:3 Sha256.update -> @nish.Sha256.update
-  local 4232:9 innerDigest: u8[] (const)
-  callee 4232:29 Sha256.digest -> @nish.Sha256.digest
-  local 4233:9 outer: Sha256 (const)
-  callee 4233:17 new Sha256 -> @nish.Sha256.constructor
-  callee 4234:3 Sha256.update -> @nish.Sha256.update
-  callee 4235:3 Sha256.update -> @nish.Sha256.update
-  local 4236:9 tag: u8[] (const)
-  callee 4236:21 Sha256.digest -> @nish.Sha256.digest
-  callee 4237:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4238:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4239:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4240:3 p256WipeHash -> @nish.p256WipeHash
-  callee 4241:3 p256WipeHash -> @nish.p256WipeHash
+  local 4250:9 ipad: u8[] (const)
+  callee 4250:22 p256PadBlock -> @nish.p256PadBlock
+  local 4251:9 opad: u8[] (const)
+  callee 4251:22 p256PadBlock -> @nish.p256PadBlock
+  local 4252:9 inner: Sha256 (const)
+  callee 4252:17 new Sha256 -> @nish.Sha256.constructor
+  callee 4253:3 Sha256.update -> @nish.Sha256.update
+  callee 4254:3 Sha256.update -> @nish.Sha256.update
+  callee 4255:3 Sha256.update -> @nish.Sha256.update
+  callee 4256:3 Sha256.update -> @nish.Sha256.update
+  callee 4257:3 Sha256.update -> @nish.Sha256.update
+  local 4258:9 innerDigest: u8[] (const)
+  callee 4258:29 Sha256.digest -> @nish.Sha256.digest
+  local 4259:9 outer: Sha256 (const)
+  callee 4259:17 new Sha256 -> @nish.Sha256.constructor
+  callee 4260:3 Sha256.update -> @nish.Sha256.update
+  callee 4261:3 Sha256.update -> @nish.Sha256.update
+  local 4262:9 tag: u8[] (const)
+  callee 4262:21 Sha256.digest -> @nish.Sha256.digest
+  callee 4263:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4264:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4265:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4266:3 p256WipeHash -> @nish.p256WipeHash
+  callee 4267:3 p256WipeHash -> @nish.p256WipeHash
 function p256NonceKey(k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] -> @nish.p256NonceKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Mac
@@ -65217,8 +65341,8 @@ function p256NonceKey(k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] -> @nis
   pointer x: size=0 writesThrough=false captured=false passedTo=nish.p256Mac#3
   pointer h: size=0 writesThrough=false captured=false passedTo=nish.p256Mac#4
   stackSites=1 stackLocals=1
-  local 4250:9 separator: u8[] (const)
-  callee 4252:10 p256Mac -> @nish.p256Mac
+  local 4276:9 separator: u8[] (const)
+  callee 4278:10 p256Mac -> @nish.p256Mac
 function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Mac
@@ -65226,101 +65350,101 @@ function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256Mac#0
   pointer v: size=0 writesThrough=false captured=false passedTo=nish.p256Mac#1
   stackSites=1 stackLocals=1
-  local 4257:9 empty: u8[] (const)
-  callee 4258:10 p256Mac -> @nish.p256Mac
+  local 4283:9 empty: u8[] (const)
+  callee 4284:10 p256Mac -> @nish.p256Mac
 function p256SignScalar(priv: u8[], z: u32[]): u8[] -> @nish.p256SignScalar
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4281:5
+  sharedWrite: 4307:5
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256FiatNonzero nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256Generator nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceKey nish.p256NonceValue nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInvert nish.p256ScalarMult nish.p256ScalarR2 nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256NonceKey#3 nish.p256NonceKey#3 nish.p256LimbsFromBytes#1
   pointer z: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsToBytes#2 nish.p256FiatScalarAdd#2
   stackSites=4 stackLocals=4
-  local 4273:9 n: u32[] (const)
-  callee 4273:20 p256Order -> @nish.p256Order
-  local 4274:9 r2: u32[] (const)
-  callee 4274:21 p256ScalarR2 -> @nish.p256ScalarR2
-  local 4275:9 h1: u8[] (const)
-  callee 4276:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  local 4277:9 empty: u8[] (const)
-  local 4278:7 v: u8[] (let)
-  local 4279:7 k: u8[] (let)
-  local 4280:12 i: i32 (let)
-  local 4285:7 next: u8[] (let)
-  callee 4285:20 p256NonceKey -> @nish.p256NonceKey
-  callee 4286:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4288:10 p256NonceValue -> @nish.p256NonceValue
-  callee 4289:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4291:10 p256NonceKey -> @nish.p256NonceKey
-  callee 4292:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4294:10 p256NonceValue -> @nish.p256NonceValue
-  callee 4295:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 4298:9 dM: u32[] (const)
-  callee 4298:21 p256Limbs -> @nish.p256Limbs
-  callee 4299:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4300:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  local 4301:9 g: P256ProjectivePoint (const)
-  callee 4301:34 p256Generator -> @nish.p256Generator
-  local 4302:9 scratch: P256PointScratch (const)
-  callee 4302:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-  local 4303:9 point: P256ProjectivePoint (const)
-  callee 4303:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  local 4304:9 x: u32[] (const)
-  callee 4304:20 p256Limbs -> @nish.p256Limbs
-  local 4305:9 r: u32[] (const)
-  callee 4305:20 p256Limbs -> @nish.p256Limbs
-  local 4306:9 kM: u32[] (const)
-  callee 4306:21 p256Limbs -> @nish.p256Limbs
-  local 4307:9 s: u32[] (const)
-  callee 4307:20 p256Limbs -> @nish.p256Limbs
-  callee 4309:12 p256NonceValue -> @nish.p256NonceValue
-  callee 4310:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4312:9 p256ScalarInRange -> @nish.p256ScalarInRange
-  callee 4313:7 p256ScalarMult -> @nish.p256ScalarMult
-  callee 4314:7 p256AffineX -> @nish.p256AffineX
-  callee 4315:7 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee 4319:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4320:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee 4321:7 p256ScalarInvert -> @nish.p256ScalarInvert
-  callee 4322:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee 4323:7 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
-  callee 4324:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee 4325:11 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee 4325:39 p256FiatNonzero -> @nish.p256FiatNonzero
-  local 4326:15 sig: u8[] (const)
-  callee 4327:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee 4328:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee 4331:9 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4332:9 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4333:9 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee 4334:9 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee 4335:9 p256WipePoint -> @nish.p256WipePoint
-  callee 4336:9 p256WipeScratch -> @nish.p256WipeScratch
-  callee 4340:12 p256NonceKey -> @nish.p256NonceKey
-  callee 4341:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 4343:12 p256NonceValue -> @nish.p256NonceValue
-  callee 4344:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 4299:9 n: u32[] (const)
+  callee 4299:20 p256Order -> @nish.p256Order
+  local 4300:9 r2: u32[] (const)
+  callee 4300:21 p256ScalarR2 -> @nish.p256ScalarR2
+  local 4301:9 h1: u8[] (const)
+  callee 4302:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local 4303:9 empty: u8[] (const)
+  local 4304:7 v: u8[] (let)
+  local 4305:7 k: u8[] (let)
+  local 4306:12 i: i32 (let)
+  local 4311:7 next: u8[] (let)
+  callee 4311:20 p256NonceKey -> @nish.p256NonceKey
+  callee 4312:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4314:10 p256NonceValue -> @nish.p256NonceValue
+  callee 4315:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4317:10 p256NonceKey -> @nish.p256NonceKey
+  callee 4318:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4320:10 p256NonceValue -> @nish.p256NonceValue
+  callee 4321:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 4324:9 dM: u32[] (const)
+  callee 4324:21 p256Limbs -> @nish.p256Limbs
+  callee 4325:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4326:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  local 4327:9 g: P256ProjectivePoint (const)
+  callee 4327:34 p256Generator -> @nish.p256Generator
+  local 4328:9 scratch: P256PointScratch (const)
+  callee 4328:19 new P256PointScratch -> @nish.P256PointScratch.constructor
+  local 4329:9 point: P256ProjectivePoint (const)
+  callee 4329:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  local 4330:9 x: u32[] (const)
+  callee 4330:20 p256Limbs -> @nish.p256Limbs
+  local 4331:9 r: u32[] (const)
+  callee 4331:20 p256Limbs -> @nish.p256Limbs
+  local 4332:9 kM: u32[] (const)
+  callee 4332:21 p256Limbs -> @nish.p256Limbs
+  local 4333:9 s: u32[] (const)
+  callee 4333:20 p256Limbs -> @nish.p256Limbs
+  callee 4335:12 p256NonceValue -> @nish.p256NonceValue
+  callee 4336:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4338:9 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee 4339:7 p256ScalarMult -> @nish.p256ScalarMult
+  callee 4340:7 p256AffineX -> @nish.p256AffineX
+  callee 4341:7 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee 4345:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4346:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4347:7 p256ScalarInvert -> @nish.p256ScalarInvert
+  callee 4348:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4349:7 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  callee 4350:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4351:11 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee 4351:39 p256FiatNonzero -> @nish.p256FiatNonzero
+  local 4352:15 sig: u8[] (const)
+  callee 4353:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4354:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4357:9 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4358:9 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4359:9 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4360:9 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4361:9 p256WipePoint -> @nish.p256WipePoint
+  callee 4362:9 p256WipeScratch -> @nish.p256WipeScratch
+  callee 4366:12 p256NonceKey -> @nish.p256NonceKey
+  callee 4367:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4369:12 p256NonceValue -> @nish.p256NonceValue
+  callee 4370:5 wipe<u8[]> -> @nish.wipe$arr.u8
 function p256PublicKey(priv: Secret<u8[]>): u8[] | null -> @nish.p256PublicKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
   calls: nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed#0
   stackSites=0 stackLocals=0
-  callee 4354:67 expose<u8[], u8[] | null, p256PublicKeyExposed> -> @nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
+  callee 4380:67 expose<u8[], u8[] | null, p256PublicKeyExposed> -> @nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed
 function p256PublicKeyExposed(priv: u8[]): u8[] | null -> @nish.p256PublicKeyExposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256EncodePoint nish.p256Generator nish.p256ScalarInRange nish.p256ScalarMult nish.p256WipeScratch
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256ScalarMult#1
   stackSites=2 stackLocals=2
-  callee 4358:8 p256ScalarInRange -> @nish.p256ScalarInRange
-  local 4361:9 point: P256ProjectivePoint (const)
-  callee 4361:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  local 4362:9 scratch: P256PointScratch (const)
-  callee 4362:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-  callee 4363:3 p256ScalarMult -> @nish.p256ScalarMult
-  callee 4363:31 p256Generator -> @nish.p256Generator
-  callee 4364:3 p256WipeScratch -> @nish.p256WipeScratch
-  callee 4365:10 p256EncodePoint -> @nish.p256EncodePoint
+  callee 4384:8 p256ScalarInRange -> @nish.p256ScalarInRange
+  local 4387:9 point: P256ProjectivePoint (const)
+  callee 4387:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  local 4388:9 scratch: P256PointScratch (const)
+  callee 4388:19 new P256PointScratch -> @nish.P256PointScratch.constructor
+  callee 4389:3 p256ScalarMult -> @nish.p256ScalarMult
+  callee 4389:31 p256Generator -> @nish.p256Generator
+  callee 4390:3 p256WipeScratch -> @nish.p256WipeScratch
+  callee 4391:10 p256EncodePoint -> @nish.p256EncodePoint
 function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Sign [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
@@ -65328,7 +65452,7 @@ function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Si
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed#0
   pointer digest: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed#1
   stackSites=0 stackLocals=0
-  callee 4377:3 exposeWith<u8[], u8[], u8[] | null, p256SignExposed> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
+  callee 4403:3 exposeWith<u8[], u8[], u8[] | null, p256SignExposed> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
 function p256SignExposed(priv: u8[], digest: u8[]): u8[] | null -> @nish.p256SignExposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
@@ -65336,11 +65460,11 @@ function p256SignExposed(priv: u8[], digest: u8[]): u8[] | null -> @nish.p256Sig
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256SignScalar#0
   pointer digest: size=0 writesThrough=false captured=false passedTo=nish.p256DigestScalar#1
   stackSites=0 stackLocals=0
-  callee 4381:8 p256ScalarInRange -> @nish.p256ScalarInRange
-  local 4384:9 z: u32[] (const)
-  callee 4384:20 p256Limbs -> @nish.p256Limbs
-  callee 4385:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee 4386:10 p256SignScalar -> @nish.p256SignScalar
+  callee 4407:8 p256ScalarInRange -> @nish.p256ScalarInRange
+  local 4410:9 z: u32[] (const)
+  callee 4410:20 p256Limbs -> @nish.p256Limbs
+  callee 4411:3 p256DigestScalar -> @nish.p256DigestScalar
+  callee 4412:10 p256SignScalar -> @nish.p256SignScalar
 function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Verify [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256DecodePoint
@@ -65349,56 +65473,56 @@ function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Ve
   pointer digest: size=0 writesThrough=false captured=false passedTo=nish.p256DigestScalar#1
   pointer sig: size=0 writesThrough=false captured=false
   stackSites=8 stackLocals=8
-  local 4407:9 q: P256ProjectivePoint | null (const)
-  callee 4407:41 p256DecodePoint -> @nish.p256DecodePoint
-  local 4411:9 rBytes: u8[] (const)
-  local 4412:9 sBytes: u8[] (const)
-  local 4413:12 i: i32 (let)
-  callee 4417:8 p256ScalarInRange -> @nish.p256ScalarInRange
-  callee 4417:38 p256ScalarInRange -> @nish.p256ScalarInRange
-  local 4420:9 n: u32[] (const)
-  callee 4420:20 p256Order -> @nish.p256Order
-  local 4421:9 r2: u32[] (const)
-  callee 4421:21 p256ScalarR2 -> @nish.p256ScalarR2
-  local 4422:9 r: u32[] (const)
-  callee 4422:20 p256Limbs -> @nish.p256Limbs
-  local 4423:9 w: u32[] (const)
-  callee 4423:20 p256Limbs -> @nish.p256Limbs
-  local 4424:9 z: u32[] (const)
-  callee 4424:20 p256Limbs -> @nish.p256Limbs
-  callee 4425:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4426:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee 4427:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee 4430:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee 4431:3 p256ScalarInvert -> @nish.p256ScalarInvert
-  local 4432:9 u1: u32[] (const)
-  callee 4432:21 p256Limbs -> @nish.p256Limbs
-  local 4433:9 u2: u32[] (const)
-  callee 4433:21 p256Limbs -> @nish.p256Limbs
-  callee 4434:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee 4435:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  local 4436:9 u1Bytes: u8[] (const)
-  local 4437:9 u2Bytes: u8[] (const)
-  callee 4438:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee 4439:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  local 4441:9 scratch: P256PointScratch (const)
-  callee 4441:19 new P256PointScratch -> @nish.P256PointScratch.constructor
-  local 4442:9 sum: P256ProjectivePoint (const)
-  callee 4442:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  local 4443:9 other: P256ProjectivePoint (const)
-  callee 4443:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee 4444:3 p256ScalarMult -> @nish.p256ScalarMult
-  callee 4444:32 p256Generator -> @nish.p256Generator
-  callee 4445:3 p256ScalarMult -> @nish.p256ScalarMult
-  callee 4446:3 p256PointAdd -> @nish.p256PointAdd
-  callee 4447:7 p256FiatNonzero -> @nish.p256FiatNonzero
-  local 4450:9 x: u32[] (const)
+  local 4433:9 q: P256ProjectivePoint | null (const)
+  callee 4433:41 p256DecodePoint -> @nish.p256DecodePoint
+  local 4437:9 rBytes: u8[] (const)
+  local 4438:9 sBytes: u8[] (const)
+  local 4439:12 i: i32 (let)
+  callee 4443:8 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee 4443:38 p256ScalarInRange -> @nish.p256ScalarInRange
+  local 4446:9 n: u32[] (const)
+  callee 4446:20 p256Order -> @nish.p256Order
+  local 4447:9 r2: u32[] (const)
+  callee 4447:21 p256ScalarR2 -> @nish.p256ScalarR2
+  local 4448:9 r: u32[] (const)
+  callee 4448:20 p256Limbs -> @nish.p256Limbs
+  local 4449:9 w: u32[] (const)
+  callee 4449:20 p256Limbs -> @nish.p256Limbs
+  local 4450:9 z: u32[] (const)
   callee 4450:20 p256Limbs -> @nish.p256Limbs
-  callee 4451:3 p256AffineX -> @nish.p256AffineX
-  callee 4452:3 p256ReduceOnce -> @nish.p256ReduceOnce
-  local 4453:9 vBytes: u8[] (const)
-  callee 4454:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee 4455:10 timingSafeEqual -> @nish.timingSafeEqual
+  callee 4451:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4452:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4453:3 p256DigestScalar -> @nish.p256DigestScalar
+  callee 4456:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4457:3 p256ScalarInvert -> @nish.p256ScalarInvert
+  local 4458:9 u1: u32[] (const)
+  callee 4458:21 p256Limbs -> @nish.p256Limbs
+  local 4459:9 u2: u32[] (const)
+  callee 4459:21 p256Limbs -> @nish.p256Limbs
+  callee 4460:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4461:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  local 4462:9 u1Bytes: u8[] (const)
+  local 4463:9 u2Bytes: u8[] (const)
+  callee 4464:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4465:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local 4467:9 scratch: P256PointScratch (const)
+  callee 4467:19 new P256PointScratch -> @nish.P256PointScratch.constructor
+  local 4468:9 sum: P256ProjectivePoint (const)
+  callee 4468:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  local 4469:9 other: P256ProjectivePoint (const)
+  callee 4469:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee 4470:3 p256ScalarMult -> @nish.p256ScalarMult
+  callee 4470:32 p256Generator -> @nish.p256Generator
+  callee 4471:3 p256ScalarMult -> @nish.p256ScalarMult
+  callee 4472:3 p256PointAdd -> @nish.p256PointAdd
+  callee 4473:7 p256FiatNonzero -> @nish.p256FiatNonzero
+  local 4476:9 x: u32[] (const)
+  callee 4476:20 p256Limbs -> @nish.p256Limbs
+  callee 4477:3 p256AffineX -> @nish.p256AffineX
+  callee 4478:3 p256ReduceOnce -> @nish.p256ReduceOnce
+  local 4479:9 vBytes: u8[] (const)
+  callee 4480:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4481:10 timingSafeEqual -> @nish.timingSafeEqual
 function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p256SignSha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Sign
@@ -65406,8 +65530,8 @@ function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p25
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256Sign#0
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.sha256#0
   stackSites=0 stackLocals=0
-  callee 4459:79 p256Sign -> @nish.p256Sign
-  callee 4459:94 sha256 -> @nish.sha256
+  callee 4485:79 p256Sign -> @nish.p256Sign
+  callee 4485:94 sha256 -> @nish.sha256
 function p256VerifySha256(pub: u8[], msg: u8[], sig: u8[]): boolean -> @nish.p256VerifySha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Verify
@@ -65416,8 +65540,258 @@ function p256VerifySha256(pub: u8[], msg: u8[], sig: u8[]): boolean -> @nish.p25
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.sha256#0
   pointer sig: size=0 writesThrough=false captured=false passedTo=nish.p256Verify#2
   stackSites=0 stackLocals=0
-  callee 4463:3 p256Verify -> @nish.p256Verify
-  callee 4463:19 sha256 -> @nish.sha256
+  callee 4489:3 p256Verify -> @nish.p256Verify
+  callee 4489:19 sha256 -> @nish.sha256
+function p256Rotr(x: u32, n: u32): u32 -> @nish.p256Rotr
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function p256LoadWord(buf: u8[], at: i32): u32 -> @nish.p256LoadWord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_panic_index nish_panic_overflow
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function p256ShaCompress(h: u32[], w: u32[], kt: u32[], src: u8[], at: i32): void -> @nish.p256ShaCompress
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4541:7
+  calls: nish.p256LoadWord nish.p256Rotr nish_panic_index nish_panic_overflow
+  pointer h: size=0 writesThrough=true captured=false
+  pointer w: size=0 writesThrough=true captured=false
+  pointer kt: size=0 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.p256LoadWord#0
+  stackSites=0 stackLocals=0
+  local 4540:14 t: i32 (let)
+  callee 4541:14 p256LoadWord -> @nish.p256LoadWord
+  local 4543:14 t: i32 (let)
+  local 4544:13 w2: u32 (const)
+  local 4545:13 w15: u32 (const)
+  local 4546:13 sigma1: u32 (const)
+  callee 4546:27 p256Rotr -> @nish.p256Rotr
+  callee 4546:46 p256Rotr -> @nish.p256Rotr
+  local 4547:13 sigma0: u32 (const)
+  callee 4547:27 p256Rotr -> @nish.p256Rotr
+  callee 4547:46 p256Rotr -> @nish.p256Rotr
+  local 4550:9 a: u32 (let)
+  local 4551:9 b: u32 (let)
+  local 4552:9 c: u32 (let)
+  local 4553:9 d: u32 (let)
+  local 4554:9 e: u32 (let)
+  local 4555:9 f: u32 (let)
+  local 4556:9 g: u32 (let)
+  local 4557:9 hh: u32 (let)
+  local 4558:14 t: i32 (let)
+  local 4559:13 bigSigma1: u32 (const)
+  callee 4559:30 p256Rotr -> @nish.p256Rotr
+  callee 4559:47 p256Rotr -> @nish.p256Rotr
+  callee 4559:65 p256Rotr -> @nish.p256Rotr
+  local 4560:13 choose: u32 (const)
+  local 4561:13 t1: u32 (const)
+  local 4562:13 bigSigma0: u32 (const)
+  callee 4562:30 p256Rotr -> @nish.p256Rotr
+  callee 4562:47 p256Rotr -> @nish.p256Rotr
+  callee 4562:65 p256Rotr -> @nish.p256Rotr
+  local 4563:13 majority: u32 (const)
+function p256ShaInto(out: u8[], at: i32, data: u8[], off: i32, len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[]): void -> @nish.p256ShaInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4622:5
+  escaping: off
+  calls: nish.p256SetLimbs nish.p256ShaCompress nish_panic_index nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.p256ShaCompress#3
+  pointer kt: size=0 writesThrough=false captured=false passedTo=nish.p256ShaCompress#2 nish.p256ShaCompress#2 nish.p256ShaCompress#2
+  pointer h: size=0 writesThrough=true captured=false passedTo=nish.p256SetLimbs#0 nish.p256ShaCompress#0 nish.p256ShaCompress#0 nish.p256ShaCompress#0
+  pointer w: size=0 writesThrough=true captured=false passedTo=nish.p256ShaCompress#1 nish.p256ShaCompress#1 nish.p256ShaCompress#1
+  pointer tail: size=0 writesThrough=true captured=false passedTo=nish.p256ShaCompress#3 nish.p256ShaCompress#3
+  stackSites=0 stackLocals=0
+  callee 4602:3 p256SetLimbs -> @nish.p256SetLimbs
+  local 4613:7 from: i32 (let)
+  callee 4615:5 p256ShaCompress -> @nish.p256ShaCompress
+  local 4618:9 rest: i32 (const)
+  local 4619:9 tailLength: i32 (const)
+  local 4620:9 dataLength: i32 (const)
+  local 4621:12 i: i32 (let)
+  local 4624:12 i: i32 (let)
+  local 4630:9 end: i32 (const)
+  local 4631:9 bits: u64 (const)
+  local 4632:12 i: i32 (let)
+  local 4633:11 j: i32 (const)
+  callee 4638:3 p256ShaCompress -> @nish.p256ShaCompress
+  callee 4640:5 p256ShaCompress -> @nish.p256ShaCompress
+  local 4642:9 outLength: i32 (const)
+  local 4643:12 i: i32 (let)
+  local 4644:11 word: u32 (const)
+  local 4645:14 b: i32 (let)
+  local 4646:13 j: i32 (const)
+function p256HmacInto(out: u8[], key: u8[], message: u8[], len: i32, kt: u32[], h: u32[], w: u32[], tail: u8[], block: u8[]): void -> @nish.p256HmacInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4679:5
+  calls: nish.p256ShaInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_exit nish_panic_index nish_panic_overflow nish_write
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#0
+  pointer key: size=0 writesThrough=false captured=false
+  pointer message: size=0 writesThrough=false captured=false
+  pointer kt: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#5 nish.p256ShaInto#5
+  pointer h: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#6 nish.p256ShaInto#6 nish.wipe$arr.u32#0
+  pointer w: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#7 nish.p256ShaInto#7 nish.wipe$arr.u32#0
+  pointer tail: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#8 nish.p256ShaInto#8 nish.wipe$arr.u8#0
+  pointer block: size=0 writesThrough=true captured=false passedTo=nish.p256ShaInto#0 nish.p256ShaInto#2 nish.p256ShaInto#2 nish.wipe$arr.u8#0
+  stackSites=0 stackLocals=0
+  local 4672:9 blockLength: i32 (const)
+  local 4673:9 keyLength: i32 (const)
+  local 4674:9 messageLength: i32 (const)
+  local 4678:12 i: i32 (let)
+  local 4681:12 i: i32 (let)
+  callee 4684:3 p256ShaInto -> @nish.p256ShaInto
+  local 4685:12 i: i32 (let)
+  callee 4688:3 p256ShaInto -> @nish.p256ShaInto
+  callee 4689:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4690:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4691:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4692:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function p256CopyBytes(out: u8[], from: u8[], n: i32): void -> @nish.p256CopyBytes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4698:5
+  pointer out: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 4697:12 i: i32 (let)
+function p256WindowFits(length: i32, at: i32, len: i32): boolean -> @nish.p256WindowFits
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function P256SignScratch.constructor(this: P256SignScratch): void -> @nish.P256SignScratch.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256Generator nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct nish_exit nish_write
+  pointer this: size=168 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 4759:17 p256Limbs -> @nish.p256Limbs
+  callee 4767:14 p256Limbs -> @nish.p256Limbs
+  callee 4768:14 p256Limbs -> @nish.p256Limbs
+  callee 4769:14 p256Limbs -> @nish.p256Limbs
+  callee 4770:15 p256Limbs -> @nish.p256Limbs
+  callee 4771:14 p256Order -> @nish.p256Order
+  callee 4772:15 p256ScalarR2 -> @nish.p256ScalarR2
+  callee 4773:14 p256Generator -> @nish.p256Generator
+  callee 4774:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee 4775:16 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee 4776:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
+  callee 4778:19 new P256PointScratch -> @nish.P256PointScratch.constructor
+function p256SignMac(sc: P256SignScratch, out: u8[], message: u8[], len: i32): void -> @nish.p256SignMac
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256HmacInto
+  escaping: len
+  calls: nish.p256HmacInto
+  pointer sc: size=168 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256HmacInto#0
+  pointer message: size=0 writesThrough=false captured=false passedTo=nish.p256HmacInto#2
+  stackSites=0 stackLocals=0
+  callee 4784:3 p256HmacInto -> @nish.p256HmacInto
+function p256NonceKeyExposed(priv: u8[], sc: P256SignScratch): u8[] -> @nish.p256NonceKeyExposed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4799:7
+  calls: nish.p256CopyBytes nish.p256HmacInto nish.p256Limbs nish.wipe$arr.u8 nish_exit nish_panic_overflow nish_write
+  pointer priv: size=0 writesThrough=false captured=false
+  pointer sc: size=168 writesThrough=false captured=false
+  stackSites=1 stackLocals=0
+  local 4793:9 message: u8[] (const)
+  callee 4794:3 p256CopyBytes -> @nish.p256CopyBytes
+  local 4795:12 i: i32 (let)
+  local 4796:11 j: i32 (const)
+  local 4797:11 l: i32 (const)
+  local 4803:9 key: u8[] (const)
+  callee 4804:3 p256HmacInto -> @nish.p256HmacInto
+  callee 4810:5 p256Limbs -> @nish.p256Limbs
+  callee 4815:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function p256SignSExposed(priv: u8[], sc: P256SignScratch): u32[] -> @nish.p256SignSExposed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256LimbsFromBytes
+  calls: nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.wipe$arr.u32
+  pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256LimbsFromBytes#1
+  pointer sc: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 4827:9 dM: u32[] (const)
+  callee 4827:21 p256Limbs -> @nish.p256Limbs
+  callee 4828:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4829:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  local 4830:9 s: u32[] (const)
+  callee 4830:20 p256Limbs -> @nish.p256Limbs
+  callee 4831:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4832:3 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  callee 4833:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4834:3 wipe<u32[]> -> @nish.wipe$arr.u32
+function p256NonceSeparated(sc: P256SignScratch, sep: u8): void -> @nish.p256NonceSeparated
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4841:3
+  escaping: sep
+  calls: nish.p256CopyBytes nish_panic_index
+  pointer sc: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 4840:3 p256CopyBytes -> @nish.p256CopyBytes
+function p256SignNonceKey(sc: P256SignScratch, priv: Secret<u8[]>, sep: u8): void -> @nish.p256SignNonceKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256NonceSeparated
+  escaping: sep
+  calls: nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed nish.p256CopyBytes nish.p256NonceSeparated nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  pointer sc: size=168 writesThrough=false captured=false passedTo=nish.p256NonceSeparated#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed#1
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed#0
+  stackSites=0 stackLocals=0
+  callee 4846:3 p256NonceSeparated -> @nish.p256NonceSeparated
+  local 4847:9 next: u8[] (const)
+  callee 4847:22 exposeWith<u8[], P256SignScratch, u8[], p256NonceKeyExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u8$fn.24.nish.p256NonceKeyExposed
+  callee 4848:3 p256CopyBytes -> @nish.p256CopyBytes
+  callee 4849:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function p256WipeSignScratch(sc: P256SignScratch): void -> @nish.p256WipeSignScratch
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.wipe$arr.u8
+  calls: nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
+  pointer sc: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 4854:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4855:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4856:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 4857:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee 4858:3 p256WipePoint -> @nish.p256WipePoint
+  callee 4859:3 p256WipeScratch -> @nish.p256WipeScratch
+function p256SignSha256Into(sc: P256SignScratch, priv: Secret<u8[]>, msg: u8[], off: i32, len: i32, out: u8[], at: i32): boolean -> @nish.p256SignSha256Into [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 4897:5
+  escaping: at len off
+  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInvert nish.p256ScalarMultWith nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256WindowFits nish.p256WipeSignScratch nish_arena_mark nish_arena_release nish_exit nish_panic_overflow nish_write
+  pointer sc: size=168 writesThrough=false captured=false passedTo=nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256WipeSignScratch#0 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange#0 nish.p256SignNonceKey#1 nish.p256SignNonceKey#1 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#0
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#2
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsToBytes#0 nish.p256LimbsToBytes#0
+  stackSites=0 stackLocals=0
+  callee 4883:8 p256WindowFits -> @nish.p256WindowFits
+  callee 4886:8 p256WindowFits -> @nish.p256WindowFits
+  local 4889:9 _scope: i64 (const)
+  callee 4890:8 expose<u8[], boolean, p256ScalarInRange> -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange
+  callee 4893:3 p256ShaInto -> @nish.p256ShaInto
+  callee 4894:3 p256DigestScalar -> @nish.p256DigestScalar
+  callee 4895:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local 4896:12 i: i32 (let)
+  callee 4900:3 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee 4901:3 p256SignMac -> @nish.p256SignMac
+  callee 4902:3 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee 4903:3 p256SignMac -> @nish.p256SignMac
+  callee 4905:5 p256SignMac -> @nish.p256SignMac
+  callee 4906:9 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee 4907:7 p256ScalarMultWith -> @nish.p256ScalarMultWith
+  callee 4908:7 p256AffineX -> @nish.p256AffineX
+  callee 4909:7 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee 4910:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee 4911:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee 4912:7 p256ScalarInvert -> @nish.p256ScalarInvert
+  local 4913:13 s: u32[] (const)
+  callee 4913:24 exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed
+  callee 4914:11 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee 4914:42 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee 4915:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4916:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee 4917:9 p256WipeSignScratch -> @nish.p256WipeSignScratch
+  callee 4922:5 p256NonceSeparated -> @nish.p256NonceSeparated
+  callee 4923:5 p256SignMac -> @nish.p256SignMac
+  callee 4924:5 p256SignMac -> @nish.p256SignMac
 module std/crypto/x25519.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith
@@ -72692,7 +73066,7 @@ import QuicListener from "nish/net/quic-listener" -> struct QuicListener
 import QuicListenerAnswer from "nish/net/quic-listener" -> struct QuicListenerAnswer
 import quicListenerPaceTime from "nish/net/quic-listener" -> function @nish.quicListenerPaceTime
 import quicListenerTakeFlight from "nish/net/quic-listener" -> function @nish.quicListenerTakeFlight
-import tlsSignEcdsaP256 from "nish/net/tls" -> function @nish.tlsSignEcdsaP256
+import TlsP256Signer from "nish/net/tls" -> struct TlsP256Signer
 const H3_SERVER_WHEEL: i32 = 2048 [exported]
 const H3_SERVER_RECEIVE_BURST: i32 = 256 [exported]
 const H3_SERVER_ANSWER_BURST: i32 = 16 [exported]
@@ -72732,7 +73106,7 @@ struct Http3Wheel (class) size=56 align=8 exported
   method file -> @nish.Http3Wheel.file
   method take -> @nish.Http3Wheel.take
   method next -> @nish.Http3Wheel.next
-struct Http3Server (class) size=200 align=8 exported
+struct Http3Server (class) size=208 align=8 exported
   field quicConfig: QuicServerConfig index=0 offset=0
   field listener: QuicListener index=1 offset=8
   field quics: QuicConnection[] index=2 offset=16
@@ -72746,23 +73120,24 @@ struct Http3Server (class) size=200 align=8 exported
   field meta: i32[] index=10 offset=80
   field entropy: u8[] index=11 offset=88
   field flight: QuicFlight index=12 offset=96
-  field signatures: i64[] index=13 offset=104
-  field state: i32[] index=14 offset=112
-  field readyRing: i32[] index=15 offset=120
-  field dirtyStack: i32[] index=16 offset=128
-  field free: i32[] index=17 offset=136
-  field queued: i32[] index=18 offset=144
-  field answerRefilled: i64 index=19 offset=152 initialized
-  field fd: i32 index=20 offset=160 initialized
-  field readyHead: i32 index=21 offset=164 initialized
-  field readyCount: i32 index=22 offset=168 initialized
-  field dirtyCount: i32 index=23 offset=172 initialized
-  field freeCount: i32 index=24 offset=176 initialized
-  field answerBudget: i32 index=25 offset=180 initialized
-  field accepted: i32 index=26 offset=184 initialized
-  field refused: i32 index=27 offset=188 initialized
-  field limited: i32 index=28 offset=192 initialized
-  field sendErrors: i32 index=29 offset=196 initialized
+  field signer: TlsP256Signer index=13 offset=104
+  field signatures: i64[] index=14 offset=112
+  field state: i32[] index=15 offset=120
+  field readyRing: i32[] index=16 offset=128
+  field dirtyStack: i32[] index=17 offset=136
+  field free: i32[] index=18 offset=144
+  field queued: i32[] index=19 offset=152
+  field answerRefilled: i64 index=20 offset=160 initialized
+  field fd: i32 index=21 offset=168 initialized
+  field readyHead: i32 index=22 offset=172 initialized
+  field readyCount: i32 index=23 offset=176 initialized
+  field dirtyCount: i32 index=24 offset=180 initialized
+  field freeCount: i32 index=25 offset=184 initialized
+  field answerBudget: i32 index=26 offset=188 initialized
+  field accepted: i32 index=27 offset=192 initialized
+  field refused: i32 index=28 offset=196 initialized
+  field limited: i32 index=29 offset=200 initialized
+  field sendErrors: i32 index=30 offset=204 initialized
   constructor -> @nish.Http3Server.constructor
   method size -> @nish.Http3Server.size
   method busy -> @nish.Http3Server.busy
@@ -72931,286 +73306,287 @@ function Http3Wheel.next(this: Http3Wheel, now: i64): i32 -> @nish.Http3Wheel.ne
   local 381:15 word64: i32 (const)
 function Http3Server.constructor(this: Http3Server, quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[]): void -> @nish.Http3Server.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 459:7
+  sharedWrite: 461:7
   escaping: fd quicConfig size
-  calls: nish.Http3CidIndex.constructor nish.Http3Connection.constructor nish.Http3Wheel.constructor nish.QuicConnection.constructor nish.QuicListener.constructor nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_random_fill nish_str_concat nish_str_from_i32 nish_write
-  pointer this: size=200 writesThrough=true captured=false
+  calls: nish.Http3CidIndex.constructor nish.Http3Connection.constructor nish.Http3Wheel.constructor nish.QuicConnection.constructor nish.QuicListener.constructor nish.TlsP256Signer.constructor nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_random_fill nish_str_concat nish_str_from_i32 nish_write
+  pointer this: size=208 writesThrough=true captured=false
   pointer quicConfig: size=112 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1 nish.QuicConnection.constructor#1
   pointer config: size=20 writesThrough=true captured=true passedTo=nish.Http3Connection.constructor#1
   pointer listenerEntropy: size=0 writesThrough=true captured=false passedTo=nish.Http3CidIndex.constructor#2 nish.QuicListener.constructor#2
   stackSites=0 stackLocals=0
-  callee 451:18 new Http3CidIndex -> @nish.Http3CidIndex.constructor
-  callee 452:21 new QuicListener -> @nish.QuicListener.constructor
-  callee 453:18 new Http3Wheel -> @nish.Http3Wheel.constructor
-  local 458:14 k: i32 (let)
-  local 460:13 quic: QuicConnection (const)
-  callee 460:20 new QuicConnection -> @nish.QuicConnection.constructor
-  callee 462:23 new Http3Connection -> @nish.Http3Connection.constructor
-  local 476:14 k: i32 (let)
+  callee 453:18 new Http3CidIndex -> @nish.Http3CidIndex.constructor
+  callee 454:21 new QuicListener -> @nish.QuicListener.constructor
+  callee 455:18 new Http3Wheel -> @nish.Http3Wheel.constructor
+  local 460:14 k: i32 (let)
+  local 462:13 quic: QuicConnection (const)
+  callee 462:20 new QuicConnection -> @nish.QuicConnection.constructor
+  callee 464:23 new Http3Connection -> @nish.Http3Connection.constructor
+  callee 472:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
+  local 479:14 k: i32 (let)
 function Http3Server.size(this: Http3Server): i32 -> @nish.Http3Server.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=200 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http3Server.busy(this: Http3Server): i32 -> @nish.Http3Server.busy [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http3Server.size nish_panic_overflow
-  pointer this: size=200 writesThrough=false captured=false passedTo=nish.Http3Server.size#0
+  pointer this: size=208 writesThrough=false captured=false passedTo=nish.Http3Server.size#0
   stackSites=0 stackLocals=0
-  callee 489:12 Http3Server.size -> @nish.Http3Server.size
+  callee 492:12 Http3Server.size -> @nish.Http3Server.size
 function Http3Server.holds(this: Http3Server, slot: i32): boolean -> @nish.Http3Server.holds [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
-  pointer this: size=200 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http3Server.connection(this: Http3Server, slot: i32): Http3Connection -> @nish.Http3Server.connection [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=464
   escaping: slot
   calls: nish_panic_index
-  pointer this: size=200 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 499:11 at: i32 (const)
+  local 502:11 at: i32 (const)
 function Http3Server.quic(this: Http3Server, slot: i32): QuicConnection -> @nish.Http3Server.quic [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=504
   escaping: slot
   calls: nish_panic_index
-  pointer this: size=200 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 505:11 at: i32 (const)
+  local 508:11 at: i32 (const)
 function Http3Server.touch(this: Http3Server, slot: i32): void -> @nish.Http3Server.touch [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 516:7
+  sharedWrite: 519:7
   escaping: slot
   calls: nish.Http3Server.dirty nish.Http3Server.holds nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.dirty#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.dirty#0
   stackSites=0 stackLocals=0
-  callee 511:10 Http3Server.holds -> @nish.Http3Server.holds
-  local 515:13 at: i32 (const)
-  callee 520:5 Http3Server.dirty -> @nish.Http3Server.dirty
+  callee 514:10 Http3Server.holds -> @nish.Http3Server.holds
+  local 518:13 at: i32 (const)
+  callee 523:5 Http3Server.dirty -> @nish.Http3Server.dirty
 function Http3Server.dirty(this: Http3Server, slot: i32): void -> @nish.Http3Server.dirty [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 526:7
+  sharedWrite: 529:7
   escaping: slot
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http3Server.ready(this: Http3Server): i32 -> @nish.Http3Server.ready [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 536:7
+  sharedWrite: 539:7
   calls: nish.Http3Server.holds nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0
   stackSites=0 stackLocals=0
-  local 535:13 slot: i32 (const)
-  callee 539:11 Http3Server.holds -> @nish.Http3Server.holds
+  local 538:13 slot: i32 (const)
+  callee 542:11 Http3Server.holds -> @nish.Http3Server.holds
 function Http3Server.receive(this: Http3Server, now: i64, key: Secret<u8[]>): i32 -> @nish.Http3Server.receive [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 556:22
+  sharedWrite: 559:22
   escaping: now
   calls: nish.Http3Server.datagram nish_panic_index nish_panic_overflow nish_panic_slice nish_udp_recv_from
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.datagram#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.datagram#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.Http3Server.datagram#6
   stackSites=0 stackLocals=0
-  local 554:9 count: i32 (let)
-  local 555:14 burst: i32 (let)
-  local 556:13 n: i32 (const)
-  local 567:13 segment: i32 (const)
-  local 568:11 at: i32 (let)
-  local 570:15 length: i32 (const)
-  callee 571:9 Http3Server.datagram -> @nish.Http3Server.datagram
+  local 557:9 count: i32 (let)
+  local 558:14 burst: i32 (let)
+  local 559:13 n: i32 (const)
+  local 570:13 segment: i32 (const)
+  local 571:11 at: i32 (let)
+  local 573:15 length: i32 (const)
+  callee 574:9 Http3Server.datagram -> @nish.Http3Server.datagram
 function Http3Server.datagram(this: Http3Server, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void -> @nish.Http3Server.datagram [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3Server.serve
   escaping: at len now
   calls: nish.Http3CidIndex.find nish.Http3Server.serve nish.Http3Server.unowned nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.serve#0 nish.Http3Server.unowned#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.serve#0 nish.Http3Server.unowned#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http3CidIndex.find#1 nish.Http3Server.serve#2 nish.Http3Server.unowned#1
   pointer address: size=0 writesThrough=false captured=false passedTo=nish.Http3Server.unowned#4
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.Http3Server.serve#6 nish.Http3Server.unowned#6
   stackSites=0 stackLocals=0
-  local 588:9 dcidAt: i32 (let)
-  local 589:9 dcidLength: i32 (let)
-  local 600:11 slot: i32 (const)
-  callee 600:23 Http3CidIndex.find -> @nish.Http3CidIndex.find
-  callee 602:7 Http3Server.serve -> @nish.Http3Server.serve
-  callee 605:5 Http3Server.unowned -> @nish.Http3Server.unowned
+  local 591:9 dcidAt: i32 (let)
+  local 592:9 dcidLength: i32 (let)
+  local 603:11 slot: i32 (const)
+  callee 603:23 Http3CidIndex.find -> @nish.Http3CidIndex.find
+  callee 605:7 Http3Server.serve -> @nish.Http3Server.serve
+  callee 608:5 Http3Server.unowned -> @nish.Http3Server.unowned
 function Http3Server.unowned(this: Http3Server, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void -> @nish.Http3Server.unowned [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 615:7
+  sharedWrite: 618:7
   escaping: at len now
   calls: nish.Http3Connection.restart nish.Http3Server.send nish.Http3Server.serve nish.Http3Server.worthListening nish.QuicConnection.acceptRetry nish.QuicConnection.reset nish.QuicListener.handle nish.h3Count nish_exit nish_panic_index nish_panic_overflow nish_random_fill nish_write
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.worthListening#0 nish.Http3Server.send#0 nish.Http3Server.serve#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.worthListening#0 nish.Http3Server.send#0 nish.Http3Server.serve#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http3Server.worthListening#1 nish.Http3Server.serve#2
   pointer address: size=0 writesThrough=false captured=false passedTo=nish.QuicListener.handle#2 nish.Http3Server.send#4
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.Http3Server.serve#6
   stackSites=0 stackLocals=0
-  callee 610:10 Http3Server.worthListening -> @nish.Http3Server.worthListening
-  local 613:11 datagram: u8[] (const)
-  local 614:14 k: i32 (let)
-  local 617:11 answer: QuicListenerAnswer (const)
-  callee 617:40 QuicListener.handle -> @nish.QuicListener.handle
-  local 619:13 reply: i32 (const)
-  callee 621:9 Http3Server.send -> @nish.Http3Server.send
-  local 629:11 slot: i32 (const)
-  local 631:11 quic: QuicConnection (const)
-  callee 632:5 QuicConnection.reset -> @nish.QuicConnection.reset
-  callee 633:5 Http3Connection.restart -> @nish.Http3Connection.restart
-  callee 635:7 QuicConnection.acceptRetry -> @nish.QuicConnection.acceptRetry
-  local 637:11 to: u8[] (const)
-  local 638:14 k: i32 (let)
-  callee 643:21 h3Count -> @nish.h3Count
-  callee 644:5 Http3Server.serve -> @nish.Http3Server.serve
+  callee 613:10 Http3Server.worthListening -> @nish.Http3Server.worthListening
+  local 616:11 datagram: u8[] (const)
+  local 617:14 k: i32 (let)
+  local 620:11 answer: QuicListenerAnswer (const)
+  callee 620:40 QuicListener.handle -> @nish.QuicListener.handle
+  local 622:13 reply: i32 (const)
+  callee 624:9 Http3Server.send -> @nish.Http3Server.send
+  local 632:11 slot: i32 (const)
+  local 634:11 quic: QuicConnection (const)
+  callee 635:5 QuicConnection.reset -> @nish.QuicConnection.reset
+  callee 636:5 Http3Connection.restart -> @nish.Http3Connection.restart
+  callee 638:7 QuicConnection.acceptRetry -> @nish.QuicConnection.acceptRetry
+  local 640:11 to: u8[] (const)
+  local 641:14 k: i32 (let)
+  callee 646:21 h3Count -> @nish.h3Count
+  callee 647:5 Http3Server.serve -> @nish.Http3Server.serve
 function Http3Server.worthListening(this: Http3Server, buf: u8[], at: i32, len: i32, now: i64): boolean -> @nish.Http3Server.worthListening [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 678:7
+  sharedWrite: 681:7
   escaping: at now
   calls: nish.Http3Server.takeAnswer nish.h3Count nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.takeAnswer#0 nish.Http3Server.takeAnswer#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.takeAnswer#0 nish.Http3Server.takeAnswer#0
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 660:11 first: i32 (const)
-  callee 662:47 Http3Server.takeAnswer -> @nish.Http3Server.takeAnswer
-  local 667:9 version: i32 (let)
-  local 668:14 k: i32 (let)
-  callee 672:31 Http3Server.takeAnswer -> @nish.Http3Server.takeAnswer
-  callee 678:22 h3Count -> @nish.h3Count
+  local 663:11 first: i32 (const)
+  callee 665:47 Http3Server.takeAnswer -> @nish.Http3Server.takeAnswer
+  local 670:9 version: i32 (let)
+  local 671:14 k: i32 (let)
+  callee 675:31 Http3Server.takeAnswer -> @nish.Http3Server.takeAnswer
+  callee 681:22 h3Count -> @nish.h3Count
 function Http3Server.takeAnswer(this: Http3Server, now: i64): boolean -> @nish.Http3Server.takeAnswer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 693:7
+  sharedWrite: 696:7
   escaping: now
   calls: nish.h3Count nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 696:11 earned: i64 (const)
-  local 698:13 room: i64 (const)
-  callee 703:22 h3Count -> @nish.h3Count
+  local 699:11 earned: i64 (const)
+  local 701:13 room: i64 (const)
+  callee 706:22 h3Count -> @nish.h3Count
 function Http3Server.serve(this: Http3Server, slot: i32, buf: u8[], at: i32, len: i32, now: i64, key: Secret<u8[]>): void -> @nish.Http3Server.serve [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.receiveWindow
   escaping: at len now slot
-  calls: nish.Http3Server.refile nish.Http3Server.touch nish.QuicConnection.receiveWindow nish.QuicConnection.sign nish.QuicConnection.signatureInput nish.tlsSignEcdsaP256 nish_panic_index
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.refile#0 nish.Http3Server.touch#0
+  calls: nish.Http3Server.refile nish.Http3Server.touch nish.QuicConnection.receiveWindow nish.QuicConnection.sign nish.QuicConnection.signatureInput nish.TlsP256Signer.sign nish_panic_index
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.refile#0 nish.Http3Server.touch#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.QuicConnection.receiveWindow#1
-  pointer key: size=8 writesThrough=false captured=false passedTo=nish.tlsSignEcdsaP256#0
+  pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsP256Signer.sign#1
   stackSites=0 stackLocals=0
-  local 712:11 quic: QuicConnection (const)
-  callee 713:5 QuicConnection.receiveWindow -> @nish.QuicConnection.receiveWindow
-  local 714:11 input: u8[] | null (const)
-  callee 714:32 QuicConnection.signatureInput -> @nish.QuicConnection.signatureInput
-  local 716:13 signature: u8[] | null (const)
-  callee 716:38 tlsSignEcdsaP256 -> @nish.tlsSignEcdsaP256
-  callee 718:9 QuicConnection.sign -> @nish.QuicConnection.sign
-  callee 721:5 Http3Server.refile -> @nish.Http3Server.refile
-  callee 722:5 Http3Server.touch -> @nish.Http3Server.touch
+  local 715:11 quic: QuicConnection (const)
+  callee 716:5 QuicConnection.receiveWindow -> @nish.QuicConnection.receiveWindow
+  local 717:11 input: u8[] | null (const)
+  callee 717:32 QuicConnection.signatureInput -> @nish.QuicConnection.signatureInput
+  local 719:13 signature: u8[] | null (const)
+  callee 719:38 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
+  callee 721:9 QuicConnection.sign -> @nish.QuicConnection.sign
+  callee 724:5 Http3Server.refile -> @nish.Http3Server.refile
+  callee 725:5 Http3Server.touch -> @nish.Http3Server.touch
 function Http3Server.refile(this: Http3Server, slot: i32): void -> @nish.Http3Server.refile [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 736:5
+  sharedWrite: 739:5
   escaping: slot
   calls: nish.Http3CidIndex.insert nish.Http3Server.unindex nish.QuicCidTable.activeLocal nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=false captured=false passedTo=nish.Http3Server.unindex#0
+  pointer this: size=208 writesThrough=false captured=false passedTo=nish.Http3Server.unindex#0
   stackSites=0 stackLocals=0
-  local 727:11 quic: QuicConnection (const)
-  local 728:11 signature: i64 (const)
-  callee 730:14 QuicCidTable.activeLocal -> @nish.QuicCidTable.activeLocal
-  callee 737:5 Http3Server.unindex -> @nish.Http3Server.unindex
-  local 738:11 first: i32 (const)
-  local 739:14 j: i32 (let)
-  local 740:13 entry: QuicCidEntry (const)
-  callee 742:9 Http3CidIndex.insert -> @nish.Http3CidIndex.insert
-  callee 746:7 Http3CidIndex.insert -> @nish.Http3CidIndex.insert
+  local 730:11 quic: QuicConnection (const)
+  local 731:11 signature: i64 (const)
+  callee 733:14 QuicCidTable.activeLocal -> @nish.QuicCidTable.activeLocal
+  callee 740:5 Http3Server.unindex -> @nish.Http3Server.unindex
+  local 741:11 first: i32 (const)
+  local 742:14 j: i32 (let)
+  local 743:13 entry: QuicCidEntry (const)
+  callee 745:9 Http3CidIndex.insert -> @nish.Http3CidIndex.insert
+  callee 749:7 Http3CidIndex.insert -> @nish.Http3CidIndex.insert
 function Http3Server.send(this: Http3Server, buf: u8[], at: i32, len: i32, to: u8[], segment: i32): boolean -> @nish.Http3Server.send [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 762:7
+  sharedWrite: 765:7
   escaping: at segment
   calls: nish.h3Count nish_panic_overflow nish_panic_slice nish_udp_send_to
-  pointer this: size=200 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   pointer buf: size=0 writesThrough=false captured=false
   pointer to: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 757:11 sent: i32 (const)
-  callee 762:25 h3Count -> @nish.h3Count
-  local 766:9 p: i32 (let)
-  local 768:13 n: i32 (const)
-  callee 770:27 h3Count -> @nish.h3Count
+  local 760:11 sent: i32 (const)
+  callee 765:25 h3Count -> @nish.h3Count
+  local 769:9 p: i32 (let)
+  local 771:13 n: i32 (const)
+  callee 773:27 h3Count -> @nish.h3Count
 function Http3Server.flush(this: Http3Server, now: i64): void -> @nish.Http3Server.flush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 786:7
+  sharedWrite: 789:7
   escaping: now
   calls: nish.Http3Server.flushSlot nish.Http3Server.holds nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.flushSlot#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.flushSlot#0
   stackSites=0 stackLocals=0
-  local 787:13 slot: i32 (const)
-  callee 789:11 Http3Server.holds -> @nish.Http3Server.holds
-  callee 790:9 Http3Server.flushSlot -> @nish.Http3Server.flushSlot
+  local 790:13 slot: i32 (const)
+  callee 792:11 Http3Server.holds -> @nish.Http3Server.holds
+  callee 793:9 Http3Server.flushSlot -> @nish.Http3Server.flushSlot
 function Http3Server.flushSlot(this: Http3Server, slot: i32, now: i64): void -> @nish.Http3Server.flushSlot [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.close
   escaping: now slot
   calls: nish.Http3Connection.isDone nish.Http3Server.refile nish.Http3Server.release nish.Http3Server.send nish.Http3Wheel.file nish.QuicConnection.close nish.QuicConnection.closed nish.QuicConnection.deadline nish.QuicConnection.takeDatagramInto nish.quicListenerPaceTime nish.quicListenerTakeFlight nish_panic_index
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.release#0 nish.Http3Server.refile#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.release#0 nish.Http3Server.refile#0
   stackSites=0 stackLocals=0
-  local 797:11 quic: QuicConnection (const)
-  callee 798:9 Http3Connection.isDone -> @nish.Http3Connection.isDone
-  callee 798:39 QuicConnection.closed -> @nish.QuicConnection.closed
-  callee 799:7 QuicConnection.close -> @nish.QuicConnection.close
-  local 801:11 to: u8[] (const)
-  local 802:9 retried: boolean (let)
-  local 803:14 guard: i32 (let)
-  local 804:13 n: i32 (const)
-  callee 804:22 quicListenerTakeFlight -> @nish.quicListenerTakeFlight
-  local 821:13 segment: i32 (const)
-  callee 822:12 Http3Server.send -> @nish.Http3Server.send
-  callee 827:9 QuicConnection.closed -> @nish.QuicConnection.closed
-  local 829:13 n: i32 (const)
-  callee 829:22 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
-  callee 831:9 Http3Server.send -> @nish.Http3Server.send
-  callee 833:7 Http3Server.release -> @nish.Http3Server.release
-  callee 836:5 Http3Server.refile -> @nish.Http3Server.refile
-  local 839:9 due: i64 (let)
-  callee 839:20 QuicConnection.deadline -> @nish.QuicConnection.deadline
-  local 840:11 paced: i64 (const)
-  callee 840:24 quicListenerPaceTime -> @nish.quicListenerPaceTime
-  callee 844:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  local 800:11 quic: QuicConnection (const)
+  callee 801:9 Http3Connection.isDone -> @nish.Http3Connection.isDone
+  callee 801:39 QuicConnection.closed -> @nish.QuicConnection.closed
+  callee 802:7 QuicConnection.close -> @nish.QuicConnection.close
+  local 804:11 to: u8[] (const)
+  local 805:9 retried: boolean (let)
+  local 806:14 guard: i32 (let)
+  local 807:13 n: i32 (const)
+  callee 807:22 quicListenerTakeFlight -> @nish.quicListenerTakeFlight
+  local 824:13 segment: i32 (const)
+  callee 825:12 Http3Server.send -> @nish.Http3Server.send
+  callee 830:9 QuicConnection.closed -> @nish.QuicConnection.closed
+  local 832:13 n: i32 (const)
+  callee 832:22 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
+  callee 834:9 Http3Server.send -> @nish.Http3Server.send
+  callee 836:7 Http3Server.release -> @nish.Http3Server.release
+  callee 839:5 Http3Server.refile -> @nish.Http3Server.refile
+  local 842:9 due: i64 (let)
+  callee 842:20 QuicConnection.deadline -> @nish.QuicConnection.deadline
+  local 843:11 paced: i64 (const)
+  callee 843:24 quicListenerPaceTime -> @nish.quicListenerPaceTime
+  callee 847:5 Http3Wheel.file -> @nish.Http3Wheel.file
 function Http3Server.unindex(this: Http3Server, slot: i32): void -> @nish.Http3Server.unindex [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3CidIndex.remove
   calls: nish.Http3CidIndex.remove nish_panic_overflow
-  pointer this: size=200 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 849:11 first: i32 (const)
-  local 850:14 j: i32 (let)
-  callee 851:7 Http3CidIndex.remove -> @nish.Http3CidIndex.remove
+  local 852:11 first: i32 (const)
+  local 853:14 j: i32 (let)
+  callee 854:7 Http3CidIndex.remove -> @nish.Http3CidIndex.remove
 function Http3Server.release(this: Http3Server, slot: i32): void -> @nish.Http3Server.release [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 860:5
+  sharedWrite: 863:5
   escaping: slot
   calls: nish.Http3Server.unindex nish.Http3Wheel.unfile nish.QuicConnection.release nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.unindex#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.unindex#0
   stackSites=0 stackLocals=0
-  callee 857:5 Http3Server.unindex -> @nish.Http3Server.unindex
-  callee 858:5 Http3Wheel.unfile -> @nish.Http3Wheel.unfile
-  callee 859:5 QuicConnection.release -> @nish.QuicConnection.release
+  callee 860:5 Http3Server.unindex -> @nish.Http3Server.unindex
+  callee 861:5 Http3Wheel.unfile -> @nish.Http3Wheel.unfile
+  callee 862:5 QuicConnection.release -> @nish.QuicConnection.release
 function Http3Server.tick(this: Http3Server, now: i64): void -> @nish.Http3Server.tick [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 871:7
+  sharedWrite: 874:7
   escaping: now
   calls: nish.Http3Server.dirty nish.Http3Server.holds nish.Http3Wheel.file nish.Http3Wheel.take nish.QuicConnection.handleTimer nish_panic_index nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.dirty#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Http3Server.holds#0 nish.Http3Server.dirty#0
   stackSites=0 stackLocals=0
-  local 869:11 wheel: Http3Wheel (const)
-  local 878:9 steps: i32 (let)
-  local 880:11 slot: i32 (let)
-  callee 880:23 Http3Wheel.take -> @nish.Http3Wheel.take
-  callee 882:13 Http3Server.holds -> @nish.Http3Server.holds
-  callee 885:13 Http3Wheel.file -> @nish.Http3Wheel.file
-  callee 887:13 QuicConnection.handleTimer -> @nish.QuicConnection.handleTimer
-  callee 888:13 Http3Server.dirty -> @nish.Http3Server.dirty
-  callee 891:16 Http3Wheel.take -> @nish.Http3Wheel.take
+  local 872:11 wheel: Http3Wheel (const)
+  local 881:9 steps: i32 (let)
+  local 883:11 slot: i32 (let)
+  callee 883:23 Http3Wheel.take -> @nish.Http3Wheel.take
+  callee 885:13 Http3Server.holds -> @nish.Http3Server.holds
+  callee 888:13 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 890:13 QuicConnection.handleTimer -> @nish.QuicConnection.handleTimer
+  callee 891:13 Http3Server.dirty -> @nish.Http3Server.dirty
+  callee 894:16 Http3Wheel.take -> @nish.Http3Wheel.take
 function Http3Server.timeout(this: Http3Server, now: i64): i32 -> @nish.Http3Server.timeout [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.Http3Wheel.next
-  pointer this: size=200 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 903:12 Http3Wheel.next -> @nish.Http3Wheel.next
+  callee 906:12 Http3Wheel.next -> @nish.Http3Wheel.next
 module std/net/webtransport.ts [package nish]
 import HttpFields from "nish/net/http-fields" -> struct HttpFields
 import httpFieldBytes from "nish/net/http-fields" -> function @nish.httpFieldBytes
