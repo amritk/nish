@@ -689,6 +689,8 @@ const diagnosticRules = (): string[] => [
   "NL2096",
   "` takes no type arguments: only a generic ",
   "NL2325",
+  "`Math.clz32` expects an i32 or a u32, got ",
+  "NL2460",
   "`substring` expects 1 or 2 arguments, got ",
   "NL2153",
   "Loose equality is forbidden; use === / !==",

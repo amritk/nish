@@ -183,7 +183,7 @@ export const webtransportChecks = (t: Suite): void => {
     inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("webtransport: three more connections, each a session and a datagram, closed by the client", all && s.accepted === 4);
-  t.ok("webtransport: each keeps 10 to 16 KiB of arena from its Initial to its close, none of it the QUIC connection's (WT-1, H3-1)", inBand);
+  t.ok("webtransport: each keeps 1 to 6 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (WT-1, H3-1)", inBand);
   t.ok("webtransport: the program was refused nothing and held nothing it could not place", lp.wtApp.refusals === 0 && lp.wtApp.table.overflows === 0);
   t.eqStr("webtransport: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

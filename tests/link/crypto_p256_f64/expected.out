@@ -68,4 +68,18 @@ PASS  the digest n signs as the digest 0
 PASS  the digest n + 5 signs as the digest 5
 PASS  the signature of the digest 0 verifies (u1 = 0)
 PASS  the signature of 5 verifies under the digest n + 5
-p256: 66 passed, 0 failed, 0 skipped
+PASS  into scratch: A.2.5 SHA-256 "sample": r || s
+PASS  into scratch: A.2.5 SHA-256 "test": r || s
+PASS  and "sample" again, in the same scratch
+PASS  the same 64 bytes as p256SignSha256: every length 0 to 199 under A.2.5's key, every ninth under three more
+PASS  a message window inside a larger array signs as the message alone
+PASS  and the bytes around the signature window are untouched
+PASS  fifty signatures after the first, each measured on its own
+PASS  and not one moved Arena.mark() or Arena.used(): a signature keeps 0 bytes
+PASS  private key 0 is refused
+PASS  private key n is refused
+PASS  a 31-byte key is refused
+PASS  a 33-byte key is refused
+PASS  and a refused key writes nothing
+PASS  the scratch signs again after a refusal
+p256: 80 passed, 0 failed, 0 skipped

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 931 programs, 63148 dump lines.
+# 933 programs, 63188 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42461,6 +42461,38 @@ function hashKey<i32>(_key: i32): u32 -> @nish.hashKey$i32 [instance]
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+program tests/cases/math_clz32.ts
+module tests/cases/math_clz32.ts (entry)
+function clz(x: i32): i32 -> @clz [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
+  stackSites=0 stackLocals=0
+function clzU(x: u32): i32 -> @clzU [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
+  stackSites=0 stackLocals=0
+function lowestBit(word: u32): i32 -> @lowestBit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: clz clzU lowestBit nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 10:18 clz -> @clz
+  callee 10:28 clz -> @clz
+  callee 10:38 clz -> @clz
+  callee 10:49 clz -> @clz
+  callee 10:63 clz -> @clz
+  local 11:9 top: u32 (const)
+  local 12:9 all: u32 (const)
+  callee 13:18 clzU -> @clzU
+  callee 13:31 clzU -> @clzU
+  callee 13:44 clzU -> @clzU
+  callee 14:18 lowestBit -> @lowestBit
+  callee 14:42 lowestBit -> @lowestBit
+  callee 14:60 lowestBit -> @lowestBit
 program tests/cases/math_i32.ts
 module tests/cases/math_i32.ts (entry)
 function clamp(x: i32, lo: i32, hi: i32): i32 -> @clamp
@@ -52800,6 +52832,16 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arch nish_arena_mark nish_arena_release nish_exit nish_is_dir nish_mkdir nish_platform nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
   local 2:9 out: string (const)
+program docs/cookbook/builtin-math-clz32.ts
+module docs/cookbook/builtin-math-clz32.ts (entry)
+function leadingZeros(x: i32): i32 -> @leadingZeros
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
+  stackSites=0 stackLocals=0
+function lowestBit(word: u32): i32 -> @lowestBit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
+  stackSites=0 stackLocals=0
 program docs/cookbook/builtin-math-f64.ts --number-mode f64
 module docs/cookbook/builtin-math-f64.ts (entry)
 function hypot(a: f64, b: f64): f64 -> @hypot

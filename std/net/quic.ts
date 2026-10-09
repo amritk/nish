@@ -58,10 +58,15 @@
  * its current value. When nothing is acknowledged for a probe timeout, with
  * its backoff, everything in flight is queued again and a probe goes out in
  * each space that has packets in flight, a PING if there is nothing to
- * resend (§6.2.4). NewReno's window holds back everything ack-eliciting but
- * a probe; an ACK always goes. PATH_RESPONSE and DATAGRAM are never sent
- * again (RFC 9000 §13.3, RFC 9221 §5.2). Pacing, and GSO batching, are the
- * carrier's: `nish/net/quic-listener`.
+ * resend (§6.2.4) — two datagrams of them during the handshake, each with
+ * the oldest CRYPTO data not acknowledged. A client that shows it lacks the
+ * server's handshake data (an Initial repeating CRYPTO data, an
+ * ack-eliciting Handshake packet) gets it again at once, a datagram each
+ * time, up to `QUIC_CONN_EARLY_RESENDS` times (§6.2.3). NewReno's window
+ * holds back everything ack-eliciting but a probe; an ACK always goes.
+ * PATH_RESPONSE and DATAGRAM are never sent again (RFC 9000 §13.3, RFC 9221
+ * §5.2). Pacing, and GSO batching, are the carrier's:
+ * `nish/net/quic-listener`.
  *
  * **Nothing allocated per packet** (QUIC-3). A connection is a slot: every
  * buffer it uses — the packet record, the stream buffers, the CRYPTO
@@ -333,6 +338,25 @@ export const QUIC_CONN_PACKET_CONTROL: i32 = 4
  */
 export const QUIC_CONN_MAX_KEY_UPDATES: i32 = 64
 /**
+ * How many ack-eliciting datagrams a probe timeout sends in the Initial and
+ * Handshake spaces (RFC 9002 §6.2.4 allows up to two). The server's first
+ * flight is usually one datagram, so with one probe a lossy path loses every
+ * copy of it about as often as it loses one datagram per probe timeout; two
+ * square that, and stay inside the amplification limit, which a one-datagram
+ * flight and two probes fill exactly. The Application Data space sends one.
+ */
+export const QUIC_CONN_HANDSHAKE_PROBES: i32 = 2
+/**
+ * How many times a connection resends its handshake data before the probe
+ * timeout because the client showed it lacks it (RFC 9002 §6.2.3, "for a
+ * limited number of times per connection"): a client Initial carrying
+ * CRYPTO data the server already read, or an ack-eliciting Handshake packet,
+ * while the server's own CRYPTO data at that level is in flight. Each
+ * resend is one datagram, so a client cannot make the server answer more
+ * than this many packets that way, whatever it sends.
+ */
+export const QUIC_CONN_EARLY_RESENDS: i32 = 2
+/**
  * How many connection IDs a connection issues in all, its first included.
  * The client retiring one asks for a replacement (§5.1.1, a SHOULD), and
  * each costs two HMACs whose temporaries stay in the arena, so this bounds
@@ -587,6 +611,12 @@ class QuicConnSpace {
    */
   cryptoOut: u8[]
   cryptoOutLength: i32 = 0
+  /**
+   * How many ack-eliciting probe packets this space still owes, which the
+   * window does not hold back: what a probe timeout asked for (RFC 9002
+   * §6.2.4), or an early resend (§6.2.3).
+   */
+  probes: i32 = 0
   cryptoOutOffset: i64 = 0
   /** How many CRYPTO bytes the client sent here that were handed to TLS, for a duplicate arriving after the next level started. */
   cryptoInDelivered: i64 = 0
@@ -625,8 +655,6 @@ class QuicConnSpace {
   discarded: boolean = false
   /** Whether the packet being built elicits an acknowledgement, and so is recorded. */
   stagedEliciting: boolean = false
-  /** Whether a probe timeout asked this space for an ack-eliciting packet, which the window does not hold back (RFC 9002 §6.2.4). */
-  probe: boolean = false
 
   constructor(level: i32) {
     this.level = level
@@ -670,7 +698,7 @@ class QuicConnSpace {
     this.cryptoResendLow = -1
     this.cryptoResendHigh = -1
     this.discarded = false
-    this.probe = false
+    this.probes = 0
     this.clearStaged()
   }
 
@@ -1143,6 +1171,10 @@ export class QuicConnection {
   /** Which of `readSecrets` and `writeSecrets` (0 or 1) holds the current secret, or -1 for `TlsServer`'s own. */
   readSecretCurrent: i32 = -1
   writeSecretCurrent: i32 = -1
+  /** Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). */
+  earlyResends: i32 = 0
+  /** The level at which the packet just read showed the client lacks the server's handshake data, or -1. */
+  resendLevel: i32 = -1
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
@@ -1280,6 +1312,8 @@ export class QuicConnection {
     this.appWriteSlot = 0
     this.readSecretCurrent = -1
     this.writeSecretCurrent = -1
+    this.earlyResends = 0
+    this.resendLevel = -1
     this.now = 0
     this.idleSince = -1
     this.readPhaseLowest = -1
@@ -1677,6 +1711,7 @@ export class QuicConnection {
     this.cryptoArrived = false
     this.topUpOwed = false
     this.phasePending = -1
+    this.resendLevel = -1
     let used: boolean = false
     {
       using _scope = arena()
@@ -1706,6 +1741,9 @@ export class QuicConnection {
     this.afterTls()
     if (this.topUpOwed) {
       this.topUpConnectionIds()
+    }
+    if (this.resendLevel >= 0 && !this.closed()) {
+      this.resendEarly(this.resendLevel)
     }
     return true
   }
@@ -1750,6 +1788,11 @@ export class QuicConnection {
     const eliciting: boolean = this.receiveFrames(space, type, payload, buf, header)
     if (this.closed()) {
       return true
+    }
+    // RFC 9002 §6.2.3: a client that sends an ack-eliciting Handshake packet
+    // while the server's Handshake data is in flight may not have it all.
+    if (eliciting && type === QUIC_PACKET_HANDSHAKE) {
+      this.resendLevel = TLS_LEVEL_HANDSHAKE
     }
     space.received.record(pn, eliciting)
     // §10.1: a packet received and processed restarts the idle timer.
@@ -2191,10 +2234,12 @@ export class QuicConnection {
 
   /**
    * A probe timeout fired (RFC 9002 §6.2.4): in every space with packets in
-   * flight, everything they carry is queued again and the next packet is a
-   * probe, sent whatever the window says, with a PING if nothing is left to
+   * flight, everything they carry is queued again and the next packets are
+   * probes, sent whatever the window says, with a PING if nothing is left to
    * carry. During the handshake that resends the Initial and the Handshake
-   * flight together, which is what a client that lost both needs.
+   * flight together, which is what a client that lost both needs, and does
+   * it twice (`QUIC_CONN_HANDSHAKE_PROBES`), so that one more lost datagram
+   * does not cost another, doubled, probe timeout.
    */
   probe(): void {
     for (let level: i32 = 0; level < 3; level += 1) {
@@ -2209,7 +2254,56 @@ export class QuicConnection {
           this.requeue(space, slot)
         }
       }
-      space.probe = true
+      space.probes = QUIC_CONN_HANDSHAKE_PROBES
+      if (level === TLS_LEVEL_APPLICATION) {
+        space.probes = 1
+      }
+    }
+  }
+
+  /**
+   * Speeds up the handshake (RFC 9002 §6.2.3): the client showed at `level`
+   * that it lacks the server's handshake data there — an Initial with CRYPTO
+   * data the server already read, or an ack-eliciting Handshake packet —
+   * so, while the server's own packets at that level are in flight, the
+   * oldest one's CRYPTO data at that level and at Handshake goes again now,
+   * as one probe datagram, rather than at the probe timeout. It does so at
+   * most `QUIC_CONN_EARLY_RESENDS` times a connection, and not while an
+   * earlier probe is still owed, so each packet the client sends asks for
+   * one datagram at most. The anti-amplification limit holds it like any
+   * datagram (`takeDatagramInto`).
+   */
+  resendEarly(level: i32): void {
+    if (
+      this.earlyResends >= QUIC_CONN_EARLY_RESENDS ||
+      this.initial.probes > 0 ||
+      this.handshake.probes > 0
+    ) {
+      return
+    }
+    const asked: QuicSentPackets | null = this.recovery.space(level)
+    if (asked === null || asked.inFlight === 0) {
+      return
+    }
+    let queued: boolean = false
+    for (let at: i32 = level; at <= TLS_LEVEL_HANDSHAKE; at += 1) {
+      const space: QuicConnSpace = this.spaceAt(at)
+      const sent: QuicSentPackets | null = this.recovery.space(at)
+      if (sent === null || space.discarded || sent.inFlight === 0) {
+        continue
+      }
+      // Compacted, the ring's oldest slot is the oldest packet in flight.
+      sent.compact()
+      const oldest: i32 = sent.slot(QUIC_CONN_FROM)
+      const length: i32 = space.cryptoLength(oldest)
+      if (length > 0) {
+        space.resendCrypto(space.cryptoOffset(oldest), length)
+        space.probes = 1
+        queued = true
+      }
+    }
+    if (queued) {
+      this.earlyResends += 1
     }
   }
 
@@ -2232,6 +2326,11 @@ export class QuicConnection {
     if (space.level > reassembly.level) {
       this.spaceAt(reassembly.level).cryptoInDelivered = reassembly.delivered
       reassembly.reset(space.level)
+    }
+    // RFC 9002 §6.2.3: an Initial with CRYPTO data the server already read
+    // says the client did not get the server's Initial flight.
+    if (space.level === TLS_LEVEL_INITIAL && frame.offset < reassembly.delivered) {
+      this.resendLevel = TLS_LEVEL_INITIAL
     }
     if (!reassembly.insert(frame.offset, payload, frame.dataStart, frame.dataLength)) {
       this.fail(QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED, toI64(QUIC_FRAME_CRYPTO))
@@ -2440,7 +2539,7 @@ export class QuicConnection {
     this.recovery.discardSpace(space.level)
     space.cryptoResendLow = -1
     space.cryptoResendHigh = -1
-    space.probe = false
+    space.probes = 0
     quicConnWipeKeys(space.readKeys)
     quicConnWipeKeys(space.writeKeys)
     space.wipeKeySlots()
@@ -2970,7 +3069,7 @@ export class QuicConnection {
       if (sent === null || overhead === 0 || remaining <= overhead + 8) {
         continue
       }
-      if (space.probe && sent.full()) {
+      if (space.probes > 0 && sent.full()) {
         // A probe has to be recorded: the oldest packet gives up its slot,
         // and what it carried, already queued again by the probe, stays queued.
         const slot: i32 = this.recovery.evictOldest(level)
@@ -2978,7 +3077,7 @@ export class QuicConnection {
           this.requeue(space, slot)
         }
       }
-      const elicit: boolean = space.probe || (open && !sent.full())
+      const elicit: boolean = space.probes > 0 || (open && !sent.full())
       const headerLength: i32 = overhead - QUIC_AEAD_TAG_SIZE
       const payloadStart: i32 = position + headerLength
       let payloadEnd: i32 = this.buildPayloadInto(
@@ -3090,7 +3189,7 @@ export class QuicConnection {
     if (space.level === TLS_LEVEL_APPLICATION) {
       at = this.buildApplication(space, out, at, end)
     }
-    if (space.probe && !space.stagedEliciting && at < end) {
+    if (space.probes > 0 && !space.stagedEliciting && at < end) {
       at = quicPutTypeOnly(out, at, end, QUIC_FRAME_PING)
       space.stagedEliciting = true
     }
@@ -3307,7 +3406,15 @@ export class QuicConnection {
     const slot: i32 = this.recovery.onPacketSent(space.level, pn, size, this.now)
     if (slot >= 0) {
       space.commitStaged(slot)
-      space.probe = false
+      if (space.probes > 0) {
+        space.probes -= 1
+        // §6.2.4: a second probe carries unacknowledged data too. When the
+        // first took everything queued, the oldest — what it just carried —
+        // goes again.
+        if (space.probes > 0 && space.cryptoResendLow < 0) {
+          this.requeue(space, slot)
+        }
+      }
     } else {
       this.requeue(space, space.staging)
     }

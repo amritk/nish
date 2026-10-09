@@ -14810,6 +14810,42 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end builtin-math-i32 -->
 
+### `Math.clz32`
+
+One `llvm.ctlz.i32` with `i1 false`, so a zero answers 32, as JavaScript's
+does. The answer is an `integer<0, 32>`, which is why `31 - Math.clz32(...)`
+in `lowestBit`, the index of a word's lowest set bit, is a plain `sub` with no
+overflow check beside it.
+
+<!-- cookbook:begin builtin-math-clz32 -->
+```ts
+const leadingZeros = (x: i32): i32 => Math.clz32(x)
+
+const lowestBit = (word: u32): i32 => 31 - Math.clz32(word & (0 - word))
+```
+
+```llvm
+declare i32 @llvm.ctlz.i32(i32, i1) #0
+
+define internal noundef i32 @leadingZeros(i32 noundef %x) #0 {
+entry:
+  %0 = call i32 @llvm.ctlz.i32(i32 %x, i1 false)
+  ret i32 %0
+}
+
+define internal noundef i32 @lowestBit(i32 noundef %word) #0 {
+entry:
+  %0 = sub i32 0, %word
+  %1 = and i32 %word, %0
+  %2 = call i32 @llvm.ctlz.i32(i32 %1, i1 false)
+  %3 = sub nsw i32 31, %2
+  ret i32 %3
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end builtin-math-clz32 -->
+
 ### `toI32` / `toI64` / `toF64`
 
 `sext`, `sitofp`, and the saturating `llvm.fptosi.sat` for `f64` to integer.
