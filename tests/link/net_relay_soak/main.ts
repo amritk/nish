@@ -29,14 +29,23 @@ const SOAK_WARMUP: i32 = 500;
 const SOAK_WAVE: i32 = 16;
 
 /**
- * Resident growth allowed past warm-up, for the whole run whatever its length:
- * four pages. A leak is caught by the arena check, which is exact to the byte
- * and sees every allocation the relay makes, since every Nish allocation is
- * the arena's. What the resident set adds is memory the arena does not hold —
- * the stack, the C runtime, a page the kernel faults in late — and there one
- * page touched once after warm-up is not a leak. The bound is fixed rather
- * than per session, so growth still fails it: 1 byte a session outside the
- * arena over the 100,000-session run is 100,000 bytes, six times this.
+ * The resident set's two checks past warm-up, read at every checkpoint (one
+ * each `SOAK_WARMUP` sessions). The arena check, exact to the byte, is what
+ * catches a leak of the relay's own allocations, since every Nish allocation
+ * is the arena's; the resident set watches what the arena does not hold — the
+ * stack, the C runtime, a page the kernel faults in late — and it is grained
+ * in 4 KiB pages. So it may grow by at most four pages over the whole run,
+ * and in at most one checkpoint interval: a page touched once after warm-up
+ * (a fault, not a leak) passes, while growth that recurs fails by its shape
+ * whatever its total.
+ *
+ * What each run can see outside the arena: `npm test`'s 2,000 sessions span
+ * four intervals of 500. A steady leak of about 2 bytes a session or more
+ * crosses two or more page boundaries in different intervals and fails the
+ * shape (at about 8 bytes or more it grows every interval, and past 8 the
+ * total too); one under about 2 bytes a session moves the set by a page at
+ * most and is invisible there. The 100,000-session run spans 200 intervals
+ * and sees 1 byte a session: 100,000 bytes, 24 pages, crossed in 24 of them.
  */
 const SOAK_RSS_BOUND: i64 = 16384;
 
@@ -167,6 +176,30 @@ const drive = (t: Suite, total: i32, files: string): void => {
     t.pass(flatResident);
   } else {
     t.fail(flatResident, figures);
+  }
+  // The shape: in how many checkpoint intervals the resident set grew, and by how much in each.
+  let grew: i32 = 0;
+  const steps: string[] = [];
+  let before: i64 = field(warm, "rss");
+  let missing: i32 = 0;
+  for (let at: i32 = SOAK_WARMUP + SOAK_WARMUP; at <= all; at = at + SOAK_WARMUP) {
+    const line: string = lineAt(text, at);
+    const rss: i64 = line.length > 0 ? field(line, "rss") : -1;
+    if (rss < 0) {
+      missing++;
+      continue;
+    }
+    if (rss > before) {
+      grew++;
+      steps.push(`${at - SOAK_WARMUP}-${at}: +${rss - before}`);
+    }
+    before = rss;
+  }
+  const once: string = `and grew in at most one checkpoint interval of ${SOAK_WARMUP} sessions`;
+  if (missing === 0 && grew <= 1) {
+    t.pass(once);
+  } else {
+    t.fail(once, `grew in ${grew} intervals (${steps.length > 0 ? steps.join(", ") : "none"}), ${missing} checkpoints missing; ${figures}`);
   }
 };
 

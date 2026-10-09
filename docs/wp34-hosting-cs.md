@@ -13,8 +13,8 @@ across every carrier (#489); and the interop job of decision S2 (#487). **A1 add
 against cs's own fixtures, its caps, timeouts, close codes, stats, identity
 and certificate reload, one upstream socket per session, GSO and GRO both
 sides and a clean stop on a signal, proved across loopback in `npm test`
-(§5a), and N9's soak flat: 100,000 sessions keep 0 bytes, arena and resident
-set alike, since the handshake (#492), its signature (#512) and the QUIC
+(§5a), and N9's soak flat: 100,000 sessions measured at 0 bytes kept, arena
+and resident set alike, since the handshake (#492), its signature (#512) and the QUIC
 listener (#515) keep nothing. **Open:** #430;
 and the cs side of A1 — the port of `services/relay` itself, `boot-check`'s
 wire pass and `bench:offload` against the Rust relay. 0.16.0 carried N1, N2,

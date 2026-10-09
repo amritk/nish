@@ -67,9 +67,9 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   for the process's life.
 - **Memory.** Every table is made at start-up, and nothing a session does
   keeps memory, its handshake included: N9's soak
-  (`tests/link/net_relay_soak`) runs 100,000 sessions past a warm-up of 500
-  with the arena at the same chunk and offset and the resident set the same
-  to the byte at every checkpoint, 0 bytes a session. It took three `std`
+  (`tests/link/net_relay_soak`) measured 100,000 sessions past a warm-up of
+  500 with the arena at the same chunk and offset and the resident set the
+  same to the byte at every checkpoint, 0 bytes a session. It took three `std`
   changes to get there: a session kept 101,818 bytes before #492 (the QUIC
   handshake's state, now in the slot), 10,983 before #512 (the
   CertificateVerify signature, now over scratch) and 1,727 before #515 (the
@@ -152,5 +152,8 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   that panics, one program each.
 - [`tests/link/net_relay_soak`](../../tests/link/net_relay_soak): N9's
   acceptance, 2,000 sessions past a warm-up of 500 in `npm test`, and
-  `soak 100000` for the full run, both holding the arena and the resident
-  set to exactly 0 bytes of growth.
+  `soak 100000` for the full run. Both hold the arena to exactly 0 bytes of
+  growth, and the resident set to at most four pages over the run, grown in
+  at most one checkpoint interval of 500 sessions: page-grained, so outside
+  the arena `npm test` catches a steady leak of about 2 bytes a session and
+  the full run one of 1.
