@@ -50,7 +50,7 @@ import { QcFound, qcConnected, qcData, qcDefaultConfig, qcFind, qcServer } from 
 import { qcStream } from "../net_quic_conn/data";
 
 /** An ACK frame from the client for `[low, high]`, with an ACK Delay field of `delay` (scaled by the default exponent, 3). */
-const rcAck = (low: i64, high: i64, delay: i64): u8[] => {
+export const rcAck = (low: i64, high: i64, delay: i64): u8[] => {
   const out: u8[] = [];
   const ranges: i64[] = [low, high];
   quicPushAck(out, ranges, n32(1), delay);
@@ -66,7 +66,7 @@ const rcAckTwo = (low1: i64, high1: i64, low2: i64, high2: i64): u8[] => {
 };
 
 /** Hands the server one datagram and answers what it sends back, dropped: the network lost it. */
-const rcLose = (conn: QuicConnection, now: i64): i32 => {
+export const rcLose = (conn: QuicConnection, now: i64): i32 => {
   let n: i32 = 0;
   let out: u8[] | null = conn.takeDatagram(now);
   while (out !== null) {
@@ -77,7 +77,7 @@ const rcLose = (conn: QuicConnection, now: i64): i32 => {
 };
 
 /** Signs for the server when its handshake asks, as a carrier would. */
-const rcSign = (conn: QuicConnection): void => {
+export const rcSign = (conn: QuicConnection): void => {
   const input: u8[] | null = conn.signatureInput();
   if (input !== null) {
     const key: Secret<u8[]> = secret(leafPrivate());
@@ -90,7 +90,7 @@ const rcSign = (conn: QuicConnection): void => {
 };
 
 /** How many frames of `type` a payload carries. */
-const rcCount = (payload: u8[], type: i32): i32 => {
+export const rcCount = (payload: u8[], type: i32): i32 => {
   const frame = new QuicFrame();
   let n: i32 = 0;
   let at: i32 = 0;

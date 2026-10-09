@@ -2,7 +2,9 @@
 // `tls-client.ts`, in one loop. A request, 300,000 bytes streamed both ways
 // at once, rounds on a warm connection with the arena measured, the
 // client's close_notify answered with the server's, and the memory a whole
-// connection keeps, from accept to close.
+// connection keeps, from accept to close: 64 bytes, the program's `Secret`
+// copy of its key. `signP256` signs in the pool's `TlsP256Signer`, which keeps
+// nothing; it kept 9,312 bytes a connection before.
 import { Suite } from "nish/testing";
 import { ascii } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
