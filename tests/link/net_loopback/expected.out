@@ -1,0 +1,96 @@
+PASS  tls: a Nish client completes the handshake across loopback, the server's signature and Finished verified
+PASS  tls: a request is echoed
+PASS  tls: 300,000 bytes streamed both ways, the echo read while the body is still going out
+PASS  tls: fifty rounds on the warm connection come back intact
+PASS  tls: and every server wake kept 0 bytes over them
+PASS  tls: the client's close_notify is answered with the server's
+PASS  tls: the server saw the client's close and closed the socket
+PASS  tls: three more connections through the slot, each handshaken, echoed and closed
+tls: a connection keeps 9376, 9376 and 9376 bytes, accept to close
+PASS  tls: with nothing gone wrong in the loop
+PASS  http/1.1: a TLS handshake offering http/1.1 across loopback
+PASS  http/1.1: ALPN chose it
+PASS  http/1.1: a GET is answered with its length
+PASS  http/1.1: a POST of 300,000 bytes is echoed whole, chunked, while it is still going out
+PASS  http/1.1: the server read it at most 4,096 bytes at a time, so it went back in at least 74 chunks
+PASS  http/1.1: fifty keep-alive requests on the warm connection, each echoed
+PASS  http/1.1: and every server wake kept 0 bytes over them
+PASS  http/1.1: the client's close_notify is answered with the server's
+PASS  http/1.1: and the server closes the slot
+PASS  http/1.1: a request with Connection: close is answered, then the server closes with close_notify
+http/1.1: that connection kept 9376 bytes, accept to close
+PASS  http/1.1: the program answered every request and refused nothing
+PASS  http/1.1: with nothing gone wrong in the loop
+PASS  websocket: the upgrade over TLS is answered 101 with RFC 6455's accept key
+PASS  websocket: a ping between a message's fragments is answered with a pong of its payload
+PASS  websocket: and the three fragments come back as the one text message
+PASS  websocket: a 100,000-byte binary message sent in seven fragments is echoed whole
+PASS  websocket: the server's echo went back in 49 fragments of at most 2,048 bytes, its output being 8,192
+PASS  websocket: a ping on its own is answered with a pong
+PASS  websocket: fifty messages on the warm connection, each echoed
+PASS  websocket: and every server wake kept 0 bytes over them
+PASS  websocket: the client's close with code 4000 is answered with a close of that code
+PASS  websocket: and the server's program saw the client's code
+PASS  websocket: then the server ends TLS with close_notify
+PASS  websocket: and closes the slot
+PASS  websocket: the program refused nothing
+PASS  websocket: with nothing gone wrong in the loop
+PASS  http/2: a TLS handshake offering h2 across loopback
+PASS  http/2: ALPN chose h2
+PASS  http/2: the server's SETTINGS, then a GET answered on stream 1
+PASS  http/2: two POSTs of 150,000 bytes on streams 3 and 5 at once, each echoed whole on its own stream
+PASS  http/2: past the server's 65,535-byte stream window the client waited for its WINDOW_UPDATEs, and past its own 16,384 the server waited for the client's
+PASS  http/2: fifty DATA frames echoed on the warm open stream
+PASS  http/2: and every server wake kept 0 bytes over them
+PASS  http/2: a GET on a new stream of the warm connection
+http/2: that request kept 728 bytes (H2-1, HPACK's per header block)
+PASS  http/2: the client's GOAWAY and close_notify are answered with the server's close_notify
+PASS  http/2: the server's program saw the GOAWAY, and the slot closed
+PASS  http/2: every stream ended, none reset
+PASS  http/2: with nothing gone wrong in the loop
+PASS  quic: a handshake across loopback, through the listener into the slot
+PASS  quic: the client read the server's transport parameters from its EncryptedExtensions
+PASS  quic: a request on stream 0 is echoed, and its FIN
+PASS  quic: 100,000 bytes on stream 4 echoed whole, and its FIN
+PASS  quic: past the server's 16,384-byte stream buffer and 65,536 bytes of connection credit, the client waited on MAX_STREAM_DATA and MAX_DATA
+PASS  quic: a DATAGRAM is echoed as one
+PASS  quic: fifty rounds on the warm stream 8, each echoed with a datagram beside it
+PASS  quic: and every server call kept 0 bytes over them
+PASS  quic: the client's CONNECTION_CLOSE with code 7 reaches the server, which drains and frees the slot
+PASS  quic: as the client's close, the application's, with its code
+PASS  quic: three more connections through the slot, each closed by the server with code 9, which the client reads
+PASS  quic: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)
+PASS  quic: no datagram was dropped by the program
+PASS  quic: with nothing gone wrong in the loop
+PASS  http/3: a handshake across loopback through the listener into a slot, and the client's three streams
+PASS  http/3: a GET answered: 200, its body, the FIN
+PASS  http/3: a POST of 100,000 bytes echoed whole, past the 32 KiB stream buffers both ways
+PASS  http/3: fifty more requests, each on a new stream past the server's first sixteen, each echoed
+PASS  http/3: and every server call kept 0 bytes over them
+PASS  http/3: the client waited on the server's MAX_STREAMS to open them
+PASS  http/3: a slot whose pacer has no credit left is woken when it has some, not at its idle deadline
+PASS  http/3: the server's GOAWAY: with every request done it closes the connection
+PASS  http/3: and the client reads H3_NO_ERROR, the application's
+PASS  http/3: three more connections, each a GET and the client's CONNECTION_CLOSE with H3_NO_ERROR, which frees the slot
+PASS  http/3: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)
+PASS  http/3: the program held nothing it could not place
+PASS  http/3: with nothing gone wrong in the loop
+PASS  webtransport: a handshake across loopback, and the client's streams under wtransport 0.7's SETTINGS
+PASS  webtransport: an extended CONNECT is a session, accepted with draft-02's header
+PASS  webtransport: a datagram of session 0 is echoed, with its quarter stream ID
+PASS  webtransport: a bidirectional stream of 100,000 bytes echoed whole on itself, past the 32 KiB buffers
+PASS  webtransport: a unidirectional stream is echoed on one the server opens for the session
+PASS  webtransport: fifty rounds on the warm session, each a datagram and a new bidirectional stream echoed
+PASS  webtransport: and every server call kept 0 bytes over them
+PASS  webtransport: past the server's sixteen streams, the client waited on its MAX_STREAMS
+PASS  webtransport: the client's CLOSE_WEBTRANSPORT_SESSION with code 7 and a reason: the server ends the CONNECT stream
+PASS  webtransport: and its program saw the client's code and reason
+PASS  webtransport: a second session on the connection
+PASS  webtransport: the server closes it with code 9
+PASS  webtransport: the client reads its CLOSE_WEBTRANSPORT_SESSION, code and reason, and the CONNECT stream's end
+PASS  webtransport: the client's CONNECTION_CLOSE frees the slot
+PASS  webtransport: three more connections, each a session and a datagram, closed by the client
+PASS  webtransport: each keeps 80 to 128 KiB of arena from its Initial to its close (WT-1, H3-1's: the handshake's)
+PASS  webtransport: the program was refused nothing and held nothing it could not place
+PASS  webtransport: with nothing gone wrong in the loop
+net loopback: 92 passed, 0 failed, 0 skipped
