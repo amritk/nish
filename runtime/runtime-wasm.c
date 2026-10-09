@@ -115,6 +115,17 @@ void nish_array_grow(nish_array *a, uint64_t elem_size) {
   a->cap = cap;
 }
 
+/* ---- Math.min and Math.max of a float: llvm.minnum / llvm.maxnum, which wasm32
+ * has no instruction for. Its `f64.min` answers NaN when either operand is NaN,
+ * and minnum answers the other operand, so the backend lowers minnum to a libm
+ * call, and these are that libm. They answer what minnum answers natively: a
+ * NaN operand is dropped, and two NaNs give NaN (tests/cases/math_minmax_float,
+ * held to these by tests/run.js). Between `0` and `-0` minnum may answer either. */
+double fmin(double a, double b) { return a != a ? b : b != b ? a : a < b ? a : b; }
+double fmax(double a, double b) { return a != a ? b : b != b ? a : a > b ? a : b; }
+float fminf(float a, float b) { return a != a ? b : b != b ? a : a < b ? a : b; }
+float fmaxf(float a, float b) { return a != a ? b : b != b ? a : a > b ? a : b; }
+
 /* ---- Panics: `unreachable`, which the host sees as a RuntimeError */
 void nish_panic_index(uint64_t idx, uint64_t len) { (void)idx; (void)len; __builtin_trap(); }
 void nish_panic_slice(int64_t s, int64_t e, int64_t len) { (void)s; (void)e; (void)len; __builtin_trap(); }
