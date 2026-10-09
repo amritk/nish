@@ -2579,6 +2579,59 @@ the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 `parallelFor`, locks, channels, non-scalar results and `scope(n)` are not in
 this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.3, §7).
 
+### Byte search: `indexOfAny` in `nish/text`
+
+`indexOfAny(text, bytes, from)` answers the first index at or after `from`
+whose byte is one of `bytes`, or -1 ([wp38-simd.md](wp38-simd.md) §3.1). It is
+the scan a parser spends its time in — the next `"` or `\` in a JSON string,
+the next delimiter in a line — and natively it reads 16 or 32 bytes at a time.
+
+```typescript
+import { indexOfAny } from "nish/text";
+
+export const main = (): i32 => {
+  const line = "key: \"value\", next";
+  console.log(`${indexOfAny(line, "\":", 0)}`);   // 3, the colon
+  console.log(`${indexOfAny(line, ",", 99)}`);    // -1: `from` is clamped to the length
+  return 0;
+};
+```
+
+- **The set is 1 to 16 ASCII bytes, or the call panics.** An empty set
+  (`indexOfAny: the set must hold 1 to 16 bytes`) matches nothing and is a
+  mistake rather than a search; seventeen bytes is more than one vector of the
+  kernel compares; and a byte of 128 or more
+  (`indexOfAny: every byte of the set must be ASCII`) would be one byte of a
+  multi-byte sequence natively and a UTF-16 unit under Node, which find
+  different things (`tests/link/std_text_index_of_any_empty_set`,
+  `_long_set`, `_non_ascii_set`).
+- **`from` is clamped to `[0, text.length]`**, as `substring` clamps: a
+  negative `from` searches from the start, and one at or past the length
+  answers -1. The answer is a byte offset, like `s.length`; an ASCII byte
+  never occurs inside a multi-byte UTF-8 sequence, so a non-ASCII `text` is
+  searched as it is and only its ASCII bytes match. Under Node the offset is a
+  UTF-16 one, so the two agree on what was found and, once a non-ASCII
+  character precedes it, not on where (`tests/link/std_text_index_of_any`).
+- **The module is ordinary Nish, and the walker is the meaning.**
+  `std/text.ts` writes `indexOfAny` as its checks and its clamp followed by
+  one call to a private walker, a loop over `charCodeAt`, which is what runs
+  under Node. The compiler recognises that call by module and name
+  (`src/kernels.ts`) and emits the runtime's `nish_str_index_of_any` in its
+  place; everything around it is emitted as written, so the kernel is only
+  ever handed a clamped `from` and a set of 1 to 16 bytes. The package is part
+  of the test: a root-package file that happens to sit at `std/text.ts` is an
+  ordinary module, and its walker is called as written. The kernel picks a
+  scalar, a 16-byte (SSE2 or NEON) or a 32-byte (AVX2) path on its first call,
+  and `NISH_SIMD=scalar|base|avx2` pins it.
+- **It is variable-time.** How long the search takes says where the first
+  match is, so it is never for secret data: `std/crypto` does not call it on
+  one, and `nish:secret`'s `expose` lets it through only because it touches
+  nothing outside its two strings.
+
+On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
+with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
+walker compiled as written (`bench/index-of-any.ts`).
+
 ### Interfaces and object literals
 
 ```ts
