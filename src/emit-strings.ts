@@ -16,6 +16,7 @@ import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck } from "./emit-arrays"
 import { templateParts } from "./emit-util"
 import { IRModule } from "./ir"
+import { INDEX_OF_ANY_KERNEL } from "./kernels"
 import { N_TEMPLATE_TEXT, Node } from "./nodes"
 import { irEscape } from "./strings"
 import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
@@ -334,6 +335,21 @@ const emitStringIndexOf = (emitter: Emitter, expr: Node, str: string): string =>
   }
   const found = emitter.fn.emitValue(`call i64 ${emitter.useRuntime(callee)}(i8* ${str}, i8* ${sub}${start})`)
   return emitNumberFromI64(emitter, found, expr)
+}
+
+/**
+ * `indexOfAny`'s walk in `nish/text`, lowered to the runtime kernel
+ * (`src/kernels.ts`): `values` are the lowered text, set and `from`, an `i32`
+ * the caller has already clamped to `[0, length]`, and the answer comes back
+ * as the walker's `i32`. A match is below the text's length and a miss is -1,
+ * so the truncation loses nothing.
+ */
+export const emitIndexOfAnyKernel = (emitter: Emitter, values: string[]): string => {
+  const from = emitter.fn.emitValue(`sext i32 ${values[2]} to i64`)
+  const found = emitter.fn.emitValue(
+    `call i64 ${emitter.useRuntime(INDEX_OF_ANY_KERNEL)}(i8* ${values[0]}, i8* ${values[1]}, i64 ${from})`
+  )
+  return emitter.fn.emitValue(`trunc i64 ${found} to i32`)
 }
 
 /** The byte methods on a string receiver. */
