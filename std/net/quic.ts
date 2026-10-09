@@ -964,7 +964,7 @@ export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
  * arena block, so issuing an ID keeps nothing (QUIC-3). The scratch and the
  * full MAC are wiped before it returns.
  */
-const quicConnResetTokenInto = (
+export const quicConnResetTokenInto = (
   mac: HmacSha256Scratch,
   key: u8[],
   cid: u8[],
