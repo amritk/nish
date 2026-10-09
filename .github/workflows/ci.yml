@@ -23,6 +23,8 @@
 #       a release carries a seed it can use and there is no row otherwise; the
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
+# simd-arm64: runtime/runtime-simd.c's agreement test on an AArch64 runner,
+#       where its native run is the NEON path no x86-64 job can run.
 # lint: package-lock.json against package.json with no registry involved,
 #       `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
@@ -769,6 +771,57 @@ jobs:
         run: |
           summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
           echo "::notice::tests/nish/run.ts over tests/cases: $summary"
+
+  # WP38 S1: runtime/runtime-simd.c's NEON path, run on the hardware it is for.
+  #
+  # The kernel has a base path per architecture, and every other job here is
+  # x86-64, where the `simd` section of tests/run.js runs the scalar, SSE2 and
+  # AVX2 paths and can only run the NEON one through qemu, which those runners
+  # do not have -- so there it is a counted skip, and a NEON path that answered
+  # wrong would ship with every check green. This row is the one place it runs:
+  # on an AArch64 host the section's native run IS the NEON path, and the
+  # agreement driver prints the paths it ran. A skip cannot pass here, because
+  # the gate is that line naming `base` on arm64, not the section's exit status.
+  simd-arm64:
+    name: the NEON path agrees (aarch64-linux)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # tests/run.js links its stage1 with the seed before any section runs,
+      # and the section's GC check compiles examples/hello.ts with it.
+      - name: Fetch the seed
+        run: bash scripts/fetch-seed.sh
+
+      # `set -o pipefail` so that a failed check in the section fails the step
+      # before the grep is asked anything; the grep is then the guard against a
+      # green section that ran no NEON code.
+      - name: The simd section, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
 
   lint:
     name: lint
