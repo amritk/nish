@@ -342,8 +342,10 @@ const quicParamsStoreBytes = (
   at: i32,
   length: i32
 ): boolean => {
-  // A value is copied only once its length is one the parameter allows, so a
-  // reused object's arrays never grow past it whatever a peer sends.
+  // A connection ID or reset token is copied only once its length is one the
+  // parameter allows, so a reused object's arrays never grow past it whatever
+  // a peer sends. `preferred_address` is server-only and so never read from a
+  // client into a server's slot; its length is the server's own.
   const cidFits: boolean = length <= QUIC_MAX_CID_LENGTH
   switch (id) {
     case QUIC_TP_ORIGINAL_DCID:
