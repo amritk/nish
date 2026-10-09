@@ -105,6 +105,7 @@ Accepted by the owner on 2026-10-09: the plan, its acceptance criteria, and wp38
 - **Build.** `scripts/build.sh` compiles `runtime-simd.c` beside `runtime.c` the way it does `runtime-os.c` and siblings, for every profile that links strings; under wasi the scalar path (or `wasm_simd128.h` under `-msimd128` — not the default, §5).
 - **Pinning.** `bench/run.mjs` sets `NISH_SIMD=base` beside `PINNED_LIBC` so the instruction count does not depend on the host. `bench/instructions.json` must not change.
 - **Tests.** A C driver under `tests/simd/` runs all three paths (skipping AVX2 when the host lacks it, and saying so) on a seeded fuzzed corpus of lengths 0..300 with matches at every alignment, plus a check in `tests/run.js` that a program that never calls the kernel links none of it.
+- **ARM in CI (owner, 2026-10-09).** The NEON path's agreement test runs natively on an ARM runner in `ci.yml` rather than as a local skip. The resolver keeps its direct `cpuid`/`xgetbv` check: `__builtin_cpu_supports` links libgcc's `__cpu_indicator_init` constructor into every program (+5.3 KB, start-up work in programs that never call the kernel).
 - **Docs.** Ceiling row in `docs/wp7-runtime.md`, unit row in `docs/MASTER_PLAN.md` §2. If any path is adapted from elsewhere, its notice and a `THIRD_PARTY_NOTICES.md` entry (`.claude/licensing.md`).
 
 ## S1 surface
@@ -135,7 +136,7 @@ Starts after `s0-decide-measure` and `s1-surface` merge (it shares `scripts/buil
 | Stage | Owns | Model | Starts after |
 | --- | --- | --- | --- |
 | s0-decide-measure | `docs/wp38-simd.md`, `bench/simd-s0.mjs` | lead | — |
-| s1-kernel | `runtime/runtime-simd.c`, `runtime/nish.h`, `scripts/build.sh`, `bench/run.mjs`, `tests/run.js`, `tests/simd/**`, `docs/wp7-runtime.md`, `docs/MASTER_PLAN.md`, `THIRD_PARTY_NOTICES.md` | lead | — |
+| s1-kernel | `runtime/runtime-simd.c`, `runtime/nish.h`, `scripts/build.sh`, `bench/run.mjs`, `tests/run.js`, `tests/simd/**`, `.github/workflows/ci.yml`, `docs/wp7-runtime.md`, `docs/MASTER_PLAN.md`, `THIRD_PARTY_NOTICES.md` | lead | — |
 | s1-surface | `std/text.ts`, `std/README.md`, `src/kernels.ts`, `src/runtime.ts`, `src/emit-*.ts`, `src/secret.ts`, `src/std-modules.ts`, `src/run-cache.ts`, `tests/nish/run.ts`, `tests/cases/text_index_of_any*`, `tests/link/std_text_index_of_any/**`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/AI.md`, `bench/index-of-any.ts` | lead | s1-kernel |
 | s1-json | `std/json.ts`, `tests/link/std_json/**`, `tests/self/goldens/**` | lead | s1-surface, #507 stage 3 |
 | s2-cpu | `src/options.ts`, `src/compile.ts`, `src/capability-report.ts`, `src/target.ts`, `scripts/build.sh`, `tests/ct-asm.js`, `tests/run.js`, `tests/cases/cli_cpu*`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/wp38-simd.md` | lead | s0-decide-measure, s1-surface |
