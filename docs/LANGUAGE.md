@@ -4756,7 +4756,7 @@ returns to it.
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below. `--unchecked-indexing` does not remove the clamp: it is the semantics, not a check | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
 | `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
-| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
+| `s.indexOf(sub: string[, from: number]): number` | the first **byte** offset at or after `from` at which `sub` occurs, or `-1`; `from` defaults to `0`. `from` is clamped into `[0, s.length]` first, as in JavaScript: a negative start searches from `0`, and a start past the end finds nothing, except that the empty needle answers the clamped start, so `s.indexOf("")` is `0`, `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction truncates and `NaN` is `0` — and an unsigned one is clamped from above only, so a `u64` past 2^63 is past the end. Under Node the program is the same call to `String.prototype.indexOf`, whose answers differ only where every offset does, on text that is not ASCII (NL8001, under "Portability warnings"). One `nish_str_index_of` or `nish_str_index_of_from` call and no allocation: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c), and the clamp is a `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does without. A loop that walks every match, `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing | `str_search`, `str_index_of_from`, `str_index_of_from_port`; `reject_str_index_of_type`, `reject_str_index_of_arity`, `reject_str_index_of_from_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
@@ -6359,8 +6359,8 @@ by the caller.
   | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32` | answers NaN from `min` or `max` when either operand is NaN, where this drops the NaN and answers the other; and answers `-0` from `round` for a negative number that rounds to zero (`Math.round(-0.4)`), where this answers `0`. Both round a half towards +∞ (`2.5` to `3`, `-2.5` to `-2`), so that is not a difference |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
 
-  **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)` or
-  `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
+  **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)`,
+  `s.indexOf(t, i)` or `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
   `string` — an array's `.length` is not one — whose receiver is not
   *provably ASCII*: a literal of bytes below 128, a module constant that folds
   to one, a template, `+` or `?:` built only of ASCII parts and number or
@@ -6386,8 +6386,8 @@ by the caller.
     operand does not itself hold an offset, as in `width - s.length`, the
     room left in a column that was not counted in bytes.
 
-  One `+ k` on the offset an `indexOf` or `lastIndexOf` of a provably ASCII
-  needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
+  One `+ k` on the offset an `indexOf` (with or without a start) or
+  `lastIndexOf` of a provably ASCII needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
   fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
   the stepped offset is followed on like any other, so printing it is
   reported. Everything else is quiet: an offset handed to a string method or
@@ -6396,7 +6396,7 @@ by the caller.
   `const width = name.length;` alone is not reported
   (`tests/cases/port_str_length_printed`, `port_str_nonascii_charcode`,
   `port_str_needle_step_printed`; quiet: `port_str_ascii_literal_quiet`,
-  `port_str_offset_roundtrip_quiet`).
+  `port_str_offset_roundtrip_quiet`; the form with a start: `str_index_of_from_port`).
 
   **NL8003 and NL8004, exactly.** A *record array* holds its records inline:
   its element type is an `interface` no class `implements`, and not

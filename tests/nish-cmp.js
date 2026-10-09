@@ -3038,6 +3038,27 @@ const DECLARED = [
     "QPACK with the static table and dynamic capacity 0",
     "a new program: it imports `nish/net/qpack`, which the reference compiler's standard library does not have"
   ),
+  {
+    program: "tests/cases/str_index_of_from.ts",
+    changelog: "start position in s.indexOf",
+    why: "it calls `s.indexOf(sub, from)`, which the reference refuses with `expects exactly 1 argument` and this tree lowers to a clamp and a call to `nish_str_index_of_from`",
+  },
+  {
+    program: "tests/cases/str_index_of_from_port.ts",
+    changelog: "start position in s.indexOf",
+    why: "it calls `s.indexOf(sub, from)` to pin NL8001 on the new form, which the reference refuses with `expects exactly 1 argument`",
+  },
+  {
+    program: "docs/cookbook/str-index-of-from.ts",
+    changelog: "start position in s.indexOf",
+    why: "the cookbook entry for `s.indexOf(sub, from)`, which the reference refuses with `expects exactly 1 argument`",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "start position in s.indexOf",
+    why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_str_index_of_from` after `nish_str_index_of`, which moves every declaration after it",
+  },
   // Last, because it covers every program and a narrower entry above must
   // still be the one a difference is reported under.
   {

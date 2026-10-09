@@ -300,6 +300,14 @@ export class RuntimeTable {
     )
     this.add(
       new RuntimeFunction(
+        "nish_str_index_of_from",
+        `declare i64 @nish_str_index_of_from(${STR_NOCAP}, ${STR_NOCAP}, i64 noundef)`,
+        attrs3("nounwind", "willreturn", "memory(argmem: read)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
         "nish_str_len",
         `declare i64 @nish_str_len(${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),

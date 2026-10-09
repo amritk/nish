@@ -251,19 +251,29 @@ _Bool nish_str_at(const nish_str *s, int64_t at, const nish_str *sub) {
    exactly such a header from `examples/strings.ts`, and the interop tests
    caught runtime.c picking it up and inheriting `nish.h` through it. A C host
    would hit the same. A fifth of the time is not worth making the runtime
-   sensitive to its includer's `-I` paths. */
-int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) {
-  if (sub->len == 0) return 0;
-  if (sub->len > s->len) return -1;
-  const char *p = s->data, *end = s->data + s->len - sub->len + 1;
-  while (p < end) {
-    const char *c = memchr(p, sub->data[0], (size_t)(end - p));
-    if (!c) return -1;
-    if (memcmp(c + 1, sub->data + 1, sub->len - 1) == 0) return (int64_t)(c - s->data);
-    p = c + 1;
+   sensitive to its includer's `-I` paths.
+
+   `s.indexOf(sub, from)` is the same search from byte `from`, and
+   `s.indexOf(sub)` is it from 0: one loop, not two. The compiler clamps `from`
+   into [0, s.length] first, as JavaScript does, with `llvm.smin`/`smax` where
+   LLVM can fold them, so the clamp costs this file nothing; an empty needle
+   answers that clamped `from`. The clamp is a precondition: a caller that
+   skips it never reads outside the string, but gets -1 for a non-empty needle
+   (a negative `from` reads as one past the end) and `from` itself, unchanged,
+   for an empty one. */
+int64_t nish_str_index_of_from(const nish_str *s, const nish_str *sub, int64_t from) {
+  uint64_t at = (uint64_t)from;
+  if (sub->len == 0) return from;
+  while (at <= s->len && sub->len <= s->len - at) {
+    const char *c = memchr(s->data + at, sub->data[0], s->len - at - sub->len + 1);
+    if (!c) break;
+    at = (uint64_t)(c - s->data);
+    if (memcmp(c + 1, sub->data + 1, sub->len - 1) == 0) return (int64_t)at;
+    at++;
   }
   return -1;
 }
+int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_str_index_of_from(s, sub, 0); }
 
 /* `console.log` / `console.error` / `write` / `writeError` and the message of
    `panic`: fd 1 or 2, with or without the trailing newline.

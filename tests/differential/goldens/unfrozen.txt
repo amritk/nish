@@ -335,6 +335,8 @@ cases/set_iter added after R6: no rewriter to freeze it with
 cases/set_iter_keys added after R6: no rewriter to freeze it with
 cases/set_iter_values added after R6: no rewriter to freeze it with
 cases/set_str added after R6: no rewriter to freeze it with
+cases/str_index_of_from added after R6: no rewriter to freeze it with
+cases/str_index_of_from_port added after R6: no rewriter to freeze it with
 cases/str_surrogate_lone added after R6: no rewriter to freeze it with
 cases/str_surrogate_map_key added after R6: no rewriter to freeze it with
 cases/str_surrogate_pair added after R6: no rewriter to freeze it with
