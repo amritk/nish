@@ -84,7 +84,7 @@ import {
   quicListenerPaceTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener"
-import { tlsSignEcdsaP256 } from "nish/net/tls"
+import { TlsP256Signer } from "nish/net/tls"
 
 /** The timer wheel's buckets, one millisecond each: its horizon. */
 export const H3_SERVER_WHEEL: i32 = 2048
@@ -410,6 +410,8 @@ export class Http3Server {
   meta: i32[]
   entropy: u8[]
   flight: QuicFlight
+  /** Signs every slot's CertificateVerify in `serve`, one for the server, keeping nothing per signature. */
+  signer: TlsP256Signer
   /** Each slot's connection-ID index signature, so it is refiled only when its IDs changed. */
   signatures: i64[]
   state: i32[]
@@ -467,6 +469,7 @@ export class Http3Server {
     this.from = new Array<u8>(H3_SERVER_ADDRESS)
     this.meta = [H3_SERVER_ZERO, H3_SERVER_ZERO]
     this.flight = new QuicFlight()
+    this.signer = new TlsP256Signer()
     this.signatures = new Array<i64>(size)
     this.state = new Array<i32>(size)
     this.readyRing = new Array<i32>(size)
@@ -713,7 +716,7 @@ export class Http3Server {
     quic.receiveWindow(buf, at, len, now)
     const input: u8[] | null = quic.signatureInput()
     if (input !== null) {
-      const signature: u8[] | null = tlsSignEcdsaP256(key, input)
+      const signature: u8[] | null = this.signer.sign(key, input)
       if (signature !== null) {
         quic.sign(signature)
       }

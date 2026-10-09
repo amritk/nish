@@ -83,16 +83,18 @@ export const lbEnd = (m: LbMeter | null): void => {
 
 /**
  * The band a whole QUIC connection's arena falls in, Initial to close, now
- * that the QUIC connection keeps its handshake in the slot (QUIC-3, H3-1):
- * 10 to 16 KiB, none of it the connection's. The program's P-256
- * signature is 9,248 to 9,376 bytes of it (`p256SignSha256` stores what it
- * allocates), the carrier's and the listener's copy of the first Initial
- * about 1.5 KB (H3-3), and in some runs 3,072 more, timing-dependent, as
- * the listener answers what arrives around the close (H3-3's class of
- * cost). Measured 10,848 to 14,392 over 18 runs. When the
- * signature leaves the arena this check fails, rather than passing silently.
+ * that the QUIC connection keeps its handshake in the slot (QUIC-3, H3-1) and
+ * the program signs in a `TlsP256Signer`, which keeps nothing: 1 to 6 KiB,
+ * none of it the connection's or the signature's. The carrier's and the
+ * listener's copy of the first Initial is 1,600 bytes through `Http3Server`
+ * and 1,944 through the bare-QUIC program (H3-3), and in some connections
+ * 3,072 more, timing-dependent, as the listener answers what arrives around
+ * the close (H3-3's class of cost). Measured 1,600 to 5,016 over 20 runs,
+ * three connections a carrier each; with the signature in the arena it was
+ * 10,848 to 14,392. When the listener's copy goes too this check fails,
+ * rather than passing silently.
  */
-export const lbHandshakeBand = (kept: i64): boolean => kept >= toI64(10240) && kept <= toI64(16384);
+export const lbHandshakeBand = (kept: i64): boolean => kept >= toI64(1024) && kept <= toI64(6144);
 
 /** The P-256 leaf key as a fresh `Secret` for one call, which the caller wipes: `secret` takes only a value nothing else holds. */
 export const lbLeafKey = (leaf: u8[]): Secret<u8[]> => {
