@@ -2629,7 +2629,7 @@ export const main = (): i32 => {
   nothing outside its two strings.
 
 On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
-with AVX2 and 10 GB/s on the 16-byte path, against 1.8 GB/s for the same
+with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
 ### Interfaces and object literals

@@ -4547,6 +4547,42 @@ if (!only || "std_text_index_of_any".includes(only)) {
       )
     }
   }
+  // `--profile wasi` links runtime-simd.c's scalar path (scripts/build.sh), so
+  // the same program run under Node's WASI prints the same lines.
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasiDir = path.join(buildDir, "wasi_std_text_index_of_any")
+    const wasm = path.join(wasiDir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [
+        path.join(linkDir, "std_text_index_of_any", "main.ts"),
+        "-o",
+        `${wasiDir}${path.sep}`,
+        "--link",
+        wasm,
+        "--profile",
+        "wasi",
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const host =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, "std_text_index_of_any", "expected.out"), "utf8")
+    check(
+      `link/std_text_index_of_any: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && host.status === 0 && host.stdout === want,
+      shown(host)
+    )
+  } else {
+    skip(
+      `skipped: link/std_text_index_of_any: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
+    )
+  }
   const rootText = path.join(buildDir, "std_text_root.ll")
   const asRoot = spawnSync(NISH, ["std/text.ts", "-o", rootText], { cwd: root, encoding: "utf8" })
   const rootIr = asRoot.status === 0 ? fs.readFileSync(rootText, "utf8") : ""

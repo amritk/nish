@@ -6,11 +6,12 @@
 //
 // The haystack is 1 MiB of lowercase letters with a quote or a backslash every
 // 4,099 bytes: the shape of a JSON string body, where the scan for the next
-// byte that matters is nearly all of the work. Each round counts every match
-// from a start that moves with the round, so no two rounds ask the same
-// question and the optimiser cannot answer once for all of them, and every
-// count is folded into a checksum the program prints. The two sides must
-// print the same checksum.
+// byte that matters is nearly all of the work. Every round is a different
+// text: one more quote is written over a byte at a position that moves with
+// the round, so each round's matches differ and the optimiser cannot answer
+// once for all of them. The text is built before either side's clock starts,
+// each side counts every match in it, and every index is folded into that
+// side's checksum, which the program prints; the two must agree.
 //
 // `indexOfAny` is the runtime kernel natively (`src/kernels.ts`). `walkFrom`
 // below is `std/text.ts`'s `indexOfAnyFrom` copied into this root module,
@@ -22,8 +23,14 @@ const HAYSTACK_BYTES: i32 = 1048576
 const MATCH_EVERY: i32 = 4099
 const ROUNDS: i32 = 200
 const SET: string = '"\\'
+/** How far the round's extra quote moves each round: prime, so it lands on a new byte every time. */
+const MOVE: i32 = 5237
 
-/** `std/text.ts`'s walker, verbatim but for its name: the unrecognised side. */
+/**
+ * `std/text.ts`'s walker, verbatim but for its name: the unrecognised side. It
+ * must stay identical to `indexOfAnyFrom`, or the ratio this prints measures
+ * two different loops.
+ */
 const walkFrom = (text: string, bytes: string, from: i32): i32 => {
   const length: i32 = toI32(text.length)
   const count: i32 = toI32(bytes.length)
@@ -58,35 +65,46 @@ const haystack = (): string => {
   return parts.join("")
 }
 
+/** Every match of `SET` in `text`, by the kernel, folded into `sum`. */
+const kernelChecksum = (text: string, sum: i64): i64 => {
+  let folded: i64 = sum
+  let at: i32 = indexOfAny(text, SET, 0)
+  while (at >= 0) {
+    folded = (folded * 31 + toI64(at)) % 1000000007
+    at = indexOfAny(text, SET, at + 1)
+  }
+  return folded
+}
+
+/** The same, by the unrecognised walker. */
+const walkChecksum = (text: string, sum: i64): i64 => {
+  let folded: i64 = sum
+  let at: i32 = walkFrom(text, SET, 0)
+  while (at >= 0) {
+    folded = (folded * 31 + toI64(at)) % 1000000007
+    at = walkFrom(text, SET, at + 1)
+  }
+  return folded
+}
+
 export const main = (): number => {
-  const text = haystack()
+  const base = haystack()
   let kernelSum: i64 = 0
-  const kernelStart = monotonicNanos()
+  let walkSum: i64 = 0
+  let kernelNanos: i64 = 0
+  let walkNanos: i64 = 0
   let round: i32 = 0
   while (round < ROUNDS) {
-    let at: i32 = indexOfAny(text, SET, round * 7)
-    while (at >= 0) {
-      kernelSum = kernelSum * 31 + toI64(at)
-      kernelSum = kernelSum % 1000000007
-      at = indexOfAny(text, SET, at + 1)
-    }
+    const at: i32 = (round * MOVE) % HAYSTACK_BYTES
+    const text = `${base.slice(0, at)}"${base.slice(at + 1, HAYSTACK_BYTES)}`
+    const kernelStart = monotonicNanos()
+    kernelSum = kernelChecksum(text, kernelSum)
+    kernelNanos += monotonicNanos() - kernelStart
+    const walkStart = monotonicNanos()
+    walkSum = walkChecksum(text, walkSum)
+    walkNanos += monotonicNanos() - walkStart
     round += 1
   }
-  const kernelNanos = monotonicNanos() - kernelStart
-
-  let walkSum: i64 = 0
-  const walkStart = monotonicNanos()
-  round = 0
-  while (round < ROUNDS) {
-    let at: i32 = walkFrom(text, SET, round * 7)
-    while (at >= 0) {
-      walkSum = walkSum * 31 + toI64(at)
-      walkSum = walkSum % 1000000007
-      at = walkFrom(text, SET, at + 1)
-    }
-    round += 1
-  }
-  const walkNanos = monotonicNanos() - walkStart
 
   const bytes: f64 = toF64(HAYSTACK_BYTES) * toF64(ROUNDS)
   const kernelMs: f64 = toF64(kernelNanos) / 1000000.0
