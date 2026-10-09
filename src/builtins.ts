@@ -422,7 +422,7 @@ export const checkNamespaceProperty = (
 const SUPPORTED_BUILTINS: string =
   "console.log, console.error, String.fromCharCode, Math.sqrt, Math.floor, Math.ceil, Math.trunc, " +
   "Math.round, Math.sin, Math.cos, Math.exp, Math.log, Math.pow, Math.abs, Math.min, Math.max, " +
-  "Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, " +
+  "Math.clz32, Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, " +
   "crypto.getRandomValues"
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
@@ -559,6 +559,28 @@ const checkMath = (
       )
     }
     return a
+  }
+  // The leading zero bits of a 32-bit integer. JavaScript reads any number
+  // through ToUint32 first; here the operand must already be one of the two
+  // 32-bit integer types, whose bits are the ones ToUint32 would give, so the
+  // answer is JavaScript's and there is no conversion to hide. The answer is an
+  // `integer<0, 32>` (WP31) because that is what it is: `31 - Math.clz32(b)`,
+  // the index of a bit, then needs no overflow check, and a ranged value reads
+  // as an `i32` everywhere else.
+  if (member === "clz32") {
+    const answer = ctx.table.rangedOf(0, 32)
+    if (!checkBuiltinArity(ctx, call, name, args, 1)) {
+      return answer
+    }
+    const got = checkExpression(ctx, args.children[0], scope, T_I32)
+    const base = got === T_ERROR ? T_ERROR : ctx.table.baseOf(got)
+    if (base !== T_ERROR && base !== T_I32 && base !== T_U32) {
+      ctx.error(
+        args.children[0],
+        `\`Math.clz32\` expects an i32 or a u32, got ${ctx.table.typeName(got)} (convert with toI32 or toU32)`
+      )
+    }
+    return answer
   }
   if (member === "random") {
     checkBuiltinArity(ctx, call, name, args, 0)

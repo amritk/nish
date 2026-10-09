@@ -1,0 +1,20 @@
+PASS  a Version Negotiation, from a window, is the whole datagram's
+PASS  a stateless reset of 99 bytes and more
+PASS  then one of 29 bytes, in the same answer's room
+PASS  a Retry
+PASS  the Initial carrying its token: accepted as retried, with the same original DCID and Retry SCID
+PASS  an Initial whose token's MAC is changed: the same INVALID_TOKEN close
+PASS  a datagram that does not parse: dropped, and the answer emptied
+PASS  with Retry off, an Initial accepted unvalidated
+PASS  the Initial with its token is accepted, the one with a byte of it changed is INVALID_TOKEN
+PASS  a thousand Version Negotiations: the arena's mark never moves
+PASS  a thousand stateless resets, each earned by 100 ms
+PASS  all of them sent
+PASS  a thousand more with the clock still, past the rate limit
+PASS  at most sixteen of them sent
+PASS  a thousand Retries
+PASS  a thousand Initials carrying a valid token, accepted
+PASS  a thousand carrying a forged one, each answered with INVALID_TOKEN
+PASS  and a thousand that do not parse
+PASS  where a thousand through `handle`, which makes each answer, move it
+quic listener: 19 passed, 0 failed, 0 skipped

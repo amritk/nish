@@ -4012,6 +4012,10 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     const a = valueRange(walk, state, e.children[0], type)
     return combinedRange("neg", a, a, type)
   }
+  const counted = bitCountRange(ctx.program, e, type)
+  if (counted !== null) {
+    return counted
+  }
   if (e.kind === N_CALL) {
     const returned = callRange(walk, state, e, type)
     if (returned !== null) {
@@ -4024,6 +4028,29 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     return new Interval(declared.lo, declared.hi)
   }
   return new Interval(typeMin(type), typeMax(type))
+}
+
+/**
+ * `Math.clz32(x)` counts bits, so it lands in `[0, 32]`. The checker gives the
+ * call `integer<0, 32>`, but an operand is recorded as the base it is read as
+ * (`readAsBase` in src/expressions.ts), so the range reaches the prover here
+ * rather than through the node's type: `31 - Math.clz32(b)`, the index of a
+ * bit, then needs no overflow check. A user function called `clz32` on a value
+ * named `Math` is not this, which `nodeCallees` and the receiver's type say.
+ */
+const bitCountRange = (program: CheckedProgram, e: Node, type: i32): Interval | null => {
+  if (type !== T_I32 || e.kind !== N_CALL || program.nodeCallees[e.id] !== null) {
+    return null
+  }
+  const callee = e.children[0]
+  if (callee.kind !== N_MEMBER || callee.text !== "clz32") {
+    return null
+  }
+  const receiver = callee.children[0]
+  if (receiver.kind !== N_IDENT || receiver.text !== "Math" || program.nodeTypes[receiver.id] >= 0) {
+    return null
+  }
+  return new Interval(toI64(0), toI64(32))
 }
 
 // ---- Return ranges ----------------------------------------------------------------
