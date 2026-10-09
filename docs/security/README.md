@@ -37,9 +37,9 @@ the record that found it. The notes below the table name each such finding.
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 ⁷ |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
-| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 3 ⁷ |
-| WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 2 ⁷ |
-| **Total** ⁸ | | | **3 / 10 / 12 / 69** | **0 / 1 / 2 / 22** |
+| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 5 | 0 / 0 / 0 / 1 ⁷ |
+| WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
+| **Total** ⁸ | | | **3 / 10 / 12 / 72** | **0 / 1 / 2 / 19** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -62,16 +62,17 @@ the record that found it. The notes below the table name each such finding.
 7. H2-2, H3-4, WT-3, WT-4 and WT-5 (Low) are accepted, with the reason in
    their records, and are not counted, as SC-17 is not. H2-3, H3-5 and WT-2
    are open: the program owns the loop and the clock. WT-1 repeats H3-1 and
-   is counted in its own record. H3-2, H3-6 and H3-7 are closed and counted
-   as fixed. H1-3 is open: its record says "accepted for now", but it names
+   is counted in its own record. H3-1, H3-2, H3-3, H3-6, H3-7 and WT-1 are
+   closed and counted as fixed. H1-3 is open: its record says "accepted for now", but it names
    the fix that closes it, so it is counted open and not accepted.
 8. A finding that two records both list is counted in each record, except
    K1-6, which is counted once, under K1: CG-9 and RT-7, CLI-6 and RT-4, and
    H3-1 and WT-1. The Total therefore counts those twins twice.
-9. TLS-3 is closed by `TlsServer` allocating its buffers once, yet H3-1 and
-   QUIC-3's remainder record the QUIC handshake still leaving 89,288 bytes of
-   arena memory per connection. The records disagree on what a handshake
-   leaves behind; tracked in #492. The counts follow each record as written.
+9. TLS-3, QUIC-3's remainder and H3-1 now agree on what a handshake leaves
+   behind: nothing. #492 moved the QUIC handshake's state into the slot,
+   #512 made the server's P-256 signature in scratch, and #515 made the
+   listener read the first Initial in place and answer into scratch, so a
+   handshake through a reused slot keeps 0 bytes of arena memory.
 
 ## Open findings
 
@@ -87,10 +88,7 @@ only.
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
-| H3-1 | Low | `std/net/http3-server.ts`, `std/net/quic.ts`, `std/net/tls.ts` | Each new connection's handshake leaves 89,288 bytes in the arena; it goes when HKDF and HMAC take caller-owned scratch. WT-1 repeats it | — |
-| H3-3 | Low | `std/net/http3-server.ts`, `std/net/quic-listener.ts` (`QuicListener.handle`) | What a datagram no slot owns can cost: 3,128 bytes for one answered with a stateless reset, past a budget of 16 at once and one per 100 ms | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
-| WT-1 | Low | `std/net/webtransport.ts`, `std/net/quic.ts`, `std/net/tls.ts` | The QUIC handshake's memory, as H3-1: nothing WebTransport does after a handshake allocates | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | QUIC-7 | Low | `std/net/quic-recovery.ts` (`onAck`), `std/net/quic.ts` (`receiveAck`) | An optimistic ACK is not detected: packet numbers are sent in order, so an ACK of one in flight cannot be told from a real one. The Application Data record of 128 packets in flight bounds the effect | — |
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
