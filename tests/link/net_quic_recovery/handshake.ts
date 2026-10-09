@@ -8,7 +8,7 @@
 import { Suite } from "nish/testing";
 import { QUIC_FRAME_CRYPTO, QUIC_FRAME_PING, quicPushTypeOnly } from "nish/net/quic-frame";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
-import { QUIC_CONN_EARLY_RESENDS, QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
+import { QUIC_CONN_EARLY_RESENDS, QUIC_CONN_HANDSHAKE_PROBES, QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -139,11 +139,11 @@ const hsProbePair = (t: Suite): void => {
   p.conn.handleTimer(p.c.now);
   const from: i32 = toI32(p.c.datagrams.length);
   const initialFrom: i32 = toI32(p.c.longPayloads.length);
-  t.eqI32("a probe timeout during the handshake sends two datagrams", qcDrain(p.conn, p.c), n32(2));
+  t.eqI32("a probe timeout during the handshake sends two datagrams", qcDrain(p.conn, p.c), QUIC_CONN_HANDSHAKE_PROBES);
   t.eqI32(
     "the Initial of each carries the ServerHello, which elicits an ACK",
     hsCryptoPayloads(p.c, initialFrom),
-    n32(2)
+    QUIC_CONN_HANDSHAKE_PROBES
   );
   // Read with the handshake keys, both datagrams open in full: an Initial and a Handshake packet each.
   t.ok("the client accepts the flight", qcReadFlight(p.c, from, n32(0)));
@@ -232,7 +232,7 @@ const hsAmplification = (t: Suite): void => {
   t.eqI64("1200 bytes in allow 3600 out, and the flight took 1200", p.conn.bytesSent, n64(1200));
   p.c.now = HS_T0 + HS_PTO;
   p.conn.handleTimer(p.c.now);
-  t.eqI32("the first probe timeout's two datagrams fit what is left", rcLose(p.conn, p.c.now), n32(2));
+  t.eqI32("the first probe timeout's two datagrams fit what is left", rcLose(p.conn, p.c.now), QUIC_CONN_HANDSHAKE_PROBES);
   t.eqI64("exactly", p.conn.bytesSent, n64(3600));
   t.ok("so the server is blocked", p.conn.amplificationBlocked());
   // Past where the second probe timeout would be, 997 + 2 × 997 ms after the flight.
