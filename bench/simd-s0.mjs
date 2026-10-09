@@ -12,8 +12,8 @@
 //   scan       bench/scan.ts, natively and as freestanding wasm under Node. The
 //              file is a library, so a driver is written beside a copy of it:
 //              a 1 MiB document of balanced JSON objects is scanned SCAN_ROUNDS
-//              times, one byte of it flipped between a digit and a comma before
-//              each pass so no pass repeats the last, and every answer is folded
+//              times, and each pass first turns one more piece's `1` into a
+//              comma, so no pass scans the document the last one did, and every answer is folded
 //              into the printed checksum. The wasm row drives the same rounds
 //              through web/bytes-worker.mjs's `scanBatch`, so it also pays the
 //              copy into linear memory that any host pays, and must print the
@@ -24,8 +24,9 @@
 //              speed` as `nish --link` runs it (the baseline: no -march), and
 //              again with clang given -march=x86-64-v3, module and runtime alike,
 //              which is what an opt-in CPU level would do (§3.4). Only the link
-//              differs, so the column is the target and nothing else. Both
-//              binaries must print the same checksum.
+//              differs, so the column is the target and nothing else. The two
+//              binaries run in alternating rounds and must print the same
+//              checksum.
 //   bootstrap  `scripts/bootstrap.sh --verify`, seed to stage3, into a work
 //              directory under build/bench so build/nish is left alone. This is
 //              the self-compilation time S4 is judged by.
@@ -86,8 +87,9 @@ const SCAN_BYTES = 1 << 20
 /**
  * One balanced object, repeated to fill the document. It has the bytes the
  * scanner branches on: quotes, an escaped quote, brackets, and commas and
- * colons both inside and outside strings. `FLIP` is the offset of the `1` the
- * rounds flip to a comma and back, outside any string, so the token count moves.
+ * colons both inside and outside strings. `FLIP` is the offset of a `1`
+ * outside any string: each round turns that byte of the next piece into a
+ * comma, one more piece per round and never back, so the token count moves.
  */
 const PIECE = '{"id":"a\\"b","n":[1,2,3],"s":"x,y:z","d":{"k":[true,null]}},'
 const FLIP = PIECE.indexOf("[1") + 1
@@ -134,6 +136,32 @@ const timeRuns = (what, time) => {
     }
   }
   return { min: Math.min(...times), median: median(times), answer }
+}
+
+/**
+ * Two builds timed against each other in alternating rounds, as
+ * bench/README.md's in-process comparisons are, so a slow stretch of a shared
+ * machine falls on both columns rather than on whichever ran second. One
+ * warm-up of each, then `runs` rounds, each running both and swapping which
+ * goes first. Both must print the same answer: [{ min, median, answer }, ...].
+ */
+const timeAlternating = (what, a, b) => {
+  const times = [[], []]
+  let answer = null
+  for (let i = 0; i <= runs; i++) {
+    const order = i % 2 === 0 ? [0, 1] : [1, 0]
+    for (const k of order) {
+      const r = [a, b][k]()
+      if (answer !== null && r.answer !== answer) {
+        fail(`${what}: round ${i} printed ${JSON.stringify(r.answer)}, not ${JSON.stringify(answer)}`)
+      }
+      answer = r.answer
+      if (i > 0) {
+        times[k].push(r.ms)
+      }
+    }
+  }
+  return times.map((t) => ({ min: Math.min(...t), median: median(t), answer }))
 }
 
 /** One process, timed from spawn to exit; its stdout is the answer. */
@@ -190,7 +218,7 @@ export const main = (): i32 => {
   let checksum: i32 = 0
   for (let r: i32 = 0; r < ${SCAN_ROUNDS}; r++) {
     const at: i32 = (r % pieces) * PIECE.length + ${FLIP}
-    bytes[at] = bytes[at] === toU8(44) ? toU8(49) : toU8(44)
+    bytes[at] = toU8(44)
     checksum = (checksum * 31 + scanJson(bytes) + r) % 1000003
   }
   console.log(checksum)
@@ -210,7 +238,7 @@ const scanWasmRounds = (exports) => {
   let checksum = 0
   for (let r = 0; r < SCAN_ROUNDS; r++) {
     const at = (r % pieces) * piece.length + FLIP
-    bytes[at] = bytes[at] === 44 ? 49 : 44
+    bytes[at] = 44
     checksum = (checksum * 31 + scanBatch(exports, [bytes])[0] + r) % 1000003
   }
   return String(checksum)
@@ -267,14 +295,8 @@ for (const name of ["nbody", "vec3", "spectral"].filter((n) => only.has(n))) {
   const wide = path.join(outDir, `${name}-${MARCH}`)
   link(base, process.env)
   link(wide, { ...process.env, CC: wideCC })
-  const b = timeRuns(`${name} baseline`, timeProcess(base, []))
+  const [b, w] = timeAlternating(name, timeProcess(base, []), timeProcess(wide, []))
   row(name, "baseline", b)
-  const w = timeRuns(`${name} ${MARCH}`, timeProcess(wide, []))
-  if (w.answer !== b.answer) {
-    fail(
-      `${name}: -march=${MARCH} printed ${JSON.stringify(w.answer)}, the baseline ${JSON.stringify(b.answer)}`
-    )
-  }
   row(name, MARCH, w)
 }
 
@@ -311,8 +333,12 @@ const commit = (() => {
   }
 })()
 const cpu = (() => {
-  const m = fs.readFileSync("/proc/cpuinfo", "utf8").match(/^model name\s*:\s*(.+)$/m)
-  return m ? m[1].trim() : "unknown"
+  try {
+    const m = fs.readFileSync("/proc/cpuinfo", "utf8").match(/^model name\s*:\s*(.+)$/m)
+    return m ? m[1].trim() : "unknown"
+  } catch {
+    return "unknown"
+  }
 })()
 console.log(`\n${runs} runs after one warm-up, at ${commit}, on ${cpu}`)
 for (const name of ["nbody", "vec3", "spectral"]) {
