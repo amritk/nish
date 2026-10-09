@@ -7,8 +7,6 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_exit(i32 noundef) #3
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
@@ -59,7 +57,6 @@ entry:
   %i.addr.2 = alloca i32, align 4
   %row.addr = alloca %struct.nish_array*, align 8
   %once.addr = alloca %struct.nish_array*, align 8
-  %arena.mark = call i64 @nish_arena_mark()
   store i32 0, i32* %total.addr, align 4
   store i32 0, i32* %i.addr, align 4
   br label %for.cond
@@ -334,7 +331,6 @@ ovf.ok.4:
   br i1 %139, label %ovf.fail, label %ovf.ok.5
 
 ovf.ok.5:
-  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %138
 
 ovf.fail:
