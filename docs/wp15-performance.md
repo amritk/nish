@@ -470,6 +470,7 @@ shape, and a fourth severity would change a machine-readable contract.
 | clamp not folded (`NL9009`) | a `substring` bound in a loop that the proof could not place in `[0, s.length]` |
 | wasteful struct padding (`NL9010`) | a field order that costs bytes no order has to spend |
 | allocation dropped by an assignment | `p = new Point(n)` overwriting an allocation nothing captured |
+| allocation dropped on every pass (`NL9016`) | `x = <allocation>` on every pass of a loop, with `x` declared outside it and nothing capturing the old value |
 | constant computed with overflow | literal arithmetic that does not fit its `i32` |
 | product widened after wrapping | `toI64(a * b)` with an `i32` multiplication |
 | shift count at or beyond the width | `x << 32` on an `i32` |

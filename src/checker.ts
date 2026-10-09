@@ -1476,6 +1476,14 @@ class PerfWalk {
    * one value in a branch", which is ordinary code with nothing to fix.
    */
   declaredAllocates: boolean[]
+  /**
+   * The assignments that run on every pass of the loop around them: each is
+   * a statement of its own at the top of a loop body that can come round
+   * again (`collectPassAssignments`). Only these can say "drops the value
+   * the pass before gave it", because one in a branch may run once, as a
+   * search loop's `found = ...` before its `break` does.
+   */
+  passAssignments: Node[]
 
   constructor(
     ctx: CheckContext,
@@ -1493,6 +1501,17 @@ class PerfWalk {
     this.declared = []
     this.declaredDepth = []
     this.declaredAllocates = []
+    this.passAssignments = []
+  }
+
+  /** Whether `expr` is one of the assignments `collectPassAssignments` found. */
+  isPassAssignment(expr: Node): boolean {
+    for (const assignment of this.passAssignments) {
+      if (assignment === expr) {
+        return true
+      }
+    }
+    return false
   }
 
   /** Whether `local` was declared holding an allocation. */
@@ -2064,6 +2083,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   }
   if (node.kind === N_FOR) {
     walkPerformance(walk, node.children[0])
+    collectPassAssignments(walk, node.children[3])
     walk.loops.push(node)
     walkPerformance(walk, node.children[1])
     walkPerformance(walk, node.children[2])
@@ -2073,6 +2093,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   }
   if (node.kind === N_FOR_OF) {
     walkPerformance(walk, node.children[1])
+    collectPassAssignments(walk, node.children[2])
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
     walkPerformance(walk, node.children[2])
@@ -2083,6 +2104,8 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   // both are walked in source order — which is the order the warnings come out
   // in, and stage0 walks the same tree in the same direction.
   if (node.kind === N_WHILE || node.kind === N_DO) {
+    const bodyIndex: i32 = node.kind === N_WHILE ? 1 : 0
+    collectPassAssignments(walk, node.children[bodyIndex])
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
     walkPerformance(walk, node.children[1])
@@ -2101,6 +2124,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
     if (node.text === "=") {
       checkStringAccumulation(walk, node)
       checkArenaReassignment(walk, node)
+      checkPassDrop(walk, node)
     }
     checkConstantOverflow(walk, node)
     checkShiftCount(walk, node)
@@ -2412,6 +2436,16 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
     }
     return false
   }
+  // A constructor keeps what it is handed as readily as a call does: `head =
+  // new Node(i, head)` stores the old list in the new node.
+  if (node.kind === N_NEW) {
+    for (const arg of node.children[2].children) {
+      if (isLocalRef(ctx, arg, local)) {
+        return true
+      }
+    }
+    return false
+  }
   if (node.kind === N_ARRAY) {
     for (const element of node.children) {
       if (isLocalRef(ctx, element, local)) {
@@ -2470,11 +2504,81 @@ const perfScanForCapture = (
 }
 
 /**
- * `s = <an allocation>` where `s` is a local that was declared holding one.
- * Reported on the target, because the assignment is the thing to change. The
- * guards are stage0's, in the same order.
+ * `s = <an allocation>` where `s` is a local that was declared holding one
+ * (NL9003). Split from the report below because the per-pass rule has to know
+ * whether this one already speaks about the same assignment: one line gets one
+ * warning. The guards are stage0's, in the same order.
  */
-const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
+const isArenaReassignment = (walk: PerfWalk, expr: Node): boolean => {
+  const left = expr.children[0]
+  if (left.kind !== N_IDENT) {
+    return false
+  }
+  const ctx = walk.ctx
+  const target = ctx.program.nodeLocals[left.id]
+  if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
+    return false
+  }
+  if (perfIsPointerType(ctx, walk.sig.returnType)) {
+    return false
+  }
+  if (isQuadraticAccumulation(walk, expr)) {
+    return false
+  }
+  if (!walk.declaredHoldingAllocation(target) || !perfAllocatesVisibly(ctx, expr.children[1])) {
+    return false
+  }
+  return !perfHeldValueMayBeReachable(walk, expr, target)
+}
+
+/**
+ * The assignments of `body` that run on every pass of its loop: each
+ * `x = ...` that is a statement of its own at the body's top level. A body
+ * whose top level ends the loop (`break`, `return`, `throw`) runs at most once,
+ * so it contributes none: whatever it assigns is never replaced by a later pass.
+ */
+const collectPassAssignments = (walk: PerfWalk, body: Node): void => {
+  const statements: Node[] = []
+  if (body.kind === N_BLOCK) {
+    for (const statement of body.children) {
+      if (statement.kind === N_BREAK || statement.kind === N_RETURN || statement.kind === N_THROW) {
+        return
+      }
+      statements.push(statement)
+    }
+  } else {
+    statements.push(body)
+  }
+  for (const statement of statements) {
+    if (statement.kind !== N_EXPR_STMT) {
+      continue
+    }
+    const expr = unwrapPerfParens(statement.children[0])
+    if (expr.kind === N_BINARY && expr.text === "=") {
+      walk.passAssignments.push(expr)
+    }
+  }
+}
+
+/**
+ * `x = <an allocation>` on every pass of a loop, where `x` is a local declared
+ * outside it (NL9016). Each pass drops the value the pass before gave `x`, and
+ * nothing frees it while the loop runs: the pass cannot take a scope, because a
+ * fresh value outlives it in `x`, and a `using a = arena()` block refuses the
+ * same assignment (NL2418). So memory grows with the number of passes, however
+ * little of it the program can still reach.
+ *
+ * This is the case NL9003 leaves silent, because `x` was declared holding a
+ * literal (`let last = ""`). Here the declaration does not matter: the value
+ * dropped from the second pass on is this assignment's own allocation. Silent
+ * when NL9002 or NL9003 already reports the line, and when any capture in the
+ * loop may have kept the old value reachable (`perfHeldValueMayBeReachable`),
+ * in which case nothing is dropped.
+ */
+const checkPassDrop = (walk: PerfWalk, expr: Node): void => {
+  if (walk.loops.length === 0 || !walk.isPassAssignment(expr)) {
+    return
+  }
   const left = expr.children[0]
   if (left.kind !== N_IDENT) {
     return
@@ -2484,20 +2588,38 @@ const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
   if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
     return
   }
-  const sig = walk.sig
-  if (perfIsPointerType(ctx, sig.returnType)) {
+  if (walk.depthOf(target) >= walk.loops.length || !perfAllocatesVisibly(ctx, expr.children[1])) {
     return
   }
-  if (isQuadraticAccumulation(walk, expr)) {
-    return
-  }
-  if (!walk.declaredHoldingAllocation(target) || !perfAllocatesVisibly(ctx, expr.children[1])) {
+  if (isQuadraticAccumulation(walk, expr) || isArenaReassignment(walk, expr)) {
     return
   }
   if (perfHeldValueMayBeReachable(walk, expr, target)) {
     return
   }
   ctx.performance(
+    left,
+    `\`${target.name}\` is given a new allocation on every pass of this loop and drops the one the pass before ` +
+      "gave it: nothing can reach that value again and nothing frees it while the loop runs, so memory grows with " +
+      `every pass. Declare \`${target.name}\` with \`const\` inside the loop when only its pass reads it, or keep ` +
+      "what the last pass needs as numbers and build the value once after the loop"
+  )
+}
+
+/**
+ * `s = <an allocation>` where `s` is a local that was declared holding one.
+ * Reported on the target, because the assignment is the thing to change.
+ */
+const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
+  if (!isArenaReassignment(walk, expr)) {
+    return
+  }
+  const left = expr.children[0]
+  const target = walk.ctx.program.nodeLocals[left.id]
+  if (target === null) {
+    return
+  }
+  walk.ctx.performance(
     left,
     `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
       "here and nothing frees it, and assigning a local is also what stops this function from releasing its arena " +

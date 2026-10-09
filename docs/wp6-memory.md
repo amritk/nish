@@ -244,4 +244,8 @@ parameter or return loses `nonnull` and `dereferenceable` and keeps `align 8`
   closed in one of two ways: a stack rule that does not need a fixed binding
   (the "captured only into one binding" fact, which `allocEscapes` already
   approximates), or an opt-in `--report-arena` audit listing each site's
-  placement. Neither is built.
+  placement. Neither is built. Its loop form, a local declared outside a loop
+  and handed a new allocation on every pass, is no longer silent: NL9016
+  reports it whatever the local was declared holding, because the value each
+  pass drops is the previous pass's own and keeping numbers across passes is a
+  rewrite that can be named.
