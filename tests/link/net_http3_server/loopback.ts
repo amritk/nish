@@ -427,12 +427,13 @@ const reused = (t: Suite): void => {
   // The carrier draws real entropy for every connection, so a handshake's
   // messages differ by a byte here and there (an ECDSA signature's DER length,
   // a key share's), and so does what it keeps: a spread of a few dozen bytes,
-  // not a growth. Since the slot keeps the handshake's state (H3-1), what is
-  // left is the caller's and the carrier's, none of it the QUIC connection's:
-  // the P-256 signature, 9,248 to 9,376 bytes as its DER length is 70 to 72
-  // (`p256SignSha256` stores what it allocates, so no arena block may hold
-  // it), and the copy of the first Initial and its parse that the listener
-  // makes (H3-3). Before, each handshake kept about 100 KB.
+  // not a growth. Since the slot keeps the handshake's state (H3-1), and
+  // `serve` signs in the server's `TlsP256Signer`, which keeps nothing, what is
+  // left is the carrier's alone: the copy of the first Initial and its parse
+  // that the listener makes (H3-3), 1,600 bytes. With the signature made by
+  // `tlsSignEcdsaP256` it was 10,912 to 11,040 (`p256SignSha256` stores what
+  // it allocates, so no arena block may hold it), and before the slot about
+  // 100 KB.
   let low: i64 = handshakes[1];
   let high: i64 = handshakes[1];
   for (let k: i32 = 2; k < toI32(handshakes.length); k++) {
@@ -440,7 +441,7 @@ const reused = (t: Suite): void => {
     high = handshakes[k] > high ? handshakes[k] : high;
   }
   t.ok("and each handshake through the listener into the slot keeps as much as the last, give or take its random encodings: under 256 bytes apart", low > n64(0) && high - low < n64(256));
-  t.ok("which is the signature and the listener's copy of the first Initial: 10 to 12 KiB, where it was about 100 KB", low >= n64(10240) && high <= n64(12288));
+  t.ok("which is the listener's copy of the first Initial alone: 1 to 2 KiB, where it was 10,912 or more with the signature and about 100 KB before the slot", low >= n64(1024) && high <= n64(2048));
 };
 
 /** Every check of this file. */
