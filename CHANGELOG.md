@@ -26,6 +26,55 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-09
+
+### Added
+
+- checker: Add `Math.clz32`, the leading zero bits of a 32-bit integer ([#511](https://github.com/amritk/nish/pull/511))
+- runtime: Find the first byte of a set with 16-byte vectors, chosen at run time ([#518](https://github.com/amritk/nish/pull/518))
+- runtime: Accept a start position in s.indexOf ([#513](https://github.com/amritk/nish/pull/513))
+- std: IndexOfAny in nish/text, lowered onto the runtime kernel ([#519](https://github.com/amritk/nish/pull/519))
+- net: The relay in Nish, with N9's soak ([#488](https://github.com/amritk/nish/pull/488))
+- std: Read several JSON fields in one scan with jsonFields ([#509](https://github.com/amritk/nish/pull/509))
+
+### Fixed
+
+- cli: Refuse --target together with --fix ([#496](https://github.com/amritk/nish/pull/496))
+- cli: Report a missing Nish entry point once per import ([#501](https://github.com/amritk/nish/pull/501))
+- runtime: Link Math.min and Math.max of a float on freestanding wasm32 ([#510](https://github.com/amritk/nish/pull/510))
+- net: Resend the server's handshake flight on two datagrams per probe, and early when the client shows it lacks it ([#514](https://github.com/amritk/nish/pull/514))
+
+### Performance
+
+- std: Compare JSON keys in place in jsonField ([#499](https://github.com/amritk/nish/pull/499))
+- codegen: Keep the per-pass release when a pushed string is only joined ([#500](https://github.com/amritk/nish/pull/500))
+- net: Keep nothing per QUIC handshake (H3-1, QUIC-3's remainder) ([#492](https://github.com/amritk/nish/pull/492))
+- crypto: Sign P-256 over caller-owned scratch, so a handshake's signature keeps nothing ([#512](https://github.com/amritk/nish/pull/512))
+- net: Let the QUIC listener read a window and answer into scratch, so an unowned datagram keeps nothing (H3-3) ([#515](https://github.com/amritk/nish/pull/515))
+- codegen: A value stored into a returned fresh array is returned with it ([#520](https://github.com/amritk/nish/pull/520))
+
+### Documentation
+
+- security: Recompute the README rows and Total from the records ([#504](https://github.com/amritk/nish/pull/504))
+- Propose WP38, SIMD ([#508](https://github.com/amritk/nish/pull/508))
+- Record WP38's decisions and its S0 baselines ([#517](https://github.com/amritk/nish/pull/517))
+- Record that WP38's --cpu flag is declined for now ([#521](https://github.com/amritk/nish/pull/521))
+- net: Record what the interop job proves in WP34's lane table ([#523](https://github.com/amritk/nish/pull/523))
+
+### Tests
+
+- differential: Retire the two declared IR differences the 0.17.0 seed carries ([#497](https://github.com/amritk/nish/pull/497))
+- net: Move net_http1 and net_websocket off Arena.mark/Arena.release ([#502](https://github.com/amritk/nish/pull/502))
+- net: A Nish server and a Nish client over loopback, every carrier ([#489](https://github.com/amritk/nish/pull/489))
+- net: Retry a failed interop runner case once, and allow the relay soak one arena-sized step ([#525](https://github.com/amritk/nish/pull/525))
+
+### CI
+
+- release: Merge the lockfile pull request from the job that opens it ([#505](https://github.com/amritk/nish/pull/505))
+- Split the two slow jobs four ways and stop every job at 15 minutes ([#506](https://github.com/amritk/nish/pull/506))
+- The interop job — quic-interop-runner, h2spec, curl and Chrome ([#487](https://github.com/amritk/nish/pull/487))
+
+
 ## [0.17.0] - 2026-10-06
 
 ### Breaking changes
@@ -730,3 +779,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.15.0]: https://github.com/amritk/nish/releases/tag/v0.15.0
 [0.16.0]: https://github.com/amritk/nish/releases/tag/v0.16.0
 [0.17.0]: https://github.com/amritk/nish/releases/tag/v0.17.0
+[0.18.0]: https://github.com/amritk/nish/releases/tag/v0.18.0
