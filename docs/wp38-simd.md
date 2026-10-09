@@ -1,17 +1,19 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: accepted; S0 and S1's kernel and surface landed, S2 and S4 declined
-for now (tracking issue #516).** The owner took the decisions in §8 on
-2026-10-09, as recommended. S0's baselines are in §2.3 (#517). S1's kernel,
-`runtime/runtime-simd.c` (#518), and its `std/text` function, `indexOfAny`
-(#519), are built; moving `std/json` onto it, and the `bench/json` bar S1 is
-judged by, wait for #507. S2's `--cpu` flag is not built, because S0's figures
-miss its bar (§7). S4, the lexer on `indexOfAny`, is not built either, because
-the lexer is too small a part of the bootstrap to move it (§7). S3 has no
-flag, type or runtime symbol yet: it arrives with its stage, and its rule goes
-into [LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists
-the work as additive. LANGUAGE.md stays normative and this note adds no rule
-to it; where they disagree, LANGUAGE.md wins.
+**Status: accepted; S0 and S1's kernel and surface landed, S2's bar met on a
+re-measurement but its flag not built, S4 declined for now (tracking issue
+#516).** The owner took the decisions in §8 on 2026-10-09, as recommended.
+S0's baselines are in §2.3 (#517). S1's kernel, `runtime/runtime-simd.c`
+(#518), and its `std/text` function, `indexOfAny` (#519), are built; moving
+`std/json` onto it, and the `bench/json` bar S1 is judged by, wait for #507.
+S2's `--cpu` flag is not built: S0's figures missed its bar, and a
+re-measurement against the noise met it (§7); building it is the owner's call.
+S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
+small a part of the bootstrap to move it (§7). S3 has no flag, type or runtime
+symbol yet: it arrives with its stage, and its rule goes into
+[LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
+work as additive. LANGUAGE.md stays normative and this note adds no rule to
+it; where they disagree, LANGUAGE.md wins.
 
 The question came from `bench/json`, the cross-language JSON benchmark of
 #507. In its recorded report Nish's `std/json` read three fields per line in
@@ -519,11 +521,11 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, except `bench/json`, pending #507. |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than S0 on the same machine: from about 90 ms to about 60, between typed serde and yyjson. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. Moving `std/json` onto it, and with that the `bench/json` bar, is pending #507. |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Declined for now**: see below. |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 
-**S2 is declined for now on its own bar.** spectral clears 10% in both of
+**S2 was declined on S0's figures, on its own bar.** spectral clears 10% in both of
 §2.3's alternating samples (10.7% and 14.7%, then 21.3% and 14.8%, minimum
 and median), but vec3 is at or below zero in three of its four figures
 (−0.3%, then −1.2% and −1.0%), so "no loss on the others" is not met, and the
@@ -531,37 +533,84 @@ bar gives no tolerance. The flag is not built, `tests/ct-asm.js` reads only
 the baseline, and LANGUAGE.md gains no rule. It reopens on a re-measurement on
 a quieter machine, or on a measurement of the noise itself: one binary timed
 against itself, showing vec3's dip lies inside it. `bench/simd-s0.mjs` only
-times the two builds against each other, so that needs a tool or option that
-does not exist yet.
+timed the two builds against each other then.
+
+**The noise, measured: S2's bar is met.** `bench/simd-s0.mjs --self` puts a
+byte-for-byte copy of the baseline binary into the rotation as a third
+column, so the baseline is timed against itself in the same rounds as against
+`-march=x86-64-v3`. Two samples of fifteen rounds of three, at `1d16469` on
+the same 2.1 GHz Xeon, gave (minimum / median):
+
+| Benchmark | x86-64-v3 against the baseline | the baseline against its copy |
+| --- | ---: | ---: |
+| spectral | +20.8% / +19.7%, then +21.1% / +20.5% | −0.2% / +0.3%, then 0.0% / +0.1% |
+| vec3 | +1.2% / +1.5%, then +1.7% / +1.1% | 0.0% / +0.2%, then +0.2% / −0.3% |
+| nbody | +0.3% / +1.1%, then −0.8% / +0.9% | +0.2% / +0.1%, then −1.1% / −0.3% |
+
+- **vec3's dip does not reproduce.** All four of its figures are now gains,
+  of 1.1% to 1.7%, while the baseline differs from its own copy by 0.3% at
+  most.
+- **nbody has one negative figure:** −0.8% on the minimum in the second
+  sample. In the same sample the baseline's minimum was 1.1% below its own
+  copy's, so that figure is inside the noise. Its medians are gains in both.
+- **spectral gains about 20%** on both figures in both samples.
+
+So spectral clears 10%, and nothing else loses by more than a binary loses to
+itself. That is the reading this paragraph asked for, and S2's bar is met on
+it. The flag is still not built: what it costs is mostly `tests/ct-asm.js`
+reading every level it accepts (§6), and whether a gain on one benchmark of
+three is worth that is the owner's decision.
 
 **S4 is declined for now on its own bar.** The lexer is about 1% of the front
 end, and the front end's three runs about 2% of `scripts/bootstrap.sh
---verify`, so no change to the lexer can make the bootstrap measurably faster.
-The figures were taken at `308a8b1`, with stage2 built from the 0.18.0 seed,
-on a 4-vCPU cloud container (Intel Xeon at 2.10 GHz). `bench/lexer.ts` lexed
-`src/*.ts` concatenated, 2,804,018 bytes, and printed 338,856 tokens per pass;
-41% of the bytes are in comment lines. One lex took 9.82 ms at the minimum,
-about 285 MB/s, and 11.62 ms at the median (nine runs of 25 passes: the least
-minimum, and the median of the runs' medians). A spike put `skipTrivia`'s two
-comment loops on `indexOf`, which skips a line comment to the next `\n` and a
-block comment to the next `*/`. In alternating rounds it took 9.46 ms and
-10.50 ms, 4% faster at the minimum and 10% at the median, with the same
-checksum and token count. Its token stream was identical: `src/dump-tokens.ts`
-built both ways printed `cmp`-equal output. The rest of the lexer's time goes
-into identifiers, keywords, numbers and the strings each token builds. Those
-loops run *while* a byte is in a class rather than *until* one is found, so
-`indexOfAny` cannot help them. `build/nish src/compile.ts`, the front end and
-IR for all of `src/`, took 919 ms at the minimum and 1,046 ms at the median
-over fifteen runs, and 913 and 1,026 ms with the spike: a difference well
-inside the runs' own spread of 913 to 1,538 ms. `scripts/bootstrap.sh
---verify` reached its fixed point in 135,556 ms. S0's 150,771 ms was taken on
+--verify`, so no change to the lexer, however fast, can make the bootstrap
+measurably faster. The figures were taken at `308a8b1`, with stage2 built from
+the 0.18.0 seed, on a 4-vCPU cloud container (Intel Xeon at 2.10 GHz).
+`bench/lexer.ts` lexed `src/*.ts` concatenated, 2,804,018 bytes, and printed
+338,856 tokens per pass; 41% of the bytes are in comment lines. One lex took
+9.82 ms at the minimum, about 285 MB/s, and 11.62 ms at the median (nine runs
+of 25 passes: the least minimum, and the median of the runs' medians). A
+spike, given below, put `skipTrivia`'s two comment loops on `indexOf`. In
+alternating rounds it took 9.46 ms and 10.50 ms, 4% faster at the minimum and
+10% at the median, with the same checksum and token count, and
+`src/dump-tokens.ts` built both ways printed `cmp`-equal output. The comment
+loops are the only part of the lexer that was measured on a search.
+String-literal bodies have `indexOfAny`'s shape too, since `scanString` runs
+until a quote, a line feed or a backslash, but they were not measured;
+identifiers and numbers run *while* a byte is in a class, which `indexOfAny`
+does not express. None of that changes the reading, which rests on the lexer's
+share alone. `build/nish src/compile.ts`, the front end and IR for all of
+`src/`, took 919 ms at the minimum and 1,046 ms at the median over fifteen
+runs, and 913 and 1,026 ms with the spike: a difference well inside the runs'
+own spread of 913 to 1,538 ms. `scripts/bootstrap.sh --verify` reached its
+fixed point in 135,556 ms, in one run rather than seven: it serves only as the
+denominator of the lexer's share, and a share of 0.02% stays far below a
+measurable effect whatever one run's noise. S0's 150,771 ms was taken on
 another machine, so what compares is each part's share of a run, not the
 times. The bootstrap runs the front end three times, once per stage, so the
-lexer is about 30 ms of it, 0.02%, and the spike would save about 1 ms. The
-spike was measured and reverted, and `src/` is unchanged. S4 reopens on a
-front-end profile that shows a scan-bound loop in `src/`, or on a bar restated
-in front-end time. `bench/lexer.ts`'s header gives the commands that reproduce
-the lexer's figures.
+lexer is about 30 ms of it, and the spike would save about 1 ms. The spike was
+measured and reverted, and `src/` is unchanged. S4 reopens on a front-end
+profile that shows a scan-bound loop in `src/`, or on a bar restated in
+front-end time.
+
+To reproduce the spike, replace the bodies of the two comment branches of
+`Lexer.skipTrivia` in `src/lexer.ts`, the `this.pos = this.pos + 2` and the
+`while` loop after it in each, with these lines:
+
+```ts
+// the `//` branch: to the line feed, or the end of the text
+const lf = this.source.indexOf("\n", this.pos + 2)
+this.pos = lf < 0 ? this.source.length : lf
+// the `/*` branch: past the `*/`, or to the end of the text
+const close = this.source.indexOf("*/", this.pos + 2)
+this.pos = close < 0 ? this.source.length : close + 2
+```
+
+Then build `bench/lexer.ts` once against each version of `src/lexer.ts`, and
+run the two binaries over the same `src/*.ts` in alternating rounds, as its
+header shows for one; for the front-end figures, build stage2 with `npm run
+build` against each version and time `src/compile.ts` with the two in the same
+alternation. Revert the spike with `git checkout src/lexer.ts`.
 
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was
