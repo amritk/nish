@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 945 programs, 88321 dump lines.
+# 945 programs, 88333 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -47024,6 +47024,9 @@ module tests/cases/perf_arena_quiet.ts (entry)
 struct Box (class) size=8 align=8
   field inner: string index=0 offset=0
   constructor -> @Box.constructor
+struct Chain (class) size=8 align=8
+  field prev: Chain | null index=0 offset=0
+  constructor -> @Chain.constructor
 struct Wrap (class) size=8 align=8
   field box: Box index=0 offset=0
   constructor -> @Wrap.constructor
@@ -47031,6 +47034,12 @@ function Box.constructor(this: Box, inner: string): void -> @Box.constructor [co
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: inner
   pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Chain.constructor(this: Chain, prev: Chain | null): void -> @Chain.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: prev
+  pointer this: size=8 writesThrough=true captured=false
+  pointer prev: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Wrap.constructor(this: Wrap, box: Box): void -> @Wrap.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -47042,25 +47051,28 @@ function build(n: i32): string -> @build
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-  local 19:7 s: string (let)
+  local 26:7 s: string (let)
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: Box.constructor Wrap.constructor build nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_str_concat
+  calls: Box.constructor Chain.constructor Wrap.constructor build nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_str_concat
   stackSites=2 stackLocals=2
-  local 27:9 a: string (const)
-  local 28:9 b: string (const)
-  local 33:7 what: string (let)
-  local 42:7 s: string (let)
-  local 48:7 plain: string (let)
-  local 54:9 rows: string[] (const)
-  local 55:7 row: string (let)
-  local 56:12 i: i32 (let)
-  local 63:7 box: Box (let)
-  callee 63:13 new Box -> @Box.constructor
-  local 64:9 wrapped: Wrap (const)
-  callee 64:19 new Wrap -> @Wrap.constructor
-  callee 65:9 new Box -> @Box.constructor
-  callee 71:5 build -> @build
+  local 34:9 a: string (const)
+  local 35:9 b: string (const)
+  local 40:7 what: string (let)
+  local 49:7 s: string (let)
+  local 55:7 plain: string (let)
+  local 61:9 rows: string[] (const)
+  local 62:7 row: string (let)
+  local 63:12 i: i32 (let)
+  local 70:7 box: Box (let)
+  callee 70:13 new Box -> @Box.constructor
+  local 71:9 wrapped: Wrap (const)
+  callee 71:19 new Wrap -> @Wrap.constructor
+  callee 72:9 new Box -> @Box.constructor
+  local 76:7 chain: Chain (let)
+  callee 76:15 new Chain -> @Chain.constructor
+  callee 77:11 new Chain -> @Chain.constructor
+  callee 83:5 build -> @build
 program tests/cases/perf_arena_using.ts
 module tests/cases/perf_arena_using.ts (entry)
 struct Log (class) size=16 align=8

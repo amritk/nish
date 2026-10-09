@@ -6,6 +6,13 @@ class Box {
   }
 }
 
+class Chain {
+  prev: Chain | null;
+  constructor(prev: Chain | null) {
+    this.prev = prev;
+  }
+}
+
 class Wrap {
   box: Box;
   constructor(box: Box) {
@@ -64,6 +71,11 @@ export function test(): number {
   const wrapped = new Wrap(box);
   box = new Box(wrapped.box.inner);
 
+  // Outside any loop the same holds for the assignment's own right-hand side:
+  // the new link keeps the old one.
+  let chain = new Chain(null);
+  chain = new Chain(chain);
+
   return (
     b.length +
     what.length +
@@ -72,6 +84,7 @@ export function test(): number {
     plain.length +
     rows.length +
     row.length +
-    box.inner.length
+    box.inner.length +
+    (chain.prev !== null ? 1 : 0)
   );
 }

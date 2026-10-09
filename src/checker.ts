@@ -2516,6 +2516,12 @@ const perfReceiverMayBeKept = (ctx: CheckContext, callee: Node, local: Local): b
  * starts can have taken a value the assignment is about to drop.
  */
 const perfHeldValueMayBeReachable = (walk: PerfWalk, expr: Node, local: Local): boolean => {
+  // The assignment's own right-hand side runs before the store, so a capture
+  // there keeps the old value wherever the assignment stands: `head = new
+  // Node(1, head)` hands it to the node that replaces it.
+  if (perfScanForCapture(walk.ctx, expr.children[1], local, true, 0)) {
+    return true
+  }
   const inLoop = walk.loops.length > 0
   const root = inLoop ? walk.loops[0] : walk.body
   return perfScanForCapture(walk.ctx, root, local, inLoop, expr.start)
