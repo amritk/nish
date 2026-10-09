@@ -189,11 +189,12 @@ const firstBadCut = (text: string): i32 => {
   const n: i32 = toI32(data.length);
   const whole: string = transcriptSplitAt(data, n, true);
   for (let cut: i32 = 0; cut < n; cut += 1) {
-    // Each pass builds two parsers and their transcripts, which nothing keeps.
-    const mark: i64 = Arena.mark();
+    // Each pass builds two parsers and their transcripts, which nothing keeps. A
+    // `using a = arena()` block would free them, but NL2424 refuses it: the parser
+    // stores what it allocates into memory. The corpus texts are short, so the passes
+    // are left to the arena until the program exits.
     const same: boolean =
       transcriptSplitAt(data, cut, true) === whole && transcriptSplitAt(data, cut, false) === whole;
-    Arena.release(mark);
     if (!same) {
       return cut;
     }

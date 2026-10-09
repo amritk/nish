@@ -99,7 +99,7 @@ PASS  the answer does not open under the old keys
 PASS  it opens under the next ones, with the Key Phase bit set
 PASS  a packet the network delayed, under the previous keys and numbered below the update, is still read (§6.5)
 PASS  the server may not start an update while it keeps the previous keys
-PASS  a probe timeout later the previous keys are wiped and the next derived
+PASS  a probe timeout later the previous keys are gone, the next derived over them in their slot
 PASS  but until the client acknowledges a packet of the new phase, still not
 PASS  once it has, the server starts an update (§6.1)
 PASS  its write phase moves on, its read phase waits for the client
@@ -115,6 +115,6 @@ PASS  a flipped Key Phase bit under the current keys is dropped, changing nothin
 PASS  and derives nothing: under 2 KB of the arena, the cost of reading any packet
 PASS  under ChaCha20-Poly1305 a client's update is followed too
 PASS  all 64 of the client's updates are followed
-PASS  each, its packet read and the next keys derived, leaves at most 12 KB in the arena, a ceiling over what QUIC-4 records
+PASS  each, its packet read and the next keys derived in the slot, leaves nothing in the arena (QUIC-4)
 PASS  the 65th is KEY_UPDATE_ERROR, deriving no key
 quic lifecycle: 119 passed, 0 failed, 0 skipped

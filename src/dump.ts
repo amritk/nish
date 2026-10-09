@@ -151,15 +151,20 @@ const factsText = (
   out.push(`  stackSites=${sites} stackLocals=${facts.stackLocals.length}`)
 }
 
-/** `name(a: i32, b: string): void`, the signature as stage0's `src/dump.ts` writes it. */
-const signatureText = (table: TypeTable, sig: FunctionSig): string => {
+/**
+ * `before`, then `name(a: i32, b: string): void` (the signature as stage0's
+ * `src/dump.ts` writes it), then `after`, as one line. The dump pushes one per
+ * function in a loop, and built here the signature is scratch the call
+ * reclaims rather than a string left under every line the dump keeps.
+ */
+const signatureLine = (table: TypeTable, sig: FunctionSig, before: string, after: string): string => {
   const params: string[] = []
   let i = 0
   while (i < sig.paramNames.length) {
     params.push(`${sig.paramNames[i]}: ${table.typeName(sig.paramTypes[i])}`)
     i = i + 1
   }
-  return `${sig.sourceName}(${params.join(", ")}): ${table.typeName(sig.returnType)}`
+  return `${before}${sig.sourceName}(${params.join(", ")}): ${table.typeName(sig.returnType)}${after}`
 }
 
 const structText = (table: TypeTable, info: StructInfo, out: string[]): void => {
@@ -382,7 +387,7 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
       tags.push("instance")
     }
     const suffix = tags.length > 0 ? ` [${tags.join(" ")}]` : ""
-    out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`)
+    out.push(signatureLine(table, sig, "function ", ` -> @${sig.name}${suffix}`))
     const f = facts.get(sig.name)
     if (f !== null) {
       factsText(source, table, sig, f, out)

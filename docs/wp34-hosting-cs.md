@@ -7,8 +7,8 @@ parser and WebSocket framing (#399); H2's HPACK (#406); and QUIC packets and
 connections, Q1 (#404) and Q2 (#441, #444). §5a has each lane's pull requests
 and what it left. **Open:** the HTTP/1.1 and HTTP/2 servers (the rest of H1
 and H2), QUIC loss recovery and streams (Q3, Q4), HTTP/3 and WebTransport (R1,
-R2), the relay itself (A1) with N9's soak, the loopback suite, and the interop
-job of decision S2. 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
+R2), the relay itself (A1) with N9's soak, and the interop job of decision
+S2. The loopback suite across every carrier has landed (#489). 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
 K1–K6 (less HKDF-Expand-Label, #398); everything else from T1 on is
 on `main` and not yet released, so cs cannot use it until a release does (§7).
 
@@ -328,8 +328,8 @@ lists what each module exports and what is verified, and
 | **Q1** | #404 | `nish/net/quic-packet` (varints, headers, packet numbers, Initial secrets, packet and header protection for the three suites, the key-update secret, the Retry integrity tag) | The wipes QUIC-1 records (#430). RFC 9001 prints no AES-256-GCM packet, so `net_quic_packet` checks one against Python's `cryptography` |
 | **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, not yet by the quic-interop-runner. Loss recovery (Q3); full streams with flow control (Q4); the AEAD limits (QUIC-6); per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); the wipes QUIC-2 and QUIC-5 record (#430) |
 | **Q3** | #466 | `nish/net/quic-recovery` (RFC 9002: sent-packet rings per space, the RTT estimate, loss by packet and time threshold, the probe timeout with backoff, NewReno, a pacer), used by `nish/net/quic` to send lost CRYPTO, STREAM and connection-ID frames again, and `nish/net/quic-listener`'s paced send | The interop runner's lossy and congested cases; ECN; detecting an optimistic ACK (QUIC-7); per-packet allocation, now with the fixed record of packets in flight (QUIC-3, Q4) |
-| **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; the AEAD limits (QUIC-6); the handshake's own arena, which is TLS-3's and the key derivations' (88 KB a connection) |
-| **S2** (interop job) | #487 | No module: `.github/workflows/interop.yml` and `tests/interop/` run the quic-interop-runner (quic-go, ngtcp2), `h2spec`, `curl --http3` and `--http2`, and Chromium through Playwright over WebTransport against `tests/link/net_interop_server`, a server on every carrier from one loop whose smoke checks run in `npm test`; `h2spec` 146 of 146 | The HTTP/3 pacer's timer, which `Http3Server.flushSlot` files at an absolute time added to now (curl `--http3` stalls); a minted certificate Chrome accepts, which needs an extension (K6); Autobahn's server cases for H1
+| **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; the AEAD limits (QUIC-6). The handshake's own arena (88 KB a connection) went with N9's QUIC stage, which keeps the handshake's state in the slot: a connection through a reused slot now keeps 0 bytes (QUIC-3, `net_quic_memory`), and a handshake through the HTTP/3 carrier about 11 KB, the caller's P-256 signature and the listener's copy of the first Initial (H3-1) |
+| **S2** (interop job) | #487 | No module: `.github/workflows/interop.yml` and `tests/interop/` run the quic-interop-runner (quic-go, ngtcp2), `h2spec`, `curl --http3` and `--http2`, and Chromium through Playwright over WebTransport against `tests/link/net_interop_server`, a server on every carrier from one loop whose smoke checks run in `npm test`; `h2spec` 146 of 146 | A server whose lost first flight is resent one datagram per probe timeout, with no reply to the client's probes (`QuicConnection.probe`; quic-go's `handshakeloss` fails about one run in three); Autobahn's server cases for H1. The pacer's timer (#490) and the minted certificate's extensions (#491) were found here and fixed
 
 K1 and K4 did not wait for their **Needs** column: they export no enum or
 alias, so N1 was not needed, and they are written branch-free on secrets by
@@ -350,6 +350,12 @@ over loopback, for every carrier. It is what catches two lanes that each pass
 their own vectors but disagree with each other. T2 and Q2 exist, so it can be
 written now; RFC 8448 over loopback from a Nish client (`net_tls_record_tcp`)
 and the Nish UDP client that replays aioquic's exchanges are its first pieces.
+The suite is `tests/link/net_loopback` (and its `_f64` twin): a section per
+carrier — TLS over TCP, HTTP/1.1, WebSocket, HTTP/2, QUIC, HTTP/3 and
+WebTransport — each a Nish server on the carrier and the lanes' own scripted
+clients on real loopback sockets in one `pollWait` loop, with every server
+call's `Arena.used()` flat over fifty rounds on a warm connection and the
+memory a whole connection keeps pinned beside it.
 
 ## 6. Decisions for the owner
 
@@ -367,7 +373,7 @@ and the Nish UDP client that replays aioquic's exchanges are its first pieces.
 | --- | --- | --- | --- | --- |
 | 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) | done but for the QPACK tables |
 | 1 | a release carrying N1–N3, N5, N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — | 0.16.0 carries N1–N3, N5 and N6 and K1–K6, less #398, #402 and #411; T1, T2 and Q2 are on `main`; the H1 server and the rest of H2 are open |
-| 2 | — | Q3, Q4, R1; the loopback suite | — | open |
+| 2 | — | Q3, Q4, R1; the loopback suite | — | open; the loopback suite landed (#489) |
 | 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust | open |
 | 4 | — | S5's reverse proxy | the Rust relay retired | open |
 
