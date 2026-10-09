@@ -5952,9 +5952,12 @@ where its memory lives and when it is reused.
    `new Array` and uses it only as `xs[i] = v`, `xs.push(v)`, `xs.length`,
    an element read that is only tested (`xs[i] === null`), and `return xs`
    itself, what it stores is reachable only through `xs`, so it goes to the
-   caller with the array and the function lets nothing else out: a loop that
-   calls it keeps its scope (`tests/cases/mem_return_array_scope`: 1000 calls
-   leave `Arena.used()` where one call left it). Any other use of `xs` keeps
+   caller with the array and the function lets nothing else out. Only a
+   string, or a `string | null`, is carried this way: an array or an object
+   holds pointers of its own, which no caller follows a level further down
+   (`mem_return_array_nested`). So a loop that calls it keeps its scope
+   (`tests/cases/mem_return_array_scope`: 1000 calls leave `Arena.used()`
+   where one call left it). Any other use of `xs` keeps
    the stored value stored, because it could hand an element on: storing
    `xs` into a field, passing it to a function, reading an element back and
    keeping it, naming `xs` through another local, or returning it through a

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 939 programs, 63654 dump lines.
+# 940 programs, 63708 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -44231,6 +44231,61 @@ function churn(): i32 -> @churn
   stackSites=0 stackLocals=0
   local 88:7 t: i32 (let)
   local 89:12 i: i32 (let)
+program tests/cases/mem_return_array_nested.ts
+module tests/cases/mem_return_array_nested.ts (entry)
+function wordsOf(i: i32): string[] -> @wordsOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 12:3
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 11:9 xs: string[] (const)
+function rowsOf(i: i32): string[][] -> @rowsOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 19:3
+  escaping: i
+  calls: nish_array_grow wordsOf
+  stackSites=0 stackLocals=0
+  local 18:9 out: string[][] (const)
+  callee 19:12 wordsOf -> @wordsOf
+function firstOf(row: string[]): string -> @firstOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer row: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function lastFirst(n: i32): string -> @lastFirst
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via rowsOf
+  calls: nish_panic_index rowsOf
+  stackSites=0 stackLocals=0
+  local 26:12 i: i32 (let)
+  local 27:11 row: string[] (const)
+  callee 27:17 rowsOf -> @rowsOf
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via rowsOf
+  calls: churn firstOf lastFirst nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32 rowsOf
+  stackSites=0 stackLocals=0
+  local 36:7 viaLocal: string (let)
+  local 37:7 viaForOf: string (let)
+  local 38:7 viaCall: string (let)
+  local 39:12 i: i32 (let)
+  local 40:11 row: string[] (const)
+  callee 40:17 rowsOf -> @rowsOf
+  local 43:12 i: i32 (let)
+  local 44:16 row: string[] (const)
+  callee 44:23 rowsOf -> @rowsOf
+  local 48:12 i: i32 (let)
+  callee 49:15 firstOf -> @firstOf
+  callee 49:23 rowsOf -> @rowsOf
+  local 51:9 viaReturn: string (const)
+  callee 51:21 lastFirst -> @lastFirst
+  callee 52:18 churn -> @churn
+function churn(): i32 -> @churn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 61:7 t: i32 (let)
+  local 62:12 i: i32 (let)
 program tests/cases/mem_return_array_readdir.ts
 module tests/cases/mem_return_array_readdir.ts (entry)
 const dir: string = "build/mem_return_array_readdir"
@@ -46719,9 +46774,9 @@ struct Point (class) size=8 align=4
   field x: i32 index=0 offset=0 initialized
   field y: i32 index=1 offset=4 initialized
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 34:5
-  calls: nish_arena_mark nish_arena_release nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_write
+  calls: nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_write
   stackSites=4 stackLocals=4
   local 11:7 total: i32 (let)
   local 15:12 i: i32 (let)

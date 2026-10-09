@@ -780,8 +780,8 @@ class EscapeAnalysis {
    * takes `xs`'s own outcome rather than escaping into memory.
    *
    * The value is reachable only through `xs`'s elements, and every use of
-   * `xs` is an element store, a push, `.length`, an element read that is
-   * only tested (`xs[i] === null`), or `return xs` itself (`isCarrierUse`).
+   * `xs` is a plain element store, a push, `.length`, an element read that
+   * is only tested (`xs[i] === null`), or `return xs` itself (`isCarrierUse`).
    * None of them hands an element back out, so the value lives exactly as
    * long as `xs` does: it dies with a `local` array, and it goes to the
    * caller with a returned one, which is what `returnsFreshElements` tells
@@ -825,7 +825,11 @@ class EscapeAnalysis {
       }
     }
     const v: Local | null = receiver === null ? null : this.freshArrayLocal(receiver)
-    if (v === null) {
+    // Only a string is carried. A string is one flat block, so the caller
+    // follows all of it by following the array's elements; an array or an
+    // object holds pointers of its own, which no caller follows a second
+    // level down, so it keeps escaping as it always did.
+    if (v === null || this.table.stripNull(this.table.refOf(v.type)) !== T_STRING) {
       return null
     }
     for (const ref of this.refsOf(v)) {
@@ -865,8 +869,14 @@ class EscapeAnalysis {
     }
     if (access.kind === N_INDEX && access.children[0] === ref) {
       const above = this.unit.parents.parentOf(access)
-      if (above !== null && above.kind === N_BINARY && above.text === "=" && above.children[0] === access) {
-        return true
+      if (
+        above !== null &&
+        above.kind === N_BINARY &&
+        above.children[0] === access &&
+        isAssignmentOperator(above.text)
+      ) {
+        // A compound store reads the element it replaces.
+        return above.text === "="
       }
       return classifyUse(this.unit, this.table, access).kind === USE_NONE
     }
