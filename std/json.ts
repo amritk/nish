@@ -52,9 +52,9 @@
  * array whose slot `k` is exactly what `jsonField(line, names[k])` answers —
  * absent, first-of-a-duplicate and malformed input included — because the two
  * share the step that reads one member (`jsonReadMember`) and stop at the same
- * one. Its array costs a loop that calls it the per-pass arena release, which
- * `jsonField` keeps when the line is older than the pass; `jsonFields`' own
- * comment says what that means for a caller.
+ * one. Its array goes back to the caller with the values in it, so a loop that
+ * calls it keeps its per-pass arena release, as one calling `jsonField` does;
+ * `jsonFields`' own comment says when that holds.
  *
  * Every offset here is a **byte** offset and every width is spelled, with each
  * length and byte a builtin answers read through `toI32` — `.length` and
@@ -614,17 +614,16 @@ export const jsonField = (object: string, name: string): string | null => {
  * stop at the same member.
  *
  * The answer is a fresh array and the only allocation besides the values. Each
- * value is stored into it, and a stored allocation is where the escape analysis
- * stops following one, so a loop calling this keeps everything every pass
- * built until its function returns: no per-pass release, and no `using a =
- * arena()` around the call either, since that block refuses a call to a
- * function that stores an allocation (LANGUAGE.md, NL2424). A loop in a
- * function whose parameters are only strings and numbers has its memory taken
- * back at the return. A loop over more lines than its function can afford to
- * hold at once, reading lines it did not build in the pass, is better served
- * by `jsonField`, whose calls keep the per-pass release on such a line; on a
- * line built in the pass neither reader keeps it (LANGUAGE.md, "Memory
- * model").
+ * value is stored into it by a plain `values[k] = text` statement, and the
+ * array is only stored into, tested and returned, so the values travel with
+ * the array: the call lets nothing else out (LANGUAGE.md, "Memory model", a
+ * value stored into an array that is returned with it). A loop calling this
+ * keeps its per-pass release on a line older than the pass, as `jsonField`'s
+ * does, and a `using a = arena()` block may hold the call. On a line built in
+ * the pass neither reader keeps the release (LANGUAGE.md, "Memory model").
+ * Reading `values` back, passing it to a function, or storing it anywhere
+ * before the return would undo this; `tests/link/std_json` pins the flat
+ * arena.
  */
 export const jsonFields = (object: string, names: string[]): (string | null)[] => {
   const count: i32 = toI32(names.length)

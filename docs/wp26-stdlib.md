@@ -162,21 +162,23 @@ is a short loop over it and neither can find a member the other does not. The
 no allocation to `jsonField`.
 
 What `jsonFields` adds is its answer. Each value is stored into the array it
-returns, and a stored allocation is where the escape analysis stops following
-one, so a loop that calls it is refused its per-pass release. A
-`using a = arena()` block around the call is no way out: it refuses a call to
-a function that stores an allocation into memory, NL2424 in
-[LANGUAGE.md](LANGUAGE.md#using-a--arena) (`tests/cases/reject_using_arena_callee_stores`),
-and `jsonFields` is such a function. A function whose parameters are only
-strings and numbers still takes everything back when it returns
-(`tests/link/std_json`: 1,000 calls leave `Arena.used()` where one left it).
-`jsonField` keeps the per-pass release only for a line older than the pass:
-LANGUAGE.md's [Memory model](LANGUAGE.md#memory-model) says a loop that builds
-its line in the pass and hands it to `jsonField` "still has no scope". So a
-loop that has to run in constant memory over lines it did not build calls
-`jsonField`; one that builds each line in the pass gets no per-pass release
-from either reader.
-§7 item 8 is the open question.
+allocates and returns, by a plain `values[k] = text` statement, and the array
+is otherwise only tested and returned. LANGUAGE.md's
+[Memory model](LANGUAGE.md#memory-model) carries such a value back to the
+caller with the array, as returned rather than stored, so a loop that calls
+`jsonFields` keeps its per-pass release and a `using a = arena()` block may
+hold the call (`tests/link/std_json`: a 1,000-pass loop keeps `Arena.used()`
+flat on every pass). Before that rule, each store counted as a store into
+memory, and a loop over `jsonFields` kept about 192 bytes per call on a
+`bench/json` line. The rule is narrow: reading `values` back, passing it to a
+function or storing it anywhere would lose it, so the function keeps the array
+to those uses.
+Both readers keep the per-pass release only for a line older than the pass:
+the Memory model says a loop that builds its line in the pass and hands it on
+"still has no scope". So a loop over lines it did not build runs in constant
+memory with either reader; one that builds each line in the pass gets no
+per-pass release from either.
+§7 item 8 records how the question was answered.
 
 ## 4. The number-mode rule
 
@@ -245,10 +247,10 @@ named.
 6. **Whether the packaging check names every module. Answered: it asks the
    tree**, so a module cannot ship unchecked as the directory grows.
 7. **Whether WP18 collapses the assertion set. Answered: no** (§3c).
-8. **Whether a loop over `jsonFields` keeps its per-pass release.** Not today
-   (§3f). The values it stores go into an array the call itself allocated and
-   returns, and nothing older than the call can reach that array, so a store
-   into it might flow as "returned" rather than "stored". Whether it can
-   without loosening anything else the analysis proves is for that change to
-   show, in `src/escape.ts`; until then the per-pass release is `jsonField`'s
-   alone, and only on a line older than the pass (§3f).
+8. **Whether a loop over `jsonFields` keeps its per-pass release. Answered:
+   yes**, on a line older than the pass (§3f). The values it stores go into an
+   array the call itself allocated and returns, and nothing older than the
+   call can reach that array, so `src/escape.ts` now carries a store into it
+   as returned rather than stored (LANGUAGE.md, Memory model). On `bench/json`
+   that takes `jsonFields`' peak RSS from 105.5 to 88.1 MB, the same as
+   `jsonField` ×3.

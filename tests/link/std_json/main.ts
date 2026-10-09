@@ -114,6 +114,33 @@ const jsonFieldsRounds = (line: string, rounds: i32): i32 => {
   return sum;
 };
 
+/**
+ * How far `Arena.used()` moves across `passes` passes of a loop over
+ * `jsonFields`, read after every pass: 0 when each pass's per-pass release
+ * takes back what the call built.
+ */
+const jsonFieldsPassSpread = (line: string, passes: i32): i64 => {
+  const names = ["code", "line", "message"];
+  let lo: i64 = -1;
+  let hi: i64 = 0;
+  let i: i32 = 0;
+  while (i < passes) {
+    const got = jsonFields(line, names);
+    if (got[2] === null) {
+      return -1;
+    }
+    const used = Arena.used();
+    if (lo < 0 || used < lo) {
+      lo = used;
+    }
+    if (used > hi) {
+      hi = used;
+    }
+    i += 1;
+  }
+  return hi - lo;
+};
+
 /** One byte as a string, so a check can spell a name's UTF-8 byte by byte. */
 const byte = (code: i32): string => String.fromCharCode(code);
 
@@ -339,10 +366,7 @@ export const main = (): number => {
   t.eqI32("and it compared every slot asked", asked.slots, 227);
 
   // 1,000 calls leave the arena where one call left it, because the function
-  // around them takes back what they allocated when it returns. A loop's own
-  // per-pass release is not taken here: `jsonFields` stores each value it
-  // builds into the array it answers, and the escape analysis stops following
-  // a stored allocation, so the pass is refused its bracket.
+  // around them takes back what they allocated when it returns.
   const before = Arena.used();
   const once = jsonFieldsRounds(diagnostic, 1);
   const afterOnce = Arena.used() - before;
@@ -350,6 +374,12 @@ export const main = (): number => {
   const many = jsonFieldsRounds(diagnostic, 1000);
   t.eqI64("1,000 jsonFields calls leave Arena.used() where one call left it", Arena.used() - again, afterOnce);
   t.eqI32("and every call answered the same bytes", many, once * 1000);
+
+  // And the loop keeps its own per-pass release: each value is stored into the
+  // array `jsonFields` allocates and returns, so it travels with that array,
+  // and the pass takes both back (LANGUAGE.md, "Memory model").
+  const flat: i64 = 0;
+  t.eqI64("a 1,000-pass jsonFields loop keeps Arena.used() flat on every pass", jsonFieldsPassSpread(diagnostic, 1000), flat);
 
   return t.done();
 };
