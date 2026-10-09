@@ -32,12 +32,16 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 
 - **Caps and timeouts**, all start-up numbers in `RelayConfig`: at most 4,096
   sessions and 64 per address, both counted from a connection's first
-  Initial; 5 s from that Initial to open a session, or the connection is
+  Initial, the address's first, so that only a connection inside its
+  address's cap takes a global place; 5 s from that Initial to open a session, or the connection is
   closed with code 1, so a handshake that pings on holds neither place for
   longer; 256 datagrams a second per session, then CLOSE RATE_LIMITED; 5 s to say hello;
   10 s idle, checked at each STATS; STATS every 2 s; QUIC's idle timeout 30 s.
   A client over either session cap is still accepted, told why (CLOSE
-  RATE_LIMITED) and closed, from a reserve of 64 spare QUIC slots.
+  RATE_LIMITED) and closed, from a reserve of 64 spare QUIC slots; at most
+  64 connections over their address's cap wait there at once, and one past
+  them is closed with code 1 at its first Initial, so one address holds at
+  most 128 slots however many handshakes it opens.
 - **Close codes and reasons** are main.rs's and grant.rs's, string for string.
   A refusal closes the QUIC connection with application code 1, the end of a
   session with 0.
@@ -52,7 +56,7 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   segment size as offload.rs cuts it, and sends the DATA one pass brings for a
   session in one GSO send while its payloads are the same size.
 - **A clean stop** on SIGINT or SIGTERM: CLOSE SHUTDOWN to every session, each
-  connection closed, exit 0.
+  connection closed, exit 0. A relay that cannot take the two signals refuses to start, rather than run without it.
 - **The grant secret** is a `Secret<u8[]>` (`nish:secret`) that `main.ts`
   holds and wipes on its way out; `GrantVerifier.verify` takes it per call and
   exposes it to the HMAC alone, which wipes each padded key block. The HMAC's
@@ -86,6 +90,12 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 
 ## Where it differs from the Rust
 
+- **The per-address cap is in force from the first Initial.** main.rs cannot
+  see the peer until `accept`, so it claims the address's place there, and a
+  client that completes QUIC and never sends CONNECT is counted against
+  nothing per address until QUIC's 30 s idle closes it. `Http3Server` knows
+  the address at the first Initial, so the port claims both places there, the
+  address's first, and closes a connection that has opened no session at 5 s.
 - **No DNS.** `nish:net` takes address literals, so a grant names an address
   or `localhost`; a name closes with UPSTREAM_UNREACHABLE, as a name that does
   not resolve does in main.rs.

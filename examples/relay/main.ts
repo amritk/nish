@@ -195,10 +195,16 @@ export const main = (): i32 => {
   const relay = new Relay(config, quicConfig, fd, new GrantVerifier(), random(QUIC_LISTENER_ENTROPY_SIZE))
   // The grant secret's bytes, held from here to the last `wipe` and exposed only to the HMAC.
   const grantKey: Secret<u8[]> = secret(httpFieldBytes(o.secret))
+  // Without the signal descriptor SIGINT and SIGTERM would kill the process and no session would be
+  // told CLOSE SHUTDOWN, so the relay refuses to start rather than run without its clean stop.
   const signals: i32 = signalFd()
-  if (signals >= 0) {
-    relay.watchSignals(signals)
+  if (signals < 0) {
+    writeError("[relay] could not take SIGINT and SIGTERM: refusing to run without a clean stop\n")
+    wipe(key)
+    wipe(grantKey)
+    return 1
   }
+  relay.watchSignals(signals)
 
   while (serveUntilPoll(relay, source, key, grantKey)) {
     const fresh = new RelayIdentity()

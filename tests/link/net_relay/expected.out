@@ -194,6 +194,11 @@ PASS  a handshake is kept while its hello deadline has not passed
 PASS  at five seconds from its first Initial each is closed with code 1, counted, and its places given back
 PASS  a connection that keeps pinging is kept until the deadline
 PASS  a connection that keeps pinging and never sends CONNECT is closed at the hello deadline
+PASS  handshakes alone from one address take no more global places than its cap of 2
+PASS  and hold no more slots than its cap and the 2 spare ones
+PASS  the two past that are closed with code 1 at their first Initial, counted
+PASS  another address still opens a session and is answered HELLO_OK
+PASS  and its DATA goes up and comes back down
 PASS  four DATA in one pass leave in one GSO send, the shorter last
 PASS  read back by the game server's GRO socket as one
 PASS  a GSO burst from the game server arrives as one GRO read, cut into three DATA
@@ -202,4 +207,4 @@ PASS  keep no arena memory in the relay
 PASS  a datagram to the upstream socket from another address is dropped and counted
 PASS  a stream the client opens is reset, and the session goes on
 PASS  a plain request is answered 404
-relay: 204 passed, 0 failed, 0 skipped
+relay: 209 passed, 0 failed, 0 skipped

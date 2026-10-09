@@ -21,7 +21,7 @@ import {
   relayDecode,
   relayEncodeClose,
 } from "../../../examples/relay/frame";
-import { RelayConfig } from "../../../examples/relay/relay";
+import { RELAY_CLOSING, RELAY_FREE, RelayConfig } from "../../../examples/relay/relay";
 import { fromHex, toHex } from "../crypto_x509/hex";
 
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -264,9 +264,10 @@ const caps = (t: Suite): void => {
   config.maxSessions = 2;
   config.maxPerPeer = 2;
   const rig = new Rig(config, false);
+  // Three addresses, so that the third meets the global cap alone.
   const a: RigClient = rig.session(n32(1), "127.0.0.1");
-  const b: RigClient = rig.session(n32(2), "127.0.0.1");
-  const over: RigClient = rig.session(n32(3), "127.0.0.1");
+  const b: RigClient = rig.session(n32(2), "127.0.0.2");
+  const over: RigClient = rig.session(n32(3), "127.0.0.3");
   t.ok("two sessions under a cap of two", toHex(a.last()).startsWith("02") && toHex(b.last()).startsWith("02"));
   t.eqStr("a third is told the relay is full", lastClose(over), `${CLOSE_RATE_LIMITED} the relay is holding as many sessions as it will`);
   t.eqStr("and closed with code 1", ended(over), "app 1");
@@ -335,6 +336,31 @@ const connecting = (t: Suite): void => {
   pinging.packet([toU8(0x01)]);
   rig2.advance(n64(200), n64(200));
   t.ok("a connection that keeps pinging and never sends CONNECT is closed at the hello deadline", ended(pinging) === "app 1" && rig2.relay.connectTimeouts === n32(1) && rig2.relay.live === n32(0));
+};
+
+/** One address that only handshakes holds at most its own cap of global places, and a bounded number of slots past it. */
+const oneAddress = (t: Suite): void => {
+  const config: RelayConfig = rigConfig();
+  config.maxPerPeer = 2;
+  const rig = new Rig(config, false);
+  // Six handshakes from one address, none sending CONNECT: the whole pool of 4 sessions and 2 spare slots.
+  for (let k: i32 = 1; k <= 6; k++) {
+    rig.connect(k, "127.0.0.1");
+  }
+  rig.settle(n32(50));
+  let held: i32 = 0;
+  for (let slot: i32 = 0; slot < rig.relay.size(); slot++) {
+    const state: i32 = rig.relay.states[slot];
+    held = held + (state !== RELAY_FREE && state !== RELAY_CLOSING ? 1 : 0);
+  }
+  t.ok("handshakes alone from one address take no more global places than its cap of 2", rig.relay.live <= n32(2));
+  t.ok("and hold no more slots than its cap and the 2 spare ones", held <= n32(4));
+  t.ok("the two past that are closed with code 1 at their first Initial, counted", rig.relay.shed === n32(2) && rig.relay.unplacedCount === n32(2));
+  const other: RigClient = rig.session(n32(7), "127.0.0.2");
+  t.eqStr("another address still opens a session and is answered HELLO_OK", toHex(other.last()).substring(0, 2), "02");
+  other.send(rigData(n32(1), n32(10), n32(0x77)));
+  rig.settle(n32(50));
+  t.ok("and its DATA goes up and comes back down", rig.echo.seen() === "10" && toI32(ofType(other, RELAY_DATA).length) === n32(1));
 };
 
 /** GSO and GRO both ways with `--offload`. */
@@ -410,6 +436,7 @@ export const loopbackChecks = (t: Suite): void => {
   refusals(t);
   caps(t);
   connecting(t);
+  oneAddress(t);
   offload(t);
   warm(t);
 };

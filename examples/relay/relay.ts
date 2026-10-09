@@ -12,11 +12,14 @@
  * **A session** is one QUIC connection carrying one WebTransport session on
  * `config.path`, and is counted against both caps the moment its first
  * Initial takes a slot, as main.rs claims its global place before the
- * handshake: at most `maxSessions` at once, and at most `maxPerPeer` from one
- * address. The pool has `spareSlots` QUIC slots past `maxSessions`, so a
- * client over either cap is still told why — its session is accepted, sent
+ * handshake: at most `maxPerPeer` from one address, claimed first, and at
+ * most `maxSessions` at once, given only to a connection inside its
+ * address's cap. The pool has `spareSlots` QUIC slots past `maxSessions`, so
+ * a client over either cap is still told why — its session is accepted, sent
  * CLOSE RATE_LIMITED and closed with QUIC application code 1 — rather than
- * dropped. A connection that has opened no session `helloTimeout` after its
+ * dropped; at most `spareSlots` connections over their address's cap wait so
+ * at once, and one past that is closed with code 1 at its first Initial, so
+ * one address holds at most `maxPerPeer + spareSlots` slots. A connection that has opened no session `helloTimeout` after its
  * first Initial is closed with code 1, so a handshake alone holds neither
  * place for longer. Then the session has `helloTimeout` to send a HELLO carrying a
  * grant (`grant.ts`); a first datagram that is not one, another version, a
@@ -232,6 +235,8 @@ export class Relay {
   counted: boolean[]
   peerHeld: boolean[]
   peerAddresses: u8[][]
+  /** Whether the slot holds neither place, and counts against `spareSlots` while it waits to be told why. */
+  unplaced: boolean[]
   /** The relay's id for the session, for its log and HELLO_OK, and its CONNECT stream. */
   ids: i64[]
   sessions: i64[]
@@ -277,8 +282,9 @@ export class Relay {
   batchLength: i32 = 0
   batchSegment: i32 = 0
   batchCount: i32 = 0
-  /** Sessions holding a place in `maxSessions`. */
+  /** Sessions holding a place in `maxSessions`, and slots holding neither place (`unplaced`). */
   live: i32 = 0
+  unplacedCount: i32 = 0
   /** Counters for a log or a test, each saturating. */
   accepted: i32 = 0
   refusedFull: i32 = 0
@@ -289,6 +295,8 @@ export class Relay {
   refusedUpstream: i32 = 0
   helloTimeouts: i32 = 0
   connectTimeouts: i32 = 0
+  /** Connections closed at their first Initial: over their address's cap with every spare slot already waiting. */
+  shed: i32 = 0
   idleClosed: i32 = 0
   rateLimited: i32 = 0
   clientClosed: i32 = 0
@@ -348,6 +356,7 @@ export class Relay {
     this.generations = new Array<i32>(slots)
     this.counted = new Array<boolean>(slots)
     this.peerHeld = new Array<boolean>(slots)
+    this.unplaced = new Array<boolean>(slots)
     this.ids = new Array<i64>(slots)
     this.sessions = new Array<i64>(slots)
     this.sessions.fill(RELAY_NONE64)
@@ -503,20 +512,32 @@ export class Relay {
     this.nextId = this.nextId < RELAY_U32 ? this.nextId + 1 : 1
     this.ids[slot] = this.nextId
     this.sessions[slot] = RELAY_NONE64
-    // Both places are claimed before the handshake is done, so half-open connections sit inside both caps.
-    this.counted[slot] = this.live < this.config.maxSessions
-    if (this.counted[slot]) {
-      this.live = this.live + 1
-    }
-    // The slot's own copy of its address, which `release` gives back by.
+    // A connection that never opens a session goes at the hello deadline, counted from here.
+    this.connectBy[slot] = now + this.config.helloTimeout
+    // Both places are claimed before the handshake is done, the address's first: a global place goes only
+    // to a connection inside its address's cap, so handshakes alone from one address hold at most
+    // `maxPerPeer` of them. The slot keeps its own copy of the address, which `release` gives back by.
     const peer: u8[] = this.peerAddresses[slot]
     const from: u8[] = this.server.addresses[slot]
     for (let k: i32 = 0; k < RELAY_PEER_KEY && k < toI32(from.length) && k < toI32(peer.length); k++) {
       peer[k] = from[k]
     }
     this.peerHeld[slot] = this.peers.claim(peer, this.config.maxPerPeer)
-    // A connection that never opens a session goes at the hello deadline, counted from here.
-    this.connectBy[slot] = now + this.config.helloTimeout
+    this.counted[slot] = this.peerHeld[slot] && this.live < this.config.maxSessions
+    if (this.counted[slot]) {
+      this.live = this.live + 1
+    }
+    if (!this.peerHeld[slot]) {
+      // Over its address's cap: it may wait in a spare slot to be told why, but no more of them wait than
+      // there are spare slots, so one address holds at most `maxPerPeer + spareSlots` slots.
+      if (this.unplacedCount >= this.config.spareSlots) {
+        this.shed = h3Count(this.shed)
+        this.close(slot, RELAY_NONE, "", RELAY_QUIC_REFUSED, now)
+        return
+      }
+      this.unplaced[slot] = true
+      this.unplacedCount = this.unplacedCount + 1
+    }
     this.wheel.file(slot, this.recheck(slot, now), now)
   }
 
@@ -531,6 +552,10 @@ export class Relay {
     if (this.counted[slot]) {
       this.counted[slot] = false
       this.live = this.live - 1
+    }
+    if (this.unplaced[slot]) {
+      this.unplaced[slot] = false
+      this.unplacedCount = this.unplacedCount - 1
     }
     if (this.peerHeld[slot]) {
       // The slot's own copy of its address: by now the carrier may have handed the slot to another client.
@@ -635,6 +660,12 @@ export class Relay {
     }
     wt.accept(id)
     this.sessions[slot] = id
+    // The address's cap first: a connection over it was given no global place either.
+    if (!this.peerHeld[slot]) {
+      this.refusedPeer = h3Count(this.refusedPeer)
+      this.close(slot, CLOSE_RATE_LIMITED, "too many sessions from this address", RELAY_QUIC_REFUSED, now)
+      return
+    }
     if (!this.counted[slot]) {
       this.refusedFull = h3Count(this.refusedFull)
       this.close(
@@ -644,11 +675,6 @@ export class Relay {
         RELAY_QUIC_REFUSED,
         now
       )
-      return
-    }
-    if (!this.peerHeld[slot]) {
-      this.refusedPeer = h3Count(this.refusedPeer)
-      this.close(slot, CLOSE_RATE_LIMITED, "too many sessions from this address", RELAY_QUIC_REFUSED, now)
       return
     }
     this.accepted = h3Count(this.accepted)
@@ -881,7 +907,7 @@ export class Relay {
       if (n < 0) {
         break
       }
-      if (!this.fromUpstream18(to)) {
+      if (!this.cameFrom(to)) {
         this.foreign = h3Count(this.foreign)
         continue
       }
@@ -906,7 +932,7 @@ export class Relay {
   }
 
   /** Whether the last read came from `to`, port included: the socket is not connected, so the relay filters. */
-  fromUpstream18(to: u8[]): boolean {
+  cameFrom(to: u8[]): boolean {
     for (let k: i32 = 0; k < RELAY_ADDRESS && k < toI32(to.length) && k < toI32(this.from.length); k++) {
       if (this.from[k] !== to[k]) {
         return false
