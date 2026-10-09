@@ -389,11 +389,12 @@ major. Whether it happens at all is still wp22 §10's open question.
    server and WebSocket (H1), HTTP/2 (H2), QUIC with loss recovery, streams
    and datagrams (Q1 to Q4), HTTP/3 with QPACK (R1) and WebTransport (R2) —
    and the relay itself, `examples/relay/` (A1), with every cap, timeout and
-   close code of cs's. Next: the QUIC handshake's memory per connection (about
-   101 KB, H3-1), which keeps N9's soak from going flat and is `std/net`'s to
-   remove; the loopback suite and S2's interop job; moving the key-holding
-   structs onto `nish:secret` ([#430](https://github.com/amritk/nish/issues/430));
-   and, once a release carries R2, the cs side: `services/relay` replaced,
+   close code of cs's, and the loopback suite across every carrier. Next: what
+   a QUIC handshake still keeps per connection (about 11 KB since #492, most
+   of it the P-256 CertificateVerify signature, H3-1), which keeps N9's soak
+   from going flat and is `std/`'s to remove; S2's interop job; moving the
+   key-holding structs onto `nish:secret` ([#430](https://github.com/amritk/nish/issues/430));
+   and, now that 0.17.0 carries R2, the cs side: `services/relay` replaced,
    `boot-check`'s wire pass and `bench:offload` against the Rust relay. §5 of
    the note has the lane table and what each lane left.
 2. **WP33 R3 and R4, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):

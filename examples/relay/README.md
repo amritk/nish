@@ -64,8 +64,9 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 - **Memory.** Every table is made at start-up; a datagram, a timer and a
   session's whole life after its handshake allocate nothing
   (`tests/link/net_relay`, "keep no arena memory in the relay"). The full-size
-  pool, 4,160 QUIC slots, is about 576 MB resident at start (about 138 KB a
-  slot, most of it QUIC's stream buffers), reached in under two seconds.
+  pool, 4,160 QUIC slots, is about 754 MB resident at start (about 181 KB a
+  slot: QUIC's stream buffers, and since #492 the handshake's TLS server and
+  key slots, made once a slot rather than once a handshake).
 
 ## Where it differs from the Rust
 
@@ -106,23 +107,15 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 - **The QUIC handshake's memory per connection** (H3-1 in
   [`docs/security/http3.md`](../../docs/security/http3.md), WT-1 in
   `webtransport.md`). Everything the relay does after a handshake allocates
-  nothing, but each handshake leaves about **101 KB** in the arena, and N9's
-  soak (`tests/link/net_relay_soak`) is therefore not flat: from 10,000 to
-  100,000 sessions resident memory grew from 1.03 GB to 10.19 GB, 101,818
-  bytes a session, the same every 10,000. Where it goes, measured one call at a
-  time over 2,000 calls (resident growth): `new TlsServer` in
-  `QuicConnection.start`, 32,790 bytes once a connection; `quicKeys` for each
-  packet-protection key (Initial, Handshake and 1-RTT both ways, and the next
-  read keys), 6,395 bytes each; `quicInitialSecrets`, 4,052; the stateless
-  reset tokens and connection IDs the connection issues, about 1,240 bytes
-  each HMAC; and `tlsSignEcdsaP256`, called by `Http3Server.serve` outside any
-  arena block, 9,324. None of it is reachable from the relay: the change that
-  removes it is in `std/net/quic.ts` and `std/net/http3-server.ts` — a
-  `TlsServer` kept in the slot and `restart`ed, as `TlsTcpServer` does since
-  #467; each level's `QuicKeys` allocated once and derived in place with
-  `HkdfScratch` and `aesKeyInto`; and the Initial secrets, reset tokens,
-  connection IDs and the signature computed in `using a = arena()` blocks over
-  HMAC scratch.
+  nothing, but each handshake still leaves about **11 KB** in the arena, so
+  N9's soak (`tests/link/net_relay_soak`) is not yet flat: 10,983 bytes a
+  session over 2,000 past warm-up. It was 101,818 before #492, which keeps the
+  handshake's TLS server, packet keys, Initial secrets, reset tokens and
+  connection IDs in the connection slot. What is left is `std/net`'s, not the
+  relay's: the CertificateVerify signature `Http3Server.serve` makes with
+  `tlsSignEcdsaP256` outside any arena block, 9,248 to 9,376 bytes, and the
+  listener's copy of the first Initial, about 1.5 KB. Signing over
+  caller-owned scratch in `std/crypto/p256` removes the first.
 - **DATA down is at most 1,164 bytes.** `nish/net/quic` sends 1,200-byte
   packets and has no path MTU discovery, so after the quarter stream ID and the
   3-byte header 1,164 bytes of payload fit; a larger datagram from the game
