@@ -524,8 +524,10 @@ and median), but vec3 is at or below zero in three of its four figures
 (−0.3%, then −1.2% and −1.0%), so "no loss on the others" is not met, and the
 bar gives no tolerance. The flag is not built, `tests/ct-asm.js` reads only
 the baseline, and LANGUAGE.md gains no rule. It reopens on a re-measurement on
-a quiet machine, or on a same-binary noise measurement with
-`bench/simd-s0.mjs` showing vec3's dip lies inside that noise.
+a quieter machine, or on a measurement of the noise itself: one binary timed
+against itself, showing vec3's dip lies inside it. `bench/simd-s0.mjs` only
+times the two builds against each other, so that needs a tool or option that
+does not exist yet.
 
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was

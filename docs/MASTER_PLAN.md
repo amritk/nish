@@ -169,7 +169,7 @@ table with each message and the idiom to write instead.
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | **Decided:** arena + escape-analysed `alloca` (WP6), with `using a = arena()` as the explicit bracket (#420). Reference counting is not built. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
-| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level **Decided ([wp38](wp38-simd.md) §8): kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics.** The first kernel and `indexOfAny` are built; the opt-in CPU level missed its bar and is declined for now (§7). |
+| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level | **Decided ([wp38](wp38-simd.md) §8): kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics.** The first kernel and `indexOfAny` are built; the opt-in CPU level missed its bar and is declined for now (§7). |
 
 ## 4. What exists today
 
