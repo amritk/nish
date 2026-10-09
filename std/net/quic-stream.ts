@@ -1224,10 +1224,16 @@ export class QuicStreams {
       if (k >= 0 && k < count) {
         const stream: QuicStream = this.slots[k]
         if (stream.id >= 0 && stream.wantsToSend()) {
-          const next: i32 =
-            stream.resendLow >= 0 || stream.resendFin
-              ? this.putResend(stream, buf, at, end)
-              : this.putNew(stream, k, buf, at, end)
+          let next: i32 = at
+          if (stream.resendLow >= 0 || stream.resendFin) {
+            next = this.putResend(stream, buf, at, end)
+          }
+          // A resend range acknowledged in full since it was queued is
+          // cleared with nothing written: the new bytes go in its place
+          // (H3-7), rather than a packet with none while they wait.
+          if (next === at && stream.resendLow < 0 && !stream.resendFin) {
+            next = this.putNew(stream, k, buf, at, end)
+          }
           if (next > at) {
             return next
           }
