@@ -64,16 +64,23 @@ env:
   H2_PORT: "8443"
   # serve's flags for those ports, expanded unquoted where the server starts.
   SERVE_PORTS: --port 4433 --h1-port 8080 --h1s-port 8081 --h2-port 8443
+  # Every apt-get call's network bound, as in ci.yml: apt waits on a stalled
+  # mirror with no timeout of its own (docs/wp10-ci.md, "Shards and time limits").
+  APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
+# Every job stops at 15 minutes, the repository's cap (docs/wp10-ci.md), and
+# every step that waits on the network at 5 or 10: the slowest lane takes about
+# 3 minutes, so a limit is reached only by a hang, in the step that names it.
 jobs:
   build:
     name: build the server image
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build tests/interop/server.dockerfile
+        timeout-minutes: 10
         run: docker build -f tests/interop/server.dockerfile -t nish-interop:ci .
 
       - name: Save the image
@@ -90,7 +97,7 @@ jobs:
     name: quic-interop-runner (${{ matrix.client }})
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -102,18 +109,23 @@ jobs:
       # (`interface_name`), which needs Docker Engine 28.1 or later; the image's
       # is older. The runner's own CI installs this version the same way.
       - uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5.5.0
+        timeout-minutes: 5
         with:
           version: version=v28.3.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
         with:
           name: nish-interop-image
 
-      - name: Load the server image, pull the simulator and the client
+      - name: Load the server image
+        run: docker load --input nish-interop.tar.gz
+
+      - name: Pull the simulator and the client
+        timeout-minutes: 5
         env:
           CLIENT: ${{ matrix.client }}
         run: |
-          docker load --input nish-interop.tar.gz
           # The runner's docker-compose.yml names the simulator by tag; the
           # pinned digest is pulled and given that tag, so compose finds it.
           docker pull "$SIMULATOR"
@@ -126,11 +138,13 @@ jobs:
         run: sudo modprobe ip6table_filter
 
       - name: Install tshark, which the runner reads the traces with
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tshark=4.2.2-1.1build3
+          sudo apt-get $APT_OPTS update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y --no-install-recommends tshark=4.2.2-1.1build3
 
       - name: Fetch the runner at its pinned commit
+        timeout-minutes: 5
         run: |
           git init -q "$RUNNER_TEMP/qir"
           git -C "$RUNNER_TEMP/qir" fetch -q --depth 1 https://github.com/quic-interop/quic-interop-runner.git "$RUNNER_COMMIT"
@@ -183,11 +197,12 @@ jobs:
     name: h2spec
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
         with:
           name: nish-interop-image
 
@@ -202,8 +217,9 @@ jobs:
           docker logs nish 2>&1 | grep -q '^ports '
 
       - name: Fetch h2spec and check its SHA-256
+        timeout-minutes: 5
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/h2spec.tar.gz" "$H2SPEC_URL"
+          curl -fsSL --retry 3 --connect-timeout 30 -o "$RUNNER_TEMP/h2spec.tar.gz" "$H2SPEC_URL"
           echo "$H2SPEC_SHA256  $RUNNER_TEMP/h2spec.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/h2spec.tar.gz" -C "$RUNNER_TEMP" h2spec
 
@@ -221,20 +237,24 @@ jobs:
     name: curl --http3 and --http2
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
         with:
           name: nish-interop-image
+
+      - name: Pull curl
+        timeout-minutes: 5
+        run: docker pull "$CURL"
 
       - name: Start the server on a directory with a 1 MB file
         run: |
           mkdir -p "$RUNNER_TEMP/www"
           head -c 1048576 /dev/urandom > "$RUNNER_TEMP/www/file"
           docker load --input nish-interop.tar.gz
-          docker pull "$CURL"
           docker run -d --name nish --network host -v "$RUNNER_TEMP/www:/www:ro" --entrypoint /interop-server nish-interop:ci \
             serve --www /www $SERVE_PORTS
           # Ready once it has printed its ports, which it does after binding them and writing the hash file.
@@ -268,7 +288,7 @@ jobs:
     name: chrome WebTransport (${{ matrix.certificate }} certificate)
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -277,8 +297,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
         with:
           name: nish-interop-image
+
+      - name: Pull Playwright's image
+        timeout-minutes: 10
+        run: docker pull "$PLAYWRIGHT"
 
       - name: Start the server
         env:
@@ -294,7 +319,6 @@ jobs:
             certs="--certs /certs"
           fi
           docker load --input nish-interop.tar.gz
-          docker pull "$PLAYWRIGHT"
           # shellcheck disable=SC2086 # $certs is empty or two words
           docker run -d --name nish --network host -v "$RUNNER_TEMP/out:/out" -v "$RUNNER_TEMP/certs:/certs:ro" \
             --entrypoint /interop-server nish-interop:ci \
@@ -305,7 +329,9 @@ jobs:
           docker logs nish
           docker logs nish 2>&1 | grep -q '^ports '
 
+      # pip's install is the network part; Chromium's own wait is a few seconds.
       - name: Chromium opens a session and echoes a datagram and a stream
+        timeout-minutes: 5
         run: |
           docker run --rm --network host --ipc host \
             -v "$GITHUB_WORKSPACE/tests/interop:/interop:ro" -v "$RUNNER_TEMP/out:/out:ro" \

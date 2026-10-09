@@ -27,14 +27,21 @@ async ({ port, hash }) => {
   const decoder = new TextDecoder();
 
   // A datagram may be lost, so it goes again every 200 ms until one comes back.
+  // One read stays pending across attempts: a fresh read() per attempt would
+  // leave the timed-out one queued ahead of it, and the echo would go to that.
   const writer = wt.datagrams.writable.getWriter();
   const reader = wt.datagrams.readable.getReader();
   let datagram = null;
+  let pending = null;
   for (let attempt = 0; attempt < 25 && datagram === null; attempt++) {
     await writer.write(encoder.encode("ping from chrome"));
+    if (pending === null) {
+      pending = reader.read();
+    }
     const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 200));
-    const got = await Promise.race([reader.read(), timeout]);
+    const got = await Promise.race([pending, timeout]);
     if (got !== null) {
+      pending = null;
       datagram = decoder.decode(got.value);
     }
   }

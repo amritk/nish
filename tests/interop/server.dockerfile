@@ -10,8 +10,10 @@
 # whose `setup.sh` routes through the network simulator, with the server and
 # `run-endpoint.sh` added. Every base image is pinned by digest.
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 AS build
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl clang-18 lld-18 llvm-18 \
+# apt has no network timeout of its own: the workflows' APT_OPTS, here as well.
+ARG APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+RUN apt-get $APT_OPTS update \
+ && apt-get $APT_OPTS install -y --no-install-recommends ca-certificates curl clang-18 lld-18 llvm-18 \
  && rm -rf /var/lib/apt/lists/* \
  && for tool in clang llc llvm-as opt ld.lld wasm-ld lld; do ln -s "/usr/bin/$tool-18" "/usr/local/bin/$tool"; done
 WORKDIR /nish
