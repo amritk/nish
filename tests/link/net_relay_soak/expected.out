@@ -1,0 +1,7 @@
+PASS  the relay starts in a process of its own and says its port
+PASS  2500 sessions connect, send a DATA the game server echoes, and leave
+PASS  the relay reported after warm-up and at the end
+PASS  Arena.used() flat over 2000 sessions past warm-up: the same chunk, the same offset
+PASS  resident memory flat over 2000 sessions past warm-up, within 524288 bytes for the whole run
+PASS  and grew in at most one checkpoint interval of 500 sessions
+relay soak: 6 passed, 0 failed, 0 skipped
