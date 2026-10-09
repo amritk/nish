@@ -2391,7 +2391,7 @@ export const analyzeFunctions = (
   let added = markFreshElements(escapes, sigs, first)
   while (added.size() > 0) {
     let i = 0
-    while (i < sigs.length) {
+    while (i < sigs.length && i < owners.length) {
       if (callsAnyOf(escapes.get(sigs[i].name), added)) {
         escapes.set(sigs[i].name, analyzeInstanceEscapes(owners[i], table, sigs[i], first, opts))
       }

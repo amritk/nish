@@ -2,11 +2,12 @@
 // by a function that filled it with fresh strings holds them, so whatever the
 // caller reads out of it is as new as the call, and is followed as the call
 // is. Kept in a local declared outside the loop, in a field, through a
-// function that hands an element back, through `pop`, out of a nested array,
-// from a `for...of` variable, or through a function that returns the array
-// on, the string outlives the pass, so the pass keeps what it allocated. Each
-// kept string reads back intact after `churn` has reused every byte a wrong
-// release would have freed.
+// function that hands an element back, through `pop` (a one-hole template is
+// the popped string itself), out of a nested array, from a `for...of`
+// variable, or through a function that returns the array on, the string
+// outlives the pass, so the pass keeps what it allocated. Each kept string
+// reads back intact after `churn` has reused every byte a wrong release would
+// have freed.
 class Log {
   first: string;
 
@@ -57,7 +58,7 @@ export const main = (): void => {
   }
   for (let i = 0; i < 1000; i++) {
     const ws = words(i);
-    popped = ws.pop();
+    popped = `${ws.pop()}`;
   }
   for (let i = 0; i < 1000; i++) {
     nested = rows(i)[0][1];

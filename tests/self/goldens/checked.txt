@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 930 programs, 63113 dump lines.
+# 935 programs, 63401 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4514,9 +4514,9 @@ function test(): i32 -> @test [exported]
 program tests/cases/cg_sec_readdir_pass.ts
 module tests/cases/cg_sec_readdir_pass.ts (entry)
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
-  calls: nish_arena_mark nish_arena_release nish_mkdir nish_panic_index nish_print nish_readdir nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
+  calls: nish_mkdir nish_panic_index nish_print nish_readdir nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
   local 7:9 dir: string (const)
   local 10:7 keep: string (let)
@@ -44041,6 +44041,280 @@ function main(): i32 -> @nish_main [exported entry]
   local 21:9 p: Point (const)
   callee 21:13 new Point -> @Point.constructor
   callee 22:15 render -> @render
+program tests/cases/mem_return_array_callee.ts
+module tests/cases/mem_return_array_callee.ts (entry)
+struct Log (class) size=16 align=8
+  field items: string[] index=0 offset=0
+  field first: string index=1 offset=8
+  constructor -> @Log.constructor
+function Log.constructor(this: Log): void -> @Log.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function stored(log: Log, i: i32): string[] -> @stored
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 22:3
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 21:9 xs: string[] (const)
+function keepFirst(log: Log, xs: string[]): void -> @keepFirst
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 28:3
+  calls: nish_panic_index
+  pointer log: size=16 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function passed(log: Log, i: i32): string[] -> @passed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 33:3
+  calls: keepFirst nish_array_grow nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false passedTo=keepFirst#0
+  stackSites=0 stackLocals=0
+  local 32:9 xs: string[] (const)
+  callee 34:3 keepFirst -> @keepFirst
+function readBack(log: Log, i: i32): string[] -> @readBack
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 40:3
+  calls: nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 39:9 xs: string[] (const)
+function aliased(i: i32): string[] -> @aliased
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 47:3
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 46:9 xs: string[] (const)
+  local 48:9 ys: string[] (const)
+function either(i: i32, other: string[]): string[] -> @either
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 54:3
+  escaping: other
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer other: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 53:9 xs: string[] (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via stored
+  calls: Log.constructor aliased churn either nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_from_i32 passed readBack stored
+  stackSites=3 stackLocals=3
+  local 59:9 a: Log (const)
+  callee 59:13 new Log -> @Log.constructor
+  local 60:9 b: Log (const)
+  callee 60:13 new Log -> @Log.constructor
+  local 61:9 c: Log (const)
+  callee 61:13 new Log -> @Log.constructor
+  local 63:7 total: i32 (let)
+  local 64:7 viaAlias: string[] (let)
+  local 65:7 viaChoice: string[] (let)
+  local 66:12 i: i32 (let)
+  callee 67:21 stored -> @stored
+  local 69:12 i: i32 (let)
+  callee 70:21 passed -> @passed
+  local 72:12 i: i32 (let)
+  callee 73:21 readBack -> @readBack
+  local 75:12 i: i32 (let)
+  callee 76:16 aliased -> @aliased
+  local 78:12 i: i32 (let)
+  callee 79:17 either -> @either
+  callee 81:18 churn -> @churn
+function churn(): i32 -> @churn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 92:7 t: i32 (let)
+  local 93:12 i: i32 (let)
+program tests/cases/mem_return_array_caller.ts
+module tests/cases/mem_return_array_caller.ts (entry)
+struct Log (class) size=8 align=8
+  field first: string index=0 offset=0
+  constructor -> @Log.constructor
+function Log.constructor(this: Log): void -> @Log.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function words(i: i32): string[] -> @words
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 21:3
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 20:9 xs: string[] (const)
+function rows(i: i32): string[][] -> @rows
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 28:3
+  escaping: i
+  calls: nish_array_grow words
+  stackSites=0 stackLocals=0
+  local 27:9 out: string[][] (const)
+  callee 28:12 words -> @words
+function wrapped(i: i32): string[] -> @wrapped
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via words
+  escaping: i
+  calls: words
+  stackSites=0 stackLocals=0
+  callee 32:39 words -> @words
+function firstOf(xs: string[]): string -> @firstOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function firstWord(i: i32): string -> @firstWord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via words
+  escaping: i
+  calls: nish_panic_index words
+  stackSites=0 stackLocals=0
+  local 37:9 ws: string[] (const)
+  callee 37:14 words -> @words
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 61:17
+  calls: Log.constructor churn firstOf firstWord nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32 rows words wrapped
+  stackSites=1 stackLocals=1
+  local 42:9 log: Log (const)
+  callee 42:15 new Log -> @Log.constructor
+  local 43:7 kept: string (let)
+  local 44:7 viaCall: string (let)
+  local 45:7 popped: string (let)
+  local 46:7 nested: string (let)
+  local 47:7 walked: string (let)
+  local 48:7 wrap: string (let)
+  local 49:7 returned: string (let)
+  local 50:12 i: i32 (let)
+  callee 51:12 words -> @words
+  local 53:12 i: i32 (let)
+  callee 54:17 words -> @words
+  local 56:12 i: i32 (let)
+  callee 57:15 firstOf -> @firstOf
+  callee 57:23 words -> @words
+  local 59:12 i: i32 (let)
+  local 60:11 ws: string[] (const)
+  callee 60:16 words -> @words
+  local 63:12 i: i32 (let)
+  callee 64:14 rows -> @rows
+  local 66:12 i: i32 (let)
+  local 67:16 w: string (const)
+  callee 67:21 words -> @words
+  local 71:12 i: i32 (let)
+  callee 72:12 wrapped -> @wrapped
+  callee 74:14 firstWord -> @firstWord
+  callee 75:18 churn -> @churn
+function churn(): i32 -> @churn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 88:7 t: i32 (let)
+  local 89:12 i: i32 (let)
+program tests/cases/mem_return_array_readdir.ts
+module tests/cases/mem_return_array_readdir.ts (entry)
+const dir: string = "build/mem_return_array_readdir"
+struct Log (class) size=8 align=8
+  field name: string index=0 offset=0
+  constructor -> @Log.constructor
+function Log.constructor(this: Log): void -> @Log.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function listOf(d: string): string[] -> @listOf
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_readdir
+  calls: nish_readdir
+  stackSites=0 stackLocals=0
+  local 21:9 names: string[] | null (const)
+function firstOf(names: string[]): string -> @firstOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer names: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function pick(d: string): string -> @pick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_readdir
+  calls: firstOf nish_readdir
+  stackSites=0 stackLocals=0
+  local 31:9 names: string[] | null (const)
+  callee 35:10 firstOf -> @firstOf
+function named(d: string): string -> @named
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_readdir
+  calls: nish_panic_index nish_readdir
+  stackSites=0 stackLocals=0
+  local 39:7 name: string (let)
+  local 40:9 names: string[] | null (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_mkdir
+  calls: Log.constructor churn listOf named nish_arena_mark nish_arena_release nish_mkdir nish_panic_index nish_print nish_readdir nish_str_concat nish_str_from_i32 nish_write_file pick
+  stackSites=1 stackLocals=1
+  local 51:9 log: Log (const)
+  callee 51:15 new Log -> @Log.constructor
+  local 52:7 keep: string (let)
+  local 53:12 i: i32 (let)
+  callee 54:12 listOf -> @listOf
+  local 56:12 i: i32 (let)
+  local 57:11 names: string[] | null (const)
+  local 62:9 picked: string (const)
+  callee 62:18 pick -> @pick
+  local 63:9 assigned: string (const)
+  callee 63:20 named -> @named
+  callee 64:18 churn -> @churn
+function churn(): i32 -> @churn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 73:7 t: i32 (let)
+  local 74:12 i: i32 (let)
+program tests/cases/mem_return_array_scope.ts
+module tests/cases/mem_return_array_scope.ts (entry)
+function fieldsOf(line: string, n: i32): string | null[] -> @fieldsOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 14:7
+  escaping: n
+  calls: nish_exit nish_str_new nish_write
+  stackSites=0 stackLocals=0
+  local 11:9 values: string | null[] (const)
+  local 12:12 k: i32 (let)
+function pairOf(a: string, b: string): string[] -> @pairOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 22:3
+  calls: nish_array_grow nish_str_concat
+  stackSites=0 stackLocals=0
+  local 21:9 pair: string[] (const)
+function run(calls: i32): string -> @run
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldsOf
+  calls: fieldsOf nish_arena_release nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 pairOf
+  stackSites=0 stackLocals=0
+  local 28:7 total: i32 (let)
+  local 29:12 i: i32 (let)
+  local 30:11 fields: string | null[] (const)
+  callee 30:20 fieldsOf -> @fieldsOf
+  local 31:11 first: string | null (const)
+  local 32:11 last: string | null (const)
+  callee 36:21 pairOf -> @pairOf
+function grows(calls: i32): string -> @grows
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via run
+  escaping: calls
+  calls: nish_arena_used nish_panic_overflow nish_str_concat nish_str_from_i64 run
+  stackSites=0 stackLocals=0
+  local 43:9 before: i64 (const)
+  local 44:9 total: string (const)
+  callee 44:17 run -> @run
+  local 45:9 grown: i64 (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via grows
+  calls: grows nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_at nish_str_eq nish_str_new
+  stackSites=0 stackLocals=0
+  local 50:9 one: string (const)
+  callee 50:15 grows -> @grows
+  local 51:9 many: string (const)
+  callee 51:16 grows -> @grows
+  local 54:9 g1: string (const)
+  local 55:9 g2: string (const)
 program tests/cases/mem_scope_dynamic_array.ts
 module tests/cases/mem_scope_dynamic_array.ts (entry)
 function histogram(n: i32, seed: i32): i32 -> @histogram
@@ -46422,9 +46696,9 @@ struct Point (class) size=8 align=4
   field x: i32 index=0 offset=0 initialized
   field y: i32 index=1 offset=4 initialized
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: 34:5
-  calls: nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_write
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_write
   stackSites=4 stackLocals=4
   local 11:7 total: i32 (let)
   local 15:12 i: i32 (let)
@@ -55464,6 +55738,25 @@ function report(b: Box, n: i32): string -> @report
   stackSites=0 stackLocals=0
   callee 32:47 join -> @join
   callee 32:57 fill -> @fill
+program docs/cookbook/mem-return-array.ts
+module docs/cookbook/mem-return-array.ts (entry)
+function fieldsOf(line: string, n: i32): string | null[] -> @fieldsOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 11:7
+  escaping: n
+  calls: nish_exit nish_str_new nish_write
+  stackSites=0 stackLocals=0
+  local 8:9 values: string | null[] (const)
+  local 9:12 k: i32 (let)
+function measure(calls: i32): string -> @measure [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldsOf
+  calls: fieldsOf nish_arena_release nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 18:7 total: i32 (let)
+  local 19:12 i: i32 (let)
+  local 20:11 last: string | null (const)
+  callee 20:18 fieldsOf -> @fieldsOf
 program docs/cookbook/mem-stack-object-arena.ts
 module docs/cookbook/mem-stack-object-arena.ts (entry)
 struct Pair (interface) size=8 align=4
