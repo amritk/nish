@@ -153,7 +153,8 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 - [`tests/link/net_relay_soak`](../../tests/link/net_relay_soak): N9's
   acceptance, 2,000 sessions past a warm-up of 500 in `npm test`, and
   `soak 100000` for the full run. Both hold the arena to exactly 0 bytes of
-  growth, and the resident set to at most four pages over the run, grown in
+  growth, and the anonymous resident set (the pages no file backs, where
+  every allocation lives) to at most four pages over the run, grown in
   at most one checkpoint interval of 500 sessions: page-grained, so outside
   the arena `npm test` catches a steady leak of about 2 bytes a session and
   the full run one of 1.

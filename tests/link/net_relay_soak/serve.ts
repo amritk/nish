@@ -3,7 +3,7 @@
 // `total` sessions have been closed by their clients, and writes a line to
 // `report` every `every` of them and at the end: the arena's bump position and its offset
 // in the current chunk (`Arena.mark`, `Arena.used`), and the resident set
-// from /proc/self/statm.
+// from /proc/self/statm, its anonymous and its file-backed parts apart.
 import { appendFileSync, readFileSyncOrNull, writeFileSync } from "nish:fs";
 import { netLocalPort, udpBind } from "nish:net";
 import { monotonicNanos, spawnSyncTo } from "nish:process";
@@ -23,48 +23,54 @@ export const SOAK_SESSIONS: i32 = 64;
 const SOAK_STALL_MS: i64 = 30000;
 
 /**
- * The resident set in bytes, from the second field of this process's
- * /proc/<pid>/statm (pages of 4 KiB), or -1. Read through `cat`, run by a
- * shell whose parent is this process: procfs reports a size of 0, which a
- * read sized by `stat` takes at its word. `argv` is `SOAK_STATM`'s, made
- * once by the caller, so that a checkpoint can release all it allocates.
+ * Reads this process's /proc/<pid>/statm into `pages`, one field each (pages
+ * of 4 KiB): `size`, `resident`, then `shared`, the resident pages a file
+ * backs, as many as `pages` holds. Answers whether it read them all. Read
+ * through `cat`, run by a shell whose parent is this process: procfs reports
+ * a size of 0, which a read sized by `stat` takes at its word. `argv` is
+ * `SOAK_STATM`'s and `pages` is the caller's, both made once, so that a
+ * checkpoint can release all it allocates.
  */
-export const residentBytes = (argv: string[], scratch: string): i64 => {
+export const residentPages = (argv: string[], scratch: string, pages: i64[]): boolean => {
   if (spawnSyncTo(argv, scratch, "") !== 0) {
-    return -1;
+    return false;
   }
   const text: string | null = readFileSyncOrNull(scratch);
   if (text === null) {
-    return -1;
+    return false;
   }
   let field: i32 = 0;
   let value: i64 = 0;
-  for (let k: i32 = 0; k < toI32(text.length); k++) {
+  for (let k: i32 = 0; k < toI32(text.length) && field < toI32(pages.length); k++) {
     const c: i32 = toI32(text.charCodeAt(k));
     if (c === 32) {
+      pages[field] = value;
       field++;
-      if (field > 1) {
-        return value * 4096;
-      }
       value = 0;
-    } else if (field === 1 && c >= 48 && c <= 57) {
+    } else if (c >= 48 && c <= 57) {
       value = value * 10 + toI64(c - 48);
     }
   }
-  return field === 1 ? value * 4096 : n64(-1);
+  return field === toI32(pages.length);
 };
 
 /**
  * One checkpoint line. The arena is read before anything is formatted, and
  * the line, the shell's output and its parse are released before the relay
  * runs again, so what the report measures is the relay's and not its own:
- * an unreleased line kept 776 bytes a checkpoint.
+ * an unreleased line kept 776 bytes a checkpoint. `anon` is the resident set
+ * no file backs, which holds everything the relay and its C runtime allocate;
+ * `file` is the rest, the pages of its code and its libraries, which the
+ * kernel faults in when a path first runs and may drop and fault in again.
  */
-const checkpoint = (report: string, statm: string, argv: string[], closed: i32, relay: Relay): void => {
+const checkpoint = (report: string, statm: string, argv: string[], pages: i64[], closed: i32, relay: Relay): void => {
   const mark: i64 = Arena.mark();
   const used: i64 = Arena.used();
   using a = arena();
-  appendFileSync(report, `at ${closed} mark ${mark} used ${used} rss ${residentBytes(argv, statm)} live ${relay.live}\n`);
+  const read: boolean = residentPages(argv, statm, pages);
+  const anon: i64 = read ? (pages[1] - pages[2]) * 4096 : n64(-1);
+  const file: i64 = read ? pages[2] * 4096 : n64(-1);
+  appendFileSync(report, `at ${closed} mark ${mark} used ${used} anon ${anon} file ${file} live ${relay.live}\n`);
 };
 
 /**
@@ -86,12 +92,13 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
   // Made before the first checkpoint, so that none of them allocates what outlives it.
   const statm: string = `${report}.statm`;
   const argv: string[] = ["sh", "-c", "cat /proc/$PPID/statm"];
+  const pages: i64[] = [n64(0), n64(0), n64(0)];
   writeFileSync(portFile, `${netLocalPort(fd)}\n`);
   const key: Secret<u8[]> = secret(leafPrivate());
   const grantKey: Secret<u8[]> = secret(bytesOf(SECRET));
   const start: i64 = monotonicNanos() / 1000000;
   let next: i32 = every;
-  checkpoint(report, statm, argv, n32(0), relay);
+  checkpoint(report, statm, argv, pages, n32(0), relay);
   let closed: i32 = 0;
   let progress: i64 = start;
   let seen: i32 = 0;
@@ -108,12 +115,12 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
       progress = now;
     }
     while (closed >= next) {
-      checkpoint(report, statm, argv, next, relay);
+      checkpoint(report, statm, argv, pages, next, relay);
       next = next + every;
     }
   }
   if (closed >= total && total % every !== 0) {
-    checkpoint(report, statm, argv, total, relay);
+    checkpoint(report, statm, argv, pages, total, relay);
   }
   wipe(key);
   wipe(grantKey);

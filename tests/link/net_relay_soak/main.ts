@@ -39,6 +39,16 @@ const SOAK_WAVE: i32 = 16;
  * (a fault, not a leak) passes, while growth that recurs fails by its shape
  * whatever its total.
  *
+ * Both read the anonymous part of the set, the pages no file backs, since
+ * whatever the relay or its C runtime allocates is there. The file-backed
+ * part is the relay's code and its libraries': a path that first runs past
+ * warm-up (a retransmission, a STATS timer, when a loaded machine stretches a
+ * session) faults in its code, and memory pressure from other processes
+ * drops pages that fault back later, neither of which a session can leak. On
+ * a shared CI runner the whole set once grew 278,528 bytes in one interval
+ * with the arena exact; the report carries both parts, so the figures name
+ * which one moved.
+ *
  * What each run can see outside the arena: `npm test`'s 2,000 sessions span
  * four intervals of 500. A steady leak of about 2 bytes a session or more
  * crosses two or more page boundaries in different intervals and fails the
@@ -160,9 +170,9 @@ const drive = (t: Suite, total: i32, files: string): void => {
     return;
   }
   t.pass("the relay reported after warm-up and at the end");
-  const resident: i64 = field(last, "rss") - field(warm, "rss");
+  const resident: i64 = field(last, "anon") - field(warm, "anon");
   // The figures, on stderr: stdout is the checks alone, which `expected.out` pins.
-  const figures: string = `after ${SOAK_WARMUP} sessions of warm-up: arena mark ${field(warm, "mark")} used ${field(warm, "used")}, resident ${field(warm, "rss")} bytes; after ${total} more: arena mark ${field(last, "mark")} used ${field(last, "used")}, resident ${field(last, "rss")} bytes (${resident} more, ${resident / toI64(total)} a session)`;
+  const figures: string = `after ${SOAK_WARMUP} sessions of warm-up: arena mark ${field(warm, "mark")} used ${field(warm, "used")}, resident ${field(warm, "anon")} bytes anonymous and ${field(warm, "file")} file-backed; after ${total} more: arena mark ${field(last, "mark")} used ${field(last, "used")}, resident ${field(last, "anon")} bytes anonymous and ${field(last, "file")} file-backed (${resident} more anonymous, ${resident / toI64(total)} a session)`;
   writeError(`net_relay_soak: ${figures}\n`);
   const flatArena: string = `Arena.used() flat over ${total} sessions past warm-up: the same chunk, the same offset`;
   if (field(last, "mark") === field(warm, "mark") && field(last, "used") === field(warm, "used")) {
@@ -172,7 +182,7 @@ const drive = (t: Suite, total: i32, files: string): void => {
   }
   // 0 over 100,000 sessions on the machine #515 was measured on; the bound is for a page faulted in once elsewhere.
   const flatResident: string = `resident memory flat over ${total} sessions past warm-up, within ${SOAK_RSS_BOUND} bytes for the whole run`;
-  if (field(warm, "rss") > 0 && resident <= SOAK_RSS_BOUND) {
+  if (field(warm, "anon") > 0 && resident <= SOAK_RSS_BOUND) {
     t.pass(flatResident);
   } else {
     t.fail(flatResident, figures);
@@ -180,11 +190,11 @@ const drive = (t: Suite, total: i32, files: string): void => {
   // The shape: in how many checkpoint intervals the resident set grew, and by how much in each.
   let grew: i32 = 0;
   const steps: string[] = [];
-  let before: i64 = field(warm, "rss");
+  let before: i64 = field(warm, "anon");
   let missing: i32 = 0;
   for (let at: i32 = SOAK_WARMUP + SOAK_WARMUP; at <= all; at = at + SOAK_WARMUP) {
     const line: string = lineAt(text, at);
-    const rss: i64 = line.length > 0 ? field(line, "rss") : -1;
+    const rss: i64 = line.length > 0 ? field(line, "anon") : -1;
     if (rss < 0) {
       missing++;
       continue;

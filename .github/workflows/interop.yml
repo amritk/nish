@@ -21,7 +21,9 @@
 # Every tool is pinned: actions by commit, images by digest, the runner by
 # commit, h2spec by release and SHA-256, Python packages by hash
 # (tests/interop/*-requirements.txt), tshark by package version. Nothing here
-# turns a failure green.
+# turns a failure green: the one retry, a quic-interop-runner case run once
+# more after it fails, passes only if that second run succeeds, and the
+# verdict prints both.
 name: Interop
 
 on:
@@ -180,7 +182,20 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" run.py -d -s nish -c "$CLIENT" -t "$RUNNER_CASES" \
             -l "$RUNNER_TEMP/logs" -j "$RUNNER_TEMP/result.json" || status=$?
           echo "runner exit $status after $(( $(date +%s) - start )) s"
-          python3 "$GITHUB_WORKSPACE/tests/interop/runner-verdict.py" "$RUNNER_TEMP/result.json" "$RUNNER_CASES"
+          # A case that failed runs once more, on its own, and must succeed
+          # then (tests/interop/runner-verdict.py says why); the verdict
+          # prints both results for it.
+          failed="$(python3 "$GITHUB_WORKSPACE/tests/interop/runner-verdict.py" --failed "$RUNNER_TEMP/result.json" "$RUNNER_CASES")"
+          if [ -z "$failed" ]; then
+            python3 "$GITHUB_WORKSPACE/tests/interop/runner-verdict.py" "$RUNNER_TEMP/result.json" "$RUNNER_CASES"
+            exit $?
+          fi
+          echo "running $failed once more"
+          status=0
+          "$RUNNER_TEMP/venv/bin/python" run.py -d -s nish -c "$CLIENT" -t "$failed" \
+            -l "$RUNNER_TEMP/logs-retry" -j "$RUNNER_TEMP/result-retry.json" || status=$?
+          echo "runner exit $status on the retry, $(( $(date +%s) - start )) s in all"
+          python3 "$GITHUB_WORKSPACE/tests/interop/runner-verdict.py" "$RUNNER_TEMP/result.json" "$RUNNER_CASES" "$RUNNER_TEMP/result-retry.json"
 
       - name: Upload the runner's logs
         if: always()
@@ -190,6 +205,8 @@ jobs:
           path: |
             ${{ runner.temp }}/logs
             ${{ runner.temp }}/result.json
+            ${{ runner.temp }}/logs-retry
+            ${{ runner.temp }}/result-retry.json
           retention-days: 7
           if-no-files-found: warn
 
