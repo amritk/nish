@@ -1434,18 +1434,27 @@ export class Compilation {
             for (const hop of chain) {
               hops.push(`${hop.at} calls ${hop.calls}`)
             }
-            this.sink.report(
-              source,
-              site.start,
-              site.end,
-              `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which the capability policy does not grant (${this.refusedBy(c)}); the chain that reaches it: ${hops.join(", ")}`
-            )
+            this.reportRefusal(source, site, sig, c, hops)
             break
           }
         }
       }
       c = c + 1
     }
+  }
+
+  /**
+   * The capability refusal of `sig` at `site`. A method of its own because the
+   * report keeps the message, so everything building it is kept too, and the
+   * loop above is told so once rather than for each call it makes.
+   */
+  reportRefusal(source: SourceFile, site: Node, sig: FunctionSig, c: i32, hops: string[]): void {
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which the capability policy does not grant (${this.refusedBy(c)}); the chain that reaches it: ${hops.join(", ")}`
+    )
   }
 
   /** Which part of the policy refuses capability `c`, as the refusal names it: the first of the four that does. */

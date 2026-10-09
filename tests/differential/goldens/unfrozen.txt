@@ -213,6 +213,11 @@ cases/mem_loop_scope_escape added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_forof added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_interior added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_threads added after R6: no rewriter to freeze it with
+cases/mem_return_array_callee added after R6: no rewriter to freeze it with
+cases/mem_return_array_caller added after R6: no rewriter to freeze it with
+cases/mem_return_array_nested added after R6: no rewriter to freeze it with
+cases/mem_return_array_readdir added after R6: no rewriter to freeze it with
+cases/mem_return_array_scope added after R6: no rewriter to freeze it with
 cases/mem_using_arena added after R6: no rewriter to freeze it with
 cases/mem_using_arena_or_return added after R6: no rewriter to freeze it with
 cases/mem_using_arena_tail added after R6: no rewriter to freeze it with

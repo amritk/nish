@@ -285,6 +285,19 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // WP38 S1: `indexOfAny`'s kernel in runtime-simd.c (`src/kernels.ts`). It
+    // reads its two strings; the one store it makes is the first call's
+    // choice of path, into a static of its own unit that no Nish code can
+    // name, which is what `inaccessiblemem` says. That choice is the same on
+    // every call, so to a caller it is a read, and `EFFECT_READ` is its effect.
+    this.add(
+      new RuntimeFunction(
+        "nish_str_index_of_any",
+        `declare i64 @nish_str_index_of_any(${STR_NOCAP}, ${STR_NOCAP}, i64 noundef)`,
+        attrs3("nounwind", "willreturn", "memory(argmem: read, inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_index_of_from",

@@ -484,13 +484,15 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   }
   // The C runtime is several translation units: the core (arena, strings,
   // arrays, number formatting, the panics), the syscall wrappers, the host
-  // calls (the wall clock, entropy, file times, signals) and the sockets of
-  // `nish:net`, split apart so each carries its own size budget. A direct `clang` line names them; only
-  // `scripts/build.sh` pairs them for its callers.
+  // calls (the wall clock, entropy, file times, signals), the sockets of
+  // `nish:net` and the byte searches that read a vector at a time, split apart
+  // so each carries its own size budget. A direct `clang` line names them;
+  // only `scripts/build.sh` pairs them for its callers.
   link.push("runtime/runtime.c");
   link.push("runtime/runtime-os.c");
   link.push("runtime/runtime-host.c");
   link.push("runtime/runtime-net.c");
+  link.push("runtime/runtime-simd.c");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

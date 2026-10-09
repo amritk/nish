@@ -191,3 +191,80 @@ export const firstDifference = (left: string[], right: string[]): i32 => {
   }
   return leftLength === rightLength ? -1 : i
 }
+
+/** The most bytes `indexOfAny` takes in its set: what one 16-byte vector of the runtime kernel compares. */
+const INDEX_OF_ANY_MAX_SET: i32 = 16
+
+/** The first byte that is not ASCII; `indexOfAny`'s set must stay below it. */
+const NON_ASCII: i32 = 128
+
+/**
+ * The first index at or after `from` whose byte is one of `bytes`, or -1.
+ *
+ * `bytes` is a set of 1 to 16 ASCII bytes, and anything else panics: an empty
+ * set matches nothing, more than 16 is more than one vector of the runtime
+ * kernel compares, and an ASCII set is what keeps the answer the same under Node,
+ * where `charCodeAt` reads a UTF-16 unit rather than a byte. An ASCII byte
+ * never occurs inside a multi-byte UTF-8 sequence, so a non-ASCII `text`
+ * passes through and only its ASCII bytes can match — as in `splitLines`, the
+ * index is a byte offset natively. `from` is clamped to `[0, text.length]`,
+ * as `substring` clamps, so a negative `from` searches from the start and one
+ * past the end answers -1.
+ *
+ * Natively the search is the runtime's `nish_str_index_of_any`, which reads
+ * 16 or 32 bytes at a time (docs/LANGUAGE.md, "Byte search"). It is
+ * **variable-time**: how long it takes says where the first match is, so it is
+ * never for secret data.
+ */
+export const indexOfAny = (text: string, bytes: string, from: i32): i32 => {
+  const count: i32 = toI32(bytes.length)
+  if (count < 1 || count > INDEX_OF_ANY_MAX_SET) {
+    panic("indexOfAny: the set must hold 1 to 16 bytes")
+  }
+  let j: i32 = 0
+  while (j < count) {
+    if (toI32(bytes.charCodeAt(j)) >= NON_ASCII) {
+      panic("indexOfAny: every byte of the set must be ASCII")
+    }
+    j += 1
+  }
+  const length: i32 = toI32(text.length)
+  let start: i32 = from
+  if (start < 0) {
+    start = 0
+  }
+  if (start > length) {
+    start = length
+  }
+  return indexOfAnyFrom(text, bytes, start)
+}
+
+/**
+ * `indexOfAny`'s walk, once its arguments are checked: the first index at or
+ * after `from` whose byte is in `bytes`, or -1.
+ *
+ * This loop is what runs under Node. Natively the compiler recognises the one
+ * call `indexOfAny` makes to it and calls the runtime kernel instead
+ * (`src/kernels.ts`), so the loop is the kernel's meaning written in the
+ * language rather than its implementation. The name is long for the reason
+ * `isTextBlankByte`'s is.
+ */
+const indexOfAnyFrom = (text: string, bytes: string, from: i32): i32 => {
+  const length: i32 = toI32(text.length)
+  const count: i32 = toI32(bytes.length)
+  let i: i32 = from
+  // `from` is never negative, because `indexOfAny` clamped it; the test is
+  // written because it is what proves `i` within `text`, as in `splitLines`.
+  while (i >= 0 && i < length) {
+    const code: i32 = toI32(text.charCodeAt(i))
+    let j: i32 = 0
+    while (j < count) {
+      if (toI32(bytes.charCodeAt(j)) === code) {
+        return i
+      }
+      j += 1
+    }
+    i += 1
+  }
+  return -1
+}
