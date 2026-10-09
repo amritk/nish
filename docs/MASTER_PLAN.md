@@ -249,7 +249,7 @@ is its plan. [README.md](README.md) indexes them.
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | proposed; no note yet | — |
-| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2 declined for now, `std/json` on the kernel pending #507, S3 and S4 unbuilt | [wp38](wp38-simd.md) |
+| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, `std/json` on the kernel pending #507, S3 unbuilt | [wp38](wp38-simd.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -433,10 +433,13 @@ major. Whether it happens at all is still wp22 §10's open question.
   measurements (#517), S1's byte-search kernel in the runtime (#518) and the
   `std/text` function `indexOfAny` that reaches it (#519) are built. Moving
   `std/json` onto it, and S1's `bench/json` bar, wait for #507. The opt-in CPU
-  level (S2) missed its bar on S0's figures and is declined for now (§7). A
-  `nish:simd` module of 128-bit vector types (S3) and the lexer on
-  `indexOfAny` (S4) are unbuilt. Every stage adds a function, a flag or a
-  module and withdraws nothing, so it fits a minor.
+  level (S2) missed its bar on S0's figures, then met it once the noise was
+  measured; it is unbuilt until the owner decides it is worth its cost (§7).
+  The lexer on `indexOfAny` (S4) is declined for now: the lexer is about 1% of
+  the front end, too little to make `bootstrap --verify` measurably faster
+  (§7). A `nish:simd` module of 128-bit vector types (S3) is unbuilt. Every
+  stage adds a function, a flag or a module and withdraws nothing, so it fits
+  a minor.
 
 #### Settled, with the note that settles it
 
