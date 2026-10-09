@@ -75,8 +75,11 @@ for (const name of only) {
 
 /** The level the wider column is linked for: the one S2's flag would offer first. */
 const MARCH = "x86-64-v3"
+if (process.arch !== "x64" && ["nbody", "vec3", "spectral"].some((n) => only.has(n))) {
+  fail(`the ${MARCH} column needs an x86-64 host; pass --only scan,bootstrap here`)
+}
 
-/** The rounds the scan driver runs over its document: about a second natively. */
+/** The rounds the scan driver runs over its document: about two seconds natively. */
 const SCAN_ROUNDS = 1000
 const SCAN_BYTES = 1 << 20
 
