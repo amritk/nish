@@ -64,9 +64,18 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 - **Memory.** Every table is made at start-up; a datagram, a timer and a
   session's whole life after its handshake allocate nothing
   (`tests/link/net_relay`, "keep no arena memory in the relay"). The full-size
-  pool, 4,160 QUIC slots, is about 754 MB resident at start (about 181 KB a
-  slot: QUIC's stream buffers, and since #492 the handshake's TLS server and
-  key slots, made once a slot rather than once a handshake).
+  pool, 4,160 QUIC slots, is about 754 MB resident at start, about 181 KB a
+  slot. Measured one part at a time: the `QuicConnection` is 158 KB of it —
+  about 90 KB fixed (its sent-packet rings, CRYPTO reassembly and three
+  key spaces), about 44 KB of stream buffers (nine streams at 2,048 bytes
+  each way) and about 24 KB of datagram rings (eight of 1,200 bytes each
+  way) — then the `Http3Connection` 15 KB and the `WebTransport` 7 KB. A
+  slot's `TlsServer`, about 31 KB, is made at its first handshake (#492).
+  `relayQuicConfig` already asks for the smallest stream buffers a CONNECT
+  fits, and the rest are `std/net` constants, so no smaller slot is on
+  offer. What a deployment can lower is the slot count: `RelayConfig`'s
+  `maxSessions` and `spareSlots`, start-up constants as main.rs's
+  `Limits` are, with no flag.
 
 ## Where it differs from the Rust
 
@@ -107,15 +116,18 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 - **The QUIC handshake's memory per connection** (H3-1 in
   [`docs/security/http3.md`](../../docs/security/http3.md), WT-1 in
   `webtransport.md`). Everything the relay does after a handshake allocates
-  nothing, but each handshake still leaves about **11 KB** in the arena, so
-  N9's soak (`tests/link/net_relay_soak`) is not yet flat: 10,983 bytes a
-  session over 2,000 past warm-up. It was 101,818 before #492, which keeps the
+  nothing, but each session still leaves about **1.7 KB** in the arena, so
+  N9's soak (`tests/link/net_relay_soak`) is not yet flat: 1,727 bytes a
+  session over 100,000 past warm-up, the same from 10,000 to 50,000 as from
+  50,000 to 100,000. It was 101,818 before #492, which keeps the
   handshake's TLS server, packet keys, Initial secrets, reset tokens and
-  connection IDs in the connection slot. What is left is `std/net`'s, not the
-  relay's: the CertificateVerify signature `Http3Server.serve` makes with
-  `tlsSignEcdsaP256` outside any arena block, 9,248 to 9,376 bytes, and the
-  listener's copy of the first Initial, about 1.5 KB. Signing over
-  caller-owned scratch in `std/crypto/p256` removes the first.
+  connection IDs in the connection slot, and 10,983 before #512, which signs
+  the CertificateVerify over scratch. What is left is the QUIC listener's
+  (H3-3), not the relay's: 1,600 bytes a handshake for the carrier's copy of
+  the client's first Initial and the listener's parse of it, and about 120
+  more on average for the stateless resets it sends to packets that arrive
+  after a slot is freed (131 over 2,500 sessions, about 3,128 bytes each).
+  The listener reading a window and answering into scratch removes both.
 - **DATA down is at most 1,164 bytes.** `nish/net/quic` sends 1,200-byte
   packets and has no path MTU discovery, so after the quarter stream ID and the
   3-byte header 1,164 bytes of payload fit; a larger datagram from the game

@@ -392,9 +392,9 @@ major. Whether it happens at all is still wp22 §10's open question.
    and datagrams (Q1 to Q4), HTTP/3 with QPACK (R1) and WebTransport (R2) —
    and the relay itself, `examples/relay/` (A1), with every cap, timeout and
    close code of cs's, and the loopback suite across every carrier. Next: what
-   a QUIC handshake still keeps per connection (about 11 KB since #492, most
-   of it the P-256 CertificateVerify signature, H3-1), which keeps N9's soak
-   from going flat and is `std/`'s to remove; S2's interop job; moving the
+   a session still keeps (about 1.7 KB since #492 and #512, all of it the
+   QUIC listener's, H3-3), which keeps N9's soak from going flat and is
+   `std/net`'s to remove; S2's interop job; moving the
    key-holding structs onto `nish:secret` ([#430](https://github.com/amritk/nish/issues/430));
    and, now that 0.17.0 carries R2, the cs side: `services/relay` replaced,
    `boot-check`'s wire pass and `bench:offload` against the Rust relay. §5 of
