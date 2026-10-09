@@ -58,6 +58,20 @@ stages:
       - id: simd-index
         content: Add WP38 to docs/MASTER_PLAN.md §5 (proposed) and §9 What remains, an Open decisions row in §3.4, and an entry in docs/README.md — see Stage 4
         status: pending
+  - id: escape-returned-array
+    title: escape analysis — a value stored into a returned fresh array flows as returned
+    goal: A function that allocates an array, fills it with values it built, and returns it keeps its callers' per-pass arena release; the stored values are treated as returned with the array, not as escaping into memory
+    verification: npm run check && npm test (zero skips) && compiler fixed point reached && the new golden prints the same Arena.used() before and after 1000 calls
+    todos:
+      - id: esc-rule
+        content: In src/escape.ts, a value stored into an array (element store or push) that this function allocated (literal or new) and whose only flow is FLOW_RETURNED (or FLOW_LOCAL) takes the array's flow instead of escaping; any other use of the array (stored, captured, passed to a callee that stores, read back and stored elsewhere) keeps today's behaviour — see Stage 5
+        status: pending
+      - id: esc-tests
+        content: Positive golden tests/cases/mem_return_array_scope (.ts .ll .out) with an Arena.used() round trip over 1000 calls; negative goldens where the array is stored to a field, captured, or an element is read back and stored, keeping the release off; register in tests/differential/goldens/unfrozen.txt; regenerate tests/self/goldens — see Stage 5
+        status: pending
+      - id: esc-docs
+        content: docs/LANGUAGE.md Memory model rule, docs/cookbook/mem-return-array.ts and its IR_COOKBOOK.md block; measure jsonFields on PR #509's branch with the rule (Measured trailer) — see Stage 5
+        status: pending
 ---
 
 ## Context
@@ -65,6 +79,14 @@ stages:
 `jsonField(object, name)` starts from the beginning of `object` on every call, so a caller that wants three fields scans each line three times. Inside each scan, string bodies — most of the bytes in a real line — are walked one `charCodeAt` at a time (`jsonEndOfString`, the `inString` branch of `jsonEndOfValue`). In the recorded cross-language report Nish was 122.7 ms on `bench/json` (gjson 118.3, typed serde 82.4, simdjson 36.8); after #499/#500 it is about 90–94 ms.
 
 The runtime already has a vectorised search: `s.indexOf(sub)` is one `nish_str_index_of` call that uses libc `memchr`. But `indexOf` takes no start position, and `substring` allocates and copies, so `std/json` cannot use it mid-string today. Stage 1 adds the start position.
+
+## Stage 5 — escape analysis: a returned fresh array carries its elements (added 2026-10-09T07:11Z, owner-approved)
+
+- Why: #509's `jsonFields` returns an array it filled with fresh value strings; `src/escape.ts` notes each element store as a store into memory, so every calling loop loses its per-pass release (≈46 B/call, 105.5 vs 88.1 MB peak RSS on bench/json input). The precedent is #500's `pushedIntoJoinedParts`: a narrow, allow-listed rule.
+- Rule: a value stored (`xs[i] = v`, `xs.push(v)`) into an array `xs` that this function allocated (array literal or `new Array`) takes `xs`'s own flow when every use of `xs` is an element store, a push, `.length`, or the return of `xs` itself. Any other use — `xs` stored to a field/global/another array, captured, passed to a callee, an element read back — keeps today's behaviour. That is the soundness argument: the elements cannot outlive the array except through the array.
+- Develops in parallel with #513, merges after it (both touch `src/` and `tests/self/goldens`): merge `main` and regenerate goldens before merge.
+- Owns: `src/escape.ts`, `src/attributes.ts` (only if a helper is needed), the `src/` files whose NL9011 count would rise (fix, never raise), `tests/perf-baseline.json` (lower only), `tests/cases/mem_return_array_*`, `tests/differential/goldens/unfrozen.txt`, `tests/self/goldens/**`, regenerated `.ll`/`.out` the rule moves, `docs/LANGUAGE.md` (Memory model section), `docs/cookbook/mem-return-array*`, one `mem-return-array` block in `docs/IR_COOKBOOK.md`.
+- Commit: `perf(codegen): a value stored into a returned fresh array is returned with it`, `Measured:` jsonFields loop kept bytes and peak RSS before/after, `Tests:` the goldens.
 
 ## Stage 1 — `s.indexOf(sub, fromIndex)`
 
