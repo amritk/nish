@@ -325,17 +325,14 @@ const clampStart = (emitter: Emitter, value: string, type: i32, str: string): st
 const emitStringIndexOf = (emitter: Emitter, expr: Node, str: string): string => {
   const args = expr.children[1]
   const sub = emitter.emitExpression(args.children[0])
-  if (args.children.length === 1) {
-    const found = emitter.fn.emitValue(
-      `call i64 ${emitter.useRuntime("nish_str_index_of")}(i8* ${str}, i8* ${sub})`
-    )
-    return emitNumberFromI64(emitter, found, expr)
+  let callee = "nish_str_index_of"
+  let start = ""
+  if (args.children.length > 1) {
+    const from = args.children[1]
+    callee = "nish_str_index_of_from"
+    start = `, i64 ${clampStart(emitter, emitOffset(emitter, from), emitter.typeOf(from), str)}`
   }
-  const value = emitOffset(emitter, args.children[1])
-  const from = clampStart(emitter, value, emitter.typeOf(args.children[1]), str)
-  const found = emitter.fn.emitValue(
-    `call i64 ${emitter.useRuntime("nish_str_index_of_from")}(i8* ${str}, i8* ${sub}, i64 ${from})`
-  )
+  const found = emitter.fn.emitValue(`call i64 ${emitter.useRuntime(callee)}(i8* ${str}, i8* ${sub}${start})`)
   return emitNumberFromI64(emitter, found, expr)
 }
 
