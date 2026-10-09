@@ -7806,7 +7806,12 @@ if (!only || "simd".includes(only)) {
       encoding: "utf8",
     })
     if (libc.status !== 0) {
-      skip("simd: no AArch64 cross libc links here (libc6-dev-arm64-cross): the NEON path is not run")
+      // The probe needs clang's AArch64 backend, ld.lld and an AArch64 libc, so the
+      // reason is the linker's own first line rather than a guess at which is missing.
+      const why = String(libc.stderr).trim().split("\n")[0] || `clang exited ${libc.status}`
+      skip(
+        `simd: an empty program does not link statically for aarch64-linux-gnu here (${why}): the NEON path is not run`
+      )
     } else {
       const linked = build(cross, a64)
       const r = linked.status === 0 ? spawnSync(a64, [], { encoding: "utf8" }) : null
