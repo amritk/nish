@@ -1,16 +1,27 @@
 # WP34: Hosting cs — the network stack first
 
 **Status: in progress.** Built: every compiler and runtime item phase one
-needs (N1, N2, N3, N5, N6 of §4); every crypto lane, K1 to K6; the TLS 1.3
-server handshake and its TCP carrier, T1 (#407) and T2 (#437); H1's HTTP/1.1
-parser and WebSocket framing (#399); H2's HPACK (#406); and QUIC packets and
-connections, Q1 (#404) and Q2 (#441, #444). §5a has each lane's pull requests
-and what it left. **Open:** the HTTP/1.1 and HTTP/2 servers (the rest of H1
-and H2), QUIC loss recovery and streams (Q3, Q4), HTTP/3 and WebTransport (R1,
-R2), the relay itself (A1) with N9's soak, and the interop job of decision
-S2. The loopback suite across every carrier has landed (#489). 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
-K1–K6 (less HKDF-Expand-Label, #398); everything else from T1 on is
-on `main` and not yet released, so cs cannot use it until a release does (§7).
+needs (N1, N2, N3, N5, N6 of §4); every crypto lane, K1 to K6; and the whole
+stack of §3 — the TLS 1.3 server handshake and its TCP carrier (T1 #407, T2
+#437), with its state kept in the slot (#467); the HTTP/1.1 parser, server and
+WebSocket (H1 #399, #468); HPACK and HTTP/2 (H2 #406, #465); QUIC packets,
+connections, loss recovery, streams and datagrams (Q1 #404, Q2 #441 and #444,
+Q3 #466, Q4 #469), with the handshake's state kept in the slot (#492); QPACK
+and HTTP/3 (R1 #464, #470); WebTransport (R2 #471); the loopback suite
+across every carrier (#489); and the interop job of decision S2 (#487). **A1 adds the relay**, `examples/relay/`: cs's
+`services/relay` in Nish on that stack, with its frame and grant tested
+against cs's own fixtures, its caps, timeouts, close codes, stats, identity
+and certificate reload, one upstream socket per session, GSO and GRO both
+sides and a clean stop on a signal, proved across loopback in `npm test`
+(§5a), and N9's soak flat: 100,000 sessions measured at 0 bytes kept, arena
+and resident set alike, since the handshake (#492), its signature (#512) and the QUIC
+listener (#515) keep nothing. **Open:** #430;
+and the cs side of A1 — the port of `services/relay` itself, `boot-check`'s
+wire pass and `bench:offload` against the Rust relay. 0.16.0 carried N1, N2,
+N3, N5 and N6 (less #402 and `tcpConnect`, #411) and K1–K6 (less
+HKDF-Expand-Label, #398); 0.17.0 carries everything from T1 to R2 and the
+minted certificate's extensions (#491), so the cs side can start; #489, #492
+and A1 are on `main` or in review and not yet released (§7).
 
 This note covers the compiler's half of a plan whose other half lives in the
 program being ported,
@@ -284,7 +295,7 @@ itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 | **Q4** | Streams (bidirectional and unidirectional, with flow control) and DATAGRAM frames (RFC 9221); send batching through GSO | the interop runner's transfer cases; a datagram round trip at the MTU edge | Q2 | built, with a datagram at the MTU edge, a GSO flight read back through GRO, and nothing allocated per packet (QUIC-3 closed); **the interop runner's transfer cases open** |
 | **R1** | HTTP/3 and QPACK, with a static table and dynamic capacity 0 | RFC 9204 static-table encodings; the interop runner's `http3` case; `curl --http3` where available | Q4, H2's header model | QPACK and HTTP/3 built; the interop runner's `http3` case and `curl --http3` open (S2's job) |
 | **R2** | Extended CONNECT (RFC 9220), HTTP datagrams (RFC 9297) and **WebTransport over HTTP/3**: sessions, datagrams, unidirectional and bidirectional streams, and close. It is pinned to the draft Chrome negotiates today; that draft's SETTINGS and headers are recorded once from a `wtransport` 0.7 exchange and held as a golden | Chrome through Playwright; a `wtransport` (Rust) client against the Nish server, which is the cross-implementation test | R1, Q4 | built against a Nish client, with a `wtransport` 0.7 exchange recorded and replayed byte for byte; **Chrome through Playwright open** (S2's interop job) |
-| **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 | **open** |
+| **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 | built in nish as `examples/relay/`, with the `cargo test` cases and fixtures ported and every refusal across loopback; N9's soak flat (0 bytes a session over 100,000, with #492, #512 and #515); `boot-check`, `bench:offload` and the cs port open, 0.17.0 carrying R2 |
 
 **What is left, in order.** A1 waits on the chain Q3 → Q4 → R1 → R2, which is
 the critical path; R1's QPACK static table is a pure function and can start
@@ -329,6 +340,7 @@ lists what each module exports and what is verified, and
 | **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, not yet by the quic-interop-runner. Loss recovery (Q3); full streams with flow control (Q4); the AEAD limits (QUIC-6); per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); the wipes QUIC-2 and QUIC-5 record (#430) |
 | **Q3** | #466; the handshake flight's two probes and early resend (QUIC-8) | `nish/net/quic-recovery` (RFC 9002: sent-packet rings per space, the RTT estimate, loss by packet and time threshold, the probe timeout with backoff, NewReno, a pacer), used by `nish/net/quic` to send lost CRYPTO, STREAM and connection-ID frames again, and `nish/net/quic-listener`'s paced send | The interop runner's lossy and congested cases; ECN; detecting an optimistic ACK (QUIC-7); per-packet allocation, now with the fixed record of packets in flight (QUIC-3, Q4) |
 | **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; the AEAD limits (QUIC-6). The handshake's own arena (88 KB a connection) went with N9's QUIC stage, which keeps the handshake's state in the slot: a connection through a reused slot now keeps 0 bytes (QUIC-3, `net_quic_memory`), and a handshake through the HTTP/3 carrier 0 bytes too, now that the caller's P-256 signature is made in scratch (#512) and `quic-listener` reads a datagram no slot owns in place and answers into scratch (H3-1 and H3-3 closed) |
+| **A1** | #488 | `examples/relay/` (not a `std/` module): `frame` and `grant` ported from cs's `frame.rs` and `grant.rs` with their fixtures, a hand-written JSON reader for the grant (N11's phase-one case), the per-peer table, `Relay` (the session flow, both caps, the rate cap, the hello and idle timeouts, STATS, CLOSE with every code, one upstream socket per session, GSO and GRO with `--offload`) on `nish/net/http3-server` and `nish/net/webtransport`, the identity (a 13-day self-signed P-256 certificate and its hash file, or `--cert`/`--key` re-read every 60 s) and main.rs's command line and environment, with a clean stop on SIGINT and SIGTERM | **NAT rebinding**: the QUIC server does not follow a peer's address change, so a client whose NAT rebinds loses its session. DATA down is at most 1,164 bytes until QUIC sends packets past 1,200; no DNS, so a grant names an address: the cs port, `boot-check`'s wire pass and `bench:offload` |
 | **S2** (interop job) | #487 | No module: `.github/workflows/interop.yml` and `tests/interop/` run the quic-interop-runner (quic-go, ngtcp2), `h2spec`, `curl --http3` and `--http2`, and Chromium through Playwright over WebTransport against `tests/link/net_interop_server`, a server on every carrier from one loop whose smoke checks run in `npm test`; `h2spec` 146 of 146 | Autobahn's server cases for H1. Three `std/` defects were found here and fixed: the pacer's timer (#490), the minted certificate's extensions (#491), and a lost first flight resent one datagram per probe timeout (#514)
 
 K1 and K4 did not wait for their **Needs** column: they export no enum or

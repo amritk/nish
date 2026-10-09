@@ -1,0 +1,210 @@
+PASS  decodes a hello written by the TypeScript
+PASS  its version and token
+PASS  decodes a data frame
+PASS  without copying its payload: a window onto the datagram
+PASS  decodes a ping
+PASS  with a microsecond clock that does not fit in 32 bits
+PASS  decodes a close
+PASS  with its code and reason
+PASS  a window inside a larger buffer reads only the window
+PASS  HELLO_OK
+PASS  DATA
+PASS  PONG
+PASS  CLOSE
+PASS  STATS
+PASS  the sequence number wraps into 16 bits
+PASS  a reused buffer never leaks the previous payload
+PASS  HELLO_OK into 6 bytes does not fit
+PASS  DATA of 4 bytes into 6 does not fit
+PASS  PONG into 6 bytes does not fit
+PASS  CLOSE of 3 characters fits 6 bytes, 4 do not
+PASS  STATS into 6 bytes does not fit
+PASS  a reason that is not ASCII is refused
+PASS  an empty datagram is truncated
+PASS  a ping cut after its id's first byte is truncated
+PASS  a ping one byte short is truncated
+PASS  a hello with no version is truncated
+PASS  a data frame with half a sequence number is truncated
+PASS  a close with half a code is truncated
+PASS  a hello whose token runs off the end is unterminated
+PASS  a close whose reason runs off the end is unterminated
+PASS  an unknown type
+PASS  names the byte
+PASS  type 0 is unknown
+PASS  type 8 is unknown
+PASS  a HELLO_OK from a client is named, not read
+PASS  so is a PONG
+PASS  and a STATS
+PASS  a DATA is not
+PASS  a hello whose token is not UTF-8 reads as an empty token
+PASS  an empty token
+PASS  two-, three- and four-byte sequences are UTF-8 to the check the decoder uses
+PASS  a stray continuation, overlongs, a surrogate, past U+10FFFF and cut sequences are not
+PASS  accepts a token signed by the TypeScript
+PASS  and keeps its expiry
+PASS  refuses a token signed with another secret
+PASS  refuses a token whose payload was edited after signing
+PASS  refuses an expired token even though it is correctly signed
+PASS  an expiry of exactly now is expired
+PASS  a millisecond before it is not
+PASS  malformed tokens: empty, one part, two parts, another version, a signature that is not base64url, four parts
+PASS  a signature one character short of the real one
+PASS  a signature of 31 bytes
+PASS  a version of one letter more
+PASS  a capital V
+PASS  a payload that is not base64url
+PASS  a payload that is not JSON
+PASS  an empty payload
+PASS  an array
+PASS  an empty object
+PASS  a host that is a number
+PASS  a port that is a string
+PASS  an expiry that is a string
+PASS  a port past u16
+PASS  a negative port
+PASS  port 65535 is in range
+PASS  an expiry with a fraction
+PASS  an expiry with an exponent
+PASS  a port that is true
+PASS  a host that is null
+PASS  no host at all
+PASS  no nonce is fine, as in grant.rs
+PASS  a host twice
+PASS  a second value after the object
+PASS  an escaped host is unescaped
+PASS  whitespace between the tokens
+PASS  an object inside the grant is read through
+PASS  a host of 254 bytes
+PASS  one of 253 is a grant
+PASS  a secret of 100 bytes
+PASS  a secret of 64 bytes
+PASS  and it is not the 100-byte one's
+PASS  RFC 4231 case 2: a key shorter than the output
+PASS  RFC 4231 case 6: a key of 131 bytes, hashed first
+PASS  an object of a string, an integer and an object
+PASS  their kinds
+PASS  i64's largest integer
+PASS  one more is refused
+PASS  every escape
+PASS  raw UTF-8 in a string
+PASS  refused: lone surrogates, a short or unknown escape, a raw control character, an open string, a leading zero, a bare sign, a plus, a boolean, an array, five levels, trailing commas, a missing colon or comma, a bare key, a top-level string, nothing, an open object
+PASS  four levels are read
+PASS  a byte that is not UTF-8
+PASS  seventeen members are refused
+PASS  sixteen are read
+PASS  a document of 1,024 bytes is read
+PASS  one of 1,025 is refused
+PASS  a grant verified, refused as bad JSON, as malformed, as a bad signature and as expired keeps no arena memory
+PASS  the defaults: port 4433, no bind, /cs, the development secret
+PASS  every option main.rs has
+PASS  --help is a switch
+PASS  an option without its value
+PASS  a port that is not one
+PASS  a port past 65535
+PASS  a bind address that is a name
+PASS  an option main.rs does not have
+PASS  a path that does not start with /
+PASS  CS_RELAY_SAN is split on commas and trimmed
+PASS  no SAN, address literals and localhost are development
+PASS  a host name is a deployment
+PASS  an address literal is one, a name is not
+PASS  a certificate without its key is refused
+PASS  a key without its certificate is refused
+PASS  neither is the self-signed arrangement rather than an error
+PASS  a self-signed identity is minted
+PASS  pinned by its own hash: dotted hex of a SHA-256, 32 bytes and 31 separators
+PASS  for thirteen days
+PASS  dotted hex
+PASS  a pinned note carries the hash and when it dies
+PASS  a trusted note writes a file with no hash in it
+PASS  a PEM pair on disk is loaded, and deliberately not pinned
+PASS  and it is watchable
+PASS  an unchanged pair is no renewal
+PASS  a chain still being written is an error rather than an empty identity
+PASS  and it is not marked seen, so the next poll looks again
+PASS  a renewal whose key is not the certificate's is refused, and the identity serving is kept
+PASS  the finished pair is the renewal: a chain of two
+PASS  a key file with no P-256 key is an error
+PASS  at start-up a key that is not the certificate's is refused
+PASS  files that are not there are an error rather than a panic
+PASS  and the watcher reads them as nothing having changed
+PASS  eight addresses fill a table of eight rows
+PASS  a ninth finds no row
+PASS  a second session of an address takes no row
+PASS  a third is over the cap
+PASS  after four rows go, every address left is found with its count, and the gone ones are not
+PASS  a row stays while a session holds it
+PASS  and goes with its last: the table is empty
+PASS  releasing an address that holds nothing does nothing
+PASS  a cap of 0 refuses a new address
+PASS  the table refills after emptying
+PASS  each release by address leaves every other count as it was
+PASS  the CONNECT is answered 200
+PASS  the hello is answered HELLO_OK: session 1, 1,200 bytes
+PASS  the session holds a place in both caps
+PASS  a DATA payload of 1,200 bytes reaches the game server whole, and one of 1,201 does not
+PASS  the refused one is counted
+PASS  the echo of 1,200 bytes cannot go down whole and is dropped, counted
+PASS  1,164 bytes from the game server reach the client as DATA, seq 2 after the dropped one's 1
+PASS  1,165 do not, and are counted
+PASS  a PING is answered with a PONG carrying its id and clock, and the relay's dwell
+PASS  an empty datagram is a bad frame, counted, not fatal
+PASS  STATS after two seconds: one DATA forwarded in (the oversized one is not counted), three datagrams from the game server
+PASS  and again two seconds later, its counters reset
+PASS  an empty DATA payload is forwarded as an empty datagram
+PASS  a HELLO_OK and an unknown type from the client are bad frames, a second HELLO is ignored; the session lives
+PASS  a CLOSE from the client ends the session: the connection closed with code 0
+PASS  its places given back
+PASS  ten seconds without a datagram is not yet idle
+PASS  at the next STATS tick past ten seconds the session is idle: CLOSE IDLE
+PASS  and the connection closed with code 0, counted
+PASS  256 datagrams inside a second are within the cap
+PASS  the 257th is RATE_LIMITED
+PASS  counted
+PASS  and the connection closed with code 0
+PASS  200 datagrams a second for three seconds is within it: the window starts again each second
+PASS  a shutdown sends CLOSE SHUTDOWN to every session and closes each connection with code 0
+PASS  and gives back every place
+PASS  an accepted session has five seconds to say hello
+PASS  past them it is closed with code 1 and no CLOSE frame, as main.rs closes it
+PASS  a grant signed with another secret: TOKEN_INVALID
+PASS  the connection closed with code 1
+PASS  an expired grant: TOKEN_EXPIRED
+PASS  a first datagram that is not a HELLO: PROTOCOL_ERROR
+PASS  a HELLO of version 2: PROTOCOL_ERROR
+PASS  a grant naming a host that does not resolve: UPSTREAM_UNREACHABLE
+PASS  each refusal gives its places back
+PASS  and each is counted: a hello timeout, two bad grants, two bad hellos, an unreachable upstream
+PASS  a session on another path is answered 404, and no session is made
+PASS  a grant naming localhost reaches the loopback
+PASS  two sessions under a cap of two
+PASS  a third is told the relay is full
+PASS  and closed with code 1
+PASS  a departure frees its place: the next one is accepted
+PASS  a connection the client closes in QUIC alone frees its place in the same step: the next one is accepted at once
+PASS  a client ending its CONNECT stream ends the session: closed with code 0, counted
+PASS  two from one address under a cap of two
+PASS  a third from it is refused
+PASS  another address is unaffected
+PASS  a refused session hands its global place back, and its address holds no extra row
+PASS  64 handshakes from one address, none of them opening a session, hold 64 places of the address
+PASS  the 65th is refused while the 64 are still connecting
+PASS  and closed with code 1
+PASS  a handshake is kept while its hello deadline has not passed
+PASS  at five seconds from its first Initial each is closed with code 1, counted, and its places given back
+PASS  a connection that keeps pinging is kept until the deadline
+PASS  a connection that keeps pinging and never sends CONNECT is closed at the hello deadline
+PASS  handshakes alone from one address take no more global places than its cap of 2
+PASS  and hold no more slots than its cap and the 2 spare ones
+PASS  the two past that are closed with code 1 at their first Initial, counted
+PASS  another address still opens a session and is answered HELLO_OK
+PASS  and its DATA goes up and comes back down
+PASS  four DATA in one pass leave in one GSO send, the shorter last
+PASS  read back by the game server's GRO socket as one
+PASS  a GSO burst from the game server arrives as one GRO read, cut into three DATA
+PASS  200 rounds of a DATA each way and a PING, and a STATS every two seconds, on a warm session
+PASS  keep no arena memory in the relay
+PASS  a datagram to the upstream socket from another address is dropped and counted
+PASS  a stream the client opens is reset, and the session goes on
+PASS  a plain request is answered 404
+relay: 209 passed, 0 failed, 0 skipped
