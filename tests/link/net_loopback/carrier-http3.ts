@@ -134,7 +134,7 @@ export const http3Checks = (t: Suite): void => {
     inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("http/3: three more connections, each a GET and the client's CONNECTION_CLOSE with H3_NO_ERROR, which frees the slot", all && s.accepted === 4);
-  t.ok("http/3: each keeps 80 to 128 KiB of arena from its Initial to its close (H3-1: the handshake's)", inBand);
+  t.ok("http/3: each keeps 10 to 16 KiB of arena from its Initial to its close, none of it the QUIC connection's (H3-1)", inBand);
   t.ok("http/3: the program held nothing it could not place", lp.h3App.table.overflows === 0 && lp.h3App.resets === 0);
   t.eqStr("http/3: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

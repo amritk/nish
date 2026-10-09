@@ -116,5 +116,5 @@ PASS  six connections, one after another, through one slot
 PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
-PASS  and from the second on, each handshake keeps exactly as much: nothing in the slot grows
+PASS  and from the second on, a handshake keeps nothing either: its state is the slot's (QUIC-3)
 http3: 119 passed, 0 failed, 0 skipped
