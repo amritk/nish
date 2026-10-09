@@ -4,7 +4,9 @@
 // reads those but a test (`values[k] === null`), so the value is returned
 // with the array rather than escaping into memory. The loop that calls the
 // function and reads the elements it gets back keeps its per-pass release,
-// and the arena is the same height after 1000 calls as after one.
+// and the arena is the same height after 1000 calls as after one. Inside
+// `fieldsOf` the loop stores into `values`, which is older than its pass, so
+// that loop keeps what each pass built: `fields[0]` reads intact.
 const fieldsOf = (line: string, n: i32): (string | null)[] => {
   const values: (string | null)[] = new Array<string | null>(n);
   for (let k = 0; k < values.length; k++) {
@@ -26,9 +28,10 @@ const run = (calls: i32): string => {
   let total = 0;
   for (let i = 0; i < calls; i++) {
     const fields = fieldsOf(`line ${i}`, 3);
+    const first = fields[0];
     const last = fields[2];
-    if (last !== null) {
-      total = total + last.length;
+    if (first !== null && last !== null) {
+      total = total + first.length + last.length;
     }
     total = total + pairOf(`${i}`, "x")[1].length;
   }
