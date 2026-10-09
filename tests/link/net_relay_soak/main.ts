@@ -60,6 +60,33 @@ const lineAt = (report: string, sessions: i32): string => {
   return end < 0 ? rest : rest.substring(0, end);
 };
 
+/** `text` on one line, its newlines written as ` | `, so that a failure's detail is one line of the log. */
+const oneLine = (text: string): string => {
+  const parts: string[] = [];
+  let from: i32 = 0;
+  for (let k: i32 = 0; k < toI32(text.length); k++) {
+    if (text.charCodeAt(k) === 10) {
+      parts.push(text.substring(from, k));
+      from = k + 1;
+    }
+  }
+  parts.push(text.substring(from, toI32(text.length)));
+  return parts.join(" | ");
+};
+
+/**
+ * Whether the relay process is still running, and what it wrote to its log:
+ * the detail every failure carries, since the relay runs in the background and
+ * its exit status reaches nobody.
+ */
+const relayState = (files: string): string => {
+  const alive: boolean = spawnSync(["sh", "-c", `kill -0 $(cat ${files}.pid) 2> /dev/null`]) === 0;
+  // Its stderr, where a panic or a failed bind goes; the last 600 bytes of it, which is where the reason is.
+  const log: string | null = readFileSyncOrNull(`${files}.log`);
+  const tail: string = log === null ? "" : log.length > 600 ? log.substring(toI32(log.length) - 600, toI32(log.length)) : log;
+  return `the relay is ${alive ? "still running" : "gone"}; its stderr: ${tail.length === 0 ? "(empty)" : oneLine(tail)}`;
+};
+
 /** Sleeps about `ms` milliseconds. */
 const nap = (ms: i32): void => {
   const loop: i32 = pollCreate();
@@ -80,9 +107,11 @@ const drive = (t: Suite, total: i32, files: string): void => {
       nap(n32(20));
     }
   }
-  if (!t.ok("the relay starts in a process of its own and says its port", port > 0)) {
+  if (port <= 0) {
+    t.fail("the relay starts in a process of its own and says its port", `no port in ${portFile} after 10 s; ${relayState(files)}`);
     return;
   }
+  t.pass("the relay starts in a process of its own and says its port");
   const echo: i32[] = echoSocket();
   let finished: i32 = 0;
   for (let first: i32 = 0; first < all; first = first + SOAK_WAVE) {
@@ -97,13 +126,19 @@ const drive = (t: Suite, total: i32, files: string): void => {
       nap(n32(20));
     }
   }
-  t.eqI32(`${all} sessions connect, send a DATA the game server echoes, and leave`, finished, all);
+  const sessions: string = `${all} sessions connect, send a DATA the game server echoes, and leave`;
+  if (finished === all) {
+    t.pass(sessions);
+  } else {
+    t.fail(sessions, `${finished} of ${all} finished; ${relayState(files)}`);
+  }
   const warm: string = lineAt(text, SOAK_WARMUP);
   const last: string = lineAt(text, all);
-  if (!t.ok("the relay reported after warm-up and at the end", warm.length > 0 && last.length > 0)) {
-    writeError(text);
+  if (warm.length === 0 || last.length === 0) {
+    t.fail("the relay reported after warm-up and at the end", `its report: ${oneLine(text)}; ${relayState(files)}`);
     return;
   }
+  t.pass("the relay reported after warm-up and at the end");
   const resident: i64 = field(last, "rss") - field(warm, "rss");
   // The figures, on stderr: stdout is the checks alone, which `expected.out` pins.
   const figures: string = `after ${SOAK_WARMUP} sessions of warm-up: arena mark ${field(warm, "mark")} used ${field(warm, "used")}, resident ${field(warm, "rss")} bytes; after ${total} more: arena mark ${field(last, "mark")} used ${field(last, "used")}, resident ${field(last, "rss")} bytes (${resident} more, ${resident / toI64(total)} a session)`;
@@ -129,7 +164,7 @@ const soak = (total: i32): i32 => {
   const all: i32 = SOAK_WARMUP + total;
   // Named by the count, so that an opt-in run and `npm test`'s cannot share them.
   const files: string = `build/net_relay_soak_${all}`;
-  spawnSync(["sh", "-c", `rm -f ${files}.port ${files}.report ${files}.pid; '${process.argv[0]}' serve ${files}.port ${files}.report ${all} ${SOAK_WARMUP} > /dev/null 2>&1 & echo $! > ${files}.pid`]);
+  spawnSync(["sh", "-c", `rm -f ${files}.port ${files}.report ${files}.pid ${files}.log; '${process.argv[0]}' serve ${files}.port ${files}.report ${all} ${SOAK_WARMUP} > /dev/null 2> ${files}.log & echo $! > ${files}.pid`]);
   drive(t, total, files);
   // Whichever way `drive` ended, the relay goes with it: it has exited by itself after a full run, and is stopped here after any other.
   spawnSync(["sh", "-c", `kill $(cat ${files}.pid) 2> /dev/null; rm -f ${files}.pid`]);
@@ -144,5 +179,9 @@ export const main = (): i32 => {
   if (argc === 3 && process.argv[1] === "soak") {
     return soak(toI32(field(`n ${process.argv[2]}`, "n")));
   }
-  return soak(n32(2000));
+  // `npm test`'s run answers 0 whatever it found, and its stdout carries the verdict: both runners compare it
+  // with `expected.out`, so a failure still fails, and `tests/nish/run.ts`, which shows a case's stdout only
+  // when its exit code matched, then prints the failing check with its detail rather than a bare exit 1.
+  soak(n32(2000));
+  return 0;
 };
