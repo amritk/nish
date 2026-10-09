@@ -7,8 +7,8 @@ parser and WebSocket framing (#399); H2's HPACK (#406); and QUIC packets and
 connections, Q1 (#404) and Q2 (#441, #444). §5a has each lane's pull requests
 and what it left. **Open:** the HTTP/1.1 and HTTP/2 servers (the rest of H1
 and H2), QUIC loss recovery and streams (Q3, Q4), HTTP/3 and WebTransport (R1,
-R2), the relay itself (A1) with N9's soak, the loopback suite, and the interop
-job of decision S2. 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
+R2), the relay itself (A1) with N9's soak, and the interop job of decision
+S2. The loopback suite across every carrier has landed (#489). 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
 K1–K6 (less HKDF-Expand-Label, #398); everything else from T1 on is
 on `main` and not yet released, so cs cannot use it until a release does (§7).
 
@@ -372,7 +372,7 @@ memory a whole connection keeps pinned beside it.
 | --- | --- | --- | --- | --- |
 | 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) | done but for the QPACK tables |
 | 1 | a release carrying N1–N3, N5, N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — | 0.16.0 carries N1–N3, N5 and N6 and K1–K6, less #398, #402 and #411; T1, T2 and Q2 are on `main`; the H1 server and the rest of H2 are open |
-| 2 | — | Q3, Q4, R1; the loopback suite | — | open |
+| 2 | — | Q3, Q4, R1; the loopback suite | — | open; the loopback suite landed (#489) |
 | 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust | open |
 | 4 | — | S5's reverse proxy | the Rust relay retired | open |
 
