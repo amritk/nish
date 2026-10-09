@@ -144,9 +144,11 @@ const firstBadCut = (data: u8[], server: boolean): i32 => {
   const n: i32 = toI32(data.length);
   const whole: string = transcript(data, n, server);
   for (let cut: i32 = 0; cut < n; cut += 1) {
-    const mark: i64 = Arena.mark();
+    // Each pass builds a decoder and its transcript, which nothing keeps. A
+    // `using a = arena()` block would free them, but NL2424 refuses it: the decoder
+    // stores what it allocates into memory. The inputs are short, so the passes are
+    // left to the arena until the program exits.
     const same: boolean = transcript(data, cut, server) === whole;
-    Arena.release(mark);
     if (!same) {
       return cut;
     }

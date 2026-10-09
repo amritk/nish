@@ -41,7 +41,7 @@ import {
   POS_RETURN,
   pushAll,
   tsKeyword,
-  tsSignature,
+  tsSignatureLine,
   TypedView,
   typedView,
 } from "./interop-abi"
@@ -737,7 +737,7 @@ export const generateWasmLoader = (
     lines.push("    memory: raw.memory,")
   }
   for (const fn of bridge.bridged) {
-    lines.push(`    /** ${fn.unit.name}: ${tsSignature(table, fn.sig)} */`)
+    lines.push(tsSignatureLine(table, fn.sig, `    /** ${fn.unit.name}: `, " */"))
     for (const line of wasmWrapper(table, fn)) {
       lines.push(`    ${line}`)
     }

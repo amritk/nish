@@ -521,22 +521,11 @@ const generateProgram = (seed, opts = {}) => {
  *
  * The list is for one release: once the seed is a release that carries the
  * change, the entry covers nothing and the run fails until it is deleted.
- * Only reachable functions belong here. #427's CG-8 also took `willreturn`
- * from `nish_read_file`, `nish_write_file`, `nish_append_file`,
- * `nish_alloc_array`, `nish_read_file_or_null` and `nish_read_file_bytes`,
- * but a generated program reads no file and builds no array, and 200
- * programs from seed 7000 differ only at `nish_str_concat`, so declaring them
- * would only be an entry nothing can make stale.
+ * Only reachable functions belong here. It is empty while the seed carries
+ * every change HEAD makes to a generated program: 0.17.0 shipped CG-8's
+ * `nish_str_concat` entry, the one the example above shows, and retired it.
  */
-const DECLARED = [
-  {
-    function: "nish_str_concat",
-    seed: "{ nounwind willreturn }",
-    head: "{ nounwind }",
-    changelog: "Close CG-2, CG-3, CG-4, CG-8 and CG-10",
-    why: "CG-8: a concatenation past 2^31 - 1 bytes exits, so `nish_str_concat` is no longer `willreturn`",
-  },
-]
+const DECLARED = []
 
 /**
  * The changes a group comparison cannot state: a program whose IR loses
@@ -545,14 +534,14 @@ const DECLARED = [
  * two texts. A module only an entry here explains still has to show every
  * group change it makes under a function `DECLARED` names, or it counts
  * toward none of them (`groupTransitions`).
+ *
+ * Empty for the same reason as `DECLARED`: 0.17.0 shipped the dropped
+ * division and `pop` checks its last entry declared, with
+ * `explains: (reference, candidate) => onlyDropsChecks(reference, candidate)`.
+ * `onlyDropsChecks` stays, held to fabricated pairs on every `npm test`, for
+ * the next release that drops a check.
  */
-const DECLARED_CHECKS = [
-  {
-    changelog: "--deny-panics and noPanic refuse every remaining panic site",
-    why: "a divisor proven to be neither 0 nor -1, and a `pop` behind a test that its array holds an element, lose their check",
-    explains: (reference, candidate) => onlyDropsChecks(reference, candidate),
-  },
-]
+const DECLARED_CHECKS = []
 
 /** How many times each runtime panic is called, and each check block opened, in an IR text. */
 const panicCounts = (ir) => {
