@@ -19,7 +19,7 @@ import { pollCreate, pollWait } from "nish:net";
 import { spawnSync } from "nish:process";
 import { writeError } from "nish:io";
 import { Suite } from "nish/testing";
-import { n32, n64 } from "../net_quic_frame/typed";
+import { n32 } from "../net_quic_frame/typed";
 import { echoSocket, wave } from "./drive";
 import { serve } from "./serve";
 
@@ -27,6 +27,18 @@ import { serve } from "./serve";
 const SOAK_WARMUP: i32 = 500;
 /** Sessions at once. */
 const SOAK_WAVE: i32 = 16;
+
+/**
+ * Resident growth allowed past warm-up, for the whole run whatever its length:
+ * four pages. A leak is caught by the arena check, which is exact to the byte
+ * and sees every allocation the relay makes, since every Nish allocation is
+ * the arena's. What the resident set adds is memory the arena does not hold —
+ * the stack, the C runtime, a page the kernel faults in late — and there one
+ * page touched once after warm-up is not a leak. The bound is fixed rather
+ * than per session, so growth still fails it: 1 byte a session outside the
+ * arena over the 100,000-session run is 100,000 bytes, six times this.
+ */
+const SOAK_RSS_BOUND: i64 = 16384;
 
 /** The decimal number `text` spells from `at`, or -1. */
 const numberAt = (text: string, at: i32): i64 => {
@@ -149,9 +161,9 @@ const drive = (t: Suite, total: i32, files: string): void => {
   } else {
     t.fail(flatArena, figures);
   }
-  // Exactly: once warm, the relay touches no page it had not touched (0 bytes over 100,000 sessions, #515).
-  const flatResident: string = `resident memory flat over ${total} sessions past warm-up: not one page more`;
-  if (field(warm, "rss") > 0 && resident === n64(0)) {
+  // 0 over 100,000 sessions on the machine #515 was measured on; the bound is for a page faulted in once elsewhere.
+  const flatResident: string = `resident memory flat over ${total} sessions past warm-up, within ${SOAK_RSS_BOUND} bytes for the whole run`;
+  if (field(warm, "rss") > 0 && resident <= SOAK_RSS_BOUND) {
     t.pass(flatResident);
   } else {
     t.fail(flatResident, figures);
