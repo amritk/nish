@@ -1,0 +1,1 @@
+`Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32)

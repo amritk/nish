@@ -613,6 +613,16 @@ const QPACK_NEW = [
 
 const DECLARED = [
   {
+    program: "tests/cases/math_clz32.ts",
+    changelog: "Add `Math.clz32`, the leading zero bits of a 32-bit integer",
+    why: "a new program: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",
+  },
+  {
+    program: "docs/cookbook/builtin-math-clz32.ts",
+    changelog: "Add `Math.clz32`, the leading zero bits of a 32-bit integer",
+    why: "a new cookbook entry: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",
+  },
+  {
     program: "tests/link/net_hpack/main.ts",
     changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
     why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
