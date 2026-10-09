@@ -7793,25 +7793,34 @@ if (!only || "simd".includes(only)) {
   }
 
   // The NEON path, on a host that is not AArch64: a static cross link, run directly,
-  // which works where binfmt_misc hands an AArch64 binary to qemu-user. A host
-  // without a cross libc, or without that registration, is told which it lacks.
+  // which works where binfmt_misc hands an AArch64 binary to qemu-user. Whether a
+  // cross libc is installed is asked of a program with nothing in it, so that a
+  // host without one is a skip and a driver that does not compile is a failure.
   if (process.arch !== "arm64") {
     const a64 = path.join(simdDir, "index-of-any.aarch64")
     const cross = ["--target=aarch64-linux-gnu", "-static", "-fuse-ld=lld"]
-    const linked = build(cross, a64)
-    const r = linked.status === 0 ? spawnSync(a64, [], { encoding: "utf8" }) : null
-    // A binary the kernel cannot execute is not an error to spawnSync: it hands the
-    // file to /bin/sh, which fails on it. So the driver ran when it printed its own
-    // line (a summary or a FAIL) or died of a signal, and not otherwise.
-    const ran = r !== null && (r.signal !== null || /^(index-of-any:|FAIL )/m.test(String(r.stdout)))
-    if (ran) {
-      judge("aarch64 through binfmt, the NEON path", linked, r)
+    const empty = path.join(simdDir, "empty.c")
+    fs.writeFileSync(empty, "int main(void) { return 0; }\n")
+    const libc = spawnSync("clang", [...cross, empty, "-o", path.join(simdDir, "empty.aarch64")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (libc.status !== 0) {
+      skip("simd: no AArch64 cross libc links here (libc6-dev-arm64-cross): the NEON path is not run")
     } else {
-      skip(
-        r !== null
-          ? "simd: this host cannot run an AArch64 binary (no binfmt_misc entry for qemu-user): the NEON path is not run"
-          : "simd: no AArch64 cross libc links here (libc6-dev-arm64-cross): the NEON path is not run"
-      )
+      const linked = build(cross, a64)
+      const r = linked.status === 0 ? spawnSync(a64, [], { encoding: "utf8" }) : null
+      // A binary the kernel cannot execute is not an error to spawnSync: it hands the
+      // file to /bin/sh, which fails on it. So the driver ran when it printed its own
+      // line (a summary or a FAIL) or died of a signal, and not otherwise.
+      const ran = r !== null && (r.signal !== null || /^(index-of-any:|FAIL )/m.test(String(r.stdout)))
+      if (linked.status !== 0 || ran) {
+        judge("aarch64 through binfmt, the NEON path", linked, r)
+      } else {
+        skip(
+          "simd: this host cannot run an AArch64 binary (no binfmt_misc entry for qemu-user): the NEON path is not run"
+        )
+      }
     }
   }
 

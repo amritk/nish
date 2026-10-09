@@ -244,9 +244,11 @@ The resolver asks `cpuid` itself rather than calling
 object that defines it runs a constructor at start-up in every program whose
 link names it, kernel called or not: `examples/hello.ts` at `--profile speed`
 went from 4,712 bytes to 10,000 and ran 374 more instructions with it. With
-`cpuid.h`, which is inline assembly, hello is byte-identical with and without
-the unit, and `tests/run.js` checks that a program which never calls the
-kernel links none of it (`node tests/run.js simd`).
+`cpuid.h`, which is inline assembly, hello measured byte-identical with and
+without the unit on 2026-10-09. What `tests/run.js` pins on every run
+(`node tests/run.js simd`) is the part of that which can regress: at the speed
+and size profiles, the link map of hello names no symbol of the unit and no
+libgcc CPU probe, while a program that calls the kernel keeps every path.
 
 ### Checked arithmetic
 

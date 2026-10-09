@@ -153,6 +153,16 @@ int main(int argc, char **argv) {
   const char *avx2_note;
   nish_any_path best = nish_any_base;
 #if defined(NISH_SIMD_SSE2)
+  /* The runtime's detector against libgcc's, which the runtime avoids only
+     for its start-up constructor (runtime-simd.c, `nish_cpu_has_avx2`) and
+     which costs nothing here. A detector that wrongly answered no would
+     otherwise drop the AVX2 path from this run without a failure. */
+  __builtin_cpu_init();
+  if (nish_cpu_has_avx2() != (__builtin_cpu_supports("avx2") != 0)) {
+    printf("FAIL detector: nish_cpu_has_avx2 says %d, __builtin_cpu_supports(\"avx2\") says %d\n",
+           nish_cpu_has_avx2(), __builtin_cpu_supports("avx2") != 0);
+    return 1;
+  }
   if (nish_cpu_has_avx2()) {
     paths[npaths++] = (path_t){"avx2", nish_any_avx2};
     best = nish_any_avx2;

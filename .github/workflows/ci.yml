@@ -275,6 +275,17 @@ jobs:
 
       # The steps from here on run in shard 1 only: each answers once for the
       # commit, and every shard built the same compiler.
+
+      # WP38 S1: the `simd` section (shard 1) passes when the kernel's paths
+      # agree, which they also do when the AVX2 path did not run at all. These
+      # runners have AVX2, so here the driver the suite built must name it, as
+      # the `simd-arm64` job's line must name the NEON path.
+      - name: The AVX2 path ran
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
+
       #
       # `build/nish` is what the steps after the suite drive: stage1, one
       # directory below the repository root, which is where its package root is
