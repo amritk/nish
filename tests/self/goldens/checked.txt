@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 927 programs, 63034 dump lines.
+# 928 programs, 63073 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42502,6 +42502,46 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 7:9 z: f64 (const)
   local 8:9 big: i64 (const)
+program tests/cases/math_minmax_float.ts
+module tests/cases/math_minmax_float.ts (entry)
+function minF64(a: f64, b: f64): f64 -> @minF64 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.minnum.f64
+  stackSites=0 stackLocals=0
+function maxF64(a: f64, b: f64): f64 -> @maxF64 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.maxnum.f64
+  stackSites=0 stackLocals=0
+function minF32(a: f32, b: f32): f32 -> @minF32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.minnum.f32
+  stackSites=0 stackLocals=0
+function maxF32(a: f32, b: f32): f32 -> @maxF32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.maxnum.f32
+  stackSites=0 stackLocals=0
+function isNan(x: f64): boolean -> @isNan
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isNan maxF32 maxF64 minF32 minF64 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 14:9 zero: f64 (const)
+  local 15:9 nan: f64 (const)
+  local 16:9 one: f64 (const)
+  local 17:9 nan32: f32 (const)
+  local 18:7 ok: i32 (let)
+  callee 19:7 minF64 -> @minF64
+  callee 20:7 minF64 -> @minF64
+  callee 21:7 maxF64 -> @maxF64
+  callee 22:7 minF64 -> @minF64
+  callee 23:7 maxF64 -> @maxF64
+  callee 24:7 isNan -> @isNan
+  callee 24:13 minF64 -> @minF64
+  callee 25:7 minF32 -> @minF32
+  callee 26:7 maxF32 -> @maxF32
+  callee 27:7 minF32 -> @minF32
 program tests/cases/math_numeric_separators.ts
 module tests/cases/math_numeric_separators.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

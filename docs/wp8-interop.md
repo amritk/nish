@@ -78,8 +78,12 @@ header, `nish_array a = { n, n, (char *)buf };`. Otherwise
 
 `scripts/build.sh --profile wasm` links a freestanding module with
 `--export-all`, against `runtime/runtime-wasm.c`. That file is an arena over
-linear memory, the array cold paths, and trapping panics. It has no strings
-and no I/O. An array argument is a pointer into linear memory, which is not
+linear memory, the array cold paths, trapping panics, and the `fmin`, `fmax`,
+`fminf` and `fmaxf` that `Math.min` and `Math.max` of a float become on wasm32,
+which has no instruction with `minnum`'s NaN rule
+(`tests/cases/math_minmax_float`). It has no strings, no I/O and no other libm:
+`Math.pow`, `sin`, `cos`, `exp` and `log` still need a libm the profile does
+not link. An array argument is a pointer into linear memory, which is not
 a JS value, so `--emit-dts x.d.ts` writes two files: the declarations, which
 use typed arrays, and `x.mjs`, the loader that implements them. **Both come
 from one predicate**, `wasmSkipReason`, so that neither file can describe a
