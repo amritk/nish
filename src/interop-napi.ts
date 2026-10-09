@@ -415,6 +415,25 @@ const napiRangeFailCall = (mode: i32, message: string): string => {
 }
 
 /**
+ * `napiReaderLines`, indented into `lines`. The lines are kept, so building
+ * them inside the loop over the parameters is building what the loop keeps,
+ * and the loop is told so once, here.
+ */
+const pushReaderLines = (
+  lines: string[],
+  r: Reader,
+  c: string,
+  i: i32,
+  what: string,
+  mode: i32,
+  json: boolean
+): void => {
+  for (const line of napiReaderLines(r, c, i, what, mode, json)) {
+    lines.push(`  ${line}`)
+  }
+}
+
+/**
  * Declaration and conversion lines for parameter `c` read from `argv[i]`.
  * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
  */
@@ -919,16 +938,7 @@ const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   i = 0
   while (i < p.readers.length) {
     const what = `${jsName}: argument ${i + 1} (${sig.paramNames[i]})`
-    for (const line of napiReaderLines(
-      p.readers[i],
-      cParamName(sig.paramNames[i]),
-      i,
-      what,
-      FAIL_REJECT,
-      table.json
-    )) {
-      lines.push(`  ${line}`)
-    }
+    pushReaderLines(lines, p.readers[i], cParamName(sig.paramNames[i]), i, what, FAIL_REJECT, table.json)
     i = i + 1
   }
   lines.push(`  ${work} *nish_w = (${work} *)malloc(sizeof *nish_w);`)
@@ -1007,16 +1017,7 @@ const napiWrapper = (table: TypeTable, p: Plan): string[] => {
   let i = 0
   while (i < p.readers.length) {
     const what = `${name}: argument ${i + 1} (${sig.paramNames[i]})`
-    for (const line of napiReaderLines(
-      p.readers[i],
-      cParamName(sig.paramNames[i]),
-      i,
-      what,
-      mode,
-      table.json
-    )) {
-      lines.push(`  ${line}`)
-    }
+    pushReaderLines(lines, p.readers[i], cParamName(sig.paramNames[i]), i, what, mode, table.json)
     i = i + 1
   }
 

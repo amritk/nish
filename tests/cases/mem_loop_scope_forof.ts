@@ -4,10 +4,11 @@
 // that pass, and so is every element of it, which is why the variable of a
 // `for...of` nested in the body counts as the body's own.
 //
-// `words` stores each string it makes into the array it returns, and the
-// escape analysis counts any store of an allocation as an escape, so a loop
-// that calls it is never scoped: `lastWord` is refused for that before its
-// assignment to `last` is even read. `letters` iterates numbers instead.
+// `words` stores each string it makes into the array it returns, so a call
+// of it answers elements as new as the call, and the variable of a `for...of`
+// over one is that call's. `lastWord`'s loop assigns that variable to `last`,
+// declared outside the pass, so the pass is refused, and the string goes back
+// to `lastWord`'s caller as its answer. `letters` iterates numbers instead.
 class Box {
   n: i32;
 
