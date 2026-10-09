@@ -326,10 +326,12 @@ export const main = (): number => {
   t.eqStr("an empty key is not a field of any other name", jsonCaseField(asked, '{"":1}', "a"), "<absent>");
   t.eqStr("the empty name beside others, asked twice", jsonCaseFields(asked, '{"a":1,"":2}', ["", "a", ""]), "2|1|2");
   t.eqStr("and absent beside a name that answers", jsonCaseFields(asked, '{"a":1}', ["", "a"]), "<absent>|1");
-  // Every name answers before the fault, so the scan has stopped by the time
-  // it would reach it, and the fault changes nothing.
-  t.eqStr("a fault after every name has answered changes nothing", jsonCaseFields(asked, '{"a":1,"b":2,"c', ["b", "a"]), "2|1");
-  t.eqStr("nor does one after a name asked twice", jsonCaseFields(asked, '{"a":1,"b":2 junk', ["a", "a"]), "1|1");
+  // A fault after every name has answered leaves the answers as they are.
+  // These do not pin the early stop: a slot is only ever filled once, so a
+  // scan that read on to the fault would answer the same. That stop is a
+  // speed path no answer can observe.
+  t.eqStr("a fault after every answer leaves the answers", jsonCaseFields(asked, '{"a":1,"b":2,"c', ["b", "a"]), "2|1");
+  t.eqStr("and so does one after a name asked twice", jsonCaseFields(asked, '{"a":1,"b":2 junk', ["a", "a"]), "1|1");
 
   // The last object's names, then everything at once.
   agreeAndMove(asked, "");

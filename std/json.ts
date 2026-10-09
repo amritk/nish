@@ -607,7 +607,8 @@ export const jsonField = (object: string, name: string): string | null => {
  * It is for a caller that wants several fields of one line — a diagnostic's
  * `code`, `line` and `message` — and would otherwise scan the line once per
  * field. This scans it once, left to right, and stops as soon as every name has
- * answered. Each slot keeps the **first** field of its name, as `jsonField`
+ * answered: a speed path and nothing more, since a slot is filled only once
+ * and reading on could change no answer. Each slot keeps the **first** field of its name, as `jsonField`
  * does; a name asked for twice answers in both slots; and a malformed object
  * answers in each slot what `jsonField` answers for that name, because both
  * stop at the same member.

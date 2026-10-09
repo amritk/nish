@@ -111,8 +111,8 @@ PASS  and is absent where no key is empty
 PASS  an empty key is not a field of any other name
 PASS  the empty name beside others, asked twice
 PASS  and absent beside a name that answers
-PASS  a fault after every name has answered changes nothing
-PASS  nor does one after a name asked twice
+PASS  a fault after every answer leaves the answers
+PASS  and so does one after a name asked twice
 PASS  jsonFields agrees with jsonField, slot for slot, on every object above
 PASS  and it compared every slot asked
 PASS  1,000 jsonFields calls leave Arena.used() where one call left it

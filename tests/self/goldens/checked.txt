@@ -53743,22 +53743,22 @@ function jsonField(object: string, name: string): string | null -> @nish.jsonFie
   callee 596:14 jsonValueText -> @nish.jsonValueText
 function jsonFields(object: string, names: string[]): string | null[] -> @nish.jsonFields [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 649:11
+  sharedWrite: 650:11
   escaping: object
   calls: nish.jsonFirstKey nish.jsonKeyEquals nish.jsonReadMember nish.jsonValueText nish_exit nish_panic_overflow nish_write
   pointer names: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 629:9 count: i32 (const)
-  local 630:9 values: string | null[] (const)
-  local 631:9 member: JsonMember (const)
-  local 632:7 missing: i32 (let)
-  local 633:7 at: i32 (let)
-  callee 633:17 jsonFirstKey -> @nish.jsonFirstKey
-  callee 634:25 jsonReadMember -> @nish.jsonReadMember
-  local 637:9 text: string | null (let)
-  local 638:9 k: i32 (let)
-  callee 642:33 jsonKeyEquals -> @nish.jsonKeyEquals
-  callee 644:18 jsonValueText -> @nish.jsonValueText
+  local 630:9 count: i32 (const)
+  local 631:9 values: string | null[] (const)
+  local 632:9 member: JsonMember (const)
+  local 633:7 missing: i32 (let)
+  local 634:7 at: i32 (let)
+  callee 634:17 jsonFirstKey -> @nish.jsonFirstKey
+  callee 635:25 jsonReadMember -> @nish.jsonReadMember
+  local 638:9 text: string | null (let)
+  local 639:9 k: i32 (let)
+  callee 643:33 jsonKeyEquals -> @nish.jsonKeyEquals
+  callee 645:18 jsonValueText -> @nish.jsonValueText
 program docs/cookbook/map-fused-extras.ts
 module docs/cookbook/map-fused-extras.ts (entry)
 import getOrInsert from "nish/map" -> generic function getOrInsert

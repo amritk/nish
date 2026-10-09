@@ -149,7 +149,9 @@ three times. `jsonFields(object, names)` reads it once and answers one slot per
 name, in the order of `names`; slot `k` is what `jsonField(object, names[k])`
 answers, in every case: a name that is not there, a duplicated key (the first
 wins), a name asked twice, and a malformed object, where both stop at the same
-member. It stops as soon as every name has answered.
+member. It stops as soon as every name has answered, which saves time and
+nothing else: a slot is filled once, so reading on could change no answer, and
+no test can see the stop.
 
 The JavaScript shape would be one scanner taking a callback per member. With no
 function values, the two readers instead share the step that reads one member:
