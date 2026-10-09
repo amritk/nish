@@ -623,7 +623,7 @@ export const jsonField = (object: string, name: string): string | null => {
  * the pass neither reader keeps the release (LANGUAGE.md, "Memory model").
  * Reading `values` back, passing it to a function, or storing it anywhere
  * before the return would undo this; `tests/link/std_json` pins the flat
- * arena.
+ * arena and the `using` block.
  */
 export const jsonFields = (object: string, names: string[]): (string | null)[] => {
   const count: i32 = toI32(names.length)

@@ -118,4 +118,5 @@ PASS  and it compared every slot asked
 PASS  1,000 jsonFields calls leave Arena.used() where one call left it
 PASS  and every call answered the same bytes
 PASS  a 1,000-pass jsonFields loop keeps Arena.used() flat on every pass
-json: 120 passed, 0 failed, 0 skipped
+PASS  a using arena() block may hold a jsonFields call, and takes back all it built
+json: 121 passed, 0 failed, 0 skipped

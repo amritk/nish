@@ -167,8 +167,9 @@ is otherwise only tested and returned. LANGUAGE.md's
 [Memory model](LANGUAGE.md#memory-model) carries such a value back to the
 caller with the array, as returned rather than stored, so a loop that calls
 `jsonFields` keeps its per-pass release and a `using a = arena()` block may
-hold the call (`tests/link/std_json`: a 1,000-pass loop keeps `Arena.used()`
-flat on every pass). Before that rule, each store counted as a store into
+hold the call. `tests/link/std_json` pins both: a 1,000-pass loop keeps
+`Arena.used()` flat on every pass, and a `using a = arena()` block around a
+call compiles, where NL2424 used to refuse it, and gives back all it built. Before that rule, each store counted as a store into
 memory, and a loop over `jsonFields` kept about 192 bytes per call on a
 `bench/json` line. The rule is narrow: reading `values` back, passing it to a
 function or storing it anywhere would lose it, so the function keeps the array

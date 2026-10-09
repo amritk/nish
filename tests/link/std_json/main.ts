@@ -141,6 +141,24 @@ const jsonFieldsPassSpread = (line: string, passes: i32): i64 => {
   return hi - lo;
 };
 
+/**
+ * How far `Arena.used()` moves across a `using a = arena()` block that holds a
+ * `jsonFields` call, or -1 when the call misses `message`. The block compiles
+ * only because `jsonFields` stores nothing into memory older than the call:
+ * NL2424 refuses one around a function that does (LANGUAGE.md, `using a =
+ * arena()`).
+ */
+const jsonFieldsInArena = (line: string): i64 => {
+  const before = Arena.used();
+  let found = false;
+  {
+    using a = arena();
+    const message = jsonFields(line, ["code", "line", "message"])[2];
+    found = message !== null;
+  }
+  return found ? Arena.used() - before : -1;
+};
+
 /** One byte as a string, so a check can spell a name's UTF-8 byte by byte. */
 const byte = (code: i32): string => String.fromCharCode(code);
 
@@ -380,6 +398,7 @@ export const main = (): number => {
   // and the pass takes both back (LANGUAGE.md, "Memory model").
   const flat: i64 = 0;
   t.eqI64("a 1,000-pass jsonFields loop keeps Arena.used() flat on every pass", jsonFieldsPassSpread(diagnostic, 1000), flat);
+  t.eqI64("a using arena() block may hold a jsonFields call, and takes back all it built", jsonFieldsInArena(diagnostic), flat);
 
   return t.done();
 };
