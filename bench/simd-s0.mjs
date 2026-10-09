@@ -3,9 +3,10 @@
 // (docs/wp38-simd.md §2.3 and §7). Nothing here is built into the compiler; it
 // only measures what the current one does.
 //
-//   npm run build && node bench/simd-s0.mjs [--runs N] [--only a,b] [--compiler <nish>]
+//   npm run build && node bench/simd-s0.mjs [--runs N] [--only a,b] [--self] [--compiler <nish>]
 //     --runs N    timed runs per row after one warm-up (default 7, the note's minimum)
 //     --only a,b  rows to run: scan, nbody, vec3, spectral, bootstrap (default: all)
+//     --self      time each -march row's baseline against a copy of itself too
 //
 // What it times, and why each row is built the way it is:
 //
@@ -26,7 +27,10 @@
 //              which is what an opt-in CPU level would do (§3.4). Only the link
 //              differs, so the column is the target and nothing else. The two
 //              binaries run in alternating rounds and must print the same
-//              checksum.
+//              checksum. With --self a byte-for-byte copy of the baseline
+//              joins the rotation as a third column: what separates a binary
+//              from itself on this machine, in these rounds, is the noise a
+//              gain or a loss has to stand out of (§7 S2).
 //   bootstrap  `scripts/bootstrap.sh --verify`, seed to stage3, into a work
 //              directory under build/bench so build/nish is left alone. This is
 //              the self-compilation time S4 is judged by.
@@ -55,12 +59,15 @@ const fail = (msg) => {
 const ROWS = ["scan", "nbody", "vec3", "spectral", "bootstrap"]
 let runs = 7
 let only = new Set(ROWS)
+let self = false
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--runs") {
     runs = Number(argv[++i])
   } else if (argv[i] === "--only") {
     only = new Set((argv[++i] ?? "").split(",").filter(Boolean))
+  } else if (argv[i] === "--self") {
+    self = true
   } else {
     fail(`unknown option ${argv[i]}`)
   }
@@ -139,23 +146,25 @@ const timeRuns = (what, time) => {
 }
 
 /**
- * Two builds timed against each other in alternating rounds, as
- * bench/README.md's in-process comparisons are, so a slow stretch of a shared
- * machine falls on both columns rather than on whichever ran second. One
- * warm-up of each, then `runs` rounds (rounded up to even), each running both
- * and swapping which goes first. Both must print the same answer:
- * [{ min, median, answer }, ...].
+ * Builds timed against each other in rotating rounds, as bench/README.md's
+ * in-process comparisons are, so a slow stretch of a shared machine falls on
+ * every column rather than on whichever ran last. One warm-up of each, then
+ * `runs` rounds (rounded up to a multiple of the count), each running all of
+ * them and rotating which goes first. All must print the same answer:
+ * [{ min, median, answer }, ...], one per build.
  */
-const timeAlternating = (what, a, b) => {
-  const times = [[], []]
+const timeAlternating = (what, ...builds) => {
+  const n = builds.length
+  const times = builds.map(() => [])
   let answer = null
-  // An even count of timed rounds, counted from the first timed one, so each
-  // build goes first in exactly half of them: `--runs 7` times eight.
-  const rounds = runs + (runs % 2)
+  // A count of timed rounds that is a multiple of the builds', counted from the
+  // first timed one, so each build goes first equally often: `--runs 7` times
+  // eight rounds of two, or nine of three.
+  const rounds = Math.ceil(runs / n) * n
   for (let i = 0; i <= rounds; i++) {
-    const order = i % 2 === 1 ? [0, 1] : [1, 0]
+    const order = builds.map((_, j) => (i + 1 + j) % n)
     for (const k of order) {
-      const r = [a, b][k]()
+      const r = builds[k]()
       if (answer !== null && r.answer !== answer) {
         fail(`${what}: round ${i} printed ${JSON.stringify(r.answer)}, not ${JSON.stringify(answer)}`)
       }
@@ -299,9 +308,25 @@ for (const name of ["nbody", "vec3", "spectral"].filter((n) => only.has(n))) {
   const wide = path.join(outDir, `${name}-${MARCH}`)
   link(base, process.env)
   link(wide, { ...process.env, CC: wideCC })
-  const [b, w] = timeAlternating(name, timeProcess(base, []), timeProcess(wide, []))
-  row(name, "baseline", b)
-  row(name, MARCH, w)
+  if (self) {
+    // A copy rather than the same path twice, so the two columns share
+    // nothing the third does not: each is its own file, mapped on its own.
+    const copy = path.join(outDir, `${name}-baseline-copy`)
+    fs.copyFileSync(base, copy)
+    const [b, c, w] = timeAlternating(
+      name,
+      timeProcess(base, []),
+      timeProcess(copy, []),
+      timeProcess(wide, [])
+    )
+    row(name, "baseline", b)
+    row(name, "baseline (copy)", c)
+    row(name, MARCH, w)
+  } else {
+    const [b, w] = timeAlternating(name, timeProcess(base, []), timeProcess(wide, []))
+    row(name, "baseline", b)
+    row(name, MARCH, w)
+  }
 }
 
 // ---- bootstrap -------------------------------------------------------------------------------
@@ -344,16 +369,21 @@ const cpu = (() => {
     return "unknown"
   }
 })()
+const columns = self ? 3 : 2
 console.log(
-  `\n${runs} runs after one warm-up (the -march rows: ${runs + (runs % 2)} alternating rounds), at ${commit}, on ${cpu}`
+  `\n${runs} runs after one warm-up (the -march rows: ${Math.ceil(runs / columns) * columns} rotating rounds of ${columns}), at ${commit}, on ${cpu}`
 )
+/** The gain of `to` over `from` on the minimum and the median, in percent. */
+const gains = (from, to) =>
+  `${((100 * (from.min - to.min)) / from.min).toFixed(1)}% on the minimum, ${((100 * (from.median - to.median)) / from.median).toFixed(1)}% on the median`
 for (const name of ["nbody", "vec3", "spectral"]) {
   const b = results.find((r) => r.name === name && r.column === "baseline")
+  const c = results.find((r) => r.name === name && r.column === "baseline (copy)")
   const w = results.find((r) => r.name === name && r.column === MARCH)
   if (b && w) {
-    const gain = (b.min - w.min) / b.min
-    console.log(
-      `${name}: -march=${MARCH} ${(100 * gain).toFixed(1)}% on the minimum (${b.min.toFixed(1)} -> ${w.min.toFixed(1)} ms)`
-    )
+    console.log(`${name}: -march=${MARCH} ${gains(b, w)} (${b.min.toFixed(1)} -> ${w.min.toFixed(1)} ms)`)
+  }
+  if (b && c) {
+    console.log(`${name}: the baseline against its own copy ${gains(b, c)}`)
   }
 }
