@@ -1,10 +1,14 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: accepted; S0–S2 in progress (tracking issue #516).** The owner
-took the decisions in §8 on 2026-10-09, as recommended. S0's baselines are in
-§2.3. Nothing else in this note has a flag, a type or a runtime symbol yet:
-each one arrives with its stage, and its rule goes into
-[LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
+**Status: accepted; S0 and S1's kernel and surface landed, S2 declined for
+now (tracking issue #516).** The owner took the decisions in §8 on
+2026-10-09, as recommended. S0's baselines are in §2.3 (#517). S1's kernel,
+`runtime/runtime-simd.c` (#518), and its `std/text` function, `indexOfAny`
+(#519), are built; moving `std/json` onto it, and the `bench/json` bar S1 is
+judged by, wait for #507. S2's `--cpu` flag is not built, because S0's figures
+miss its bar (§7). S3 and S4 have no flag, type or runtime symbol yet: each
+arrives with its stage, and its rule goes into [LANGUAGE.md](LANGUAGE.md)
+then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
 work as additive. LANGUAGE.md stays normative and this note adds no rule to
 it; where they disagree, LANGUAGE.md wins.
 
@@ -208,7 +212,8 @@ The first, unalternated run of this script, at `97210d5`, put spectral at 8.0%
 and nbody at −3.5%. Alternating the two builds is meant to stop drift on the
 machine from landing on one column only, and these rows replace that run.
 
-**For S2's bar the outcome is undecided.** The bar is ≥10% at one level on
+**For S2's bar the outcome was undecided when S0 was written; §7 records how
+`s2-cpu` read it.** The bar is ≥10% at one level on
 at least one of nbody, vec3 or spectral, with no loss on the others. Per
 benchmark:
 
@@ -268,9 +273,13 @@ borrowing room. Two candidates:
 
 A wider path (AVX2) is compiled with `__attribute__((target("avx2")))` and
 chosen lazily, per kernel, on that kernel's first call. Each kernel is called
-through a pointer that starts at a resolver. The resolver asks
-`__builtin_cpu_supports` (after `__builtin_cpu_init`), stores the path it
-picks and calls it. A later call goes straight to the stored path. Nothing
+through a pointer that starts at a resolver. The resolver asks the CPU
+directly, with `cpuid` and `xgetbv`, stores the path it picks and calls it.
+It does not use `__builtin_cpu_supports`: that links libgcc's
+`__cpu_indicator_init` constructor into every program, which #518 measured
+taking `examples/hello.ts` from 4,712 bytes to 10,000 and its run 374
+instructions longer (`runtime/runtime-simd.c`,
+[wp7-runtime.md](wp7-runtime.md#the-vector-unit)). A later call goes straight to the stored path. Nothing
 runs when the program starts, so a program that never calls a kernel pays
 nothing, in time or in instructions, and `bench/instructions.json` cannot
 move for it. glibc's `memchr` and simdjson also choose their paths at run
@@ -502,12 +511,21 @@ a printed checksum.
 
 | Stage | What | Ships only if |
 | --- | --- | --- |
-| **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Done**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, except `bench/json`, pending #507. |
-| **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than S0 on the same machine: from about 90 ms to about 60, between typed serde and yyjson. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. |
+| **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, except `bench/json`, pending #507. |
+| **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than S0 on the same machine: from about 90 ms to about 60, between typed serde and yyjson. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. Moving `std/json` onto it, and with that the `bench/json` bar, is pending #507. |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Declined for now**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. |
+
+**S2 is declined for now on its own bar.** spectral clears 10% in both of
+§2.3's alternating samples (10.7% and 14.7%, then 21.3% and 14.8%, minimum
+and median), but vec3 is at or below zero in three of its four figures
+(−0.3%, then −1.2% and −1.0%), so "no loss on the others" is not met, and the
+bar gives no tolerance. The flag is not built, `tests/ct-asm.js` reads only
+the baseline, and LANGUAGE.md gains no rule. It reopens on a re-measurement on
+a quiet machine, or on a same-binary noise measurement with
+`bench/simd-s0.mjs` showing vec3's dip lies inside that noise.
 
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was
