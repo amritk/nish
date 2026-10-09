@@ -6,7 +6,7 @@ PASS  tls: and every server wake kept 0 bytes over them
 PASS  tls: the client's close_notify is answered with the server's
 PASS  tls: the server saw the client's close and closed the socket
 PASS  tls: three more connections through the slot, each handshaken, echoed and closed
-tls: a connection keeps 9376, 9376 and 9376 bytes, accept to close
+tls: a connection keeps 64, 64 and 64 bytes, accept to close
 PASS  tls: with nothing gone wrong in the loop
 PASS  http/1.1: a TLS handshake offering http/1.1 across loopback
 PASS  http/1.1: ALPN chose it
@@ -18,7 +18,7 @@ PASS  http/1.1: and every server wake kept 0 bytes over them
 PASS  http/1.1: the client's close_notify is answered with the server's
 PASS  http/1.1: and the server closes the slot
 PASS  http/1.1: a request with Connection: close is answered, then the server closes with close_notify
-http/1.1: that connection kept 9376 bytes, accept to close
+http/1.1: that connection kept 64 bytes, accept to close
 PASS  http/1.1: the program answered every request and refused nothing
 PASS  http/1.1: with nothing gone wrong in the loop
 PASS  websocket: the upgrade over TLS is answered 101 with RFC 6455's accept key
