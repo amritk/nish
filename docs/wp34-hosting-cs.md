@@ -7,8 +7,8 @@ parser and WebSocket framing (#399); H2's HPACK (#406); and QUIC packets and
 connections, Q1 (#404) and Q2 (#441, #444). §5a has each lane's pull requests
 and what it left. **Open:** the HTTP/1.1 and HTTP/2 servers (the rest of H1
 and H2), QUIC loss recovery and streams (Q3, Q4), HTTP/3 and WebTransport (R1,
-R2), the relay itself (A1) with N9's soak, the loopback suite, and the interop
-job of decision S2. 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
+R2), the relay itself (A1) with N9's soak, and the interop job of decision
+S2. The loopback suite across every carrier has landed (#489). 0.16.0 carries N1, N2, N3, N5 and N6 (less #402 and `tcpConnect`, #411) and
 K1–K6 (less HKDF-Expand-Label, #398); everything else from T1 on is
 on `main` and not yet released, so cs cannot use it until a release does (§7).
 
@@ -273,7 +273,7 @@ itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 | **K3** | AES-128 and AES-256 with GCM, bitsliced so that it runs in constant time; AES-ECB as QUIC header protection | NIST SP 800-38D vectors, Wycheproof `aes_gcm` | N1, N6 | built |
 | **K4** | X25519, with 25.5-bit limbs in `i64` | RFC 7748 §5.2 and the iterated vector, Wycheproof `x25519` | N6 | built |
 | **K5** | P-256 ECDSA sign and verify, ported from fiat-crypto's 32-bit output (MIT/Apache/BSD; [licensing](../.claude/licensing.md) rules apply), with RFC 6979 nonces | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256` | N6 | built |
-| **K6** | DER, PEM and X.509: parse a key and a chain; mint the self-signed ECDSA P-256 certificate, at most fourteen days; its SHA-256 for `serverCertificateHashes` | `openssl x509 -text` reads what it mints; a golden DER; Chrome accepts the hash (A1's gate) | K1, K5, N3 | built, but for Chrome |
+| **K6** | DER, PEM and X.509: parse a key and a chain; mint the self-signed ECDSA P-256 certificate, at most fourteen days; its SHA-256 for `serverCertificateHashes` | `openssl x509 -text` reads what it mints; a golden DER; Chrome accepts the hash (A1's gate) | K1, K5, N3 | built; the mint carries the extensions Chromium's quiche requires (X509-9), and Chrome accepting the hash live is S2's interop job's |
 | **T1** | TLS 1.3 **server** handshake, carrier-agnostic. The key schedule, and ClientHello through Finished, with ALPN, SNI, the QUIC transport-parameters extension and HelloRetryRequest. No 0-RTT and no client authentication | RFC 8448 §3's full trace reproduced byte for byte for the key schedule and every server message | K1–K5 | built |
 | **T2** | TLS records over TCP | `openssl s_client`, `curl`, Chrome; a record-boundary fuzz | T1, N5 | built, but for Chrome |
 | **H1** | HTTP/1.1 server: an incremental parser, keep-alive, chunked bodies both ways, `Upgrade`; WebSocket framing (RFC 6455) | a corpus of split-at-every-byte requests, `curl`, and the Autobahn suite's server cases | N1, N2 | built against a Nish client over TCP and TLS; **`curl` and Autobahn open** (S2's interop job) |
@@ -315,7 +315,7 @@ lists what each module exports and what is verified, and
 | **K3** | #340, with Wycheproof `aes_gcm`; audit #372 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | The key schedule, packing and the block loops by disassembly (`ct_asm_aes` reads one round, one GHASH multiply and the tag compare). AES-NI and PCLMUL as builtins, per S1, when a profile asks. AES-192 is out of scope |
 | **K4** | #289; ladder by disassembly #339; Wycheproof and audit #373 | `nish/crypto/x25519` | The 255-step ladder loop, the inversion and the encodings remain discipline (`ct_asm_x25519` reads the field operations, the swap and one ladder step) |
 | **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | The 64-window loop, the table build, the inversions and the nonce derivation remain discipline (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations and one window step). A 64-bit or fixed-base-table P-256, when a profile of signing asks |
-| **K6** | #346; audit #376 | `nish/crypto/x509` (DER, PEM, a P-256 key from SEC1 or PKCS#8, a chain parsed, an ECDSA signature verified, the self-signed 1-to-14-day certificate minted, its SHA-256) | Chrome accepting the hash, which is A1's gate. It parses and does not validate: no path validation and no extensions read, which the relay's own `--cert` needs no more than |
+| **K6** | #346; audit #376 | `nish/crypto/x509` (DER, PEM, a P-256 key from SEC1 or PKCS#8, a chain parsed, an ECDSA signature verified, the self-signed 1-to-14-day certificate minted, its SHA-256) | Chrome accepting the hash, which is A1's gate: since X509-9 ([`security/crypto-x509.md`](security/crypto-x509.md)) the minted certificate carries the critical basicConstraints and keyUsage that quiche's `CertificateView` needs before it compares a hash, and the live proof is S2's `chrome (minted certificate)` lane. It parses and does not validate: no path validation and no extensions read, which the relay's own `--cert` needs no more than |
 | **T1** | #407 | `nish/net/tls` (the server state machine), `nish/net/tls/codec`, `nish/net/tls/schedule` | Groups other than x25519; NewSessionTicket, 0-RTT and client authentication (§3 keeps them out); the wipes TLS-1 records (#430) |
 | **T2** | #437 | `nish/net/tls/record`, `nish/net/tls/record-server` (TLS over a byte stream, sans-IO), `nish/net/tls-tcp` (the TCP carrier: a slot pool on `nish:net`) | Chrome; a carrier idle timeout (TLS-4); `record_size_limit`; the client role (N13) |
 | **H1** (parser) | #399 | `nish/net/http1` (the incremental request parser and the response writer), `nish/net/websocket` (RFC 6455 framing and the handshake), and `nish/crypto/sha1` for the accept key alone | The server on `nish:net`, and `curl` and the Autobahn suite's server cases against it |
@@ -349,6 +349,12 @@ over loopback, for every carrier. It is what catches two lanes that each pass
 their own vectors but disagree with each other. T2 and Q2 exist, so it can be
 written now; RFC 8448 over loopback from a Nish client (`net_tls_record_tcp`)
 and the Nish UDP client that replays aioquic's exchanges are its first pieces.
+The suite is `tests/link/net_loopback` (and its `_f64` twin): a section per
+carrier — TLS over TCP, HTTP/1.1, WebSocket, HTTP/2, QUIC, HTTP/3 and
+WebTransport — each a Nish server on the carrier and the lanes' own scripted
+clients on real loopback sockets in one `pollWait` loop, with every server
+call's `Arena.used()` flat over fifty rounds on a warm connection and the
+memory a whole connection keeps pinned beside it.
 
 ## 6. Decisions for the owner
 
@@ -366,7 +372,7 @@ and the Nish UDP client that replays aioquic's exchanges are its first pieces.
 | --- | --- | --- | --- | --- |
 | 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) | done but for the QPACK tables |
 | 1 | a release carrying N1–N3, N5, N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — | 0.16.0 carries N1–N3, N5 and N6 and K1–K6, less #398, #402 and #411; T1, T2 and Q2 are on `main`; the H1 server and the rest of H2 are open |
-| 2 | — | Q3, Q4, R1; the loopback suite | — | open |
+| 2 | — | Q3, Q4, R1; the loopback suite | — | open; the loopback suite landed (#489) |
 | 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust | open |
 | 4 | — | S5's reverse proxy | the Rust relay retired | open |
 

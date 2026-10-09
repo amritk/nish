@@ -3653,7 +3653,7 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
 | `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`): `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0` | none | `math_intrinsics` |
 | `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
-| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: `llvm.minnum/maxnum.<f32\|f64>` | none | `math_i32`, `math_intrinsics`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
+| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: `llvm.minnum/maxnum.<f32\|f64>`, which a freestanding wasm32 build gets from `runtime/runtime-wasm.c` | none | `math_i32`, `math_intrinsics`, `math_minmax_float`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
 | `Math.random(): f64` | xorshift64\* in the runtime (`nish_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
 | `Math.PI: f64`, `Math.E: f64` | constants, also in i32 mode | none | `math_i32`, `math_intrinsics` |
 
@@ -5872,6 +5872,27 @@ where its memory lives and when it is reused.
    - the function neither calls `Arena.mark`, `Arena.release` or
      `Arena.reset` itself nor reaches a callee that releases or resets.
 
+   A string pushed onto an array that is only joined is not stored into
+   memory. When a function binds a `string[]` local to its own fresh literal
+   or `new Array` and then uses it only as `parts.push(...)`,
+   `parts.join(...)` and `parts.length`, what it pushes is reachable only
+   through `parts`. `join` copies every part into a new string, so the
+   pushed values die with the frame, and a loop that calls the function keeps
+   its scope (`tests/cases/mem_join_parts_scope`: 1000 calls leave
+   `Arena.used()` where one call left it). Any other use of `parts` keeps the
+   pushed value stored, because it could hand a part back out: an element
+   read (`mem_join_parts_readback`), a `for...of` (`mem_join_parts_forof`),
+   passing `parts` to a function (`mem_join_parts_passed`), another method on
+   it, such as `parts.pop()` (`mem_join_parts_method`), or a `parts` that
+   names another local's array (`mem_join_parts_alias`). Assigning or
+   returning `parts`, and an array the function did not build itself, count
+   the same way. The rule is about what the function
+   allocates, not what it is handed: a *parameter* pushed onto `parts`
+   still counts as kept by the callee. So a loop that builds a string in a
+   pass and passes it to such a function (`jsonField(line, ...)` on a line
+   built in the pass, `replaceAll` on one) still has no scope. Passing it a
+   string older than the pass is what keeps the scope.
+
    An element of an array whose elements are inline is the address of a slot
    in that array, so keeping one keeps the array: it is followed as the array
    in every rule above, and in the function rule too
@@ -5980,6 +6001,11 @@ by the caller.
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
+  It shapes what a compile emits and links, and `--fix`, which rewrites the
+  sources and emits and links nothing, refuses it with a usage error (exit 2)
+  rather than dropping it, as it refuses `-o` and `--link`: fix first, then
+  compile for the target. It refuses `-g`, `--threads`, `--runtime-decls` and
+  `--plain` the same way, for the same reason.
 - **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is a
   checked panic* above (`tests/cases/opt_nsw`, `opt_wrapping`,
   `ovf_repro_wrapping`). It reaches the entry package's modules only

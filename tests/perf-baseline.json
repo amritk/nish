@@ -84,7 +84,7 @@
     },
     "src/interop-header.ts": {
       "NL9007": 1,
-      "NL9011": 6
+      "NL9011": 4
     },
     "src/interop-napi.ts": {
       "NL9010": 1,
