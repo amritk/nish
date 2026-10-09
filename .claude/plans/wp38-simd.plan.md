@@ -137,7 +137,7 @@ Starts after `s0-decide-measure` and `s1-surface` merge (it shares `scripts/buil
 | --- | --- | --- | --- |
 | s0-decide-measure | `docs/wp38-simd.md`, `bench/simd-s0.mjs` | lead | — |
 | s1-kernel | `runtime/runtime-simd.c`, `runtime/nish.h`, `scripts/build.sh`, `bench/run.mjs`, `tests/run.js`, `tests/simd/**`, `.github/workflows/ci.yml`, `docs/wp7-runtime.md`, `docs/MASTER_PLAN.md`, `THIRD_PARTY_NOTICES.md` | lead | — |
-| s1-surface | `std/text.ts`, `std/README.md`, `src/kernels.ts`, `src/runtime.ts`, `src/emit-*.ts`, `src/secret.ts`, `src/std-modules.ts`, `src/run-cache.ts`, `tests/nish/run.ts`, `tests/cases/text_index_of_any*`, `tests/link/std_text_index_of_any/**`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/AI.md`, `bench/index-of-any.ts` | lead | s1-kernel |
+| s1-surface | `std/text.ts`, `std/README.md`, `src/kernels.ts`, `src/runtime.ts`, `src/emit.ts`, `src/emit-*.ts`, `tests/run.js`, `tests/link/std_text_index_of_any*/**`, `tests/link/caps_package_named_nish/expected.caps.json`, `src/secret.ts`, `src/std-modules.ts`, `src/run-cache.ts`, `tests/nish/run.ts`, `tests/cases/text_index_of_any*`, `tests/link/std_text_index_of_any/**`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/AI.md`, `bench/index-of-any.ts` | lead | s1-kernel |
 | s1-json | `std/json.ts`, `tests/link/std_json/**`, `tests/self/goldens/**` | lead | s1-surface, #507 stage 3 |
 | s2-cpu | `src/options.ts`, `src/compile.ts`, `src/capability-report.ts`, `src/target.ts`, `scripts/build.sh`, `tests/ct-asm.js`, `tests/run.js`, `tests/cases/cli_cpu*`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/wp38-simd.md` | lead | s0-decide-measure, s1-surface |
 
