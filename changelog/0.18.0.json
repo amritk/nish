@@ -1,0 +1,617 @@
+{
+  "version": "0.18.0",
+  "date": "2026-10-09",
+  "tag": "v0.18.0",
+  "range": {
+    "from": "v0.17.0",
+    "to": "120e6bc9"
+  },
+  "entries": [
+    {
+      "id": "retire-the-two-declared-ir-differences-the-0",
+      "type": "test",
+      "scope": "differential",
+      "breaking": false,
+      "title": "retire the two declared IR differences the 0.17.0 seed carries",
+      "body": "The seeded fuzz differential compares the released compiler's IR with HEAD's on random programs. It accepts a difference only where `DECLARED` or `DECLARED_CHECKS` names it, and it fails on an entry nothing uses. Both registers still held a change that 0.17.0 shipped:\n\n- CG-8's `nish_str_concat` attribute change\n- the dropped division and `pop` checks from `--deny-panics`\n\nWith 0.17.0 as the seed, main failed the run with `stale=2`, which turned both `nish-cmp` jobs red on every open pull request. Both registers are now empty, as the file's own rule asks. The mechanism and its self-checks stay for the next release.\n\nThis commit also brings in #493's regenerated `package-lock.json` for v0.17.0, so `npm ci` passes.",
+      "metrics": [
+        "fuzz --stage1 --seed 20261001 --count 200: stale=2 (exit 1) before, stale=0 (exit 0) after"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/differential/fuzz.js"
+      ],
+      "commits": [
+        "f19f6b5"
+      ],
+      "pr": 497,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-07"
+    },
+    {
+      "id": "refuse-target-together-with-fix-496",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "refuse --target together with --fix",
+      "body": "`nish file.ts --fix --target <triple>` used to rewrite the sources and drop `--target` without a word. `--fix` rewrites sources and emits and links nothing, so a flag that only shapes what a compile emits or links has nothing to act on.\n\n`--fix` now refuses those flags with a usage error (exit 2), just as it already refused `-o` and `--link`:\n\n- `--target`\n- `-g`\n- `--threads`\n- `--runtime-decls`\n- `--plain`\n\nWhat such a flag changes belongs to the compile that follows the fix. That includes the checker's answer to a wasm `--target`. Fix first, then compile for the target.\n\nFlags that change what the check reports stay accepted, because they change what `--fix` prints and how it exits:\n\n- `--unchecked-indexing` (the documented NL9014 migration)\n- `--wrapping`\n- `--number-mode`\n- `--profile`\n- `--range-reference`\n- `--strict-exports`\n- `--no-stack-alloc`, which steers the escape analysis behind the arena diagnostics\n\nFixes #433",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (--target)"
+      ],
+      "tests": [
+        "tests/nish/cli.ts (checkFixField)"
+      ],
+      "commits": [
+        "d592dd5"
+      ],
+      "pr": 496,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-07"
+    },
+    {
+      "id": "report-a-missing-nish-entry-point-once-per",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "report a missing Nish entry point once per import",
+      "body": "An `import` whose module cannot be resolved was reported once per imported name. Importing three names from a package whose `exports` has no `nish` condition printed the same \"has no Nish entry point\" error three times, and importing two names from a missing relative module gave two NL3006s.\n\nThe checker keeps one import binding per name, and module discovery only remembered a specifier once it resolved. A failed one was therefore resolved and reported again for every name. Discovery now remembers the last statement that failed and skips its other bindings, so each statement is reported once, at its specifier. Two separate statements importing the same missing module are still reported separately, one per statement.\n\nFixes #434",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/package_not_nish_names",
+        "tests/link/package_not_nish_statements",
+        "tests/link/missing_module_names"
+      ],
+      "commits": [
+        "51ccdc7"
+      ],
+      "pr": 501,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-07"
+    },
+    {
+      "id": "compare-json-keys-in-place-in-jsonfield-499",
+      "type": "perf",
+      "scope": "std",
+      "breaking": false,
+      "title": "compare JSON keys in place in jsonField",
+      "body": "`jsonField` used to unescape every key it walked past into a new string,\nonly to compare it with `name` and throw it away. On a diagnostic line\nthat is one allocation per field before the one asked for. Now a private\n`jsonKeyEquals` walks the key's bytes and `name` together, decodes each\nescape where it stands, and stops at the first byte that differs. It reads\nevery escape exactly as `jsonUnescape` does: the short forms, `\\uXXXX` as\nthe UTF-8 bytes `jsonUtf8` would build (compared one byte at a time, never\nbuilt), a broken `\\u` as the two bytes `\\u`, a backslash with no letter\nafter it as itself, and any other escape as the byte it escapes. So a key\nmatches exactly when its decoded text would have. Value decoding is\nunchanged.",
+      "metrics": [
+        "bench/json jsonField x3 over 100,000 lines 156.9 -> 130.8 ms, peak RSS 145 -> 119 MB; 200,000 calls best of 5 (spread): diagnostic line 71.0 (240.5) -> 44.1 (0.7) ms, 50-key object last field 583.4 (1678.9) -> 495.8 (57.7) ms, escaped keys 241.3 (951.6) -> 42.9 (3.2) ms, miss 194.6 (184.5) -> 62.4 (8.5) ms; bench/run.mjs --instructions --check unchanged"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/std_json"
+      ],
+      "commits": [
+        "345bcde"
+      ],
+      "pr": 499,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-07"
+    },
+    {
+      "id": "recompute-the-readme-rows-and-total-from-the",
+      "type": "docs",
+      "scope": "security",
+      "breaking": false,
+      "title": "recompute the README rows and Total from the records",
+      "body": "The security README's summary table had drifted from the records it summarises.\n\n- The TLS and QUIC rows still counted TLS-3 and QUIC-3 as open after both closed, and the QUIC row missed QUIC-7.\n- The HTTP/1.1, HTTP/2, HTTP/3 and WebTransport records had no row, so none of their findings were in any count.\n\nEvery row is now recounted mechanically from its record, and the Total is summed from the rows: 3/10/12/69 fixed and 0/1/2/22 open, up from 3/10/10/66 and 0/1/2/13. The Open findings table lists exactly the 25 open findings.\n\nNew footnotes state the counting rules:\n- A finding listed in two records is counted in each, except K1-6, which is counted once.\n- Accepted findings are not counted.\n- H1-3 counts as open.\n\nA further note records that tls.md and quic.md/http3.md disagree about how much memory a QUIC handshake leaves behind.\n\nruntime.md and codegen.md now say that #427 fixed CG-3's last source, `join`.\n\nFixes #439",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e1449d5"
+      ],
+      "pr": 504,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-07"
+    },
+    {
+      "id": "merge-the-lockfile-pull-request-from-the-job",
+      "type": "ci",
+      "scope": "release",
+      "breaking": false,
+      "title": "merge the lockfile pull request from the job that opens it",
+      "body": "After each release, `release.yml`'s `lockfile` job regenerates\n`package-lock.json` against the packages it just published and opens a\npull request with the result. That pull request then waited for a human,\nwith no checks at all — a pull request opened with GITHUB_TOKEN starts no\nworkflow — while CI's `lint` job kept main red. After 0.17.0, #493 sat open\nuntil an unrelated pull request carried the same lockfile by hand.\n\nThe job now squash-merges its own pull request, pinned to the commit it\npushed. There is nothing in it to review: the lockfile is fully determined\nby the registry and the job checks it with `npm ls --package-lock-only`\nbefore pushing. A merge the repository refuses is a warning naming the\npull request, not a failed release.",
+      "metrics": [],
+      "refs": [
+        "docs/wp12-release.md#the-lockfiles-copy-of-the-platform-pins"
+      ],
+      "tests": [],
+      "commits": [
+        "4146aae"
+      ],
+      "pr": 505,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "keep-the-per-pass-release-when-a-pushed",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "keep the per-pass release when a pushed string is only joined",
+      "body": "Escape analysis no longer counts a string pushed onto a function's own\n`parts: string[]` as stored into memory, when `parts` is that function's\nfresh array literal or `new Array` and is used only through\n`parts.push(...)`, `parts.join(...)` and `parts.length`. `join` copies every\npart into a new string, so the parts die with the frame. Every caller of\nsuch a function now gets the call-site reclaim, and a loop that calls it\nkeeps its per-pass arena release. `std/json`'s `jsonUnescape` is that shape,\nso a loop over `jsonField` stops keeping each decoded value's scratch.\n\nAny other use of `parts` keeps the old, conservative answer: an element\nread, `for...of`, `pop`, spread, passing `parts` to a call, or assigning,\nreturning or aliasing it. Each of those is pinned by a negative golden whose\nmutant prints freed memory. The rule covers what the function allocates,\nnot what it is handed: a parameter pushed onto `parts` still counts as kept\n(#503).\n\nThe rule also surfaced ten arena-loop warnings in `src/`. They are fixed,\nnot baselined: a whole-line helper in the interop emitters and `dump`, and a\nhoisted message in `generics`. Compiler output is unchanged, and\ninterop-header's NL9011 cap falls from 6 to 4.",
+      "metrics": [
+        "1,000 jsonField calls on escaped values 52,152 B -> 16 B kept (per-pass release); replaceAll x1,000 on fresh arguments 57,784 -> 22,432 B; mem_join_parts_scope 1,000 calls 23,040 B (growing) -> 16 B (flat); 37 callees newly reclaimed at the call site, incl. jsonUnescape, http1Text, base64urlEncode, websocketAcceptKey, x509Base64Encode; self-hosted compile of src/ 1.089 -> 1.053 s (inside the noise, no change), peak RSS unchanged; bench/run.mjs --check unchanged"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#memory-model"
+      ],
+      "tests": [
+        "tests/cases/mem_join_parts_scope",
+        "mem_join_parts_readback",
+        "mem_join_parts_forof",
+        "mem_join_parts_passed",
+        "mem_join_parts_alias",
+        "mem_join_parts_method"
+      ],
+      "commits": [
+        "480e3fb"
+      ],
+      "pr": 500,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "split-the-two-slow-jobs-four-ways-and",
+      "type": "ci",
+      "breaking": false,
+      "title": "split the two slow jobs four ways and stop every job at 15 minutes",
+      "body": "A CI job that hangs now fails within minutes instead of running to GitHub's six-hour limit. On #502, three jobs waited on one `apt-get update` fetch from 19:22 to 01:22 and no test ran: `ci.yml` set no `timeout-minutes`, and apt has no network timeout of its own.\n\nEvery job now stops at 15 minutes, and every LLVM install step at 5 (10 for Homebrew). Every `apt-get` gets `$APT_OPTS`: 30 s per connection and three retries.\n\nThe two jobs that took longer than 15 minutes are each split four ways:\n\n- **`test`** runs `tests/run.js --shard <i>/4`. Every shard builds stage1 and runs everything before the `tests/link/` programs. Shard 1 runs every section after them, plus the link programs whose output a later check reads (`LINK_READ_LATER`). Shards 2–4 share the remaining link programs round-robin. Each shard counts what it leaves to another as **delegated**, naming the shard that proves it.\n- **The Nish golden runner** runs `build/nish-runner --shard <i>/4`, which deals its cases and link programs round-robin.\n\nThe link programs were 1305 s of a 2014 s local run, which is why they are what gets dealt out. Before, one `test` job took 25 min and the runner 20. On this PR the test shards took 5:31–8:37 and the runner shards 4:12–6:06.\n\nNew checks in `tests/run.js`:\n- each job's `shard:` list must be 1..n for the n its `--shard` names;\n- the runner's `--shard 1/2` and `2/2` must cover the `pop` cases exactly once between them, and `3/2` must be refused;\n- every name in `LINK_READ_LATER` must still be a `tests/link` program.\n\nThe union of the four suite shards' checks equals the unsharded run's 13,499, plus the three new checks. The four runner shards pass 11,204 checks, the same as main's unsharded runner.",
+      "metrics": [
+        "test 25 min -> 4 shards of 5.5-8.6 min; runner 20 min -> 4 shards of 4.2-6.1 min"
+      ],
+      "refs": [
+        "docs/wp10-ci.md#shards-and-time-limits",
+        "#502"
+      ],
+      "tests": [],
+      "commits": [
+        "bdc6ca8"
+      ],
+      "pr": 506,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "move-net-http1-and-net-websocket-off-arena",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "move net_http1 and net_websocket off Arena.mark/Arena.release",
+      "body": "The cut-at-every-byte loops in net_http1 and net_websocket bracketed each pass\nwith the deprecated `Arena.mark()` / `Arena.release()`. A `using a = arena()`\nblock is refused there by NL2424, because the parser and decoder store what they\nallocate into memory, so the brackets are removed and a comment says why. The\ninputs are short and the passes are left to the arena until the program exits;\nwhat the loops check, that every cut agrees with the whole parse, is unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/link/net_http1",
+        "tests/link/net_websocket"
+      ],
+      "commits": [
+        "326d47e"
+      ],
+      "pr": 502,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "a-nish-server-and-a-nish-client-over",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "a Nish server and a Nish client over loopback, every carrier",
+      "body": "A new link case, `tests/link/net_loopback`, and its twin `net_loopback_f64`, form the cross-lane suite of wp34 §5a. It covers seven carriers: TLS over TCP, HTTP/1.1, WebSocket, HTTP/2, QUIC, HTTP/3 and WebTransport. For each one, a Nish server on the standard library's carrier talks to a scripted Nish client over real loopback sockets, driven by one `pollWait` loop per carrier. The kernel carries every byte. Each lane's own case drives its server with an in-memory client; this suite drives each carrier the way the relay and cs will.\n\nThe client learns its flow-control credit from the wire: the server's transport parameters, then every MAX_DATA, MAX_STREAM_DATA and MAX_STREAMS it sends. A server that forgot to give credit back stalls it. Every carrier checks `Arena.used()` flat across 50 warm rounds, summed over every server wake, and measures what a connection keeps separately.\n\nThe suite found a real disagreement between two lanes. HTTP/3's `flushSlot` read `quicListenerPaceTime`'s absolute time as a delay, so a paced slot slept until its idle deadline. #490 fixed that, and this suite's pacer check is the deterministic pin for it.\n\nMeasured: 0 bytes kept per round after warm-up on all seven carriers; per connection, TLS 9,376 (9,312 the ECDSA signature), HTTP/1.1 9,376, HTTP/2 728 a request, QUIC 100,616-103,896, HTTP/3 100,216-103,768, WebTransport 100,176-100,240; net_loopback 30 of 30 and net_loopback_f64 25 of 25 runs byte-identical\nRefs: docs/wp34-hosting-cs.md#5a-landed, docs/security/http3.md, docs/security/tls.md\nTests: tests/link/net_loopback, tests/link/net_loopback_f64\nPart of #463",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5e19d80"
+      ],
+      "pr": 489,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "link-math-min-and-math-max-of-a",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "link Math.min and Math.max of a float on freestanding wasm32",
+      "body": "`Math.min` and `Math.max` of an `f64` or `f32` lower to `llvm.minnum` /\n`llvm.maxnum`. wasm32 has no instruction with minnum's NaN rule (its own\n`f64.min` answers NaN when either operand is NaN), so the backend calls libm's\n`fmin`, `fmax`, `fminf` and `fmaxf`. The freestanding `--profile wasm` links no\nlibm, and `runtime/runtime-wasm.c` did not provide them, so any module that used\neither builtin on a float failed at the link with an undefined symbol.\n\n`runtime-wasm.c` now defines the four, with the semantics minnum has natively:\na NaN operand is dropped and the other answered, and two NaNs give NaN. A wasm\nbuild therefore answers what a native build answers. A new check links\n`tests/cases/math_minmax_float` for wasm32, requires the module to import\nnothing, and compares its exports' answers with the native case's.\n\n`Math.pow`, `sin`, `cos`, `exp` and `log` still need a libm the freestanding\nprofile does not link. `docs/wp8-interop.md` now says so.",
+      "metrics": [],
+      "refs": [
+        "docs/wp8-interop.md#--emit-dts-filedts-typings-and-a-loader-for-the-wasm-build"
+      ],
+      "tests": [
+        "tests/cases/math_minmax_float"
+      ],
+      "commits": [
+        "d226aa6"
+      ],
+      "pr": 510,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "keep-nothing-per-quic-handshake-h3-1-quic",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "keep nothing per QUIC handshake (H3-1, QUIC-3's remainder)",
+      "body": "A QUIC connection now keeps its handshake state in its connection slot, as TLS over TCP has since #467. A connection through a reused `QuicConnection` slot used to keep 87 to 127 KB of arena. It now keeps none.\n\n- **TLS server:** each slot holds one `TlsServer`. The slot's first handshake makes it and each later one `restart`s it. The client's transport parameters are refilled into an array the slot keeps.\n- **Packet keys:** every level's keys, the next read keys and a key update's keys are derived in place into `QuicKeysSlot`s. Each packet-number space makes its slots once, and a slot holds both AEAD key sizes. The new functions in `nish/net/quic-packet` that do this are `quicInitialSecretsInto`, `quicKeysInto`, `quicKeysUpdateInto` and `quicKeyUpdateSecretInto`. Generations of a key update take turns between two slots and two secrets per direction.\n- **Transport parameters:** they are encoded and parsed into the slot's own objects with `quicEncodeTransportParametersInto` and `quicParseTransportParametersInto`. A connection ID or reset token is copied only once its length is allowed, so a client cannot grow a reused array.\n- **Reset tokens and connection IDs:** both are computed in HMAC scratch, then copied into the table.\n- **Wiping:** every key slot and secret pool is wiped when a slot is reused or released.\n- **H3-7:** fixed at its source in `quic-stream.ts`. A lost range the peer has since acknowledged no longer yields an empty STREAM frame. The stream's new bytes go out in the same call.\n\nThrough `Http3Server`, about 11 KB still remains per handshake. Most of it is the program's P-256 signature; the rest is the listener's copy of the first Initial (H3-3). The loopback suite's band moves from 80–128 KiB to 10–16 KiB per connection to match.\n\nMeasured: through a reused slot a QUIC connection keeps 0 bytes, Arena.mark() unmoved over 100 more connections under AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305 (was 87,328 to 127,312); net_loopback's QUIC, HTTP/3 and WebTransport connections keep 10,848 to 14,392 bytes whole over 18 runs (was 100,176 to 103,896)\nRefs: docs/security/quic.md (QUIC-3, QUIC-4), docs/security/http3.md (H3-1, H3-7), docs/security/webtransport.md (WT-1)\nTests: tests/link/net_quic_memory, tests/link/net_quic_memory_f64, tests/link/net_quic_stream, tests/link/net_loopback\nPart of #463",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "53dc65c"
+      ],
+      "pr": 492,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "propose-wp38-simd-508",
+      "type": "docs",
+      "breaking": false,
+      "title": "propose WP38, SIMD",
+      "body": "Adds docs/wp38-simd.md, a proposal for how Nish should get SIMD, and lists it as WP38 in the master plan. It is a design note only: no code, test or golden changes.\n\nThe note starts from what the repository pins today. Vectors come only from LLVM's loop vectoriser in counted loops at the baseline CPU, since `--profile speed` passes no `-march`. The one other vector path is libc `memchr` behind `s.indexOf`. Byte scanners whose loops can exit early, such as `std/json` and the lexer, get nothing.\n\nThe note weighs four options:\n- runtime kernels whose CPU path is chosen at run time;\n- a `nish:simd` module of fixed 128-bit vector types;\n- explicit target intrinsics;\n- auto-vectorisation with an opt-in CPU level.\n\nFor each it gives the cost, what it buys and withdraws on 0.x, its TypeScript reading, its wasm and N-API story, and how it interacts with `Secret` and the constant-time checker.\n\nIt recommends, in order:\n1. Byte-search kernels in a new runtime unit with its own size ceiling. Each kernel picks its CPU path lazily on its first call, and programs reach it through an ordinary `std` function.\n2. The default target stays the baseline CPU. An opt-in `--cpu` flag ships only once the constant-time checker reads every level it accepts.\n3. `nish:simd`, only once it clears a measured bar.\n4. No target intrinsics.\n\nStages S0–S4 each carry a measured bar. MASTER_PLAN lists WP38 as proposed, adds an open-decisions row, and files it as additive and unscheduled until the owner takes the note's §8 decisions.",
+      "metrics": [],
+      "refs": [
+        "docs/wp38-simd.md",
+        "docs/MASTER_PLAN.md"
+      ],
+      "tests": [
+        "none (documentation only; npm test",
+        "check-links and lint green)"
+      ],
+      "commits": [
+        "e466f8b"
+      ],
+      "pr": 508,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "sign-p-256-over-caller-owned-scratch-so",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "sign P-256 over caller-owned scratch, so a handshake's signature keeps nothing",
+      "body": "`p256SignSha256` stores what it allocates, so every TLS or QUIC handshake used to leave about 9.3 KB of signature work in the arena. A long-running server pays that once per connection.\n\n`nish/crypto/p256` now has a second signing path, `p256SignSha256Into`. It writes `r || s` into a caller's window and does all its work in a `P256SignScratch` the caller makes once. The path is byte-identical to `p256SignSha256`:\n- the same RFC 6979 nonce derivation;\n- the same constant-time 4-bit-window ladder;\n- every secret field of the scratch wiped before it returns.\n\nA message or signature window outside its array is refused before the key is read.\n\n`nish/net/tls` adds `TlsP256Signer`, which holds one scratch and one preallocated DER array for each length from 8 to 72. `TlsServer.sign` copies the signature into its flight at once, so the arrays are safe to share. `TlsTcpServer.signP256` and `Http3Server.serve` both sign through it.\n\nMeasured: TLS and HTTP/1.1 over loopback keep 64 bytes a connection (was 9,376; the 64 is the program's Secret copy of its key, 20 of 20 runs); an HTTP/3 server handshake keeps 1,600 (was 10,912 to 11,040), all of it the listener's copy of the first Initial (H3-3); QUIC, HTTP/3 and WebTransport over loopback keep 1,600 to 5,016 a connection over 20 runs of 3 connections; 1,000 signP256 connections over loopback leave Arena.mark() unmoved\nRefs: docs/security/crypto-ecc.md, docs/security/tls.md (TLS-3), docs/security/http3.md (H3-1), docs/security/webtransport.md (WT-1)\nTests: tests/link/crypto_p256, tests/link/crypto_p256_sign_into_message_window, tests/link/crypto_p256_sign_into_signature_window, tests/link/net_tls_memory, tests/link/net_loopback, tests/link/net_http3_server\nPart of #463",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3716f70"
+      ],
+      "pr": 512,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "resend-the-server-s-handshake-flight-on-two",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "resend the server's handshake flight on two datagrams per probe, and early when the client shows it lacks it",
+      "body": "A QUIC server whose first flight is lost now gets it to the client far more reliably. This closes defect 3, which the interop runner's `handshakeloss` case found against quic-go (30% loss, 50 connections), and which is QUIC-8 in docs/security/quic.md.\n\n`QuicConnection.probe` used to resend a lost flight only when the probe timeout fired, and as one datagram. With no RTT sample the copies left at t, t+1, t+3 and t+7 s, so at 30% loss all four were lost about once in 120 connections. quic-go's handshake timer expired first.\n\n- **Two probes (RFC 9002 §6.2.4).** A probe timeout in the Initial or Handshake space now sends `QUIC_CONN_HANDSHAKE_PROBES` (2) ack-eliciting datagrams, each carrying the oldest CRYPTO data not yet acknowledged.\n- **Early resend (RFC 9002 §6.2.3).** The server resends at once when the client shows it lacks the flight: a repeated ClientHello (CRYPTO at an offset already read), or an ack-eliciting Handshake packet while the server's packets at that level are in flight. A counter caps this at `QUIC_CONN_EARLY_RESENDS` (2) per connection. An actor who saw the client's first Initial can spend it, and the connection then falls back to the two-datagram probes. QUIC-8 records this as accepted.\n- **Amplification.** RFC 9000 §8.1's limit covers both. A one-datagram flight plus its two probes uses exactly the 3,600 bytes a 1,200-byte ClientHello allows, and a forbidden probe stays owed until the client sends more.\n\n`QuicConnSpace` shrinks by 8 bytes. Every recorded transcript replays unchanged.\n\nMeasured: quic-go handshakeloss through a 30%-loss proxy, 8 runs of 20 connections, seeds 41–48: 8/8 green with this change against 6/8 for a same-session control; of connections whose first flight was dropped, 53/53 recovered (first copy delivered a mean 0.29 s later, max 1.60 s) against 46/48 (mean 1.52 s, max 6.98 s)\nRefs: docs/security/quic.md (QUIC-8), RFC 9002 §6.2.3 and §6.2.4, RFC 9000 §8.1\nTests: tests/link/net_quic_recovery, tests/link/net_quic_recovery_f64\nPart of #463",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6699927"
+      ],
+      "pr": 514,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-08"
+    },
+    {
+      "id": "add-math-clz32-the-leading-zero-bits-of",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "add `Math.clz32`, the leading zero bits of a 32-bit integer",
+      "body": "`Math.clz32(x)` counts the leading zero bits of `x`'s 32 bits, as it does in\nJavaScript. The operand must be an `i32` or a `u32`, whose bits are the ones\nJavaScript's ToUint32 would give, so the answer is the same; any other type is\nrefused (NL2460) rather than converted. It lowers to one `llvm.ctlz.i32` with\n`i1 false`, so a zero answers 32, and it is an `i32` instruction on every\ntarget: wasm32 has `i32.clz`, with no libm involved.\n\nThe answer is an `integer<0, 32>`, and the overflow prover reads that range\noff the call, so `31 - Math.clz32(word & (0 - word))`, the index of a word's\nlowest set bit, compiles to a plain `sub nsw` with no overflow check. Without\nthe builtin, the bit index had to come from the exponent of the bit converted\nto `f64`.\n\nThe motivating code is a game's collision trace, which uses exactly that idiom\nover a candidate bitset and ports to Nish unchanged now that the builtin\nexists. Against the `f64`-exponent workaround it replaces, the trace runs about\n5% faster as wasm, and natively it is within noise: x86-64 without `lzcnt`\nspends the saving on `bsr` and the fix-up for zero.\n\nMeasured: ns per trace, best of 9, 1e6 traces of the game's own collision\ntrace, two A/B rounds on a 2.1 GHz Xeon VM: wasm -O3 1261/1248 -> 1189/1183,\nwasm -Oz 1294/1289 -> 1234/1262, native 1054/1027 -> 1041/1054",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#math"
+      ],
+      "tests": [
+        "tests/cases/math_clz32",
+        "tests/cases/reject_math_clz32_type"
+      ],
+      "commits": [
+        "35f8b62"
+      ],
+      "pr": 511,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "the-interop-job-quic-interop-runner-h2spec-curl",
+      "type": "ci",
+      "breaking": false,
+      "title": "the interop job — quic-interop-runner, h2spec, curl and Chrome",
+      "body": "A new workflow, `.github/workflows/interop.yml`, runs a Nish server against other implementations on every pull request that touches `std/net`, `std/crypto` or the interop files, and on every push to main.\n\nThe server is `tests/link/net_interop_server`, a link case in its own right. It serves files over HTTP/3, HTTP/2 and WebTransport. Each lane drives it with a different client:\n\n- **quic-interop-runner:** the runner's own test cases against quic-go's and ngtcp2's clients, through the network simulator, `handshakeloss` included.\n- **h2spec:** all 146 HTTP/2 conformance cases.\n- **curl:** `--http3` and `--http2`.\n- **Chrome:** a WebTransport session, a datagram and a stream echoed, under both a minted and an OpenSSL certificate.\n\nLive interop found what byte replays could not:\n\n- an HTTP/3 slot paced at twice the pacer's time (#490);\n- a minted certificate Chrome refused (#491);\n- a server first flight resent one datagram per probe timeout (#514).\n\nEach was fixed in its own pull request before this one merged.\n\n**Pinning.** Every action is pinned by commit SHA and every image by digest. The runner is pinned by commit, h2spec by a checked hash, and pip requirements with `--require-hashes`.\n\n**Permissions and limits.** The workflow runs with `contents: read` and no secrets. Each job stops at 15 minutes and each network step has its own limit. apt gets the repo's `$APT_OPTS`.\n\nThe server refuses paths that leave its `www` root and bounds every request.\n\nMeasured: run 7 at the merged head — quic-go 10/10 and ngtcp2 10/10 test cases (handshakeloss 30.3 s, down from 60.3 s before #514), h2spec 146/146, curl and both Chrome lanes green; each interop job finishes in about 3 minutes\nRefs: docs/wp34-hosting-cs.md (decision S2), docs/wp10-ci.md\nTests: tests/link/net_interop_server, tests/link/net_interop_server_f64\nPart of #463",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f772bd2"
+      ],
+      "pr": 487,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "let-the-quic-listener-read-a-window-and",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "let the QUIC listener read a window and answer into scratch, so an unowned datagram keeps nothing (H3-3)",
+      "body": "`QuicListener` gains a window form, `handleWindow(buf, at, len, address, now, answer)`. It reads a datagram where it lies and writes its answer into a `QuicListenerAnswer` that the caller makes once. A datagram that no connection owns now costs no arena memory, whatever the listener does with it.\n\n`Http3Server` now passes the listener its receive window and no longer copies datagrams. This closes H3-3, the last memory a QUIC/HTTP/3 connection kept, and with it H3-1 and WT-1. A handshake through a reused slot now keeps 0 bytes from the first Initial to the close, where it used to keep 1,600.\n\n**Where the listener's answers and secrets live:**\n- **Header.** It is parsed in place into a `QuicHeader` the listener makes once.\n- **Answers.** Version Negotiation, Retry, stateless reset and the INVALID_TOKEN close are each written into one reply buffer of `QUIC_LISTENER_ANSWER_SIZE` bytes. The buffer is resized within that room for each answer.\n- **MACs and keys.** Every MAC, key and seal runs in scratch the listener makes at start-up. The stateless reset token comes from `quicConnResetTokenInto`, which `std/net/quic.ts` now exports.\n- **Retry integrity tag.** It uses a Retry key that is expanded once.\n\nThe answers are unchanged byte for byte, and aioquic's recordings still replay. A window outside its array panics: the length is checked as non-negative before `at <= length - len`.\n\n**Compatibility.** `handle(datagram, address, now)` stays as a wrapper over `handleWindow`. `QuicListenerAnswer`'s constructor now takes the size of the reply buffer.",
+      "metrics": [
+        "a handshake through a reused one-slot carrier, from first Initial to close, 1,600 → 0 bytes",
+        "3,000 unowned datagrams (resets, Version Negotiations, dropped Initials) within the answer budget, 6,690,464 → 0 bytes of Arena.mark(); 3,000 more past the budget, 1,651,360 → 0",
+        "over loopback, 20 runs, every HTTP/3 and WebTransport connection kept 0 bytes from Initial to close (was 1,600 to 5,016)"
+      ],
+      "refs": [
+        "docs/security/http3.md#findings"
+      ],
+      "tests": [
+        "tests/link/net_quic_listener",
+        "net_quic_listener_f64",
+        "net_quic_listener_bad_window",
+        "net_http3_server",
+        "net_loopback"
+      ],
+      "commits": [
+        "c78dab5"
+      ],
+      "pr": 515,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "find-the-first-byte-of-a-set-with",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "find the first byte of a set with 16-byte vectors, chosen at run time",
+      "body": "The runtime gains its first vector kernel, the first step of WP38 S1.\n`nish_str_index_of_any(s, set, from)` returns the first index at or after\n`from` whose byte is one of a 1..16-byte set, or -1. It lives in a new\ntranslation unit, `runtime/runtime-simd.c`, with its own 768-byte ceiling.\n`scripts/build.sh` links it beside `runtime.c` on every profile.\n\nEach search has three paths: a scalar membership table; a 16-byte base path\non the vectors every machine of the target has (SSE2 on x86-64, NEON on\nAArch64, simd128 on wasm only under `-msimd128`); and a 32-byte AVX2 path\ncompiled with `target(\"avx2\")`.\n\nA pointer that starts at a resolver picks the path on the first call, so\nnothing runs at program start. A program that never searches links none of\nthe unit. `NISH_SIMD=scalar|base|avx2` pins the choice, and the instruction\ngate pins `base` so a count does not depend on the host.\n\nThe CPU is asked with `cpuid` and `xgetbv` directly rather than through\n`__builtin_cpu_supports`. That builtin links libgcc's start-up constructor\ninto every program that names it, which took hello from 4,712 to 10,000\nbytes without a single search.\n\nAn agreement test checks every path against a reference loop on 2.8\nmillion cases. CI runs it natively on x86-64 and on an AArch64 runner, and\non each it requires the widest path to have actually run.",
+      "metrics": [
+        "1 MiB haystack, quote-and-backslash set: scalar 1.57 GB/s, SSE2 5.77 GB/s, AVX2 11.53 GB/s; JSON's six structural bytes: 1.60, 3.44, 8.47 GB/s. Unit .text 675 bytes at -Oz (ceiling 768)."
+      ],
+      "refs": [
+        "docs/wp38-simd.md#31-a-runtime-kernels-chosen-at-run-time"
+      ],
+      "tests": [
+        "tests/simd/index-of-any.c",
+        "tests/run.js simd"
+      ],
+      "commits": [
+        "f0598db"
+      ],
+      "pr": 518,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-wp38-s-decisions-and-its-s0-baselines",
+      "type": "docs",
+      "breaking": false,
+      "title": "record WP38's decisions and its S0 baselines",
+      "body": "WP38 (SIMD) moves from proposed to accepted. The owner took §8's four\nrecommendations on 2026-10-09:\n- runtime kernels first, with an opt-in CPU flag beside them;\n- `nish:simd` vector types only if they clear their bar;\n- no target intrinsics;\n- the baseline CPU as the default target;\n- wrapping integer lanes, named so;\n- 128-bit vectors only.\n\nS0's baselines are now in §2.3, and every later stage's bar is a ratio\nagainst them. `bench/simd-s0.mjs` measures:\n- `bench/scan.ts`, natively and as freestanding wasm;\n- `scripts/bootstrap.sh --verify`;\n- nbody, vec3 and spectral at the baseline and at `-march=x86-64-v3`.\n\nThe `-march` builds link the same `.ll` and run in alternating rounds, so\nthat drift on a shared machine falls on both columns.\n\nThe S2 verdict is left open. spectral gains well over 10% at\nx86-64-v3, but vec3 is at or below zero in three of its four figures, so\n\"no loss on the others\" is not clearly met. `bench/json`'s row waits for\nthe json-one-pass run (#507).",
+      "metrics": [
+        "-march=x86-64-v3, 7 alternating rounds: spectral 567.4 -> 506.6 ms (10.7% min, 14.7% median), nbody 1139.8 -> 1093.5 (4.1% min), vec3 420.0 -> 408.5 (2.7% min, -0.3% median); 15 rounds: spectral 21.3% / 14.8%, nbody 2.2% / 4.1%, vec3 -1.2% / -1.0%; bench/scan.ts 1,000 x 1 MiB: 1783.2 ms native, 2334.6 ms wasm; bootstrap --verify 150.8 s"
+      ],
+      "refs": [
+        "docs/wp38-simd.md#s0-the-baselines"
+      ],
+      "tests": [],
+      "commits": [
+        "ddfdfec"
+      ],
+      "pr": 517,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "accept-a-start-position-in-s-indexof-513",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "accept a start position in s.indexOf",
+      "body": "`s.indexOf(sub, from)` now compiles and answers what JavaScript answers: the\nfirst byte offset at or after `from` where `sub` occurs, or `-1`.\n\n- **Clamping.** `from` is clamped into `[0, s.length]` first. A negative start\n  searches from 0. A start past the end finds nothing, except that an empty\n  needle answers the clamped start.\n- **Start types.** A float start converts as `ToIntegerOrInfinity` does: a\n  fraction truncates and `NaN` is 0. An unsigned start is clamped from above\n  only, so a `u64` of 2^63 or more is past the end, not negative.\n- **Runtime.** It is one call to the new `nish_str_index_of_from`, which shares\n  its memchr/memcmp loop with `nish_str_index_of` and allocates nothing.\n- **Size.** `runtime.c` shrinks from 3,606 to 3,601 bytes of `.text` at `-Oz`,\n  so its size ceiling is unchanged.\n- **Where the clamp lives.** The compiler emits it as `llvm.smin`/`llvm.smax`\n  (`llvm.umin` for an unsigned start), and the C states it as a precondition.\n- **Diagnostics.** NL2461 refuses a third argument, and a non-number start is\n  refused too. NL8001 treats the two-argument form as the same offset source\n  as the one-argument form.",
+      "metrics": [
+        "runtime.c .text* 3,606 -> 3,601 bytes at clang -Oz; bench/instructions.json unchanged (all 21 within +0.1%)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md (string methods)",
+        "docs/IR_COOKBOOK.md#searching-from-an-offset"
+      ],
+      "tests": [
+        "tests/cases/str_index_of_from",
+        "tests/cases/str_index_of_from_port",
+        "tests/cases/reject_str_index_of_arity",
+        "tests/cases/reject_str_index_of_from_type"
+      ],
+      "commits": [
+        "7b6cc9a"
+      ],
+      "pr": 513,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "indexofany-in-nish-text-lowered-onto-the-runtime",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "indexOfAny in nish/text, lowered onto the runtime kernel",
+      "body": "`nish/text` gains `indexOfAny(text, bytes, from)`. It returns the first\nindex at or after `from` whose byte is one of `bytes`, or -1. The set is 1\nto 16 ASCII bytes; anything else panics. `from` is clamped to the text,\nand indices are byte offsets, as everywhere else in the module.\n\nUnder Node it is the plain loop `std/text.ts` is written as. Natively the\ncompiler recognises that loop's one call, by module and name, and replaces\nit with `nish_str_index_of_any`, the vector kernel from #518. The\nargument checks and the clamp run as written in both, so the two backends\nagree on every answer and every panic. A root-package file that happens to\nsit at `std/text.ts` keeps its loop.\n\nThe kernel is variable-time: it stops at the first match. `std/crypto`\nmust not search secret data with it.\n\nThe new tests check that native, Node and `--profile wasi` agree on every\nedge: empty text, `from` out of range, no match, a match on the last byte,\nnon-ASCII text, and 1- and 16-byte sets. Three refusal programs pin the\npanics.",
+      "metrics": [
+        "bench/index-of-any.ts, 1 MiB haystack, 200 rounds, a different text each round, median of 7: recognised kernel 14.7 ms vs the same walker unrecognised 140.7 ms (9.4x) with AVX2; 29.6 ms vs 130.7 ms (4.3x) with NISH_SIMD=base (SSE2); 1.0x scalar"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md (Byte search: indexOfAny in nish/text)",
+        "docs/wp38-simd.md#31-a-runtime-kernels-chosen-at-run-time"
+      ],
+      "tests": [
+        "tests/link/std_text_index_of_any",
+        "tests/link/std_text_index_of_any_empty_set",
+        "tests/link/std_text_index_of_any_long_set",
+        "tests/link/std_text_index_of_any_non_ascii_set"
+      ],
+      "commits": [
+        "d3d2ebf"
+      ],
+      "pr": 519,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-that-wp38-s-cpu-flag-is-declined",
+      "type": "docs",
+      "breaking": false,
+      "title": "record that WP38's --cpu flag is declined for now",
+      "body": "WP38's S2, an opt-in `--cpu` level, needed at least a 10% gain on nbody,\nvec3 or spectral with no loss on the others. S0's alternating samples\nput spectral well over the bar, but vec3 is at or below zero in three of\nits four figures, and the bar gives no tolerance. So no flag is built,\nand the release binary stays on the baseline CPU.\n\nThe decline is for now. S2 reopens on a re-measurement on a quieter\nmachine, or on a measurement of one binary timed against itself showing\nthat vec3's dip is noise. No tool or option makes that measurement yet.\n\nThe note also records what landed: S0 (#517), and S1's kernel (#518)\nand `indexOfAny` (#519). S1's `bench/json` bar is still pending #507.\n§3.1 now describes the resolver as built: it asks the CPU with\n`cpuid`/`xgetbv` rather than `__builtin_cpu_supports`, whose libgcc\nconstructor would run in every program. MASTER_PLAN and docs/README no\nlonger call WP38 proposed.",
+      "metrics": [
+        "-march=x86-64-v3 vs baseline, alternating rounds (docs/wp38-simd.md §2.3): spectral +10.7% min / +14.7% median, then +21.3% / +14.8%; vec3 +2.7% / -0.3%, then -1.2% / -1.0%; nbody +4.1% / +0.2%, then +2.2% / +4.1%"
+      ],
+      "refs": [
+        "docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear"
+      ],
+      "tests": [],
+      "commits": [
+        "a2cc39a"
+      ],
+      "pr": 521,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "a-value-stored-into-a-returned-fresh-array",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "a value stored into a returned fresh array is returned with it",
+      "body": "A function that allocates an array, fills it with strings it built and returns it no longer costs its callers their per-pass arena release. Before, escape analysis counted each element store as a store into memory, so every loop that called such a function, such as `std/json`'s `jsonFields`, kept everything it allocated until the loop ended.\n\n**The callee rule.** A `string` or `string | null` stored into an array that the function itself allocated now travels with the array, the same way the array does. The array must come from an array literal or `new Array`, and every use of it must be one of:\n- an element store with a plain `=` that stands as its own statement;\n- a `push`;\n- `.length`;\n- `return` of the array itself.\n\nAny other use keeps the conservative answer. That includes storing the array anywhere, passing it to a function, reading an element back, a compound store, an assignment used as a value, and any element that is itself an array or an object. Loops and `using arena()` blocks refuse to carry a store into an array declared outside them.\n\n**The caller rule.** A function that returns such an array is now a listing, like `readdirSync`. What the caller reads out of it (an element, a `for...of` variable, the array returned on) is followed as the call itself. Passing the array to a function, `pop`, and every method except `length`, `join`, `indexOf` and `push` count as storing it.\n\n**Bug fixes.** The same caller rules close four existing ways a `readdirSync` name could outlive a scope that released it.",
+      "metrics": [
+        "jsonFields on bench/json kept 60.9 -> 0 B/call; peak RSS 105.5 -> 88.1 MB; median 123.8 -> 115.1 ms; a 1,000-call jsonFields loop keeps Arena.used() flat"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md (Memory model)",
+        "docs/IR_COOKBOOK.md#a-value-returned-in-a-fresh-array"
+      ],
+      "tests": [
+        "tests/cases/mem_return_array_scope",
+        "tests/cases/mem_return_array_callee",
+        "tests/cases/mem_return_array_caller",
+        "tests/cases/mem_return_array_readdir",
+        "tests/cases/mem_return_array_nested"
+      ],
+      "commits": [
+        "2183bd3"
+      ],
+      "pr": 520,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "the-relay-in-nish-with-n9-s-soak",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "the relay in Nish, with N9's soak",
+      "body": "`examples/relay/` is the cs relay, written in Nish on `std/net`. It ports cs's `services/relay` (Rust, over `wtransport`), keeping its wire format, caps, timeouts, close codes and reasons. This is WP34's lane A1.\n\nA WebTransport session on `/cs` sends a HELLO carrying a grant: `v1.<base64url(json)>.<base64url(hmac-sha256)>`. The relay checks the MAC in constant time before it reads the JSON, then checks expiry and shape. If the grant holds, it opens one UDP socket to the granted address. From then on DATA is forwarded both ways, PING is answered with PONG, and STATS is sent every 2 s. Every refusal is answered with the CLOSE code that main.rs gives it.\n\nThe limits match main.rs:\n- at most 4,096 sessions, and at most 64 from one address;\n- 256 datagrams a second per session;\n- 5 s for the HELLO, and 10 s idle.\n\nUnlike main.rs, this port sees a client's address at its first Initial, so it claims the address's place before giving out a global place. A connection over its address's cap gets one of 64 spare slots, which exist to tell it why with CLOSE RATE_LIMITED. One address therefore holds at most `maxPerPeer` global places and `maxPerPeer + spareSlots` slots, handshakes included.\n\nEvery table is made at start-up. The per-address table is a salted hash, and the timers run on a wheel, so no per-packet work scans a table.\n\nThe certificate is either minted (P-256, 13 days, with its SHA-256 written for the client to pin) or loaded with `--cert`/`--key`. A loaded pair is checked every 60 s and swapped under the running server, but only when the key matches the certificate. The grant secret and the TLS key are `Secret`s and are wiped on every exit path. SIGINT and SIGTERM send every session CLOSE SHUTDOWN and exit 0, and the relay refuses to start if it cannot take those signals.\n\nN9's soak runs the relay in its own process and drives sessions through connect, CONNECT, HELLO, an echoed DATA and CLOSE. After 500 sessions of warm-up, 100,000 more keep 0 bytes a session: the arena stays at the same chunk and offset, and resident memory is identical at every checkpoint. Three `std` changes made that possible: #492, #512 and #515. `npm test` runs 2,000 sessions. That run holds the arena to exactly 0 bytes and resident memory to at most four pages, grown in at most one 500-session interval.\n\nKnown gaps, recorded in the README:\n- NAT rebinding is not followed.\n- DATA down is at most 1,164 bytes.\n- The 4,160-slot pool is about 754 MB resident at start, about 181 KB a slot (mostly the QUIC connection's fixed state), with no smaller per-slot setting.\n\nThe port is from the same owner's repository and is relicensed MIT, with no THIRD_PARTY_NOTICES entry.",
+      "metrics": [
+        "0 bytes a session over 100,000 sessions past warm-up, arena and resident set (101,818 before #492, 10,983 before #512, 1,727 before #515)",
+        "~74,000 datagrams a second forwarded on loopback, 64-byte payloads both ways, one process (a lower bound)",
+        "4,160-slot pool 754 MB resident at start, ~181 KB a slot; relay .text 512,933 bytes"
+      ],
+      "refs": [
+        "docs/wp34-hosting-cs.md#2-what-the-relay-does-today",
+        "examples/relay/README.md",
+        "docs/security/http3.md"
+      ],
+      "tests": [
+        "tests/link/net_relay",
+        "tests/link/net_relay_f64",
+        "tests/link/net_relay_soak",
+        "tests/link/net_relay_bad_*",
+        "tests/link/net_relay_*_window"
+      ],
+      "commits": [
+        "14d7f31"
+      ],
+      "pr": 488,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-what-the-interop-job-proves-in-wp34",
+      "type": "docs",
+      "scope": "net",
+      "breaking": false,
+      "title": "record what the interop job proves in WP34's lane table",
+      "body": "The lane table in docs/wp34-hosting-cs.md §5 still listed as open the external proofs that S2's interop job (#487) now runs.\n\nThe State cells now say what that job passes:\n- `h2spec`'s every case for H2;\n- the runner's `handshakeloss`, `transferloss` and `blackhole` cases against quic-go and ngtcp2 for Q3;\n- the runner's `http3` case and `curl --http3` for R1;\n- Chromium through Playwright opening a WebTransport session and echoing a datagram and a stream for R2.\n\n§5a's \"Left\" cells drop the items already closed: TLS-3, QUIC-3 and R2's extended CONNECT.\n\nWhat stays open is named:\n- Chrome over HTTP/2;\n- the runner's congestion cases, ECN and QUIC-7 for Q3;\n- `curl` and Autobahn for H1, which the interop job does not run;\n- H3-4 (accepted) and WT-3 and WT-4.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md#5-the-lanes",
+        ".github/workflows/interop.yml"
+      ],
+      "tests": [],
+      "commits": [
+        "e2d359c"
+      ],
+      "pr": 523,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "retry-a-failed-interop-runner-case-once-and",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "retry a failed interop runner case once, and allow the relay soak one arena-sized step",
+      "body": "Two checks turned main red on commits that could not have caused them.\n\n**The quic-interop-runner job** failed one case per run, and the case changed every time: retry, handshake, handshakeloss. In most of these runs the client exited 0 and its files checked out, but the runner found nothing in its packet trace. On one run, tshark crashed while reading the trace and took the runner down before it wrote its results. Now a case that fails runs once more and must succeed then, and a run that wrote no results counts as every case not run, so the retry runs them all. The verdict prints both results. A case that fails twice still fails, and so do two runs that both crash.\n\n**The relay soak** (`tests/link/net_relay_soak`) failed with resident memory up 278,528 bytes, and on a later run up 90,112 bytes. Each time the growth fell in a single 500-session interval, while the arena stayed exact to the byte. The report now splits anonymous memory from file-backed memory, and the split shows the growth was anonymous: the heap under the arena. When a scope outgrows its chunk, the arena mallocs another 64 KiB chunk and frees it at the scope's end, and glibc keeps that memory. A busier step after warm-up on a loaded runner needs one chunk more than any step before it, so memory steps up once. The leak checks are unchanged: the arena check is exact, and memory may grow in at most one interval, which a steady leak fails however small it is. The total bound, which now caps only that one step, rises from four pages to eight arena chunks (512 KiB).",
+      "metrics": [],
+      "refs": [
+        ".github/workflows/interop.yml",
+        "examples/relay/README.md"
+      ],
+      "tests": [
+        "tests/link/net_relay_soak",
+        "tests/interop/runner-verdict.py"
+      ],
+      "commits": [
+        "a522432"
+      ],
+      "pr": 525,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "read-several-json-fields-in-one-scan-with",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "read several JSON fields in one scan with jsonFields",
+      "body": "* feat(std): read several JSON fields in one scan with jsonFields\n\n`jsonFields(object, names)` answers one slot per name, in the order of\n`names`, and slot `k` is exactly what `jsonField(object, names[k])`\nanswers: an absent field is `null`, the first of a duplicated key wins,\na name asked twice answers in both slots, and a malformed object answers\nin each slot what `jsonField` answers for that name. It reads the object\nonce, left to right, and stops as soon as every name has answered, where\nthree `jsonField` calls read it three times.\n\nThe two readers share the step that reads one member, `jsonReadMember`,\nso they cannot disagree about where a member ends. The member record is\na stack slot, and `jsonField` gains no allocation from the refactor.\n\nEach value `jsonFields` builds is stored into the array it answers, which\nthe escape analysis does not follow, so a loop calling it gets no\nper-pass arena release; a function whose parameters are only strings and\nnumbers still takes it all back when it returns. `jsonField` keeps the\nper-pass release.\n\nRefs: docs/wp26-stdlib.md#3f-a-function-is-not-a-value-so-jsonfields-shares-a-step-not-a-loop\nTests: tests/link/std_json\n\n* test(self): regenerate checked.txt for the json-fields cookbook entry\n\nThe cookbook snippets are part of the corpus tests/self/goldens records,\nso docs/cookbook/json-fields.ts adds one program to checked.txt.\nRegenerated with node tests/self/goldens.js --update.\n\n* test(std): pin an empty JSON value through jsonFields\n\nA colon with no value answers the empty string and the scan reads on,\nas jsonField always has; jsonFields agrees.\n\nTests: tests/link/std_json\n\n* refactor(std): say jsonFields' arena trade-off once and ask it once per check\n\nThe module header points at jsonFields' own comment instead of restating\nit, and the link test's agreement check answers the values it compared\nrather than calling jsonFields a second time.\n\n* test(self): regenerate checked.txt after the std/json header shrank\n\nThe json-fields cookbook entry brings std/json.ts into the dump, so its\nsource positions are recorded; the header is three lines shorter.\nRegenerated with node tests/self/goldens.js --update.\n\nMeasured: medians of 9 runs, 100,000 lines, ms (base jsonField x3 / jsonField x3 / jsonFields): bench/json 92.1 / 82.7 / 91.4; --json lines 66.6 / 56.3 / 51.8; 50 keys, wanted last 151.4 / 120.9 / 98.0; a miss 87.7 / 65.1 / 30.5; short strings only 85.2 / 76.5 / 59.7\n\n* docs(std): qualify jsonField's per-pass release and show jsonFields' IR\n\n`jsonField` keeps a loop's per-pass arena release only on a line older\nthan the pass: on a line built in the pass it has none either, as\nLANGUAGE.md's memory model says. `std/json.ts` and\n`docs/wp26-stdlib.md` now say so wherever they offer `jsonField` as the\nconstant-memory choice, and the `using a = arena()` refusal around a\n`jsonFields` call is stated as the pinned rule it is, NL2424.\n\nThe cookbook entry gets its section in `docs/IR_COOKBOOK.md`, written by\n`docs/cookbook/regen.sh`, and the link test asks for the empty name,\npresent and absent, through both readers.\n\nRefs: docs/wp26-stdlib.md\nTests: tests/link/std_json, tests/cases/reject_using_arena_callee_stores\n\n* test(std): say what the jsonFields fault-after-answers checks pin\n\nThe two checks with a fault after every name has answered pin that such a\nfault leaves the answers alone. They do not pin the early stop: a slot is\nfilled only once, so a scan that read on would answer the same. The stop\nis now described as what it is, a speed path no answer can observe, in\nthe test, in `jsonFields`' comment and in `docs/wp26-stdlib.md`.\n\nTests: tests/link/std_json\n\n* docs(std): say jsonFields keeps a loop's per-pass release, and pin it\n\nWith a value stored into a returned fresh array now returned with it,\na loop over `jsonFields` keeps its per-pass arena release on a line\nolder than the pass, as one over `jsonField` does, and a\n`using a = arena()` block may hold the call. `std/json.ts` and\n`docs/wp26-stdlib.md` §3f said the opposite; §7 item 8 is now answered.\n`tests/link/std_json` pins it: a 1,000-pass loop reads `Arena.used()`\nafter every pass and must find it flat.\n\nMeasured: jsonFields kept 192 B per call on a bench/json line before, 0 after; peak RSS 105.5 to 88.1 MB on the bench/json input, equal to jsonField x3\nTests: tests/link/std_json\n\n* test(std): pin a using arena() block around a jsonFields call\n\n`docs/wp26-stdlib.md` §3f and `jsonFields`' JSDoc say a\n`using a = arena()` block may hold a `jsonFields` call now that a value\nstored into a returned fresh array travels with it. `tests/link/std_json`\nnow shows it: the block compiles, where NL2424 refused it before, and\nleaves `Arena.used()` where it found it. The released compiler still\nrefuses the same file, so the check fails without the rule.\n\nTests: tests/link/std_json",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "120e6bc"
+      ],
+      "pr": 509,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    }
+  ]
+}
