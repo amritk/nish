@@ -16956,6 +16956,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #5
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -16964,7 +16965,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare noundef double @nish_random() #2
-declare void @nish_exit(i32 noundef) #5
+declare void @nish_exit(i32 noundef) #6
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
@@ -17011,16 +17012,16 @@ declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
-declare void @nish_panic_div(i1 noundef zeroext) #6
-declare extern_weak void @nish_panic_overflow(i32 noundef) #6
+declare void @nish_panic_index(i64 noundef, i64 noundef) #7
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #7
+declare void @nish_panic_div(i1 noundef zeroext) #7
+declare extern_weak void @nish_panic_overflow(i32 noundef) #7
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #8 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -17054,8 +17055,9 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
+attributes #6 = { noreturn nounwind }
+attributes #7 = { nounwind noreturn cold }
+attributes #8 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end runtime-prelude -->
