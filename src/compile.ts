@@ -810,6 +810,17 @@ export const main = (): number => {
     }
   }
 
+  // A package root this user may not trust is refused before anything is
+  // compiled, since `nish/<module>` would otherwise be read from it or, with
+  // it refused, from nowhere without a word (`packageRootRefused`).
+  if (packageRootRefused()) {
+    reportToolchainFailure(
+      `${runMode ? "run" : "compile"}: no package root this user may trust (${packageRootSearch()}); install the compiler where only you or root can write its package`,
+      json
+    )
+    return 3
+  }
+
   // The exit-70 path on demand (`src/ice.ts`), at the point stage0 raised
   // its own: the command line is valid and nothing is compiled yet. It is the
   // real report, `--json` object included, so what the hook shows is what a
@@ -1177,6 +1188,37 @@ const packageRootIn = (candidates: string[]): string => {
 const packageRoot = (): string => packageRootIn(packageRootCandidates([]))
 
 /**
+ * Where the package root was looked for, and every candidate refused with why:
+ * the parenthesis of the diagnostics that say no package root was found.
+ */
+const packageRootSearch = (): string => {
+  const refused: string[] = []
+  const looked = packageRootCandidates(refused)
+  const where: string[] = []
+  if (looked.length > 0 || refused.length === 0) {
+    where.push(`looked in ${looked.join(" and ")}`)
+  }
+  if (refused.length > 0) {
+    where.push(`refused ${refused.join(" and ")}`)
+  }
+  return where.join("; ")
+}
+
+/**
+ * Whether the package was refused rather than missing: no candidate it may
+ * trust holds `scripts/build.sh`, and at least one was refused for its owner
+ * or mode (`considerRoot`). Every compile then stops with that reason, because
+ * `std/` comes from the same root as the script: without the refusal the
+ * library would resolve under `/`, and the only error would be a module that
+ * is not there, saying nothing about why (docs/security/cli.md, CLI-9).
+ */
+const packageRootRefused = (): boolean => {
+  const refused: string[] = []
+  const candidates = packageRootCandidates(refused)
+  return refused.length > 0 && packageRootIn(candidates).length === 0
+}
+
+/**
  * The root `nish/<module>` is read from: the package root when there is one,
  * and otherwise the root the compiler's own path implies, or `/` when it has
  * none either — never empty, because `Compilation` reads an empty root as the
@@ -1399,17 +1441,8 @@ const linkProgram = (
 ): number => {
   const root = packageRoot()
   if (root.length === 0) {
-    const refused: string[] = []
-    const looked = packageRootCandidates(refused)
-    const where: string[] = []
-    if (looked.length > 0 || refused.length === 0) {
-      where.push(`looked in ${looked.join(" and ")}`)
-    }
-    if (refused.length > 0) {
-      where.push(`refused ${refused.join(" and ")}`)
-    }
     reportToolchainFailure(
-      `--link: cannot find scripts/build.sh (${where.join("; ")}); run the compiler from a checkout or an installed package`,
+      `--link: cannot find scripts/build.sh (${packageRootSearch()}); run the compiler from a checkout or an installed package`,
       json
     )
     return 3

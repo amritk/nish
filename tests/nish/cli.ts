@@ -1801,6 +1801,34 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
     `refused ${pkg}/bin/.., which can be written by every user`
   );
 
+  // The same root as the library: a compile that imports `nish/<module>`
+  // must not read it from the refused root's `std/`, and must say why rather
+  // than report a module that is not there.
+  mkdirSync(`${pkg}/std`);
+  writeFileSync(`${pkg}/std/planted.ts`, "export const plantedOnly = (): number => 1;\n");
+  const usesStd = `${abs}/sec-shared-std.ts`;
+  writeFileSync(
+    usesStd,
+    [
+      'import { plantedOnly } from "nish/planted";',
+      "export const main = (): number => {",
+      "  return plantedOnly();",
+      "};",
+      "",
+    ].join("\n")
+  );
+  const std = spawnSyncTo(
+    inDirectory("/", [`${pkg}/bin/nish`, usesStd, "-o", `${abs}/sec-shared-std.ll`]),
+    `${WORK}/sec_shared_std.out`,
+    `${WORK}/sec_shared_std.err`
+  );
+  t.eqI32("CLI-9: a compile that imports nish/<module> from that root is refused with the toolchain band", std, 3);
+  t.contains(
+    "CLI-9: and names the root it refused, and why",
+    readOrEmpty(`${WORK}/sec_shared_std.err`),
+    `refused ${pkg}/bin/.., which can be written by every user`
+  );
+
   chmodTo("775", pkg);
   spawnSyncTo(inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)), `${WORK}/sec_group.out`, `${WORK}/sec_group.err`);
   t.eqBool(
@@ -1814,24 +1842,41 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
     t.skip("CLI-9: the first executable nish on PATH", "needs env(1) and a PATH to set one");
     return;
   }
-  // A readable `nish` with no execute bit ahead of the real one: `env` skips
-  // it, as the shell does, and the compiler has to agree on which ran.
+  // A readable `nish` with no execute bit, and a directory called `nish`
+  // (which `access(X_OK)` passes), ahead of the real one: `env` skips both,
+  // as the shell does, and the compiler has to agree on which ran.
   const decoy = `${abs}/sec-decoy`;
   const decoyMarker = `${abs}/sec-decoy-ran`;
+  const dirDecoy = `${abs}/sec-dir-decoy`;
+  const dirDecoyMarker = `${abs}/sec-dir-decoy-ran`;
   removeTree(decoy);
   removeTree(decoyMarker);
+  removeTree(dirDecoy);
+  removeTree(dirDecoyMarker);
   removeTree(marker);
   mkdirSync(decoy);
   mkdirSync(`${decoy}/bin`);
   mkdirSync(`${decoy}/scripts`);
+  mkdirSync(dirDecoy);
+  mkdirSync(`${dirDecoy}/bin`);
+  mkdirSync(`${dirDecoy}/bin/nish`);
+  mkdirSync(`${dirDecoy}/scripts`);
   chmodTo("755", decoy);
+  chmodTo("755", dirDecoy);
+  chmodTo("755", `${dirDecoy}/bin/nish`);
   chmodTo("755", pkg);
   writeFileSync(`${decoy}/bin/nish`, "#!/bin/sh\nexit 0\n");
   writeFileSync(`${decoy}/scripts/build.sh`, `touch '${decoyMarker}'\nexit 1\n`);
+  writeFileSync(`${dirDecoy}/scripts/build.sh`, `touch '${dirDecoyMarker}'\nexit 1\n`);
   spawnSyncTo(
-    inDirectory("/", followedBy(["env", `PATH=${decoy}/bin:${pkg}/bin:${path}`, "nish"], linkArgs)),
+    inDirectory("/", followedBy(["env", `PATH=${dirDecoy}/bin:${decoy}/bin:${pkg}/bin:${path}`, "nish"], linkArgs)),
     `${WORK}/sec_path.out`,
     `${WORK}/sec_path.err`
+  );
+  t.eqBool(
+    "CLI-9: a directory called nish on PATH does not name the package",
+    readFileSyncOrNull(dirDecoyMarker) !== null,
+    false
   );
   t.eqBool(
     "CLI-9: a nish on PATH with no execute bit does not name the package",
