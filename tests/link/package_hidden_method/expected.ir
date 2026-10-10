@@ -1,0 +1,6 @@
+define hidden noundef i32 @pkg_q.Space.unsent(%struct.Space* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this, i32 noundef %total)
+define hidden noundef nonnull align 8 i8* @pkg_q.Space.name(
+define hidden noundef i64 @pkg_q.Space.take(
+define internal noundef i32 @pkg_q.Space.twice(
+declare noundef i64 @pkg_q.Space.take(
+define hidden noundef nonnull align 8 i8* @pkg_q.Space.either$str(

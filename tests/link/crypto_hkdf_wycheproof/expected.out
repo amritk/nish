@@ -1,0 +1,5 @@
+wycheproof HKDF-SHA-256: 86 cases, 83 derived the file's output, 3 oversized lengths refused
+PASS  wycheproof HKDF-SHA-256: every case agrees with the file
+wycheproof HKDF-SHA-384: 83 cases, 80 derived the file's output, 3 oversized lengths refused
+PASS  wycheproof HKDF-SHA-384: every case agrees with the file
+hkdf wycheproof: 2 passed, 0 failed, 0 skipped
