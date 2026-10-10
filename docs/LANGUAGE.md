@@ -5954,12 +5954,20 @@ where its memory lives and when it is reused.
    it, such as `parts.pop()` (`mem_join_parts_method`), or a `parts` that
    names another local's array (`mem_join_parts_alias`). Assigning or
    returning `parts`, and an array the function did not build itself, count
-   the same way. The rule is about what the function
-   allocates, not what it is handed: a *parameter* pushed onto `parts`
-   still counts as kept by the callee. So a loop that builds a string in a
-   pass and passes it to such a function (`jsonField(line, ...)` on a line
-   built in the pass, `replaceAll` on one) still has no scope. Passing it a
-   string older than the pass is what keeps the scope.
+   the same way. The same holds for a `string` *parameter* the function
+   pushes onto such a `parts` directly (`parts.push(word)`, parentheses
+   seen through): `join` reads it before the call returns and nothing can
+   reach it afterwards, so the callee does not keep it, the parameter is
+   `nocapture`, and a loop that builds the argument in the same pass and
+   passes it keeps its scope (`tests/cases/mem_join_parts_same_pass`: 1000
+   passes leave `Arena.used()` where one pass left it). Every negative above
+   keeps the parameter kept as well (`mem_join_parts_same_pass_kept` reads a
+   part back into an object). The rule stops at the push: a parameter that
+   is first copied into a local (`let rest = text`), returned, or handed to
+   another user function still counts as kept, since a `string` passed on is
+   not followed into its callee. So `jsonField(line, ...)` and `replaceAll`
+   on a line built in the pass still have no scope, and passing them a
+   string older than the pass is what keeps it.
 
    A value stored into an array that is returned with it is returned, not
    stored. When a function binds a local `xs` to its own fresh literal or

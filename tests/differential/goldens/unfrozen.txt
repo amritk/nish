@@ -206,6 +206,8 @@ cases/mem_join_parts_forof added after R6: no rewriter to freeze it with
 cases/mem_join_parts_method added after R6: no rewriter to freeze it with
 cases/mem_join_parts_passed added after R6: no rewriter to freeze it with
 cases/mem_join_parts_readback added after R6: no rewriter to freeze it with
+cases/mem_join_parts_same_pass added after R6: no rewriter to freeze it with
+cases/mem_join_parts_same_pass_kept added after R6: no rewriter to freeze it with
 cases/mem_join_parts_scope added after R6: no rewriter to freeze it with
 cases/mem_loop_scope added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_chunk added after R6: no rewriter to freeze it with
