@@ -4576,14 +4576,23 @@ if (!only || "std_text_index_of_any".includes(only)) {
     }
   }
   // `--profile wasi` links runtime-simd.c's scalar path (scripts/build.sh), so
-  // the same program run under Node's WASI prints the same lines.
-  if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasiDir = path.join(buildDir, "wasi_std_text_index_of_any")
+  // the same programs run under Node's WASI print the same lines. The second is
+  // the non-ASCII edge's byte offsets, which the native build and this one both
+  // count in UTF-8 bytes and Node in UTF-16 units, so it is held to its
+  // expected.out here and natively, and never run under Node above.
+  for (const name of ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset"]) {
+    if (!WASI_SYSROOT || !has("wasm-ld")) {
+      skip(
+        `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
+      )
+      continue
+    }
+    const wasiDir = path.join(buildDir, `wasi_${name}`)
     const wasm = path.join(wasiDir, "app.wasm")
     const built = spawnSync(
       NISH,
       [
-        path.join(linkDir, "std_text_index_of_any", "main.ts"),
+        path.join(linkDir, name, "main.ts"),
         "-o",
         `${wasiDir}${path.sep}`,
         "--link",
@@ -4600,15 +4609,11 @@ if (!only || "std_text_index_of_any".includes(only)) {
             encoding: "utf8",
           })
         : built
-    const want = fs.readFileSync(path.join(linkDir, "std_text_index_of_any", "expected.out"), "utf8")
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
     check(
-      `link/std_text_index_of_any: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
       built.status === 0 && host.status === 0 && host.stdout === want,
       shown(host)
-    )
-  } else {
-    skip(
-      `skipped: link/std_text_index_of_any: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
     )
   }
   const rootText = path.join(buildDir, "std_text_root.ll")

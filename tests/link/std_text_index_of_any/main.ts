@@ -34,7 +34,8 @@ export const main = (): number => {
   // An ASCII byte never occurs inside a multi-byte sequence, so non-ASCII text
   // passes through and only its ASCII bytes can match. Natively the answer is
   // a byte offset and under Node a UTF-16 one, so the line prints what was
-  // found rather than where.
+  // found rather than where; `std_text_index_of_any_non_ascii_offset` pins
+  // where, natively and under `--profile wasi`.
   const accented = "héllo wörld; ünïcödé, done";
   const semi = indexOfAny(accented, ";,", 0);
   console.log(`non-ascii: ${accented.substring(semi, semi + 1)} ${indexOfAny(accented, "xq", 0)} ${indexOfAny("ab;cdé", ";", 0)}`);
