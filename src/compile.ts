@@ -1402,8 +1402,9 @@ const pushRecipeFlags = (argv: string[], profile: string, debugInfo: boolean, th
  * link only compiles the program. Empty when the link should compile the
  * runtime itself, as it always did: the wasi profile, which the cache does not
  * take, and a cache root that is not there or cannot be made private, so a
- * `--link` that works without the cache works without it. Null when the
- * runtime did not compile, which is reported here as the link's failure.
+ * `--link` that works without the cache works without it, and an entry
+ * the compile left nothing to fill. Null when the runtime did not compile,
+ * which is reported here as the link's failure.
  *
  * The root is made `0700` on every link rather than on a miss, as
  * `buildIntoCache` does for the run cache (docs/security/cli.md, CLI-4 and
@@ -1463,7 +1464,11 @@ const cachedRuntime = (
   const script = `${root}/scripts/build.sh`
   const argv: string[] = ["bash", script, `${root}/runtime/runtime.c`, "--runtime-objects", work]
   pushRecipeFlags(argv, profile, debugInfo, threads)
-  let status = spawnSync(argv)
+  const status = spawnSync(argv)
+  // A compiler that answers 0 and writes no object (`CC=true`, which turns a
+  // link into a no-op) leaves nothing to move, and the entry then gets no key:
+  // the link compiles the runtime itself, as it would with no cache at all.
+  let entry = ""
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
     reportToolchainFailure(`--link: ${script} failed compiling the runtime (${why})`, json)
@@ -1474,16 +1479,14 @@ const cachedRuntime = (
       move.push(`${work}/${unit.slice(0, unit.length - 2)}.o`)
     }
     move.push(`${cacheEntry}/`)
-    status = spawnSync(move)
-    if (status === 0) {
+    if (spawnSyncTo(move, "/dev/null", "/dev/null") === 0) {
       writeFileSync(keyFile, key)
-    } else {
-      reportToolchainFailure(`--link: could not move the runtime into ${cacheEntry}`, json)
+      entry = cacheEntry
     }
   }
   const clean: string[] = ["rm", "-rf", "--", work]
   spawnSync(clean)
-  return status === 0 ? cacheEntry : null
+  return status === 0 ? entry : null
 }
 
 /**
