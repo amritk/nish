@@ -1,14 +1,14 @@
 ---
 name: Issue sweep 2 — the fixable open issues, in two lanes
-overview: Continues the issue-sweep run (#494), which closed at its deadline with nine stages unstarted, and adds #524 and #503. Compiler stages run one at a time in lane A, since every src/ change moves the goldens. Std, test and doc stages run in parallel beside it in lane B. A last stage recounts docs/security/README.md once every record has moved.
+overview: "Continues the issue-sweep run (#494), which closed at its deadline with nine stages unstarted, and adds #524 and #503. Compiler stages run one at a time in lane A, since every src/ change moves the goldens. Std, test and doc stages run in parallel beside it in lane B. A last stage recounts docs/security/README.md once every record has moved."
 stages:
   - id: hoist-new-resize
     title: "fix(codegen): do not hoist a loop's array header across a new whose constructor resizes it"
-    goal: The #435 reproducer prints 706 like Node, and IR moves only for loops whose constructor really resizes (#435)
+    goal: "The #435 reproducer prints 706 like Node, and IR moves only for loops whose constructor really resizes (#435)"
     verification: npm run check && npm test && node tests/self/goldens.js
     todos:
       - id: hoist-test-first
-        content: Add the #435 reproducer as a failing-first tests/cases golden with expected stdout — see hoist-new-resize
+        content: "Add the #435 reproducer as a failing-first tests/cases golden with expected stdout — see hoist-new-resize"
         status: pending
       - id: hoist-fix
         content: Make callMayResize in src/emit-arrays.ts treat a class new as a call to its constructor, folding rightSideMayResize in if it fits — see hoist-new-resize
@@ -18,7 +18,7 @@ stages:
         status: pending
   - id: nonexported-method
     title: "fix(checker): a method of a non-exported std class called from another package links or is refused"
-    goal: The #442 shape either links and runs, or is refused by the checker with a diagnostic naming the class, and never fails with an undefined symbol at link (#442)
+    goal: "The #442 shape either links and runs, or is refused by the checker with a diagnostic naming the class, and never fails with an undefined symbol at link (#442)"
     verification: npm run check && npm test && node tests/self/goldens.js && node scripts/gen-diagnostic-codes.mjs --check
     todos:
       - id: nonexported-repro
@@ -46,7 +46,7 @@ stages:
         status: pending
   - id: fix-followups-461
     title: "fix(checker): the diagnostic-fix-2 follow-ups — NL9007 wording, uncheckedGet in the range analysis, one-round migration"
-    goal: Items 2, 3 and 4 of #461 are done, and item 1 (unsafe-wrap) is untouched
+    goal: "Items 2, 3 and 4 of #461 are done, and item 1 (unsafe-wrap) is untouched"
     verification: npm run check && npm test && node tests/self/goldens.js
     todos:
       - id: f461-nl9007
@@ -60,7 +60,7 @@ stages:
         status: pending
   - id: fix-followups-440
     title: "feat(checker): fixes for !xs.length and non-boolean && / || operands, and code-checked nofix cases"
-    goal: Items 3 and 4 of #440 are done, and items 1 and 2 are untouched
+    goal: "Items 3 and 4 of #440 are done, and items 1 and 2 are untouched"
     verification: npm run check && npm test && node tests/self/goldens.js
     todos:
       - id: f440-truthiness
@@ -81,7 +81,7 @@ stages:
         content: Teach src/attributes.ts that a parameter reaching only a local parts.push that is joined and dropped is not captured — see join-same-pass
         status: pending
       - id: join-evidence
-        content: Keep the #500 negative cases off, and report breadth across std/ and src/, the self-build, and bench --check — see join-same-pass
+        content: "Keep the #500 negative cases off, and report breadth across std/ and src/, the self-build, and bench --check — see join-same-pass"
         status: pending
   - id: index-of-any-offset
     title: "test(std): compare indexOfAny's non-ASCII byte offset between native and --profile wasi"
