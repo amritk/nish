@@ -26,7 +26,7 @@
 // that calls `nish_panic_index` and never returns. Comparing *unsigned* makes a
 // negative index fail too.
 
-import { constructorOf, HoistedHeader, isResizeCall } from "./attributes"
+import { HoistedHeader, isResizeCall } from "./attributes"
 import { NO_RECORD, recordReaches, recordStoreType } from "./bounds"
 import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter, LoopTarget } from "./emit"
@@ -38,7 +38,7 @@ import {
   emitIntBinary,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { intrinsicType, isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { emitSliceCheck } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
@@ -58,14 +58,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
-import {
-  elementLLVMType,
-  elementStride,
-  FieldInfo,
-  FunctionSig,
-  inlineElementStruct,
-  StructInfo,
-} from "./program"
+import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
@@ -528,10 +521,9 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
  *
  * Three things can: a `push` or a `pop` written in it, a call to a user
  * function the fixpoint says grows an array (`FunctionFacts.resizesArray`), and
- * a `new` of a class whose constructor it says the same of, since a
- * constructor is a call `nodeCallees` does not hold (CG-11). A builtin cannot
- * -- `push` and `pop` are the only builtins that reach a user array's header
- * and both are caught in the first place -- and an element store cannot
+ * a `new` of a class whose constructor it says the same of (CG-11). A builtin
+ * cannot -- `push` and `pop` are the only builtins that reach a user array's
+ * header and both are caught in the first place -- and an element store cannot
  * either, which is the reason the fact is not `writesThrough`: a loop that
  * writes `dst[i]` is exactly the loop this is for.
  *
@@ -552,25 +544,26 @@ const mayResize = (emitter: Emitter, node: Node): boolean => {
   return false
 }
 
-/** `node` itself, not its operands, is a `push`, a `pop`, or a call or a `new` the fixpoint says may grow an array. */
+/**
+ * `node` itself, not its operands, is a `push`, a `pop`, or a call or a `new`
+ * the fixpoint says may grow an array.
+ */
 const callMayResize = (emitter: Emitter, node: Node): boolean => {
-  const program = emitter.program
-  if (isResizeCall(program, emitter.table, node)) {
+  if (isResizeCall(emitter.program, emitter.table, node)) {
     return true
   }
-  let callee: FunctionSig | null = null
-  if (node.kind === N_CALL) {
-    callee = program.nodeCallees[node.id]
-  } else if (node.kind === N_NEW) {
-    // The class named, not the type it converts to; a class with no
-    // constructor stores constants only, and `new Array` is not a struct.
-    callee = constructorOf(program, emitter.table, intrinsicType(program, node))
+  // A `new` holds its class's constructor, and a class with none stores
+  // constants only; `new Array` holds nothing.
+  if (node.kind === N_CALL || node.kind === N_NEW) {
+    const callee = emitter.program.nodeCallees[node.id]
+    if (callee !== null) {
+      const facts = emitter.facts.get(callee.name)
+      if (facts === null || facts.resizesArray) {
+        return true
+      }
+    }
   }
-  if (callee === null) {
-    return false
-  }
-  const facts = emitter.facts.get(callee.name)
-  return facts === null || facts.resizesArray
+  return false
 }
 
 /**

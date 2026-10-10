@@ -3211,22 +3211,20 @@ const bodyMayExtend = (
   if (body.kind === N_THROW || isResizeCall(unit.program, table, body)) {
     return true
   }
-  // An unresolved callee is a builtin, and no builtin but `push`/`pop`
-  // reaches a user array's header; those two are above. A `new` runs its
-  // class's constructor, a call `nodeCallees` does not hold (CG-11).
-  let callee: FunctionSig | null = null
-  if (body.kind === N_CALL) {
-    callee = unit.program.nodeCallees[body.id]
-  } else if (body.kind === N_NEW) {
-    callee = constructorOf(unit.program, table, intrinsicType(unit.program, body))
-  }
-  if (callee !== null) {
-    if (known === null) {
-      return true
-    }
-    const calleeFacts = known.get(callee.name)
-    if (calleeFacts === null || calleeFacts.resizesArray) {
-      return true
+  // A `new` holds its class's constructor (CG-11), and a class with none
+  // stores constants only.
+  if (body.kind === N_CALL || body.kind === N_NEW) {
+    const callee = unit.program.nodeCallees[body.id]
+    // An unresolved callee is a builtin, and no builtin but `push`/`pop`
+    // reaches a user array's header; those two are above.
+    if (callee !== null) {
+      if (known === null) {
+        return true
+      }
+      const calleeFacts = known.get(callee.name)
+      if (calleeFacts === null || calleeFacts.resizesArray) {
+        return true
+      }
     }
   }
   for (const child of body.children) {
