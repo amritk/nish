@@ -78,6 +78,34 @@ void ct_fill(void *p, size_t bytes, int secret_class) {
   }
 }
 
+void ct_signed_limbs(int64_t *limbs, size_t count, int bits) {
+  uint64_t magnitude = ((uint64_t)1 << bits) - 1;
+  for (size_t i = 0; i < count; i++) {
+    uint64_t r = (uint64_t)limbs[i];
+    uint64_t sign = (uint64_t)0 - (r >> 63);
+    limbs[i] = (int64_t)(((r & magnitude) ^ sign) - sign);
+  }
+}
+
+size_t ct_first_nonzero(const int64_t *limbs, size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    if (limbs[i] != 0) {
+      return i;
+    }
+  }
+  return count;
+}
+
+uint64_t ct_work_if(int64_t s) {
+  volatile uint64_t acc = 0;
+  if (s != 0) {
+    for (int k = 0; k < 200; k++) {
+      acc = acc * 0x9e3779b97f4a7c15u + (uint64_t)k;
+    }
+  }
+  return acc;
+}
+
 /* A cycle counter where the machine offers one to user space, else nanoseconds. */
 static inline uint64_t ct_ticks(void) {
 #if defined(__x86_64__)
