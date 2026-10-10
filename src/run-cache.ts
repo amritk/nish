@@ -247,10 +247,22 @@ const fileFingerprint = (path: string): string => {
  */
 const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
   key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
-  for (const unit of runtimeUnits()) {
-    key.add(`${unit} ${fileFingerprint(`${root}/runtime/${unit}`)}\n`)
-  }
+  addUnitFingerprints(key, root, runtimeUnits(), 0)
   key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
+}
+
+/**
+ * The lines of `units` from `at` on. Recursive rather than a loop, because a
+ * loop would keep every file it hashed alive until the key is done (NL9011),
+ * and a call gives each file's text back when it returns.
+ */
+const addUnitFingerprints = (key: StringBuilder, root: string, units: string[], at: i32): void => {
+  if (at < 0 || at >= units.length) {
+    return
+  }
+  const unit = units[at]
+  key.add(`${unit} ${fileFingerprint(`${root}/runtime/${unit}`)}\n`)
+  addUnitFingerprints(key, root, units, at + 1)
 }
 
 /**
