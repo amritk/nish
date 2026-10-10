@@ -88,6 +88,7 @@ process. The goals considered are:
 | K1-4 | Low | `std/crypto/hkdf.ts:74`, `:108` | `hkdfExpandSha256/384` MACed `toI32(info.length)` bytes of `info`. Under `--number-mode f64` two `info`s longer than 2^31 − 1 bytes that shared their first 2^31 − 1 derived one key. | Fixed: such an `info` answers `null`, like an out-of-range L. Test: `crypto_hkdf_long_f64` |
 | K1-5 | Low | `std/crypto/hkdf.ts:74`, `:108` | RFC 5869 §2.3 asks for a PRK of at least HashLen bytes. `hkdfExpand*` accepted any length, an empty PRK included, which keys HMAC with nothing a caller had to know. Misuse resistance rather than a break: every caller in the tree passes an `hkdfExtract*` result. | Fixed: a PRK shorter than 32 (SHA-256) or 48 (SHA-384) bytes answers `null`. Test: `crypto_hkdf_k1_bounds` (and `_f64`) |
 | K1-6 | High | `src/emit-arrays.ts:1098` (`emitArrayLength`, through `emitNumberFromI64`); `runtime/runtime.c:1164` (`nish_array_grow`) | Under `--number-mode i32`, `a.length` is the array's `i64` length truncated to `i32`. Nothing stops an array from growing past 2^31 − 1 elements (`push` doubles the capacity without a bound). A `u8[]` of 2^32 + 5 bytes therefore has `length` 5 everywhere in the program, and every std function sees a 5-byte array. Measured on base and on this branch: `sha256` of 2^32 + 5 bytes equals `sha256` of its first 5, `hmacSha256Verify` accepts the 5-byte message's tag for the 4 GiB message, and `timingSafeEqual` of it against a 5-byte array answers `true`. std cannot see the true length in this mode, so nothing inside this stage's files can fix it. | **Fixed**, by the stages after this one. As this stage left it: needs `src/emit-arrays.ts` (the codegen stage) or `runtime/runtime.c` (the runtime stage). A fix is to refuse (panic) growth or allocation past 2^31 − 1 elements under `--number-mode i32`, or to make `.length` panic rather than truncate. Once that lands, the K1-1/K1-2 guards cover i32 mode as well. *Since fixed: the codegen stage bounded `push` and `new Array` at 2^31 − 1 elements ([codegen.md](codegen.md), K1-6 and CG-1), and the runtime stage closed the file reads, concatenation and `nish_alloc_array` ([runtime.md](runtime.md), RT-1, RT-2, RT-7). The one source left, a string `join` builds (`src/emit-arrays.ts`), was closed with CG-3 by [#427](https://github.com/amritk/nish/pull/427) and is counted under it ([codegen.md](codegen.md))* |
+| K1-7 | Low | `std/crypto/hmac.ts` (`HmacSha256`, `HmacSha384`), `std/crypto/hkdf.ts` (`hkdfExpandSha256/384`) | Key material outlived the call. HMAC left both key blocks (`K XOR ipad`, `K XOR opad`), the hash of a key longer than a block and the hasher that made it, the inner digest, and both keyed hashers' chaining value, block and schedule in arena memory; a keyed midstate forges tags as well as the key does. `expand` left every T(i), including the bytes of the last one past L. A later memory disclosure could read them. Found while closing #476; nothing in this stage's original reading covered memory left behind. | **Fixed** (#476). Each is zeroed with `wipe`, a volatile `llvm.memset`, before the function returns: the key blocks once absorbed, the hashed key and its hasher once the key blocks are made, the inner digest once fed to the outer hash, both hashers when `digest` answers, and each T(i) as soon as the next replaces it and the last one at the end. `HmacSha256Scratch` and `HmacSha384Scratch` zero their hashers with `wipe` too, where ordinary stores stood. Callers holding a key as a `Secret<u8[]>` have `hmacSha256Secret`/`384`/`512`, `hkdfExtractSha256Secret`/`384`, `hkdfExpandSha256Secret`/`384` and `hkdfSha256Secret`/`384`, which read it only inside `exposeWith` and hand the PRK and the output back as `Secret`s; `hkdfSha256Secret` wipes the PRK between its two steps. Tests: `crypto_hmac` and `_f64` read both hashers back as zeros after each `digest`; `tests/run.js` ("crypto_hmac crypto_hkdf: the wipes survive -O2") counts the volatile wipes under each entry point after `opt -O2`, and fails when any one is deleted or made an ordinary store. **Not reached**, and recorded rather than claimed: the caller's own key array on the plain entry points; an `HmacSha*` keyed and dropped without a `digest`; the PRK and output the plain `hkdfExtract*`, `hkdfExpand*` and `hkdfExpandLabel*` answer, which are the caller's (moving `std/net`'s TLS and QUIC callers onto the `Secret` entry points is #430); and the compression functions' working variables, which live in registers or spill slots no store in the language can name. |
 
 No finding was made in the length counters, the padding, HMAC's key handling,
 the digest-ends-computation rule, the window checks, HKDF's L bound, or the
@@ -144,6 +145,12 @@ stage that is:
   `tests/cases/ct_asm_k1_base64url` holds the two character maps verbatim, and
   one encode group and one decode group. The length-driven loops, the
   decoder's store guard and the encoder's string building remain discipline.
+- The `crypto/hmac.ts` and `crypto/hkdf.ts` rows, after #476: HMAC runs
+  over SHA-512 too (`HmacSha512`, `hmacSha512`, `hmacSha512Verify`); both
+  modules wipe the key blocks, hashers, inner digest and T(i) they make
+  (K1-7); and each has `Secret`-keyed entry points (`hmacSha256Secret` and
+  its twins, `hkdfSha256Secret`, `hkdfExtractSha256Secret`,
+  `hkdfExpandSha256Secret` and their SHA-384 twins).
 - Worth a sentence near the top: until K1-6 is fixed, a program built under
   `--number-mode i32` must not hand these functions an array of 2^31 bytes or
   more. `length` wraps there, and nothing in std can tell. *Since K1-6 is
@@ -175,6 +182,36 @@ The answers are pinned against every HKDF-Expand-Label step RFC 8448 §3
 prints and all of RFC 9001 A.1, in both number modes
 (`tests/link/crypto_hkdf_expand_label`, `_f64`); the SHA-384 vectors and the
 largest accepted label, context and length were checked against OpenSSL's
-TLS13-KDF. The secrets they derive are plain arrays and are not wiped: `nish:secret`
-now has the primitive (ECC-2, closed), and moving HKDF's secrets onto it is not
-yet done.
+TLS13-KDF. The secrets they derive are plain arrays, the caller's to wipe:
+every T(i) and HMAC state on the way is wiped now (K1-7), and HKDF has `Secret`
+entry points, but the label functions answer plain arrays until their TLS and
+QUIC callers move (#430).
+
+## Addendum: Wycheproof and wiped state (#476)
+
+Added after this audit: `HmacSha512`, `hmacSha512` and `hmacSha512Verify`, the
+`Secret` entry points of K1-7, and Project Wycheproof's vectors for HMAC and
+HKDF, carried the way K2, K3 and K5 carry theirs
+(`tests/link/crypto_wycheproof/hmac.ts`, `hkdf.ts`, upstream commit `3fa63dd`).
+
+| Suite | Cases | Run by |
+| --- | --- | --- |
+| HMAC-SHA-256, -384, -512 | 174 each: 66 valid, 108 with a modified tag; keys the hash's length, half of it and 65 bytes (past SHA-256's block, so hashed first there), tags full and truncated to half | `tests/link/crypto_hmac_wycheproof`, `_f64` |
+| HKDF-SHA-256 | 86: 83 valid, among them 23 with an empty salt, salts up to 80 bytes (past the block, so hashed first) and the largest output, 255 × 32 bytes; 3 asking one byte more | `tests/link/crypto_hkdf_wycheproof`, `_f64` |
+| HKDF-SHA-384 | 83: 80 valid, among them 22 with an empty salt and the largest output, 255 × 48 bytes; 3 asking one byte more | the same |
+
+Every case agrees in both number modes, by every entry point it has: an HMAC
+tag computed by the one-shot function, by the streaming class and under a
+`Secret` key is one tag, whose leading bytes a valid case matches and a
+modified one does not, and a full-length tag goes through the verifier too. An
+HKDF output derived by `extract` and `expand`, by the `*Into` functions over an
+`HkdfScratch`, and by `hkdfSha256Secret`/`384` is the file's, and the oversized
+lengths are refused by all three.
+
+HMAC-SHA-512 is pinned besides against RFC 4231's seven cases and the 128- and
+129-byte keys either side of its block (`crypto_hmac`). With the constructors
+now hashing a long key in a hasher of their own, a key longer than 2^31 − 1
+bytes is refused by HMAC rather than by `sha256`, so K1-1's reasoning for the
+key holds where it is checked: `crypto_hmac_sha256_long_key_f64` pins the
+refusal, and `crypto_hmac_sha512_digest_twice` that a wiped, finished
+`HmacSha512` still refuses a second `digest`.

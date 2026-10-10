@@ -1,5 +1,6 @@
 /**
- * `nish/crypto/hmac` — HMAC as RFC 2104 defines it, over SHA-256 and SHA-384.
+ * `nish/crypto/hmac` — HMAC as RFC 2104 defines it, over SHA-256, SHA-384 and
+ * SHA-512.
  *
  *     H(K XOR opad, H(K XOR ipad, text))
  *
@@ -24,6 +25,21 @@
  * which HMAC does not keep secret; a received tag is compared with
  * `timingSafeEqual`, never `===`.
  *
+ * **What the key reaches is wiped** (CLAUDE.md, "Security"). The two key
+ * blocks are wiped once their hashers have absorbed them, and so is the hash
+ * of a key longer than a block and the hasher that made it. `digest` wipes
+ * the inner digest and both keyed hashers (chaining value, pending block and
+ * message schedule) before it answers, so a finished `HmacSha256` holds
+ * nothing of the key. The wipes are `wipe`'s volatile stores, which `-O2`
+ * keeps (`tests/run.js`, "crypto_hmac crypto_hkdf: the wipes survive -O2").
+ * What no wipe here reaches is the caller's own key array, and an
+ * `HmacSha256` that is keyed and then dropped without a `digest` keeps its
+ * keyed hashers (docs/security/crypto-k1.md, K1-7).
+ *
+ * A caller that holds its key as a `Secret<u8[]>` (`nish:secret`) MACs with
+ * `hmacSha256Secret`, `hmacSha384Secret` or `hmacSha512Secret`, which read the
+ * key only inside `exposeWith`; the tag they answer is public and plain.
+ *
  * `HmacSha256Scratch` and `HmacSha384Scratch` are the same computation in
  * hashers the caller allocates once: `begin` keys them again in place and
  * `finishInto` writes the tag into the caller's array, so a loop of them
@@ -32,9 +48,10 @@
  *
  * Written from RFC 2104, not ported from another implementation.
  */
-import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
-import { SHA384_SIZE, SHA512_BLOCK, Sha384, sha384 } from "nish/crypto/sha512"
+import { SHA256_BLOCK, SHA256_SIZE, Sha256 } from "nish/crypto/sha256"
+import { SHA384_SIZE, SHA512_BLOCK, SHA512_SIZE, Sha384, Sha512 } from "nish/crypto/sha512"
 import { timingSafeEqual } from "nish/crypto/ct"
+import { Secret, exposeWith, wipe } from "nish:secret"
 
 /** RFC 2104 §2's `ipad`, the byte XORed into the key for the inner hash. */
 const HMAC_IPAD: i32 = 0x36
@@ -77,6 +94,86 @@ const hmacPadBlock = (key: u8[], blockSize: i32, pad: i32): u8[] => {
 }
 
 /**
+ * Zeroes everything `h` holds of the key and the message it was fed: its hash
+ * value, its pending block and its message schedule, with `wipe`'s volatile
+ * stores, which no optimiser removes however dead the hasher is about to be.
+ * The hasher is left finished, so that feeding it before it is started again
+ * panics, as feeding a spent one always has.
+ */
+const hmacWipeSha256 = (h: Sha256): void => {
+  wipe(h.state)
+  wipe(h.block)
+  wipe(h.schedule)
+  h.fill = 0
+  h.total = 0
+  h.finished = true
+}
+
+/** `hmacWipeSha256` for SHA-384. */
+const hmacWipeSha384 = (h: Sha384): void => {
+  wipe(h.engine.state)
+  wipe(h.engine.block)
+  wipe(h.engine.schedule)
+  h.engine.filled = 0
+  h.engine.count = toU64(0)
+  h.engine.finished = true
+}
+
+/** `hmacWipeSha256` for SHA-512. */
+const hmacWipeSha512 = (h: Sha512): void => {
+  wipe(h.engine.state)
+  wipe(h.engine.block)
+  wipe(h.engine.schedule)
+  h.engine.filled = 0
+  h.engine.count = toU64(0)
+  h.engine.finished = true
+}
+
+/**
+ * Panics on a key longer than 2^31 - 1 bytes, before any `toI32` of its
+ * length: under `--number-mode f64` that would saturate, and the key hashed
+ * would be a prefix, so two keys sharing it would MAC alike (K1-1).
+ */
+const hmacCheckKey = (key: u8[]): void => {
+  if (key.length > 2147483647) {
+    panic("hmac: a key longer than 2^31 - 1 bytes")
+  }
+}
+
+/**
+ * Keys `inner` with `k XOR ipad` and `outer` with `k XOR opad`, `k` no longer
+ * than SHA-256's block, and wipes both key blocks once absorbed.
+ */
+const hmacKeySha256 = (inner: Sha256, outer: Sha256, k: u8[]): void => {
+  const ipad: u8[] = hmacPadBlock(k, SHA256_BLOCK, HMAC_IPAD)
+  inner.update(ipad, HMAC_FROM, SHA256_BLOCK)
+  wipe(ipad)
+  const opad: u8[] = hmacPadBlock(k, SHA256_BLOCK, HMAC_OPAD)
+  outer.update(opad, HMAC_FROM, SHA256_BLOCK)
+  wipe(opad)
+}
+
+/** `hmacKeySha256` for SHA-384's 128-byte block. */
+const hmacKeySha384 = (inner: Sha384, outer: Sha384, k: u8[]): void => {
+  const ipad: u8[] = hmacPadBlock(k, SHA512_BLOCK, HMAC_IPAD)
+  inner.update(ipad, HMAC_FROM, SHA512_BLOCK)
+  wipe(ipad)
+  const opad: u8[] = hmacPadBlock(k, SHA512_BLOCK, HMAC_OPAD)
+  outer.update(opad, HMAC_FROM, SHA512_BLOCK)
+  wipe(opad)
+}
+
+/** `hmacKeySha256` for SHA-512's 128-byte block. */
+const hmacKeySha512 = (inner: Sha512, outer: Sha512, k: u8[]): void => {
+  const ipad: u8[] = hmacPadBlock(k, SHA512_BLOCK, HMAC_IPAD)
+  inner.update(ipad, HMAC_FROM, SHA512_BLOCK)
+  wipe(ipad)
+  const opad: u8[] = hmacPadBlock(k, SHA512_BLOCK, HMAC_OPAD)
+  outer.update(opad, HMAC_FROM, SHA512_BLOCK)
+  wipe(opad)
+}
+
+/**
  * HMAC-SHA-256 in progress (RFC 2104 with RFC 4231's SHA-256): feed the
  * message with `update`, as many windows as it takes, and take the 32-byte
  * tag with `digest`.
@@ -87,13 +184,25 @@ export class HmacSha256 {
   /** H(K XOR opad, …), fed the key block in the constructor and the inner digest last. */
   outer: Sha256
 
-  /** Keys the computation. A key longer than 64 bytes is replaced by its SHA-256 (RFC 2104 §2). */
+  /**
+   * Keys the computation. A key longer than 64 bytes is replaced by its
+   * SHA-256 (RFC 2104 §2), and that hash and the hasher that made it are
+   * wiped once the key blocks are absorbed.
+   */
   constructor(key: u8[]) {
-    const k: u8[] = toI32(key.length) > SHA256_BLOCK ? sha256(key) : key
+    hmacCheckKey(key)
     this.inner = new Sha256()
-    this.inner.update(hmacPadBlock(k, SHA256_BLOCK, HMAC_IPAD), HMAC_FROM, SHA256_BLOCK)
     this.outer = new Sha256()
-    this.outer.update(hmacPadBlock(k, SHA256_BLOCK, HMAC_OPAD), HMAC_FROM, SHA256_BLOCK)
+    if (toI32(key.length) > SHA256_BLOCK) {
+      const hasher = new Sha256()
+      hasher.update(key, HMAC_FROM, toI32(key.length))
+      const hashed: u8[] = hasher.digest()
+      hmacWipeSha256(hasher)
+      hmacKeySha256(this.inner, this.outer, hashed)
+      wipe(hashed)
+    } else {
+      hmacKeySha256(this.inner, this.outer, key)
+    }
   }
 
   /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. */
@@ -101,11 +210,15 @@ export class HmacSha256 {
     this.inner.update(data, off, len)
   }
 
-  /** The 32-byte tag, in a fresh array. Ends the computation. */
+  /** The 32-byte tag, in a fresh array. Ends the computation, and wipes both hashers. */
   digest(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
-    return this.outer.digest()
+    wipe(innerDigest)
+    const tag: u8[] = this.outer.digest()
+    hmacWipeSha256(this.inner)
+    hmacWipeSha256(this.outer)
+    return tag
   }
 }
 
@@ -121,11 +234,19 @@ export class HmacSha384 {
 
   /** Keys the computation. A key longer than 128 bytes is replaced by its SHA-384 (RFC 2104 §2). */
   constructor(key: u8[]) {
-    const k: u8[] = toI32(key.length) > SHA512_BLOCK ? sha384(key) : key
+    hmacCheckKey(key)
     this.inner = new Sha384()
-    this.inner.update(hmacPadBlock(k, SHA512_BLOCK, HMAC_IPAD), HMAC_FROM, SHA512_BLOCK)
     this.outer = new Sha384()
-    this.outer.update(hmacPadBlock(k, SHA512_BLOCK, HMAC_OPAD), HMAC_FROM, SHA512_BLOCK)
+    if (toI32(key.length) > SHA512_BLOCK) {
+      const hasher = new Sha384()
+      hasher.update(key, HMAC_FROM, toI32(key.length))
+      const hashed: u8[] = hasher.digest()
+      hmacWipeSha384(hasher)
+      hmacKeySha384(this.inner, this.outer, hashed)
+      wipe(hashed)
+    } else {
+      hmacKeySha384(this.inner, this.outer, key)
+    }
   }
 
   /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha384.update`. */
@@ -133,11 +254,59 @@ export class HmacSha384 {
     this.inner.update(data, off, len)
   }
 
-  /** The 48-byte tag, in a fresh array. Ends the computation. */
+  /** The 48-byte tag, in a fresh array. Ends the computation, and wipes both hashers. */
   digest(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA384_SIZE)
-    return this.outer.digest()
+    wipe(innerDigest)
+    const tag: u8[] = this.outer.digest()
+    hmacWipeSha384(this.inner)
+    hmacWipeSha384(this.outer)
+    return tag
+  }
+}
+
+/**
+ * HMAC-SHA-512 in progress (RFC 2104 with RFC 4231's SHA-512), with
+ * `HmacSha256`'s methods. The block is SHA-512's 128 bytes and the tag 64.
+ */
+export class HmacSha512 {
+  /** H(K XOR ipad, …), fed the key block in the constructor and the message after. */
+  inner: Sha512
+  /** H(K XOR opad, …), fed the key block in the constructor and the inner digest last. */
+  outer: Sha512
+
+  /** Keys the computation. A key longer than 128 bytes is replaced by its SHA-512 (RFC 2104 §2). */
+  constructor(key: u8[]) {
+    hmacCheckKey(key)
+    this.inner = new Sha512()
+    this.outer = new Sha512()
+    if (toI32(key.length) > SHA512_BLOCK) {
+      const hasher = new Sha512()
+      hasher.update(key, HMAC_FROM, toI32(key.length))
+      const hashed: u8[] = hasher.digest()
+      hmacWipeSha512(hasher)
+      hmacKeySha512(this.inner, this.outer, hashed)
+      wipe(hashed)
+    } else {
+      hmacKeySha512(this.inner, this.outer, key)
+    }
+  }
+
+  /** Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha512.update`. */
+  update(data: u8[], off: i32, len: i32): void {
+    this.inner.update(data, off, len)
+  }
+
+  /** The 64-byte tag, in a fresh array. Ends the computation, and wipes both hashers. */
+  digest(): u8[] {
+    const innerDigest: u8[] = this.inner.digest()
+    this.outer.update(innerDigest, HMAC_FROM, SHA512_SIZE)
+    wipe(innerDigest)
+    const tag: u8[] = this.outer.digest()
+    hmacWipeSha512(this.inner)
+    hmacWipeSha512(this.outer)
+    return tag
   }
 }
 
@@ -147,7 +316,7 @@ export class HmacSha384 {
  * `data` longer than 2^31 - 1 bytes panics, as `sha256` does and for its
  * reason: under `--number-mode f64` the tag would be of a prefix, and a tag
  * that verifies every message sharing that prefix is a forgery. A key that
- * long reaches `sha256` in the constructor and panics there.
+ * long panics in the constructor for the same reason.
  */
 export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
   if (data.length > 2147483647) {
@@ -172,6 +341,31 @@ export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
 }
 
 /**
+ * The HMAC-SHA-512 of all of `data` under `key`, as a fresh 64-byte array.
+ * `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+ */
+export const hmacSha512 = (key: u8[], data: u8[]): u8[] => {
+  if (data.length > 2147483647) {
+    panic("hmacSha512: a message longer than 2^31 - 1 bytes")
+  }
+  const mac = new HmacSha512(key)
+  mac.update(data, HMAC_FROM, toI32(data.length))
+  return mac.digest()
+}
+
+/**
+ * `hmacSha256` under a key held as a `Secret`, read only inside `exposeWith`.
+ * The tag is public, so it is answered plain; the caller still wipes the key.
+ */
+export const hmacSha256Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeWith(key, data, hmacSha256)
+
+/** `hmacSha384` under a key held as a `Secret`, as `hmacSha256Secret` is. */
+export const hmacSha384Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeWith(key, data, hmacSha384)
+
+/** `hmacSha512` under a key held as a `Secret`, as `hmacSha256Secret` is. */
+export const hmacSha512Secret = (key: Secret<u8[]>, data: u8[]): u8[] => exposeWith(key, data, hmacSha512)
+
+/**
  * Whether `tag` is the HMAC-SHA-256 of `data` under `key`, compared by
  * `timingSafeEqual`. A tag that is not 32 bytes answers `false` without a
  * byte compare, since its length is public; one that is is compared in full,
@@ -183,6 +377,10 @@ export const hmacSha256Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
 /** Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as `hmacSha256Verify` does. */
 export const hmacSha384Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
   timingSafeEqual(hmacSha384(key, data), tag)
+
+/** Whether `tag` is the HMAC-SHA-512 of `data` under `key`, compared as `hmacSha256Verify` does. */
+export const hmacSha512Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
+  timingSafeEqual(hmacSha512(key, data), tag)
 
 // ---- Caller-owned scratch --------------------------------------------------
 //
@@ -241,44 +439,6 @@ export const hmacCopySha384 = (from: Sha384, to: Sha384): void => {
   to.engine.finished = from.engine.finished
 }
 
-/**
- * Zeroes everything `h` holds of the message it was fed: the pending block
- * with `secureZero`, and the hash value and message schedule, which are words
- * `secureZero` does not take, with ordinary stores. Those stand because the
- * hasher stays reachable for the next `begin`. The hasher is left finished, so
- * that feeding it before it is started again panics.
- */
-const hmacWipeSha256 = (h: Sha256): void => {
-  secureZero(h.block)
-  const state: u32[] = h.state
-  for (let i: i32 = 0; i < toI32(state.length); i += 1) {
-    state[i] = toU32(0)
-  }
-  const schedule: u32[] = h.schedule
-  for (let i: i32 = 0; i < toI32(schedule.length); i += 1) {
-    schedule[i] = toU32(0)
-  }
-  h.fill = 0
-  h.total = 0
-  h.finished = true
-}
-
-/** `hmacWipeSha256` for SHA-384. */
-const hmacWipeSha384 = (h: Sha384): void => {
-  secureZero(h.engine.block)
-  const state: u64[] = h.engine.state
-  for (let i: i32 = 0; i < toI32(state.length); i += 1) {
-    state[i] = toU64(0)
-  }
-  const schedule: u64[] = h.engine.schedule
-  for (let i: i32 = 0; i < toI32(schedule.length); i += 1) {
-    schedule[i] = toU64(0)
-  }
-  h.engine.filled = 0
-  h.engine.count = toU64(0)
-  h.engine.finished = true
-}
-
 /** Whether `[off, off + len)` is a window inside an array of `length` elements. */
 const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
   off >= 0 && len >= 0 && off <= length - len
@@ -334,6 +494,9 @@ export class HmacSha256Scratch {
       this.keyHash[i] = digest[i]
     }
     secureZero(digest)
+    // The key's last partial block and its schedule are still in the hasher,
+    // and starting it again copies neither over (K1-7).
+    hmacWipeSha256(this.inner)
     this.keyBlocks(this.keyHash, HMAC_FROM, SHA256_SIZE)
     secureZero(this.keyHash)
   }
@@ -422,6 +585,9 @@ export class HmacSha384Scratch {
       this.keyHash[i] = digest[i]
     }
     secureZero(digest)
+    // The key's last partial block and its schedule are still in the hasher,
+    // and starting it again copies neither over (K1-7).
+    hmacWipeSha384(this.inner)
     this.keyBlocks(this.keyHash, HMAC_FROM, SHA384_SIZE)
     secureZero(this.keyHash)
   }

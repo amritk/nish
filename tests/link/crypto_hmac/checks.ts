@@ -1,15 +1,28 @@
 // `nish/crypto/hmac` against the published answers. Every tag below is from
-// RFC 4231 §4 ("Test Cases"), cited by its case number, except the four
+// RFC 4231 §4 ("Test Cases"), cited by its case number, except the six
 // block-size keys marked otherwise, which no RFC case sits on and were checked
-// against Python's `hmac` module.
+// against Python's `hmac` module or against `node:crypto`.
 //
 // Cases 1-4 pin the construction on short keys, case 5 the truncated compare
 // the RFC prints (the first 128 bits), and cases 6 and 7 a key longer than the
 // block, which RFC 2104 §2 hashes first. The block-size keys pin that boundary
 // itself: a key of exactly one block is used as it is, one byte more is hashed.
-// The streaming checks pin `update`, and the verify checks pin the compare.
+// The streaming checks pin `update`, the verify checks pin the compare, and the
+// wipe checks pin that a finished MAC holds nothing of its key (#476).
 import { Suite } from "nish/testing";
-import { HmacSha256, HmacSha384, hmacSha256, hmacSha256Verify, hmacSha384, hmacSha384Verify } from "nish/crypto/hmac";
+import {
+  HmacSha256,
+  HmacSha256Scratch,
+  HmacSha384,
+  HmacSha384Scratch,
+  HmacSha512,
+  hmacSha256,
+  hmacSha256Verify,
+  hmacSha384,
+  hmacSha384Verify,
+  hmacSha512,
+  hmacSha512Verify,
+} from "nish/crypto/hmac";
 
 const HEX_DIGITS: string = "0123456789abcdef";
 
@@ -102,6 +115,73 @@ const sha384InChunks = (key: u8[], data: u8[], chunk: i32): string => {
   }
   return hexOf(mac.digest());
 };
+
+/** HMAC-SHA-512 of `data` fed in chunks of `chunk` bytes, the last one short. */
+const sha512InChunks = (key: u8[], data: u8[], chunk: i32): string => {
+  const mac = new HmacSha512(key);
+  const n: i32 = toI32(data.length);
+  let at: i32 = 0;
+  while (at < n) {
+    const take: i32 = n - at < chunk ? n - at : chunk;
+    mac.update(data, at, take);
+    at += take;
+  }
+  return hexOf(mac.digest());
+};
+
+/** Whether every byte of `xs` is zero. */
+const zeroBytes = (xs: u8[]): boolean => {
+  let acc: i32 = 0;
+  for (const x of xs) {
+    acc = acc | toI32(x);
+  }
+  return acc === 0;
+};
+
+/** Whether every word of `xs` is zero. */
+const zeroWords32 = (xs: u32[]): boolean => {
+  let any: boolean = false;
+  for (const x of xs) {
+    any = any || x !== toU32(0);
+  }
+  return !any;
+};
+
+/** Whether every word of `xs` is zero. */
+const zeroWords64 = (xs: u64[]): boolean => {
+  let any: boolean = false;
+  for (const x of xs) {
+    any = any || x !== toU64(0);
+  }
+  return !any;
+};
+
+/** Whether a digested `HmacSha256` keeps nothing in either hasher: state, block and schedule all zero. */
+const sha256Wiped = (mac: HmacSha256): boolean =>
+  zeroWords32(mac.inner.state) &&
+  zeroBytes(mac.inner.block) &&
+  zeroWords32(mac.inner.schedule) &&
+  zeroWords32(mac.outer.state) &&
+  zeroBytes(mac.outer.block) &&
+  zeroWords32(mac.outer.schedule);
+
+/** `sha256Wiped` for `HmacSha384`. */
+const sha384Wiped = (mac: HmacSha384): boolean =>
+  zeroWords64(mac.inner.engine.state) &&
+  zeroBytes(mac.inner.engine.block) &&
+  zeroWords64(mac.inner.engine.schedule) &&
+  zeroWords64(mac.outer.engine.state) &&
+  zeroBytes(mac.outer.engine.block) &&
+  zeroWords64(mac.outer.engine.schedule);
+
+/** `sha256Wiped` for `HmacSha512`. */
+const sha512Wiped = (mac: HmacSha512): boolean =>
+  zeroWords64(mac.inner.engine.state) &&
+  zeroBytes(mac.inner.engine.block) &&
+  zeroWords64(mac.inner.engine.schedule) &&
+  zeroWords64(mac.outer.engine.state) &&
+  zeroBytes(mac.outer.engine.block) &&
+  zeroWords64(mac.outer.engine.schedule);
 
 /**
  * Runs every check and answers the exit code. A function of its own rather
@@ -235,6 +315,54 @@ export const hmacChecks = (): i32 => {
     "41b716fdc05cdbf749230caf91f627050721a28e40b90425a4df345942d10aacee2c122099f1ecd3be945871b8ae6a0e"
   );
 
+  // --- HMAC-SHA-512: RFC 4231 §4.2 to §4.8, and its block-size boundary ----
+  // The SHA-512 tags of the seven RFC cases above, then the 128- and 129-byte
+  // keys around SHA-512's block, which no RFC case sits on (checked against
+  // `node:crypto`).
+  t.eqStr(
+    "HMAC-SHA-512, RFC 4231 test case 1",
+    hexOf(hmacSha512(key1, data1)),
+    "87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cdedaa833b7d6b8a702038b274eaea3f4e4be9d914eeb61f1702e696c203a126854"
+  );
+  t.eqStr(
+    "HMAC-SHA-512, RFC 4231 test case 2",
+    hexOf(hmacSha512(key2, data2)),
+    "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
+  );
+  t.eqStr(
+    "HMAC-SHA-512, RFC 4231 test case 3",
+    hexOf(hmacSha512(key3, data3)),
+    "fa73b0089d56a284efb0f0756c890be9b1b5dbdd8ee81a3655f83e33b2279d39bf3e848279a722c806b485a47e67c807b946a337bee8942674278859e13292fb"
+  );
+  t.eqStr(
+    "HMAC-SHA-512, RFC 4231 test case 4",
+    hexOf(hmacSha512(key4, data4)),
+    "b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd"
+  );
+  t.eqStr(
+    "HMAC-SHA-512, RFC 4231 test case 5 (first 128 bits)",
+    hexOf(prefix(hmacSha512(key5, data5), truncated)),
+    "415fad6271580a531d4179bc891d87a6"
+  );
+  t.eqStr(
+    "HMAC-SHA-512, RFC 4231 test case 6 (131-byte key, hashed first)",
+    hexOf(hmacSha512(key6, data6)),
+    "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f3526b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598"
+  );
+  const tag7Sha512: string =
+    "e37b6a775dc87dbaa4dfa9f96e5e3ffddebd71f8867289865df5a32d20cdc944b6022cac3c4982b10d5eeb55c3e4de15134676fb6de0446065c97440fa8c6a58";
+  t.eqStr("HMAC-SHA-512, RFC 4231 test case 7", hexOf(hmacSha512(key6, data7)), tag7Sha512);
+  t.eqStr(
+    "HMAC-SHA-512 with a 128-byte key, used as it is (checked against node:crypto)",
+    hexOf(hmacSha512(counting(0, 128), boundaryData)),
+    "695dc10b6e2b7f95bf21d58d04e30fb4f75b54f4701452b10e13694adcda2240f63c91a3915c90203ae5f29596b4fc3f8d9b67455a2eb2719658f2b85aace95c"
+  );
+  t.eqStr(
+    "HMAC-SHA-512 with a 129-byte key, hashed first (checked against node:crypto)",
+    hexOf(hmacSha512(counting(0, 129), boundaryData)),
+    "935db917a886dc2d99263737db8f72ab7f71ec96bcad62cee9486d41cd7b47329c529c5514705ba6a2d88ca3f2f219d446bd74102869794c01e70a98ef2681bf"
+  );
+
   // --- Streaming ------------------------------------------------------------
   // Test case 7's 152 bytes of data span more than one SHA-256 block and more
   // than one SHA-384 block, so byte-at-a-time and 50-byte chunks both top up
@@ -243,6 +371,8 @@ export const hmacChecks = (): i32 => {
   t.eqStr("HMAC-SHA-256 of test case 7 fed in 50-byte chunks", sha256InChunks(key6, data7, 50), tag7Sha256);
   t.eqStr("HMAC-SHA-384 of test case 7 fed one byte at a time", sha384InChunks(key6, data7, 1), tag7Sha384);
   t.eqStr("HMAC-SHA-384 of test case 7 fed in 50-byte chunks", sha384InChunks(key6, data7, 50), tag7Sha384);
+  t.eqStr("HMAC-SHA-512 of test case 7 fed one byte at a time", sha512InChunks(key6, data7, 1), tag7Sha512);
+  t.eqStr("HMAC-SHA-512 of test case 7 fed in 50-byte chunks", sha512InChunks(key6, data7, 50), tag7Sha512);
   // No update at all is the HMAC of the empty message; an empty window is a no-op.
   const empty: u8[] = [];
   const mac256 = new HmacSha256(key2);
@@ -279,6 +409,55 @@ export const hmacChecks = (): i32 => {
     false
   );
   t.eqBool("hmacSha384Verify refuses the tag of other data", hmacSha384Verify(key2, data1, tag384), false);
+  const tag512: u8[] = hmacSha512(key2, data2);
+  t.eqBool("hmacSha512Verify accepts the right tag", hmacSha512Verify(key2, data2, tag512), true);
+  t.eqBool("hmacSha512Verify refuses a one-bit flip", hmacSha512Verify(key2, data2, flipLastBit(tag512)), false);
+  t.eqBool(
+    "hmacSha512Verify refuses a truncated tag",
+    hmacSha512Verify(key2, data2, prefix(tag512, truncated)),
+    false
+  );
+  t.eqBool("hmacSha512Verify refuses the HMAC-SHA-384 tag", hmacSha512Verify(key2, data2, tag384), false);
+
+  // --- Wiped state ----------------------------------------------------------
+  // Once `digest` answers, neither hasher holds anything of the key: a keyed
+  // midstate is as good as the key for forging tags. Key 6 is longer than
+  // every block, so the hashed-key path runs too; key 2 is padded.
+  const wiped256 = new HmacSha256(key6);
+  wiped256.update(data7, start, toI32(data7.length));
+  t.eqStr("HmacSha256.digest answers the tag", hexOf(wiped256.digest()), tag7Sha256);
+  t.ok("and leaves both of HmacSha256's hashers zeroed", sha256Wiped(wiped256));
+  const wiped384 = new HmacSha384(key6);
+  wiped384.update(data7, start, toI32(data7.length));
+  t.eqStr("HmacSha384.digest answers the tag", hexOf(wiped384.digest()), tag7Sha384);
+  t.ok("and leaves both of HmacSha384's hashers zeroed", sha384Wiped(wiped384));
+  const wiped512 = new HmacSha512(key2);
+  wiped512.update(data2, start, toI32(data2.length));
+  t.eqStr("HmacSha512.digest answers the tag", hexOf(wiped512.digest()), hexOf(tag512));
+  t.ok("and leaves both of HmacSha512's hashers zeroed", sha512Wiped(wiped512));
+  // A scratch keyed with a key longer than its block hashes the key in its
+  // inner hasher first; starting that hasher again must not leave the key's
+  // last partial block behind in it.
+  const scratch256 = new HmacSha256Scratch();
+  scratch256.begin(key6, start, toI32(key6.length));
+  t.ok(
+    "HmacSha256Scratch.begin with a 131-byte key leaves none of it in the inner block",
+    zeroBytes(scratch256.inner.block)
+  );
+  scratch256.update(data7, start, toI32(data7.length));
+  const scratchTag256: u8[] = new Array<u8>(32);
+  scratch256.finishInto(scratchTag256, start);
+  t.eqStr("and its HMAC-SHA-256 tag is still RFC 4231 test case 7's", hexOf(scratchTag256), tag7Sha256);
+  const scratch384 = new HmacSha384Scratch();
+  scratch384.begin(key6, start, toI32(key6.length));
+  t.ok(
+    "HmacSha384Scratch.begin with a 131-byte key leaves none of it in the inner block",
+    zeroBytes(scratch384.inner.engine.block)
+  );
+  scratch384.update(data7, start, toI32(data7.length));
+  const scratchTag384: u8[] = new Array<u8>(48);
+  scratch384.finishInto(scratchTag384, start);
+  t.eqStr("and its HMAC-SHA-384 tag is still RFC 4231 test case 7's", hexOf(scratchTag384), tag7Sha384);
 
   // Each tag is a fresh array, so writing into one cannot change another.
   const first: u8[] = hmacSha256(key1, data1);
