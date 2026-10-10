@@ -38,6 +38,14 @@ exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
 ported or adapted from elsewhere keeps its upstream notice and is listed in
 `THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
 
+**A rule that lets a value outlive its scope pins what it leaves out.** An
+escape-analysis rule that lets a value travel with a container says which
+element types it covers, and pins the excluded ones with a negative golden run
+after `churn()`: #520's second review round reproduced a use-after-free through
+`string[][]` that every reading review had missed. Narrowing such a rule
+regenerates every golden the wider rule moved, not only the new cases — #520's
+`perf_alloc_quiet.ll` kept the wider rule's release and turned CI red.
+
 **There is one compiler, and a construct is written once, in `src/`.** The
 TypeScript implementation that used to sit beside it, stage0, was deleted in
 WP19 R6 (`docs/wp19-stage0-retirement.md`). `src/` is built by the last
@@ -49,8 +57,10 @@ release: the rolling freeze, which CI's `bootstrap` job checks by building
 **Generated goldens are regenerated, never edited or merged by hand.**
 `tests/self/goldens/checked.txt` and `checked-self.txt` are stage1's
 `--emit-checked` dump of the golden cases and of `src/`, so any change to
-`src/` or to a positive `tests/cases/*.ts` moves them, and every `src/` commit
-on `main` conflicts with every open pull request that touches `src/`. Rewrite
+`src/`, to `std/` or to a positive `tests/cases/*.ts` moves them, and every
+`src/` commit on `main` conflicts with every open pull request that touches
+`src/`. A plan stage that changes `src/` or `std/` therefore owns these goldens
+too (#532 regenerated `checked.txt` outside its declared files). Rewrite
 them only with `node tests/self/goldens.js --update` (add
 `--seed build/seed/bin/nish` when `build/nish` is not built) and read the diff
 before committing it. On a conflict, merge `main` in and regenerate rather
@@ -61,7 +71,9 @@ than resolving lines ([`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-requ
 
 Vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) says,
 and each audited area keeps its record under
-[`docs/security/`](docs/security/README.md).
+[`docs/security/`](docs/security/README.md). A record states the commit its
+`file:line` anchors are at; a row rewritten after that base names the commit
+its own anchors are at, rather than moving them silently (#529, CG-5).
 
 **Secret material in `std/crypto` is a `Secret` and is wiped.** `nish:secret`
 (docs/LANGUAGE.md, "Secrets") is the primitive: a function that holds a
@@ -81,6 +93,10 @@ focused on the code changes. A cloud session can have a footer with a session
 link appended to a pull request's body after you write it, so read the body
 back once the pull request is open and delete any such footer: `pr-body.yml`
 fails the pull request until you do.
+
+Before starting on an issue, search the open pull requests for it, and put
+`Fixes #N` in the first push: two parallel runs both fixed #524 (#534 and
+#536), and one had to be thrown away.
 
 **A pull request goes up finished, and you merge it yourself.** Fully tested
 (`npm run check` and an **undegraded** `npm test` — read the skip count, not
@@ -130,6 +146,9 @@ Tests: tests/cases/arr_alias_domains
   body loses them, because the body is not the changelog. Time a loop whose
   input changes on every iteration and whose output is folded into a printed
   checksum, or the optimiser may compute the answer once and time nothing.
+  State the noise band too — the baseline timed against a byte-identical copy
+  of itself in the same interleaved rounds — and read every delta against it:
+  "faster", or "none faster", is claimed only outside that band (#538).
   `Refs:` and `Tests:` link the rule and the golden that pins it.
 - **`Release-Note:`** replaces the body in public notes, for when the body is
   about the review rather than about the change.
