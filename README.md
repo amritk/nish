@@ -341,6 +341,7 @@ nish run [options] <file.ts> [args ...]
   --emit-panics <file.json>  also write every panic site, per function, proven or not
   --deny-panics              refuse every panic site of the entry package a proof does not remove
   --deny-retention           refuse arena memory the entry package keeps after nothing can reach it
+  --emit-arena <file.json>   also write every allocation site and where its memory goes
   --emit-capabilities <file.json>
                              also write the capabilities (fs, net, clock, ...) each function reaches
   --capabilities             print the program's capabilities in one line on stderr

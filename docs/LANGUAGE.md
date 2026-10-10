@@ -6571,6 +6571,9 @@ by the caller.
 - **`--deny-retention`** refuses a program whose own code keeps arena memory
   that nothing can reach, for a long-running program that cannot afford it; see
   [Retention as an error](#retention-as-an-error) below.
+- **`--emit-arena <file.json>`** writes every allocation site of the program
+  with where its memory goes, beside the IR, and changes no byte of it; see
+  [Arena placement](#arena-placement) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -6787,6 +6790,63 @@ modules:
   the build compiles without it (`tests/cases/deny_retention_clean`). `nish run`
   and `--fix` accept it; with `--emit-ast`, which stops before the checker, it
   is a usage error (exit 2).
+
+### Arena placement
+
+**`--emit-arena <file.json>`** writes where the memory of every allocation site
+goes: the decisions the [memory model](#memory-model) made, read back in the
+order the emitter applies them, so the file and the IR cannot disagree. It is
+the audit for the cases no warning names: a site a rule stays silent about is
+still in the file, with its placement.
+
+The file is one JSON object, one function per line, in module order and, in
+each module, in declaration order followed by the instantiations of its
+generic functions, and its sites in source order. The keys and their order are
+a contract, like `--emit-panics`':
+
+```
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/cases/arena_placement.ts","line":32,"sites":[{"kind":"new","line":34,"column":13,"placement":"stack"},…,{"kind":"string","line":52,"column":12,"placement":"function","accumulates":true}]}
+]}
+```
+
+Per function `{"name","symbol","module","line","sites"}`, as `--emit-panics`
+writes them, and a generic function once per instantiation. Per site
+`{"kind","line","column","placement"}`, then `"callee"` for a `call` and a
+`builtin`, then `"accumulates":true` where it applies. A site's **kind** is
+`new`, `object`, `array`, `string` (a concatenation or a template), `push`,
+`print` (a number `console.log` formats), `builtin` (a runtime function that
+allocates, such as `join`) or `call` (a user function whose memory the result
+is). Its **placement** is the first of these that holds:
+
+| Placement | Where the memory goes |
+| --- | --- |
+| `stack` | an entry-block `alloca`, reused on every pass of a loop |
+| `pass` | released at the end of each pass of the innermost scoped loop around it |
+| `block` | released when the block of the `using a = arena()` before it ends |
+| `function` | released when the function returns: its arena scope |
+| `returned` | handed to the caller with the return value, whose placement decides |
+| `caller` | released when the function returns, by every caller's reclaim of the returned string |
+| `kept` | stored into memory older than the function, and as long-lived as it |
+| `unscoped` | released by nothing in this function: it lives as long as the caller's memory, which in `main` is the rest of the run |
+
+**`accumulates`** marks a site that runs on every pass of a loop that releases
+nothing per pass — or in that loop's condition or update, which run outside
+the bracket a pass takes — and whose memory is unreachable before its
+release: `pass`, `block`, `function`, `caller` or `unscoped`. Its memory piles up pass
+after pass until then. `` last = `item ${i}` `` in a loop over ten million
+passes is a `function` site that accumulates in a `main` that earns a scope
+through its callees, and an `unscoped` one in a function that has none
+(`tests/cases/arena_placement`, `arena_placement_loops`). A `returned` or `kept`
+site is memory the program holds on purpose, so it is never marked.
+
+- **The answer is about the site's own function.** A scope in a caller can
+  still release an `unscoped` site's memory: a loop whose pass is scoped takes
+  back what its callees leave behind. Only in `main` is `unscoped` the end of
+  the run.
+- `--emit-arena` changes no byte of the IR, and it is a product, as
+  `--emit-panics` is: `nish run` and `--fix` refuse it, and so does
+  `--emit-ast`, which stops before the facts exist (exit 2).
 
 ## Forbidden constructs (Phase 0 validator)
 

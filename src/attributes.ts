@@ -426,6 +426,8 @@ export class FunctionFacts {
   carriers: Local[]
   /** `EscapeResult.arenaNodes`: the sites that bump the arena themselves. */
   arenaNodes: Node[]
+  /** `EscapeResult.arenaFlows`: each of those sites' flow, for the placement report. */
+  arenaFlows: i32[]
   /** Every loop of the body, and whether its passes are scoped. Decided after the scopes are settled. */
   loopScopes: LoopScope[]
   /**
@@ -553,6 +555,7 @@ export class FunctionFacts {
     this.carriedStores = []
     this.carriers = []
     this.arenaNodes = []
+    this.arenaFlows = []
     this.loopScopes = []
     this.contained = false
     this.escapeSite = null
@@ -2240,6 +2243,7 @@ const collectFacts = (
     facts.carriedStores = memory.carriedStores
     facts.carriers = memory.carriers
     facts.arenaNodes = memory.arenaNodes
+    facts.arenaFlows = memory.arenaFlows
     facts.escapeSite = memory.escapeSite
     // The half of `contained` that needs no fixpoint; the other is added after it.
     facts.contained = rootsHoldNoPointer(program, table, sig)

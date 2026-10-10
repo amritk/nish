@@ -859,6 +859,36 @@ const runCase = async (name) => {
     }
   }
 
+  // `--emit-arena`: a case with a `<name>.arena` golden compiles a third time
+  // with the flag, which must change no byte of the IR, and the placements it
+  // writes are held against the golden, paths taken back to the repository's.
+  // Only those cases: the report reads facts the compile already has, so there
+  // is nothing a corpus-wide run would find that the goldens do not pin.
+  if (fs.existsSync(side("arena"))) {
+    const arenaLl = path.join(buildDir, `${name}.arena.ll`)
+    const arenaFile = path.join(buildDir, `${name}.arena.json`)
+    const placed = await spawnAsync(NISH, [src, "-o", arenaLl, ...args, "--emit-arena", arenaFile], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (placed.status !== 0 || !fs.existsSync(arenaLl) || !fs.existsSync(arenaFile)) {
+      expect(`${name}: --emit-arena writes the placements`, false, `exit ${placed.status}\n${placed.stderr}`)
+    } else {
+      expect(
+        `${name}: --emit-arena changes no byte of the IR`,
+        fs.readFileSync(arenaLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+        "the two .ll files differ"
+      )
+      const want = fs.readFileSync(side("arena"), "utf8").trim()
+      const got = fs.readFileSync(arenaFile, "utf8").split(`${root}/`).join("").trim()
+      expect(
+        `${name}: --emit-arena matches .arena`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
+  }
+
   if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
@@ -12426,6 +12456,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-panics",
     "--deny-panics",
     "--deny-retention",
+    "--emit-arena",
     "--target",
     "--profile",
     "--warn-portability",
@@ -12803,6 +12834,23 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       ),
     shown(denyAst)
   )
+  // `--emit-arena` is a report on the checked program like `--emit-panics`, so
+  // it is refused where the program is not checked (docs/LANGUAGE.md, "Arena placement").
+  for (const [flag, refusal] of [
+    ["--emit-ast", "`--emit-arena` reports on a checked program, and --emit-ast stops before the check"],
+    ["--fix", "`--emit-arena` cannot be used with --fix"],
+  ]) {
+    const file = path.join(capsDir, `arena${flag}.json`)
+    const refused = spawnSync(NISH, [panicsSource, flag, "--emit-arena", file], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `arena placement: --emit-arena with ${flag} is a usage error, exit 2, and writes nothing`,
+      refused.status === 2 && refused.stderr.includes(refusal) && !fs.existsSync(file),
+      shown(refused)
+    )
+  }
   // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
   // and those are found by the body checks and the whole-program facts, which
   // `--emit-ast` never reaches (docs/LANGUAGE.md, "Retention as an error").
@@ -13189,6 +13237,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       ["-o", "x.ll"],
       ["--emit-header", "x.h"],
       ["--emit-panics", "x.json"],
+      ["--emit-arena", "x.json"],
       ["--emit-checked"],
       ["--target", "host"],
     ]) {
