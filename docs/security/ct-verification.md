@@ -138,6 +138,23 @@ under-stated the module's real inputs, and is kept here as a reading.
 | this one, plus two leaks of the fixture's own (below) | non-negative | all seven and the leaks | 2.07, 1.60 |
 | this one, plus two leaks of the fixture's own (below) | out of domain | all seven and the leaks | 1.97, 2.31 |
 
+How each row was taken. Only the "signed domain, all seven" row is a run of
+the committed `tests/ct-timing.js`. Every other row was taken with a harness
+that is not committed, and cannot be repeated with the one that is:
+
+- "out of domain, all seven": three runs with `tests/ct-timing.js` as it is
+  on `main` at 69e5fe8, before `DOMAINS` existed, and four with a scratch copy
+  of this harness whose `DOMAINS` lookup was switched off.
+- "non-negative": the first version of this change (607ca5d), whose single
+  `ct_field25519` mask is no longer in the tree.
+- "`ladderStep` alone", in every domain: a scratch copy of the harness that
+  filtered the fixture's specs (and its `DOMAINS` entry) to `ladderStep`
+  before it wrote the driver.
+- the fixture CT-13 was read on: `tests/ct-timing.js` from a worktree at
+  0d362c59, with `--nish` naming the 0.16.0 seed.
+- the two rows with leaks: 607ca5d's harness, and the scratch copy without
+  `DOMAINS`, on the fixture with the two leaks added and then reverted.
+
 The weekly `ct-timing.yml` run of 2026-10-05 (9552a94, 1,000,000 samples,
 out of domain) is the second machine: 1.17 on an `INTEL(R) XEON(R) PLATINUM
 8573C` and 2.09 on the aarch64 runner. In the signed-domain runs the other six
