@@ -168,6 +168,7 @@ export class Checker {
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
     this.program.wrapping = wrapping
+    this.program.f64Mode = numberMode === NUMBER_MODE_F64
     this.program.uncheckedIndexing = uncheckedIndexing
     this.declared = []
     this.ctx = new CheckContext(
@@ -1667,14 +1668,7 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   if (holder.length === 0 || name.length === 0) {
     return
   }
-  const advice = indexGuardAdvice(
-    walk.ctx.program,
-    walk.ctx.table,
-    index,
-    name,
-    holder,
-    walk.ctx.numberMode === NUMBER_MODE_F64
-  )
+  const advice = indexGuardAdvice(walk.ctx.program, walk.ctx.table, index, name, holder)
   const message =
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
     `compares against the length on every iteration: ${advice}`
@@ -1702,16 +1696,15 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
  * `u64` or a float has no spelling at all: `i < xs.length` does not type-check
  * for the first two, `lengthOf` reads no `toI64(xs.length)` or
  * `toU64(xs.length)`, and `isIndexType` proves nothing about a float.
- * `f64Mode` is false where the number mode is not known (NL2457).
  */
 export const indexGuardAdvice = (
   program: CheckedProgram,
   table: TypeTable,
   index: Node,
   name: string,
-  holder: string,
-  f64Mode: boolean
+  holder: string
 ): string => {
+  const f64Mode = program.f64Mode
   const type = program.nodeTypes[index.id]
   const unsigned = type === T_U8 || type === T_U16 || type === T_U32
   if (type !== T_I32 && !table.isRanged(type) && !unsigned) {

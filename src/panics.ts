@@ -762,9 +762,8 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
   const unchecked = program.uncheckedIndexing
     ? " (`--unchecked-indexing` removes the check without proving it, which makes an access out of range undefined behaviour rather than a proven one)"
     : ""
-  // The guard NL9007 offers, or none where no spelling is credited. The
-  // number mode is not known here, so an `i32` index is given `xs.length`.
-  return `${what}${unchecked}: ${indexGuardAdvice(program, table, index, i, xs, false)}`
+  // The guard NL9007 offers, or none where no spelling is credited.
+  return `${what}${unchecked}: ${indexGuardAdvice(program, table, index, i, xs)}`
 }
 
 /** A `slice`, an array `set` or a socket call whose buffer range is checked: no proof removes any of them. */

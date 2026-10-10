@@ -1619,8 +1619,10 @@ allowed. Each error names its fix, and there are five:
 
 - **Guard** what the checker cannot prove: `if (i >= 0 && i < xs.length)` before
   `xs[i]` (`if (toU32(i) < toU32(xs.length))` for a `u8`, `u16` or `u32` index,
-  whose type is the lower end; an `i64` or `u64` index has no guard, so index
-  with an `i32` or a `u32`), `if (d !== 0 && d !== -1)` before `a / d` (a
+  whose type is the lower end; `toI32(xs.length)` for the bound under
+  `--number-mode f64`; an `i64`, `u64` or float index — `number` under
+  `--number-mode f64` — has no guard, so index with an `i32` or a `u32`),
+  `if (d !== 0 && d !== -1)` before `a / d` (a
   constant divisor needs nothing), `if (xs.length > 0)` before `xs.pop()`,
   `if (n >= 0 && n <= 9)` before `n` enters `integer<0, 9>`.
 - **Bound a signed `+ - *`, or say it wraps**: an `i32`/`i64` operation the

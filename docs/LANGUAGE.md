@@ -6337,8 +6337,10 @@ by the caller.
     (`tests/cases/perf_bounds_loop`, `arr_bounds_unsigned_guard`,
     `reject_deny_panics_index_unsigned`). Under `--number-mode f64`, where a
     length is an `f64`, the bound is spelled `toI32(a.length)`
-    (`tests/wordings/nl9007_guard_f64_mode`). The hint names only a guard that
-    compiles and that the proof credits, so it names none for an `i64`, a
+    (`tests/wordings/nl9007_guard_f64_mode`, and NL2457's
+    `nl2457_deny_panics_index_f64_i32` and `_f64_ranged`). The hint names
+    only a guard that compiles and that the proof credits, so it names none
+    for an `i64`, a
     `u64` or a float index, which no spelling compares with the length in a
     credited way, nor where the module declares its own `toU32` (or, under
     f64, `toI32`), which the guard would call instead of the builtin; it says
