@@ -617,6 +617,8 @@ folding every answer into a printed checksum. Each build ran seven times at
 | --- | ---: | ---: | ---: |
 | `--profile speed` | 542 / 563 | 384 / 415 | 1.41x / 1.36x |
 | the same, `--unchecked-indexing` | 527 / 559 | 125 / 133 | 4.2x / 4.2x |
+| 0.18.0: `if (b.length < n) { return 0 }`, then `i + 3 < n` | — | 411 / 419 | — |
+| 0.18.0: the same guard, and every access through `uncheckedGet` | — | 130 / 133 | — |
 
 With unchecked indexing, LLVM turns the four scalar chains into one loop
 over a `<4 x float>` accumulator, `mulps` then `addps`: the code a
@@ -624,7 +626,21 @@ one-accumulator `f32x4` kernel would be. In C the same four-accumulator loop
 compiles to that loop too, and ran at 0.99x the speed of one written with
 SSE2 intrinsics and one `__m128` accumulator. With checked indexing, the
 bounds check on each element keeps the loop scalar: its optimised IR has no
-vector accumulator. For a float kernel, then, much of what
+vector accumulator.
+
+`--unchecked-indexing` is deprecated (NL9014), so the last two rows repeat the
+kernel with the compiler built from `main` (0.18.0) and with `n = a.length`.
+A guard that the loop's `i + 3 < n` and `b.length >= n` hold does not help:
+the range analysis credits a test of the index itself, `i < n`, and learns
+nothing from `i + 3 < n`, so all eight accesses keep their checks. NL9007
+warns on only two of them, `a[i]` and `b[i]`, because it speaks only for an
+index that is a plain local (`checkSurvivingBoundsCheck`, `src/checker.ts`).
+The six offset accesses keep their checks without a word. Writing every
+access as `uncheckedGet` inside the same guard gives the unchecked speed
+without the flag. Crediting an offset index `i + k` from a test
+`i + c < n`, with `0 <= k <= c`, would give it with no `nish:unsafe` at all.
+
+For a float kernel, then, much of what
 S3 could show over scalar Nish is available to scalar Nish already, and the
 bounds checks stand in the way. It is (d)'s loop-shape work (§3.4) as much
 as (b)'s. S3's float comparator therefore has one scalar accumulator for
