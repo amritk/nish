@@ -26,7 +26,7 @@
 // that calls `nish_panic_index` and never returns. Comparing *unsigned* makes a
 // negative index fail too.
 
-import { HoistedHeader, isResizeCall } from "./attributes"
+import { constructorOf, HoistedHeader, isResizeCall } from "./attributes"
 import { NO_RECORD, recordReaches, recordStoreType } from "./bounds"
 import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter, LoopTarget } from "./emit"
@@ -38,7 +38,7 @@ import {
   emitIntBinary,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
+import { intrinsicType, isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { emitSliceCheck } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
@@ -58,7 +58,14 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
-import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program"
+import {
+  elementLLVMType,
+  elementStride,
+  FieldInfo,
+  FunctionSig,
+  inlineElementStruct,
+  StructInfo,
+} from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
@@ -515,71 +522,55 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
 }
 
 /**
- * Whether anything `loop` does can move an array header, which is the whole of
- * what a hoisted `len` and `data` depend on.
+ * Whether evaluating `node` can move an array header, which is the whole of
+ * what a hoisted `len` and `data` depend on, and what a compound element store
+ * re-checks its slot against once its right side has run (CG-10).
  *
- * Two things can: a `push` or a `pop` written in the loop, and a call to a user
- * function the fixpoint says grows an array (`FunctionFacts.resizesArray`). A
- * builtin cannot -- `push` and `pop` are the only builtins that reach a user
- * array's header and both are caught in the first place -- and an element store
- * cannot either, which is the reason the fact is not `writesThrough`: a loop
- * that writes `dst[i]` is exactly the loop this is for.
+ * Three things can: a `push` or a `pop` written in it, a call to a user
+ * function the fixpoint says grows an array (`FunctionFacts.resizesArray`), and
+ * a `new` of a class whose constructor it says the same of, since a
+ * constructor is a call `nodeCallees` does not hold (CG-11). A builtin cannot
+ * -- `push` and `pop` are the only builtins that reach a user array's header
+ * and both are caught in the first place -- and an element store cannot
+ * either, which is the reason the fact is not `writesThrough`: a loop that
+ * writes `dst[i]` is exactly the loop this is for.
  *
  * A callee with no facts is treated as growing one, so an unanalysed program
- * hoists nothing rather than hoisting wrongly.
+ * hoists nothing rather than hoisting wrongly. The attribute pass answers a
+ * coarser form of the question before the fixpoint exists (`callsAnything` in
+ * `src/attributes.ts`), and must stay a superset of this.
  */
-const loopMayResize = (emitter: Emitter, node: Node): boolean => {
+const mayResize = (emitter: Emitter, node: Node): boolean => {
   if (callMayResize(emitter, node)) {
     return true
   }
   for (const child of node.children) {
-    if (loopMayResize(emitter, child)) {
+    if (mayResize(emitter, child)) {
       return true
     }
   }
   return false
 }
 
-/** `node` itself, not its operands, is a `push`, a `pop` or a call the fixpoint says may grow an array. */
+/** `node` itself, not its operands, is a `push`, a `pop`, or a call or a `new` the fixpoint says may grow an array. */
 const callMayResize = (emitter: Emitter, node: Node): boolean => {
-  if (isResizeCall(emitter.program, emitter.table, node)) {
+  const program = emitter.program
+  if (isResizeCall(program, emitter.table, node)) {
     return true
   }
+  let callee: FunctionSig | null = null
   if (node.kind === N_CALL) {
-    const callee = emitter.program.nodeCallees[node.id]
-    if (callee !== null) {
-      const facts = emitter.facts.get(callee.name)
-      if (facts === null || facts.resizesArray) {
-        return true
-      }
-    }
+    callee = program.nodeCallees[node.id]
+  } else if (node.kind === N_NEW) {
+    // The class named, not the type it converts to; a class with no
+    // constructor stores constants only, and `new Array` is not a struct.
+    callee = constructorOf(program, emitter.table, intrinsicType(program, node))
   }
-  return false
-}
-
-/**
- * Whether the right side of a compound element assignment can move the array
- * it stores into (CG-10): `loopMayResize`'s question, and a `new` of a class
- * too, since a constructor is a call `nodeCallees` does not hold. The attribute
- * pass answers a coarser form of it before the fixpoint exists
- * (`callsAnything` in `src/attributes.ts`), and must stay a superset of this.
- */
-const rightSideMayResize = (emitter: Emitter, node: Node): boolean => {
-  if (callMayResize(emitter, node)) {
-    return true
+  if (callee === null) {
+    return false
   }
-  if (node.kind === N_NEW) {
-    const type = emitter.program.nodeTypes[node.id]
-    if (type >= 0 && emitter.table.isStruct(type)) {
-      return true
-    }
-  }
-  for (const child of node.children) {
-    if (rightSideMayResize(emitter, child)) {
-      return true
-    }
-  }
-  return false
+  const facts = emitter.facts.get(callee.name)
+  return facts === null || facts.resizesArray
 }
 
 /**
@@ -758,7 +749,7 @@ const pathIsShadowed = (expr: Node, names: string[]): boolean => {
 export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
   const facts = emitter.current
   facts.hoistedScopeStarts.push(facts.hoistedHeaders.length)
-  if (!emitter.opts.optimizeAttributes || loopMayResize(emitter, loop)) {
+  if (!emitter.opts.optimizeAttributes || mayResize(emitter, loop)) {
     return
   }
   const uses: ArrayUse[] = []
@@ -1258,7 +1249,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   // A hoisted header is only hoisted out of a loop nothing in it resizes, and
   // an inline field's slots never move, so only a plain base is taken again.
   let store = slot
-  if (base.header === null && base.owner === null && rightSideMayResize(emitter, expr.children[1])) {
+  if (base.header === null && base.owner === null && mayResize(emitter, expr.children[1])) {
     emitRangeCheck(emitter, idx, baseLength(emitter, base))
     store = elementPointer(emitter, base, elem, idx)
   }
