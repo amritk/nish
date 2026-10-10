@@ -6,7 +6,8 @@ built, S4 declined for now (tracking issue #516).** The owner took the
 decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
-made `bench/json` faster than S0, so `std/json` is unchanged (§2.3); whether
+was faster than S0 on `bench/json` beyond the noise, and none came near 1.5x,
+so `std/json` is unchanged (§2.3); whether
 to design S1b, the block classifier, is the owner's call (§7).
 S2's `--cpu` flag is not built: S0's figures missed its bar, and a
 re-measurement against the noise met it (§7); building it is the owner's call.
@@ -168,7 +169,10 @@ was an `Intel(R) Xeon(R) Processor @ 2.10GHz` (lscpu: family 6, model 207; 4
 vCPUs under KVM; AVX2, FMA and AVX-512 present). Each row is seven runs after
 one warm-up, in ms. Every later bar in §7 is a ratio against this table, on
 this machine, so a stage that measures elsewhere re-runs the script there
-first.
+first. The `bench/json` row is the exception: `s1-json` took it on its own
+machine, with its own programs, in interleaved rounds against S1's variants,
+under the owner's rule for that row
+([below](#s1-stdjson-on-indexofany-the-bar-missed)).
 
 | Row | Build | min ms | median ms |
 | --- | --- | ---: | ---: |
@@ -243,21 +247,24 @@ the other two.
 #### S1: `std/json` on `indexOfAny`, the bar missed
 
 S1's bar was `bench/json` with `jsonFields` from 75.7 ms to about 50. No way
-of putting `indexOfAny` into `std/json` was faster than S0, so `std/json` is
-unchanged. The scan has nothing for a search to jump: inside `bench/json`'s
-nested values a quote, brace or bracket comes every 5 to 7 bytes, and the
-scan is only about half of the reader's time.
+of putting `indexOfAny` into `std/json` was faster than S0 beyond the noise,
+and none came near 1.5x, so `std/json` is unchanged. The scan has nothing for
+a search to jump: inside `bench/json`'s nested values a quote, brace or
+bracket comes every 5 to 7 bytes, and the parts of the reader a byte search
+could reach are about 37% of its instructions.
 
 **How it was measured.** This row is S0 for S1 alone. It was taken at
 `f33139a`, `main` after #507's stage 3 (#532), interleaved with the variants
 on one machine as §7 requires: an `Intel(R) Xeon(R) Processor @ 2.80GHz` with
-4 vCPUs, so not a ratio against the 2.1 GHz table above. The harness is §2.3's,
-from branch `ccr-ee7596b7-up0cqq` at `956506d`, checked out and not committed.
-It times `jsonField` ×3 only, so a second program timed `jsonFields` and
-#507's four non-benchmark shapes. Each variant was built by the same compiler,
-and every one printed S0's checksum on every shape. One warm-up preceded the
-rounds, and S0 was also timed against a byte-identical copy of itself, which
-shows the noise. In ms, minimum / median, with peak RSS for the whole process:
+4 vCPUs, so not a ratio against the 2.1 GHz table above. The harness is
+§2.3's, from branch `ccr-ee7596b7-up0cqq` at `956506d`, checked out and not
+committed. At that commit it names an undefined variable when its input file
+is missing, so the input was generated first and put where it looks. It times
+`jsonField` ×3 only, so a second program timed `jsonFields` and #507's four
+non-benchmark shapes. Each variant was built by the same compiler, and every
+one printed S0's checksum on every shape. One warm-up preceded the rounds, and
+S0 was also timed against a byte-identical copy of itself, which shows the
+noise. In ms, minimum / median, with peak RSS for the whole process:
 
 | Shape | S0 | S0 against its copy |
 | --- | ---: | ---: |
@@ -268,9 +275,11 @@ shows the noise. In ms, minimum / median, with peak RSS for the whole process:
 | 50 keys, a miss, `jsonField` | 163.5 / 170.5, 346 MB | +2.8% / +2.1% |
 | short strings only, the last key, `jsonField` | 81.8 / 88.4, 59.6 MB | −0.9% / −4.8% |
 
-Across all twelve rows of the run, both readers on every shape, S0 and its
-copy differed by under 3% on most figures and by 6.1% at most, a `--json`
-minimum with `jsonField` ×3. The `--json` line is 100,000 lines drawn from 307
+Across all twelve rows of the second program's run, both readers on every
+shape, S0 and its copy differed by under 3% on most figures, by up to 6.1% on
+a minimum (the `--json` line, `jsonField` ×3) and by up to 6.7% on a median
+(`bench/json`, `jsonField` ×3). That is the band a variant's figure has to
+leave before it says anything. The `--json` line is 100,000 lines drawn from 307
 real `build/nish --json` diagnostics of `tests/cases/reject_*`, with the file,
 line, column and code varied. The 50-key object has 49 string fields of 4 to
 44 bytes, then the field. The short strings are 30 keys of one to three bytes,
@@ -308,13 +317,22 @@ slower):
 | C | +7.5% / +10.9% | +12.8% / +9.3% |
 | D | +12.5% / +12.3% | +15.3% / +12.7% |
 
-None of them is faster than S0 on `bench/json`. B's `jsonField` ×3 was 3.5%
-faster at the minimum in the second program and 5.7% to 7.3% slower in the
-harness's, so its sign follows the code around it, not the change: on these
-lines its `indexOfAny` is never called. A and B leave the four shapes'
-executed instructions as they were (the callgrind table), yet their times
-moved, mostly 1% to 9% faster and one median, B's short strings with
-`jsonFields`, 6.8% slower: layout of the same kind. D is also 6% to 12%
+None of them is faster than S0 on `bench/json` beyond the noise, and none
+comes near the 33% that 1.5x means. A, C and D are slower everywhere on
+`bench/json`. B is the only one with a faster figure: −2.8% at the minimum
+with `jsonFields`, and −3.5% at the minimum and −7.6% at the median with
+`jsonField` ×3 in the second program. The minimums are inside the band; the
+median is 0.9 points outside it. In the harness's program the same change is
+7.3% slower at the minimum and 5.0% at the median, and in two runs of the
+harness's own report, not interleaved, 9.4% and 5.9% slower at the minimum.
+Its `indexOfAny` is never called on these lines, so what B changes is a real
+cost, the 8-byte window's 3% more instructions on `bench/json`, plus where the
+code lands. That second part is visible on the `--json` line, where B executes
+the same branches as S0 and cachegrind's simulated predictor counts 8% fewer
+mispredicts, which only a change of addresses explains. On the three
+non-benchmark columns of the callgrind table A and B execute what S0 does, yet
+their times moved, mostly 1% to 10% faster and one median, B's short strings
+with `jsonFields`, 6.8% slower: layout of the same kind. D is also 6% to 12%
 slower on the 50-key object, so it fails the shapes' condition as well.
 
 **Why.** Where S0's time goes, under callgrind, for `jsonFields` on 20,000
@@ -643,7 +661,7 @@ a printed checksum.
 | Stage | What | Ships only if |
 | --- | --- | --- |
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
-| **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was faster than S0, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
+| **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was faster than S0 beyond the noise, none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
@@ -655,11 +673,14 @@ missed its bar because a per-call search has nothing to jump on `bench/json`
 ([§3.1](#31-a-runtime-kernels-chosen-at-run-time), the second kernel) takes
 the call out of each structural byte. On §2.3's profile it can remove at most
 the scan's string windows, depth loop and blank skip, 51 M of the 138 M
-instructions, and it keeps a floor of its own. A line is about 438 bytes,
-seven blocks to classify, and it has a structural byte every 5 to 7 bytes, a
-few instructions each. An estimate of that floor is 8 M or more, which leaves
-about 43 M against the 46 M that 1.5x needs. So S1b alone probably does not
-reach the bar either: it also needs the per-member work, the key comparisons
+instructions, and it keeps a floor of its own. That floor is an estimate, not
+a measurement. A `bench/json` line is about 436 bytes, seven blocks to
+classify, and holds about 104 bytes from `"{}[]:,\\`, one every 4.2 bytes,
+those inside strings included. At about 20 instructions to classify a block
+and about 3 to walk each bit, that is about 440 instructions a line, about
+9 M per 20,000 lines. It leaves about 42 M against the 46 M that 1.5x needs,
+a margin well within the estimate's error. So S1b alone may not reach the bar
+either: it may also need the per-member work, the key comparisons
 (18 M) or the unescaping (17 M) made cheaper, or the bar restated. And
 `jsonField` takes the text afresh on every call, so the harness's three calls
 would classify each line three times. Where the masks live between calls (a
