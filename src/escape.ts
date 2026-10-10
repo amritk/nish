@@ -31,7 +31,10 @@ import {
   CallSite,
   FactsTable,
   FunctionFacts,
+  isFreshArrayLocal,
+  isJoinedParts,
   LoopScope,
+  pushedOnto,
   USE_ARGUMENT,
   USE_NONE,
   USE_READ,
@@ -736,34 +739,23 @@ class EscapeAnalysis {
    * allocation out, and every loop that calls it loses its per-pass release
    * (`LOOP_CALLEE_STORES`).
    *
-   * The narrowness is the proof. Any other use of `parts` — `parts[i]`, a
-   * `for...of`, passing it, storing it, returning it, aliasing it, any other
-   * method — could hand a part back out, so each one keeps the conservative
-   * answer, and so does an array that is not this function's own literal or
-   * `new Array`, because an alias of it could be read where `parts` is not
-   * (`tests/cases/mem_join_parts_*`).
+   * The narrowness is the proof, and `isJoinedParts` (attributes.ts) holds
+   * it: any other use of `parts` — `parts[i]`, a `for...of`, passing it,
+   * storing it, returning it, aliasing it, any other method — could hand a
+   * part back out, so each one keeps the conservative answer, and so does an
+   * array that is not this function's own literal or `new Array`, because an
+   * alias of it could be read where `parts` is not
+   * (`tests/cases/mem_join_parts_*`). `noteUse` asks the same question of a
+   * string parameter pushed onto `parts` (#503).
    */
   pushedIntoJoinedParts(expr: Node): boolean {
-    const program = this.unit.program
-    let list = this.unit.parents.parentOf(expr)
-    while (list !== null && list.kind === N_PAREN) {
-      list = this.unit.parents.parentOf(list)
-    }
-    if (list === null || list.kind !== N_LIST) {
+    const v = pushedOnto(this.unit, this.table, expr)
+    if (
+      v === null ||
+      v.storage !== STORAGE_LOCAL ||
+      !isJoinedParts(this.unit, this.table, v, this.declarationOf(v), this.refsOf(v))
+    ) {
       return false
-    }
-    const call = this.unit.parents.parentOf(list)
-    if (call === null || !isPushCall(program, this.table, call) || call.children[1] !== list) {
-      return false
-    }
-    const v = this.freshArrayLocal(call.children[0].children[0])
-    if (v === null || this.table.refOf(v.type) !== T_STRING) {
-      return false
-    }
-    for (const ref of this.refsOf(v)) {
-      if (!this.isPartsUse(ref)) {
-        return false
-      }
     }
     const visiting: Local[] = []
     return this.localOutcome(v, visiting).flow === FLOW_LOCAL
@@ -773,15 +765,7 @@ class EscapeAnalysis {
   freshArrayLocal(receiver: Node): Local | null {
     const e = unwrapParens(receiver)
     const v: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
-    if (v === null || v.storage !== STORAGE_LOCAL || !this.table.isArray(v.type)) {
-      return null
-    }
-    const decl = this.declarationOf(v)
-    if (decl === null) {
-      return null
-    }
-    const init = unwrapParens(decl.children[2])
-    return init.kind === N_ARRAY || init.kind === N_NEW ? v : null
+    return v !== null && isFreshArrayLocal(this.table, v, this.declarationOf(v)) ? v : null
   }
 
   /**
@@ -939,21 +923,6 @@ class EscapeAnalysis {
       return method !== "join" && method !== "indexOf" && method !== "push"
     }
     return access.text !== "length"
-  }
-
-  /** `ref` is `parts.push(...)`, `parts.join(...)` or `parts.length`, and nothing else. */
-  isPartsUse(ref: Node): boolean {
-    const program = this.unit.program
-    const access = this.unit.parents.parentOf(ref)
-    if (access === null || access.kind !== N_MEMBER || access.children[0] !== ref) {
-      return false
-    }
-    const above = this.unit.parents.parentOf(access)
-    if (above !== null && above.kind === N_CALL && above.children[0] === access) {
-      return isPushCall(program, this.table, above) || isJoinCall(program, this.table, above)
-    }
-    // `parts.length = n` is refused for every array, so a `length` here is a read.
-    return access.text === "length"
   }
 
   memoised(v: Local): Outcome | null {
