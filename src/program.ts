@@ -1230,6 +1230,8 @@ export class CheckedProgram {
    */
   uncheckedIndexing: boolean
   wrapping: boolean
+  /** Whether `--number-mode f64` is in force, where a `.length` is an `f64`. */
+  f64Mode: boolean
   /**
    * The `nish:unsafe` imports of this module, in source order, and every call
    * of one of its functions, in the order the checker met them (each once,
@@ -1438,6 +1440,7 @@ export class CheckedProgram {
     this.usesArgv = false
     this.uncheckedIndexing = false
     this.wrapping = false
+    this.f64Mode = false
     this.unsafeImports = []
     this.unsafeCalls = []
     this.nodeTypes = new Array<i32>(nodeCount)

@@ -34,13 +34,14 @@
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
+import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
 import { isNetExport, netRangeBuffer } from "./nish-modules"
 import { N_BINARY, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { addJsonQuoted, StringBuilder } from "./strings"
-import { T_U16, T_U32, T_U8, TypeTable, isUnsigned } from "./types"
+import { TypeTable, isUnsigned } from "./types"
 
 // The kinds. The number is internal and never reused, so a kind added later
 // takes the next one wherever docs/LANGUAGE.md lists it; the name
@@ -693,7 +694,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
   const node = site.node
   switch (site.kind) {
     case PANIC_INDEX:
-      return indexAdvice(program, node)
+      return indexAdvice(program, table, node)
     case PANIC_POP: {
       const holder = siteLocalName(program, unwrapBoundsParens(node.children[0]).children[0])
       const xs = holder.length > 0 ? holder : "xs"
@@ -734,7 +735,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
 }
 
 /** The guard for an element access or a `charCodeAt`, and for the second check of a compound store. */
-const indexAdvice = (program: CheckedProgram, node: Node): string => {
+const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
   if (node.kind === N_BINARY) {
     return (
       "a compound store checks its index again after its right side, which may resize the array, and no " +
@@ -761,14 +762,8 @@ const indexAdvice = (program: CheckedProgram, node: Node): string => {
   const unchecked = program.uncheckedIndexing
     ? " (`--unchecked-indexing` removes the check without proving it, which makes an access out of range undefined behaviour rather than a proven one)"
     : ""
-  // A `u8`, `u16` or `u32` index is given the credited `u32` compare, which
-  // the `i32` test does not type-check against (NL9007 says the same).
-  const type = program.nodeTypes[index.id]
-  const guard =
-    type === T_U8 || type === T_U16 || type === T_U32
-      ? `\`if (toU32(${i}) < toU32(${xs}.length))\` proves it, because an unsigned index needs only the upper end`
-      : `\`if (${i} >= 0 && ${i} < ${xs}.length)\` proves both ends, and an unsigned index needs only the upper one`
-  return `${what}${unchecked}: guard it with a test that reaches the access — ${guard}`
+  // The guard NL9007 offers, or none where no spelling is credited.
+  return `${what}${unchecked}: ${indexGuardAdvice(program, table, index, i, xs)}`
 }
 
 /** A `slice`, an array `set` or a socket call whose buffer range is checked: no proof removes any of them. */
