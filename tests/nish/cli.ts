@@ -1606,6 +1606,193 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
   t.eqI32("CLI-2: nish/<module> is not read from the working directory's std/", std, 1);
 };
 
+/** `head` with every one of `tail` pushed after it. */
+const followedBy = (head: string[], tail: string[]): string[] => {
+  for (const arg of tail) {
+    head.push(arg);
+  }
+  return head;
+};
+
+/** `chmod <mode> <path>`, for the checks that need a mode `mkdirSync` does not give. */
+const chmodTo = (mode: string, path: string): void => {
+  spawnSyncTo(["chmod", mode, path], `${WORK}/chmod.out`, `${WORK}/chmod.err`);
+};
+
+/**
+ * CLI-7: every run, a hit included, refuses a cache root that is not a
+ * directory this user owns, or that its group or every user can write, before
+ * it starts anything from it. A root another user made at this user's cache
+ * path, filled with a key and a binary, used to have its binary started by
+ * the next hit, because only a miss ran CLI-4's `chmod 700`. The refusal is
+ * the toolchain band and `NL0002`, as the run's other refusals are, and a
+ * root made private again is a hit again.
+ *
+ * Giving a directory to another user needs root, so the owner half is a
+ * counted skip for anyone else; the mode and the link halves run everywhere.
+ */
+const checkCacheRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
+  if (!env) {
+    t.skip("CLI-7: the cache root's owner", "needs env(1) to set XDG_CACHE_HOME, and the probe did not find one");
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("CLI-7: the cache root's owner", `cannot resolve ${WORK}`);
+    return;
+  }
+  const cache = `${abs}/sec-owner-cache`;
+  removeTree(cache);
+  const root = `${cache}/nish/run`;
+  const script = `${WORK}/sec-owner.ts`;
+  writeRunFixture(script);
+  const setting = `XDG_CACHE_HOME=${cache}`;
+  const first = cli.run("sec_owner", [setting], ["run", script]);
+  if (first.status === 3 && contains(first.stderr, "no usable C compiler")) {
+    t.skip("CLI-7: the cache root's owner", "no C compiler, so nothing can be linked into it");
+    return;
+  }
+  t.eqI32("CLI-7: a run into its own private cache root runs", first.status, 7);
+
+  chmodTo("770", root);
+  const group = cli.run("sec_owner_group", [setting], ["run", "--json", script]);
+  t.eqI32("CLI-7: a cache root its group can write is refused with the toolchain band", group.status, 3);
+  t.eqBool("CLI-7: and the binary in it never ran", contains(group.stdout, "cli-sec ran"), false);
+  const objects = cliObjectLines(group.stdout);
+  if (t.eqI32("CLI-7: and --json carries one object", toI32(objects.length), 1)) {
+    t.eqStr("CLI-7: whose code is NL0002", cliField(objects[0], "code"), "NL0002");
+    t.contains(
+      "CLI-7: and whose message says why",
+      cliField(objects[0], "message"),
+      `refusing the cache root ${root}, which can be written by its group or by every user`
+    );
+  }
+  chmodTo("707", root);
+  const world = cli.run("sec_owner_world", [setting], ["run", script]);
+  t.eqI32("CLI-7: a cache root every user can write is refused", world.status, 3);
+  t.eqBool("CLI-7: and the binary in it never ran either", contains(world.stdout, "cli-sec ran"), false);
+  chmodTo("700", root);
+  const again = cli.run("sec_owner_again", [setting], ["run", script]);
+  t.eqI32("CLI-7: the same root made private again is a hit again", again.status, 7);
+
+  // A link to a directory this user owns is not a directory this user owns:
+  // the path as written is the one to trust.
+  const linked = `${abs}/sec-owner-link`;
+  removeTree(linked);
+  mkdirSync(linked);
+  mkdirSync(`${linked}/nish`);
+  spawnSyncTo(["ln", "-s", root, `${linked}/nish/run`], `${WORK}/ln.out`, `${WORK}/ln.err`);
+  const throughLink = cli.run("sec_owner_link", [`XDG_CACHE_HOME=${linked}`], ["run", script]);
+  t.eqI32("CLI-7: a cache root that is a symbolic link is refused", throughLink.status, 3);
+  t.contains("CLI-7: and says it is not a directory", throughLink.stderr, "is not a directory");
+  t.eqBool("CLI-7: and the binary it leads to never ran", contains(throughLink.stdout, "cli-sec ran"), false);
+
+  if (geteuid() !== 0) {
+    t.skip("CLI-7: a cache root another user owns", "only root can give a directory to another user");
+    return;
+  }
+  spawnSyncTo(["chown", "65534", root], `${WORK}/chown.out`, `${WORK}/chown.err`);
+  const other = cli.run("sec_owner_other", [setting], ["run", script]);
+  t.eqI32("CLI-7: a cache root another user owns is refused", other.status, 3);
+  t.contains("CLI-7: and says who owns it", other.stderr, "is owned by uid 65534, not by this user (uid 0)");
+  t.eqBool("CLI-7: and the binary in it never ran, root or not", contains(other.stdout, "cli-sec ran"), false);
+};
+
+/**
+ * CLI-9: the package root is the parent of the compiler's directory, so a
+ * compiler kept in a directory directly under `/tmp` used to trust
+ * `/tmp/scripts/build.sh`, which any user can create; and a `nish` on `PATH`
+ * with no execute bit, which the shell skipped, named the package of a
+ * compiler that never ran. A package root every user can write is refused, one
+ * its group can write is not (whoever writes the root can replace `bin/`
+ * already), and the package used is that of the first *executable* `nish`.
+ *
+ * Every compiler here is started in `/`, so the working directory is never a
+ * candidate and the checkout's own `scripts/build.sh` cannot stand in.
+ */
+const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
+  if (cli.head.length !== 1) {
+    t.skip("CLI-9: the package root's owner", `${cli.label} is not a binary that can be copied out of its package`);
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("CLI-9: the package root's owner", `cannot resolve ${WORK}`);
+    return;
+  }
+  const pkg = `${abs}/sec-shared`;
+  const marker = `${abs}/sec-shared-ran`;
+  removeTree(pkg);
+  removeTree(marker);
+  mkdirSync(pkg);
+  mkdirSync(`${pkg}/bin`);
+  mkdirSync(`${pkg}/scripts`);
+  if (spawnSyncTo(["cp", cli.head[0], `${pkg}/bin/nish`], `${WORK}/cp.out`, `${WORK}/cp.err`) !== 0) {
+    t.fail("CLI-9: the package root's owner", `cannot copy ${cli.label}: ${readOrEmpty(`${WORK}/cp.err`)}`);
+    return;
+  }
+  writeFileSync(`${pkg}/scripts/build.sh`, `touch '${marker}'\nexit 1\n`);
+  const source = `${abs}/${FIXTURE_OK}`;
+  const linkArgs: string[] = [source, "-o", `${abs}/sec-shared.ll`, "--link", `${abs}/sec-shared`];
+
+  chmodTo("777", pkg);
+  const shared = spawnSyncTo(
+    inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)),
+    `${WORK}/sec_shared.out`,
+    `${WORK}/sec_shared.err`
+  );
+  t.eqBool(
+    "CLI-9: --link does not run scripts/build.sh from a package root every user can write",
+    readFileSyncOrNull(marker) !== null,
+    false
+  );
+  t.eqI32("CLI-9: and is refused with the toolchain band", shared, 3);
+  t.contains(
+    "CLI-9: and says which root it refused, and why",
+    readOrEmpty(`${WORK}/sec_shared.err`),
+    `refused ${pkg}/bin/.., which can be written by every user`
+  );
+
+  chmodTo("775", pkg);
+  spawnSyncTo(inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)), `${WORK}/sec_group.out`, `${WORK}/sec_group.err`);
+  t.eqBool(
+    "CLI-9: a package root only its group can write is still the package",
+    readFileSyncOrNull(marker) !== null,
+    true
+  );
+
+  const path = getenv("PATH");
+  if (!env || path === null) {
+    t.skip("CLI-9: the first executable nish on PATH", "needs env(1) and a PATH to set one");
+    return;
+  }
+  // A readable `nish` with no execute bit ahead of the real one: `env` skips
+  // it, as the shell does, and the compiler has to agree on which ran.
+  const decoy = `${abs}/sec-decoy`;
+  const decoyMarker = `${abs}/sec-decoy-ran`;
+  removeTree(decoy);
+  removeTree(decoyMarker);
+  removeTree(marker);
+  mkdirSync(decoy);
+  mkdirSync(`${decoy}/bin`);
+  mkdirSync(`${decoy}/scripts`);
+  chmodTo("755", decoy);
+  chmodTo("755", pkg);
+  writeFileSync(`${decoy}/bin/nish`, "#!/bin/sh\nexit 0\n");
+  writeFileSync(`${decoy}/scripts/build.sh`, `touch '${decoyMarker}'\nexit 1\n`);
+  spawnSyncTo(
+    inDirectory("/", followedBy(["env", `PATH=${decoy}/bin:${pkg}/bin:${path}`, "nish"], linkArgs)),
+    `${WORK}/sec_path.out`,
+    `${WORK}/sec_path.err`
+  );
+  t.eqBool(
+    "CLI-9: a nish on PATH with no execute bit does not name the package",
+    readFileSyncOrNull(decoyMarker) !== null,
+    false
+  );
+  t.eqBool("CLI-9: the first executable one does", readFileSyncOrNull(marker) !== null, true);
+};
+
 export const main = (): number => {
   const spec = process.argv.length > 1 ? process.argv[1] : DEFAULT_CLI;
   mkdirSync("build");
@@ -1645,6 +1832,8 @@ export const main = (): number => {
   checkIdentity198(t, cli);
   checkRunCache(t, cli, env);
   checkPackageRoot(t, cli);
+  checkCacheRootOwner(t, cli, env);
+  checkPackageRootOwner(t, cli, env);
 
   return t.done();
 };
