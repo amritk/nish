@@ -311,6 +311,10 @@ export class EmittedModule {
   }
 }
 
+/** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
+const isRetentionCode = (code: string): boolean =>
+  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016"
+
 /**
  * Whether a performance warning is a deprecated flag's (NL9014, NL9015;
  * `Compilation.reportDeprecatedFlags`). `nish run` prints these and no other
@@ -1188,6 +1192,7 @@ export class Compilation {
     layoutInlineArrays(contexts, mode)
     proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     this.reportArenaLoops()
+    this.denyRetention()
     this.reportDeprecatedFlags()
     this.reportUncheckedIndexSites(programs)
     this.checkParallel()
@@ -1519,6 +1524,52 @@ export class Compilation {
       }
     }
     this.sink.warnings = kept
+  }
+
+  /**
+   * `--deny-retention`: each arena-retention warning in a module of the root
+   * package becomes an error. The four rules are the ones whose finding is
+   * memory nothing can reach that stays allocated: quadratic string building
+   * (NL9002), an allocation dropped by an assignment (NL9003), a loop over a
+   * call that leaves its memory behind (NL9011) and an allocation dropped on
+   * every pass (NL9016). The error keeps the warning's text, which names the
+   * rewrite, and its code, so a reader sees which rule refused the build. A
+   * dependency's warnings stay warnings, as its panic sites stay outside the
+   * no-panic scope: the program's author cannot change that code.
+   *
+   * Run after `reportArenaLoops`, the last of the four to be found, and the
+   * warning it restates is dropped so the line is said once.
+   */
+  denyRetention(): void {
+    if (!this.opts.denyRetention) {
+      return
+    }
+    const kept: Diagnostic[] = []
+    for (const warning of this.sink.warnings) {
+      const code = codeFor("performance", warning.text)
+      if (isRetentionCode(code) && this.inRootPackage(warning.source)) {
+        this.sink.report(
+          warning.source,
+          warning.start,
+          warning.end,
+          `\`--deny-retention\` refuses this ${code} finding, because the arena memory it describes stays ` +
+            `allocated after nothing in the program can reach it any more: ${warning.text}`
+        )
+      } else {
+        kept.push(warning)
+      }
+    }
+    this.sink.warnings = kept
+  }
+
+  /** Whether `source` is a module of the root package, the program's own code. */
+  inRootPackage(source: SourceFile): boolean {
+    for (const unit of this.modules) {
+      if (unit.source === source) {
+        return unit.packageName === ROOT_PACKAGE
+      }
+    }
+    return false
   }
 
   /** Every module's enum table, keyed for the emitter now that no name is resolved (`CheckedProgram.keyEnumsBySymbol`). */

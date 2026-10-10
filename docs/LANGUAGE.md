@@ -6546,6 +6546,9 @@ by the caller.
 - **`--emit-panics <file.json>`** writes every panic site of the program,
   function by function, beside the IR, and changes no byte of it; see
   [Panic sites](#panic-sites) below.
+- **`--deny-retention`** refuses a program whose own code keeps arena memory
+  that nothing can reach, for a long-running program that cannot afford it; see
+  [Retention as an error](#retention-as-an-error) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -6724,6 +6727,44 @@ performance warning about the same check is not printed beside the error.
 - `--deny-panics` changes no byte of the IR: a program it accepts is the one the
   build compiles without it. With `--emit-ast`, which stops before the checker,
   it is a usage error (exit 2).
+
+### Retention as an error
+
+A program that runs for a long time, a server above all, cannot afford memory
+that stays allocated after nothing can reach it: in a command-line tool it is
+returned when `main` does, and in a server it grows until the process is
+killed. Four performance warnings are exactly that finding, and
+**`--deny-retention`** makes each of them an error (NL2462) in the program's own
+modules:
+
+| Warning | What stays allocated |
+| --- | --- |
+| NL9002, quadratic string building | every intermediate string of `s = s + t` in a loop |
+| NL9003, an allocation dropped by an assignment | the value the local held |
+| NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
+| NL9016, an allocation dropped on every pass | the value each pass replaced |
+
+- **The error keeps the warning.** Its text is the warning's, after the code of
+  the rule that found it, so it names the same rewrite:
+  `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
+  (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`). The warning it
+  restates is not printed as well, and `--no-warn-performance` does not
+  silence the error.
+- **The program's own modules only.** A module of the root package is held to
+  it; a dependency's warnings stay warnings, as its panic sites stay outside
+  the [no-panic scope](#the-no-panic-scope), because the program's author
+  cannot change that code (`tests/link/deny_retention_dependency`).
+- **What it does not promise.** The four warnings are conservative in the
+  direction of silence: each fires only where the compiler can name the memory
+  and the rewrite, so a program it accepts can still retain memory in a shape
+  no rule recognises ([wp6-memory.md](wp6-memory.md), "Left out"). Nor does it
+  cover memory a program keeps on purpose: an array it pushes onto for its
+  whole run is reachable, and so not retention.
+- `--deny-retention` changes no byte of the IR: a program it accepts is the one
+  the build compiles without it (`tests/cases/deny_retention_clean`). `nish run`
+  and `--fix` accept it; with `--emit-ast`, which stops before the checker, it
+  is a usage error (exit 2).
 
 ## Forbidden constructs (Phase 0 validator)
 

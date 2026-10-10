@@ -1,0 +1,2 @@
+`--deny-retention` refuses this NL9002 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more
+`out` is rebuilt from its own value on every iteration of this loop

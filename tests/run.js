@@ -12308,6 +12308,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-napi-async",
     "--emit-panics",
     "--deny-panics",
+    "--deny-retention",
     "--target",
     "--profile",
     "--warn-portability",
@@ -12684,6 +12685,60 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
         "`--deny-panics` reports on a checked program, and --emit-ast stops before the check"
       ),
     shown(denyAst)
+  )
+  // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
+  // and those are found by the body checks and the whole-program facts, which
+  // `--emit-ast` never reaches (docs/LANGUAGE.md, "Retention as an error").
+  const retainSource = path.join(root, "tests", "cases", "reject_deny_retention_pass_drop.ts")
+  const retainAst = spawnSync(NISH, [retainSource, "--emit-ast", "--deny-retention"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "retention: --deny-retention with --emit-ast is a usage error, exit 2",
+    retainAst.status === 2 &&
+      retainAst.stdout === "" &&
+      retainAst.stderr.includes(
+        "`--deny-retention` reports on a checked program, and --emit-ast stops before the check"
+      ),
+    shown(retainAst)
+  )
+  // It decides whether the build happens and nothing else: the program it
+  // accepts is the program a compile without it writes, byte for byte.
+  const retainClean = path.join(root, "tests", "cases", "deny_retention_clean.ts")
+  const retainWith = path.join(capsDir, "retain-with.ll")
+  const retainWithout = path.join(capsDir, "retain-without.ll")
+  const withFlag = spawnSync(NISH, [retainClean, "--deny-retention", "-o", retainWith], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const withoutFlag = spawnSync(NISH, [retainClean, "-o", retainWithout], { cwd: root, encoding: "utf8" })
+  check(
+    "retention: --deny-retention changes no byte of the IR of a program it accepts",
+    withFlag.status === 0 &&
+      withoutFlag.status === 0 &&
+      fs.readFileSync(retainWith, "utf8") === fs.readFileSync(retainWithout, "utf8"),
+    `${shown(withFlag)}\n${shown(withoutFlag)}`
+  )
+  // A dependency's retention stays a warning, as its panic sites stay outside
+  // the no-panic scope: the program's author cannot change that code.
+  const retainDep = path.join(root, "tests", "link", "deny_retention_dependency", "main.ts")
+  const depRun = spawnSync(
+    NISH,
+    [retainDep, "--deny-retention", "-o", path.join(capsDir, "retain-dep") + "/"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "retention: under --deny-retention a dependency's NL9016 is still a warning, and the program compiles",
+    depRun.status === 0 &&
+      depRun.stderr.includes(
+        "retain_pkg/index.ts:5:5: performance: `label` is given a new allocation on every pass"
+      ) &&
+      !depRun.stderr.includes("error:"),
+    shown(depRun)
   )
   const panicsChecked = path.join(capsDir, "panics-checked.json")
   const dumped = spawnSync(NISH, [panicsSource, "--emit-checked", "--emit-panics", panicsChecked], {

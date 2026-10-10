@@ -1512,7 +1512,9 @@ for (const row of rows) {
 every pass's string, because nothing frees a value a later pass replaced:
 10,000,000 passes peaked at 392 MB. The compiler warns (NL9016). Declare the
 value with `const` inside the loop when only the pass reads it, or keep
-numbers across passes and build the value once after the loop.
+numbers across passes and build the value once after the loop. A server, or
+anything that runs for a long time, should compile with `--deny-retention`,
+which makes this warning and the three like it errors.
 
 Everything else is bumped from the arena, which is released when `main`
 returns. **Do not write `Arena.release` or `Arena.reset`**: releasing while
