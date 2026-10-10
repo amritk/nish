@@ -316,6 +316,15 @@ export const rfc8448Checks = (): i32 => {
   const forged: TlsServer = rfc8448Server();
   forged.receive(TLS_LEVEL_INITIAL, hello, zero, toI32(hello.length));
   forged.sign(rfc8448RsaPssSignature());
+  // `sign` derived the secret ahead into its pool array (index 8,
+  // `TLS_SECRET_RESUMPTION`), which `fail` must wipe, as `net_tls_memory`
+  // reads the pools after `restart`.
+  const resumptionArray: u8[] = forged.secrets256[8];
+  t.eqStr(
+    "sign derives resumption_master_secret ahead, into its pool array",
+    toHex(resumptionArray),
+    toHex(rfc8448ResumptionSecret())
+  );
   const tampered: u8[] = rfc8448ClientFinished();
   const last: i32 = toI32(tampered.length) - 1;
   tampered[last] = toU8(toI32(tampered[last]) ^ 1);
@@ -326,6 +335,7 @@ export const rfc8448Checks = (): i32 => {
   );
   t.eqI32("and fails the handshake", forged.state, TLS_STATE_FAILED);
   t.eqStr("with no resumption_master_secret", toHex(forged.resumptionSecret), "");
+  t.eqStr("and the one derived ahead is wiped", toHex(resumptionArray), toHex(new Array<u8>(h)));
 
   // --- The same ClientHello a byte at a time --------------------------------
   // A carrier hands over whatever a record or a CRYPTO frame held, so the

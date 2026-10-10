@@ -41,9 +41,11 @@ PASS  and the handshake is done
 PASS  with nothing left to send
 PASS  resumption_master_secret, {server} derive secret "tls13 res master"
 PASS  resumption_master_secret, from the schedule over the trace's transcript
+PASS  sign derives resumption_master_secret ahead, into its pool array
 PASS  a client Finished with one bit flipped is decrypt_error
 PASS  and fails the handshake
 PASS  with no resumption_master_secret
+PASS  and the one derived ahead is wiped
 PASS  fed a byte at a time, the ClientHello is accepted
 PASS  and answered with the same ServerHello
 PASS  and so is the client Finished
@@ -60,4 +62,4 @@ PASS  SHA-384: server_application_traffic_secret_0 (checked against Python)
 PASS  SHA-384: the client Finished the model computes is accepted
 PASS  SHA-384: connected
 PASS  SHA-384: resumption_master_secret (checked against Python)
-tls rfc8448: 62 passed, 0 failed, 0 skipped
+tls rfc8448: 64 passed, 0 failed, 0 skipped
