@@ -1,0 +1,7 @@
+wycheproof HMAC-SHA-256: 174 cases, 66 valid tags matched, 108 modified tags refused
+PASS  wycheproof HMAC-SHA-256: every case agrees with the file
+wycheproof HMAC-SHA-384: 174 cases, 66 valid tags matched, 108 modified tags refused
+PASS  wycheproof HMAC-SHA-384: every case agrees with the file
+wycheproof HMAC-SHA-512: 174 cases, 66 valid tags matched, 108 modified tags refused
+PASS  wycheproof HMAC-SHA-512: every case agrees with the file
+hmac wycheproof: 3 passed, 0 failed, 0 skipped

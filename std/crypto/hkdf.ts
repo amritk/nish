@@ -65,6 +65,17 @@
  * length other than 32 or 48, or an output window outside its array, is the
  * caller's bug and panics.
  *
+ * **What the key reaches is wiped** (CLAUDE.md, "Security"). Every HMAC on
+ * the way wipes its key blocks and hashers (`nish/crypto/hmac`), and `expand`
+ * wipes each T(i) once the next has replaced it, and the last one before it
+ * returns. The PRK `extract` answers and the output `expand` answers are the
+ * caller's. A caller that holds its input keying material as a `Secret<u8[]>`
+ * (`nish:secret`) derives with `hkdfSha256Secret` or `hkdfSha384Secret`,
+ * which run both steps, hand the output back as a `Secret` and wipe the PRK
+ * between them, or with the `*Secret` twins of each step:
+ *
+ *     const okm: Secret<u8[]> | null = hkdfSha256Secret(salt, ikm, info, 42);
+ *
  * Written from RFC 5869 and RFC 8446 §7.1, not ported from another
  * implementation.
  */
@@ -78,6 +89,7 @@ import {
 } from "nish/crypto/hmac"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
+import { Secret, exposeWith, secret, wipe } from "nish:secret"
 
 /** The largest block counter, and so the most blocks `expand` can make (RFC 5869 §2.3). */
 const HKDF_MAX_BLOCKS: i32 = 255
@@ -145,10 +157,13 @@ export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | nul
     mac.update(info, HKDF_FROM, toI32(info.length))
     counter[0] = toU8(i)
     mac.update(counter, HKDF_FROM, counterLength)
-    previous = mac.digest()
+    const block: u8[] = mac.digest()
+    wipe(previous)
+    previous = block
     at = hkdfAppend(out, at, previous)
     i += 1
   }
+  wipe(previous)
   return out
 }
 
@@ -179,11 +194,113 @@ export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | nul
     mac.update(info, HKDF_FROM, toI32(info.length))
     counter[0] = toU8(i)
     mac.update(counter, HKDF_FROM, counterLength)
-    previous = mac.digest()
+    const block: u8[] = mac.digest()
+    wipe(previous)
+    previous = block
     at = hkdfAppend(out, at, previous)
     i += 1
   }
+  wipe(previous)
   return out
+}
+
+// ---- Keys held as `Secret`s ------------------------------------------------
+//
+// The `*Secret` functions the module docs name: each reads its key only inside
+// `exposeWith`, and hands the PRK and the output back as `Secret`s.
+
+/** What `expand` needs besides the PRK, as one argument, since `exposeWith` hands on only one. */
+interface HkdfExpandRequest {
+  info: u8[]
+  length: i32
+}
+
+/**
+ * HKDF-Extract with HMAC-SHA-256 on the plain IKM, for `exposeWith` to run.
+ * It keys HMAC with `salt` itself rather than through `hkdfSalt`, whose answer
+ * may be `salt`, because the checker does not credit that path with leaving
+ * `salt` unwritten (NL2450). The PRK is the same: an empty salt is padded to
+ * the block with zeros, as the HashLen zeros of §2.2 would be.
+ */
+const hkdfExtractSha256Exposed = (ikm: u8[], salt: u8[]): u8[] => hmacSha256(salt, ikm)
+
+/** HKDF-Extract with HMAC-SHA-384 on the plain IKM, for `exposeWith` to run, as the SHA-256 one is. */
+const hkdfExtractSha384Exposed = (ikm: u8[], salt: u8[]): u8[] => hmacSha384(salt, ikm)
+
+/** HKDF-Expand with HMAC-SHA-256 on the plain PRK, for `exposeWith` to run. */
+const hkdfExpandSha256Exposed = (prk: u8[], request: HkdfExpandRequest): u8[] | null =>
+  hkdfExpandSha256(prk, request.info, request.length)
+
+/** HKDF-Expand with HMAC-SHA-384 on the plain PRK, for `exposeWith` to run. */
+const hkdfExpandSha384Exposed = (prk: u8[], request: HkdfExpandRequest): u8[] | null =>
+  hkdfExpandSha384(prk, request.info, request.length)
+
+/** `hkdfExtractSha256` on input keying material held as a `Secret`: the 32-byte PRK, held as one. */
+export const hkdfExtractSha256Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> => {
+  const prk: u8[] = exposeWith(ikm, salt, hkdfExtractSha256Exposed)
+  return secret(prk)
+}
+
+/** `hkdfExtractSha384` on input keying material held as a `Secret`: the 48-byte PRK, held as one. */
+export const hkdfExtractSha384Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> => {
+  const prk: u8[] = exposeWith(ikm, salt, hkdfExtractSha384Exposed)
+  return secret(prk)
+}
+
+/**
+ * `hkdfExpandSha256` on a PRK held as a `Secret`: the output keying material,
+ * held as one, or `null` where `hkdfExpandSha256` answers `null`.
+ */
+export const hkdfExpandSha256Secret = (prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null => {
+  const request: HkdfExpandRequest = { info: info, length: length }
+  const okm: u8[] | null = exposeWith(prk, request, hkdfExpandSha256Exposed)
+  if (okm === null) {
+    return null
+  }
+  return secret(okm)
+}
+
+/**
+ * `hkdfExpandSha384` on a PRK held as a `Secret`: the output keying material,
+ * held as one, or `null` where `hkdfExpandSha384` answers `null`.
+ */
+export const hkdfExpandSha384Secret = (prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null => {
+  const request: HkdfExpandRequest = { info: info, length: length }
+  const okm: u8[] | null = exposeWith(prk, request, hkdfExpandSha384Exposed)
+  if (okm === null) {
+    return null
+  }
+  return secret(okm)
+}
+
+/**
+ * HKDF with HMAC-SHA-256, both steps (RFC 5869 §2): `length` bytes from `salt`,
+ * the `Secret` input keying material and `info`, held as a `Secret`, or `null`
+ * where `hkdfExpandSha256` answers `null`. The PRK is wiped before it returns.
+ */
+export const hkdfSha256Secret = (
+  salt: u8[],
+  ikm: Secret<u8[]>,
+  info: u8[],
+  length: i32
+): Secret<u8[]> | null => {
+  const prk: Secret<u8[]> = hkdfExtractSha256Secret(salt, ikm)
+  const okm: Secret<u8[]> | null = hkdfExpandSha256Secret(prk, info, length)
+  wipe(prk)
+  return okm
+}
+
+/** `hkdfSha256Secret` with HMAC-SHA-384: the PRK is 48 bytes, and wiped before it returns. */
+export const hkdfSha384Secret = (
+  salt: u8[],
+  ikm: Secret<u8[]>,
+  info: u8[],
+  length: i32
+): Secret<u8[]> | null => {
+  const prk: Secret<u8[]> = hkdfExtractSha384Secret(salt, ikm)
+  const okm: Secret<u8[]> | null = hkdfExpandSha384Secret(prk, info, length)
+  wipe(prk)
+  return okm
 }
 
 /**
@@ -221,12 +338,12 @@ const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u
 
 /**
  * HKDF-Expand-Label with HMAC-SHA-256 (RFC 8446 §7.1): `length` bytes from
- * `secret`, `"tls13 " + label` and `context`. Panics on an argument out of the
+ * `prk` (RFC 8446's Secret), `"tls13 " + label` and `context`. Panics on an argument out of the
  * range the module docs give, a secret shorter than 32 bytes among them.
  */
-export const hkdfExpandLabelSha256 = (secret: u8[], label: string, context: u8[], length: i32): u8[] => {
+export const hkdfExpandLabelSha256 = (prk: u8[], label: string, context: u8[], length: i32): u8[] => {
   const okm: u8[] | null = hkdfExpandSha256(
-    secret,
+    prk,
     hkdfLabel("hkdfExpandLabelSha256", label, context, length),
     length
   )
@@ -238,12 +355,12 @@ export const hkdfExpandLabelSha256 = (secret: u8[], label: string, context: u8[]
 
 /**
  * HKDF-Expand-Label with HMAC-SHA-384 (RFC 8446 §7.1): `length` bytes from
- * `secret`, `"tls13 " + label` and `context`. Panics on an argument out of the
+ * `prk` (RFC 8446's Secret), `"tls13 " + label` and `context`. Panics on an argument out of the
  * range the module docs give, a secret shorter than 48 bytes among them.
  */
-export const hkdfExpandLabelSha384 = (secret: u8[], label: string, context: u8[], length: i32): u8[] => {
+export const hkdfExpandLabelSha384 = (prk: u8[], label: string, context: u8[], length: i32): u8[] => {
   const okm: u8[] | null = hkdfExpandSha384(
-    secret,
+    prk,
     hkdfLabel("hkdfExpandLabelSha384", label, context, length),
     length
   )
@@ -435,7 +552,7 @@ export const hkdfExpandInto = (
 
 /**
  * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
- * bytes from `secret`, `"tls13 " + label` and the context
+ * bytes from `prk` (RFC 8446's Secret), `"tls13 " + label` and the context
  * `context[contextOff .. contextOff + contextLen)`, written at `out[at]`. It
  * panics where `hkdfExpandLabelSha256` does — a length outside 0 to 255, a
  * label empty or past 249 bytes, a context past 255, a secret shorter than
@@ -444,7 +561,7 @@ export const hkdfExpandInto = (
 export const hkdfExpandLabelInto = (
   s: HkdfScratch,
   hashLength: i32,
-  secret: u8[],
+  prk: u8[],
   label: string,
   context: u8[],
   contextOff: i32,
@@ -468,7 +585,7 @@ export const hkdfExpandLabelInto = (
   ) {
     panic("hkdfExpandLabelInto: the context window is outside its array or longer than 255 bytes")
   }
-  if (toI32(secret.length) < hashLength) {
+  if (toI32(prk.length) < hashLength) {
     panic("hkdfExpandLabelInto: a secret shorter than HashLen")
   }
   hkdfCheckOutput("hkdfExpandLabelInto", out, at, length)
@@ -491,5 +608,5 @@ export const hkdfExpandLabelInto = (
   for (let k: i32 = 0; k < contextLen && contextAt + 1 + k < toI32(info.length); k += 1) {
     info[contextAt + 1 + k] = context[contextOff + k]
   }
-  hkdfExpandWindow(s, hashLength, secret, info, contextAt + 1 + contextLen, out, at, length)
+  hkdfExpandWindow(s, hashLength, prk, info, contextAt + 1 + contextLen, out, at, length)
 }
