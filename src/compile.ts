@@ -82,7 +82,7 @@ import { resolveTarget, supportedTargets } from "./target"
 import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -575,6 +575,8 @@ export const main = (): number => {
       opts.emitPanics = process.argv[arg]
     } else if (value === "--deny-panics") {
       opts.denyPanics = true
+    } else if (value === "--deny-retention") {
+      opts.denyRetention = true
     } else if (value === "--emit-capabilities") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -759,6 +761,14 @@ export const main = (): number => {
   if (emitAst && (opts.emitPanics.length > 0 || opts.denyPanics)) {
     console.error(
       `compile: \`${opts.denyPanics ? "--deny-panics" : "--emit-panics"}\` reports on a checked program, and --emit-ast stops before the check`
+    )
+    return 2
+  }
+  // The retention warnings come from the body checks and the whole-program
+  // facts, which `--emit-ast` never reaches, so there would be nothing to deny.
+  if (emitAst && opts.denyRetention) {
+    console.error(
+      "compile: `--deny-retention` reports on a checked program, and --emit-ast stops before the check"
     )
     return 2
   }

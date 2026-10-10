@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 946 programs, 88815 dump lines.
+# 947 programs, 88836 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -13042,6 +13042,28 @@ function main(): i32 -> @nish_main [exported entry]
   callee 21:15 first -> @first
   local 22:9 bytes: u8[] (const)
   callee 23:3 mark -> @mark
+program tests/cases/deny_retention_clean.ts
+module tests/cases/deny_retention_clean.ts (entry)
+function label(n: i32): string -> @label
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_arena_release
+  calls: label nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 7:7 total: i32 (let)
+  local 8:7 lastIndex: i32 (let)
+  local 9:12 i: i32 (let)
+  local 10:11 s: string (const)
+  callee 10:15 label -> @label
+  local 14:9 rows: string[] (const)
+  local 15:7 widest: i32 (let)
+  local 16:14 row: string (const)
+  local 17:11 a: i64 (const)
+  local 18:11 line: string (const)
+  callee 23:27 label -> @label
 program tests/cases/diag_order.ts
 module tests/cases/diag_order.ts (entry)
 function banner(n: i32): string -> @banner [exported]
