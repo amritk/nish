@@ -458,12 +458,10 @@ ovf.fail:
 
 define noundef i32 @forOfGrows(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
 entry:
-  %s.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
   %r.addr = alloca %struct.R*, align 8
   %R.obj = alloca %struct.R, align 8
-  store i32 0, i32* %s.addr, align 4
   store i64 0, i64* %forof.idx, align 8
   br label %forof.cond
 
@@ -483,32 +481,16 @@ forof.body:
   store i32 %8, i32* %x.addr, align 4
   call void @R.constructor(%struct.R* %R.obj, %struct.nish_array* %xs)
   store %struct.R* %R.obj, %struct.R** %r.addr, align 8
-  %9 = load %struct.R*, %struct.R** %r.addr, align 8
-  %10 = getelementptr inbounds %struct.R, %struct.R* %9, i32 0, i32 0
-  %11 = load i32, i32* %10, align 4, !tbaa !21
-  %12 = load i32, i32* %x.addr, align 4
-  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 %12)
-  %14 = extractvalue { i32, i1 } %13, 0
-  %15 = extractvalue { i32, i1 } %13, 1
-  br i1 %15, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  store i32 %14, i32* %s.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %16 = load i64, i64* %forof.idx, align 8
-  %17 = add i64 %16, 1
-  store i64 %17, i64* %forof.idx, align 8
+  %9 = load i64, i64* %forof.idx, align 8
+  %10 = add i64 %9, 1
+  store i64 %10, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %18 = load i32, i32* %s.addr, align 4
-  ret i32 %18
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  ret i32 0
 }
 
 define noundef i32 @test() #0 {

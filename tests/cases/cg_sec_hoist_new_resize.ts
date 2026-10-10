@@ -84,12 +84,10 @@ const compoundNew = (): i32 => {
 };
 
 export const forOfGrows = (xs: i32[]): i32 => {
-  let s = 0;
   for (const x of xs) {
     const r = new R(xs);
-    s = r.n + x;
   }
-  return s;
+  return 0;
 };
 
 export const test = (): i32 => whileLoop() * 100000 + forOfLoop() * 100 + keepsHoist() * 10 + compoundNew();

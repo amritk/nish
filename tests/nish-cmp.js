@@ -3059,6 +3059,11 @@ const DECLARED = [
     changelog: "start position in s.indexOf",
     why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_str_index_of_from` after `nish_str_index_of`, which moves every declaration after it",
   },
+  {
+    program: "tests/cases/cg_sec_hoist_new_resize.ts",
+    changelog: "Do not hoist a loop's array header across a new whose constructor resizes it",
+    why: "the case for CG-11 (#435): `whileLoop` reloads `len` and `data` every pass, because `new P(xs)` runs a constructor that pushes, where the reference hoisted them; and `forOfGrows`, whose `new R(xs)` pushes on every pass, loses the `willreturn` the reference gave it",
+  },
   // Last, because it covers every program and a narrower entry above must
   // still be the one a difference is reported under.
   {

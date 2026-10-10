@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 946 programs, 88419 dump lines.
+# 946 programs, 88418 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4463,24 +4463,23 @@ function compoundNew(): i32 -> @compoundNew
   local 81:9 xs: i32[] (const)
   callee 82:12 new P -> @P.constructor
 function forOfGrows(xs: i32[]): i32 -> @forOfGrows [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via R.constructor
-  calls: R.constructor nish_panic_overflow
+  calls: R.constructor
   pointer xs: size=0 writesThrough=true captured=false passedTo=R.constructor#1
   stackSites=1 stackLocals=1
-  local 87:7 s: i32 (let)
-  local 88:14 x: i32 (const)
-  local 89:11 r: R (const)
-  callee 89:15 new R -> @R.constructor
+  local 87:14 x: i32 (const)
+  local 88:11 r: R (const)
+  callee 88:15 new R -> @R.constructor
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via whileLoop
   calls: compoundNew forOfLoop keepsHoist nish_panic_overflow whileLoop
   stackSites=0 stackLocals=0
-  callee 95:32 whileLoop -> @whileLoop
-  callee 95:55 forOfLoop -> @forOfLoop
-  callee 95:75 keepsHoist -> @keepsHoist
-  callee 95:95 compoundNew -> @compoundNew
+  callee 93:32 whileLoop -> @whileLoop
+  callee 93:55 forOfLoop -> @forOfLoop
+  callee 93:75 keepsHoist -> @keepsHoist
+  callee 93:95 compoundNew -> @compoundNew
 program tests/cases/cg_sec_join_limit.ts
 module tests/cases/cg_sec_join_limit.ts (entry)
 function joined(parts: string[], sep: string): string -> @joined
