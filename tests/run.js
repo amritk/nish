@@ -3888,6 +3888,14 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
     codeCheck(name, path.join(fixDir, `${name}.code`), plain)
     if (noFix) {
+      // A refused shape must name the diagnostic it was written for: with
+      // nothing to apply, a case whose diagnostic stopped firing, or that
+      // another diagnostic now stops first, would otherwise pass for having
+      // no fix.
+      check(
+        `fix ${name}: ${name}.code names the diagnostic the refused shape is about`,
+        sidecar(path.join(fixDir, `${name}.code`), "").length > 0
+      )
       check(
         `fix ${name}: reported with no \`fix\` key`,
         plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),

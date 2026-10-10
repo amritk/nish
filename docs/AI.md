@@ -136,7 +136,7 @@ rejects. This table is the highest-value part of the page.
 
 | Your reflex | What happens | Write instead |
 | --- | --- | --- |
-| `if (xs.length)` | `Condition must be boolean … (Nish has no truthiness)` | `if (xs.length !== 0)` |
+| `if (xs.length)`, `!xs.length`, `if (s.length && ok)` | `Condition must be boolean … (Nish has no truthiness)` / `` Unsupported unary operator `!` on i32 `` / `` Operator `&&` requires boolean operands, got i32 and boolean `` | `if (xs.length !== 0)`, `xs.length === 0`, `if (s.length !== 0 && ok)`; `nish --fix` writes each where it is the test `tsc` reads (an operand of `&&` or `\|\|` only where the whole is a condition or under `!`) |
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
