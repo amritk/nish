@@ -1154,20 +1154,30 @@ const checkLogical = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
 const logicalFix = (ctx: CheckContext, expr: Node, left: i32, right: i32): Edit[] => {
   const none: Edit[] = []
   const edits: Edit[] = []
-  const operands = [left, right]
-  for (let i = 0; i < 2; i++) {
-    if (operands[i] !== T_BOOL) {
-      const operand = truthinessFix(ctx, expr.children[i], operands[i])
-      if (operand.length === 0) {
-        return none
-      }
-      for (const edit of operand) {
-        edits.push(edit)
-      }
-    }
+  if (
+    !pushOperandFix(ctx, edits, expr.children[0], left) ||
+    !pushOperandFix(ctx, edits, expr.children[1], right)
+  ) {
+    return none
   }
   const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length)
   return readForTruthiness(parents, expr) ? edits : none
+}
+
+/**
+ * Add to `edits` what makes `operand`, of `type`, a boolean test, and answer
+ * whether it could: a boolean needs nothing, and a type `truthinessFix` has
+ * no comparison for cannot be made one.
+ */
+const pushOperandFix = (ctx: CheckContext, edits: Edit[], operand: Node, type: i32): boolean => {
+  if (type === T_BOOL) {
+    return true
+  }
+  const fix = truthinessFix(ctx, operand, type)
+  for (const edit of fix) {
+    edits.push(edit)
+  }
+  return fix.length > 0
 }
 
 /**
