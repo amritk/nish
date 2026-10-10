@@ -8,7 +8,8 @@
 // counted: `forOfGrows` pushes on every pass through `new R(xs)`, never ends
 // over a non-empty array, and was marked `willreturn`. It is not called. And
 // it decides CG-10's question, so `compoundNew` stores into the block
-// `new P(xs)` left, not the one it read `xs[0]` from.
+// `new P(xs)` left, not the one it read `xs[0]` from, while `compoundKeeps`,
+// whose `new Q(xs)` cannot move `xs`, checks and addresses its slot once.
 // docs/security/codegen.md, CG-11.
 class P {
   n: i32;
@@ -83,6 +84,12 @@ const compoundNew = (): i32 => {
   return xs[0];
 };
 
+const compoundKeeps = (): i32 => {
+  const xs: i32[] = [4];
+  xs[0] += new Q(xs).n;
+  return xs[0];
+};
+
 export const forOfGrows = (xs: i32[]): i32 => {
   for (const x of xs) {
     const r = new R(xs);
@@ -90,4 +97,5 @@ export const forOfGrows = (xs: i32[]): i32 => {
   return 0;
 };
 
-export const test = (): i32 => whileLoop() * 100000 + forOfLoop() * 100 + keepsHoist() * 10 + compoundNew();
+export const test = (): i32 =>
+  whileLoop() * 1000000 + forOfLoop() * 1000 + keepsHoist() * 100 + compoundNew() * 10 + compoundKeeps();

@@ -3062,7 +3062,7 @@ const DECLARED = [
   {
     program: "tests/cases/cg_sec_hoist_new_resize.ts",
     changelog: "Do not hoist a loop's array header across a new whose constructor resizes it",
-    why: "the case for CG-11 (#435): `whileLoop` reloads `len` and `data` every pass, because `new P(xs)` runs a constructor that pushes, where the reference hoisted them; and `forOfGrows`, whose `new R(xs)` pushes on every pass, loses the `willreturn` the reference gave it",
+    why: "the case for CG-11 (#435): `whileLoop` reloads `len` and `data` every pass, because `new P(xs)` runs a constructor that pushes, where the reference hoisted them; and `forOfGrows`, whose `new R(xs)` pushes on every pass, loses the `willreturn` the reference gave it; and `compoundKeeps`, whose `new Q(xs)` cannot move `xs`, stores into the slot it read where the reference checked the index and took the address a second time",
   },
   // Last, because it covers every program and a narrower entry above must
   // still be the one a difference is reported under.
