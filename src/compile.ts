@@ -82,7 +82,7 @@ import { resolveTarget, supportedTargets } from "./target"
 import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -577,6 +577,14 @@ export const main = (): number => {
       opts.denyPanics = true
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
+    } else if (value === "--emit-arena") {
+      productFlag = productFlag.length === 0 ? value : productFlag
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-arena needs a file")
+        return 2
+      }
+      opts.emitArena = process.argv[arg]
     } else if (value === "--emit-capabilities") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -764,11 +772,12 @@ export const main = (): number => {
     )
     return 2
   }
-  // The retention warnings come from the body checks and the whole-program
-  // facts, which `--emit-ast` never reaches, so there would be nothing to deny.
-  if (emitAst && opts.denyRetention) {
+  // The retention warnings and the arena placements come from the body checks
+  // and the whole-program facts, which `--emit-ast` never reaches, so there
+  // would be nothing to deny or to write.
+  if (emitAst && (opts.denyRetention || opts.emitArena.length > 0)) {
     console.error(
-      "compile: `--deny-retention` reports on a checked program, and --emit-ast stops before the check"
+      `compile: \`${opts.denyRetention ? "--deny-retention" : "--emit-arena"}\` reports on a checked program, and --emit-ast stops before the check`
     )
     return 2
   }
@@ -921,6 +930,15 @@ export const main = (): number => {
     }
     writeFileSync(opts.emitPanics, compilation.panicsText())
     console.error(`wrote ${opts.emitPanics}`)
+  }
+  // The arena placements are the whole-program facts read back, written here
+  // for the reason the panic sites are.
+  if (opts.emitArena.length > 0) {
+    if (!makeDirectoryFor(opts.emitArena)) {
+      return 1
+    }
+    writeFileSync(opts.emitArena, compilation.arenaText())
+    console.error(`wrote ${opts.emitArena}`)
   }
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.

@@ -192,7 +192,10 @@ const rewriteFile = (diagnostics: Diagnostic[], target: FixTarget): boolean => {
  * report it against the text the accepted one produced, if it still applies.
  * So is one whose own edits overlap each other, which no order of applying
  * them makes right — `export { f, f }` asks for `export ` before `f` twice —
- * and the next round reports it again, so it is never applied.
+ * and the next round reports it again, so it is never applied. An edit
+ * identical to one another fix already had accepted — the same span and the
+ * same text — is no overlap but the same change: it counts as applied, and
+ * the rest of its fix goes in with it.
  */
 const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
   const accepted: Edit[] = []
@@ -203,7 +206,7 @@ const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
     let clear = true
     const own: Edit[] = []
     for (const edit of diagnostic.edits) {
-      if (overlapsAny(edit, accepted) || overlapsAny(edit, own)) {
+      if (overlapsAny(edit, own) || (!sameAsAny(edit, accepted) && overlapsAny(edit, accepted))) {
         clear = false
         break
       }
@@ -213,6 +216,12 @@ const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
       continue
     }
     for (const edit of diagnostic.edits) {
+      // An edit an earlier fix already made is made once: every NL7002 fix
+      // carries the one import its module lacks, and taking it as applied
+      // lets every site land in the round that writes it.
+      if (sameAsAny(edit, accepted)) {
+        continue
+      }
       // A stable insertion by start, so the result is in source order.
       accepted.push(edit)
       let i = accepted.length - 1
@@ -226,6 +235,16 @@ const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
     }
   }
   return accepted
+}
+
+/** Whether `list` holds an edit with `edit`'s span and text, which applying `edit` too would repeat. */
+const sameAsAny = (edit: Edit, list: Edit[]): boolean => {
+  for (const other of list) {
+    if (edit.start === other.start && edit.end === other.end && edit.text === other.text) {
+      return true
+    }
+  }
+  return false
 }
 
 /**

@@ -61,10 +61,13 @@ import {
   N_BINARY,
   N_CALL,
   N_CONDITIONAL,
+  N_DO,
   N_EMPTY,
   N_FALSE,
+  N_FOR,
   N_FUNCTION,
   N_IDENT,
+  N_IF,
   N_INDEX,
   N_LIST,
   N_MEMBER,
@@ -87,6 +90,7 @@ import {
   N_TYPE_REF,
   N_UNARY,
   N_VAR_DECL,
+  N_WHILE,
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
@@ -599,7 +603,12 @@ const checkUnary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   }
   if (op === "!") {
     if (type !== T_BOOL) {
-      return ctx.errorType(expr, `Unsupported unary operator \`!\` on ${ctx.table.typeName(type)}`)
+      ctx.errorFix(
+        expr,
+        `Unsupported unary operator \`!\` on ${ctx.table.typeName(type)}`,
+        negationFix(ctx, expr, operand, type)
+      )
+      return T_ERROR
     }
     return T_BOOL
   }
@@ -1123,9 +1132,128 @@ const checkLogical = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (left !== T_BOOL || right !== T_BOOL) {
     const a = ctx.table.typeName(left)
     const b = ctx.table.typeName(right)
-    return ctx.errorType(expr, `Operator \`${expr.text}\` requires boolean operands, got ${a} and ${b}`)
+    ctx.errorFix(
+      expr,
+      `Operator \`${expr.text}\` requires boolean operands, got ${a} and ${b}`,
+      logicalFix(ctx, expr, left, right)
+    )
+    return T_ERROR
   }
   return T_BOOL
+}
+
+/**
+ * The comparison that makes each non-boolean operand of `&&` or `||` the test
+ * `tsc` reads, as `truthinessFix` writes it for a condition. Under `tsc` the
+ * operator answers one of its operands rather than a boolean, so the rewrite
+ * keeps the meaning only where that answer is read for whether it is truthy:
+ * the whole, through parentheses, `!` and other `&&` and `||`, is a condition
+ * or `!`'s operand (`readForTruthiness`). Anywhere else, and when either
+ * operand has no such comparison, there is no fix.
+ */
+const logicalFix = (ctx: CheckContext, expr: Node, left: i32, right: i32): Edit[] => {
+  const none: Edit[] = []
+  const edits: Edit[] = []
+  if (
+    !pushOperandFix(ctx, edits, expr.children[0], left) ||
+    !pushOperandFix(ctx, edits, expr.children[1], right)
+  ) {
+    return none
+  }
+  const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length)
+  return readForTruthiness(parents, expr) ? edits : none
+}
+
+/**
+ * Add to `edits` what makes `operand`, of `type`, a boolean test, and answer
+ * whether it could: a boolean needs nothing, and a type `truthinessFix` has
+ * no comparison for cannot be made one.
+ */
+const pushOperandFix = (ctx: CheckContext, edits: Edit[], operand: Node, type: i32): boolean => {
+  if (type === T_BOOL) {
+    return true
+  }
+  const fix = truthinessFix(ctx, operand, type)
+  for (const edit of fix) {
+    edits.push(edit)
+  }
+  return fix.length > 0
+}
+
+/**
+ * Whether the value of `expr` is read only for whether it is truthy: it is a
+ * condition, or `!`'s operand, directly or through parentheses and the
+ * operands of `&&` and `||`, which pass their operand's truthiness through.
+ */
+const readForTruthiness = (parents: ParentTable, expr: Node): boolean => {
+  let node = expr
+  let parent = linkedParent(parents, node)
+  while (parent !== null && (parent.kind === N_PAREN || isLogical(parent))) {
+    node = parent
+    parent = linkedParent(parents, node)
+  }
+  if (parent === null) {
+    return false
+  }
+  if (parent.kind === N_UNARY) {
+    return parent.text === "!"
+  }
+  if (parent.kind === N_IF || parent.kind === N_WHILE || parent.kind === N_CONDITIONAL) {
+    return parent.children[0] === node
+  }
+  return (parent.kind === N_DO || parent.kind === N_FOR) && parent.children[1] === node
+}
+
+/** Whether `node` is `&&` or `||`. */
+const isLogical = (node: Node): boolean =>
+  node.kind === N_BINARY && (node.text === "&&" || node.text === "||")
+
+/**
+ * `!x` rewritten as the comparison `truthinessFix` would test `x` with, turned
+ * round: `x === 0`, `x === null`, `x.length === 0`. `!` reads truthiness
+ * wherever it stands, so the rewrite keeps the meaning everywhere; only its
+ * precedence differs, and the result is parenthesised unless its parent binds
+ * looser than `===` (`equalityStandsBare`). A type with no such comparison has
+ * no fix, as it has none in a condition.
+ */
+const negationFix = (ctx: CheckContext, expr: Node, operand: Node, type: i32): Edit[] => {
+  const none: Edit[] = []
+  const suffix = truthinessSuffix(ctx, type, "===")
+  if (suffix.length === 0) {
+    return none
+  }
+  const outer = !equalityStandsBare(new ParentTable(ctx.program.file, ctx.program.nodeTypes.length), expr)
+  const inner = !operandStandsBare(operand, type)
+  const edits: Edit[] = []
+  edits.push(ctx.edit(expr.start, operand.start, (outer ? "(" : "") + (inner ? "(" : "")))
+  edits.push(ctx.edit(operand.end, operand.end, (inner ? ")" : "") + suffix + (outer ? ")" : "")))
+  return edits
+}
+
+/**
+ * Whether an `===` written in `expr`'s place is still the whole of what its
+ * parent reads: the parent is no operator at all (a statement, an argument, a
+ * condition, an initialiser, parentheses), a conditional, or one of the
+ * binary operators that bind looser than equality and read a boolean —
+ * `&&`, `||`, `??` and an assignment.
+ */
+const equalityStandsBare = (parents: ParentTable, expr: Node): boolean => {
+  const parent = linkedParent(parents, expr)
+  if (parent === null) {
+    return false
+  }
+  if (parent.kind === N_BINARY) {
+    return isLogical(parent) || parent.text === "??" || writesLeft(parent.text)
+  }
+  return (
+    parent.kind !== N_UNARY &&
+    parent.kind !== N_MEMBER &&
+    parent.kind !== N_INDEX &&
+    parent.kind !== N_CALL &&
+    parent.kind !== N_NEW &&
+    parent.kind !== N_AS &&
+    parent.kind !== N_SPREAD
+  )
 }
 
 const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
@@ -1195,19 +1323,36 @@ export const checkCondition = (ctx: CheckContext, expr: Node, scope: Scope): voi
  * and `null` are both falsy and the reader has to say which one was meant.
  */
 const truthinessFix = (ctx: CheckContext, expr: Node, type: i32): Edit[] => {
+  const suffix = truthinessSuffix(ctx, type, "!==")
+  if (suffix.length === 0) {
+    const none: Edit[] = []
+    return none
+  }
+  return appendFix(ctx, expr, operandStandsBare(expr, type), suffix)
+}
+
+/**
+ * What a truthiness test of a `type` is compared with, under `op` (`!==` for
+ * truthy, `===` for falsy), or `""` where there is no comparison that is the
+ * test `tsc` reads: ` !== 0`, ` !== null` or `.length !== 0`.
+ */
+const truthinessSuffix = (ctx: CheckContext, type: i32, op: string): string => {
   if (isInteger(type)) {
-    return appendFix(ctx, expr, bindsTighterThanEquality(expr), " !== 0")
+    return ` ${op} 0`
   }
   const inner = ctx.table.stripNull(type)
   if (ctx.table.isNullable(type) && (ctx.table.isStruct(inner) || ctx.table.isArray(inner))) {
-    return appendFix(ctx, expr, bindsTighterThanEquality(expr), " !== null")
+    return ` ${op} null`
   }
   if (type === T_STRING) {
-    return appendFix(ctx, expr, isMemberReceiver(expr), ".length !== 0")
+    return `.length ${op} 0`
   }
-  const none: Edit[] = []
-  return none
+  return ""
 }
+
+/** Whether `truthinessSuffix`'s text, written after `expr`, applies to the whole of it. */
+const operandStandsBare = (expr: Node, type: i32): boolean =>
+  type === T_STRING ? isMemberReceiver(expr) : bindsTighterThanEquality(expr)
 
 /**
  * Edits that put `suffix` after `expr`, parenthesising `expr` first unless

@@ -1,0 +1,17 @@
+PASS  a drawn key is a P-256 private key
+PASS  so is a second
+PASS  the two differ
+x509-random keys: 3 passed, 0 failed, 0 skipped
+PASS  65 serials are twenty octets with the top bits 01
+PASS  none equals the first
+PASS  the first octet's low six bits vary
+x509-random serials: 3 passed, 0 failed, 0 skipped
+PASS  a mint with a drawn key and serial parses, carries both and verifies under itself
+PASS  so does a second with the same key
+PASS  their serials differ
+PASS  so their DER differs
+PASS  15 days answers null, as x509MintSelfSigned does
+PASS  an empty common name answers null
+PASS  a mint with another drawn key is sound
+PASS  and carries a key unlike the first
+x509-random mint: 8 passed, 0 failed, 0 skipped

@@ -15,7 +15,7 @@ import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
-import { CheckContext } from "./context"
+import { CheckContext, NUMBER_MODE_F64 } from "./context"
 import {
   isBuiltinSpecifier,
   isNishModule,
@@ -132,7 +132,20 @@ import {
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable, intBits } from "./types"
+import {
+  T_BOOL,
+  T_ERROR,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  T_U16,
+  T_U32,
+  T_U8,
+  T_VOID,
+  TypeTable,
+  intBits,
+} from "./types"
 
 export class Checker {
   ctx: CheckContext
@@ -155,6 +168,7 @@ export class Checker {
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
     this.program.wrapping = wrapping
+    this.program.f64Mode = numberMode === NUMBER_MODE_F64
     this.program.uncheckedIndexing = uncheckedIndexing
     this.declared = []
     this.ctx = new CheckContext(
@@ -1632,14 +1646,8 @@ const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bound
 /**
  * A bounds check `src/bounds.ts` could not remove, on an access inside a loop
  * whose receiver and index are both plain locals — which is the shape the
- * analysis knows how to prove, so a guard really would remove the check.
- *
- * The hint is one rewrite rather than a list because it is the one that always
- * works: an `i >= 0 && i < xs.length` test reaching the access proves both
- * ends whatever took the proof away, `--wrapping` included, where an
- * incremented counter has no lower bound the compiler may assume. An unsigned
- * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
- * the language already has, and half the proof comes off their declaration.
+ * analysis knows how to prove, so a guard really would remove the check. The
+ * advice is `indexGuardAdvice`'s, which NL2457 gives too.
  */
 const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access
@@ -1660,11 +1668,10 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   if (holder.length === 0 || name.length === 0) {
     return
   }
+  const advice = indexGuardAdvice(walk.ctx.program, walk.ctx.table, index, name, holder)
   const message =
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
-    "compares against the length on every iteration: guard it with a test that reaches the access — " +
-    `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
-    "the upper one"
+    `compares against the length on every iteration: ${advice}`
   const edits = boundsGuardEdits(walk, access, index, name, holder)
   if (edits.length > 0) {
     walk.ctx.performanceFix(index, message, edits)
@@ -1674,20 +1681,73 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
 }
 
 /**
+ * How to remove the check on `index` into `holder`, for NL9007 and NL2457:
+ * one guard, and only a spelling that type-checks against the length and that
+ * `src/bounds.ts` credits (`orderFacts`), or none at all.
+ *
+ * An `i32` or ranged index is given `i >= 0 && i < xs.length`, which proves
+ * both ends whatever took the proof away, `--wrapping` included; under
+ * `--number-mode f64` the length is an `f64`, so the bound is spelled
+ * `toI32(xs.length)`, which `lengthOf` accepts. A `u8`, `u16` or `u32`
+ * index, which that `i32` test does not type-check against, is given the
+ * credited `u32` compare `toU32(i) < toU32(xs.length)`, its type the lower
+ * end. Both conversions must be the builtins, so a module that declares its
+ * own is given no guard, as `boundsGuardEdits` gives it no fix. An `i64`, a
+ * `u64` or a float has no spelling at all: `i < xs.length` does not type-check
+ * for the first two, `lengthOf` reads no `toI64(xs.length)` or
+ * `toU64(xs.length)`, and `isIndexType` proves nothing about a float.
+ */
+export const indexGuardAdvice = (
+  program: CheckedProgram,
+  table: TypeTable,
+  index: Node,
+  name: string,
+  holder: string
+): string => {
+  const f64Mode = program.f64Mode
+  const type = program.nodeTypes[index.id]
+  const unsigned = type === T_U8 || type === T_U16 || type === T_U32
+  if (type !== T_I32 && !table.isRanged(type) && !unsigned) {
+    const what = type >= 0 ? `an index of type \`${table.typeName(type)}\`` : "this index"
+    return (
+      `no guard removes the check on ${what}, because the compiler credits no compare of it with the length: ` +
+      "an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does"
+    )
+  }
+  const convert = unsigned ? "toU32" : "toI32"
+  if ((unsigned || f64Mode) && declaresName(program.file, convert)) {
+    return (
+      "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
+      `\`${convert}\`, which this module's own \`${convert}\` hides: rename it to guard the access`
+    )
+  }
+  const lead = "guard it with a test that reaches the access — "
+  if (unsigned) {
+    return `${lead}\`if (toU32(${name}) < toU32(${holder}.length))\` proves it, because an unsigned index needs only the upper end`
+  }
+  const length = f64Mode ? `toI32(${holder}.length)` : `${holder}.length`
+  return `${lead}\`if (${name} >= 0 && ${name} < ${length})\` proves both ends, and an unsigned index needs only the upper one`
+}
+
+/**
  * The fix NL9007 carries: a guard inserted at the start of the statement that
  * holds the access, which `src/bounds.ts` credits because its failing branch
  * ends in `panic`. `toI32(xs.length)` is the one spelling of the upper bound
  * that compiles and is credited in both number modes: under `--number-mode
- * f64` the length is an `f64` and `i < xs.length` does not compile.
+ * f64` the length is an `f64` and `i < xs.length` does not compile. A `u8`,
+ * `u16` or `u32` index is never negative and cannot be compared with an `i32`,
+ * so its guard is the upper end alone, `toU32(i) < toU32(xs.length)`, a `u32`
+ * compare the proof credits in both modes too.
  *
  * Applying it changes nothing on an index in range, and an index out of range
  * still stops the program with status 1, at a `panic` rather than at the
  * runtime's index error. That holds only when nothing the statement does
  * before the access can be skipped or reordered by the earlier test, so the
  * fix is offered only where `guardStatement` finds such a statement, the
- * index is an `i32` the guard's compare is typed for (an `i64` or unsigned one
- * has no credited spelling), and `panic` and `toI32` are the builtins. An
- * empty list means the warning goes out with no fix.
+ * index is one a guard's compare is typed for — an `i32`, a range over one, or
+ * a `u8`, `u16` or `u32` (an `i64` or a `u64` has no credited spelling) — and
+ * `panic` and the conversion the guard calls are the builtins. An empty list
+ * means the warning goes out with no fix.
  */
 const boundsGuardEdits = (
   walk: PerfWalk,
@@ -1699,10 +1759,12 @@ const boundsGuardEdits = (
   const ctx = walk.ctx
   const none: Edit[] = []
   const type = ctx.program.nodeTypes[index.id]
-  if (type !== T_I32 && !ctx.table.isRanged(type)) {
+  const unsigned = type === T_U8 || type === T_U16 || type === T_U32
+  if (type !== T_I32 && !ctx.table.isRanged(type) && !unsigned) {
     return none
   }
-  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, "toI32")) {
+  const convert = unsigned ? "toU32" : "toI32"
+  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, convert)) {
     return none
   }
   // A statement that declares the index or the receiver (`const j = i, v = xs[j]`)
@@ -1720,7 +1782,10 @@ const boundsGuardEdits = (
   }
   const ownLine = lineStart === 0 || text.charCodeAt(lineStart - 1) === 10
   const after = ownLine ? `\n${text.substring(lineStart, stmt.start)}` : " "
-  const guard = `if (!(${name} >= 0 && ${name} < toI32(${holder}.length))) { panic("index out of range") }`
+  const test = unsigned
+    ? `toU32(${name}) < toU32(${holder}.length)`
+    : `${name} >= 0 && ${name} < toI32(${holder}.length)`
+  const guard = `if (!(${test})) { panic("index out of range") }`
   const edits: Edit[] = [ctx.edit(stmt.start, stmt.start, guard + after)]
   return edits
 }

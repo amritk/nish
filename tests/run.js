@@ -859,6 +859,36 @@ const runCase = async (name) => {
     }
   }
 
+  // `--emit-arena`: a case with a `<name>.arena` golden compiles a third time
+  // with the flag, which must change no byte of the IR, and the placements it
+  // writes are held against the golden, paths taken back to the repository's.
+  // Only those cases: the report reads facts the compile already has, so there
+  // is nothing a corpus-wide run would find that the goldens do not pin.
+  if (fs.existsSync(side("arena"))) {
+    const arenaLl = path.join(buildDir, `${name}.arena.ll`)
+    const arenaFile = path.join(buildDir, `${name}.arena.json`)
+    const placed = await spawnAsync(NISH, [src, "-o", arenaLl, ...args, "--emit-arena", arenaFile], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (placed.status !== 0 || !fs.existsSync(arenaLl) || !fs.existsSync(arenaFile)) {
+      expect(`${name}: --emit-arena writes the placements`, false, `exit ${placed.status}\n${placed.stderr}`)
+    } else {
+      expect(
+        `${name}: --emit-arena changes no byte of the IR`,
+        fs.readFileSync(arenaLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+        "the two .ll files differ"
+      )
+      const want = fs.readFileSync(side("arena"), "utf8").trim()
+      const got = fs.readFileSync(arenaFile, "utf8").split(`${root}/`).join("").trim()
+      expect(
+        `${name}: --emit-arena matches .arena`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
+  }
+
   if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
@@ -3858,6 +3888,14 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
     codeCheck(name, path.join(fixDir, `${name}.code`), plain)
     if (noFix) {
+      // A refused shape must name the diagnostic it was written for: with
+      // nothing to apply, a case whose diagnostic stopped firing, or that
+      // another diagnostic now stops first, would otherwise pass for having
+      // no fix.
+      check(
+        `fix ${name}: ${name}.code names the diagnostic the refused shape is about`,
+        sidecar(path.join(fixDir, `${name}.code`), "").length > 0
+      )
       check(
         `fix ${name}: reported with no \`fix\` key`,
         plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
@@ -4243,6 +4281,25 @@ if (!only) {
     "every program LINK_READ_LATER keeps in shard 1 is a tests/link program",
     gone.length === 0,
     `not in tests/link: ${gone.join(", ")}`
+  )
+}
+
+// X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
+// `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
+// by the link loop above. This is the other half: `nish/crypto/x509` alone
+// still compiles for wasm32, which an import of the drawing module from
+// `x509.ts` would end.
+if (!only || "crypto_x509_random_wasm".includes(only)) {
+  const entry = path.join(linkDir, "crypto_x509_random_wasm", "x509-only.ts")
+  const outDir = path.join(buildDir, "x509-only-wasm") + path.sep
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const r = fs.existsSync(entry)
+    ? spawnSync(NISH, [entry, "--target", "wasm32", "-o", outDir], { cwd: root, encoding: "utf8" })
+    : null
+  check(
+    "crypto_x509_random_wasm: a wasm32 build importing nish/crypto/x509 alone compiles",
+    r !== null && r.status === 0,
+    r === null ? "no such fixture: tests/link/crypto_x509_random_wasm/x509-only.ts" : r.stderr
   )
 }
 
@@ -12426,6 +12483,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-panics",
     "--deny-panics",
     "--deny-retention",
+    "--emit-arena",
     "--target",
     "--profile",
     "--warn-portability",
@@ -12803,6 +12861,23 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       ),
     shown(denyAst)
   )
+  // `--emit-arena` is a report on the checked program like `--emit-panics`, so
+  // it is refused where the program is not checked (docs/LANGUAGE.md, "Arena placement").
+  for (const [flag, refusal] of [
+    ["--emit-ast", "`--emit-arena` reports on a checked program, and --emit-ast stops before the check"],
+    ["--fix", "`--emit-arena` cannot be used with --fix"],
+  ]) {
+    const file = path.join(capsDir, `arena${flag}.json`)
+    const refused = spawnSync(NISH, [panicsSource, flag, "--emit-arena", file], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `arena placement: --emit-arena with ${flag} is a usage error, exit 2, and writes nothing`,
+      refused.status === 2 && refused.stderr.includes(refusal) && !fs.existsSync(file),
+      shown(refused)
+    )
+  }
   // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
   // and those are found by the body checks and the whole-program facts, which
   // `--emit-ast` never reaches (docs/LANGUAGE.md, "Retention as an error").
@@ -13189,6 +13264,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       ["-o", "x.ll"],
       ["--emit-header", "x.h"],
       ["--emit-panics", "x.json"],
+      ["--emit-arena", "x.json"],
       ["--emit-checked"],
       ["--target", "host"],
     ]) {

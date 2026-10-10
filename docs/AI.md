@@ -136,7 +136,7 @@ rejects. This table is the highest-value part of the page.
 
 | Your reflex | What happens | Write instead |
 | --- | --- | --- |
-| `if (xs.length)` | `Condition must be boolean … (Nish has no truthiness)` | `if (xs.length !== 0)` |
+| `if (xs.length)`, `!xs.length`, `if (s.length && ok)` | `Condition must be boolean … (Nish has no truthiness)` / `` Unsupported unary operator `!` on i32 `` / `` Operator `&&` requires boolean operands, got i32 and boolean `` | `if (xs.length !== 0)`, `xs.length === 0`, `if (s.length !== 0 && ok)`; `nish --fix` writes each where it is the test `tsc` reads (an operand of `&&` or `\|\|` only where the whole is a condition or under `!`) |
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
@@ -1618,9 +1618,13 @@ is an error (NL2457) until a proof removes it; out of memory is the one kind
 allowed. Each error names its fix, and there are five:
 
 - **Guard** what the checker cannot prove: `if (i >= 0 && i < xs.length)` before
-  `xs[i]`, `if (d !== 0 && d !== -1)` before `a / d` (a constant divisor needs
-  nothing), `if (xs.length > 0)` before `xs.pop()`, `if (n >= 0 && n <= 9)`
-  before `n` enters `integer<0, 9>`.
+  `xs[i]` (`if (toU32(i) < toU32(xs.length))` for a `u8`, `u16` or `u32` index,
+  whose type is the lower end; `toI32(xs.length)` for the bound under
+  `--number-mode f64`; an `i64`, `u64` or float index — `number` under
+  `--number-mode f64` — has no guard, so index with an `i32` or a `u32`),
+  `if (d !== 0 && d !== -1)` before `a / d` (a
+  constant divisor needs nothing), `if (xs.length > 0)` before `xs.pop()`,
+  `if (n >= 0 && n <= 9)` before `n` enters `integer<0, 9>`.
 - **Bound a signed `+ - *`, or say it wraps**: an `i32`/`i64` operation the
   checker cannot prove fits is an `overflow` site; bound its operands (a loop
   below a length, a guard on the value), compute in `u32`/`u64`, or write
@@ -1641,6 +1645,13 @@ const at = (xs: i32[], i: i32): i32 => {
   return 0;
 };
 
+const byte = (xs: i32[], i: u8): i32 => {
+  if (toU32(i) < toU32(xs.length)) {
+    return xs[i];
+  }
+  return 0;
+};
+
 const ratio = (a: i32, d: i32): i32 => {
   if (d !== 0 && d !== -1) {
     return a / d;
@@ -1654,7 +1665,7 @@ const size = (path: string): i32 => {
 };
 
 export const main = (): i32 => {
-  console.log(`${at([4, 5], 1)} ${ratio(9, 3)} ${size("missing.txt")}`);
+  console.log(`${at([4, 5], 1)} ${byte([4, 5], 0)} ${ratio(9, 3)} ${size("missing.txt")}`);
   return 0;
 };
 ```

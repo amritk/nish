@@ -15,7 +15,7 @@ export const weigh = (buckets: i32[], weights: f64[], names: string[]): string =
   let total: f64 = 0.0
   for (let i = 0; i < buckets.length; i++) {
     total = total + uncheckedGet(weights, buckets[i])
-    if (uncheckedGet(buckets, i) > uncheckedGet(buckets, best)) {
+    if (buckets[i] > uncheckedGet(buckets, best)) {
       best = i
     }
   }

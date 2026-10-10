@@ -71,6 +71,7 @@ import {
   isAssignmentOperator,
   isAssignmentTarget,
   isArenaCall,
+  isJoinCall,
   isPushCall,
   builtinArgumentLetters,
   isWrittenArgument,
@@ -130,7 +131,7 @@ import {
   RuntimeFunction,
   RuntimeTable,
 } from "./runtime"
-import { Local, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { checksOverflow } from "./bounds"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
@@ -425,6 +426,8 @@ export class FunctionFacts {
   carriers: Local[]
   /** `EscapeResult.arenaNodes`: the sites that bump the arena themselves. */
   arenaNodes: Node[]
+  /** `EscapeResult.arenaFlows`: each of those sites' flow, for the placement report. */
+  arenaFlows: i32[]
   /** Every loop of the body, and whether its passes are scoped. Decided after the scopes are settled. */
   loopScopes: LoopScope[]
   /**
@@ -552,6 +555,7 @@ export class FunctionFacts {
     this.carriedStores = []
     this.carriers = []
     this.arenaNodes = []
+    this.arenaFlows = []
     this.loopScopes = []
     this.contained = false
     this.escapeSite = null
@@ -1098,6 +1102,104 @@ const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Nod
   }
 }
 
+/**
+ * The local `parts` when `expr`, seen through parentheses, is an argument of
+ * `parts.push(...)`, or null.
+ */
+export const pushedOnto = (unit: AnalysisUnit, table: TypeTable, expr: Node): Local | null => {
+  const program = unit.program
+  let list = unit.parents.parentOf(expr)
+  while (list !== null && list.kind === N_PAREN) {
+    list = unit.parents.parentOf(list)
+  }
+  if (list === null || list.kind !== N_LIST) {
+    return null
+  }
+  const call = unit.parents.parentOf(list)
+  if (call === null || !isPushCall(program, table, call) || call.children[1] !== list) {
+    return null
+  }
+  const receiver = unwrapParens(call.children[0].children[0])
+  return receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
+}
+
+/** `v` is a local of this function that `decl` binds to its own array literal or `new Array`. */
+export const isFreshArrayLocal = (table: TypeTable, v: Local, decl: Node | null): boolean => {
+  if (v.storage !== STORAGE_LOCAL || !table.isArray(v.type) || decl === null) {
+    return false
+  }
+  const init = unwrapParens(decl.children[2])
+  return init.kind === N_ARRAY || init.kind === N_NEW
+}
+
+/**
+ * `parts` is a `string[]` that `decl` binds to a fresh array of this function
+ * (`isFreshArrayLocal`), and every one of `refs`, its references, pushes onto
+ * it, joins it or reads its length (`isPartsUse`).
+ *
+ * A string pushed onto such an array is reachable only through its elements,
+ * and nothing reads those but `join`, which copies every part into a string of
+ * its own (`emitJoin`). So once the frame that owns `parts` returns, nothing
+ * can reach what was pushed through it. The escape analysis uses this for a
+ * string the function allocates (`pushedIntoJoinedParts`), and `noteUse` for
+ * a string it is handed (#503). Any other use of `parts` could hand a part
+ * back out, and so could an alias of an array that is not this function's
+ * own, so each keeps the conservative answer (`tests/cases/mem_join_parts_*`).
+ */
+export const isJoinedParts = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  parts: Local,
+  decl: Node | null,
+  refs: Node[]
+): boolean => {
+  if (!isFreshArrayLocal(table, parts, decl) || table.refOf(parts.type) !== T_STRING) {
+    return false
+  }
+  for (const ref of refs) {
+    if (!isPartsUse(unit, table, ref)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** `ref` is `parts.push(...)`, `parts.join(...)` or `parts.length`, and nothing else. */
+const isPartsUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): boolean => {
+  const program = unit.program
+  const access = unit.parents.parentOf(ref)
+  if (access === null || access.kind !== N_MEMBER || access.children[0] !== ref) {
+    return false
+  }
+  const above = unit.parents.parentOf(access)
+  if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+    return isPushCall(program, table, above) || isJoinCall(program, table, above)
+  }
+  // `parts.length = n` is refused for every array, so a `length` here is a read.
+  return access.text === "length"
+}
+
+/**
+ * The declaration under `node` that binds `local`, or null. It skips lifted
+ * arrow bodies as `collectRefs` does, so the two walks see the same function.
+ */
+const declarationIn = (program: CheckedProgram, node: Node, local: Local): Node | null => {
+  if (node.kind === N_ARROW) {
+    return null
+  }
+  const declared: Local | null = node.kind === N_VAR_DECL ? program.nodeLocals[node.id] : null
+  if (declared !== null && declared === local) {
+    return node
+  }
+  for (const child of node.children) {
+    const found = declarationIn(program, child, local)
+    if (found !== null) {
+      return found
+    }
+  }
+  return null
+}
+
 /** The block a declaration's scope ends with, or null when it is not in one. */
 const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
   let node: Node | null = unit.parents.parentOf(decl)
@@ -1345,6 +1447,9 @@ class FactCollector {
     const found = classifyUse(this.unit, this.table, ref)
     const pointer = this.facts.pointerParam(name)
     if (found.kind === USE_ESCAPE) {
+      if (this.pushedOntoJoinedParts(ref)) {
+        return
+      }
       this.facts.escaping.add(name)
       if (pointer !== null) {
         pointer.captured = true
@@ -1367,6 +1472,33 @@ class FactCollector {
     if (found.kind === USE_WRITE && pointer !== null) {
       pointer.writesThrough = true
     }
+  }
+
+  /**
+   * `ref`, a string parameter, is pushed onto a `parts` of this function that
+   * is only pushed onto, joined and measured (`isJoinedParts`). The parameter
+   * is read by the `join` before the call returns and is unreachable once it
+   * has, so it is not kept: a loop that builds the argument in the same pass
+   * keeps its per-pass release (#503).
+   */
+  pushedOntoJoinedParts(ref: Node): boolean {
+    const parts = pushedOnto(this.unit, this.table, ref)
+    // The storage and type are answered without the two walks of the body.
+    if (
+      parts === null ||
+      parts.storage !== STORAGE_LOCAL ||
+      !this.table.isArray(parts.type) ||
+      this.table.refOf(parts.type) !== T_STRING
+    ) {
+      return false
+    }
+    const body = this.sig.body()
+    if (body === null) {
+      return false
+    }
+    const refs: Node[] = []
+    collectRefs(this.unit.program, body, parts, refs)
+    return isJoinedParts(this.unit, this.table, parts, declarationIn(this.unit.program, body, parts), refs)
   }
 
   /** `expr` denotes a stack object: a stack allocation itself, or a local that only holds one. */
@@ -2111,6 +2243,7 @@ const collectFacts = (
     facts.carriedStores = memory.carriedStores
     facts.carriers = memory.carriers
     facts.arenaNodes = memory.arenaNodes
+    facts.arenaFlows = memory.arenaFlows
     facts.escapeSite = memory.escapeSite
     // The half of `contained` that needs no fixpoint; the other is added after it.
     facts.contained = rootsHoldNoPointer(program, table, sig)
