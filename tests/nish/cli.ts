@@ -101,6 +101,7 @@ const advertisedFlags = (): string[] => [
   "--emit-panics",
   "--deny-panics",
   "--deny-retention",
+  "--emit-arena",
   "--target",
   "--profile",
   "--warn-portability",
@@ -1008,6 +1009,27 @@ const checkDenyRetention = (t: Suite, cli: Cli): void => {
   t.eqI32("--deny-retention with --emit-ast exits 2", ast.status, 2);
 };
 
+/**
+ * `--emit-arena`: the arena placement report is one `{"functions":[...]}`
+ * object in the named file, the progress line on stderr and nothing on
+ * stdout, and the IR beside it is the bytes a compile without it writes.
+ */
+const checkArenaReport = (t: Suite, cli: Cli): void => {
+  const file = `${WORK}/arena.json`;
+  const irPath = `${WORK}/arena.ll`;
+  const run = cli.plain("arena", [`${WORK}/${FIXTURE_OK}`, "-o", irPath, "--emit-arena", file]);
+  if (!t.eqI32("--emit-arena exits 0", run.status, 0)) {
+    return;
+  }
+  t.eqStr("and leaves stdout empty", run.stdout, "");
+  t.contains("and says on stderr where it wrote the placements", run.stderr, `wrote ${file}`);
+  const text = readOrEmpty(file);
+  t.ok('and the file is one `{"functions":[...]}` object', text.startsWith('{"functions":[') && text.endsWith("]}\n"));
+  t.eqStr("and the IR is the bytes a compile without it writes", readOrEmpty(irPath), readOrEmpty(`${WORK}/ok.ll`));
+  const bare = cli.plain("arena_bare", [`${WORK}/${FIXTURE_OK}`, "--emit-arena"]);
+  t.eqI32("--emit-arena with no file exits 2", bare.status, 2);
+};
+
 /** An input that cannot be read: band 1, and an object under `--json` like any other failure. */
 const checkMissingInput = (t: Suite, cli: Cli): void => {
   const run = cli.plain("missing", ["does-not-exist.ts"]);
@@ -1683,6 +1705,7 @@ export const main = (): number => {
   checkPanicSites(t, cli);
   checkDenyPanics(t, cli);
   checkDenyRetention(t, cli);
+  checkArenaReport(t, cli);
   checkCapabilities(t, cli, env);
   checkCapabilityPolicy(t, cli, env);
   checkMissingInput(t, cli);
