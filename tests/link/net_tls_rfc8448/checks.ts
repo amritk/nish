@@ -317,7 +317,8 @@ export const rfc8448Checks = (): i32 => {
   forged.receive(TLS_LEVEL_INITIAL, hello, zero, toI32(hello.length));
   forged.sign(rfc8448RsaPssSignature());
   const tampered: u8[] = rfc8448ClientFinished();
-  tampered[toI32(tampered.length) - 1] = toU8(toI32(tampered[toI32(tampered.length) - 1]) ^ 1);
+  const last: i32 = toI32(tampered.length) - 1;
+  tampered[last] = toU8(toI32(tampered[last]) ^ 1);
   t.eqI32(
     "a client Finished with one bit flipped is decrypt_error",
     forged.receive(TLS_LEVEL_HANDSHAKE, tampered, zero, toI32(tampered.length)),

@@ -556,9 +556,25 @@ const TLS_SECRET_CLIENT_FINISHED: i32 = 6
 /** The CertificateVerify input sits beside them: 98 bytes and the transcript hash. */
 const TLS_SECRET_TO_BE_SIGNED: i32 = 7
 const TLS_SECRET_RESUMPTION: i32 = 8
-const TLS_SECRET_COUNT: i32 = 9
 /** What CertificateVerify signs besides the hash (RFC 8446 §4.4.3): 64 spaces, the 33-byte context and a zero. */
 const TLS_CERTIFICATE_VERIFY_PREFIX: i32 = 98
+
+/**
+ * One array per `TLS_SECRET_*` index, in that order, each `hashLength` bytes
+ * (the CertificateVerify input's 98 more). A literal, so the pool is
+ * allocated at exactly its size rather than grown by `push`.
+ */
+const tlsSecretPool = (hashLength: i32): u8[][] => [
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength),
+  new Array<u8>(hashLength + TLS_CERTIFICATE_VERIFY_PREFIX),
+  new Array<u8>(hashLength),
+]
 
 /**
  * The most the server's Handshake-level flight under `config` takes with an
@@ -654,7 +670,7 @@ export class TlsServer {
   expectedClientFinished: u8[]
   /** The empty array every secret field points at until its secret is derived. */
   none: u8[]
-  /** The arrays the secret fields point into: `TLS_SECRET_COUNT` of each hash's lengths. */
+  /** The arrays the secret fields point into: one per `TLS_SECRET_*` index at each hash's length (`tlsSecretPool`). */
   secrets256: u8[][]
   secrets384: u8[][]
   /** The ClientHello last read, as windows into `input`. */
@@ -699,13 +715,8 @@ export class TlsServer {
     this.input = new Array<u8>(TLS_INPUT_START)
     this.outputInitial = new Array<u8>(TLS_INITIAL_OUTPUT_SIZE)
     this.outputHandshake = new Array<u8>(this.configFits ? tlsFlightCapacity(config) : TLS_FROM)
-    this.secrets256 = []
-    this.secrets384 = []
-    for (let k: i32 = 0; k < TLS_SECRET_COUNT; k++) {
-      const extra: i32 = k === TLS_SECRET_TO_BE_SIGNED ? TLS_CERTIFICATE_VERIFY_PREFIX : 0
-      this.secrets256.push(new Array<u8>(SHA256_SIZE + extra))
-      this.secrets384.push(new Array<u8>(SHA384_SIZE + extra))
-    }
+    this.secrets256 = tlsSecretPool(SHA256_SIZE)
+    this.secrets384 = tlsSecretPool(SHA384_SIZE)
     this.hello = new TlsClientHelloView()
     this.kdf = new HkdfScratch()
     this.exchange = new TlsExchangeWords()
@@ -769,11 +780,7 @@ export class TlsServer {
     }
   }
 
-  /**
-   * Fails the handshake with `alert` and answers it, wiping the resumption
-   * master secret `sign` derived ahead of a client Finished that will now
-   * never be accepted.
-   */
+  /** Fails the handshake with `alert` and answers it, wiping the resumption master secret `sign` derived ahead. */
   fail(alert: i32): i32 {
     secureZero(this.secretArray(TLS_SECRET_RESUMPTION))
     this.state = TLS_STATE_FAILED
@@ -1360,12 +1367,10 @@ export class TlsServer {
     )
     // The only client Finished `handleFinished` accepts is the one just
     // computed, so the transcript through it is known now (RFC 8446 §4.6.1),
-    // and the resumption master secret is derived while the master secret
-    // is. It stays out of `resumptionSecret` until that Finished arrives;
-    // `fail` wipes it if it never does.
-    const finishedHeader: u8[] = [toU8(TLS_HANDSHAKE_FINISHED), toU8(0), toU8(0), toU8(h)]
-    this.transcript.update(finishedHeader, TLS_FROM, toI32(finishedHeader.length))
-    this.transcript.update(this.expectedClientFinished, TLS_FROM, h)
+    // and the resumption master secret is derived while the master secret is.
+    const clientFinished: u8[] = new Array<u8>(4 + h)
+    tlsWriteFinished(clientFinished, TLS_FROM, this.expectedClientFinished, TLS_FROM, h)
+    this.transcript.update(clientFinished, TLS_FROM, toI32(clientFinished.length))
     this.transcript.hashInto(this.hashes, TLS_FROM)
     tlsDeriveSecretInto(
       this.kdf,
