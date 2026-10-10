@@ -11,7 +11,7 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 | `<name>.rounds` (optional) | how many rounds `--fix` takes: one `fixed <file>` line on stderr per round that rewrote the file |
 | `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
 | `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1; a program whose only diagnostics are warnings exits 0 |
-| `<name>.code` (optional) | a code the plain `--json` run must report, so a case whose diagnostic stopped firing fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it |
+| `<name>.code` | a code the plain `--json` run must report, so a case whose diagnostic stopped firing, or that another diagnostic now stops first, fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it. Required beside a `.nofix.ts`, optional beside a `.fixed.ts` |
 | `<name>.stdout` (optional) | beside a `.fixed.ts`: the input and the fixed program are each linked and run, and both must print exactly this and exit with `<name>.run-exit` (default 0). Skipped without clang |
 | `<name>/` | a case of several files, for what the command line decides: which files are named and which may be rewritten. `argv` lists the files `--fix` is given; every `x.ts` comes out as its `x.fixed.ts`, or byte-identical when there is none; `exit` (default 0) is `--fix`'s status; `rewrites` (optional) counts the `fixed <file>` lines on stderr. A case that exits 0 must then compile clean, and one that does not must still report the fix it was not allowed to apply. With `same-as-plain`, the report instead has to be byte for byte what a plain run (human and `--json`) prints about the files `--fix` leaves. `plain-exit` and `code` are the sidecars above, checked on the plain run (on the run after `--fix` under `same-as-plain`), and `code` is checked absent from the fixed program when `--fix` exits 0. `node-modules/` is copied as `node_modules/`, which git would ignore here |
 
@@ -97,6 +97,15 @@ cases `tests/link/unsafe-migrate-index-flag` (under the flag) and
 Its four modules hold every fixed shape, so each rewrite is compiled and run
 without the flag; the fix runner itself compiles the result with the case's
 `argv`, flag included.
+
+The `expr-truthy-` cases are the truthiness fixes: a condition (NL2188) takes
+`!== 0`, `!== null` or `.length !== 0`, `!x` (NL2263) the same comparison
+turned round, and a non-boolean operand of `&&` or `||` (NL2099) the
+condition's comparison, but only where the whole is read for its truthiness —
+a condition, or `!`'s operand — because elsewhere `tsc` hands on the operand
+itself (`expr-nofix-logical-value`, `-argument`). A float, a `string | null`
+and a class that cannot be `null` have no comparison, and an `&&` with one such
+operand has no fix for the other either (`expr-nofix-logical-float`).
 
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.
