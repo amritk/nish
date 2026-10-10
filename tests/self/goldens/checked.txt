@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 951 programs, 89003 dump lines.
+# 955 programs, 89149 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -727,6 +727,156 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 poke
   stackSites=1 stackLocals=0
   callee 13:18 poke -> @poke
+program tests/cases/arr_bounds_unchecked_kept.ts
+module tests/cases/arr_bounds_unchecked_kept.ts (entry)
+import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
+import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
+unsafe import 4:10 uncheckedGet from "nish:unsafe"
+unsafe import 4:24 uncheckedSet from "nish:unsafe"
+unsafe call 7:54 uncheckedGet (node 23)
+unsafe call 11:3 uncheckedSet (node 49)
+unsafe call 25:5 uncheckedSet (node 105)
+unsafe call 35:5 uncheckedSet (node 149)
+function readTwice(xs: i32[], i: i32): i32 -> @readTwice [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function writeThenRead(xs: i32[], i: i32): i32 -> @writeThenRead [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 11:3
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function shrink(xs: i32[]): i32 -> @shrink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:3
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function shrinkAcross(xs: i32[], i: i32): i32 -> @shrinkAcross [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 25:5
+  escaping: i
+  calls: nish_panic_index shrink
+  pointer xs: size=0 writesThrough=true captured=false passedTo=shrink#0
+  stackSites=0 stackLocals=0
+  callee 25:25 shrink -> @shrink
+function popAfter(xs: i32[], i: i32): i32 -> @popAfter [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 35:5
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/arr_bounds_unsigned_guard.ts
+module tests/cases/arr_bounds_unsigned_guard.ts (entry)
+function at32(xs: i32[], i: u32): i32 -> @at32
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function at16(xs: i32[], i: u16): i32 -> @at16
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function at8(xs: i32[], i: u8): i32 -> @at8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: i
+  calls: nish_exit nish_write
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sum(xs: i32[], n: u32): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 24:7 s: i32 (let)
+  local 25:7 i: u32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: at16 at32 at8 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 sum
+  stackSites=1 stackLocals=1
+  local 36:9 xs: i32[] (const)
+  callee 38:18 at32 -> @at32
+  callee 38:33 at32 -> @at32
+  callee 38:48 at32 -> @at32
+  callee 39:18 at16 -> @at16
+  callee 39:40 at16 -> @at16
+  callee 39:66 at8 -> @at8
+  callee 40:18 sum -> @sum
+program tests/cases/arr_bounds_unsigned_guard_f64.ts --number-mode f64
+module tests/cases/arr_bounds_unsigned_guard_f64.ts (entry)
+function at32(xs: i32[], i: u32): i32 -> @at32
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: llvm.fptoui.sat.i32.f64
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function at8(xs: i32[], i: u8): i32 -> @at8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: i
+  calls: llvm.fptoui.sat.i32.f64 nish_exit nish_write
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sum(xs: i32[], n: u32): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptoui.sat.i32.f64 nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 20:7 s: i32 (let)
+  local 21:7 i: u32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: at32 at8 llvm.fptoui.sat.i32.f64 llvm.fptoui.sat.i8.f64 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 sum
+  stackSites=1 stackLocals=1
+  local 32:9 xs: i32[] (const)
+  callee 33:18 at32 -> @at32
+  callee 33:40 at32 -> @at32
+  callee 33:62 at32 -> @at32
+  callee 33:93 at8 -> @at8
+  callee 34:18 sum -> @sum
+program tests/cases/arr_bounds_unsigned_guard_kept.ts
+module tests/cases/arr_bounds_unsigned_guard_kept.ts (entry)
+function wide(xs: i32[], i: u64): i32 -> @wide [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function signed(xs: i32[], i: u32): i32 -> @signed [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function atMost(xs: i32[], i: u32): i32 -> @atMost [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function last(xs: i32[], i: u32): i32 -> @last [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 19:9 top: u32 (const)
+function other(xs: i32[], ys: i32[], i: u32): i32 -> @other [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 program tests/cases/arr_element_bitwise_assign.ts
 module tests/cases/arr_element_bitwise_assign.ts (entry)
 function slot(): i32 -> @slot

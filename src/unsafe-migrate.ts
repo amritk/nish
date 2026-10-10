@@ -11,12 +11,15 @@
 // right side calls something (`emitElementAssignment`), an unproven
 // `charCodeAt` or `pop`, and every `slice`, array `set` and socket buffer
 // range. They are read after `proveCallSiteRanges`, when `nodeProvenIndex` is
-// final. The flag records no fact for a check it drops, so its proofs are a
-// subset of the proofs without it: an access left as `xs[i]` because it was
-// proven stays proven once the flag is gone. The converse does not hold, so a
-// site can be one the checker would have proven without the flag, and its
-// rewrite then gives up a check that would have cost nothing: the meaning is
-// the same, and dropping the flag first is the way to keep such a site.
+// final. The flag records no fact for a check it drops, so its own proofs are
+// a subset of the proofs without it, and pass 2 adds the rest: it walks each
+// body again recording what every access the migration leaves checked passes
+// (`proveUnflagged` in src/bounds.ts), so an access the build without the flag
+// proves from one of those is proven here too and never rewritten. Either
+// way, an access left as `xs[i]` because it was proven stays proven once the
+// flag is gone. What the whole-program pass would prove from a caller's
+// passed check is not added, so such a site is still rewritten: the meaning
+// is the same, and dropping the flag first is the way to keep it.
 //
 // **A fix is offered only where the rewrite compiles and means the same.** The
 // two calls take an array of numbers and an `i32` index, `uncheckedSet` is a
@@ -29,14 +32,17 @@
 // **The import is part of the fix.** A call needs its name imported from
 // `nish:unsafe` (NL2456), so while the module lacks a name, every site's fix
 // carries the one edit that adds every name the module's fixes need. The
-// edits are the same, so `--fix` applies one site's fix in the first round
-// and drops the rest as overlapping, and in the second round, with the import
-// written, every other site's fix applies. `planUnsafeImport` and
+// edits are the same, and `--fix` makes an edit it has already accepted once
+// (`acceptedEdits` in src/fix.ts), so every site's fix lands in one round
+// with the import. A rewritten site moves no fact its neighbours were proven
+// by, either: `uncheckedGet` and `uncheckedSet` are the load and the store an
+// access is to the bounds analysis (`callsNothing`). `planUnsafeImport` and
 // `unsafeImportEdit` know nothing about indexing, so a migration to the
 // `wrapping*` functions can reuse them for its own names.
 
+import { hasUncheckedForm } from "./bounds"
 import { CLI } from "./branding"
-import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
+import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { arrayMethodName, builtinNameOf, isAssignmentOperator, isStringMethodCall } from "./emit-util"
 import { unsafeModule } from "./nish-modules"
 import {
@@ -60,7 +66,7 @@ import {
 import { builtinPanicKind, PANIC_SLICE } from "./panics"
 import { CheckedProgram, Instantiation } from "./program"
 import { StringBuilder } from "./strings"
-import { T_I32, TypeTable, isNumeric } from "./types"
+import { TypeTable, isNumeric } from "./types"
 
 /** `;`, which a module that ends its statements with one gets after a new import. */
 const CH_SEMICOLON: i32 = 59
@@ -298,21 +304,20 @@ class SiteWalk {
   /**
    * Why `xs[i]` cannot be either call, or `""`: the element must be a number
    * and the index an `i32`, which is exactly what `checkUncheckedAccess`
-   * (src/builtins.ts) accepts.
+   * (src/builtins.ts) accepts, and `hasUncheckedForm` asks.
    */
   accessRefusal(access: Node): string {
     const program = this.program
     const table = this.table
-    const array = program.nodeTypes[access.children[0].id]
-    const elem = table.refOf(array)
+    if (hasUncheckedForm(program, table, access)) {
+      return ""
+    }
+    const elem = table.refOf(program.nodeTypes[access.children[0].id])
     if (!isNumeric(elem)) {
       return `\`${unsafeModule()}\` reads and writes only arrays of numbers, and this one holds ${table.typeName(elem)}`
     }
     const index = program.nodeTypes[access.children[1].id]
-    if (index !== T_I32 && !(table.isRanged(index) && table.baseOf(index) === T_I32)) {
-      return `\`uncheckedGet\` and \`uncheckedSet\` take an i32 index, and this one is ${table.typeName(index)}`
-    }
-    return ""
+    return `\`uncheckedGet\` and \`uncheckedSet\` take an i32 index, and this one is ${table.typeName(index)}`
   }
 
   /** The method and builtin calls whose check the flag drops: none of them has a `nish:unsafe` form. */
@@ -476,10 +481,7 @@ const reportModule = (into: ModuleSites, sink: DiagnosticSink): void => {
       }
       edits.push(siteEdit(program.source, get.local, set.local, site))
     }
-    // Built here rather than through `reportDeprecation`, which takes no edits.
-    const warning = new Diagnostic(program.source, site.node.start, site.node.end, "deprecation", text)
-    warning.edits = edits
-    sink.insertWarning(sink.deprecations, warning)
+    sink.reportDeprecationFix(program.source, site.node.start, site.node.end, text, edits)
   }
 }
 

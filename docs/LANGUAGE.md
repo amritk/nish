@@ -3257,6 +3257,19 @@ and both come from the program as written:
     `i < n`. A constant index `w[3]` needs `w.length >= 4` instead, which a
     length guard (`if (w.length >= 4)`) or an array literal of known size
     gives.
+  - for a `u8`, `u16` or `u32` index, `toU32(i) < toU32(w.length)` — or
+    `i < toU32(w.length)` for a `u32` — the same way: an unsigned index
+    cannot be compared with the `i32` length as it is, its type is its lower
+    end, and this is the upper one. `toU32` widens a `u8` or `u16` and is the
+    identity on a `u32`, and of a length it can only answer the length or
+    less (in f64 mode it is a saturating `fptoui`), so the `u32` compare is
+    `i < w.length` or stronger. Only in the test itself: a `u32` copy of the
+    length is not a length, because `toU32(w.length) - toU32(1)` wraps on an
+    empty array. A `u64` index is not credited — `toU32` keeps its low 32
+    bits — and neither is `toI32(i) < w.length` on a `u32`, which reads an
+    index past `2^31 - 1` as negative
+    (`tests/cases/arr_bounds_unsigned_guard`, `arr_bounds_unsigned_guard_f64`;
+    `arr_bounds_unsigned_guard_kept` keeps every check).
   - **a guard that ends the path.** After `if (i < 0 || i >= w.length) { … }`
     the negation of the test holds for the rest of the block when the guarded
     branch ends in `return`, `break`, `continue`, or a call to the
@@ -3857,11 +3870,18 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   emitter writes without the flag: an element access the checker did not
   prove in range, the second check of a compound store whose right side calls
   something, an unproven `charCodeAt` or `pop`, and every `slice`, array `set`
-  and `nish:net` buffer range. A site the checker proved is not reported: the
-  flag records nothing for a check it drops, so what it proves is a subset of
-  what is proven without it, and an access left as `xs[i]` stays proven once
-  the flag is gone. Like NL7001 it is printed by default, `nish run` included,
-  and `--no-warn-performance` does not silence it. Where a rewrite says the
+  and `nish:net` buffer range. A site the checker proved is not reported, and
+  an access left as `xs[i]` stays proven once the flag is gone: the flag
+  records nothing for a check it drops, so what it proves is a subset of what
+  is proven without it. The checker adds what the build without the flag
+  learns from each check the migration leaves in place, so an access that
+  check proves is not a site either: after `const name = names[i]`, whose
+  strings have no `nish:unsafe` form, `i >= 0` holds, and with
+  `if (i < xs.length)` the access `xs[i]` is proven and stays
+  (`unsafe-index-kept`). What a caller's check would prove for its callee is
+  not added, so such a site is still rewritten, to the same meaning. Like
+  NL7001 it is printed by default, `nish run` included, and
+  `--no-warn-performance` does not silence it. Where a rewrite says the
   same thing, the warning carries it as a `fix`:
 
   | Shape | Rewrite | Case (`tests/fix/`) |
@@ -3887,9 +3907,18 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   module's fixes call: the names after its existing `nish:unsafe` import
   (`unsafe-index-extend`), else a new import after its last import, else
   before its first statement. An import that renames is called by its alias
-  (`unsafe-index-alias`). The edits are the same, so the first round applies
-  one site's fix and the second applies the rest (`unsafe-index-rounds`). The
-  program then compiles without the flag and prints what it printed with it:
+  (`unsafe-index-alias`). The edits are the same, and `nish --fix` makes an
+  edit once however many fixes carry it, so one round applies every site
+  (`unsafe-index-rounds`). To the bounds proof `uncheckedGet` and
+  `uncheckedSet` are the load and the store `xs[i]` and `xs[i] = v` are,
+  less the check: a rewritten site moves no length, so in
+  `a[at[0]] + b[at[1]]` with `at` an array of two, `at[1]` stays proven after
+  `a[at[0]]` is rewritten, and the fixed point is reached in that one round
+  (`unsafe-index-pair`). Neither records a passed check, because neither has
+  one: a checked `xs[i]` after either keeps its check, and a resize in the
+  value stored still takes the length away
+  (`tests/cases/arr_bounds_unchecked_kept`). The program then compiles without the flag and prints what it
+  printed with it:
   `tests/link/unsafe-migrate-index-flag` runs `unsafe-index-equivalence`'s
   sources under the flag and `unsafe-migrate-index-fixed` runs their
   `.fixed.ts` without it, against one `expected.out`; between them its four
@@ -6302,15 +6331,20 @@ by the caller.
     loaded and compared on every iteration. The hint is the guard that always
     works — `if (i >= 0 && i < a.length)` reaching the access proves both ends,
     whatever took the proof away — with an unsigned index named beside it,
-    since half the proof then comes off the declaration
-    (`tests/cases/perf_bounds_loop`). Reported on the index, once per access.
-    Where the index is an `i32` or an `i32`-based ranged integer and nothing
-    between the start of its statement and the access branches, loops,
-    calls, allocates or assigns (the README below lists the rest of the
-    conditions), the warning carries a fix: `nish --fix`
-    inserts `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
-    at the start of that statement, a guard the proof credits, so an index in
-    range runs as before and one out of range still exits 1, at the guard
+    since half the proof then comes off the declaration; for a `u8`, `u16`
+    or `u32` index, which that `i32` test does not type-check against, the
+    hint is the other half alone, `if (toU32(i) < toU32(a.length))`
+    (`tests/cases/perf_bounds_loop`, `arr_bounds_unsigned_guard`,
+    `reject_deny_panics_index_unsigned`). Reported on the index, once per
+    access. Where the index is an `i32`, an `i32`-based ranged integer or a
+    `u8`, `u16` or `u32`, and nothing between the start of its statement and
+    the access branches, loops, calls, allocates or assigns (the README below
+    lists the rest of the conditions), the warning carries a fix: `nish --fix`
+    inserts `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`,
+    or `if (!(toU32(i) < toU32(xs.length))) { panic("index out of range") }`
+    for an unsigned index, at the start of that statement, a guard the proof
+    credits, so an index in range runs as before and one out of range still
+    exits 1, at the guard
     (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
     Silent outside a loop, where one check is not a cost anybody is paying;
     silent under `--unchecked-indexing`, where no check survives to report;

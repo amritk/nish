@@ -38,9 +38,12 @@ first is applied and the second dropped as overlapping it, and the next round
 applies the other, so it takes two rounds. `decl-export-list-twice` is a fix
 whose own edits overlap — `export { f, f }` asks for `export ` before `f` twice
 — so it is dropped whole every round and the file is left as it was. Each fails
-when its half of `acceptedEdits`'s overlap test is taken out; the first half
-also fails the `unsafe-index-` directory cases, whose fixes share one import
-edit. `decl-fs-two-names` pinned the first half until #434: two names from a
+when its half of `acceptedEdits`'s overlap test is taken out. An edit
+identical to one already accepted is not an overlap but the same change, made
+once: the `unsafe-index-` directory cases' fixes share one import edit, and
+`unsafe-index-rounds` and `unsafe-index-pair` count the single round that
+takes; each needs more rounds when `sameAsAny` is taken out.
+`decl-fs-two-names` pinned the first half until #434: two names from a
 missing `fs` are one NL3015 now, not two carrying the same edit.
 
 The `guard-` cases are NL9007's, whose fix is a guard
@@ -50,11 +53,14 @@ what keeps a guard the analysis did not credit from being inserted again every
 round, and each fixed case's `code` is NL9007, which the fixed program must no
 longer report. `guard-array` and `guard-out-of-range` run the program before and after
 the fix: the same output in range, and status 1 out of range, from the
-runtime's index error before and from the guard's panic after. Each refused
-shape — an `i64` or unsigned index, an access in a loop's condition or behind
-`? :`, `&&` or `??`, a call before it in the statement, a statement that
-declares the index, a `panic` or `toI32` the module declares, as a function,
-a parameter or a local — has a case, and each fails when its refusal in `boundsGuardEdits`
+runtime's index error before and from the guard's panic after. A `u8`, `u16`
+or `u32` index gets the upper end alone, `toU32(i) < toU32(xs.length)`, whose
+type is its lower end (`guard-u8`, `guard-u16`, which runs out of range, and
+`guard-u32`). Each refused shape — an `i64` or `u64` index (`toU32` would keep
+a `u64`'s low bits), an access in a loop's condition or behind `? :`, `&&` or
+`??`, a call before it in the statement, a statement that declares the index,
+a `panic`, `toI32` or `toU32` the module declares, as a function, a parameter
+or a local — has a case, and each fails when its refusal in `boundsGuardEdits`
 (`src/checker.ts`) is taken out. `guard-nofix-deny-panics` pins the last
 refused shape: under `--deny-panics` the index is an error (NL2457), so the
 program does not check and no warning's fix is applied.
@@ -78,8 +84,13 @@ The `unsafe-index-` cases are that kind: every `argv` passes
 `--unchecked-indexing`, and each fixed shape and each refused one in the
 table in `docs/LANGUAGE.md` ("`nish:unsafe`") has its case.
 `unsafe-index-rounds` pins the convergence its `rewrites` counts: every site's
-fix carries the same import edit, so the first round over `main.ts` applies
-one fix and the second the rest, after the round that fixes `seed.ts`.
+fix carries the same import edit, and one round over `main.ts` applies them
+all, after the round that fixes `seed.ts`. `unsafe-index-pair` is #461's
+`a[at[0]] + b[at[1]]`: `uncheckedGet` is a load to the bounds analysis, so
+rewriting `a[at[0]]` leaves `at[1]` proven and both sites land in that one
+round. `unsafe-index-kept` is an access the build without the flag proves
+from a check the migration leaves in place (`names[i]`, whose strings have no
+`nish:unsafe` form): it is not a site, and stays `xs[i]`.
 `unsafe-index-equivalence`'s sources and their `.fixed.ts` are the two link
 cases `tests/link/unsafe-migrate-index-flag` (under the flag) and
 `unsafe-migrate-index-fixed` (without it), which print one `expected.out`.
