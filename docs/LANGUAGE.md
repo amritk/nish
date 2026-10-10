@@ -1620,6 +1620,20 @@ and their `.ll` goldens are byte-identical files.
   or drop it (`tests/cases/export_fn`, `tests/link/strict`).
   `--no-strict-exports` makes every function external again, which is what a C
   driver calling a non-exported function needs (`tests/cases/export_no_strict`).
+  - **A method another module calls is in the link.** The layouts an import
+    brings (above) include a class its module does not export — `Conn.space():
+    Space` hands an importer of `Conn` a `Space` whether or not `Space` is
+    exported — and the importer may call that value's methods, generic ones
+    included. Such a method (or instantiation of one) is `hidden` rather than
+    `internal`: one the final link resolves and the
+    output exports to nothing, with the `Result` ABI an exported one has. A
+    method only its own module calls stays `internal`
+    (`tests/link/package_hidden_method`, #442). The class's name stays its
+    module's: importing it is
+    `` `Space` is declared in `pkg_q` but not exported (add `export`) ``
+    (`tests/link/package_hidden_class_import`), and naming it in an annotation
+    is `` Unsupported type reference `Space` ``
+    (`tests/link/package_hidden_class_annotation`).
 - **A function name is unique across the whole program**, exported or not, in
   either mode (`tests/link/duplicate_export`, `duplicate_internal`).
   `internal` linkage keeps a name out of the linker's way but it does not buy a
