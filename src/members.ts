@@ -225,6 +225,24 @@ const toStringFix = (ctx: CheckContext, call: Node, receiver: i32): Edit[] => {
   return templateFix(ctx, call, access.children[0])
 }
 
+/**
+ * Make `method` callable from the module being checked (#442).
+ *
+ * A value of a class its module does not export still reaches other modules,
+ * through an exported function's or method's signature (`reachableStructs`),
+ * and the language lets them call its methods (docs/LANGUAGE.md, "Linkage").
+ * Such a method would be `internal`, so a call from another module would name
+ * a symbol nothing defines and fail at link. It becomes `hidden` instead, as a
+ * private function an imported instantiation calls does (`exposeTo` in
+ * `src/generics.ts`): in the final link, and exported from nothing. The caller
+ * already has its `declare`, because the class's layout reached it.
+ */
+const exposeMethod = (ctx: CheckContext, method: FunctionSig): void => {
+  if (!method.exported && !method.definedIn(ctx.source)) {
+    method.hidden = true
+  }
+}
+
 /** `receiver.method(args)` where `receiver` is a value. */
 export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const access = expr.children[0]
@@ -284,7 +302,12 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     // one is a call of a generic function whose first parameter is `this`.
     const template = info.methodTemplate(access.text)
     if (template !== null) {
-      return checkGenericCall(ctx, expr, template, scope)
+      const type = checkGenericCall(ctx, expr, template, scope)
+      const instance = ctx.program.nodeCallees[expr.id]
+      if (instance !== null) {
+        exposeMethod(ctx, instance)
+      }
+      return type
     }
     const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : ""
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
@@ -304,6 +327,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     false
   )
   ctx.program.nodeCallees[expr.id] = method
+  exposeMethod(ctx, method)
   if (access.text === "set" && isCollectionStruct(info)) {
     recordUpdateFusion(ctx, expr) // WP32 S5: one probe for `m.set(k, (m.get(k) ?? 0) + 1)`
   }
