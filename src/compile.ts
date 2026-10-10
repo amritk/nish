@@ -1039,6 +1039,14 @@ const WRITABLE_BY_GROUP_OR_ALL: i64 = 0x12
 const WRITABLE_BY_ALL: i64 = 0x2
 
 /**
+ * The low 32 bits, where a uid fits: the mask the owner half of an
+ * `lstatOwnerModeSync` answer needs. A constant so the literal is an `i64` in
+ * every number mode; written inline, a wasm32 build reads it as an `i32` it
+ * does not fit.
+ */
+const UID_MASK: i64 = 0xffffffff
+
+/**
  * Why the compiler may not trust what `dir` holds, as the rest of a sentence
  * that starts with `dir`, or empty when it may, or when there is nothing at
  * `dir` at all, which only the caller can judge. A directory is trusted when
@@ -1060,7 +1068,7 @@ const distrustOf = (dir: string, rootMayOwn: boolean, writable: i64): string => 
   if ((ownerMode & MODE_TYPE) !== MODE_DIRECTORY) {
     return "is not a directory (a symbolic link is not followed)"
   }
-  const owner = (ownerMode >> 32) & 0xffffffff
+  const owner = (ownerMode >> 32) & UID_MASK
   const self = geteuid()
   if (owner !== self && !(rootMayOwn && owner === 0)) {
     return `is owned by uid ${owner}, not by this user (uid ${self})${rootMayOwn ? " or root" : ""}`
