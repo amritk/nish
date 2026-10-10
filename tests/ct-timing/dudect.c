@@ -78,6 +78,12 @@ void ct_fill(void *p, size_t bytes, int secret_class) {
   }
 }
 
+void ct_field25519(int64_t *limbs, size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    limbs[i] &= ((int64_t)1 << (26 - (int)(i & 1))) - 1;
+  }
+}
+
 /* A cycle counter where the machine offers one to user space, else nanoseconds. */
 static inline uint64_t ct_ticks(void) {
 #if defined(__x86_64__)

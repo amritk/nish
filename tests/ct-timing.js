@@ -25,7 +25,9 @@
  * 0 sets them all to zero, class 1 to fresh random bits for every measurement;
  * everything else is zero in both. Every array is `ELEMENTS` long, which is
  * more than any fixture indexes, and every one is reset before each
- * measurement, since some of the functions write their arguments.
+ * measurement, since some of the functions write their arguments. A fixture
+ * whose module only ever passes narrower values than its types hold has them
+ * narrowed to that domain, in both classes (`DOMAINS`).
  *
  *   node tests/ct-timing.js            the full run, SAMPLES measurements a function
  *   node tests/ct-timing.js --quick    a smoke run, QUICK_SAMPLES a function
@@ -69,6 +71,19 @@ const QUICK_SAMPLES = 4000
 const CONTROL_FIXTURE = "ct_asm_refused.ts"
 /** Elements in every array argument: more than any fixture indexes. */
 const ELEMENTS = 256
+
+/**
+ * The inputs a fixture's functions are ever given, where that is narrower than
+ * their types. `array` is the `dudect.h` function that narrows every secret
+ * `i64[]` argument after it is filled, and `scalar` masks every secret scalar.
+ * Out of its domain a function runs on values its module never makes, and a
+ * difference there says nothing about the module: CT-13 in
+ * docs/security/ct-verification.md is the reading that taught this.
+ */
+const DOMAINS = {
+  // std/crypto/x25519.ts: limbs as `f25519Carry` leaves them, and a swap bit of 0 or 1.
+  "ct_asm_x25519.ts": { array: "ct_field25519", scalar: 1 },
+}
 
 /** The C type of each scalar a fixture may take, and each element's size in bytes. */
 const C_TYPES = {
@@ -138,11 +153,13 @@ if (nish === null) {
  * The C file that calls one fixture's functions: for each, static buffers and
  * headers for its arrays, a `prepare` that fills its secrets for a class, and
  * a `call` that makes the call and keeps the answer where the optimiser cannot
- * drop it. `null` and a reason when a signature has a type it cannot build.
+ * drop it. Secrets are narrowed to `domain` when there is one. An `error`
+ * when a signature has a type it cannot build or a domain cannot narrow.
  */
-const driverFor = (specs) => {
+const driverFor = (specs, domain) => {
   const lines = ["#include <stdbool.h>", '#include "dudect.h"', "", "static volatile uint64_t sink;", ""]
   const table = []
+  let narrowed = false
   for (const [n, spec] of specs.entries()) {
     const params = []
     const fills = []
@@ -157,7 +174,15 @@ const driverFor = (specs) => {
         const bytes = ELEMENTS * element[1]
         decls.push(`static _Alignas(16) unsigned char f${n}_d${i}[${bytes}];`)
         decls.push(`static ct_array f${n}_a${i} = { ${ELEMENTS}, ${ELEMENTS}, f${n}_d${i} };`)
-        fills.push(`  ct_fill(f${n}_d${i}, ${bytes}, ${secret || spec.contents ? "c" : "0"});`)
+        const filled = secret || spec.contents
+        fills.push(`  ct_fill(f${n}_d${i}, ${bytes}, ${filled ? "c" : "0"});`)
+        if (domain !== undefined && filled) {
+          if (type !== "i64[]") {
+            return { error: `${spec.name}: its domain narrows i64[], not ${type}` }
+          }
+          fills.push(`  ${domain.array}((int64_t *)f${n}_d${i}, ${ELEMENTS});`)
+          narrowed = true
+        }
         params.push(["ct_array *", `&f${n}_a${i}`])
       } else {
         const scalar = C_TYPES[type]
@@ -168,6 +193,9 @@ const driverFor = (specs) => {
         fills.push(`  ct_fill(&f${n}_s${i}, sizeof f${n}_s${i}, ${secret ? "c" : "0"});`)
         if (scalar[0] === "bool") {
           fills.push(`  f${n}_s${i} = (*(unsigned char *)&f${n}_s${i} & 1) != 0;`)
+        } else if (domain !== undefined && secret) {
+          fills.push(`  f${n}_s${i} &= ${domain.scalar};`)
+          narrowed = true
         }
         params.push([scalar[0], `f${n}_s${i}`])
       }
@@ -183,6 +211,9 @@ const driverFor = (specs) => {
       ""
     )
     table.push(`  { "${spec.name}", f${n}_prepare, f${n}_call },`)
+  }
+  if (domain !== undefined && !narrowed) {
+    return { error: "nothing its domain narrows: no secret i64[] or scalar" }
   }
   lines.push("const ct_function ct_functions[] = {", ...table, "};")
   lines.push(`const int ct_function_count = ${specs.length};`, "")
@@ -202,6 +233,11 @@ const fixtures = fs
   // The control's fixture runs whatever the filter, so a filtered run is checked too.
   .filter((f) => /^ct_asm_\w+\.ts$/.test(f) && (only === null || f.includes(only) || f === CONTROL_FIXTURE))
   .sort()
+// A domain is only read when its fixture runs, so one left behind by a rename would narrow nothing, silently.
+const stale = Object.keys(DOMAINS).find((f) => !fs.existsSync(path.join(casesDir, f)))
+if (stale !== undefined) {
+  fail(`DOMAINS names ${stale}, and there is no tests/cases/${stale}`)
+}
 // The control alone is not a match: a misspelt filter would otherwise run only it.
 if (only === null ? fixtures.length === 0 : !fixtures.some((f) => f.includes(only))) {
   fail(`no tests/cases/ct_asm_*.ts${only === null ? "" : ` matches ${only}`}`)
@@ -232,7 +268,7 @@ for (const file of fixtures) {
     ll,
     fs.readFileSync(ll, "utf8").replace(/^(define [^@\n]*)@main\(/m, "$1@ct_fixture_main(")
   )
-  const driver = driverFor(specs)
+  const driver = driverFor(specs, DOMAINS[file])
   if (driver.error !== undefined) {
     fail(`${name}: cannot call ${driver.error}`)
   }

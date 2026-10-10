@@ -40,4 +40,11 @@ extern const int ct_function_count;
  */
 void ct_fill(void *p, size_t bytes, int secret_class);
 
+/*
+ * The `count` limbs at `limbs` narrowed to a reduced GF(2^255 - 19) element's, as
+ * `std/crypto/x25519.ts` keeps them: 26 bits for an even limb, 25 for an odd
+ * one. Called on both classes after `ct_fill`, so both run it; zero stays zero.
+ */
+void ct_field25519(int64_t *limbs, size_t count);
+
 #endif
