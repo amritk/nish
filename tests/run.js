@@ -13616,6 +13616,26 @@ if (!only || "runtime-cache".includes(only)) {
         runtimeEntries(path.join(home, ".cache", "nish", "runtime")).length === 1,
       relative.stderr
     )
+    // A link at the root's path is not this user's directory, whatever it
+    // names (CLI-7's owner check): the link compiles the runtime itself and
+    // keeps nothing there.
+    const linkedCache = path.join(rcDir, "linked")
+    const elsewhere = path.join(rcDir, "elsewhere")
+    fs.mkdirSync(path.join(linkedCache, "nish"), { recursive: true })
+    fs.mkdirSync(elsewhere, { recursive: true })
+    fs.symlinkSync(elsewhere, path.join(linkedCache, "nish", "runtime"))
+    const throughLink = spawnSync(NISH, ["examples/hello.ts", "--link", path.join(rcDir, "hello-linked")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: linkedCache },
+    })
+    check(
+      "runtime cache: a symbolic link at the root's path is not used -- the link compiles the runtime itself and keeps nothing there",
+      throughLink.status === 0 &&
+        runOut("hello-linked").stdout === "hello from Nish\n" &&
+        fs.readdirSync(elsewhere).length === 0,
+      throughLink.stderr + fs.readdirSync(elsewhere).join(", ")
+    )
     const rootless = spawnSync(NISH, ["examples/hello.ts", "--link", path.join(rcDir, "hello-rootless")], {
       cwd: root,
       encoding: "utf8",
