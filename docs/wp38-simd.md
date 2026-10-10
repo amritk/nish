@@ -318,22 +318,30 @@ slower):
 | D | +12.5% / +12.3% | +15.3% / +12.7% |
 
 None of them is faster than S0 on `bench/json` beyond the noise, and none
-comes near the 33% that 1.5x means. A, C and D are slower everywhere on
-`bench/json`. B is the only one with a faster figure: −2.8% at the minimum
-with `jsonFields`, and −3.5% at the minimum and −7.6% at the median with
-`jsonField` ×3 in the second program. The minimums are inside the band; the
-median is 0.9 points outside it. In the harness's program the same change is
-7.3% slower at the minimum and 5.0% at the median, and in two runs of the
-harness's own report, not interleaved, 9.4% and 5.9% slower at the minimum.
-Its `indexOfAny` is never called on these lines, so what B changes is a real
-cost, the 8-byte window's 3% more instructions on `bench/json`, plus where the
-code lands. That second part is visible on the `--json` line, where B executes
-the same branches as S0 and cachegrind's simulated predictor counts 8% fewer
-mispredicts, which only a change of addresses explains. On the three
-non-benchmark columns of the callgrind table A and B execute what S0 does, yet
-their times moved, mostly 1% to 10% faster and one median, B's short strings
-with `jsonFields`, 6.8% slower: layout of the same kind. D is also 6% to 12%
-slower on the 50-key object, so it fails the shapes' condition as well.
+comes near the 33% that 1.5x means. Every figure of A, C and D is slower or
+inside the noise band: C's −0.2% median with `jsonField` ×3 in the second
+program is inside it. B's faster figures are inside it too: −2.8% at the
+minimum with `jsonFields`, and −3.5% at the minimum with `jsonField` ×3 in the
+second program, whose −7.6% median is 0.9 points outside it. In the harness's
+program the same change is 7.3% slower at the minimum and 5.0% at the median,
+and in two runs of the harness's own report, not interleaved, 9.4% and 5.9%
+slower at the minimum. Its `indexOfAny` is never called on these lines, so
+what B changes is a real cost, the 8-byte window's 3% more instructions on
+`bench/json`, plus where the code lands. That second part is visible on the
+`--json` line: on 20,000 lines with `jsonFields`, B executes 30,268,909
+branches to S0's 30,268,647, and cachegrind's simulated predictor counts
+1,141,078 mispredicts to S0's 1,241,360, 8% fewer, which points to a change of
+addresses rather than of work. On the three non-benchmark columns of the
+callgrind table A and B execute what S0 does, and most of their figures on the
+four shapes stay inside the band. Those outside it are A on the `--json` line
+(−7.6% at the minimum, −9.5% and −6.9% at the median), on the 50-key object
+with `jsonFields` (−7.2% and −6.3% at the minimum, −7.1% at the median) and on
+short strings' last key with `jsonField` (−8.2% at the median), and B on the
+`--json` line with `jsonFields` (−6.3% and −8.3%), on the 50-key miss (−6.8%
+and −8.4% at the median) and one slower median, short strings' last key with
+`jsonFields` (+6.8%): layout of the same kind, in both directions. D is 5.8% to
+11.6% slower on the 50-key object, outside the band on all four of its medians,
+so it fails the shapes' condition as well.
 
 **Why.** Where S0's time goes, under callgrind, for `jsonFields` on 20,000
 `bench/json` lines:
