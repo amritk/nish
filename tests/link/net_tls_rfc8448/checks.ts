@@ -6,15 +6,15 @@
 // (RSA-PSS is not in the stack and is randomised, so it cannot be recomputed),
 // write the trace's CertificateVerify and Finished, and accept the trace's
 // client Finished. Every secret the trace prints is checked on the way: the
-// schedule's own steps through `nish/net/tls/schedule`, and the traffic and
-// exporter secrets as the server exposes them.
+// schedule's own steps through `nish/net/tls/schedule`, and the traffic,
+// exporter and resumption secrets as the server exposes them.
 //
 // The one value not printed by the RFC is the transcript hash CertificateVerify
 // signs; `rfc8448CertificateTranscriptHash` was computed with Python's
 // hashlib over the trace's four messages.
 import { Suite } from "nish/testing";
 import { x25519Plain } from "../crypto_x25519/plain";
-import { TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 } from "nish/net/tls/codec";
+import { TLS_ALERT_DECRYPT_ERROR, TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 } from "nish/net/tls/codec";
 import {
   TLS_AES_128_GCM_SHA256,
   TLS_AES_256_GCM_SHA384,
@@ -33,6 +33,7 @@ import {
   TLS_LEVEL_HANDSHAKE,
   TLS_LEVEL_INITIAL,
   TLS_STATE_CONNECTED,
+  TLS_STATE_FAILED,
   TLS_STATE_WAIT_FINISHED,
   TLS_STATE_WAIT_SIGNATURE,
   TlsServer,
@@ -64,6 +65,7 @@ import {
   rfc8448HandshakeSecret,
   rfc8448HelloHash,
   rfc8448MasterSecret,
+  rfc8448ResumptionSecret,
   rfc8448RsaPssSignature,
   rfc8448ServerApplicationIv,
   rfc8448ServerApplicationKey,
@@ -283,6 +285,7 @@ export const rfc8448Checks = (): i32 => {
     toHex(rfc8448ServerApplicationTraffic())
   );
   t.eqStr("exporter_master_secret", toHex(server.exporterSecret), toHex(rfc8448ExporterSecret()));
+  t.eqStr("no resumption_master_secret before the client's Finished", toHex(server.resumptionSecret), "");
 
   // --- The client's Finished ------------------------------------------------
   const finished: u8[] = rfc8448ClientFinished();
@@ -293,6 +296,35 @@ export const rfc8448Checks = (): i32 => {
   );
   t.eqI32("and the handshake is done", server.state, TLS_STATE_CONNECTED);
   t.eqStr("with nothing left to send", toHex(server.takeOutput(TLS_LEVEL_HANDSHAKE)), "");
+  t.eqStr(
+    'resumption_master_secret, {server} derive secret "tls13 res master"',
+    toHex(server.resumptionSecret),
+    toHex(rfc8448ResumptionSecret())
+  );
+  // The same secret from the schedule alone, over the transcript through the
+  // client's Finished, so the server's answer is not the only witness.
+  transcript.update(finished, zero, toI32(finished.length));
+  t.eqStr(
+    "resumption_master_secret, from the schedule over the trace's transcript",
+    toHex(tlsDeriveSecret(h, rfc8448MasterSecret(), "res master", transcript.hash())),
+    toHex(rfc8448ResumptionSecret())
+  );
+
+  // --- A client Finished that does not verify -------------------------------
+  // One bit of verify_data flipped: refused, and no resumption secret is
+  // derived from a handshake that did not complete.
+  const forged: TlsServer = rfc8448Server();
+  forged.receive(TLS_LEVEL_INITIAL, hello, zero, toI32(hello.length));
+  forged.sign(rfc8448RsaPssSignature());
+  const tampered: u8[] = rfc8448ClientFinished();
+  tampered[toI32(tampered.length) - 1] = toU8(toI32(tampered[toI32(tampered.length) - 1]) ^ 1);
+  t.eqI32(
+    "a client Finished with one bit flipped is decrypt_error",
+    forged.receive(TLS_LEVEL_HANDSHAKE, tampered, zero, toI32(tampered.length)),
+    TLS_ALERT_DECRYPT_ERROR
+  );
+  t.eqI32("and fails the handshake", forged.state, TLS_STATE_FAILED);
+  t.eqStr("with no resumption_master_secret", toHex(forged.resumptionSecret), "");
 
   // --- The same ClientHello a byte at a time --------------------------------
   // A carrier hands over whatever a record or a CRYPTO frame held, so the
@@ -311,11 +343,21 @@ export const rfc8448Checks = (): i32 => {
   );
   split.sign(rfc8448RsaPssSignature());
   split.takeOutput(TLS_LEVEL_HANDSHAKE);
+  // A carrier wipes the handshake secrets once the flight is signed, before
+  // the client's Finished arrives (TlsRecordServer and QUIC both do), so the
+  // resumption secret cannot be derived from them afterwards.
+  secureZero(split.handshakeSecret);
+  secureZero(split.clientHandshakeSecret);
   for (let k: i32 = 0; k < toI32(finished.length); k++) {
     alerts = alerts + split.receive(TLS_LEVEL_HANDSHAKE, finished, k, one);
   }
   t.eqI32("and so is the client Finished", alerts, zero);
   t.eqI32("which completes the handshake", split.state, TLS_STATE_CONNECTED);
+  t.eqStr(
+    "with the trace's resumption_master_secret, though its carrier wiped the handshake secrets",
+    toHex(split.resumptionSecret),
+    toHex(rfc8448ResumptionSecret())
+  );
 
   // --- The same server under TLS_AES_256_GCM_SHA384 -------------------------
   // RFC 8448 pins only the SHA-256 suite. Here the trace's server — its
@@ -372,6 +414,11 @@ export const rfc8448Checks = (): i32 => {
     zero
   );
   t.eqI32("SHA-384: connected", sha384.state, TLS_STATE_CONNECTED);
+  t.eqStr(
+    "SHA-384: resumption_master_secret (checked against Python)",
+    toHex(sha384.resumptionSecret),
+    "87842baad2ea6733dab276bf5d9c00fde9043f6e1c33019cfc57a36f0e415634272671a9189b01b0a547cfb6986001d1"
+  );
 
   return t.done();
 };

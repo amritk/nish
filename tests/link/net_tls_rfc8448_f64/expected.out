@@ -35,13 +35,20 @@ PASS  the client's verify_data, likewise
 PASS  client_application_traffic_secret_0 is its Application read secret
 PASS  server_application_traffic_secret_0 is its Application write secret
 PASS  exporter_master_secret
+PASS  no resumption_master_secret before the client's Finished
 PASS  the trace's client Finished verifies
 PASS  and the handshake is done
 PASS  with nothing left to send
+PASS  resumption_master_secret, {server} derive secret "tls13 res master"
+PASS  resumption_master_secret, from the schedule over the trace's transcript
+PASS  a client Finished with one bit flipped is decrypt_error
+PASS  and fails the handshake
+PASS  with no resumption_master_secret
 PASS  fed a byte at a time, the ClientHello is accepted
 PASS  and answered with the same ServerHello
 PASS  and so is the client Finished
 PASS  which completes the handshake
+PASS  with the trace's resumption_master_secret, though its carrier wiped the handshake secrets
 PASS  SHA-384: the ClientHello is accepted
 PASS  SHA-384: the ServerHello (checked against Python)
 PASS  SHA-384: client_handshake_traffic_secret (checked against Python)
@@ -52,4 +59,5 @@ PASS  SHA-384: client_application_traffic_secret_0 (checked against Python)
 PASS  SHA-384: server_application_traffic_secret_0 (checked against Python)
 PASS  SHA-384: the client Finished the model computes is accepted
 PASS  SHA-384: connected
-tls rfc8448: 54 passed, 0 failed, 0 skipped
+PASS  SHA-384: resumption_master_secret (checked against Python)
+tls rfc8448: 62 passed, 0 failed, 0 skipped

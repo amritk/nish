@@ -41,7 +41,9 @@
  * `quic_transport_parameters` is read and written only when the configuration
  * says the carrier is QUIC. PSKs, 0-RTT, NewSessionTicket and client
  * authentication are not here: a PSK or early-data offer is ignored, so the
- * client falls back to a full handshake.
+ * client falls back to a full handshake. The resumption master secret a
+ * ticket would come from is derived all the same, and readable once the
+ * client's Finished is accepted.
  *
  * **Refusals are alerts.** `receive` and `sign` answer 0 or a TLS alert
  * description (`TLS_ALERT_*` in `nish/net/tls/codec`); after one the server
@@ -53,8 +55,9 @@
  * server keeps in its fields — the caller's ephemeral key bytes, since a
  * `Secret` may not be a field, and the handshake, traffic and exporter secrets
  * its carrier reads — is wiped by its carrier, and by `restart` before the
- * next connection uses the arrays (CLAUDE.md §Security; TLS-1 in
- * `docs/security/tls.md`).
+ * next connection uses the arrays. The resumption master secret, which no
+ * carrier reads yet, is wiped by `fail` and `restart` alone (CLAUDE.md
+ * §Security; TLS-1 in `docs/security/tls.md`).
  *
  * **Memory.** A `TlsServer` keeps its state in buffers it allocates once —
  * the messages in and out, the transcript, the secrets, the HKDF scratch —
@@ -552,7 +555,8 @@ const TLS_SECRET_EXPORTER: i32 = 5
 const TLS_SECRET_CLIENT_FINISHED: i32 = 6
 /** The CertificateVerify input sits beside them: 98 bytes and the transcript hash. */
 const TLS_SECRET_TO_BE_SIGNED: i32 = 7
-const TLS_SECRET_COUNT: i32 = 8
+const TLS_SECRET_RESUMPTION: i32 = 8
+const TLS_SECRET_COUNT: i32 = 9
 /** What CertificateVerify signs besides the hash (RFC 8446 §4.4.3): 64 spaces, the 33-byte context and a zero. */
 const TLS_CERTIFICATE_VERIFY_PREFIX: i32 = 98
 
@@ -591,7 +595,8 @@ const tlsFlightCapacity = (config: TlsServerConfig): i32 => {
  *
  * The fields are readable: `state` and `alert`, the negotiated `suite`,
  * `serverName`, `alpn` and the client's `clientTransportParameters`, and the
- * traffic secrets. `readSecret` and `writeSecret` answer the last by level.
+ * traffic, exporter and resumption secrets. `readSecret` and `writeSecret`
+ * answer the traffic secrets by level.
  *
  * **What it allocates.** Everything it keeps is allocated by the constructor
  * and reused by `restart`: the input and output buffers, the transcript's
@@ -636,6 +641,13 @@ export class TlsServer {
   serverApplicationSecret: u8[]
   /** `exporter_master_secret` (RFC 8446 §7.5), for a caller's own exporters. */
   exporterSecret: u8[]
+  /**
+   * `resumption_master_secret` (RFC 8446 §7.1), known once the client's
+   * Finished is accepted: what a NewSessionTicket's PSK would be derived
+   * from. Nothing here issues tickets, so it is held for the caller and wiped
+   * by `fail` and `restart` (TLS-1).
+   */
+  resumptionSecret: u8[]
   /** The CertificateVerify input while `state` is `TLS_STATE_WAIT_SIGNATURE`. */
   toBeSigned: u8[]
   /** The client Finished's `verify_data`, known once the server's Finished is written. */
@@ -705,6 +717,7 @@ export class TlsServer {
     this.clientApplicationSecret = this.none
     this.serverApplicationSecret = this.none
     this.exporterSecret = this.none
+    this.resumptionSecret = this.none
     this.toBeSigned = this.none
     this.expectedClientFinished = this.none
     this.restart(serverRandom, ephemeralPrivate)
@@ -743,6 +756,7 @@ export class TlsServer {
     this.clientApplicationSecret = this.none
     this.serverApplicationSecret = this.none
     this.exporterSecret = this.none
+    this.resumptionSecret = this.none
     this.toBeSigned = this.none
     this.expectedClientFinished = this.none
     if (
@@ -755,8 +769,13 @@ export class TlsServer {
     }
   }
 
-  /** Fails the handshake with `alert` and answers it. */
+  /**
+   * Fails the handshake with `alert` and answers it, wiping the resumption
+   * master secret `sign` derived ahead of a client Finished that will now
+   * never be accepted.
+   */
   fail(alert: i32): i32 {
+    secureZero(this.secretArray(TLS_SECRET_RESUMPTION))
     this.state = TLS_STATE_FAILED
     this.alert = alert
     return alert
@@ -1339,6 +1358,24 @@ export class TlsServer {
       this.expectedClientFinished,
       TLS_FROM
     )
+    // The only client Finished `handleFinished` accepts is the one just
+    // computed, so the transcript through it is known now (RFC 8446 §4.6.1),
+    // and the resumption master secret is derived while the master secret
+    // is. It stays out of `resumptionSecret` until that Finished arrives;
+    // `fail` wipes it if it never does.
+    const finishedHeader: u8[] = [toU8(TLS_HANDSHAKE_FINISHED), toU8(0), toU8(0), toU8(h)]
+    this.transcript.update(finishedHeader, TLS_FROM, toI32(finishedHeader.length))
+    this.transcript.update(this.expectedClientFinished, TLS_FROM, h)
+    this.transcript.hashInto(this.hashes, TLS_FROM)
+    tlsDeriveSecretInto(
+      this.kdf,
+      h,
+      master,
+      "res master",
+      this.hashes,
+      TLS_FROM,
+      this.secretArray(TLS_SECRET_RESUMPTION)
+    )
     secureZero(master)
     this.toBeSigned = this.none
     this.state = TLS_STATE_WAIT_FINISHED
@@ -1349,7 +1386,10 @@ export class TlsServer {
    * The client's Finished (§4.4.4), `input[0 .. 4 + length)`: its
    * `verify_data` is HashLen bytes and must equal the HMAC the server
    * computed, compared in constant time. A wrong length is `decode_error`, a
-   * wrong value `decrypt_error`.
+   * wrong value `decrypt_error`. Once it verifies, the resumption master
+   * secret `sign` derived is the connection's, and `resumptionSecret` points
+   * at it. The transcript already holds this Finished: `sign` absorbed the
+   * one it expected, and these bytes are equal to it.
    */
   handleFinished(length: i32): i32 {
     if (length !== this.hashLength) {
@@ -1358,7 +1398,7 @@ export class TlsServer {
     if (!timingSafeEqualAt(this.input, 4, this.expectedClientFinished, TLS_FROM, this.hashLength)) {
       return TLS_ALERT_DECRYPT_ERROR
     }
-    this.transcript.update(this.input, TLS_FROM, 4 + length)
+    this.resumptionSecret = this.secretArray(TLS_SECRET_RESUMPTION)
     // The handshake secret has done its work: wiped, and no longer held.
     secureZero(this.handshakeSecret)
     this.handshakeSecret = this.none
