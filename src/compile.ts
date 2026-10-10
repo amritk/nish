@@ -1331,7 +1331,7 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const runtime = cachedRuntime(root, profile, debugInfo, threads, json)
+  const runtime = cachedRuntime(root, outputs, profile, debugInfo, threads, json)
   if (runtime === null) {
     return 3
   }
@@ -1423,6 +1423,7 @@ const pushRecipeFlags = (argv: string[], profile: string, debugInfo: boolean, th
  */
 const cachedRuntime = (
   root: string,
+  outputs: string[],
   profile: string,
   debugInfo: boolean,
   threads: boolean,
@@ -1471,7 +1472,10 @@ const cachedRuntime = (
   let entry = ""
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
-    reportToolchainFailure(`--link: ${script} failed compiling the runtime (${why})`, json)
+    reportToolchainFailure(
+      `--link: ${script} failed (${why}) compiling the runtime; the IR is in ${outputs.join(", ")}`,
+      json
+    )
   } else {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--"]
