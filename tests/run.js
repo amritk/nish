@@ -4937,19 +4937,29 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // `nish/crypto/hmac` and `nish/crypto/hkdf` wipe what their keys reach (#476),
 // and the wipes survive `-O2`. `crypto_hkdf_wycheproof` imports both modules,
 // whose every export is emitted, and the modules that define their symbols go
-// through `opt -O2`. Each function below must then still reach at least the
-// volatile wipes its source writes, counted along every call site it keeps (a
-// callee called twice counts twice), so the count does not depend on what was
-// inlined: a `wipe` is a volatile `llvm.memset` (`i1 true`) and a `secureZero`
-// a call to `nish_wipe`, while an ordinary `fill(0)` in their place is
-// neither, so a wipe deleted or weakened in the source fails here. An HMAC
-// constructor reaches 6: the long-key path's hasher (three arrays), the hashed
-// key and the key block, and the short path's key block. A `digest` reaches
-// 7: the inner digest and both hashers' three arrays. HKDF's `expand` reaches
-// 15: the T(i) wiped in the loop and the last one, plus the constructor's 6
-// and the digest's 7. The `Secret` HKDF reaches 29: the PRK, `extract`'s
-// one-shot HMAC (13) and `expand` (15). Each count was checked by deleting one
-// wipe of its kind and watching it drop.
+// through `opt -O2`. Each root below must then reach exactly the volatile
+// wipes counted here, along every call site it keeps (a callee called twice
+// counts twice): a `wipe` is a volatile `llvm.memset` (`i1 true`) and a
+// `secureZero` a call to `nish_wipe`, while an ordinary `fill(0)` in their
+// place is neither. The count is exact rather than a floor because `-O2` can
+// duplicate a wipe: `hkdfExtractInto` inlines `hkdfWipe` into both hash
+// branches, so it reaches 50 where its source writes 49, and a floor of 49
+// would let one deleted wipe through. A deleted or weakened wipe lowers a
+// count, and so does one the optimiser removes; a wipe added on purpose
+// raises one, and the count here is raised with it.
+//
+// The roots and their counts, as LLVM 18's `opt -O2` leaves them: an HMAC
+// constructor 6 (the long-key path's hasher, three arrays, its hash and the
+// key block; the short path's key block), `digest` 7 (the inner digest, both
+// hashers' three arrays), HKDF's `expand` 15 (T(i) in the loop and the last
+// one, the constructor's 6, the digest's 7), the `Secret` HKDF 29 (the PRK,
+// `extract`'s one-shot HMAC, 13, and `expand`). The scratch: `begin` 16 (on
+// the long-key path the key's digest, `keyBlocks` and the key hash; on the
+// short path `keyBlocks`, which wipes both hashers, six arrays, and the pad),
+// `finishInto` 2 (the inner digest, the tag's copy), `wipe` 6, `HkdfScratch`'s
+// `wipe` 13 (T(i) and both hashes' scratch), and the `*Into` functions 49 or
+// 50 (both hashes' `begin` and `finishInto`, and `hkdfWipe`). Each kind was
+// checked by deleting one wipe and watching its roots' counts drop.
 if (!only || "crypto_hmac crypto_hkdf: the wipes survive -O2".includes(only)) {
   if (!has("opt")) {
     skip("crypto_hmac crypto_hkdf: no opt to show the wipes survive -O2")
@@ -5006,19 +5016,29 @@ if (!only || "crypto_hmac crypto_hkdf: the wipes survive -O2".includes(only)) {
       ["nish.hkdfExpandSha384", 15],
       ["nish.hkdfSha256Secret", 29],
       ["nish.hkdfSha384Secret", 29],
+      ["nish.HmacSha256Scratch.begin", 16],
+      ["nish.HmacSha384Scratch.begin", 16],
+      ["nish.HmacSha256Scratch.finishInto", 2],
+      ["nish.HmacSha384Scratch.finishInto", 2],
+      ["nish.HmacSha256Scratch.wipe", 6],
+      ["nish.HmacSha384Scratch.wipe", 6],
+      ["nish.HkdfScratch.wipe", 13],
+      ["nish.hkdfExtractInto", 50],
+      ["nish.hkdfExpandInto", 49],
+      ["nish.hkdfExpandLabelInto", 49],
     ]
-    const short = expected
+    const wrong = expected
       .map(([symbol, want]) => [symbol, want, bodies.has(symbol) ? wipesUnder(symbol) : null])
-      .filter(([, want, got]) => got === null || got < want)
+      .filter(([, want, got]) => got !== want)
     check(
       "crypto_hmac crypto_hkdf: the wipes survive -O2 (HMAC's key blocks, hashed key, inner digest and hashers; HKDF's T(i) and PRK)",
-      failure === "" && short.length === 0,
+      failure === "" && wrong.length === 0,
       failure ||
-        short
+        wrong
           .map(([symbol, want, got]) =>
             got === null
               ? `${symbol}: not in the optimised modules`
-              : `${symbol}: ${got} volatile wipes, want ${want}`
+              : `${symbol}: ${got} volatile wipes, want exactly ${want}`
           )
           .join("\n")
     )
