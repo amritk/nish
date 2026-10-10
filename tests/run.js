@@ -4284,6 +4284,25 @@ if (!only) {
   )
 }
 
+// X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
+// `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
+// by the link loop above. This is the other half: `nish/crypto/x509` alone
+// still compiles for wasm32, which an import of the drawing module from
+// `x509.ts` would end.
+if (!only || "crypto_x509_random_wasm".includes(only)) {
+  const entry = path.join(linkDir, "crypto_x509_random_wasm", "x509-only.ts")
+  const outDir = path.join(buildDir, "x509-only-wasm") + path.sep
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const r = fs.existsSync(entry)
+    ? spawnSync(NISH, [entry, "--target", "wasm32", "-o", outDir], { cwd: root, encoding: "utf8" })
+    : null
+  check(
+    "crypto_x509_random_wasm: a wasm32 build importing nish/crypto/x509 alone compiles",
+    r !== null && r.status === 0,
+    r === null ? "no such fixture: tests/link/crypto_x509_random_wasm/x509-only.ts" : r.stderr
+  )
+}
+
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
 // exit code only, so the wording is pinned here, on stderr, the way
