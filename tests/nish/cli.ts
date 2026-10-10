@@ -1734,16 +1734,35 @@ const checkCacheRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
     t.contains(
       "CLI-7: and whose message says why",
       cliField(objects[0], "message"),
-      `refusing the cache root ${root}, which can be written by its group or by every user`
+      `refusing the cache root ${root}, which can be written by its group`
     );
   }
   chmodTo("707", root);
   const world = cli.run("sec_owner_world", [setting], ["run", script]);
   t.eqI32("CLI-7: a cache root every user can write is refused", world.status, 3);
+  t.contains("CLI-7: and says every user can write it", world.stderr, "which can be written by every user");
   t.eqBool("CLI-7: and the binary in it never ran either", contains(world.stdout, "cli-sec ran"), false);
   chmodTo("700", root);
   const again = cli.run("sec_owner_again", [setting], ["run", script]);
   t.eqI32("CLI-7: the same root made private again is a hit again", again.status, 7);
+
+  // The check is a `/bin/sh` and `/bin/ls` by absolute path, so a `PATH`
+  // holding an `ls` and an `sh` of someone else's neither runs them nor moves
+  // the answer: the hit still runs, and nothing on that `PATH` ran.
+  const stubs = `${abs}/sec-owner-stubs`;
+  const stubbed = `${abs}/sec-owner-stub-ran`;
+  removeTree(stubs);
+  removeTree(stubbed);
+  mkdirSync(stubs);
+  writeExecutable(`${stubs}/ls`, `#!/bin/sh\ntouch '${stubbed}'\necho 'drwx------ 2 0 0 0 Jan 1 00:00 x'\n`);
+  writeExecutable(`${stubs}/sh`, `#!/bin/sh\ntouch '${stubbed}'\nexit 0\n`);
+  const onStubs = cli.run("sec_owner_stubs", [setting, `PATH=${stubs}`], ["run", script]);
+  t.eqI32("CLI-7: a hit checks its root with no tool found on PATH", onStubs.status, 7);
+  t.eqBool("CLI-7: and runs no ls or sh found on PATH", readFileSyncOrNull(stubbed) !== null, false);
+  chmodTo("770", root);
+  const stubGroup = cli.run("sec_owner_stub_group", [setting, `PATH=${stubs}`], ["run", script]);
+  t.eqI32("CLI-7: and a PATH ls that says the root is private does not make it so", stubGroup.status, 3);
+  chmodTo("700", root);
 
   // A link to a directory this user owns is not a directory this user owns:
   // the path as written is the one to trust.
@@ -1764,7 +1783,7 @@ const checkCacheRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   spawnSyncTo(["chown", "65534", root], `${WORK}/chown.out`, `${WORK}/chown.err`);
   const other = cli.run("sec_owner_other", [setting], ["run", script]);
   t.eqI32("CLI-7: a cache root another user owns is refused", other.status, 3);
-  t.contains("CLI-7: and says who owns it", other.stderr, "is owned by uid 65534, not by this user (uid 0)");
+  t.contains("CLI-7: and says this user does not own it", other.stderr, "which is not owned by this user");
   t.eqBool("CLI-7: and the binary in it never ran, root or not", contains(other.stdout, "cli-sec ran"), false);
 };
 

@@ -416,13 +416,6 @@ export const main = (): number => {
     return 2
   }
   const opts = new Options()
-  // Where `nish/<module>` is resolved from, worked out once here because this
-  // is the only place `process.argv` is legal (`packageRoot`). A compiler with
-  // no package beside it is still handed a root, the one it would have had, so
-  // that `Compilation` does not fall back to the working directory and compile
-  // a `std/` the checkout it was run in supplied (docs/security/cli.md, CLI-2).
-  // The import then fails naming where the library should have been.
-  opts.packageRoot = libraryRoot()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
   // `nish run [flags] <file.ts> [args ...]`: the flags before the file are the
   // compiler's and everything after it is the program's, so a script is run by
@@ -819,16 +812,26 @@ export const main = (): number => {
     }
   }
 
-  // A package root this user may not trust is refused before anything is
-  // compiled, since `nish/<module>` would otherwise be read from it or, with
-  // it refused, from nowhere without a word (`packageRootRefused`).
-  if (packageRootRefused()) {
+  // Where `nish/<module>` is resolved from and `scripts/build.sh` is run
+  // from, worked out once here because this is the only place `process.argv`
+  // is legal, and only now that the command line is known to compile
+  // something, because the owner checks are processes (`findPackage`). A
+  // compiler with no package beside it is still handed a root, the one it
+  // would have had, so that `Compilation` does not fall back to the working
+  // directory and compile a `std/` the checkout it was run in supplied
+  // (docs/security/cli.md, CLI-2). The import then fails naming where the
+  // library should have been. A package this user may not trust is refused
+  // before anything is compiled, since `nish/<module>` would otherwise be read
+  // from it or, with it refused, from nowhere without a word.
+  const pkg = findPackage()
+  if (pkg.wasRefused()) {
     reportToolchainFailure(
-      `${runMode ? "run" : "compile"}: no package root this user may trust (${packageRootSearch()}); install the compiler where only you or root can write its package`,
+      `${runMode ? "run" : "compile"}: no package root this user may trust (${pkg.where()}); install the compiler where only you or root can write its package`,
       json
     )
     return 3
   }
+  opts.packageRoot = pkg.library
 
   // The exit-70 path on demand (`src/ice.ts`), at the point stage0 raised
   // its own: the command line is valid and nothing is compiled yet. It is the
@@ -963,6 +966,7 @@ export const main = (): number => {
   if (runMode) {
     return runProgram(
       emitted,
+      pkg,
       basenameWithout(roots[0], ".ts"),
       profile,
       opts.debugInfo,
@@ -1002,11 +1006,22 @@ export const main = (): number => {
   if (link.length === 0) {
     return 0
   }
-  return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json, false)
+  return linkProgram(outputs, pkg, link, profile, opts.debugInfo, opts.threads, json, false)
 }
 
 /** `:`, the byte `$PATH` is cut on. */
 const COLON: i32 = 58
+
+/**
+ * The script `programOnPath` hands `/bin/sh`: the 1-based position of the
+ * first operand that is executable and not a directory, as the exit status, or
+ * 0 for none. The paths are operands, never text in the script.
+ */
+const ON_PATH_SCRIPT: string =
+  'i=0; for p do i=$((i + 1)); if [ -x "$p" ] && [ ! -d "$p" ]; then exit "$i"; fi; done; exit 0'
+
+/** How many `$PATH` entries one probe asks about: an exit status holds 0 to 255. */
+const ON_PATH_MAX: i32 = 250
 
 /**
  * The file `argv[0]` names, when `argv[0]` names no directory — a command found
@@ -1015,11 +1030,18 @@ const COLON: i32 = 58
  *
  * The shell ran the first executable of that name on `$PATH`, so the first
  * entry holding an executable file of that name is the one that ran, and that
- * is the question `isExecutableSync` asks, as the shell asks it. A readable
- * file is not the same answer: a `nish` with no execute bit earlier on `$PATH`
- * was skipped by the shell, and taking its package would trust a directory
- * the compiler was not run from (docs/security/cli.md, CLI-9). A directory
- * answers `X_OK` too, and the shell skips it, so it is skipped here.
+ * is the question `test -x` asks, as the shell asks it. A readable file is not
+ * the same answer: a `nish` with no execute bit earlier on `$PATH` was skipped
+ * by the shell, and taking its package would trust a directory the compiler
+ * was not run from (docs/security/cli.md, CLI-9). A directory passes `-x` too,
+ * and the shell skips it, so it is skipped here.
+ *
+ * One `/bin/sh` answers for every entry (`ON_PATH_SCRIPT`), by absolute path
+ * so that no `$PATH` is trusted to find it. The language's
+ * `isExecutableSync` asks the same question in-process, but it is refused on a
+ * wasm32 build and `src/` is also the web compiler, which links to wasm32. A
+ * probe that cannot run answers nothing, so no package is taken: it fails
+ * closed.
  *
  * It answers the file rather than the root because the caller needs both
  * answers the file gives — the parent of its directory, and the parent of the
@@ -1035,68 +1057,94 @@ const programOnPath = (program: string): string => {
     return ""
   }
   const entries = splitByte(pathVar, COLON)
+  const probe: string[] = ["/bin/sh", "-c", ON_PATH_SCRIPT, "sh"]
+  const files: string[] = []
   let i = 0
-  while (i < entries.length) {
-    const entry = entries[i]
-    const dir = entry.length === 0 ? "." : entry
-    const candidate = `${dir}/${program}`
-    if (isExecutableSync(candidate) && !isDirectorySync(candidate)) {
-      return candidate
-    }
+  while (i < entries.length && i < ON_PATH_MAX) {
+    const dir = entries[i].length === 0 ? "." : entries[i]
+    files.push(`${dir}/${program}`)
+    probe.push(`${dir}/${program}`)
     i = i + 1
   }
-  return ""
+  const found = spawnSyncTo(probe, "/dev/null", "/dev/null")
+  return found >= 1 && found <= files.length ? files[found - 1] : ""
 }
 
-/** `S_IFMT` and `S_IFDIR`: the type bits of an `lstatOwnerModeSync` answer, and a directory's. */
-const MODE_TYPE: i64 = 0xf000
-const MODE_DIRECTORY: i64 = 0x4000
-
-/** Write permission for the group or for every user (`0o022`), and for every user (`0o002`). */
-const WRITABLE_BY_GROUP_OR_ALL: i64 = 0x12
-const WRITABLE_BY_ALL: i64 = 0x2
-
 /**
- * The low 32 bits, where a uid fits: the mask the owner half of an
- * `lstatOwnerModeSync` answer needs. A constant so the literal is an `i64` in
- * every number mode; written inline, a wasm32 build reads it as an `i32` it
- * does not fit.
+ * The script `distrustOf` hands `/bin/sh`, with the directory, `1` when root
+ * may own it, and `1` when its group may not write it as operands. One
+ * `/bin/ls -ldn` answers the type, the mode and the owner's uid without
+ * following a link, and the answer is its exit status (`DISTRUST_*`). Output
+ * that does not have the shape of a mode string and a numeric uid exits 4, as
+ * a failed `ls` does: a probe that cannot be read is no proof. `-O` is the
+ * shell's own test of the effective uid, so no `id` runs. `set -f` keeps a
+ * path's `*` from being expanded when the line is split.
  */
-const UID_MASK: i64 = 0xffffffff
+const DISTRUST_SCRIPT: string =
+  "set -f\n" +
+  "p=$1 r=$2 g=$3\n" +
+  '[ -e "$p" ] || [ -h "$p" ] || exit 3\n' +
+  'line=$(/bin/ls -ldn -- "$p") || exit 4\n' +
+  "set -- $line\n" +
+  "case $1 in [-dlbcps][-r][-w][-xsS][-r][-w][-xsS][-r][-w][-xtT]*) ;; *) exit 4 ;; esac\n" +
+  'case $3 in "" | *[!0-9]*) exit 4 ;; esac\n' +
+  "case $1 in d*) ;; *) exit 5 ;; esac\n" +
+  '[ -O "$p" ] || { [ "$r" = 1 ] && [ "$3" = 0 ]; } || exit 6\n' +
+  "case $1 in ????????w*) exit 8 ;; esac\n" +
+  'case $1 in ?????w*) if [ "$g" = 1 ]; then exit 7; fi ;; esac\n' +
+  "exit 0\n"
+
+/** The answers `DISTRUST_SCRIPT` exits with; any other status is a probe that failed. */
+const DISTRUST_ABSENT: i32 = 3
+const DISTRUST_NOT_DIRECTORY: i32 = 5
+const DISTRUST_OWNER: i32 = 6
+const DISTRUST_GROUP_WRITABLE: i32 = 7
+const DISTRUST_ALL_WRITABLE: i32 = 8
 
 /**
  * Why the compiler may not trust what `dir` holds, as the rest of a sentence
  * that starts with `dir`, or empty when it may, or when there is nothing at
  * `dir` at all, which only the caller can judge. A directory is trusted when
  * it is a directory rather than a link to one, this user owns it (or root does,
- * when `rootMayOwn`), and none of the `writable` bits is set: whoever else can
- * write it can put a file in it for this user to run (docs/security/cli.md,
- * CLI-7 and CLI-9).
+ * when `rootMayOwn`), and every user cannot write it, nor its group when
+ * `groupMayNotWrite`: whoever else can write it can put a file in it for this
+ * user to run (docs/security/cli.md, CLI-7 and CLI-9).
  *
- * One `lstat` answers all three, so they describe one directory however the
- * path changes in between. The owner is masked to 32 bits as the builtin's rule
- * says, and the absence is `-1` exactly, because a uid of 2^31 or more makes a
- * real answer negative.
+ * The question goes to a process, `/bin/sh` running `DISTRUST_SCRIPT`, rather
+ * than to the language's `lstatOwnerModeSync`: that builtin is refused on a
+ * wasm32 build, and `src/` is also the web compiler. Both tools are named by
+ * absolute path, so no `$PATH` is trusted, and `dir` reaches them as an
+ * operand, never as script text. **It fails closed**: a probe that cannot be
+ * started, that fails, or whose answer does not parse, refuses the directory,
+ * and says that it could not be checked.
  */
-const distrustOf = (dir: string, rootMayOwn: boolean, writable: i64): string => {
-  const ownerMode = lstatOwnerModeSync(dir)
-  if (ownerMode === -1) {
+const distrustOf = (dir: string, rootMayOwn: boolean, groupMayNotWrite: boolean): string => {
+  const probe: string[] = [
+    "/bin/sh",
+    "-c",
+    DISTRUST_SCRIPT,
+    "sh",
+    dir,
+    rootMayOwn ? "1" : "0",
+    groupMayNotWrite ? "1" : "0",
+  ]
+  const status = spawnSyncTo(probe, "/dev/null", "/dev/null")
+  if (status === 0 || status === DISTRUST_ABSENT) {
     return ""
   }
-  if ((ownerMode & MODE_TYPE) !== MODE_DIRECTORY) {
+  if (status === DISTRUST_NOT_DIRECTORY) {
     return "is not a directory (a symbolic link is not followed)"
   }
-  const owner = (ownerMode >> 32) & UID_MASK
-  const self = geteuid()
-  if (owner !== self && !(rootMayOwn && owner === 0)) {
-    return `is owned by uid ${owner}, not by this user (uid ${self})${rootMayOwn ? " or root" : ""}`
+  if (status === DISTRUST_OWNER) {
+    return rootMayOwn ? "is owned by neither this user nor root" : "is not owned by this user"
   }
-  if ((ownerMode & writable) !== 0) {
-    return writable === WRITABLE_BY_ALL
-      ? "can be written by every user"
-      : "can be written by its group or by every user"
+  if (status === DISTRUST_GROUP_WRITABLE) {
+    return "can be written by its group"
   }
-  return ""
+  if (status === DISTRUST_ALL_WRITABLE) {
+    return "can be written by every user"
+  }
+  return "could not be checked (the /bin/sh and /bin/ls probe of its owner and mode failed)"
 }
 
 /**
@@ -1147,29 +1195,21 @@ const distrustOf = (dir: string, rootMayOwn: boolean, writable: i64): string => 
  * script (docs/security/cli.md, CLI-2). A compiler inside the tree it is run
  * in is that tree's own, so the tree is no less trusted than the binary.
  *
- * **And every candidate has to be a directory nobody else can fill.** The
- * root is the parent of the compiler's directory, so a compiler kept at
- * `/tmp/x/nish` would trust `/tmp/scripts/build.sh`, which any user can
- * create (docs/security/cli.md, CLI-9). A candidate that is not owned by this
- * user or by root, or that every user can write, is no candidate, and its
- * name and why go into `refused` for the one diagnostic that says where the
- * compiler looked. A root its *group* can write is still one: whoever can
- * write the root can already replace the `bin/` that holds the compiler, so
- * refusing it would protect nothing, and it would refuse every checkout made
- * under the `0002` umask that user-private groups give.
+ * **And the root it settles on has to be a directory nobody else can fill**
+ * (`findPackage`, which asks).
  *
  * It lives in the driver rather than beside the path helpers because
  * `process.argv` is legal only in a program with an entry `main`, and every
  * `src/` module is compiled on its own by `tests/run.js`. Everything that
  * needs the root is handed it through `Options.packageRoot`.
  */
-const packageRootCandidates = (refused: string[]): string[] => {
+const packageRootCandidates = (): string[] => {
   const candidates: string[] = []
   const program = process.argv[0]
   const invoked = program.indexOf("/") < 0 ? programOnPath(program) : program
   if (invoked.length > 0) {
     const asInvoked = `${dirname(invoked)}/..`
-    considerRoot(asInvoked, candidates, refused)
+    candidates.push(asInvoked)
     // Only when it differs, so the ordinary install — a real path, no link in
     // it — keeps naming one directory in the diagnostic and keeps answering the
     // relative spelling it was invoked with.
@@ -1177,86 +1217,129 @@ const packageRootCandidates = (refused: string[]): string[] => {
     if (real !== null) {
       const throughLink = `${dirname(real)}/..`
       if (throughLink !== asInvoked) {
-        considerRoot(throughLink, candidates, refused)
+        candidates.push(throughLink)
       }
       const here = realpathSync(".")
       if (here !== null && real.startsWith(`${here}/`)) {
-        considerRoot(".", candidates, refused)
+        candidates.push(".")
       }
     }
   }
   return candidates
 }
 
-/** `dir` onto `candidates` when the compiler may trust it, and onto `refused`, with why, when not. */
-const considerRoot = (dir: string, candidates: string[], refused: string[]): void => {
-  const distrust = distrustOf(dir, true, WRITABLE_BY_ALL)
-  if (distrust.length > 0) {
-    refused.push(`${dir}, which ${distrust}`)
-  } else {
-    candidates.push(dir)
+/** Where the package is, worked out once per process by `findPackage`. */
+class PackageSearch {
+  /** The root `scripts/build.sh` is run from, or empty when there is none to trust. */
+  root: string
+  /** The root `nish/<module>` is read from: never empty, because `Compilation` reads an empty root as the working directory. */
+  library: string
+  /** Every candidate looked in and not refused. */
+  looked: string[]
+  /** Every candidate refused, each with why. */
+  refused: string[]
+
+  constructor() {
+    this.root = ""
+    this.library = "/"
+    this.looked = []
+    this.refused = []
+  }
+
+  /** Where it looked and what it refused: the parenthesis of a diagnostic that says no package root was found. */
+  where(): string {
+    const parts: string[] = []
+    if (this.looked.length > 0 || this.refused.length === 0) {
+      parts.push(`looked in ${this.looked.join(" and ")}`)
+    }
+    if (this.refused.length > 0) {
+      parts.push(`refused ${this.refused.join(" and ")}`)
+    }
+    return parts.join("; ")
+  }
+
+  /**
+   * Whether the package was refused rather than missing: no candidate it may
+   * trust holds it, and one was refused for its owner or mode. Every compile
+   * then stops with that reason, because `std/` comes from the same root as
+   * the script: without the refusal the library would resolve under `/`, and
+   * the only error would be a module that is not there, saying nothing about
+   * why (docs/security/cli.md, CLI-9).
+   */
+  wasRefused(): boolean {
+    return this.root.length === 0 && this.refused.length > 0
   }
 }
 
-/** The first of `candidates` with `scripts/build.sh` in it, or empty. */
-const packageRootIn = (candidates: string[]): string => {
+/**
+ * One candidate onto `search`: its root when it holds `scripts/build.sh` and
+ * the compiler may trust it, refused with why when it holds the script and may
+ * not be trusted, and looked in otherwise. Only a candidate holding the script
+ * is asked about, since the answer is a process.
+ */
+const considerRoot = (search: PackageSearch, dir: string): void => {
+  const hasScript = readFileSyncOrNull(`${dir}/scripts/build.sh`) !== null
+  const distrust = hasScript ? distrustOf(dir, true, false) : ""
+  if (distrust.length > 0) {
+    search.refused.push(`${dir}, which ${distrust}`)
+  } else if (hasScript) {
+    search.root = dir
+  } else {
+    search.looked.push(dir)
+  }
+}
+
+/**
+ * The package root and the library root, from `packageRootCandidates` in
+ * order: the first candidate with `scripts/build.sh` in it that the compiler
+ * may trust, or, with none, the root the compiler's own path implies, or `/`
+ * when it has none either.
+ *
+ * **Every root it settles on has to be a directory nobody else can fill.** The
+ * root is the parent of the compiler's directory, so a compiler kept at
+ * `/tmp/x/nish` would trust `/tmp/scripts/build.sh` and `/tmp/std/`, which any
+ * user can create (docs/security/cli.md, CLI-9). A root that is not owned by
+ * this user or by root, or that every user can write, is refused, and its name
+ * and why go into the diagnostic that says where the compiler looked. A root
+ * its *group* can write is still one: whoever can write the root can already
+ * replace the `bin/` that holds the compiler, so refusing it would protect
+ * nothing, and it would refuse every checkout made under the `0002` umask that
+ * user-private groups give.
+ *
+ * Only a root it would use is asked about, since each answer is a process
+ * (`distrustOf`): an ordinary compile asks once.
+ */
+const findPackage = (): PackageSearch => {
+  const search = new PackageSearch()
+  const candidates = packageRootCandidates()
   let i = 0
-  while (i < candidates.length) {
-    const root = candidates[i]
-    if (readFileSyncOrNull(`${root}/scripts/build.sh`) !== null) {
-      return root
-    }
+  while (i < candidates.length && search.root.length === 0) {
+    considerRoot(search, candidates[i])
     i = i + 1
   }
-  return ""
-}
-
-const packageRoot = (): string => packageRootIn(packageRootCandidates([]))
-
-/**
- * Where the package root was looked for, and every candidate refused with why:
- * the parenthesis of the diagnostics that say no package root was found.
- */
-const packageRootSearch = (): string => {
-  const refused: string[] = []
-  const looked = packageRootCandidates(refused)
-  const where: string[] = []
-  if (looked.length > 0 || refused.length === 0) {
-    where.push(`looked in ${looked.join(" and ")}`)
+  if (search.root.length > 0) {
+    search.library = search.root
+    return search
   }
-  if (refused.length > 0) {
-    where.push(`refused ${refused.join(" and ")}`)
+  // No package: the library root is the one the compiler's own path implies,
+  // asked about too, since a `std/` there is read as the library.
+  if (search.refused.length === 0 && candidates.length > 0) {
+    const distrust = distrustOf(candidates[0], true, false)
+    if (distrust.length > 0) {
+      // It was the first one looked in, and is now the one refused.
+      const rest: string[] = []
+      let j = 1
+      while (j < search.looked.length) {
+        rest.push(search.looked[j])
+        j = j + 1
+      }
+      search.looked = rest
+      search.refused.push(`${candidates[0]}, which ${distrust}`)
+    } else {
+      search.library = candidates[0]
+    }
   }
-  return where.join("; ")
-}
-
-/**
- * Whether the package was refused rather than missing: no candidate it may
- * trust holds `scripts/build.sh`, and at least one was refused for its owner
- * or mode (`considerRoot`). Every compile then stops with that reason, because
- * `std/` comes from the same root as the script: without the refusal the
- * library would resolve under `/`, and the only error would be a module that
- * is not there, saying nothing about why (docs/security/cli.md, CLI-9).
- */
-const packageRootRefused = (): boolean => {
-  const refused: string[] = []
-  const candidates = packageRootCandidates(refused)
-  return refused.length > 0 && packageRootIn(candidates).length === 0
-}
-
-/**
- * The root `nish/<module>` is read from: the package root when there is one,
- * and otherwise the root the compiler's own path implies, or `/` when it has
- * none either — never empty, because `Compilation` reads an empty root as the
- * working directory.
- */
-const libraryRoot = (): string => {
-  const candidates = packageRootCandidates([])
-  const root = packageRootIn(candidates)
-  if (root.length > 0) {
-    return root
-  }
-  return candidates.length > 0 ? candidates[0] : "/"
+  return search
 }
 
 /**
@@ -1277,6 +1360,7 @@ const libraryRoot = (): string => {
  */
 const runProgram = (
   emitted: EmittedModule[],
+  pkg: PackageSearch,
   name: string,
   profile: string,
   debugInfo: boolean,
@@ -1296,7 +1380,7 @@ const runProgram = (
     return 3
   }
   const file = runBinaryName(name)
-  const key = runCacheKey(emitted, file, packageRoot(), profile, debugInfo, threads, cCompiler())
+  const key = runCacheKey(emitted, file, pkg.root, profile, debugInfo, threads, cCompiler())
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
@@ -1304,6 +1388,7 @@ const runProgram = (
   if (stored === null || stored !== key) {
     const status = buildIntoCache(
       emitted,
+      pkg,
       cacheRoot,
       cacheEntry,
       keyFile,
@@ -1340,9 +1425,9 @@ const runProgram = (
  * CLI-7). CLI-4's `chmod 700` covers every root a miss makes, but a hit runs
  * no `chmod`, so a root another user made at this user's cache path — which
  * needs only a parent they can write — and filled with a key and a binary
- * would have its binary started. One `lstat` keeps the hit a read and a
- * spawn. A root that is not there yet is no answer, and the miss that makes it
- * asks again.
+ * would have its binary started. The question is one probe (`distrustOf`),
+ * so a hit is the probe, a read and a spawn of the binary. A root that is not
+ * there yet is no answer, and the miss that makes it asks again.
  *
  * Unlike the package root, root does not own this user's cache, and a root
  * its group can write is refused: a run never makes one, so it is a root from
@@ -1350,7 +1435,7 @@ const runProgram = (
  * not be this user's.
  */
 const refuseCacheRoot = (cacheRoot: string, json: boolean): boolean => {
-  const distrust = distrustOf(cacheRoot, false, WRITABLE_BY_GROUP_OR_ALL)
+  const distrust = distrustOf(cacheRoot, false, true)
   if (distrust.length === 0) {
     return false
   }
@@ -1388,6 +1473,7 @@ const refuseCacheRoot = (cacheRoot: string, json: boolean): boolean => {
  */
 const buildIntoCache = (
   emitted: EmittedModule[],
+  pkg: PackageSearch,
   cacheRoot: string,
   cacheEntry: string,
   keyFile: string,
@@ -1428,7 +1514,7 @@ const buildIntoCache = (
     outputs.push(file)
   }
   const built = `${work}/${name}`
-  let status = linkProgram(outputs, built, profile, debugInfo, threads, json, true)
+  let status = linkProgram(outputs, pkg, built, profile, debugInfo, threads, json, true)
   if (status === 0) {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
@@ -1458,6 +1544,7 @@ const buildIntoCache = (
  */
 const linkProgram = (
   outputs: string[],
+  pkg: PackageSearch,
   link: string,
   profile: string,
   debugInfo: boolean,
@@ -1465,10 +1552,10 @@ const linkProgram = (
   json: boolean,
   quiet: boolean
 ): number => {
-  const root = packageRoot()
+  const root = pkg.root
   if (root.length === 0) {
     reportToolchainFailure(
-      `--link: cannot find scripts/build.sh (${packageRootSearch()}); run the compiler from a checkout or an installed package`,
+      `--link: cannot find scripts/build.sh (${pkg.where()}); run the compiler from a checkout or an installed package`,
       json
     )
     return 3
