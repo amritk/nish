@@ -69,6 +69,7 @@ import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { reportUncheckedIndexSites } from "./unsafe-migrate"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
+import { arenaJson } from "./arena-report"
 import {
   allCapabilities,
   CAPABILITY_COUNT,
@@ -2176,6 +2177,12 @@ export class Compilation {
   panicsText(): string {
     const facts = this.analyze() // fills `analysisUnits` when nothing has yet
     return panicsJson(this.analysisUnits, facts)
+  }
+
+  /** The `--emit-arena` file: every allocation site and its placement (`arenaJson`). */
+  arenaText(): string {
+    const facts = this.analyze()
+    return arenaJson(this.analysisUnits, facts)
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
