@@ -6,9 +6,9 @@ built, S4 declined for now (tracking issue #516).** The owner took the
 decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
-was faster than S0 on `bench/json` beyond the noise, and none came near 1.5x,
-so `std/json` is unchanged (§2.3); whether
-to design S1b, the block classifier, is the owner's call (§7).
+was reliably faster than S0 on `bench/json`, and none came near 1.5x, so
+`std/json` is unchanged (§2.3); whether to design S1b, the block classifier,
+is the owner's call (§7).
 S2's `--cpu` flag is not built: S0's figures missed its bar, and a
 re-measurement against the noise met it (§7); building it is the owner's call.
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
@@ -247,8 +247,8 @@ the other two.
 #### S1: `std/json` on `indexOfAny`, the bar missed
 
 S1's bar was `bench/json` with `jsonFields` from 75.7 ms to about 50. No way
-of putting `indexOfAny` into `std/json` was faster than S0 beyond the noise,
-and none came near 1.5x, so `std/json` is unchanged. The scan has nothing for
+of putting `indexOfAny` into `std/json` was reliably faster than S0, and none
+came near 1.5x, so `std/json` is unchanged. The scan has nothing for
 a search to jump: inside `bench/json`'s nested values a quote, brace or
 bracket comes every 5 to 7 bytes, and the parts of the reader a byte search
 could reach are about 37% of its instructions.
@@ -317,13 +317,14 @@ slower):
 | C | +7.5% / +10.9% | +12.8% / +9.3% |
 | D | +12.5% / +12.3% | +15.3% / +12.7% |
 
-None of them is faster than S0 on `bench/json` beyond the noise, and none
-comes near the 33% that 1.5x means. Every figure of A, C and D is slower or
-inside the noise band: C's −0.2% median with `jsonField` ×3 in the second
-program is inside it. B's faster figures are inside it too: −2.8% at the
-minimum with `jsonFields`, and −3.5% at the minimum with `jsonField` ×3 in the
-second program, whose −7.6% median is 0.9 points outside it. In the harness's
-program the same change is 7.3% slower at the minimum and 5.0% at the median,
+Every figure of A, C and D is slower or inside the noise band: C's −0.2%
+median with `jsonField` ×3 in the second program is inside it. B's −2.8% at
+the minimum with `jsonFields` and −3.5% at the minimum with `jsonField` ×3 in
+the second program are inside it too. Only one figure leaves the band, B's
+−7.6% median with `jsonField` ×3 in the second program, by 0.9 points. It
+comes from S0's own median in that row, 94.2 ms against its copy's 87.9 in the
+same rounds. No variant is reliably faster, and none comes near the 33% that
+1.5x means. In the harness's program the same change is 7.3% slower at the minimum and 5.0% at the median,
 and in two runs of the harness's own report, not interleaved, 9.4% and 5.9%
 slower at the minimum. Its `indexOfAny` is never called on these lines, so
 what B changes is a real cost, the 8-byte window's 3% more instructions on
@@ -669,7 +670,7 @@ a printed checksum.
 | Stage | What | Ships only if |
 | --- | --- | --- |
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
-| **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was faster than S0 beyond the noise, none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
+| **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
