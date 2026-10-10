@@ -1776,6 +1776,39 @@ const checkCacheRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   t.contains("CLI-7: and says it is not a directory", throughLink.stderr, "is not a directory");
   t.eqBool("CLI-7: and the binary it leads to never ran", contains(throughLink.stdout, "cli-sec ran"), false);
 
+  // Another user's root, without root: with `<cache>/nish` a link to `/`,
+  // the root is `<cache>/nish/run`, which is `/run`, a directory root owns.
+  // `ls -ldn` looks at the last component only, so the root is a directory
+  // and the owner is what refuses it. Root owns `/run`, so as root this
+  // proves nothing and a miss would `chmod 700` it: skipped there, and where
+  // `/run` is not a directory root owns (macOS).
+  const runOwnerMode = lstatOwnerModeSync("/run");
+  const runIsRoots =
+    runOwnerMode !== -1 && (runOwnerMode & 0xf000) === 0x4000 && ((runOwnerMode >> 32) & 0xffffffff) === 0;
+  if (geteuid() === 0 || !runIsRoots) {
+    t.skip(
+      "CLI-7: a cache root root owns, as another user",
+      "needs a user other than root and a /run that is a directory root owns"
+    );
+  } else {
+    const foreign = `${abs}/sec-owner-foreign`;
+    removeTree(foreign);
+    mkdirSync(foreign);
+    spawnSyncTo(["ln", "-s", "/", `${foreign}/nish`], `${WORK}/ln.out`, `${WORK}/ln.err`);
+    const notMine = cli.run("sec_owner_foreign", [`XDG_CACHE_HOME=${foreign}`], ["run", "--json", script]);
+    t.eqI32("CLI-7: a cache root another user owns is refused, run by any user", notMine.status, 3);
+    const refusal = cliObjectLines(notMine.stdout);
+    if (t.eqI32("CLI-7: and --json carries one object for it", toI32(refusal.length), 1)) {
+      t.eqStr("CLI-7: whose code is NL0002 too", cliField(refusal[0], "code"), "NL0002");
+      t.contains(
+        "CLI-7: and whose message says this user does not own it",
+        cliField(refusal[0], "message"),
+        `refusing the cache root ${foreign}/nish/run, which is not owned by this user`
+      );
+    }
+    t.eqBool("CLI-7: and no binary ran", contains(notMine.stdout, "cli-sec ran"), false);
+  }
+
   if (geteuid() !== 0) {
     t.skip("CLI-7: a cache root another user owns", "only root can give a directory to another user");
     return;
