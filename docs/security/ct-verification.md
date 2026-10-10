@@ -80,8 +80,8 @@ a pass nobody earned, so the model is held to err towards refusing.
 | CT-9 | Low | `tests/ct-asm.js:832`, `:925` | aarch64 acquire and exclusive loads (`ldaxr`, `ldapr`) were not loads, so the register took its address's taint and a secret element came out public; atomics and exclusive stores (`ldadd`, `swp`, `cas`, `stxr`) were read as arithmetic. | Fixed: the plain ones are loads; any other memory instruction but a prefetch is `unmodelled`; corners. |
 | CT-10 | Low | `tests/ct-asm.js:835` | aarch64 `fccmpe` was not a compare: it was read as writing its first operand and left the flags clean, so a `csetm` after a secret float compare was public. | Fixed; corner. |
 | CT-11 | Low | `tests/ct-asm.js:142` | A `ct-check` whose `secret=contents` names a function with no array argument taints nothing and passes whatever the function does. | Fixed: refused as a spec problem, checked at load. |
-| CT-12 | Low | `tests/ct-timing.js:69`, `:291` | The timing harness had no positive control: every `expect=` function was left out, so a harness that timed nothing (a call the optimiser dropped, a timer that does not tick) would print "none above". | Fixed: the `expect=branch` functions are timed as the control and must differ, or the run fails with exit 2; a filtered run still times them. Measured: `naiveEqual` |t| = 162 at `--quick`, 1114–1301 at 300,000 samples. |
-| CT-13 | High if real; not reproduced | `tests/cases/ct_asm_x25519.ts:148` (`ladderStep`), `std/crypto/x25519.ts`, `tests/ct-timing.js` | `ladderStep` measured |t| = 35–42 at 300,000 samples, every run, on this machine when the driver held all seven x25519 functions — and 1.4–2.9 when it was linked alone or twice, on the same inputs and seeds, and `fieldSub` once read 11. The verdict followed the link layout of the driver, not only the function. It might have been a microarchitectural effect of out-of-domain inputs (the harness handed it unreduced 64-bit limbs and a 64-bit `swap`) that some layouts expose, or a harness artefact. | Closed, not reproduced (#378): 28 runs of `ladderStep` since (26 here, 2 on CI), in its domain and out of it, in the full driver and linked alone, on this fixture and on the one the reading was taken from, read |t| = 1.17–3.22, and its x86-64 machine code holds no branch, divide or other instruction whose time is known to depend on its operands ([the readings](#ct-13-the-readings)). `tests/ct-timing.js` now hands the x25519 fixture limbs as `f25519Carry` leaves them and a `swap` of 0 or 1 (`DOMAINS`), so that a difference it reports is one the module can produce; a branch on an in-domain limb still reads |t| > 1,000 under it. |
+| CT-12 | Low | `tests/ct-timing.js:73`, `:416` | The timing harness had no positive control: every `expect=` function was left out, so a harness that timed nothing (a call the optimiser dropped, a timer that does not tick) would print "none above". | Fixed: the `expect=branch` functions are timed as the control and must differ, or the run fails with exit 2; a filtered run still times them. Measured: `naiveEqual` |t| = 162 at `--quick`, 1114–1301 at 300,000 samples. |
+| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts:148` (`ladderStep`), `std/crypto/x25519.ts`, `tests/ct-timing.js` | `ladderStep` measured |t| = 35–42 at 300,000 samples, every run, on this machine when the driver held all seven x25519 functions — and 1.4–2.9 when it was linked alone or twice, on the same inputs and seeds, and `fieldSub` once read 11. The verdict followed the link layout of the driver, not only the function. It might have been a microarchitectural effect of out-of-domain inputs (the harness handed it unreduced 64-bit limbs and a 64-bit `swap`) that some layouts expose, or a harness artefact. | Open, not reproduced (#378). 34 runs of `ladderStep` on this VM since, in the module's domain and out of it, in the full driver and linked alone, and on the fixture the reading was taken from, read |t| = 1.46–3.22; the weekly CI run read 1.17 (x86-64) and 2.09 (aarch64). That does not establish that the 35–42 was an artefact: it was never re-run on the host that produced it, its cause is not measured, and only the x86-64 code was inventoried ([the readings](#ct-13-the-readings)). `tests/ct-timing.js` now times the fixture on the inputs the module gives each function, with controls of its own that fail the run if the narrowing erases a leak (`DOMAINS`). |
 | CT-14 | Low | `tests/run.js:3418` | The check's name says "refused for a conditional branch" for every `expect=` other than `load`, so the new `call` and `latency` seeds are named as branches in the output (the assertion itself is right). | Fixed after this stage: each check is named by the `promise` `ctSpecs` gives its spec in `tests/ct-asm.js`: the kind it expects, and the `via=` callee where there is one, both from the `EXPECT_KINDS` table `ctSpecs` also reads its kinds from, so a kind it accepts always has a name. |
 | CT-15 | Low | `tests/run.js:3376` | A clang without the aarch64 target turns that half of the check into counted skips; `npm test` then exits 0 with a "Note", not the DEGRADED banner, since every tool is present. CI's clang has both targets today, but nothing requires it. | Fixed after this stage: `ct_asm: clang targets <target>` is a check for each of the two targets, and fails with clang's answer when one is missing; the target's fixtures are not tried again. Shown with a `clang` that refuses `--target=aarch64*`: 9 skips and exit 0 before, one failure and exit 1 after. The wasm32 compile, which reads no branches, is still a counted skip. |
 | CT-16 | Low | `tests/run.js:3369` | The checker reads `clang -O2` for the baseline CPU only. A program built with another profile or `-march` is not what was read, and the ISA extensions behind CT-5 and CT-6 never reach it. | Open, documented here. |
@@ -121,61 +121,76 @@ timed on the inputs `std/crypto/x25519.ts` really gives it, in the full
 seven-function driver and linked alone. Every reading below is max |t| over
 the harness's tests at 300,000 samples a function, one run a seed, on an
 `Intel(R) Xeon(R) Processor @ 2.80GHz` (`/proc/cpuinfo`), a 4-vCPU shared
-cloud VM, with nothing else running.
+cloud VM, with nothing else running. "Signed domain" is the one the harness
+now holds the fixture to (below); "non-negative" is a first, narrower mask
+(limbs in `[0, 2^26)` or `[0, 2^25)`) that the review of #537 found
+under-stated the module's real inputs, and is kept here as a reading.
 
 | fixture and compiler | inputs | driver | `ladderStep` max \|t\| |
 | --- | --- | --- | --- |
-| this one, `build/nish` at 69e5fe8 | in domain | all seven | 1.66, 2.36, 2.33, 1.72 |
-| this one, `build/nish` at 69e5fe8 | in domain | `ladderStep` alone | 2.85, 1.74, 2.74, 1.99 |
+| this one, `build/nish` at 69e5fe8 | signed domain | all seven | 1.90, 1.77, 2.24, 1.47 |
+| this one, `build/nish` at 69e5fe8 | signed domain | `ladderStep` alone | 2.39, 2.12, 3.13, 2.52 |
+| this one, `build/nish` at 69e5fe8 | non-negative | all seven | 1.66, 2.36, 2.33, 1.72 |
+| this one, `build/nish` at 69e5fe8 | non-negative | `ladderStep` alone | 2.85, 1.74, 2.74, 1.99 |
 | this one, `build/nish` at 69e5fe8 | out of domain | all seven | 2.09, 1.99, 1.46, 2.46, 2.27, 2.33, 3.22 |
 | this one, `build/nish` at 69e5fe8 | out of domain | `ladderStep` alone | 2.18, 2.16, 1.56, 2.10 |
 | the one CT-13 was read on (0d362c59), the 0.16.0 seed | out of domain | all seven | 2.26, 2.14, 2.36 |
-| this one, with the domain, plus the two controls below | in domain | all seven and the controls | 2.07, 1.60 |
-| this one, without the domain, plus the two controls below | out of domain | all seven and the controls | 1.97, 2.31 |
+| this one, plus two leaks of the fixture's own (below) | non-negative | all seven and the leaks | 2.07, 1.60 |
+| this one, plus two leaks of the fixture's own (below) | out of domain | all seven and the leaks | 1.97, 2.31 |
 
 The weekly `ct-timing.yml` run of 2026-10-05 (9552a94, 1,000,000 samples,
 out of domain) is the second machine: 1.17 on an `INTEL(R) XEON(R) PLATINUM
-8573C` and 2.09 on the aarch64 runner. `fieldMul` and `fieldSub`, read in
-every local run, stayed at or below 3.67, and `fieldSub`'s 11 did not recur
-(1.15–2.73).
+8573C` and 2.09 on the aarch64 runner. In the signed-domain runs the other six
+functions read at most 3.74 (`fieldSub`, once), and `fieldSub`'s 11 did not
+recur in any run.
 
-So the gap is gone in every configuration, the out-of-domain one included,
-and it is gone on the fixture it was read on as well as on today's. The
-harness has not changed since #377. The fixture has: #426 rewrote its
-arithmetic in `u64`, which moves its code and the driver's layout. The 35–42
-was most likely the layout effect the row describes, on whatever host served
-that VM then. That is an explanation, not a measurement: it could not be
-reproduced to be confirmed. What closes the finding is what the readings and
-the code agree on. `clang -O2` compiles `ladderStep` and the field functions
-it calls to `mov`, `lea`, `add`, `sub`, `neg`, `and`, `xor`, `sar`, SSE moves,
-`paddq`, `psubq` and `imulq`, and calls to `condSwap` and `fieldMul`. None of
-those is documented as taking an operand-dependent time on current x86-64
-cores (64-bit `imul` included); there is no divide and no branch, which
-`tests/ct-asm.js` already pins on both targets. The aarch64 code was not
-inventoried here; the CI runner's 2.09 is its reading.
+**What this establishes.** On this VM and on the two CI runners, `ladderStep`
+does not differ between the classes, in its domain or out of it, in either
+link layout, on today's fixture or on the one CT-13 was read on. `clang -O2`
+compiles `ladderStep` and the field functions it calls, for x86-64, to `mov`,
+`lea`, `add`, `sub`, `neg`, `and`, `xor`, `sar`, SSE moves, `paddq`, `psubq`
+and `imulq`, and calls to `condSwap` and `fieldMul`: no divide and no branch,
+which `tests/ct-asm.js` already pins on both targets, and none of those is
+documented as taking an operand-dependent time on current x86-64 cores.
 
-The harness now holds the fixture to its domain. A reading on 64-bit limbs is
-about a function the module never runs: `f25519Carry` leaves every limb at 26
-bits (even) or 25 (odd), and the ladder's swap bit is 0 or 1. A difference
-there would send this record chasing values no caller can make, and a quiet
-one would not cover the module either. `DOMAINS` in `tests/ct-timing.js` names
-the fixture. `ct_field25519` in `tests/ct-timing/dudect.c` masks every secret
-limb after `ct_fill`, and the scalar mask keeps one bit of `swap` and `bit`.
-Both classes run the masking, so zero stays zero and the class is still only
-in `ct_fill`'s mask. A `DOMAINS` entry whose fixture is gone, that narrows
-nothing, or that meets an array other than `i64[]`, fails the run with exit 2
-rather than timing out-of-domain inputs in silence.
+**What it does not.** The 35–42 was never re-run on the host that produced
+it, so it is not shown to be an artefact. The harness has not changed since
+#377, but the fixture has (#426 rewrote its arithmetic in `u64`, which moves
+its code and the driver's layout), and a layout effect on that host is an
+explanation, not a measurement. The aarch64 code was not inventoried; the CI
+runner's 2.09 is its only reading. So CT-13 stays open at its severity, as an
+unconfirmed reading that has not reproduced.
 
-Two controls, added to the fixture for the measurement and not kept, show the
-narrowed harness still sees a leak and that the narrowing is applied. Each is
-`expect=branch`, so it must differ:
+**The harness's domain.** A reading on 64-bit limbs is about a function the
+module never runs, so `DOMAINS` in `tests/ct-timing.js` gives each function
+the fixture times the inputs the module gives it, from the bounds
+`std/crypto/x25519.ts` states: `f25519Mul` and `f25519MulA24` are handed the
+sum or difference of two reduced elements, signed and below 2^27 in magnitude
+(`fieldMul`, `fieldSquare`, `fieldMulA24`); the other functions are handed
+reduced elements, below 2^26 in magnitude, limb 1's final carry out of limb 0
+included (`f25519Carry`); and the swap bit is 0 or 1. `ct_signed_limbs` in
+`tests/ct-timing/dudect.c` makes each secret limb signed with a magnitude
+below the bound, after `ct_fill`, in both classes, so zero stays zero and the
+class is still only in `ct_fill`'s mask. The run fails with exit 2 when a
+fixture in `DOMAINS` is gone, when its entry names a function it does not
+time or misses one it does, and when an entry narrows a secret its function
+does not take or leaves one unnarrowed.
 
-- `limbLeak` returns at the first non-zero limb. Narrowed, it read |t| =
-  1,297 and 2,105 (seeds 201, 202). Unnarrowed, it read 1,383 and 656.
-- `highBitLeak` does 200 extra multiplies when bit 40 of limb 0 is set: a bit
-  no reduced limb has. Unnarrowed, it read 791 and 1,088. Narrowed, it read
-  1.77 and 0.98, and the run failed with exit 2 ("the control highBitLeak did
-  not differ").
+**The domain's own controls.** For each limb bound and scalar mask a domain
+uses, the driver also times a leak written in C (`ct_first_nonzero`, which
+stops at the first non-zero limb, and `ct_work_if`, which does extra work
+when the scalar is non-zero) on a buffer filled and narrowed by the same
+lines. Each must differ like any `expect=branch` function. In the signed-domain
+runs they read |t| = 4,934–25,611 (limbs) and 380–430 (scalar). With
+`ct_signed_limbs` changed to erase every limb, both limb controls read about
+1.7 and the run failed with exit 2.
+
+Two leaks added to the fixture for the first measurement, and not kept, read
+the same way through the first mask: `limbLeak`, which returns at the first
+non-zero limb, read |t| = 1,297 and 2,105 narrowed and 1,383 and 656 not;
+`highBitLeak`, which does 200 extra multiplies when bit 40 of limb 0 is set,
+read 791 and 1,088 unnarrowed and 1.77 and 0.98 narrowed, which failed the run
+with exit 2 as a control that did not differ.
 
 ## Checked arithmetic and the fixtures
 

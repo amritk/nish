@@ -27,7 +27,9 @@
  * more than any fixture indexes, and every one is reset before each
  * measurement, since some of the functions write their arguments. A fixture
  * whose module only ever passes narrower values than its types hold has them
- * narrowed to that domain, in both classes (`DOMAINS`).
+ * narrowed to that domain, in both classes (`DOMAINS`), and is timed with a
+ * control of its own: a leak written in C on inputs narrowed the same way,
+ * which must differ like any other.
  *
  *   node tests/ct-timing.js            the full run, SAMPLES measurements a function
  *   node tests/ct-timing.js --quick    a smoke run, QUICK_SAMPLES a function
@@ -74,15 +76,75 @@ const ELEMENTS = 256
 
 /**
  * The inputs a fixture's functions are ever given, where that is narrower than
- * their types. `array` is the `dudect.h` function that narrows every secret
- * `i64[]` argument after it is filled, and `scalar` masks every secret scalar.
- * Out of its domain a function runs on values its module never makes, and a
- * difference there says nothing about the module: CT-13 in
- * docs/security/ct-verification.md is the reading that taught this.
+ * their types, keyed by fixture and then by every function it times. `limbs`
+ * narrows each secret `i64[]` to signed limbs of magnitude below 2^limbs, and
+ * `scalar` masks each secret scalar other than a `boolean`. Out of its domain a
+ * function runs on values its module never makes, and a difference there says
+ * nothing about the module: CT-13 in docs/security/ct-verification.md is the
+ * reading that taught this.
  */
 const DOMAINS = {
-  // std/crypto/x25519.ts: limbs as `f25519Carry` leaves them, and a swap bit of 0 or 1.
-  "ct_asm_x25519.ts": { array: "ct_field25519", scalar: 1 },
+  "ct_asm_x25519.ts": {
+    // std/crypto/x25519.ts: `f25519Mul` and `f25519MulA24` are handed the sum or
+    // difference of two reduced elements, signed and below 2^27 (`f25519Add`, `f25519Sub`).
+    fieldMul: { limbs: 27 },
+    fieldSquare: { limbs: 27 },
+    fieldMulA24: { limbs: 27 },
+    // The rest are handed reduced elements, below 2^26 in magnitude (`f25519Carry`,
+    // limb 1's final carry included), and a swap bit of 0 or 1.
+    fieldAdd: { limbs: 26 },
+    fieldSub: { limbs: 26 },
+    condSwap: { limbs: 26, scalar: 1 },
+    ladderStep: { limbs: 26, scalar: 1 },
+  },
+}
+
+/** The `prepare` line that narrows a filled `i64[]` buffer to signed limbs below 2^bits. */
+const narrowLimbs = (buffer, bits) => `  ct_signed_limbs((int64_t *)${buffer}, ${ELEMENTS}, ${bits});`
+
+/**
+ * The C that times a domain's own controls: for each limb width and each scalar
+ * mask the domain uses, a buffer or scalar filled and narrowed by the same
+ * lines as the fixture's, handed to a leak in `dudect.c`. A narrowing that
+ * erased the secret (masked everything to zero, say) leaves both classes
+ * equal, so the control does not differ and the run fails.
+ */
+const domainControls = (domain, first) => {
+  const lines = []
+  const table = []
+  const names = []
+  const entries = Object.values(domain)
+  const widths = [...new Set(entries.map((e) => e.limbs).filter((b) => b !== undefined))]
+  const masks = [...new Set(entries.map((e) => e.scalar).filter((m) => m !== undefined))]
+  for (const [k, bits] of widths.entries()) {
+    const n = `k${first + k}`
+    lines.push(
+      `static _Alignas(16) unsigned char ${n}_d[${ELEMENTS * 8}];`,
+      `static void ${n}_prepare(int c) {`,
+      `  ct_fill(${n}_d, ${ELEMENTS * 8}, c);`,
+      narrowLimbs(`${n}_d`, bits),
+      "}",
+      `static void ${n}_call(void) { sink = (uint64_t)ct_first_nonzero((const int64_t *)${n}_d, ${ELEMENTS}); }`,
+      ""
+    )
+    names.push(`domain control: limbs below 2^${bits}`)
+    table.push(`  { "${names.at(-1)}", ${n}_prepare, ${n}_call },`)
+  }
+  for (const [k, mask] of masks.entries()) {
+    const n = `k${first + widths.length + k}`
+    lines.push(
+      `static int64_t ${n}_s;`,
+      `static void ${n}_prepare(int c) {`,
+      `  ct_fill(&${n}_s, sizeof ${n}_s, c);`,
+      `  ${n}_s &= ${mask};`,
+      "}",
+      `static void ${n}_call(void) { sink = ct_work_if(${n}_s); }`,
+      ""
+    )
+    names.push(`domain control: scalar & ${mask}`)
+    table.push(`  { "${names.at(-1)}", ${n}_prepare, ${n}_call },`)
+  }
+  return { lines, table, names }
 }
 
 /** The C type of each scalar a fixture may take, and each element's size in bytes. */
@@ -153,52 +215,73 @@ if (nish === null) {
  * The C file that calls one fixture's functions: for each, static buffers and
  * headers for its arrays, a `prepare` that fills its secrets for a class, and
  * a `call` that makes the call and keeps the answer where the optimiser cannot
- * drop it. Secrets are narrowed to `domain` when there is one. An `error`
- * when a signature has a type it cannot build or a domain cannot narrow.
+ * drop it. With a `domain`, each function's secrets are narrowed to its
+ * entry there, and the domain's controls are added (`domainControls`). An
+ * `error` when a signature has a type it cannot build, or a domain does not
+ * fit the functions it names.
  */
 const driverFor = (specs, domain) => {
   const lines = ["#include <stdbool.h>", '#include "dudect.h"', "", "static volatile uint64_t sink;", ""]
   const table = []
-  let narrowed = false
+  const untimed = Object.keys(domain ?? {}).find((fn) => !specs.some((spec) => spec.name === fn))
+  if (untimed !== undefined) {
+    return { error: `its domain names ${untimed}, which it does not time` }
+  }
   for (const [n, spec] of specs.entries()) {
     const params = []
     const fills = []
     const decls = []
+    const entry = domain?.[spec.name]
+    if (domain !== undefined && entry === undefined) {
+      return { error: `its domain has no entry for ${spec.name}` }
+    }
+    // Each narrowing an entry gives must meet a secret it narrows, or the entry says more than is timed.
+    let usedLimbs = false
+    let usedScalar = false
     for (const [i, type] of spec.types.entries()) {
       const secret = spec.secretArgs.includes(i)
       if (type.endsWith("[]")) {
         const element = C_TYPES[type.slice(0, -2)]
         if (element === undefined) {
-          return { error: `${spec.name}: an array of ${type.slice(0, -2)}` }
+          return { error: `cannot call ${spec.name}: an array of ${type.slice(0, -2)}` }
         }
         const bytes = ELEMENTS * element[1]
         decls.push(`static _Alignas(16) unsigned char f${n}_d${i}[${bytes}];`)
         decls.push(`static ct_array f${n}_a${i} = { ${ELEMENTS}, ${ELEMENTS}, f${n}_d${i} };`)
         const filled = secret || spec.contents
         fills.push(`  ct_fill(f${n}_d${i}, ${bytes}, ${filled ? "c" : "0"});`)
-        if (domain !== undefined && filled) {
-          if (type !== "i64[]") {
-            return { error: `${spec.name}: its domain narrows i64[], not ${type}` }
+        if (entry !== undefined && filled) {
+          if (type !== "i64[]" || entry.limbs === undefined) {
+            return { error: `the domain of ${spec.name} gives no limbs for its secret ${type}` }
           }
-          fills.push(`  ${domain.array}((int64_t *)f${n}_d${i}, ${ELEMENTS});`)
-          narrowed = true
+          fills.push(narrowLimbs(`f${n}_d${i}`, entry.limbs))
+          usedLimbs = true
         }
         params.push(["ct_array *", `&f${n}_a${i}`])
       } else {
         const scalar = C_TYPES[type]
         if (scalar === undefined) {
-          return { error: `${spec.name}: a parameter of type ${type}` }
+          return { error: `cannot call ${spec.name}: a parameter of type ${type}` }
         }
         decls.push(`static ${scalar[0]} f${n}_s${i};`)
         fills.push(`  ct_fill(&f${n}_s${i}, sizeof f${n}_s${i}, ${secret ? "c" : "0"});`)
         if (scalar[0] === "bool") {
           fills.push(`  f${n}_s${i} = (*(unsigned char *)&f${n}_s${i} & 1) != 0;`)
-        } else if (domain !== undefined && secret) {
-          fills.push(`  f${n}_s${i} &= ${domain.scalar};`)
-          narrowed = true
+        } else if (entry !== undefined && secret) {
+          if (entry.scalar === undefined) {
+            return { error: `the domain of ${spec.name} gives no mask for its secret ${type}` }
+          }
+          fills.push(`  f${n}_s${i} &= ${entry.scalar};`)
+          usedScalar = true
         }
         params.push([scalar[0], `f${n}_s${i}`])
       }
+    }
+    if (
+      entry !== undefined &&
+      ((entry.limbs !== undefined && !usedLimbs) || (entry.scalar !== undefined && !usedScalar))
+    ) {
+      return { error: `the domain of ${spec.name} narrows a secret it does not take` }
     }
     // A pointer answer (an array, a string, `T | null`) is one register like any other.
     const returns = spec.returns === "void" ? "void" : (C_TYPES[spec.returns]?.[0] ?? "void *")
@@ -212,12 +295,13 @@ const driverFor = (specs, domain) => {
     )
     table.push(`  { "${spec.name}", f${n}_prepare, f${n}_call },`)
   }
-  if (domain !== undefined && !narrowed) {
-    return { error: "nothing its domain narrows: no secret i64[] or scalar" }
-  }
+  const controls =
+    domain === undefined ? { lines: [], table: [], names: [] } : domainControls(domain, specs.length)
+  lines.push(...controls.lines)
+  table.push(...controls.table)
   lines.push("const ct_function ct_functions[] = {", ...table, "};")
-  lines.push(`const int ct_function_count = ${specs.length};`, "")
-  return { source: lines.join("\n") }
+  lines.push(`const int ct_function_count = ${table.length};`, "")
+  return { source: lines.join("\n"), controls: controls.names }
 }
 
 /** The `.args` of a case, as tests/run.js hands them to the compiler. */
@@ -270,7 +354,7 @@ for (const file of fixtures) {
   )
   const driver = driverFor(specs, DOMAINS[file])
   if (driver.error !== undefined) {
-    fail(`${name}: cannot call ${driver.error}`)
+    fail(`${name}: ${driver.error}`)
   }
   const driverC = path.join(workDir, `${name}.c`)
   fs.writeFileSync(driverC, driver.source)
@@ -298,7 +382,10 @@ for (const file of fixtures) {
   if (run.status !== 0) {
     fail(`${name} exited ${run.status}:\n${run.stderr}`)
   }
-  const controls = new Set(specs.filter((spec) => spec.expect !== null).map((spec) => spec.name))
+  const controls = new Set([
+    ...specs.filter((spec) => spec.expect !== null).map((spec) => spec.name),
+    ...driver.controls,
+  ])
   for (const line of run.stdout.trim().split("\n")) {
     const [fn, batch, max, test, used, raw] = line.split("\t")
     rows.push({ fixture: name, fn, batch, max: Number(max), test, used, raw, control: controls.has(fn) })

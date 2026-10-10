@@ -41,10 +41,18 @@ extern const int ct_function_count;
 void ct_fill(void *p, size_t bytes, int secret_class);
 
 /*
- * The `count` limbs at `limbs` narrowed to a reduced GF(2^255 - 19) element's, as
- * `std/crypto/x25519.ts` keeps them: 26 bits for an even limb, 25 for an odd
- * one. Called on both classes after `ct_fill`, so both run it; zero stays zero.
+ * The `count` limbs at `limbs` narrowed to signed values of magnitude below
+ * 2^bits: the low `bits` bits as the magnitude and the top bit as the sign.
+ * Called on both classes after `ct_fill`, so both run it; zero stays zero.
  */
-void ct_field25519(int64_t *limbs, size_t count);
+void ct_signed_limbs(int64_t *limbs, size_t count, int bits);
+
+/*
+ * The leaks a domain's controls time (tests/ct-timing.js, `domainControls`):
+ * the index of the first non-zero limb, which stops as soon as it finds one,
+ * and extra work exactly when `s` is non-zero.
+ */
+size_t ct_first_nonzero(const int64_t *limbs, size_t count);
+uint64_t ct_work_if(int64_t s);
 
 #endif
