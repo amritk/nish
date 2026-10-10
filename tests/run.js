@@ -13475,18 +13475,18 @@ if (!only || "runtime-cache".includes(only)) {
     const isTls = (o) => o.includes(".tbss") || o.includes("__thread_bss")
     const isDwarf = (o) => o.includes("debug_info")
     const isBitcode = (o) => o.startsWith("BC\xc0\xde") || o.startsWith("\xde\xc0\x17\x0b")
-    const plain = objectOf(afterFirst.length === 1 ? afterFirst[0] : "")
+    const debugObject = objectOf(afterFirst.length === 1 ? afterFirst[0] : "")
     check(
       "runtime cache: the debug entry's runtime.o is native code, with no thread-local arena and no DWARF",
-      plain.length > 0 && !isTls(plain) && !isDwarf(plain) && !isBitcode(plain),
-      `${plain.length} bytes`
+      debugObject.length > 0 && !isTls(debugObject) && !isDwarf(debugObject) && !isBitcode(debugObject),
+      `${debugObject.length} bytes`
     )
     const variants = [
       ["--threads", ["--profile", "debug", "--threads"], {}, (o) => isTls(o) && !isBitcode(o)],
       ["-g", ["--profile", "debug", "-g"], {}, (o) => isDwarf(o) && !isTls(o)],
       ["--profile speed", ["--profile", "speed"], {}, isBitcode],
       ["--profile size", ["--profile", "size"], {}, isBitcode],
-      ["a CC of another name", ["--profile", "debug"], { CC: "cc-log-too" }, (o) => o === plain],
+      ["a CC of another name", ["--profile", "debug"], { CC: "cc-log-too" }, (o) => o === debugObject],
     ]
     for (const [what, flags, env, objectIs] of variants) {
       const before = runtimeEntries()
