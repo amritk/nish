@@ -4580,40 +4580,41 @@ if (!only || "std_text_index_of_any".includes(only)) {
   // the non-ASCII edge's byte offsets, which the native build and this one both
   // count in UTF-8 bytes and Node in UTF-16 units, so it is held to its
   // expected.out here and natively, and never run under Node above.
-  for (const name of ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset"]) {
-    if (!WASI_SYSROOT || !has("wasm-ld")) {
-      skip(
-        `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
+  const wasiNames = ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset"]
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    for (const name of wasiNames) {
+      const wasiDir = path.join(buildDir, `wasi_${name}`)
+      const wasm = path.join(wasiDir, "app.wasm")
+      const built = spawnSync(
+        NISH,
+        [
+          path.join(linkDir, name, "main.ts"),
+          "-o",
+          `${wasiDir}${path.sep}`,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8" }
       )
-      continue
+      const host =
+        built.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+              cwd: root,
+              encoding: "utf8",
+            })
+          : built
+      const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
+      check(
+        `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+        built.status === 0 && host.status === 0 && host.stdout === want,
+        shown(host)
+      )
     }
-    const wasiDir = path.join(buildDir, `wasi_${name}`)
-    const wasm = path.join(wasiDir, "app.wasm")
-    const built = spawnSync(
-      NISH,
-      [
-        path.join(linkDir, name, "main.ts"),
-        "-o",
-        `${wasiDir}${path.sep}`,
-        "--link",
-        wasm,
-        "--profile",
-        "wasi",
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
-    const host =
-      built.status === 0
-        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
-            cwd: root,
-            encoding: "utf8",
-          })
-        : built
-    const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
-    check(
-      `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
-      built.status === 0 && host.status === 0 && host.stdout === want,
-      shown(host)
+  } else {
+    skip(
+      `skipped: link/${wasiNames.join(", link/")}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
     )
   }
   const rootText = path.join(buildDir, "std_text_root.ll")
