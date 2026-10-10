@@ -6,3 +6,4 @@ last: 800 31
 one: 15
 sixteen: 800 103
 non-ascii: ; -1 2
+bytes: 2 4 6 4 32 31 33 64

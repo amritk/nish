@@ -4529,10 +4529,13 @@ if (!only || "std_text_index_of_any".includes(only)) {
     }
     const run = runUnderPrelude(entry, [])
     const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
+    // The `bytes:` line is a byte offset: natively and under wasi it is held to
+    // expected.out, under Node it is a UTF-16 offset and is left out.
+    const dropBytes = (text) => text.replace(/^bytes: .*\n/gm, "")
     const code = Number(fs.readFileSync(path.join(linkDir, name, "expected.code"), "utf8").trim())
     check(
       `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints${message ? `, "${message}"` : ""}`,
-      run.status === code && run.stdout === want && run.stderr.includes(message),
+      run.status === code && dropBytes(run.stdout) === dropBytes(want) && run.stderr.includes(message),
       `--- native (expected.out)\n${want}--- node\n${shown(run)}`
     )
     const exe = path.join(buildDir, "link", name, "app")

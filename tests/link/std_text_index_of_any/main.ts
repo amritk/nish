@@ -18,25 +18,46 @@ const repeated = (fill: string, n: i32): string => {
 
 export const main = (): number => {
   // The empty text has no byte to find, from anywhere.
-  console.log(`empty: ${indexOfAny("", "a", 0)} ${indexOfAny("", "a", -1)} ${indexOfAny("", "a", 1)}`);
+  console.log(
+    `empty: ${indexOfAny("", "a", 0)} ${indexOfAny("", "a", -1)} ${indexOfAny("", "a", 1)}`,
+  );
   // `from` is clamped to [0, length]: below it searches from the start, past it finds nothing.
-  console.log(`from: ${indexOfAny("a,b,c", ",", -7)} ${indexOfAny("a,b,c", ",", 2)} ${indexOfAny("a,b,c", ",", 4)} ${indexOfAny("a,b,c", ",", 5)} ${indexOfAny("a,b,c", ",", 99)}`);
+  console.log(
+    `from: ${indexOfAny("a,b,c", ",", -7)} ${indexOfAny("a,b,c", ",", 2)} ${indexOfAny("a,b,c", ",", 4)} ${indexOfAny("a,b,c", ",", 5)} ${indexOfAny("a,b,c", ",", 99)}`,
+  );
   // The first byte of the set wins, whichever byte of the set it is.
-  console.log(`first: ${indexOfAny("key: \"value\"", "\":", 0)} ${indexOfAny("key: \"value\"", "\"", 0)}`);
+  console.log(
+    `first: ${indexOfAny('key: "value"', '":', 0)} ${indexOfAny('key: "value"', '"', 0)}`,
+  );
   // No byte of the set: -1, on a text long enough for the vector paths.
   const hay = repeated("abcdefgh", 100);
   console.log(`miss: ${indexOfAny(hay, "xyz", 0)}`);
   // The last byte, past every whole vector, and one before a 32-byte boundary.
-  console.log(`last: ${indexOfAny(`${hay}!`, "!?", 0)} ${indexOfAny(`${repeated("a", 31)}!${repeated("a", 40)}`, "!", 0)}`);
+  console.log(
+    `last: ${indexOfAny(`${hay}!`, "!?", 0)} ${indexOfAny(`${repeated("a", 31)}!${repeated("a", 40)}`, "!", 0)}`,
+  );
   // A 1-byte set and a 16-byte set, the two ends of what the kernel takes.
   console.log(`one: ${indexOfAny(hay, "h", 8)}`);
-  console.log(`sixteen: ${indexOfAny(`${hay}~`, "0123456789!#$%&~", 0)} ${indexOfAny(hay, "0123456789!#$%&h", 100)}`);
+  console.log(
+    `sixteen: ${indexOfAny(`${hay}~`, "0123456789!#$%&~", 0)} ${indexOfAny(hay, "0123456789!#$%&h", 100)}`,
+  );
   // An ASCII byte never occurs inside a multi-byte sequence, so non-ASCII text
   // passes through and only its ASCII bytes can match. Natively the answer is
   // a byte offset and under Node a UTF-16 one, so the line prints what was
   // found rather than where.
   const accented = "héllo wörld; ünïcödé, done";
   const semi = indexOfAny(accented, ";,", 0);
-  console.log(`non-ascii: ${accented.substring(semi, semi + 1)} ${indexOfAny(accented, "xq", 0)} ${indexOfAny("ab;cdé", ";", 0)}`);
+  console.log(
+    `non-ascii: ${accented.substring(semi, semi + 1)} ${indexOfAny(accented, "xq", 0)} ${indexOfAny("ab;cdé", ";", 0)}`,
+  );
+  // Where the match is, in bytes. Natively and under `--profile wasi` an index
+  // counts UTF-8 bytes; under Node it counts UTF-16 units, so `tests/run.js`
+  // drops this line from the Node comparison and holds the other two to it.
+  // Offsets by hand: é is 2 bytes, € 3, 日 and 本 3 each, 😀 4. Then the
+  // vector boundary inside non-ASCII text: 16 é is 32 bytes so the match is at
+  // 32, 15 é and an `a` put it at 31, 11 € make 33, 32 é make 64.
+  console.log(
+    `bytes: ${indexOfAny("é;", ";", 0)} ${indexOfAny("a€;", ";", 0)} ${indexOfAny("日本;", ";", 0)} ${indexOfAny("😀;", ";", 0)} ${indexOfAny(`${repeated("é", 16)};`, ";", 0)} ${indexOfAny(`${repeated("é", 15)}a;`, ";", 0)} ${indexOfAny(`${repeated("€", 11)};`, ";", 0)} ${indexOfAny(`${repeated("é", 32)};`, ";", 0)}`,
+  );
   return 0;
 };
