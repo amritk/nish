@@ -675,7 +675,7 @@ the call out of each structural byte. On §2.3's profile it can remove at most
 the scan's string windows, depth loop and blank skip, 51 M of the 138 M
 instructions, and it keeps a floor of its own. That floor is an estimate, not
 a measurement. A `bench/json` line is about 436 bytes, seven blocks to
-classify, and holds about 104 bytes from `"{}[]:,\\`, one every 4.2 bytes,
+classify, and holds about 104 bytes from `"{}[]:,\`, one every 4.2 bytes,
 those inside strings included. At about 20 instructions to classify a block
 and about 3 to walk each bit, that is about 440 instructions a line, about
 9 M per 20,000 lines. It leaves about 42 M against the 46 M that 1.5x needs,
