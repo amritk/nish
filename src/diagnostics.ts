@@ -520,6 +520,13 @@ export class DiagnosticSink {
     this.insertWarning(this.deprecations, new Diagnostic(source, start, end, DEPRECATION, text))
   }
 
+  /** `reportDeprecation` with a machine-applicable fix, on the terms `reportFix` states. */
+  reportDeprecationFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
+    const warning = new Diagnostic(source, start, end, DEPRECATION, text)
+    warning.edits = edits
+    this.insertWarning(this.deprecations, warning)
+  }
+
   /** `reportPortability` with a machine-applicable fix, on the terms `reportFix` states. */
   reportPortabilityFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
     const warning = new Diagnostic(source, start, end, PORTABILITY, text)

@@ -132,7 +132,20 @@ import {
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable, intBits } from "./types"
+import {
+  T_BOOL,
+  T_ERROR,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  T_U16,
+  T_U32,
+  T_U8,
+  T_VOID,
+  TypeTable,
+  intBits,
+} from "./types"
 
 export class Checker {
   ctx: CheckContext
@@ -1678,16 +1691,20 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
  * holds the access, which `src/bounds.ts` credits because its failing branch
  * ends in `panic`. `toI32(xs.length)` is the one spelling of the upper bound
  * that compiles and is credited in both number modes: under `--number-mode
- * f64` the length is an `f64` and `i < xs.length` does not compile.
+ * f64` the length is an `f64` and `i < xs.length` does not compile. A `u8`,
+ * `u16` or `u32` index is never negative and cannot be compared with an `i32`,
+ * so its guard is the upper end alone, `toU32(i) < toU32(xs.length)`, a `u32`
+ * compare the proof credits in both modes too.
  *
  * Applying it changes nothing on an index in range, and an index out of range
  * still stops the program with status 1, at a `panic` rather than at the
  * runtime's index error. That holds only when nothing the statement does
  * before the access can be skipped or reordered by the earlier test, so the
  * fix is offered only where `guardStatement` finds such a statement, the
- * index is an `i32` the guard's compare is typed for (an `i64` or unsigned one
- * has no credited spelling), and `panic` and `toI32` are the builtins. An
- * empty list means the warning goes out with no fix.
+ * index is one a guard's compare is typed for — an `i32`, a range over one, or
+ * a `u8`, `u16` or `u32` (an `i64` or a `u64` has no credited spelling) — and
+ * `panic` and the conversion the guard calls are the builtins. An empty list
+ * means the warning goes out with no fix.
  */
 const boundsGuardEdits = (
   walk: PerfWalk,
@@ -1699,10 +1716,12 @@ const boundsGuardEdits = (
   const ctx = walk.ctx
   const none: Edit[] = []
   const type = ctx.program.nodeTypes[index.id]
-  if (type !== T_I32 && !ctx.table.isRanged(type)) {
+  const unsigned = type === T_U8 || type === T_U16 || type === T_U32
+  if (type !== T_I32 && !ctx.table.isRanged(type) && !unsigned) {
     return none
   }
-  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, "toI32")) {
+  const convert = unsigned ? "toU32" : "toI32"
+  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, convert)) {
     return none
   }
   // A statement that declares the index or the receiver (`const j = i, v = xs[j]`)
@@ -1720,7 +1739,10 @@ const boundsGuardEdits = (
   }
   const ownLine = lineStart === 0 || text.charCodeAt(lineStart - 1) === 10
   const after = ownLine ? `\n${text.substring(lineStart, stmt.start)}` : " "
-  const guard = `if (!(${name} >= 0 && ${name} < toI32(${holder}.length))) { panic("index out of range") }`
+  const test = unsigned
+    ? `toU32(${name}) < toU32(${holder}.length)`
+    : `${name} >= 0 && ${name} < toI32(${holder}.length)`
+  const guard = `if (!(${test})) { panic("index out of range") }`
   const edits: Edit[] = [ctx.edit(stmt.start, stmt.start, guard + after)]
   return edits
 }

@@ -1,4 +1,6 @@
-// A u32 index: the guard's i32 compare does not type-check against it.
+// NL9007 on a u32 index: its type is the lower end, and an `i32` compare does
+// not type-check against it, so the fix inserts the upper end alone as a
+// `u32` compare, which the bounds analysis credits.
 const sumAt = (xs: i32[], idx: u32[]): i32 => {
   let total = 0
   for (const i of idx) {
