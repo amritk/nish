@@ -39,6 +39,7 @@ nish --fix program.ts             # apply every machine-applicable fix, then rep
 nish program.ts -o out.ll         # emit LLVM IR
 nish program.ts --link prog       # build a native binary (needs clang)
 nish run program.ts a b           # build into a cache, then run it with `a b`
+                                  # (the C runtime is cached too: ~/.cache/nish/runtime)
 nish --help                       # the full flag list, stdout, exit 0
 ```
 

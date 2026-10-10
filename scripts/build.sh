@@ -57,6 +57,20 @@
 # put in the .ll (line table, variables) reaches the binary. `nish
 # --link -g` passes it through automatically.
 #
+# The runtime compiled once (the debug, speed and size profiles only; `nish
+# --link` and `nish run` use these through their runtime cache, src/compile.ts):
+#   --runtime-objects <dir>  compile the runtime.c input and its five siblings,
+#                            one $CC -c each and all at once, into
+#                            <dir>/<unit>.o with the profile's compile flags,
+#                            and link nothing. speed and size store LTO bitcode,
+#                            so the link can still inline the runtime into the
+#                            program. No -o; prints nothing on success.
+#   --runtime-from <dir>     link against <dir>/<unit>.o in place of a
+#                            runtime.c input, after compiling every other input
+#                            with its own $CC -c, all at once. The link line is
+#                            the one the profile always uses.
+# Both refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.
+#
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
 set -euo pipefail
@@ -67,22 +81,36 @@ inputs=()
 pgo=()                                 # -fprofile-generate / -fprofile-use=<file>
 debug=0                                # -g: keep DWARF (nish -g emits it in the IR; runtime.c gets it here)
 threads=0                              # --threads: -DNISH_THREADS, the thread-local arena (WP20 T0)
+objects_to=""                          # --runtime-objects <dir>: compile the runtime alone, into <dir>
+objects_from=""                        # --runtime-from <dir>: link against the runtime compiled there
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
     -g) debug=1; shift ;;
     --threads) threads=1; shift ;;
+    --runtime-objects) objects_to="$2"; shift 2 ;;
+    --runtime-from) objects_from="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,75p' "$0"; exit 0 ;;
     *) inputs+=("$1"); shift ;;
   esac
 done
 [ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
-[ -n "$out" ] || { echo "error: -o <out> is required" >&2; exit 2; }
+if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
+  # A cached runtime is the profile's ordinary compile, so it exists only for
+  # the profiles that compile the runtime with nothing but these flags.
+  case "$profile" in
+    debug|speed|size) ;;
+    *) echo "error: --runtime-objects and --runtime-from take the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+  [ ${#pgo[@]} -eq 0 ] || { echo "error: --runtime-objects and --runtime-from do not take --pgo-*" >&2; exit 2; }
+  [ -z "$objects_to" ] || [ -z "$objects_from" ] || { echo "error: --runtime-objects and --runtime-from are two different builds" >&2; exit 2; }
+fi
+[ -n "$out" ] || [ -n "$objects_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
 # The runtime is six translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
@@ -98,10 +126,11 @@ done
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
+halves="runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c runtime-simd.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
-      for half in runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c runtime-simd.c; do
+      for half in $halves; do
         side="${i%runtime.c}$half"
         have=0
         for j in "${inputs[@]}"; do
@@ -183,6 +212,105 @@ if [ "$threads" = 1 ]; then
   tls=(-DNISH_THREADS=1 -ftls-model=initial-exec)
 fi
 
+# What the speed and size profiles compile every input with, beside `common`.
+# One list per profile, because the runtime cache below compiles with exactly
+# what the one-command link does, and two copies of a flag set drift.
+optimise=()
+case "$profile" in
+  speed)
+    optimise=(-O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
+      -ffunction-sections -fdata-sections -fomit-frame-pointer
+      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
+  size)
+    optimise=(-Oz -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
+      -ffunction-sections -fdata-sections -fomit-frame-pointer
+      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}
+      -fno-stack-protector -fvisibility=hidden) ;;
+esac
+
+# --runtime-objects and --runtime-from: the one-command link split in two, with
+# every compile it held run at once. A `$CC -c` takes `common` and `optimise`,
+# which is what the one command compiles each input with -- less
+# -fuse-ld=lld, which only names the linker -- so a runtime unit compiles to the
+# same object either way: native code for debug, -flto bitcode for speed and
+# size, which the link still optimises together with the program. The link
+# takes the same line the profile always uses, with objects for sources.
+if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
+  compile=()
+  for flag in "${common[@]}"; do
+    case "$flag" in -fuse-ld=*) ;; *) compile+=("$flag") ;; esac
+  done
+  compile+=(${optimise[@]+"${optimise[@]}"})
+  # Waits for every job, not just the last, and fails when any of them did.
+  # bash 3.2 has no `wait -n`, so the jobs are waited for in order.
+  pids=()
+  join_jobs() {
+    local failed=0 pid
+    for pid in ${pids[@]+"${pids[@]}"}; do
+      wait "$pid" || failed=1
+    done
+    pids=()
+    return "$failed"
+  }
+fi
+
+if [ -n "$objects_to" ]; then
+  runtime=""
+  for i in "${inputs[@]}"; do
+    case "$i" in
+      */runtime.c|runtime.c) runtime="$i" ;;
+      */runtime-*.c|runtime-*.c) ;;     # its siblings, added above
+      *) echo "error: --runtime-objects compiles the runtime alone, not $i" >&2; exit 2 ;;
+    esac
+  done
+  [ -n "$runtime" ] || { echo "error: --runtime-objects needs runtime/runtime.c" >&2; exit 2; }
+  mkdir -p -- "$objects_to"
+  objects_to=$(cd -- "$objects_to" && pwd)
+  # Each unit is compiled from inside its own directory, by its bare name, so
+  # an object holds no trace of where the compile was started: -g's DWARF names
+  # the file `runtime.c` in the runtime's own directory, whichever directory
+  # the first link that compiled it was run in.
+  runtime_dir=$(dirname -- "$runtime")
+  # A CC named by a relative path is named from here, not from there.
+  case "$CC" in /*) ;; */*) CC="$(pwd)/$CC" ;; esac
+  for unit in runtime.c $halves; do
+    (cd -- "$runtime_dir" && exec "$CC" "${compile[@]}" -c "$unit" -o "$objects_to/${unit%.c}.o") &
+    pids+=("$!")
+  done
+  join_jobs || { echo "error: the runtime did not compile" >&2; exit 1; }
+  exit 0
+fi
+
+if [ -n "$objects_from" ]; then
+  for unit in runtime.c $halves; do
+    [ -f "$objects_from/${unit%.c}.o" ] || { echo "error: --runtime-from: $objects_from/${unit%.c}.o is missing" >&2; exit 2; }
+  done
+  # The program's own objects are this link's alone, so they go in a private
+  # directory of its own and go with it.
+  work=$(mktemp -d "${TMPDIR:-/tmp}/nish-link.XXXXXX")
+  trap 'rm -rf -- "$work"' EXIT
+  objects=()
+  n=0
+  for i in "${inputs[@]}"; do
+    case "$i" in */runtime.c|runtime.c) echo "error: --runtime-from links the runtime in $objects_from, so $i is not an input" >&2; exit 2 ;; esac
+    n=$((n + 1))
+    "$CC" "${compile[@]}" -c "$i" -o "$work/$n.o" &
+    pids+=("$!")
+    objects+=("$work/$n.o")
+  done
+  join_jobs || { echo "error: a module did not compile" >&2; exit 1; }
+  # In the order the one-command link names them: the inputs, then runtime.c
+  # and its siblings.
+  for unit in runtime.c $halves; do
+    objects+=("$objects_from/${unit%.c}.o")
+  done
+  inputs=("${objects[@]}")
+  # clang runs dsymutil itself when one command compiles and links with -g on
+  # macOS; a link of objects does not, so it is run here, while the program's
+  # objects the debug map points at are still there.
+  if [ "$debug" = 1 ] && [ "$(uname -s)" = Darwin ]; then dsym=1; else dsym=0; fi
+fi
+
 # The ${arr[@]+"${arr[@]}"} spelling below is not a style tic: macOS ships bash
 # 3.2 (Apple will not ship GPLv3), where expanding an empty array as "${arr[@]}"
 # under `set -u` is a fatal "unbound variable" -- bash 4.4 made it legal, which is
@@ -191,16 +319,8 @@ fi
 case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
-  speed)
-    "$CC" "${common[@]}" -O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"} \
-      -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"} \
-      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
-  size)
-    "$CC" "${common[@]}" -Oz -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"} \
-      -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"} \
-      -fno-stack-protector -fvisibility=hidden \
+  speed|size)
+    "$CC" "${common[@]}" "${optimise[@]}" \
       "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   wasm)
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it
@@ -283,6 +403,8 @@ case "$profile" in
       "${shared[@]}" "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   *) echo "error: unknown profile '$profile'" >&2; exit 2 ;;
 esac
+
+if [ "${dsym:-0}" = 1 ]; then "$("$CC" -print-prog-name=dsymutil)" "$out"; fi
 
 # `wc -c` pads with spaces on macOS; strip them so the number is clean.
 printf '%s: %s bytes (%s)\n' "$out" "$(wc -c < "$out" | tr -d ' ')" "$profile"

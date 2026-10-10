@@ -151,7 +151,11 @@ compiler the `nish` command hands over to), **70** internal compiler error — a
 bug in `nish`, not in the input. All three of 3's causes are one `NL0002`
 object under `--json`; the `message` is what tells them apart. `nish run
 <file.ts> [args ...]` uses the same bands up to the moment the program starts,
-and answers the program's own exit status after that.
+and answers the program's own exit status after that. It keeps each program's
+binary in `$XDG_CACHE_HOME/nish/run` (or `~/.cache/nish/run`), and it and
+`--link` keep the compiled C runtime beside that in `nish/runtime`, one entry
+per profile, `-g`, `--threads` and C compiler
+([docs/security/cli.md](./docs/security/cli.md), CLI-11).
 
 ## Trusting a test run
 

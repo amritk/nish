@@ -147,3 +147,26 @@ this is what is true now.
   `build/selfhost/stage` still finds the checkout only through the narrowed
   `.` fallback. Building that stage one level below the checkout's root, or
   passing the root explicitly, would let the fallback go entirely. (Done in #386 phase 1: see "Status after the owner builtins".)
+
+## The runtime cache (CLI-11)
+
+Added with the runtime cache, against `main` at `8bd77b5`; its anchors are
+function names in the commit that adds this section rather than line numbers.
+`--link` and every `nish run` link with the debug, speed or size profile used to
+compile the runtime's six translation units on every link. They are now
+compiled once per recipe into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the
+key>/` (`runtimeCacheRoot`, `runtimeCacheKey` and `runtimeUnits` in
+`src/run-cache.ts`; `cachedRuntime` in `src/compile.ts`; the
+`--runtime-objects` and `--runtime-from` modes of `scripts/build.sh`), and every
+later link of any program links those objects into its binary.
+
+| Id | Severity | Where | Description | Disposition |
+| --- | --- | --- | --- | --- |
+| CLI-11 | Medium (by design, as a new surface) | `src/compile.ts` `cachedRuntime`; `src/run-cache.ts` `runtimeCacheRoot`, `runtimeCacheKey` | Cached code is linked into every binary the victim builds, so the entry is a place to plant code that runs as them in every program, and a stale entry is a wrong runtime in every program. The threats are CLI-3's, CLI-4's, CLI-5's and CLI-8's, now against objects rather than one binary: a root another user or a checkout can write, an entry another recipe filled, a partial entry, a race between two links. | **Mitigated as the run cache is.** The root is `runCacheRoot`'s sibling and follows its rules: absolute `XDG_CACHE_HOME` or `HOME` only, never relative and never `/tmp`; with none, `--link` compiles the runtime itself rather than refusing a link that works without the cache. The root is made and `chmod 700`'d on **every** link before anything is written in it (a hit reads only, but the key needs `$CC --version`, captured through a file in the root), and a root that cannot be made private is not used. The key holds the compiler's name and version, the profile, `-g`, `--threads`, `CC`, what `$CC --version` prints (the LLVM version LTO bitcode is tied to, and the target), the runtime's real directory (which `-g` writes into the objects), and the SHA-256 of `scripts/build.sh`, all six runtime files and `nish.h`; the entry is named by the SHA-256 of the key and a hit is the stored key equal to this one byte for byte. A miss compiles into a scratch directory inside the entry, empties the entry's key, moves the six objects in with one `mv` (a `rename` each, inside the entry), and writes the key last, so a key on disk always stands beside six whole objects of its recipe; an object is never deleted, only replaced whole, so two concurrent misses both succeed. `build.sh` links exactly the six objects by name, never a glob, so a file planted beside them is never read. Tests (`tests/run.js`, "runtime cache:"): "a miss creates one entry, named by 64 hex digits, holding the six objects and the key and nothing else", "the root is private to its owner (0700)", "an entry with no key and a missing object is compiled again, and the link runs", "an entry whose key is not this recipe's is compiled again, and its planted object is never linked", "two links on a cold cache at once both succeed, and both binaries run", "a relative XDG_CACHE_HOME is ignored, and the entry goes under $HOME/.cache/nish/runtime", "with neither HOME nor XDG_CACHE_HOME, --link compiles the runtime itself and links", and one "is an entry of its own" check each for `--threads`, `-g`, speed, size, another `CC` and an edited `runtime.c`. |
+
+Unlike the run cache, CLI-7's gap does not reach this one: the root is
+`chmod 700`'d on every link, hits included, and `chmod` fails on a directory
+another user owns, so a root someone else created at the victim's cache path
+is never read. The `chmod` follows a symbolic link, so a link at the root's
+path is used only when it names a directory the victim owns. The objects are
+linked, never executed by the compiler.
