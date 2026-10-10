@@ -3,7 +3,7 @@
  * `nish/crypto/x509`'s `x509MintSelfSigned` needs, drawn from the operating
  * system's CSPRNG, and the mint that draws its own serial.
  *
- *     import { wipe } from "nish:secret";
+ *     import { Secret, wipe } from "nish:secret";
  *     import { x509DrawP256Key, x509MintSelfSignedDrawn } from "nish/crypto/x509-random";
  *
  *     const priv: Secret<u8[]> = x509DrawP256Key();
@@ -17,10 +17,6 @@
  * takes the key and the serial as arguments and imports nothing from here, so
  * a wasm32 program can still parse, verify and mint with bytes it was handed
  * (X509-6, docs/security/crypto-x509.md).
- *
- * Private names carry the `x509Random` prefix because a `std/` module's
- * private functions share the importing program's flat symbol namespace
- * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, secret, wipe } from "nish:secret"
 import { P256_SCALAR_SIZE, p256PublicKey } from "nish/crypto/p256"
