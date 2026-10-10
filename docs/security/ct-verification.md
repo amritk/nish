@@ -144,14 +144,15 @@ out of domain) is the second machine: 1.17 on an `INTEL(R) XEON(R) PLATINUM
 functions read at most 3.74 (`fieldSub`, once), and `fieldSub`'s 11 did not
 recur in any run.
 
-**What this establishes.** On this VM, `ladderStep` does not differ between
-the classes, in its domain or out of it, in either link layout, on today's
-fixture or on the one CT-13 was read on. On the two CI runners it did not
-differ in the one reading each has: out of domain, in the full driver, on
-today's fixture. `clang -O2`
-compiles `ladderStep` and the field functions it calls, for x86-64, to `mov`,
-`lea`, `add`, `sub`, `neg`, `and`, `xor`, `sar`, SSE moves, `paddq`, `psubq`
-and `imulq`, and calls to `condSwap` and `fieldMul`: no divide and no branch,
+**What this establishes.** On this VM, on today's fixture, `ladderStep` does
+not differ between the classes, in its domain or out of it, in either link
+layout. On the fixture CT-13 was read on, it did not differ in the one
+configuration measured there: out of domain, in the full driver. On the two
+CI runners it did not differ in the one reading each has: out of domain, in
+the full driver, on today's fixture. `clang -O2` compiles `ladderStep` and
+the field functions it calls, for x86-64, to `mov`, `lea`, `add`, `sub`,
+`neg`, `and`, `xor`, `sar`, SSE moves, `paddq`, `psubq` and `imulq`, and
+calls to `condSwap` and `fieldMul`: no divide and no branch,
 which `tests/ct-asm.js` already pins on both targets, and none of those is
 documented as taking an operand-dependent time on current x86-64 cores.
 

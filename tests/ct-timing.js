@@ -414,6 +414,11 @@ for (const file of fixtures) {
       domainControl,
     })
   }
+  // A control that printed no row was never timed, and would otherwise pass unseen.
+  const silent = driver.controls.filter((fn) => !rows.some((r) => r.fixture === name && r.fn === fn))
+  if (silent.length > 0) {
+    fail(`${name}: ${silent.join(", ")} printed no reading`)
+  }
 }
 
 console.log(
