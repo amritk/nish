@@ -171,6 +171,9 @@ export const rfc8448ClientFinishedKey = (): u8[] => fromHex("b80ad01015fb2f0bd65
 /** The client's Finished. */
 export const rfc8448ClientFinished = (): u8[] => fromHex("14000020a8ec436d677634ae525ac1fcebe11a039ec17694fac6e98527b642f2edd5ce61");
 
+/** resumption_master_secret: Derive-Secret(master, "res master", ClientHello..client Finished). */
+export const rfc8448ResumptionSecret = (): u8[] => fromHex("7df235f2031d2a051287d02b0241b0bfdaf86cc856231f2d5aba46c434ec196c");
+
 /** EncryptedExtensions' supported_groups and record_size_limit, which the server does not write itself, handed to it as `extraExtensions`. */
 export const rfc8448ExtraExtensions = (): u8[] => fromHex("000a00140012001d00170018001901000101010201030104001c00024001");
 
