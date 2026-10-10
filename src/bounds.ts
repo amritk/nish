@@ -1218,6 +1218,44 @@ const lengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
 }
 
 /**
+ * The `u8`, `u16` or `u32` local `expr` reads, alone or through `toU32`: the
+ * index side of the unsigned guard `toU32(i) < toU32(w.length)`, whose
+ * compare is a `u32` one. `toU32` widens a `u8` or `u16` with `zext` and is
+ * the identity on a `u32`, so the compared value is the index's own. A `u64`
+ * is not one: `toU32` keeps its low 32 bits, which may be below the length
+ * while the index is not.
+ */
+const unsignedIndexOf = (ctx: CheckContext, expr: Node): Local | null => {
+  let e = unwrapBoundsParens(expr)
+  if (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toU32")) {
+    e = e.children[1].children[0]
+  }
+  const v = localOf(ctx.program, e)
+  if (v === null || (v.type !== T_U8 && v.type !== T_U16 && v.type !== T_U32)) {
+    return null
+  }
+  return v
+}
+
+/**
+ * `toU32(w.length)`: the length side of the unsigned guard, and the one
+ * spelling of a length an unsigned index compares with in both number modes.
+ * A length is a non-negative `i32` in i32 mode, which `toU32` keeps as it is,
+ * and an `f64` under `--number-mode f64`, which it lowers with the saturating
+ * `llvm.fptoui.sat`: never past the length, so `i < toU32(w.length)` is
+ * `i < w.length` or stronger. It is accepted in the guard alone, not where
+ * `lengthOf` is, because a fact stated about a `u32` copy of a length would
+ * meet unsigned arithmetic that wraps at zero (`toU32(w.length) - 1`).
+ */
+const unsignedLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== N_CALL || !isBuiltinConversion(walk.ctx.program, e, "toU32")) {
+    return null
+  }
+  return lengthOf(walk, e.children[1].children[0])
+}
+
+/**
  * The non-negative integer a literal denotes, or -1. Written as decimal digits
  * only: `0x10` and `1_0` are normalised differently by the two front ends, and
  * a bound that only one compiler folds is a bound that makes the two disagree
@@ -1446,6 +1484,13 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   // `i < w.length`: the fact the whole analysis is built around.
   if (loVar !== null && hiLength !== null && strict) {
     out.push(new Fact(FACT_BELOW, loVar, hiLength, 0))
+  }
+  // `toU32(i) < toU32(w.length)`: the same fact, for the unsigned index that
+  // cannot be compared with the `i32` length as it is.
+  const unsignedVar = unsignedIndexOf(ctx, lo)
+  const unsignedLength = unsignedLengthOf(walk, hi)
+  if (unsignedVar !== null && unsignedLength !== null && strict) {
+    out.push(new Fact(FACT_BELOW, unsignedVar, unsignedLength, 0))
   }
   // `i < n` / `i <= n`.
   if (loVar !== null && hiConst >= 0) {
@@ -1940,6 +1985,13 @@ export class BoundsWalk {
   loops: i32
   uncheckedIndexing: boolean
   /**
+   * The second walk of a body under `--unchecked-indexing` (`proveUnflagged`):
+   * it records what an access passes, as the walk without the flag does, but
+   * only where the migration leaves the access checked, and keeps nothing but
+   * its element-access proofs.
+   */
+  shadow: boolean
+  /**
    * Whether a proof is written to the side tables. `src/ranges.ts` walks a
    * body while its entry facts are still being settled, and a proof drawn from
    * an entry fact that has not settled may not be kept.
@@ -2030,6 +2082,7 @@ export class BoundsWalk {
     this.breaks = []
     this.loops = 0
     this.uncheckedIndexing = uncheckedIndexing
+    this.shadow = false
     this.tables = null
     this.record = true
     this.proved = []
@@ -2084,10 +2137,35 @@ const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
  * fact". `charCodeAt` is a load. The builtin `toI32` is a cast or one
  * `llvm.fptosi.sat`, and without it `const m: i32 = toI32(ys.length)` would
  * drop the fact `const n: i32 = toI32(xs.length)` recorded one line above.
+ * `uncheckedGet` and `uncheckedSet` are the load and the store `xs[i]` and
+ * `xs[i] = v` are, less the check (`isUncheckedElementCall`), and without them
+ * the rewrite of one access in `a[at[0]] + b[at[1]]` would un-prove the other.
  * The walk and the loop-effect scan both ask this, so they cannot disagree.
  */
 export const callsNothing = (ctx: CheckContext, call: Node): boolean =>
-  isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call)
+  isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call) || isUncheckedElementCall(ctx.program, call)
+
+/**
+ * `uncheckedGet(xs, i)` or `uncheckedSet(xs, i, v)` from `nish:unsafe`, by the
+ * name it was imported as: `isUncheckedAccess` in `src/emit-util.ts`, spelled
+ * again here rather than imported, as `isBoundsAssignment` is. Neither moves a
+ * length or a local, and `uncheckedSet` stores only a number (`src/builtins.ts`),
+ * which no fact here describes, so neither changes the state. Neither has a
+ * check to have passed, either, so neither records one (`recordPassedCheck`).
+ */
+const isUncheckedElementCall = (program: CheckedProgram, call: Node): boolean => {
+  const callee = call.children[0]
+  if (
+    callee.kind !== N_IDENT ||
+    program.nodeCallees[call.id] !== null ||
+    call.children[1].children.length === 0
+  ) {
+    return false
+  }
+  const imported = program.nodeBuiltins[call.id]
+  const name = imported.length > 0 ? imported : callee.text
+  return name === "uncheckedGet" || name === "uncheckedSet"
+}
 
 /**
  * What an access leaves behind on the path that continues past it: its check
@@ -2101,14 +2179,20 @@ export const callsNothing = (ctx: CheckContext, call: Node): boolean =>
  * Under `--unchecked-indexing` there is no check to have passed at all, so
  * nothing is recorded: an out-of-range access there proves nothing, and a
  * fact drawn from one would fold a later `substring` clamp, which that flag
- * leaves alone.
+ * leaves alone. The shadow walk records it anyway, for the accesses that keep
+ * their check once the flag is gone, because that is what the build without
+ * the flag will know there; its facts reach no side table but the one it is
+ * asked about (`proveUnflagged`).
  *
  * `passes` is the caller's word that the check reads the array the holder
  * still names once the access is over. Only `a[i] = v` can break that, and the
  * caller says how.
  */
-const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index: Node): void => {
-  if (walk.uncheckedIndexing) {
+const recordPassedCheck = (walk: BoundsWalk, state: State, node: Node, holder: Local, index: Node): void => {
+  if (
+    walk.uncheckedIndexing ||
+    (walk.shadow && node.kind === N_INDEX && hasUncheckedForm(walk.ctx.program, walk.ctx.table, node))
+  ) {
     return
   }
   const constant = literalValue(index)
@@ -2151,7 +2235,7 @@ const judge = (
   }
   const proven = proves(ctx, state, holder, index)
   if (passes) {
-    recordPassedCheck(walk, state, holder, index)
+    recordPassedCheck(walk, state, node, holder, index)
   }
   if (proven) {
     noteProof(walk, node)
@@ -2787,7 +2871,9 @@ const judgeRange = (walk: BoundsWalk, state: State, node: Node): void => {
   }
   // An entry with no recorded source is a store back, a sum no fact is stated about.
   if (ctx.program.nodeCoercions[node.id] >= 0 && provesEntry(walk, state, node, to)) {
-    ctx.program.nodeProvenRange[node.id] = true
+    if (!walk.shadow) {
+      ctx.program.nodeProvenRange[node.id] = true
+    }
     return
   }
   const lo = toI64(ctx.table.rangeLo(to))
@@ -3665,7 +3751,59 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
   } else {
     walkExpression(walk, state, body)
   }
+  if (uncheckedIndexing) {
+    proveUnflagged(ctx, body)
+  }
   return walk
+}
+
+/**
+ * Under `--unchecked-indexing`, mark proven every element access of `body`
+ * that the build without the flag would prove once the migration
+ * (`src/unsafe-migrate.ts`) has run, so that it never rewrites one: the flag
+ * build records no passed check, and its proofs alone are a subset of those.
+ * A second walk records them as that build would, at every access the
+ * migration leaves checked — one with no `nish:unsafe` form; one it rewrites
+ * passes no check once rewritten. The emitter reads no access's proof under
+ * the flag, which drops every check anyway, so the element accesses are the
+ * only proofs kept: the walk is unrecorded, and its clamps, its overflow and
+ * division proofs and its range entries rest on facts the flag build may not
+ * use, so they are thrown away.
+ *
+ * Only pass 2's facts are taken. An access the whole-program pass
+ * (`src/ranges.ts`) would prove from what a caller's passed check hands it is
+ * still reported, and rewritten, which keeps its meaning.
+ */
+const proveUnflagged = (ctx: CheckContext, body: Node): void => {
+  const shadow = new BoundsWalk(ctx, false)
+  shadow.shadow = true
+  shadow.record = false
+  const state = new State(ctx.table)
+  if (body.kind === N_BLOCK) {
+    walkBoundsStatement(shadow, state, body)
+  } else {
+    walkExpression(shadow, state, body)
+  }
+  for (const node of shadow.proved) {
+    if (node.kind === N_INDEX && ctx.table.isArray(ctx.program.nodeTypes[node.children[0].id])) {
+      ctx.program.nodeProvenIndex[node.id] = true
+    }
+  }
+}
+
+/**
+ * Whether `uncheckedGet` and `uncheckedSet` can say `access`: its element is
+ * a number and its index an `i32` or a range over one, which is what
+ * `checkUncheckedAccess` (src/builtins.ts) accepts. The migration rewrites
+ * only such an access (`src/unsafe-migrate.ts`), and the shadow walk records
+ * a passed check at every other (`recordPassedCheck`).
+ */
+export const hasUncheckedForm = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
+  if (!isNumeric(table.refOf(program.nodeTypes[access.children[0].id]))) {
+    return false
+  }
+  const index = program.nodeTypes[access.children[1].id]
+  return index === T_I32 || (table.isRanged(index) && table.baseOf(index) === T_I32)
 }
 
 /**
