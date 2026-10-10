@@ -5,15 +5,13 @@
  * pins by its SHA-256.
  *
  *     import { x509MintSelfSigned, x509CertificateHash, derToPem } from "nish/crypto/x509";
+ *     // Native only: a program that imports this does not compile for wasm32, which has no entropy.
+ *     import { x509DrawP256Key, x509DrawSerial } from "nish/crypto/x509-random";
  *
- *     // Both secrets come from the kernel's CSPRNG; a predictable key or serial is the caller's bug.
- *     const drawn: u8[] = new Array<u8>(32);
- *     crypto.getRandomValues(drawn);
- *     const priv: Secret<u8[]> = secret(drawn); // nish:secret; p256PublicKey(priv) === null: draw again (odds 2^-32)
- *     const serial: u8[] = new Array<u8>(16);
- *     crypto.getRandomValues(serial);
- *     serial[0] = serial[0] & toU8(0x7f);   // positive, so it stays 16 octets
- *     const der: u8[] | null = x509MintSelfSigned(priv, "localhost", toI64(Date.now()), 14, serial);
+ *     // Both come from the kernel's CSPRNG; a predictable key or serial is the caller's bug.
+ *     // A wasm32 program is handed them instead, and passes them in as they are passed here.
+ *     const priv: Secret<u8[]> = x509DrawP256Key();
+ *     const der: u8[] | null = x509MintSelfSigned(priv, "localhost", toI64(Date.now()), 14, x509DrawSerial());
  *     wipe(priv);
  *     // x509CertificateHash(der) is what serverCertificateHashes names;
  *     // derToPem(der, "CERTIFICATE") is the file a TLS stack loads.
@@ -68,7 +66,9 @@
  * parameters so the golden certificate is deterministic; a caller passes
  * `Date.now()` and, for the key and the serial, bytes from
  * `crypto.getRandomValues`. This module does not draw them itself,
- * because a call to the operating system would stop it compiling for wasm32.
+ * because a call to the operating system would stop it compiling for wasm32;
+ * `nish/crypto/x509-random`, which this module does not import, draws both
+ * for a native program (X509-6).
  *
  * **Constant time.** A private key is the one secret that passes through here:
  * it is base64-decoded from PEM, lifted out of its DER, and handed to
