@@ -26,10 +26,10 @@ the record that found it. The notes below the table name each such finding.
 | --- | --- | --- | ---: | ---: |
 | AEADs | [crypto-aead.md](crypto-aead.md) | `std/crypto/chacha20poly1305.ts`, `std/crypto/aes.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
-| SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 3 ¹ | 0 / 0 / 0 / 0 |
+| SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 4 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 0 / 8 | 0 / 0 / 0 / 1 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 14 | 0 / 1 ² / 0 / 1 |
-| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 3 ³ | 0 / 0 / 0 / 0 |
+| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
 | TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 0 ⁹ | 0 / 0 / 0 / 3 |
@@ -39,7 +39,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 5 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| **Total** ⁸ | | | **3 / 10 / 12 / 74** | **0 / 1 / 2 / 18** |
+| **Total** ⁸ | | | **3 / 10 / 12 / 76** | **0 / 1 / 2 / 18** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -82,7 +82,7 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
-| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts` (`ladderStep`), `std/crypto/x25519.ts` | `ladderStep` measured \|t\| = 35–42 in one link layout of the timing driver and 1.4–2.9 in others. Not established as a leak or as an artefact | #378 |
+| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts` (`ladderStep`), `std/crypto/x25519.ts` | `ladderStep` measured \|t\| = 35–42 in one link layout of the timing driver and 1.4–2.9 in others. 34 later runs read 1.46–3.22, and the weekly CI run 1.17 (x86-64) and 2.09 (aarch64), but the 35–42 was never re-run on the host that produced it. Not established as a leak or as an artefact | #378 |
 | H1-1 | Medium | `std/net/http1-server.ts` (`Http1Server.expire`, `Http1TlsServer.expire`, `Http1Connection.idle`) | The idle timeout counts from the last byte moved, so a client that sends one byte of its head every `idleTimeout` (slowloris) keeps its slot, and with every slot held new connections are shed. Memory stays bounded. The fix is a deadline for a whole head | — |
 | H2-1 | Medium | `std/net/http2.ts` (`endBlock`, `trailers`), `std/net/hpack.ts` (`HpackDecoder.decode`) | Each header block leaves memory in the arena until the program resets it: 664 bytes a request, so a client that sends requests in a loop grows the server. The way out is an HPACK decoder that decodes into storage the caller owns | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
@@ -93,7 +93,7 @@ only.
 | QUIC-7 | Low | `std/net/quic-recovery.ts` (`onAck`), `std/net/quic.ts` (`receiveAck`) | An optimistic ACK is not detected: packet numbers are sent in order, so an ACK of one in flight cannot be told from a real one. The Application Data record of 128 packets in flight bounds the effect | — |
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
-| TLS-1 | Low | `std/net/tls.ts`, `std/net/tls/schedule.ts` | What `TlsServer` keeps in its fields (the caller's ephemeral key bytes, the handshake, traffic and exporter secrets) and the schedule's plain-bytes answers are not wiped. The ECDHE secret and the exchange's key copy are `Secret`s, wiped on every path | #430 |
+| TLS-1 | Low | `std/net/tls.ts`, `std/net/tls/schedule.ts` | What `TlsServer` keeps in its fields (the caller's ephemeral key bytes, the handshake, traffic, exporter and resumption master secrets) and the schedule's plain-bytes answers are not wiped. The ECDHE secret and the exchange's key copy are `Secret`s, wiped on every path | #430 |
 | TLS-2 | Low | `std/net/tls/record.ts` | The AES key schedule is zeroed by ordinary stores, since `secureZero` takes only bytes, and the copies made while deriving a key die unwiped | #430 |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`) | Handshake and 1-RTT traffic secrets and the keys derived from them are not wiped yet. The primitives are on `main` (`secureZero`, #417; `nish:secret`, #418) but this module does not use them yet; the Initial keys are public by construction | #430 |
