@@ -206,13 +206,8 @@ export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | nul
 
 // ---- Keys held as `Secret`s ------------------------------------------------
 //
-// A caller that holds its input keying material as a `Secret<u8[]>`
-// (`nish:secret`, docs/LANGUAGE.md "Secrets") derives through the functions
-// below, which read it only inside `exposeWith` and hand the PRK and the
-// output back as `Secret`s too. `hkdfSha256Secret` runs both steps and wipes
-// the PRK between them, so the PRK never reaches the caller at all. Every
-// HMAC under them wipes its key blocks and hashers (`nish/crypto/hmac`), and
-// `expand` wipes each T(i) once it is copied out.
+// The `*Secret` functions the module docs name: each reads its key only inside
+// `exposeWith`, and hands the PRK and the output back as `Secret`s.
 
 /** What `expand` needs besides the PRK, as one argument, since `exposeWith` hands on only one. */
 interface HkdfExpandRequest {

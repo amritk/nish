@@ -165,23 +165,19 @@ const sha256Wiped = (mac: HmacSha256): boolean =>
   zeroBytes(mac.outer.block) &&
   zeroWords32(mac.outer.schedule);
 
+/** Whether one SHA-384 or SHA-512 hasher's hash value, block and schedule are all zero. */
+const engineWiped = (state: u64[], block: u8[], schedule: u64[]): boolean =>
+  zeroWords64(state) && zeroBytes(block) && zeroWords64(schedule);
+
 /** `sha256Wiped` for `HmacSha384`. */
 const sha384Wiped = (mac: HmacSha384): boolean =>
-  zeroWords64(mac.inner.engine.state) &&
-  zeroBytes(mac.inner.engine.block) &&
-  zeroWords64(mac.inner.engine.schedule) &&
-  zeroWords64(mac.outer.engine.state) &&
-  zeroBytes(mac.outer.engine.block) &&
-  zeroWords64(mac.outer.engine.schedule);
+  engineWiped(mac.inner.engine.state, mac.inner.engine.block, mac.inner.engine.schedule) &&
+  engineWiped(mac.outer.engine.state, mac.outer.engine.block, mac.outer.engine.schedule);
 
 /** `sha256Wiped` for `HmacSha512`. */
 const sha512Wiped = (mac: HmacSha512): boolean =>
-  zeroWords64(mac.inner.engine.state) &&
-  zeroBytes(mac.inner.engine.block) &&
-  zeroWords64(mac.inner.engine.schedule) &&
-  zeroWords64(mac.outer.engine.state) &&
-  zeroBytes(mac.outer.engine.block) &&
-  zeroWords64(mac.outer.engine.schedule);
+  engineWiped(mac.inner.engine.state, mac.inner.engine.block, mac.inner.engine.schedule) &&
+  engineWiped(mac.outer.engine.state, mac.outer.engine.block, mac.outer.engine.schedule);
 
 /**
  * Runs every check and answers the exit code. A function of its own rather

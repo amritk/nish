@@ -10,7 +10,7 @@
 // full-length tag and refuse a truncated one.
 import { Suite } from "nish/testing";
 import { Secret, secret, wipe } from "nish:secret";
-import { timingSafeEqual } from "nish/crypto/ct";
+import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct";
 import {
   HmacSha256,
   HmacSha384,
@@ -93,15 +93,6 @@ const verified = (hash: i32, key: u8[], msg: u8[], tag: u8[]): boolean => {
   return hmacSha512Verify(key, msg, tag);
 };
 
-/** The first `n` bytes of `bytes`, fresh; `n` is at most `bytes.length`. */
-const leading = (bytes: u8[], n: i32): u8[] => {
-  const out: u8[] = new Array<u8>(n);
-  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(bytes.length); i += 1) {
-    out[i] = bytes[i];
-  }
-  return out;
-};
-
 /**
  * Every case of one file through HMAC over `hash`. A case that disagrees is
  * named by its `tcId`. Answers the number that disagreed.
@@ -120,7 +111,7 @@ const runCases = (t: Suite, name: string, hash: i32, cases: WycheproofHmacCase[]
     const fromSecret: u8[] = sealed(hash, held, msg);
     wipe(held);
     const oneTag: boolean = timingSafeEqual(full, streamed(hash, key, msg)) && timingSafeEqual(full, fromSecret);
-    const agrees: boolean = timingSafeEqual(leading(full, wantLength), want);
+    const agrees: boolean = timingSafeEqualAt(full, FROM, want, FROM, wantLength);
     // The verifier takes only a full-length tag, so it must refuse every truncated one.
     const accepted: boolean = verified(hash, key, msg, want);
     const verifierAgrees: boolean = wantLength === toI32(full.length) ? accepted === agrees : !accepted;

@@ -4935,53 +4935,49 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 }
 
 // `nish/crypto/hmac` and `nish/crypto/hkdf` wipe what their keys reach (#476),
-// and the wipes survive `-O2`. `crypto_hmac_wycheproof` and
-// `crypto_hkdf_wycheproof` between them call every entry point below. After
-// `opt -O2`, each function must still reach at least the volatile wipes its
-// source writes, counted along every call site it keeps (a callee called twice
-// counts twice), so the count does not depend on what was inlined: a `wipe` is
-// a volatile `llvm.memset` (`i1 true`) and a `secureZero` a call to
-// `nish_wipe`, while an ordinary `fill(0)` in their place is neither, so a wipe
-// deleted or weakened in the source fails here. An HMAC constructor reaches 8:
-// the long-key path's hasher (three arrays), the hashed key and two pads, and
-// the short path's two pads. A `digest` reaches 7: the inner digest and both
-// hashers' three arrays. HKDF's `expand` reaches 17: the T(i) wiped in the
-// loop and the last one, plus the constructor's 8 and the digest's 7. The
-// `Secret` HKDF reaches 33: the PRK, `extract`'s one-shot HMAC (15) and
-// `expand` (17). Each count was checked by deleting one wipe of its kind and
-// watching it drop.
+// and the wipes survive `-O2`. `crypto_hkdf_wycheproof` imports both modules,
+// whose every export is emitted, and the modules that define their symbols go
+// through `opt -O2`. Each function below must then still reach at least the
+// volatile wipes its source writes, counted along every call site it keeps (a
+// callee called twice counts twice), so the count does not depend on what was
+// inlined: a `wipe` is a volatile `llvm.memset` (`i1 true`) and a `secureZero`
+// a call to `nish_wipe`, while an ordinary `fill(0)` in their place is
+// neither, so a wipe deleted or weakened in the source fails here. An HMAC
+// constructor reaches 6: the long-key path's hasher (three arrays), the hashed
+// key and the key block, and the short path's key block. A `digest` reaches
+// 7: the inner digest and both hashers' three arrays. HKDF's `expand` reaches
+// 15: the T(i) wiped in the loop and the last one, plus the constructor's 6
+// and the digest's 7. The `Secret` HKDF reaches 29: the PRK, `extract`'s
+// one-shot HMAC (13) and `expand` (15). Each count was checked by deleting one
+// wipe of its kind and watching it drop.
 if (!only || "crypto_hmac crypto_hkdf: the wipes survive -O2".includes(only)) {
   if (!has("opt")) {
     skip("crypto_hmac crypto_hkdf: no opt to show the wipes survive -O2")
   } else {
     const wipeDir = path.join(buildDir, "crypto-wipe-o2")
     fs.rmSync(wipeDir, { recursive: true, force: true })
-    /** Every function `opt -O2` left in the emitted modules, by symbol. */
+    fs.mkdirSync(wipeDir, { recursive: true })
+    /** Every function `opt -O2` left in the modules that define HMAC, HKDF or SHA-2, by symbol. */
     const bodies = new Map()
-    let failure = ""
-    for (const program of ["crypto_hmac_wycheproof", "crypto_hkdf_wycheproof"]) {
-      const out = path.join(wipeDir, program)
-      fs.mkdirSync(out, { recursive: true })
-      const c = spawnSync(NISH, [path.join(root, "tests", "link", program, "main.ts"), "-o", `${out}/`], {
-        cwd: root,
-        encoding: "utf8",
-      })
-      if (c.status !== 0) {
-        failure += c.stderr
+    const c = spawnSync(
+      NISH,
+      [path.join(root, "tests", "link", "crypto_hkdf_wycheproof", "main.ts"), "-o", `${wipeDir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    let failure = c.status === 0 ? "" : c.stderr
+    const modules = c.status === 0 ? fs.readdirSync(wipeDir).filter((f) => f.endsWith(".ll")) : []
+    for (const file of modules) {
+      const ll = path.join(wipeDir, file)
+      if (!/^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha)/m.test(fs.readFileSync(ll, "utf8"))) {
         continue
       }
-      for (const file of fs.readdirSync(out).filter((f) => f.endsWith(".ll"))) {
-        const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(out, file)], {
-          encoding: "utf8",
-          maxBuffer: 1 << 28,
-        })
-        if (o.status !== 0) {
-          failure += o.stderr
-          continue
-        }
-        for (const m of o.stdout.matchAll(/^define [^\n]*?@"?([\w.$]+)"?\([\s\S]*?\n\}/gm)) {
-          bodies.set(m[1], m[0])
-        }
+      const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+      if (o.status !== 0) {
+        failure += o.stderr
+        continue
+      }
+      for (const m of o.stdout.matchAll(/^define [^\n]*?@"?([\w.$]+)"?\([\s\S]*?\n\}/gm)) {
+        bodies.set(m[1], m[0])
       }
     }
     /** The volatile wipes `symbol` reaches, along every call site `opt` kept. */
@@ -5000,16 +4996,16 @@ if (!only || "crypto_hmac crypto_hkdf: the wipes survive -O2".includes(only)) {
       return count
     }
     const expected = [
-      ["nish.HmacSha256.constructor", 8],
-      ["nish.HmacSha384.constructor", 8],
-      ["nish.HmacSha512.constructor", 8],
+      ["nish.HmacSha256.constructor", 6],
+      ["nish.HmacSha384.constructor", 6],
+      ["nish.HmacSha512.constructor", 6],
       ["nish.HmacSha256.digest", 7],
       ["nish.HmacSha384.digest", 7],
       ["nish.HmacSha512.digest", 7],
-      ["nish.hkdfExpandSha256", 17],
-      ["nish.hkdfExpandSha384", 17],
-      ["nish.hkdfSha256Secret", 33],
-      ["nish.hkdfSha384Secret", 33],
+      ["nish.hkdfExpandSha256", 15],
+      ["nish.hkdfExpandSha384", 15],
+      ["nish.hkdfSha256Secret", 29],
+      ["nish.hkdfSha384Secret", 29],
     ]
     const short = expected
       .map(([symbol, want]) => [symbol, want, bodies.has(symbol) ? wipesUnder(symbol) : null])

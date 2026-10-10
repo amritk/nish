@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 945 programs, 88683 dump lines.
+# 945 programs, 88708 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -54545,7 +54545,7 @@ function hkdfExtractSha256Exposed(ikm: u8[], salt: u8[]): u8[] -> @nish.hkdfExtr
   pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#1
   pointer salt: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#0
   stackSites=0 stackLocals=0
-  callee 230:67 hmacSha256 -> @nish.hmacSha256
+  callee 225:67 hmacSha256 -> @nish.hmacSha256
 function hkdfExtractSha384Exposed(ikm: u8[], salt: u8[]): u8[] -> @nish.hkdfExtractSha384Exposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacSha384
@@ -54553,7 +54553,7 @@ function hkdfExtractSha384Exposed(ikm: u8[], salt: u8[]): u8[] -> @nish.hkdfExtr
   pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#1
   pointer salt: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#0
   stackSites=0 stackLocals=0
-  callee 233:67 hmacSha384 -> @nish.hmacSha384
+  callee 228:67 hmacSha384 -> @nish.hmacSha384
 function hkdfExpandSha256Exposed(prk: u8[], request: HkdfExpandRequest): u8[] | null -> @nish.hkdfExpandSha256Exposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandSha256
@@ -54561,7 +54561,7 @@ function hkdfExpandSha256Exposed(prk: u8[], request: HkdfExpandRequest): u8[] | 
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandSha256#0
   pointer request: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 237:3 hkdfExpandSha256 -> @nish.hkdfExpandSha256
+  callee 232:3 hkdfExpandSha256 -> @nish.hkdfExpandSha256
 function hkdfExpandSha384Exposed(prk: u8[], request: HkdfExpandRequest): u8[] | null -> @nish.hkdfExpandSha384Exposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandSha384
@@ -54569,7 +54569,7 @@ function hkdfExpandSha384Exposed(prk: u8[], request: HkdfExpandRequest): u8[] | 
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandSha384#0
   pointer request: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 241:3 hkdfExpandSha384 -> @nish.hkdfExpandSha384
+  callee 236:3 hkdfExpandSha384 -> @nish.hkdfExpandSha384
 function hkdfExtractSha256Secret(salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> -> @nish.hkdfExtractSha256Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha256Exposed
@@ -54577,9 +54577,9 @@ function hkdfExtractSha256Secret(salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> ->
   pointer salt: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha256Exposed#1
   pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha256Exposed#0
   stackSites=0 stackLocals=0
-  local 245:9 prk: u8[] (const)
-  callee 245:21 exposeWith<u8[], u8[], u8[], hkdfExtractSha256Exposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha256Exposed
-  callee 246:10 secret<u8[]> -> @nish.secret$arr.u8
+  local 240:9 prk: u8[] (const)
+  callee 240:21 exposeWith<u8[], u8[], u8[], hkdfExtractSha256Exposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha256Exposed
+  callee 241:10 secret<u8[]> -> @nish.secret$arr.u8
 function hkdfExtractSha384Secret(salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> -> @nish.hkdfExtractSha384Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha384Exposed
@@ -54587,9 +54587,9 @@ function hkdfExtractSha384Secret(salt: u8[], ikm: Secret<u8[]>): Secret<u8[]> ->
   pointer salt: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha384Exposed#1
   pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha384Exposed#0
   stackSites=0 stackLocals=0
-  local 251:9 prk: u8[] (const)
-  callee 251:21 exposeWith<u8[], u8[], u8[], hkdfExtractSha384Exposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha384Exposed
-  callee 252:10 secret<u8[]> -> @nish.secret$arr.u8
+  local 246:9 prk: u8[] (const)
+  callee 246:21 exposeWith<u8[], u8[], u8[], hkdfExtractSha384Exposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha384Exposed
+  callee 247:10 secret<u8[]> -> @nish.secret$arr.u8
 function hkdfExpandSha256Secret(prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null -> @nish.hkdfExpandSha256Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha256Exposed
@@ -54598,10 +54598,10 @@ function hkdfExpandSha256Secret(prk: Secret<u8[]>, info: u8[], length: i32): Sec
   pointer prk: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha256Exposed#0
   pointer info: size=0 writesThrough=true captured=true
   stackSites=1 stackLocals=1
-  local 260:9 request: HkdfExpandRequest (const)
-  local 261:9 okm: u8[] | null (const)
-  callee 261:28 exposeWith<u8[], HkdfExpandRequest, u8[] | null, hkdfExpandSha256Exposed> -> @nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha256Exposed
-  callee 265:10 secret<u8[]> -> @nish.secret$arr.u8
+  local 255:9 request: HkdfExpandRequest (const)
+  local 256:9 okm: u8[] | null (const)
+  callee 256:28 exposeWith<u8[], HkdfExpandRequest, u8[] | null, hkdfExpandSha256Exposed> -> @nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha256Exposed
+  callee 260:10 secret<u8[]> -> @nish.secret$arr.u8
 function hkdfExpandSha384Secret(prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null -> @nish.hkdfExpandSha384Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha384Exposed
@@ -54610,10 +54610,10 @@ function hkdfExpandSha384Secret(prk: Secret<u8[]>, info: u8[], length: i32): Sec
   pointer prk: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha384Exposed#0
   pointer info: size=0 writesThrough=true captured=true
   stackSites=1 stackLocals=1
-  local 273:9 request: HkdfExpandRequest (const)
-  local 274:9 okm: u8[] | null (const)
-  callee 274:28 exposeWith<u8[], HkdfExpandRequest, u8[] | null, hkdfExpandSha384Exposed> -> @nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha384Exposed
-  callee 278:10 secret<u8[]> -> @nish.secret$arr.u8
+  local 268:9 request: HkdfExpandRequest (const)
+  local 269:9 okm: u8[] | null (const)
+  callee 269:28 exposeWith<u8[], HkdfExpandRequest, u8[] | null, hkdfExpandSha384Exposed> -> @nish.exposeWith$arr.u8$$HkdfExpandRequest$opt.arr.u8$fn.28.nish.hkdfExpandSha384Exposed
+  callee 273:10 secret<u8[]> -> @nish.secret$arr.u8
 function hkdfSha256Secret(salt: u8[], ikm: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null -> @nish.hkdfSha256Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha256Secret
@@ -54623,11 +54623,11 @@ function hkdfSha256Secret(salt: u8[], ikm: Secret<u8[]>, info: u8[], length: i32
   pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.hkdfExtractSha256Secret#1
   pointer info: size=0 writesThrough=true captured=true passedTo=nish.hkdfExpandSha256Secret#1
   stackSites=0 stackLocals=0
-  local 292:9 prk: Secret<u8[]> (const)
-  callee 292:29 hkdfExtractSha256Secret -> @nish.hkdfExtractSha256Secret
-  local 293:9 okm: Secret<u8[]> | null (const)
-  callee 293:36 hkdfExpandSha256Secret -> @nish.hkdfExpandSha256Secret
-  callee 294:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local 287:9 prk: Secret<u8[]> (const)
+  callee 287:29 hkdfExtractSha256Secret -> @nish.hkdfExtractSha256Secret
+  local 288:9 okm: Secret<u8[]> | null (const)
+  callee 288:36 hkdfExpandSha256Secret -> @nish.hkdfExpandSha256Secret
+  callee 289:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function hkdfSha384Secret(salt: u8[], ikm: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null -> @nish.hkdfSha384Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha384Secret
@@ -54637,23 +54637,23 @@ function hkdfSha384Secret(salt: u8[], ikm: Secret<u8[]>, info: u8[], length: i32
   pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.hkdfExtractSha384Secret#1
   pointer info: size=0 writesThrough=true captured=true passedTo=nish.hkdfExpandSha384Secret#1
   stackSites=0 stackLocals=0
-  local 305:9 prk: Secret<u8[]> (const)
-  callee 305:29 hkdfExtractSha384Secret -> @nish.hkdfExtractSha384Secret
-  local 306:9 okm: Secret<u8[]> | null (const)
-  callee 306:36 hkdfExpandSha384Secret -> @nish.hkdfExpandSha384Secret
-  callee 307:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local 300:9 prk: Secret<u8[]> (const)
+  callee 300:29 hkdfExtractSha384Secret -> @nish.hkdfExtractSha384Secret
+  local 301:9 okm: Secret<u8[]> | null (const)
+  callee 301:36 hkdfExpandSha384Secret -> @nish.hkdfExpandSha384Secret
+  callee 302:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function hkdfLabel(caller: string, label: string, context: u8[], length: i32): u8[] -> @nish.hkdfLabel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 333:3
+  sharedWrite: 328:3
   calls: nish.hkdfAppend nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_write
   pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfAppend#2
   stackSites=0 stackLocals=0
-  local 329:9 full: string (const)
-  local 330:9 fullLength: i32 (const)
-  local 331:9 contextLength: i32 (const)
-  local 332:9 out: u8[] (const)
-  local 336:12 k: i32 (let)
-  callee 340:3 hkdfAppend -> @nish.hkdfAppend
+  local 324:9 full: string (const)
+  local 325:9 fullLength: i32 (const)
+  local 326:9 contextLength: i32 (const)
+  local 327:9 out: u8[] (const)
+  local 331:12 k: i32 (let)
+  callee 335:3 hkdfAppend -> @nish.hkdfAppend
 function hkdfExpandLabelSha256(prk: u8[], label: string, context: u8[], length: i32): u8[] -> @nish.hkdfExpandLabelSha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandSha256
@@ -54662,9 +54662,9 @@ function hkdfExpandLabelSha256(prk: u8[], label: string, context: u8[], length: 
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandSha256#0
   pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfLabel#2
   stackSites=0 stackLocals=0
-  local 350:9 okm: u8[] | null (const)
-  callee 350:28 hkdfExpandSha256 -> @nish.hkdfExpandSha256
-  callee 352:5 hkdfLabel -> @nish.hkdfLabel
+  local 345:9 okm: u8[] | null (const)
+  callee 345:28 hkdfExpandSha256 -> @nish.hkdfExpandSha256
+  callee 347:5 hkdfLabel -> @nish.hkdfLabel
 function hkdfExpandLabelSha384(prk: u8[], label: string, context: u8[], length: i32): u8[] -> @nish.hkdfExpandLabelSha384 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandSha384
@@ -54673,25 +54673,25 @@ function hkdfExpandLabelSha384(prk: u8[], label: string, context: u8[], length: 
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandSha384#0
   pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfLabel#2
   stackSites=0 stackLocals=0
-  local 367:9 okm: u8[] | null (const)
-  callee 367:28 hkdfExpandSha384 -> @nish.hkdfExpandSha384
-  callee 369:5 hkdfLabel -> @nish.hkdfLabel
+  local 362:9 okm: u8[] | null (const)
+  callee 362:28 hkdfExpandSha384 -> @nish.hkdfExpandSha384
+  callee 364:5 hkdfLabel -> @nish.hkdfLabel
 function HkdfScratch.constructor(this: HkdfScratch): void -> @nish.HkdfScratch.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.HmacSha256Scratch.constructor
   calls: nish.HmacSha256Scratch.constructor nish.HmacSha384Scratch.constructor nish_alloc_struct nish_exit nish_write
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 400:19 new HmacSha256Scratch -> @nish.HmacSha256Scratch.constructor
-  callee 401:19 new HmacSha384Scratch -> @nish.HmacSha384Scratch.constructor
+  callee 395:19 new HmacSha256Scratch -> @nish.HmacSha256Scratch.constructor
+  callee 396:19 new HmacSha384Scratch -> @nish.HmacSha384Scratch.constructor
 function HkdfScratch.wipe(this: HkdfScratch): void -> @nish.HkdfScratch.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 409:5
+  sharedWrite: 404:5
   calls: nish.HmacSha256Scratch.wipe nish.HmacSha384Scratch.wipe nish_wipe
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 410:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
-  callee 411:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
+  callee 405:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
+  callee 406:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
 function hkdfCheckHash(caller: string, hashLength: i32): void -> @nish.hkdfCheckHash
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -54705,12 +54705,12 @@ function hkdfCheckOutput(caller: string, out: u8[], at: i32, length: i32): void 
   stackSites=0 stackLocals=0
 function hkdfWipe(s: HkdfScratch, hashLength: i32): void -> @nish.hkdfWipe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 431:3
+  sharedWrite: 426:3
   calls: nish.HmacSha256Scratch.wipe nish.HmacSha384Scratch.wipe nish_wipe
   pointer s: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 433:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
-  callee 435:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
+  callee 428:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
+  callee 430:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
 function hkdfMacBegin(s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len: i32): void -> @nish.hkdfMacBegin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha384Scratch.begin
@@ -54719,8 +54719,8 @@ function hkdfMacBegin(s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len:
   pointer s: size=40 writesThrough=false captured=false
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.begin#1 nish.HmacSha256Scratch.begin#1
   stackSites=0 stackLocals=0
-  callee 442:5 HmacSha384Scratch.begin -> @nish.HmacSha384Scratch.begin
-  callee 444:5 HmacSha256Scratch.begin -> @nish.HmacSha256Scratch.begin
+  callee 437:5 HmacSha384Scratch.begin -> @nish.HmacSha384Scratch.begin
+  callee 439:5 HmacSha256Scratch.begin -> @nish.HmacSha256Scratch.begin
 function hkdfMacUpdate(s: HkdfScratch, hashLength: i32, data: u8[], off: i32, len: i32): void -> @nish.hkdfMacUpdate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha384Scratch.update
@@ -54729,8 +54729,8 @@ function hkdfMacUpdate(s: HkdfScratch, hashLength: i32, data: u8[], off: i32, le
   pointer s: size=40 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.update#1 nish.HmacSha256Scratch.update#1
   stackSites=0 stackLocals=0
-  callee 451:5 HmacSha384Scratch.update -> @nish.HmacSha384Scratch.update
-  callee 453:5 HmacSha256Scratch.update -> @nish.HmacSha256Scratch.update
+  callee 446:5 HmacSha384Scratch.update -> @nish.HmacSha384Scratch.update
+  callee 448:5 HmacSha256Scratch.update -> @nish.HmacSha256Scratch.update
 function hkdfMacFinish(s: HkdfScratch, hashLength: i32, out: u8[], at: i32): void -> @nish.hkdfMacFinish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha384Scratch.finishInto
@@ -54739,8 +54739,8 @@ function hkdfMacFinish(s: HkdfScratch, hashLength: i32, out: u8[], at: i32): voi
   pointer s: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.HmacSha384Scratch.finishInto#1 nish.HmacSha256Scratch.finishInto#1
   stackSites=0 stackLocals=0
-  callee 460:5 HmacSha384Scratch.finishInto -> @nish.HmacSha384Scratch.finishInto
-  callee 462:5 HmacSha256Scratch.finishInto -> @nish.HmacSha256Scratch.finishInto
+  callee 455:5 HmacSha384Scratch.finishInto -> @nish.HmacSha384Scratch.finishInto
+  callee 457:5 HmacSha256Scratch.finishInto -> @nish.HmacSha256Scratch.finishInto
 function hkdfExtractInto(s: HkdfScratch, hashLength: i32, salt: u8[], ikm: u8[], out: u8[], at: i32): void -> @nish.hkdfExtractInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfCheckHash
@@ -54751,15 +54751,15 @@ function hkdfExtractInto(s: HkdfScratch, hashLength: i32, salt: u8[], ikm: u8[],
   pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hkdfMacUpdate#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfCheckOutput#1 nish.hkdfMacFinish#2
   stackSites=0 stackLocals=0
-  callee 481:3 hkdfCheckHash -> @nish.hkdfCheckHash
-  callee 482:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
-  callee 486:3 hkdfMacBegin -> @nish.hkdfMacBegin
-  callee 487:3 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 488:3 hkdfMacFinish -> @nish.hkdfMacFinish
-  callee 489:3 hkdfWipe -> @nish.hkdfWipe
+  callee 476:3 hkdfCheckHash -> @nish.hkdfCheckHash
+  callee 477:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
+  callee 481:3 hkdfMacBegin -> @nish.hkdfMacBegin
+  callee 482:3 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 483:3 hkdfMacFinish -> @nish.hkdfMacFinish
+  callee 484:3 hkdfWipe -> @nish.hkdfWipe
 function hkdfExpandWindow(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[], infoLen: i32, out: u8[], at: i32, length: i32): void -> @nish.hkdfExpandWindow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 516:5
+  sharedWrite: 511:5
   escaping: hashLength infoLen
   calls: nish.hkdfMacBegin nish.hkdfMacFinish nish.hkdfMacUpdate nish.hkdfWipe nish_panic_index nish_panic_overflow
   pointer s: size=40 writesThrough=false captured=false passedTo=nish.hkdfMacBegin#0 nish.hkdfMacUpdate#0 nish.hkdfMacUpdate#0 nish.hkdfMacUpdate#0 nish.hkdfMacFinish#0 nish.hkdfWipe#0
@@ -54767,16 +54767,16 @@ function hkdfExpandWindow(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[]
   pointer info: size=0 writesThrough=false captured=false passedTo=nish.hkdfMacUpdate#2
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 507:9 counterLength: i32 (const)
-  local 508:7 done: i32 (let)
-  local 509:7 i: i32 (let)
-  callee 511:5 hkdfMacBegin -> @nish.hkdfMacBegin
-  callee 513:7 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 515:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 517:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 518:5 hkdfMacFinish -> @nish.hkdfMacFinish
-  local 519:14 k: i32 (let)
-  callee 525:3 hkdfWipe -> @nish.hkdfWipe
+  local 502:9 counterLength: i32 (const)
+  local 503:7 done: i32 (let)
+  local 504:7 i: i32 (let)
+  callee 506:5 hkdfMacBegin -> @nish.hkdfMacBegin
+  callee 508:7 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 510:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 512:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 513:5 hkdfMacFinish -> @nish.hkdfMacFinish
+  local 514:14 k: i32 (let)
+  callee 520:3 hkdfWipe -> @nish.hkdfWipe
 function hkdfExpandInto(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[], out: u8[], at: i32, length: i32): boolean -> @nish.hkdfExpandInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfCheckHash
@@ -54787,12 +54787,12 @@ function hkdfExpandInto(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[], 
   pointer info: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandWindow#3
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfCheckOutput#1 nish.hkdfExpandWindow#5
   stackSites=0 stackLocals=0
-  callee 544:3 hkdfCheckHash -> @nish.hkdfCheckHash
-  callee 553:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
-  callee 554:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
+  callee 539:3 hkdfCheckHash -> @nish.hkdfCheckHash
+  callee 548:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
+  callee 549:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
 function hkdfExpandLabelInto(s: HkdfScratch, hashLength: i32, prk: u8[], label: string, context: u8[], contextOff: i32, contextLen: i32, out: u8[], at: i32, length: i32): void -> @nish.hkdfExpandLabelInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 602:3
+  sharedWrite: 597:3
   escaping: at hashLength length
   calls: nish.hkdfCheckHash nish.hkdfCheckOutput nish.hkdfExpandWindow nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_write
   pointer s: size=40 writesThrough=false captured=false passedTo=nish.hkdfExpandWindow#0
@@ -54800,17 +54800,17 @@ function hkdfExpandLabelInto(s: HkdfScratch, hashLength: i32, prk: u8[], label: 
   pointer context: size=0 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfCheckOutput#1 nish.hkdfExpandWindow#5
   stackSites=0 stackLocals=0
-  callee 578:3 hkdfCheckHash -> @nish.hkdfCheckHash
-  callee 596:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
-  local 598:9 prefixLength: i32 (const)
-  local 599:9 labelLength: i32 (const)
-  local 600:9 fullLength: i32 (const)
-  local 601:9 info: u8[] (const)
-  local 605:12 k: i32 (let)
+  callee 573:3 hkdfCheckHash -> @nish.hkdfCheckHash
+  callee 591:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
+  local 593:9 prefixLength: i32 (const)
+  local 594:9 labelLength: i32 (const)
+  local 595:9 fullLength: i32 (const)
+  local 596:9 info: u8[] (const)
+  local 600:12 k: i32 (let)
+  local 603:12 k: i32 (let)
+  local 606:9 contextAt: i32 (const)
   local 608:12 k: i32 (let)
-  local 611:9 contextAt: i32 (const)
-  local 613:12 k: i32 (let)
-  callee 616:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
+  callee 611:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
 module std/crypto/hmac.ts [package nish]
 import SHA256_BLOCK from "nish/crypto/sha256" -> const SHA256_BLOCK
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
@@ -54922,73 +54922,112 @@ function hmacCheckKey(key: u8[]): void -> @nish.hmacCheckKey
   calls: nish_exit nish_write
   pointer key: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function hmacKeySha256(inner: Sha256, outer: Sha256, k: u8[]): void -> @nish.hmacKeySha256
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+function hmacPadsSha256(inner: Sha256, outer: Sha256, k: u8[]): void -> @nish.hmacPadsSha256
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacPadBlock
-  calls: nish.Sha256.update nish.hmacPadBlock nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  calls: nish.Sha256.update nish.hmacPadBlock nish.hmacPadInto nish.wipe$arr.u8 nish_arena_mark nish_arena_release
   pointer inner: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0
   pointer outer: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0
-  pointer k: size=0 writesThrough=false captured=false passedTo=nish.hmacPadBlock#0 nish.hmacPadBlock#0
+  pointer k: size=0 writesThrough=false captured=false passedTo=nish.hmacPadBlock#0 nish.hmacPadInto#1
   stackSites=0 stackLocals=0
-  local 148:9 ipad: u8[] (const)
-  callee 148:22 hmacPadBlock -> @nish.hmacPadBlock
-  callee 149:3 Sha256.update -> @nish.Sha256.update
-  callee 150:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 151:9 opad: u8[] (const)
-  callee 151:22 hmacPadBlock -> @nish.hmacPadBlock
+  local 149:9 pad: u8[] (const)
+  callee 149:21 hmacPadBlock -> @nish.hmacPadBlock
+  callee 150:3 Sha256.update -> @nish.Sha256.update
+  callee 151:3 hmacPadInto -> @nish.hmacPadInto
   callee 152:3 Sha256.update -> @nish.Sha256.update
   callee 153:3 wipe<u8[]> -> @nish.wipe$arr.u8
-function hmacKeySha384(inner: Sha384, outer: Sha384, k: u8[]): void -> @nish.hmacKeySha384
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+function hmacKeySha256(inner: Sha256, outer: Sha256, key: u8[]): void -> @nish.hmacKeySha256
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacCheckKey
+  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.update nish.hmacCheckKey nish.hmacPadsSha256 nish.hmacWipeSha256 nish.wipe$arr.u8
+  pointer inner: size=40 writesThrough=true captured=false passedTo=nish.hmacPadsSha256#0 nish.hmacPadsSha256#0
+  pointer outer: size=40 writesThrough=true captured=false passedTo=nish.hmacPadsSha256#1 nish.hmacPadsSha256#1
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacCheckKey#0 nish.hmacPadsSha256#2 nish.Sha256.update#1
+  stackSites=1 stackLocals=1
+  callee 162:3 hmacCheckKey -> @nish.hmacCheckKey
+  callee 164:5 hmacPadsSha256 -> @nish.hmacPadsSha256
+  local 167:9 hasher: Sha256 (const)
+  callee 167:18 new Sha256 -> @nish.Sha256.constructor
+  callee 168:3 Sha256.update -> @nish.Sha256.update
+  local 169:9 hashed: u8[] (const)
+  callee 169:24 Sha256.digest -> @nish.Sha256.digest
+  callee 170:3 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee 171:3 hmacPadsSha256 -> @nish.hmacPadsSha256
+  callee 172:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function hmacPadsSha384(inner: Sha384, outer: Sha384, k: u8[]): void -> @nish.hmacPadsSha384
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacPadBlock
-  calls: nish.Sha384.update nish.hmacPadBlock nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  calls: nish.Sha384.update nish.hmacPadBlock nish.hmacPadInto nish.wipe$arr.u8 nish_arena_mark nish_arena_release
   pointer inner: size=8 writesThrough=false captured=false passedTo=nish.Sha384.update#0
   pointer outer: size=8 writesThrough=false captured=false passedTo=nish.Sha384.update#0
-  pointer k: size=0 writesThrough=false captured=false passedTo=nish.hmacPadBlock#0 nish.hmacPadBlock#0
+  pointer k: size=0 writesThrough=false captured=false passedTo=nish.hmacPadBlock#0 nish.hmacPadInto#1
   stackSites=0 stackLocals=0
-  local 158:9 ipad: u8[] (const)
-  callee 158:22 hmacPadBlock -> @nish.hmacPadBlock
-  callee 159:3 Sha384.update -> @nish.Sha384.update
-  callee 160:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 161:9 opad: u8[] (const)
-  callee 161:22 hmacPadBlock -> @nish.hmacPadBlock
-  callee 162:3 Sha384.update -> @nish.Sha384.update
-  callee 163:3 wipe<u8[]> -> @nish.wipe$arr.u8
-function hmacKeySha512(inner: Sha512, outer: Sha512, k: u8[]): void -> @nish.hmacKeySha512
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  local 177:9 pad: u8[] (const)
+  callee 177:21 hmacPadBlock -> @nish.hmacPadBlock
+  callee 178:3 Sha384.update -> @nish.Sha384.update
+  callee 179:3 hmacPadInto -> @nish.hmacPadInto
+  callee 180:3 Sha384.update -> @nish.Sha384.update
+  callee 181:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function hmacKeySha384(inner: Sha384, outer: Sha384, key: u8[]): void -> @nish.hmacKeySha384
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacCheckKey
+  calls: nish.Sha384.constructor nish.Sha384.digest nish.Sha384.update nish.hmacCheckKey nish.hmacPadsSha384 nish.hmacWipeSha384 nish.wipe$arr.u8
+  pointer inner: size=8 writesThrough=false captured=false passedTo=nish.hmacPadsSha384#0 nish.hmacPadsSha384#0
+  pointer outer: size=8 writesThrough=false captured=false passedTo=nish.hmacPadsSha384#1 nish.hmacPadsSha384#1
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacCheckKey#0 nish.hmacPadsSha384#2 nish.Sha384.update#1
+  stackSites=1 stackLocals=1
+  callee 190:3 hmacCheckKey -> @nish.hmacCheckKey
+  callee 192:5 hmacPadsSha384 -> @nish.hmacPadsSha384
+  local 195:9 hasher: Sha384 (const)
+  callee 195:18 new Sha384 -> @nish.Sha384.constructor
+  callee 196:3 Sha384.update -> @nish.Sha384.update
+  local 197:9 hashed: u8[] (const)
+  callee 197:24 Sha384.digest -> @nish.Sha384.digest
+  callee 198:3 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee 199:3 hmacPadsSha384 -> @nish.hmacPadsSha384
+  callee 200:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function hmacPadsSha512(inner: Sha512, outer: Sha512, k: u8[]): void -> @nish.hmacPadsSha512
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacPadBlock
-  calls: nish.Sha512.update nish.hmacPadBlock nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  calls: nish.Sha512.update nish.hmacPadBlock nish.hmacPadInto nish.wipe$arr.u8 nish_arena_mark nish_arena_release
   pointer inner: size=8 writesThrough=false captured=false passedTo=nish.Sha512.update#0
   pointer outer: size=8 writesThrough=false captured=false passedTo=nish.Sha512.update#0
-  pointer k: size=0 writesThrough=false captured=false passedTo=nish.hmacPadBlock#0 nish.hmacPadBlock#0
+  pointer k: size=0 writesThrough=false captured=false passedTo=nish.hmacPadBlock#0 nish.hmacPadInto#1
   stackSites=0 stackLocals=0
-  local 168:9 ipad: u8[] (const)
-  callee 168:22 hmacPadBlock -> @nish.hmacPadBlock
-  callee 169:3 Sha512.update -> @nish.Sha512.update
-  callee 170:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 171:9 opad: u8[] (const)
-  callee 171:22 hmacPadBlock -> @nish.hmacPadBlock
-  callee 172:3 Sha512.update -> @nish.Sha512.update
-  callee 173:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 205:9 pad: u8[] (const)
+  callee 205:21 hmacPadBlock -> @nish.hmacPadBlock
+  callee 206:3 Sha512.update -> @nish.Sha512.update
+  callee 207:3 hmacPadInto -> @nish.hmacPadInto
+  callee 208:3 Sha512.update -> @nish.Sha512.update
+  callee 209:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function hmacKeySha512(inner: Sha512, outer: Sha512, key: u8[]): void -> @nish.hmacKeySha512
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacCheckKey
+  calls: nish.Sha512.constructor nish.Sha512.digest nish.Sha512.update nish.hmacCheckKey nish.hmacPadsSha512 nish.hmacWipeSha512 nish.wipe$arr.u8
+  pointer inner: size=8 writesThrough=false captured=false passedTo=nish.hmacPadsSha512#0 nish.hmacPadsSha512#0
+  pointer outer: size=8 writesThrough=false captured=false passedTo=nish.hmacPadsSha512#1 nish.hmacPadsSha512#1
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacCheckKey#0 nish.hmacPadsSha512#2 nish.Sha512.update#1
+  stackSites=1 stackLocals=1
+  callee 218:3 hmacCheckKey -> @nish.hmacCheckKey
+  callee 220:5 hmacPadsSha512 -> @nish.hmacPadsSha512
+  local 223:9 hasher: Sha512 (const)
+  callee 223:18 new Sha512 -> @nish.Sha512.constructor
+  callee 224:3 Sha512.update -> @nish.Sha512.update
+  local 225:9 hashed: u8[] (const)
+  callee 225:24 Sha512.digest -> @nish.Sha512.digest
+  callee 226:3 hmacWipeSha512 -> @nish.hmacWipeSha512
+  callee 227:3 hmacPadsSha512 -> @nish.hmacPadsSha512
+  callee 228:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function HmacSha256.constructor(this: HmacSha256, key: u8[]): void -> @nish.HmacSha256.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.hmacCheckKey
-  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.update nish.hmacCheckKey nish.hmacKeySha256 nish.hmacWipeSha256 nish.wipe$arr.u8 nish_alloc_struct
+  sharedWrite: via nish.Sha256.constructor
+  calls: nish.Sha256.constructor nish.hmacKeySha256 nish_alloc_struct
   pointer this: size=16 writesThrough=true captured=false
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacCheckKey#0 nish.Sha256.update#1 nish.hmacKeySha256#2
-  stackSites=1 stackLocals=1
-  callee 193:5 hmacCheckKey -> @nish.hmacCheckKey
-  callee 194:18 new Sha256 -> @nish.Sha256.constructor
-  callee 195:18 new Sha256 -> @nish.Sha256.constructor
-  local 197:13 hasher: Sha256 (const)
-  callee 197:22 new Sha256 -> @nish.Sha256.constructor
-  callee 198:7 Sha256.update -> @nish.Sha256.update
-  local 199:13 hashed: u8[] (const)
-  callee 199:28 Sha256.digest -> @nish.Sha256.digest
-  callee 200:7 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee 201:7 hmacKeySha256 -> @nish.hmacKeySha256
-  callee 202:7 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 204:7 hmacKeySha256 -> @nish.hmacKeySha256
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
+  stackSites=0 stackLocals=0
+  callee 247:18 new Sha256 -> @nish.Sha256.constructor
+  callee 248:18 new Sha256 -> @nish.Sha256.constructor
+  callee 249:5 hmacKeySha256 -> @nish.hmacKeySha256
 function HmacSha256.update(this: HmacSha256, data: u8[], off: i32, len: i32): void -> @nish.HmacSha256.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.update
@@ -54997,40 +55036,31 @@ function HmacSha256.update(this: HmacSha256, data: u8[], off: i32, len: i32): vo
   pointer this: size=16 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
   stackSites=0 stackLocals=0
-  callee 210:5 Sha256.update -> @nish.Sha256.update
+  callee 254:5 Sha256.update -> @nish.Sha256.update
 function HmacSha256.digest(this: HmacSha256): u8[] -> @nish.HmacSha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.digest
   calls: nish.Sha256.digest nish.Sha256.update nish.hmacWipeSha256 nish.wipe$arr.u8
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 215:11 innerDigest: u8[] (const)
-  callee 215:31 Sha256.digest -> @nish.Sha256.digest
-  callee 216:5 Sha256.update -> @nish.Sha256.update
-  callee 217:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 218:11 tag: u8[] (const)
-  callee 218:23 Sha256.digest -> @nish.Sha256.digest
-  callee 219:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee 220:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  local 259:11 innerDigest: u8[] (const)
+  callee 259:31 Sha256.digest -> @nish.Sha256.digest
+  callee 260:5 Sha256.update -> @nish.Sha256.update
+  callee 261:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 262:11 tag: u8[] (const)
+  callee 262:23 Sha256.digest -> @nish.Sha256.digest
+  callee 263:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee 264:5 hmacWipeSha256 -> @nish.hmacWipeSha256
 function HmacSha384.constructor(this: HmacSha384, key: u8[]): void -> @nish.HmacSha384.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.hmacCheckKey
-  calls: nish.Sha384.constructor nish.Sha384.digest nish.Sha384.update nish.hmacCheckKey nish.hmacKeySha384 nish.hmacWipeSha384 nish.wipe$arr.u8 nish_alloc_struct
+  sharedWrite: via nish.Sha384.constructor
+  calls: nish.Sha384.constructor nish.hmacKeySha384 nish_alloc_struct
   pointer this: size=16 writesThrough=true captured=false
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacCheckKey#0 nish.Sha384.update#1 nish.hmacKeySha384#2
-  stackSites=1 stackLocals=1
-  callee 237:5 hmacCheckKey -> @nish.hmacCheckKey
-  callee 238:18 new Sha384 -> @nish.Sha384.constructor
-  callee 239:18 new Sha384 -> @nish.Sha384.constructor
-  local 241:13 hasher: Sha384 (const)
-  callee 241:22 new Sha384 -> @nish.Sha384.constructor
-  callee 242:7 Sha384.update -> @nish.Sha384.update
-  local 243:13 hashed: u8[] (const)
-  callee 243:28 Sha384.digest -> @nish.Sha384.digest
-  callee 244:7 hmacWipeSha384 -> @nish.hmacWipeSha384
-  callee 245:7 hmacKeySha384 -> @nish.hmacKeySha384
-  callee 246:7 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 248:7 hmacKeySha384 -> @nish.hmacKeySha384
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha384#2
+  stackSites=0 stackLocals=0
+  callee 281:18 new Sha384 -> @nish.Sha384.constructor
+  callee 282:18 new Sha384 -> @nish.Sha384.constructor
+  callee 283:5 hmacKeySha384 -> @nish.hmacKeySha384
 function HmacSha384.update(this: HmacSha384, data: u8[], off: i32, len: i32): void -> @nish.HmacSha384.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha384.update
@@ -55039,40 +55069,31 @@ function HmacSha384.update(this: HmacSha384, data: u8[], off: i32, len: i32): vo
   pointer this: size=16 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha384.update#1
   stackSites=0 stackLocals=0
-  callee 254:5 Sha384.update -> @nish.Sha384.update
+  callee 288:5 Sha384.update -> @nish.Sha384.update
 function HmacSha384.digest(this: HmacSha384): u8[] -> @nish.HmacSha384.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha384.digest
   calls: nish.Sha384.digest nish.Sha384.update nish.hmacWipeSha384 nish.wipe$arr.u8
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 259:11 innerDigest: u8[] (const)
-  callee 259:31 Sha384.digest -> @nish.Sha384.digest
-  callee 260:5 Sha384.update -> @nish.Sha384.update
-  callee 261:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 262:11 tag: u8[] (const)
-  callee 262:23 Sha384.digest -> @nish.Sha384.digest
-  callee 263:5 hmacWipeSha384 -> @nish.hmacWipeSha384
-  callee 264:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  local 293:11 innerDigest: u8[] (const)
+  callee 293:31 Sha384.digest -> @nish.Sha384.digest
+  callee 294:5 Sha384.update -> @nish.Sha384.update
+  callee 295:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 296:11 tag: u8[] (const)
+  callee 296:23 Sha384.digest -> @nish.Sha384.digest
+  callee 297:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee 298:5 hmacWipeSha384 -> @nish.hmacWipeSha384
 function HmacSha512.constructor(this: HmacSha512, key: u8[]): void -> @nish.HmacSha512.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.hmacCheckKey
-  calls: nish.Sha512.constructor nish.Sha512.digest nish.Sha512.update nish.hmacCheckKey nish.hmacKeySha512 nish.hmacWipeSha512 nish.wipe$arr.u8 nish_alloc_struct
+  sharedWrite: via nish.Sha512.constructor
+  calls: nish.Sha512.constructor nish.hmacKeySha512 nish_alloc_struct
   pointer this: size=16 writesThrough=true captured=false
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacCheckKey#0 nish.Sha512.update#1 nish.hmacKeySha512#2
-  stackSites=1 stackLocals=1
-  callee 281:5 hmacCheckKey -> @nish.hmacCheckKey
-  callee 282:18 new Sha512 -> @nish.Sha512.constructor
-  callee 283:18 new Sha512 -> @nish.Sha512.constructor
-  local 285:13 hasher: Sha512 (const)
-  callee 285:22 new Sha512 -> @nish.Sha512.constructor
-  callee 286:7 Sha512.update -> @nish.Sha512.update
-  local 287:13 hashed: u8[] (const)
-  callee 287:28 Sha512.digest -> @nish.Sha512.digest
-  callee 288:7 hmacWipeSha512 -> @nish.hmacWipeSha512
-  callee 289:7 hmacKeySha512 -> @nish.hmacKeySha512
-  callee 290:7 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 292:7 hmacKeySha512 -> @nish.hmacKeySha512
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha512#2
+  stackSites=0 stackLocals=0
+  callee 315:18 new Sha512 -> @nish.Sha512.constructor
+  callee 316:18 new Sha512 -> @nish.Sha512.constructor
+  callee 317:5 hmacKeySha512 -> @nish.hmacKeySha512
 function HmacSha512.update(this: HmacSha512, data: u8[], off: i32, len: i32): void -> @nish.HmacSha512.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha512.update
@@ -55081,21 +55102,21 @@ function HmacSha512.update(this: HmacSha512, data: u8[], off: i32, len: i32): vo
   pointer this: size=16 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha512.update#1
   stackSites=0 stackLocals=0
-  callee 298:5 Sha512.update -> @nish.Sha512.update
+  callee 322:5 Sha512.update -> @nish.Sha512.update
 function HmacSha512.digest(this: HmacSha512): u8[] -> @nish.HmacSha512.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha512.digest
   calls: nish.Sha512.digest nish.Sha512.update nish.hmacWipeSha512 nish.wipe$arr.u8
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 303:11 innerDigest: u8[] (const)
-  callee 303:31 Sha512.digest -> @nish.Sha512.digest
-  callee 304:5 Sha512.update -> @nish.Sha512.update
-  callee 305:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 306:11 tag: u8[] (const)
-  callee 306:23 Sha512.digest -> @nish.Sha512.digest
-  callee 307:5 hmacWipeSha512 -> @nish.hmacWipeSha512
-  callee 308:5 hmacWipeSha512 -> @nish.hmacWipeSha512
+  local 327:11 innerDigest: u8[] (const)
+  callee 327:31 Sha512.digest -> @nish.Sha512.digest
+  callee 328:5 Sha512.update -> @nish.Sha512.update
+  callee 329:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 330:11 tag: u8[] (const)
+  callee 330:23 Sha512.digest -> @nish.Sha512.digest
+  callee 331:5 hmacWipeSha512 -> @nish.hmacWipeSha512
+  callee 332:5 hmacWipeSha512 -> @nish.hmacWipeSha512
 function hmacSha256(key: u8[], data: u8[]): u8[] -> @nish.hmacSha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -55103,10 +55124,10 @@ function hmacSha256(key: u8[], data: u8[]): u8[] -> @nish.hmacSha256 [exported]
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha256.constructor#1
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.HmacSha256.update#1
   stackSites=1 stackLocals=1
-  local 325:9 mac: HmacSha256 (const)
-  callee 325:15 new HmacSha256 -> @nish.HmacSha256.constructor
-  callee 326:3 HmacSha256.update -> @nish.HmacSha256.update
-  callee 327:10 HmacSha256.digest -> @nish.HmacSha256.digest
+  local 349:9 mac: HmacSha256 (const)
+  callee 349:15 new HmacSha256 -> @nish.HmacSha256.constructor
+  callee 350:3 HmacSha256.update -> @nish.HmacSha256.update
+  callee 351:10 HmacSha256.digest -> @nish.HmacSha256.digest
 function hmacSha384(key: u8[], data: u8[]): u8[] -> @nish.hmacSha384 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -55114,10 +55135,10 @@ function hmacSha384(key: u8[], data: u8[]): u8[] -> @nish.hmacSha384 [exported]
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384.constructor#1
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384.update#1
   stackSites=1 stackLocals=1
-  local 338:9 mac: HmacSha384 (const)
-  callee 338:15 new HmacSha384 -> @nish.HmacSha384.constructor
-  callee 339:3 HmacSha384.update -> @nish.HmacSha384.update
-  callee 340:10 HmacSha384.digest -> @nish.HmacSha384.digest
+  local 362:9 mac: HmacSha384 (const)
+  callee 362:15 new HmacSha384 -> @nish.HmacSha384.constructor
+  callee 363:3 HmacSha384.update -> @nish.HmacSha384.update
+  callee 364:10 HmacSha384.digest -> @nish.HmacSha384.digest
 function hmacSha512(key: u8[], data: u8[]): u8[] -> @nish.hmacSha512 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -55125,10 +55146,10 @@ function hmacSha512(key: u8[], data: u8[]): u8[] -> @nish.hmacSha512 [exported]
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha512.constructor#1
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.HmacSha512.update#1
   stackSites=1 stackLocals=1
-  local 351:9 mac: HmacSha512 (const)
-  callee 351:15 new HmacSha512 -> @nish.HmacSha512.constructor
-  callee 352:3 HmacSha512.update -> @nish.HmacSha512.update
-  callee 353:10 HmacSha512.digest -> @nish.HmacSha512.digest
+  local 375:9 mac: HmacSha512 (const)
+  callee 375:15 new HmacSha512 -> @nish.HmacSha512.constructor
+  callee 376:3 HmacSha512.update -> @nish.HmacSha512.update
+  callee 377:10 HmacSha512.digest -> @nish.HmacSha512.digest
 function hmacSha256Secret(key: Secret<u8[]>, data: u8[]): u8[] -> @nish.hmacSha256Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha256
@@ -55136,7 +55157,7 @@ function hmacSha256Secret(key: Secret<u8[]>, data: u8[]): u8[] -> @nish.hmacSha2
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha256#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha256#1
   stackSites=0 stackLocals=0
-  callee 360:74 exposeWith<u8[], u8[], u8[], hmacSha256> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha256
+  callee 384:74 exposeWith<u8[], u8[], u8[], hmacSha256> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha256
 function hmacSha384Secret(key: Secret<u8[]>, data: u8[]): u8[] -> @nish.hmacSha384Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha384
@@ -55144,7 +55165,7 @@ function hmacSha384Secret(key: Secret<u8[]>, data: u8[]): u8[] -> @nish.hmacSha3
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha384#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha384#1
   stackSites=0 stackLocals=0
-  callee 363:74 exposeWith<u8[], u8[], u8[], hmacSha384> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha384
+  callee 387:74 exposeWith<u8[], u8[], u8[], hmacSha384> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha384
 function hmacSha512Secret(key: Secret<u8[]>, data: u8[]): u8[] -> @nish.hmacSha512Secret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha512
@@ -55152,7 +55173,7 @@ function hmacSha512Secret(key: Secret<u8[]>, data: u8[]): u8[] -> @nish.hmacSha5
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha512#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha512#1
   stackSites=0 stackLocals=0
-  callee 366:74 exposeWith<u8[], u8[], u8[], hmacSha512> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha512
+  callee 390:74 exposeWith<u8[], u8[], u8[], hmacSha512> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.15.nish.hmacSha512
 function hmacSha256Verify(key: u8[], data: u8[], tag: u8[]): boolean -> @nish.hmacSha256Verify [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacSha256
@@ -55161,8 +55182,8 @@ function hmacSha256Verify(key: u8[], data: u8[], tag: u8[]): boolean -> @nish.hm
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#1
   pointer tag: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqual#1
   stackSites=0 stackLocals=0
-  callee 375:3 timingSafeEqual -> @nish.timingSafeEqual
-  callee 375:19 hmacSha256 -> @nish.hmacSha256
+  callee 399:3 timingSafeEqual -> @nish.timingSafeEqual
+  callee 399:19 hmacSha256 -> @nish.hmacSha256
 function hmacSha384Verify(key: u8[], data: u8[], tag: u8[]): boolean -> @nish.hmacSha384Verify [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacSha384
@@ -55171,8 +55192,8 @@ function hmacSha384Verify(key: u8[], data: u8[], tag: u8[]): boolean -> @nish.hm
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#1
   pointer tag: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqual#1
   stackSites=0 stackLocals=0
-  callee 379:3 timingSafeEqual -> @nish.timingSafeEqual
-  callee 379:19 hmacSha384 -> @nish.hmacSha384
+  callee 403:3 timingSafeEqual -> @nish.timingSafeEqual
+  callee 403:19 hmacSha384 -> @nish.hmacSha384
 function hmacSha512Verify(key: u8[], data: u8[], tag: u8[]): boolean -> @nish.hmacSha512Verify [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacSha512
@@ -55181,32 +55202,32 @@ function hmacSha512Verify(key: u8[], data: u8[], tag: u8[]): boolean -> @nish.hm
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.hmacSha512#1
   pointer tag: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqual#1
   stackSites=0 stackLocals=0
-  callee 383:3 timingSafeEqual -> @nish.timingSafeEqual
-  callee 383:19 hmacSha512 -> @nish.hmacSha512
+  callee 407:3 timingSafeEqual -> @nish.timingSafeEqual
+  callee 407:19 hmacSha512 -> @nish.hmacSha512
 function hmacCopySha256(from: Sha256, to: Sha256): void -> @nish.hmacCopySha256 [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 409:5
+  sharedWrite: 433:5
   pointer from: size=40 writesThrough=false captured=false
   pointer to: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 406:9 fromState: u32[] (const)
-  local 407:9 toState: u32[] (const)
-  local 408:12 i: i32 (let)
-  local 411:9 fromBlock: u8[] (const)
-  local 412:9 toBlock: u8[] (const)
-  local 413:12 i: i32 (let)
+  local 430:9 fromState: u32[] (const)
+  local 431:9 toState: u32[] (const)
+  local 432:12 i: i32 (let)
+  local 435:9 fromBlock: u8[] (const)
+  local 436:9 toBlock: u8[] (const)
+  local 437:12 i: i32 (let)
 function hmacCopySha384(from: Sha384, to: Sha384): void -> @nish.hmacCopySha384 [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 426:5
+  sharedWrite: 450:5
   pointer from: size=8 writesThrough=false captured=false
   pointer to: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 423:9 fromState: u64[] (const)
-  local 424:9 toState: u64[] (const)
-  local 425:12 i: i32 (let)
-  local 428:9 fromBlock: u8[] (const)
-  local 429:9 toBlock: u8[] (const)
-  local 431:9 i: i32 (let)
+  local 447:9 fromState: u64[] (const)
+  local 448:9 toState: u64[] (const)
+  local 449:12 i: i32 (let)
+  local 452:9 fromBlock: u8[] (const)
+  local 453:9 toBlock: u8[] (const)
+  local 455:9 i: i32 (let)
 function hmacWindowFits(length: i32, off: i32, len: i32): boolean -> @nish.hmacWindowFits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
@@ -55217,39 +55238,41 @@ function HmacSha256Scratch.constructor(this: HmacSha256Scratch): void -> @nish.H
   calls: nish.Sha256.constructor nish_alloc_struct nish_exit nish_write
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 474:18 new Sha256 -> @nish.Sha256.constructor
-  callee 475:18 new Sha256 -> @nish.Sha256.constructor
-  callee 476:18 new Sha256 -> @nish.Sha256.constructor
+  callee 498:18 new Sha256 -> @nish.Sha256.constructor
+  callee 499:18 new Sha256 -> @nish.Sha256.constructor
+  callee 500:18 new Sha256 -> @nish.Sha256.constructor
 function HmacSha256Scratch.begin(this: HmacSha256Scratch, key: u8[], off: i32, len: i32): void -> @nish.HmacSha256Scratch.begin [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 494:7
+  sharedWrite: 518:7
   escaping: len off
   calls: nish.HmacSha256Scratch.keyBlocks nish.Sha256.digest nish.Sha256.update nish.hmacCopySha256 nish.hmacWindowFits nish_arena_mark nish_arena_release nish_exit nish_wipe nish_write
   pointer this: size=40 writesThrough=false captured=false passedTo=nish.HmacSha256Scratch.keyBlocks#0 nish.HmacSha256Scratch.keyBlocks#0
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha256Scratch.keyBlocks#1 nish.Sha256.update#1
   stackSites=0 stackLocals=0
-  callee 483:10 hmacWindowFits -> @nish.hmacWindowFits
-  callee 487:7 HmacSha256Scratch.keyBlocks -> @nish.HmacSha256Scratch.keyBlocks
-  callee 490:5 hmacCopySha256 -> @nish.hmacCopySha256
-  callee 491:5 Sha256.update -> @nish.Sha256.update
-  local 492:11 digest: u8[] (const)
-  callee 492:26 Sha256.digest -> @nish.Sha256.digest
-  local 493:14 i: i32 (let)
-  callee 497:5 HmacSha256Scratch.keyBlocks -> @nish.HmacSha256Scratch.keyBlocks
+  callee 507:10 hmacWindowFits -> @nish.hmacWindowFits
+  callee 511:7 HmacSha256Scratch.keyBlocks -> @nish.HmacSha256Scratch.keyBlocks
+  callee 514:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee 515:5 Sha256.update -> @nish.Sha256.update
+  local 516:11 digest: u8[] (const)
+  callee 516:26 Sha256.digest -> @nish.Sha256.digest
+  local 517:14 i: i32 (let)
+  callee 521:5 HmacSha256Scratch.keyBlocks -> @nish.HmacSha256Scratch.keyBlocks
 function HmacSha256Scratch.keyBlocks(this: HmacSha256Scratch, key: u8[], off: i32, len: i32): void -> @nish.HmacSha256Scratch.keyBlocks [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 515:5
+  sharedWrite: 543:5
   escaping: len off
-  calls: nish.Sha256.update nish.hmacCopySha256 nish.hmacPadInto nish_wipe
+  calls: nish.Sha256.update nish.hmacCopySha256 nish.hmacPadInto nish.hmacWipeSha256 nish_wipe
   pointer this: size=40 writesThrough=false captured=false
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacPadInto#1 nish.hmacPadInto#1
   stackSites=0 stackLocals=0
-  callee 509:5 hmacPadInto -> @nish.hmacPadInto
-  callee 510:5 hmacCopySha256 -> @nish.hmacCopySha256
-  callee 511:5 Sha256.update -> @nish.Sha256.update
-  callee 512:5 hmacPadInto -> @nish.hmacPadInto
-  callee 513:5 hmacCopySha256 -> @nish.hmacCopySha256
-  callee 514:5 Sha256.update -> @nish.Sha256.update
+  callee 535:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee 536:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee 537:5 hmacPadInto -> @nish.hmacPadInto
+  callee 538:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee 539:5 Sha256.update -> @nish.Sha256.update
+  callee 540:5 hmacPadInto -> @nish.hmacPadInto
+  callee 541:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee 542:5 Sha256.update -> @nish.Sha256.update
 function HmacSha256Scratch.update(this: HmacSha256Scratch, data: u8[], off: i32, len: i32): void -> @nish.HmacSha256Scratch.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.update
@@ -55258,69 +55281,71 @@ function HmacSha256Scratch.update(this: HmacSha256Scratch, data: u8[], off: i32,
   pointer this: size=40 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
   stackSites=0 stackLocals=0
-  callee 520:5 Sha256.update -> @nish.Sha256.update
+  callee 548:5 Sha256.update -> @nish.Sha256.update
 function HmacSha256Scratch.finishInto(this: HmacSha256Scratch, out: u8[], at: i32): void -> @nish.HmacSha256Scratch.finishInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 530:5
+  sharedWrite: 558:5
   escaping: at
   calls: nish.Sha256.digest nish.Sha256.update nish.hmacWindowFits nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_wipe nish_write
   pointer this: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 525:10 hmacWindowFits -> @nish.hmacWindowFits
-  local 528:11 innerDigest: u8[] (const)
-  callee 528:31 Sha256.digest -> @nish.Sha256.digest
-  callee 529:5 Sha256.update -> @nish.Sha256.update
-  local 531:11 tag: u8[] (const)
-  callee 531:23 Sha256.digest -> @nish.Sha256.digest
-  local 532:14 i: i32 (let)
+  callee 553:10 hmacWindowFits -> @nish.hmacWindowFits
+  local 556:11 innerDigest: u8[] (const)
+  callee 556:31 Sha256.digest -> @nish.Sha256.digest
+  callee 557:5 Sha256.update -> @nish.Sha256.update
+  local 559:11 tag: u8[] (const)
+  callee 559:23 Sha256.digest -> @nish.Sha256.digest
+  local 560:14 i: i32 (let)
 function HmacSha256Scratch.wipe(this: HmacSha256Scratch): void -> @nish.HmacSha256Scratch.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacWipeSha256
   calls: nish.hmacWipeSha256
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 540:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee 541:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee 568:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee 569:5 hmacWipeSha256 -> @nish.hmacWipeSha256
 function HmacSha384Scratch.constructor(this: HmacSha384Scratch): void -> @nish.HmacSha384Scratch.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.Sha384.constructor
   calls: nish.Sha384.constructor nish_alloc_struct nish_exit nish_write
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 562:18 new Sha384 -> @nish.Sha384.constructor
-  callee 563:18 new Sha384 -> @nish.Sha384.constructor
-  callee 564:18 new Sha384 -> @nish.Sha384.constructor
+  callee 590:18 new Sha384 -> @nish.Sha384.constructor
+  callee 591:18 new Sha384 -> @nish.Sha384.constructor
+  callee 592:18 new Sha384 -> @nish.Sha384.constructor
 function HmacSha384Scratch.begin(this: HmacSha384Scratch, key: u8[], off: i32, len: i32): void -> @nish.HmacSha384Scratch.begin [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 582:7
+  sharedWrite: 610:7
   escaping: len off
   calls: nish.HmacSha384Scratch.keyBlocks nish.Sha384.digest nish.Sha384.update nish.hmacCopySha384 nish.hmacWindowFits nish_arena_mark nish_arena_release nish_exit nish_wipe nish_write
   pointer this: size=40 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.keyBlocks#0 nish.HmacSha384Scratch.keyBlocks#0
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.keyBlocks#1 nish.Sha384.update#1
   stackSites=0 stackLocals=0
-  callee 571:10 hmacWindowFits -> @nish.hmacWindowFits
-  callee 575:7 HmacSha384Scratch.keyBlocks -> @nish.HmacSha384Scratch.keyBlocks
-  callee 578:5 hmacCopySha384 -> @nish.hmacCopySha384
-  callee 579:5 Sha384.update -> @nish.Sha384.update
-  local 580:11 digest: u8[] (const)
-  callee 580:26 Sha384.digest -> @nish.Sha384.digest
-  local 581:14 i: i32 (let)
-  callee 585:5 HmacSha384Scratch.keyBlocks -> @nish.HmacSha384Scratch.keyBlocks
+  callee 599:10 hmacWindowFits -> @nish.hmacWindowFits
+  callee 603:7 HmacSha384Scratch.keyBlocks -> @nish.HmacSha384Scratch.keyBlocks
+  callee 606:5 hmacCopySha384 -> @nish.hmacCopySha384
+  callee 607:5 Sha384.update -> @nish.Sha384.update
+  local 608:11 digest: u8[] (const)
+  callee 608:26 Sha384.digest -> @nish.Sha384.digest
+  local 609:14 i: i32 (let)
+  callee 613:5 HmacSha384Scratch.keyBlocks -> @nish.HmacSha384Scratch.keyBlocks
 function HmacSha384Scratch.keyBlocks(this: HmacSha384Scratch, key: u8[], off: i32, len: i32): void -> @nish.HmacSha384Scratch.keyBlocks [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 603:5
+  sharedWrite: 635:5
   escaping: len off
-  calls: nish.Sha384.update nish.hmacCopySha384 nish.hmacPadInto nish_wipe
+  calls: nish.Sha384.update nish.hmacCopySha384 nish.hmacPadInto nish.hmacWipeSha384 nish_wipe
   pointer this: size=40 writesThrough=false captured=false
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacPadInto#1 nish.hmacPadInto#1
   stackSites=0 stackLocals=0
-  callee 597:5 hmacPadInto -> @nish.hmacPadInto
-  callee 598:5 hmacCopySha384 -> @nish.hmacCopySha384
-  callee 599:5 Sha384.update -> @nish.Sha384.update
-  callee 600:5 hmacPadInto -> @nish.hmacPadInto
-  callee 601:5 hmacCopySha384 -> @nish.hmacCopySha384
-  callee 602:5 Sha384.update -> @nish.Sha384.update
+  callee 627:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee 628:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee 629:5 hmacPadInto -> @nish.hmacPadInto
+  callee 630:5 hmacCopySha384 -> @nish.hmacCopySha384
+  callee 631:5 Sha384.update -> @nish.Sha384.update
+  callee 632:5 hmacPadInto -> @nish.hmacPadInto
+  callee 633:5 hmacCopySha384 -> @nish.hmacCopySha384
+  callee 634:5 Sha384.update -> @nish.Sha384.update
 function HmacSha384Scratch.update(this: HmacSha384Scratch, data: u8[], off: i32, len: i32): void -> @nish.HmacSha384Scratch.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha384.update
@@ -55329,30 +55354,30 @@ function HmacSha384Scratch.update(this: HmacSha384Scratch, data: u8[], off: i32,
   pointer this: size=40 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha384.update#1
   stackSites=0 stackLocals=0
-  callee 608:5 Sha384.update -> @nish.Sha384.update
+  callee 640:5 Sha384.update -> @nish.Sha384.update
 function HmacSha384Scratch.finishInto(this: HmacSha384Scratch, out: u8[], at: i32): void -> @nish.HmacSha384Scratch.finishInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 618:5
+  sharedWrite: 650:5
   escaping: at
   calls: nish.Sha384.digest nish.Sha384.update nish.hmacWindowFits nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_wipe nish_write
   pointer this: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 613:10 hmacWindowFits -> @nish.hmacWindowFits
-  local 616:11 innerDigest: u8[] (const)
-  callee 616:31 Sha384.digest -> @nish.Sha384.digest
-  callee 617:5 Sha384.update -> @nish.Sha384.update
-  local 619:11 tag: u8[] (const)
-  callee 619:23 Sha384.digest -> @nish.Sha384.digest
-  local 620:14 i: i32 (let)
+  callee 645:10 hmacWindowFits -> @nish.hmacWindowFits
+  local 648:11 innerDigest: u8[] (const)
+  callee 648:31 Sha384.digest -> @nish.Sha384.digest
+  callee 649:5 Sha384.update -> @nish.Sha384.update
+  local 651:11 tag: u8[] (const)
+  callee 651:23 Sha384.digest -> @nish.Sha384.digest
+  local 652:14 i: i32 (let)
 function HmacSha384Scratch.wipe(this: HmacSha384Scratch): void -> @nish.HmacSha384Scratch.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacWipeSha384
   calls: nish.hmacWipeSha384
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 628:5 hmacWipeSha384 -> @nish.hmacWipeSha384
-  callee 629:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee 660:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee 661:5 hmacWipeSha384 -> @nish.hmacWipeSha384
 module std/crypto/sha256.ts [package nish]
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
