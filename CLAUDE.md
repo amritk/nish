@@ -57,10 +57,13 @@ so a session that may hold an older one runs `bash scripts/fetch-seed.sh
 --force` before building: a 0.16.0 seed against `main`'s 0.18.0 made `fuzz
 --stage1` disagree on a clean `main` (#541, #540). `src/` is also linked whole
 into the web compiler's wasi module, and the performance ratchet allows no new
-NL9007 in it, so a change to `src/` runs `node tests/run.js web` and `node
+NL9007 in it, so a change to `src/` runs `node tests/run.js wasi` and `node
 tests/run.js performance` before it is pushed: #546 called builtins refused on
 wasm32 and #550 added an unproven index, both green on every local check and
-red in CI.
+red in CI. The `web:` checks that link `src/` as `nish.wasm` live in the
+`wasi` section, not under the `web` filter, and the section skips without a
+WASI sysroot (`WASI_SYSROOT=/usr` where the wasi-libc package is installed),
+so read its skip line.
 
 **Generated goldens are regenerated, never edited or merged by hand.**
 `tests/self/goldens/checked.txt` and `checked-self.txt` are stage1's
