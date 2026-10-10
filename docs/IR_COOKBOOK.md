@@ -10797,7 +10797,10 @@ loads of one address.
 Four things refuse the hoist, and each is the whole of a proof:
 
 - a `push` or `pop` anywhere in the loop, or a call to a function the fixpoint
-  says grows an array — those are what move `len`, `cap` and `data`;
+  says grows an array — those are what move `len`, `cap` and `data`. A `new`
+  of a class is a call to its constructor, and refuses the hoist on the same
+  fact (`cg_sec_hoist_new_resize`: `new P(xs)` pushes, `new Q(xs)` only
+  reads and keeps it);
 - a store in the loop to a field named anywhere in the path (`h.xs = other`),
   since the hoisted value is a field load;
 - a path rooted at a local the loop itself declares, or at a reassignable one,

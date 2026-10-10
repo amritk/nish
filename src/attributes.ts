@@ -2644,7 +2644,7 @@ const collectRound = (
 
 /**
  * Whether evaluating `node` can run a call or a constructor: a superset of
- * `rightSideMayResize` in `src/emit-arrays.ts`, which the fixpoint narrows.
+ * `mayResize` in `src/emit-arrays.ts`, which the fixpoint narrows.
  */
 const callsAnything = (node: Node): boolean => {
   if (node.kind === N_CALL || node.kind === N_NEW) {
@@ -3211,7 +3211,9 @@ const bodyMayExtend = (
   if (body.kind === N_THROW || isResizeCall(unit.program, table, body)) {
     return true
   }
-  if (body.kind === N_CALL) {
+  // A `new` holds its class's constructor (CG-11), and a class with none
+  // stores constants only.
+  if (body.kind === N_CALL || body.kind === N_NEW) {
     const callee = unit.program.nodeCallees[body.id]
     // An unresolved callee is a builtin, and no builtin but `push`/`pop`
     // reaches a user array's header; those two are above.

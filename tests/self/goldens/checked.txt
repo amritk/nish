@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 945 programs, 88348 dump lines.
+# 946 programs, 88440 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4394,6 +4394,99 @@ function test(): i32 -> @test [exported]
   callee 21:3 extend -> @extend
   local 22:9 text: string (const)
   callee 22:16 load -> @load
+program tests/cases/cg_sec_hoist_new_resize.ts
+module tests/cases/cg_sec_hoist_new_resize.ts (entry)
+struct P (class) size=4 align=4
+  field n: i32 index=0 offset=0
+  constructor -> @P.constructor
+struct Q (class) size=4 align=4
+  field n: i32 index=0 offset=0
+  constructor -> @Q.constructor
+struct R (class) size=4 align=4
+  field n: i32 index=0 offset=0
+  constructor -> @R.constructor
+function P.constructor(this: P, xs: i32[]): void -> @P.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 19:7
+  calls: nish_array_grow
+  pointer this: size=4 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 17:9 k: i32 (let)
+function Q.constructor(this: Q, xs: i32[]): void -> @Q.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=4 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function R.constructor(this: R, xs: i32[]): void -> @R.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 36:5
+  calls: nish_array_grow
+  pointer this: size=4 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function whileLoop(): i32 -> @whileLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via P.constructor
+  calls: P.constructor nish_arena_mark nish_arena_release nish_panic_overflow
+  stackSites=2 stackLocals=2
+  local 42:9 xs: i32[] (const)
+  local 43:7 s: i32 (let)
+  local 44:7 i: i32 (let)
+  local 48:13 p: P (const)
+  callee 48:17 new P -> @P.constructor
+function forOfLoop(): i32 -> @forOfLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via P.constructor
+  calls: P.constructor nish_arena_mark nish_arena_release nish_panic_overflow
+  stackSites=2 stackLocals=2
+  local 57:9 xs: i32[] (const)
+  local 58:7 s: i32 (let)
+  local 59:14 x: i32 (const)
+  local 62:13 p: P (const)
+  callee 62:17 new P -> @P.constructor
+function keepsHoist(): i32 -> @keepsHoist
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: Q.constructor nish_panic_overflow
+  stackSites=2 stackLocals=2
+  local 70:9 xs: i32[] (const)
+  local 71:7 s: i32 (let)
+  local 72:7 i: i32 (let)
+  local 74:11 q: Q (const)
+  callee 74:15 new Q -> @Q.constructor
+function compoundNew(): i32 -> @compoundNew
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via P.constructor
+  calls: P.constructor nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
+  stackSites=2 stackLocals=1
+  local 82:9 xs: i32[] (const)
+  callee 83:12 new P -> @P.constructor
+function compoundKeeps(): i32 -> @compoundKeeps
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: Q.constructor nish_panic_index nish_panic_overflow
+  stackSites=2 stackLocals=1
+  local 88:9 xs: i32[] (const)
+  callee 89:12 new Q -> @Q.constructor
+function forOfGrows(xs: i32[]): i32 -> @forOfGrows [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via R.constructor
+  calls: R.constructor
+  pointer xs: size=0 writesThrough=true captured=false passedTo=R.constructor#1
+  stackSites=1 stackLocals=1
+  local 94:14 x: i32 (const)
+  local 95:11 r: R (const)
+  callee 95:15 new R -> @R.constructor
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via whileLoop
+  calls: compoundKeeps compoundNew forOfLoop keepsHoist nish_panic_overflow whileLoop
+  stackSites=0 stackLocals=0
+  callee 101:3 whileLoop -> @whileLoop
+  callee 101:27 forOfLoop -> @forOfLoop
+  callee 101:48 keepsHoist -> @keepsHoist
+  callee 101:69 compoundNew -> @compoundNew
+  callee 101:90 compoundKeeps -> @compoundKeeps
 program tests/cases/cg_sec_join_limit.ts
 module tests/cases/cg_sec_join_limit.ts (entry)
 function joined(parts: string[], sep: string): string -> @joined
