@@ -6335,7 +6335,15 @@ by the caller.
     or `u32` index, which that `i32` test does not type-check against, the
     hint is the other half alone, `if (toU32(i) < toU32(a.length))`
     (`tests/cases/perf_bounds_loop`, `arr_bounds_unsigned_guard`,
-    `reject_deny_panics_index_unsigned`). Reported on the index, once per
+    `reject_deny_panics_index_unsigned`). Under `--number-mode f64`, where a
+    length is an `f64`, the bound is spelled `toI32(a.length)`
+    (`tests/wordings/nl9007_guard_f64_mode`). The hint names only a guard that
+    compiles and that the proof credits, so it names none for an `i64`, a
+    `u64` or a float index, which no spelling compares with the length in a
+    credited way, nor where the module declares its own `toU32` (or, under
+    f64, `toI32`), which the guard would call instead of the builtin; it says
+    so instead (`tests/wordings/nl9007_guard_*`, and NL2457's
+    `nl2457_deny_panics_index_*`). Reported on the index, once per
     access. Where the index is an `i32`, an `i32`-based ranged integer or a
     `u8`, `u16` or `u32`, and nothing between the start of its statement and
     the access branches, loops, calls, allocates or assigns (the README below

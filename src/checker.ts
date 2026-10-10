@@ -15,7 +15,7 @@ import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
-import { CheckContext } from "./context"
+import { CheckContext, NUMBER_MODE_F64 } from "./context"
 import {
   isBuiltinSpecifier,
   isNishModule,
@@ -1645,16 +1645,8 @@ const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bound
 /**
  * A bounds check `src/bounds.ts` could not remove, on an access inside a loop
  * whose receiver and index are both plain locals — which is the shape the
- * analysis knows how to prove, so a guard really would remove the check.
- *
- * The hint is one rewrite rather than a list because it is the one that always
- * works: an `i >= 0 && i < xs.length` test reaching the access proves both
- * ends whatever took the proof away, `--wrapping` included, where an
- * incremented counter has no lower bound the compiler may assume. An unsigned
- * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
- * the language already has, and half the proof comes off their declaration;
- * a `u8`, `u16` or `u32` index, which that `i32` test does not type-check
- * against, is given the other half instead, `toU32(i) < toU32(xs.length)`.
+ * analysis knows how to prove, so a guard really would remove the check. The
+ * advice is `indexGuardAdvice`'s, which NL2457 gives too.
  */
 const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access
@@ -1675,22 +1667,73 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   if (holder.length === 0 || name.length === 0) {
     return
   }
-  // A `u8`, `u16` or `u32` index cannot be compared with the `i32` length as
-  // it is, so its hint is the credited `u32` compare, its type the lower end.
-  const type = walk.ctx.program.nodeTypes[index.id]
-  const guard =
-    type === T_U8 || type === T_U16 || type === T_U32
-      ? `\`if (toU32(${name}) < toU32(${holder}.length))\` proves it, because an unsigned index needs only the upper end`
-      : `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only the upper one`
+  const advice = indexGuardAdvice(
+    walk.ctx.program,
+    walk.ctx.table,
+    index,
+    name,
+    holder,
+    walk.ctx.numberMode === NUMBER_MODE_F64
+  )
   const message =
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
-    `compares against the length on every iteration: guard it with a test that reaches the access — ${guard}`
+    `compares against the length on every iteration: ${advice}`
   const edits = boundsGuardEdits(walk, access, index, name, holder)
   if (edits.length > 0) {
     walk.ctx.performanceFix(index, message, edits)
   } else {
     walk.ctx.performance(index, message)
   }
+}
+
+/**
+ * How to remove the check on `index` into `holder`, for NL9007 and NL2457:
+ * one guard, and only a spelling that type-checks against the length and that
+ * `src/bounds.ts` credits (`orderFacts`), or none at all.
+ *
+ * An `i32` or ranged index is given `i >= 0 && i < xs.length`, which proves
+ * both ends whatever took the proof away, `--wrapping` included; under
+ * `--number-mode f64` the length is an `f64`, so the bound is spelled
+ * `toI32(xs.length)`, which `lengthOf` accepts. A `u8`, `u16` or `u32`
+ * index, which that `i32` test does not type-check against, is given the
+ * credited `u32` compare `toU32(i) < toU32(xs.length)`, its type the lower
+ * end. Both conversions must be the builtins, so a module that declares its
+ * own is given no guard, as `boundsGuardEdits` gives it no fix. An `i64`, a
+ * `u64` or a float has no spelling at all: `i < xs.length` does not type-check
+ * for the first two, `lengthOf` reads no `toI64(xs.length)` or
+ * `toU64(xs.length)`, and `isIndexType` proves nothing about a float.
+ * `f64Mode` is false where the number mode is not known (NL2457).
+ */
+export const indexGuardAdvice = (
+  program: CheckedProgram,
+  table: TypeTable,
+  index: Node,
+  name: string,
+  holder: string,
+  f64Mode: boolean
+): string => {
+  const type = program.nodeTypes[index.id]
+  const unsigned = type === T_U8 || type === T_U16 || type === T_U32
+  if (type !== T_I32 && !table.isRanged(type) && !unsigned) {
+    const what = type >= 0 ? `an index of type \`${table.typeName(type)}\`` : "this index"
+    return (
+      `no guard removes the check on ${what}, because the compiler credits no compare of it with the length: ` +
+      "an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does"
+    )
+  }
+  const convert = unsigned ? "toU32" : "toI32"
+  if ((unsigned || f64Mode) && declaresName(program.file, convert)) {
+    return (
+      "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
+      `\`${convert}\`, which this module's own \`${convert}\` hides: rename it to guard the access`
+    )
+  }
+  const lead = "guard it with a test that reaches the access — "
+  if (unsigned) {
+    return `${lead}\`if (toU32(${name}) < toU32(${holder}.length))\` proves it, because an unsigned index needs only the upper end`
+  }
+  const length = f64Mode ? `toI32(${holder}.length)` : `${holder}.length`
+  return `${lead}\`if (${name} >= 0 && ${name} < ${length})\` proves both ends, and an unsigned index needs only the upper one`
 }
 
 /**

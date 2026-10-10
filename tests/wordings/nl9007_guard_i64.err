@@ -1,0 +1,1 @@
+`i` is not proven to be in range for `xs` here, so this access keeps its bounds check and compares against the length on every iteration: no guard removes the check on an index of type `i64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
