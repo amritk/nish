@@ -1652,7 +1652,9 @@ const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bound
  * ends whatever took the proof away, `--wrapping` included, where an
  * incremented counter has no lower bound the compiler may assume. An unsigned
  * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
- * the language already has, and half the proof comes off their declaration.
+ * the language already has, and half the proof comes off their declaration;
+ * a `u8`, `u16` or `u32` index, which that `i32` test does not type-check
+ * against, is given the other half instead, `toU32(i) < toU32(xs.length)`.
  */
 const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access
@@ -1673,11 +1675,16 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   if (holder.length === 0 || name.length === 0) {
     return
   }
+  // A `u8`, `u16` or `u32` index cannot be compared with the `i32` length as
+  // it is, so its hint is the credited `u32` compare, its type the lower end.
+  const type = walk.ctx.program.nodeTypes[index.id]
+  const guard =
+    type === T_U8 || type === T_U16 || type === T_U32
+      ? `\`if (toU32(${name}) < toU32(${holder}.length))\` proves it, because an unsigned index needs only the upper end`
+      : `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only the upper one`
   const message =
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
-    "compares against the length on every iteration: guard it with a test that reaches the access — " +
-    `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
-    "the upper one"
+    `compares against the length on every iteration: guard it with a test that reaches the access — ${guard}`
   const edits = boundsGuardEdits(walk, access, index, name, holder)
   if (edits.length > 0) {
     walk.ctx.performanceFix(index, message, edits)

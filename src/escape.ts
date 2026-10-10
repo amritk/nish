@@ -211,6 +211,14 @@ export class EscapeResult {
   /** Every site of this body that bumps the arena itself: an allocation that is not an alloca, a `push`, a logged number. */
   arenaNodes: Node[]
   /**
+   * The flow of each `arenaNodes` site, parallel to it: `FLOW_LOCAL`,
+   * `FLOW_RETURNED` or `FLOW_LEAKS`. Kept for the placement report
+   * (`src/arena-report.ts`), which has to tell a value handed to the caller
+   * from one nothing here releases; every other reader wants only the
+   * aggregates above.
+   */
+  arenaFlows: i32[]
+  /**
    * Every `xs[i] = v` and `xs.push(v)` whose value takes `xs`'s outcome
    * (`storedIntoReturnedArray`), and its `xs`. The value is in memory all the
    * same, so a pass or a block that did not declare `xs` may not release it.
@@ -221,6 +229,7 @@ export class EscapeResult {
   constructor(nodeCount: i32) {
     this.escapingNodes = []
     this.arenaNodes = []
+    this.arenaFlows = []
     this.carriedStores = []
     this.carriers = []
     this.stackSites = new Array<boolean>(nodeCount)
@@ -543,6 +552,7 @@ class EscapeAnalysis {
         // `nish_str_from_*` allocates the text; `nish_print` does not retain it.
         this.logsNumbers = true
         this.result.arenaNodes.push(call)
+        this.result.arenaFlows.push(FLOW_LOCAL)
       }
     }
   }
@@ -1069,6 +1079,7 @@ class EscapeAnalysis {
         continue
       }
       this.result.arenaNodes.push(site.node)
+      this.result.arenaFlows.push(flow)
       if (flow === FLOW_LOCAL) {
         this.result.directArena = true
       } else if (flow === FLOW_RETURNED) {
@@ -1139,6 +1150,8 @@ class EscapeAnalysis {
         v = this.unit.program.nodeLocals[receiver.id]
       }
       let owned = false
+      // Someone else's array: the growth lives as long as that array does.
+      let growth = FLOW_LEAKS
       // WP9: the growth is reachable exactly where the array it belongs to is.
       // An array this function allocated and only keeps or returns takes its
       // growth with it; anyone else's array leaves it reachable by the caller.
@@ -1147,12 +1160,14 @@ class EscapeAnalysis {
         const visiting: Local[] = []
         const outcome = this.localOutcome(v, visiting)
         owned = outcome.flow === FLOW_LOCAL
+        growth = outcome.flow
         escapes = outcome.escapes
       }
       if (escapes) {
         this.result.noteEscape(push)
       }
       this.result.arenaNodes.push(push)
+      this.result.arenaFlows.push(growth)
       if (owned) {
         this.result.directArena = true
       } else {
@@ -1905,7 +1920,7 @@ const decidePass = (
 // empty bracket costs two runtime calls and is what the program wrote.
 
 /** Whether `stmt` is a `using` declaration that opens an arena: one of its initialisers is `arena()`. */
-const isArenaUsing = (program: CheckedProgram, stmt: Node): boolean => {
+export const isArenaUsing = (program: CheckedProgram, stmt: Node): boolean => {
   if (stmt.kind !== N_VAR || (stmt.flags & FLAG_USING) === 0) {
     return false
   }
@@ -2258,7 +2273,7 @@ const findArenaLoops = (
   }
 }
 
-const loopScopeOf = (f: FunctionFacts, loop: Node): LoopScope | null => {
+export const loopScopeOf = (f: FunctionFacts, loop: Node): LoopScope | null => {
   for (const scope of f.loopScopes) {
     if (scope.loop === loop) {
       return scope
