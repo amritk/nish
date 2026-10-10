@@ -1,0 +1,2 @@
+`--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more
+`last` is given a new allocation on every pass of this loop

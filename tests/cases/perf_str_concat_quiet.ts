@@ -6,10 +6,13 @@ export function test(): number {
   const parts = ["a", "bb", "ccc"];
 
   // The result does not include the target, so each pass allocates one bounded
-  // string and the loop is linear.
+  // string and the loop is linear. Each value is kept in `lines`: assigned and
+  // dropped on every pass, `line` would be NL9016's instead.
+  const lines: string[] = [];
   let line = "";
   for (const part of parts) {
     line = part + "!";
+    lines.push(line);
   }
 
   // The accumulator is declared inside the loop, so it is reset every pass.
@@ -31,5 +34,5 @@ export function test(): number {
     seen = seen + x.length;
   }
 
-  return line.length + total + head.length + seen;
+  return line.length + lines.length + total + head.length + seen;
 }

@@ -15,7 +15,7 @@ import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
-import { CheckContext } from "./context"
+import { CheckContext, NUMBER_MODE_F64 } from "./context"
 import {
   isBuiltinSpecifier,
   isNishModule,
@@ -59,6 +59,7 @@ import {
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
+  N_FALSE,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
@@ -131,7 +132,20 @@ import {
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable, intBits } from "./types"
+import {
+  T_BOOL,
+  T_ERROR,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  T_U16,
+  T_U32,
+  T_U8,
+  T_VOID,
+  TypeTable,
+  intBits,
+} from "./types"
 
 export class Checker {
   ctx: CheckContext
@@ -154,6 +168,7 @@ export class Checker {
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
     this.program.wrapping = wrapping
+    this.program.f64Mode = numberMode === NUMBER_MODE_F64
     this.program.uncheckedIndexing = uncheckedIndexing
     this.declared = []
     this.ctx = new CheckContext(
@@ -1476,6 +1491,14 @@ class PerfWalk {
    * one value in a branch", which is ordinary code with nothing to fix.
    */
   declaredAllocates: boolean[]
+  /**
+   * The assignments that run on every pass of the innermost loop around the
+   * walk: each is a statement of its own at the top of a loop body that can
+   * come round again (`walkLoopBody`). Only these can say "drops the value
+   * the pass before gave it", because one in a branch may run once, as a
+   * search loop's `found = ...` before its `break` does.
+   */
+  passAssignments: Node[]
 
   constructor(
     ctx: CheckContext,
@@ -1493,6 +1516,17 @@ class PerfWalk {
     this.declared = []
     this.declaredDepth = []
     this.declaredAllocates = []
+    this.passAssignments = []
+  }
+
+  /** Whether `expr` is one of the innermost loop's `passAssignments`. */
+  isPassAssignment(expr: Node): boolean {
+    for (const assignment of this.passAssignments) {
+      if (assignment === expr) {
+        return true
+      }
+    }
+    return false
   }
 
   /** Whether `local` was declared holding an allocation. */
@@ -1612,14 +1646,8 @@ const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bound
 /**
  * A bounds check `src/bounds.ts` could not remove, on an access inside a loop
  * whose receiver and index are both plain locals — which is the shape the
- * analysis knows how to prove, so a guard really would remove the check.
- *
- * The hint is one rewrite rather than a list because it is the one that always
- * works: an `i >= 0 && i < xs.length` test reaching the access proves both
- * ends whatever took the proof away, `--wrapping` included, where an
- * incremented counter has no lower bound the compiler may assume. An unsigned
- * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
- * the language already has, and half the proof comes off their declaration.
+ * analysis knows how to prove, so a guard really would remove the check. The
+ * advice is `indexGuardAdvice`'s, which NL2457 gives too.
  */
 const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access
@@ -1640,11 +1668,10 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   if (holder.length === 0 || name.length === 0) {
     return
   }
+  const advice = indexGuardAdvice(walk.ctx.program, walk.ctx.table, index, name, holder)
   const message =
     `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
-    "compares against the length on every iteration: guard it with a test that reaches the access — " +
-    `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
-    "the upper one"
+    `compares against the length on every iteration: ${advice}`
   const edits = boundsGuardEdits(walk, access, index, name, holder)
   if (edits.length > 0) {
     walk.ctx.performanceFix(index, message, edits)
@@ -1654,20 +1681,73 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
 }
 
 /**
+ * How to remove the check on `index` into `holder`, for NL9007 and NL2457:
+ * one guard, and only a spelling that type-checks against the length and that
+ * `src/bounds.ts` credits (`orderFacts`), or none at all.
+ *
+ * An `i32` or ranged index is given `i >= 0 && i < xs.length`, which proves
+ * both ends whatever took the proof away, `--wrapping` included; under
+ * `--number-mode f64` the length is an `f64`, so the bound is spelled
+ * `toI32(xs.length)`, which `lengthOf` accepts. A `u8`, `u16` or `u32`
+ * index, which that `i32` test does not type-check against, is given the
+ * credited `u32` compare `toU32(i) < toU32(xs.length)`, its type the lower
+ * end. Both conversions must be the builtins, so a module that declares its
+ * own is given no guard, as `boundsGuardEdits` gives it no fix. An `i64`, a
+ * `u64` or a float has no spelling at all: `i < xs.length` does not type-check
+ * for the first two, `lengthOf` reads no `toI64(xs.length)` or
+ * `toU64(xs.length)`, and `isIndexType` proves nothing about a float.
+ */
+export const indexGuardAdvice = (
+  program: CheckedProgram,
+  table: TypeTable,
+  index: Node,
+  name: string,
+  holder: string
+): string => {
+  const f64Mode = program.f64Mode
+  const type = program.nodeTypes[index.id]
+  const unsigned = type === T_U8 || type === T_U16 || type === T_U32
+  if (type !== T_I32 && !table.isRanged(type) && !unsigned) {
+    const what = type >= 0 ? `an index of type \`${table.typeName(type)}\`` : "this index"
+    return (
+      `no guard removes the check on ${what}, because the compiler credits no compare of it with the length: ` +
+      "an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does"
+    )
+  }
+  const convert = unsigned ? "toU32" : "toI32"
+  if ((unsigned || f64Mode) && declaresName(program.file, convert)) {
+    return (
+      "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
+      `\`${convert}\`, which this module's own \`${convert}\` hides: rename it to guard the access`
+    )
+  }
+  const lead = "guard it with a test that reaches the access — "
+  if (unsigned) {
+    return `${lead}\`if (toU32(${name}) < toU32(${holder}.length))\` proves it, because an unsigned index needs only the upper end`
+  }
+  const length = f64Mode ? `toI32(${holder}.length)` : `${holder}.length`
+  return `${lead}\`if (${name} >= 0 && ${name} < ${length})\` proves both ends, and an unsigned index needs only the upper one`
+}
+
+/**
  * The fix NL9007 carries: a guard inserted at the start of the statement that
  * holds the access, which `src/bounds.ts` credits because its failing branch
  * ends in `panic`. `toI32(xs.length)` is the one spelling of the upper bound
  * that compiles and is credited in both number modes: under `--number-mode
- * f64` the length is an `f64` and `i < xs.length` does not compile.
+ * f64` the length is an `f64` and `i < xs.length` does not compile. A `u8`,
+ * `u16` or `u32` index is never negative and cannot be compared with an `i32`,
+ * so its guard is the upper end alone, `toU32(i) < toU32(xs.length)`, a `u32`
+ * compare the proof credits in both modes too.
  *
  * Applying it changes nothing on an index in range, and an index out of range
  * still stops the program with status 1, at a `panic` rather than at the
  * runtime's index error. That holds only when nothing the statement does
  * before the access can be skipped or reordered by the earlier test, so the
  * fix is offered only where `guardStatement` finds such a statement, the
- * index is an `i32` the guard's compare is typed for (an `i64` or unsigned one
- * has no credited spelling), and `panic` and `toI32` are the builtins. An
- * empty list means the warning goes out with no fix.
+ * index is one a guard's compare is typed for — an `i32`, a range over one, or
+ * a `u8`, `u16` or `u32` (an `i64` or a `u64` has no credited spelling) — and
+ * `panic` and the conversion the guard calls are the builtins. An empty list
+ * means the warning goes out with no fix.
  */
 const boundsGuardEdits = (
   walk: PerfWalk,
@@ -1679,10 +1759,12 @@ const boundsGuardEdits = (
   const ctx = walk.ctx
   const none: Edit[] = []
   const type = ctx.program.nodeTypes[index.id]
-  if (type !== T_I32 && !ctx.table.isRanged(type)) {
+  const unsigned = type === T_U8 || type === T_U16 || type === T_U32
+  if (type !== T_I32 && !ctx.table.isRanged(type) && !unsigned) {
     return none
   }
-  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, "toI32")) {
+  const convert = unsigned ? "toU32" : "toI32"
+  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, convert)) {
     return none
   }
   // A statement that declares the index or the receiver (`const j = i, v = xs[j]`)
@@ -1700,7 +1782,10 @@ const boundsGuardEdits = (
   }
   const ownLine = lineStart === 0 || text.charCodeAt(lineStart - 1) === 10
   const after = ownLine ? `\n${text.substring(lineStart, stmt.start)}` : " "
-  const guard = `if (!(${name} >= 0 && ${name} < toI32(${holder}.length))) { panic("index out of range") }`
+  const test = unsigned
+    ? `toU32(${name}) < toU32(${holder}.length)`
+    : `${name} >= 0 && ${name} < toI32(${holder}.length)`
+  const guard = `if (!(${test})) { panic("index out of range") }`
   const edits: Edit[] = [ctx.edit(stmt.start, stmt.start, guard + after)]
   return edits
 }
@@ -2067,7 +2152,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
     walk.loops.push(node)
     walkPerformance(walk, node.children[1])
     walkPerformance(walk, node.children[2])
-    walkPerformance(walk, node.children[3])
+    walkLoopBody(walk, node.children[3], false)
     walk.loops.pop()
     return
   }
@@ -2075,16 +2160,25 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
     walkPerformance(walk, node.children[1])
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
-    walkPerformance(walk, node.children[2])
+    walkLoopBody(walk, node.children[2], false)
     walk.loops.pop()
     return
   }
   // `while` and `do` differ only in which of the two children comes first, and
   // both are walked in source order — which is the order the warnings come out
   // in, and stage0 walks the same tree in the same direction.
-  if (node.kind === N_WHILE || node.kind === N_DO) {
+  if (node.kind === N_WHILE) {
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
+    walkLoopBody(walk, node.children[1], false)
+    walk.loops.pop()
+    return
+  }
+  if (node.kind === N_DO) {
+    // `do { ... } while (false)` runs its body once, so nothing in it is
+    // replaced by a later pass.
+    walk.loops.push(node)
+    walkLoopBody(walk, node.children[0], unwrapPerfParens(node.children[1]).kind === N_FALSE)
     walkPerformance(walk, node.children[1])
     walk.loops.pop()
     return
@@ -2100,7 +2194,11 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   } else if (node.kind === N_BINARY) {
     if (node.text === "=") {
       checkStringAccumulation(walk, node)
-      checkArenaReassignment(walk, node)
+      if (isArenaReassignment(walk, node)) {
+        reportArenaReassignment(walk, node)
+      } else {
+        checkPassDrop(walk, node)
+      }
     }
     checkConstantOverflow(walk, node)
     checkShiftCount(walk, node)
@@ -2406,7 +2504,17 @@ const perfIsPointerType = (ctx: CheckContext, type: i32): boolean =>
 const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean => {
   if (node.kind === N_CALL) {
     for (const arg of node.children[1].children) {
-      if (isLocalRef(ctx, arg, local)) {
+      if (perfMayYieldLocal(ctx, arg, local)) {
+        return true
+      }
+    }
+    return perfReceiverMayBeKept(ctx, node.children[0], local)
+  }
+  // A constructor keeps what it is handed as readily as a call does: `head =
+  // new Node(i, head)` stores the old list in the new node.
+  if (node.kind === N_NEW) {
+    for (const arg of node.children[2].children) {
+      if (perfMayYieldLocal(ctx, arg, local)) {
         return true
       }
     }
@@ -2414,19 +2522,46 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
   }
   if (node.kind === N_ARRAY) {
     for (const element of node.children) {
-      if (isLocalRef(ctx, element, local)) {
+      if (perfMayYieldLocal(ctx, element, local)) {
         return true
       }
     }
     return false
   }
   if (node.kind === N_RETURN || node.kind === N_PROPERTY) {
-    return isLocalRef(ctx, node.children[0], local)
+    return perfMayYieldLocal(ctx, node.children[0], local)
   }
   if (node.kind === N_VAR_DECL) {
-    return isLocalRef(ctx, node.children[2], local)
+    return perfMayYieldLocal(ctx, node.children[2], local)
   }
-  return node.kind === N_BINARY && node.text === "=" && isLocalRef(ctx, node.children[1], local)
+  return node.kind === N_BINARY && node.text === "=" && perfMayYieldLocal(ctx, node.children[1], local)
+}
+
+/**
+ * Whether `expr` may evaluate to the value `local` holds: the local itself, or
+ * a conditional with it in either arm, so that `ks.push(i > 1 ? s : "z")`
+ * counts as keeping `s`.
+ */
+const perfMayYieldLocal = (ctx: CheckContext, expr: Node, local: Local): boolean => {
+  const e = unwrapPerfParens(expr)
+  if (e.kind === N_CONDITIONAL) {
+    return perfMayYieldLocal(ctx, e.children[1], local) || perfMayYieldLocal(ctx, e.children[2], local)
+  }
+  return isLocalRef(ctx, e, local)
+}
+
+/**
+ * A method called on `local` may keep its receiver, as `cur.attach(reg)` does
+ * when `attach` pushes `this`, and this walk cannot see into the method. A
+ * string's and an array's methods are the language's own and keep neither:
+ * they copy what they return.
+ */
+const perfReceiverMayBeKept = (ctx: CheckContext, callee: Node, local: Local): boolean => {
+  const c = unwrapPerfParens(callee)
+  if (c.kind !== N_MEMBER || !isLocalRef(ctx, c.children[0], local)) {
+    return false
+  }
+  return local.type !== T_STRING && !ctx.table.isArray(local.type)
 }
 
 /**
@@ -2446,6 +2581,12 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
  * starts can have taken a value the assignment is about to drop.
  */
 const perfHeldValueMayBeReachable = (walk: PerfWalk, expr: Node, local: Local): boolean => {
+  // The assignment's own right-hand side runs before the store, so a capture
+  // there keeps the old value wherever the assignment stands: `head = new
+  // Node(1, head)` hands it to the node that replaces it.
+  if (perfScanForCapture(walk.ctx, expr.children[1], local, true, 0)) {
+    return true
+  }
   const inLoop = walk.loops.length > 0
   const root = inLoop ? walk.loops[0] : walk.body
   return perfScanForCapture(walk.ctx, root, local, inLoop, expr.start)
@@ -2470,34 +2611,126 @@ const perfScanForCapture = (
 }
 
 /**
- * `s = <an allocation>` where `s` is a local that was declared holding one.
- * Reported on the target, because the assignment is the thing to change. The
- * guards are stage0's, in the same order.
+ * The local `expr` assigns, when it is one the two dropped-allocation rules
+ * ask about: a local that is not a parameter, of a type that names memory,
+ * given a value the checker can see allocating. `null` for anything else.
  */
-const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
+const perfDroppingTarget = (walk: PerfWalk, expr: Node): Local | null => {
   const left = expr.children[0]
   if (left.kind !== N_IDENT) {
-    return
+    return null
   }
   const ctx = walk.ctx
   const target = ctx.program.nodeLocals[left.id]
   if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
+    return null
+  }
+  return perfAllocatesVisibly(ctx, expr.children[1]) ? target : null
+}
+
+/**
+ * `s = <an allocation>` where `s` is a local that was declared holding one
+ * (NL9003). Split from the report because the per-pass rule runs only when
+ * this one does not speak about the same assignment: one line gets one
+ * warning. The guards are stage0's, in the same order.
+ */
+const isArenaReassignment = (walk: PerfWalk, expr: Node): boolean => {
+  const target = perfDroppingTarget(walk, expr)
+  if (target === null || perfIsPointerType(walk.ctx, walk.sig.returnType)) {
+    return false
+  }
+  if (isQuadraticAccumulation(walk, expr) || !walk.declaredHoldingAllocation(target)) {
+    return false
+  }
+  return !perfHeldValueMayBeReachable(walk, expr, target)
+}
+
+/**
+ * Walk a loop's body with `walk.passAssignments` set to the assignments that
+ * run on every one of its passes: each `x = ...` that is a statement of its own
+ * at the body's top level. A body whose top level ends the loop (`break`,
+ * `return`, `throw`) runs at most once, and so does one `once` says runs once,
+ * so it has none: whatever it assigns is never replaced by a later pass. The
+ * list is the innermost loop's alone, and the enclosing loop's comes back when
+ * the body is done.
+ */
+const walkLoopBody = (walk: PerfWalk, body: Node, once: boolean): void => {
+  const enclosing = walk.passAssignments
+  const assignments: Node[] = []
+  let loops = !once
+  const statements: Node[] = []
+  if (body.kind === N_BLOCK) {
+    for (const statement of body.children) {
+      if (statement.kind === N_BREAK || statement.kind === N_RETURN || statement.kind === N_THROW) {
+        loops = false
+      }
+      statements.push(statement)
+    }
+  } else {
+    statements.push(body)
+  }
+  for (const statement of statements) {
+    if (!loops || statement.kind !== N_EXPR_STMT) {
+      continue
+    }
+    const expr = unwrapPerfParens(statement.children[0])
+    if (expr.kind === N_BINARY && expr.text === "=") {
+      assignments.push(expr)
+    }
+  }
+  walk.passAssignments = assignments
+  walkPerformance(walk, body)
+  walk.passAssignments = enclosing
+}
+
+/**
+ * `x = <an allocation>` on every pass of a loop, where `x` is a local declared
+ * outside it (NL9016). Each pass drops the value the pass before gave `x`, and
+ * nothing frees it while the loop runs: the pass cannot take a scope, because a
+ * fresh value outlives it in `x`, and a `using a = arena()` block refuses the
+ * same assignment (NL2418). So memory grows with the number of passes, however
+ * little of it the program can still reach.
+ *
+ * This is the case NL9003 leaves silent, because `x` was declared holding a
+ * literal (`let last = ""`). Here the declaration does not matter: the value
+ * dropped from the second pass on is this assignment's own allocation. Silent
+ * when NL9002 or NL9003 already reports the line, and when any capture in the
+ * loop may have kept the old value reachable (`perfHeldValueMayBeReachable`),
+ * in which case nothing is dropped.
+ */
+const checkPassDrop = (walk: PerfWalk, expr: Node): void => {
+  if (walk.loops.length === 0 || !walk.isPassAssignment(expr)) {
     return
   }
-  const sig = walk.sig
-  if (perfIsPointerType(ctx, sig.returnType)) {
+  const target = perfDroppingTarget(walk, expr)
+  if (target === null || walk.depthOf(target) >= walk.loops.length) {
     return
   }
-  if (isQuadraticAccumulation(walk, expr)) {
+  if (isQuadraticAccumulation(walk, expr) || perfHeldValueMayBeReachable(walk, expr, target)) {
     return
   }
-  if (!walk.declaredHoldingAllocation(target) || !perfAllocatesVisibly(ctx, expr.children[1])) {
-    return
-  }
-  if (perfHeldValueMayBeReachable(walk, expr, target)) {
-    return
-  }
+  const ctx = walk.ctx
+  const left = expr.children[0]
   ctx.performance(
+    left,
+    `\`${target.name}\` is given a new allocation on every pass of this loop and drops the one the pass before ` +
+      "gave it: nothing can reach that value again and nothing frees it while the loop runs, so memory grows with " +
+      `every pass. Declare \`${target.name}\` with \`const\` inside the loop when only its pass reads it, or keep ` +
+      "what the last pass needs as numbers and build the value once after the loop"
+  )
+}
+
+/**
+ * The NL9003 report for an assignment `isArenaReassignment` found. Reported on
+ * the target, because the assignment is the thing to change.
+ */
+const reportArenaReassignment = (walk: PerfWalk, expr: Node): void => {
+  const left = expr.children[0]
+  const target = walk.ctx.program.nodeLocals[left.id]
+  if (target === null) {
+    return
+  }
+  walk.ctx.performance(
     left,
     `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
       "here and nothing frees it, and assigning a local is also what stops this function from releasing its arena " +

@@ -78,6 +78,8 @@ const FIXTURE_FIX: string = "fix.ts";
 const FIXTURE_NOFIX: string = "nofix.ts";
 /** A program that compiles and earns a WP15 §8 warning, which is a diagnostic on a program that is fine. */
 const FIXTURE_WARN: string = "warn.ts";
+/** A program that compiles with one arena-retention warning (NL9016), which `--deny-retention` refuses. */
+const FIXTURE_RETAIN: string = "retain.ts";
 /** A program that compiles and calls a deprecated builtin, which warns by default. */
 const FIXTURE_DEPRECATED: string = "deprecated.ts";
 
@@ -98,6 +100,8 @@ const advertisedFlags = (): string[] => [
   "--emit-napi-async",
   "--emit-panics",
   "--deny-panics",
+  "--deny-retention",
+  "--emit-arena",
   "--target",
   "--profile",
   "--warn-portability",
@@ -293,6 +297,19 @@ const writeFixtures = (): void => {
     ["export const same = (a: i32, b: i32): boolean => {", "  return a == b;", "};", ""].join("\n")
   );
   writeFileSync(`${WORK}/${FIXTURE_DENY}`, "export const at = (xs: i32[], i: i32): i32 => xs[i];\n");
+  writeFileSync(
+    `${WORK}/${FIXTURE_RETAIN}`,
+    [
+      "export const last = (n: i32): i32 => {",
+      '  let s = "";',
+      "  for (let i = 0; i < n; i++) {",
+      "    s = `${i}`;",
+      "  }",
+      "  return s.length;",
+      "};",
+      "",
+    ].join("\n")
+  );
   writeFileSync(
     `${WORK}/${FIXTURE_NOFIX}`,
     ["export const fail = (): i32 => {", '  throw new Error("no");', "};", ""].join("\n")
@@ -958,6 +975,59 @@ const checkDenyPanics = (t: Suite, cli: Cli): void => {
   t.eqStr("and whose code is the no-panic scope's", cliField(objects[0], "code"), "NL2457");
   const ast = cli.plain("deny_ast", [`${WORK}/${FIXTURE_DENY}`, "--deny-panics", "--emit-ast"]);
   t.eqI32("--deny-panics with --emit-ast exits 2", ast.status, 2);
+};
+
+/**
+ * `--deny-retention`: a program with no retention warning compiles to the bytes
+ * it compiles to without the flag, and one with a warning is refused, band 1,
+ * with one `--json` error whose code is the rule's (NL2462) and no performance
+ * object left to say it twice. With `--emit-ast` it is a usage error.
+ */
+const checkDenyRetention = (t: Suite, cli: Cli): void => {
+  const irPath = `${WORK}/retain_ok.ll`;
+  const clean = cli.plain("retain_ok", [`${WORK}/${FIXTURE_OK}`, "-o", irPath, "--deny-retention"]);
+  if (t.eqI32("--deny-retention on a program with no retention exits 0", clean.status, 0)) {
+    t.eqStr("and the IR is the bytes a compile without it writes", readOrEmpty(irPath), readOrEmpty(`${WORK}/ok.ll`));
+  }
+  const refused = cli.plain("retain_site", [
+    `${WORK}/${FIXTURE_RETAIN}`,
+    "--deny-retention",
+    "--json",
+    "-o",
+    `${WORK}/retain.ll`,
+  ]);
+  if (!t.eqI32("--deny-retention on a dropped allocation exits 1", refused.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(refused.stdout);
+  if (!t.eqI32("with one object under --json", toI32(objects.length), 1)) {
+    return;
+  }
+  t.eqStr("whose severity is error", cliField(objects[0], "severity"), "error");
+  t.eqStr("and whose code is the retention rule's", cliField(objects[0], "code"), "NL2462");
+  const ast = cli.plain("retain_ast", [`${WORK}/${FIXTURE_RETAIN}`, "--deny-retention", "--emit-ast"]);
+  t.eqI32("--deny-retention with --emit-ast exits 2", ast.status, 2);
+};
+
+/**
+ * `--emit-arena`: the arena placement report is one `{"functions":[...]}`
+ * object in the named file, the progress line on stderr and nothing on
+ * stdout, and the IR beside it is the bytes a compile without it writes.
+ */
+const checkArenaReport = (t: Suite, cli: Cli): void => {
+  const file = `${WORK}/arena.json`;
+  const irPath = `${WORK}/arena.ll`;
+  const run = cli.plain("arena", [`${WORK}/${FIXTURE_OK}`, "-o", irPath, "--emit-arena", file]);
+  if (!t.eqI32("--emit-arena exits 0", run.status, 0)) {
+    return;
+  }
+  t.eqStr("and leaves stdout empty", run.stdout, "");
+  t.contains("and says on stderr where it wrote the placements", run.stderr, `wrote ${file}`);
+  const text = readOrEmpty(file);
+  t.ok('and the file is one `{"functions":[...]}` object', text.startsWith('{"functions":[') && text.endsWith("]}\n"));
+  t.eqStr("and the IR is the bytes a compile without it writes", readOrEmpty(irPath), readOrEmpty(`${WORK}/ok.ll`));
+  const bare = cli.plain("arena_bare", [`${WORK}/${FIXTURE_OK}`, "--emit-arena"]);
+  t.eqI32("--emit-arena with no file exits 2", bare.status, 2);
 };
 
 /** An input that cannot be read: band 1, and an object under `--json` like any other failure. */
@@ -1634,6 +1704,8 @@ export const main = (): number => {
   checkDumps(t, cli);
   checkPanicSites(t, cli);
   checkDenyPanics(t, cli);
+  checkDenyRetention(t, cli);
+  checkArenaReport(t, cli);
   checkCapabilities(t, cli, env);
   checkCapabilityPolicy(t, cli, env);
   checkMissingInput(t, cli);

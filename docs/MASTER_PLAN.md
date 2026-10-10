@@ -238,7 +238,7 @@ is its plan. [README.md](README.md) indexes them.
 | 24 | `async`/`await` | declined; `--emit-napi-async` built | [wp24](wp24-async.md) |
 | 25 | Remove inheritance, widen `implements` | landed | [wp25](wp25-inheritance.md) |
 | 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
-| 27 | Calling C | S1 and S2 built | [wp27](wp27-ffi.md) |
+| 27 | Calling C | S1 and S2 built; S3 planned | [wp27](wp27-ffi.md) |
 | 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
 | 29 | The thread surface | P1 and P2 built; P3 proposed | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
@@ -428,7 +428,8 @@ major. Whether it happens at all is still wp22 §10's open question.
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
 - **WP27's later stages**, calling C beyond scalars and opaque pointers
-  ([wp27-ffi.md](wp27-ffi.md)).
+  ([wp27-ffi.md](wp27-ffi.md)). S3, `string` as a borrowed `char *` in and a
+  copied one out, is planned in three steps (§8).
 - **WP38, SIMD** ([wp38-simd.md](wp38-simd.md)), accepted. S0's
   measurements (#517), S1's byte-search kernel in the runtime (#518) and the
   `std/text` function `indexOfAny` that reaches it (#519) are built. Moving

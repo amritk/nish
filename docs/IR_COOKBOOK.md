@@ -10797,7 +10797,10 @@ loads of one address.
 Four things refuse the hoist, and each is the whole of a proof:
 
 - a `push` or `pop` anywhere in the loop, or a call to a function the fixpoint
-  says grows an array — those are what move `len`, `cap` and `data`;
+  says grows an array — those are what move `len`, `cap` and `data`. A `new`
+  of a class is a call to its constructor, and refuses the hoist on the same
+  fact (`cg_sec_hoist_new_resize`: `new P(xs)` pushes, `new Q(xs)` only
+  reads and keeps it);
 - a store in the loop to a field named anywhere in the path (`h.xs = other`),
   since the hoisted value is a field load;
 - a path rooted at a local the loop itself declares, or at a reassignable one,
@@ -14095,6 +14098,36 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !14 = !{!13, !13, i64 0}
 ```
 <!-- cookbook:end mem-join-parts -->
+
+#### A parameter pushed only to be joined
+
+The same holds for a `string` the function is handed and pushes onto its own
+`parts`: `join` has read it by the time the call returns, and nothing can
+reach it after that, so the parameter is not kept. It is `nocapture`, and a
+loop that builds the argument in the pass and passes it keeps its per-pass
+release. From `tests/cases/mem_join_parts_same_pass`, where `run` builds
+`word` in each pass and hands it to `quote`, which pushes it and joins:
+
+```llvm
+define internal noundef nonnull align 8 i8* @quote(i8* noundef nonnull noalias readonly align 8 nocapture %word, i32 noundef %n) #0 {
+```
+
+and `run`'s pass now ends by giving the arena back, where before it fell
+through to `for.inc` holding `word`:
+
+```llvm
+ovf.ok:
+  store i32 %23, i32* %total.addr, align 4
+  %25 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %26 = load i8*, i8** %25, align 8
+  %27 = icmp eq i8* %26, %3
+  br i1 %27, label %pass.rewind, label %pass.free
+```
+
+Reading a part back out of `parts` keeps the parameter kept, as it keeps an
+allocated part (`mem_join_parts_same_pass_kept`), and so does copying the
+parameter into a local first, returning it or passing it to another user
+function: a `string` handed on is not followed into the callee.
 
 ### A value returned in a fresh array
 

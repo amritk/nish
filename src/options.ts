@@ -148,6 +148,19 @@ export class Options {
    */
   denyPanics: boolean
   /**
+   * `--deny-retention`: every arena-retention warning in the program's own
+   * modules (NL9002, NL9003, NL9011, NL9016) is an error instead
+   * (`Compilation.denyRetention`). Like `--deny-panics` it changes no byte of
+   * the IR: it only decides whether the build is allowed to happen.
+   */
+  denyRetention: boolean
+  /**
+   * `--emit-arena <file.json>`: the path the arena placement report is written
+   * to, or the empty string (`src/arena-report.ts`). It reads the facts the
+   * build computes anyway and changes no byte of the IR.
+   */
+  emitArena: string
+  /**
    * The root package's `"nish".noPanic` named at least one module, which puts
    * those modules in the scope `--deny-panics` puts all of them in. Set by
    * `Compilation` once it has read the manifest, before anything records.
@@ -192,6 +205,8 @@ export class Options {
     this.warnPortability = false
     this.emitPanics = ""
     this.denyPanics = false
+    this.denyRetention = false
+    this.emitArena = ""
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

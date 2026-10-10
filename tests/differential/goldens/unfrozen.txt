@@ -4,6 +4,8 @@
 # a line out when its program is gone. The rewriter that wrote the store was
 # stage0's and is deleted, so a line here is coverage lost, not a task deferred:
 # the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).
+cases/arena_placement added after R6: no rewriter to freeze it with
+cases/arena_placement_loops added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_for added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_for_string added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_while added after R6: no rewriter to freeze it with
@@ -23,6 +25,8 @@ cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
 cases/arr_bounds_ranged added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
+cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
+cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
@@ -108,6 +112,7 @@ cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
+cases/deny_retention_clean added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
 cases/fnarg_arrow added after R6: no rewriter to freeze it with
 cases/fnarg_forward added after R6: no rewriter to freeze it with
@@ -205,6 +210,8 @@ cases/mem_join_parts_forof added after R6: no rewriter to freeze it with
 cases/mem_join_parts_method added after R6: no rewriter to freeze it with
 cases/mem_join_parts_passed added after R6: no rewriter to freeze it with
 cases/mem_join_parts_readback added after R6: no rewriter to freeze it with
+cases/mem_join_parts_same_pass added after R6: no rewriter to freeze it with
+cases/mem_join_parts_same_pass_kept added after R6: no rewriter to freeze it with
 cases/mem_join_parts_scope added after R6: no rewriter to freeze it with
 cases/mem_loop_scope added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_chunk added after R6: no rewriter to freeze it with
@@ -271,6 +278,8 @@ cases/panics_slice added after R6: no rewriter to freeze it with
 cases/panics_unchecked_indexing added after R6: no rewriter to freeze it with
 cases/perf_arena_control added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
+cases/perf_arena_pass_drop added after R6: no rewriter to freeze it with
+cases/perf_arena_pass_quiet added after R6: no rewriter to freeze it with
 cases/perf_arena_using added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with

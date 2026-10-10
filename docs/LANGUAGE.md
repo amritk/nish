@@ -1620,6 +1620,20 @@ and their `.ll` goldens are byte-identical files.
   or drop it (`tests/cases/export_fn`, `tests/link/strict`).
   `--no-strict-exports` makes every function external again, which is what a C
   driver calling a non-exported function needs (`tests/cases/export_no_strict`).
+  - **A method another module calls is in the link.** The layouts an import
+    brings (above) include a class its module does not export — `Conn.space():
+    Space` hands an importer of `Conn` a `Space` whether or not `Space` is
+    exported — and the importer may call that value's methods, generic ones
+    included. Such a method (or instantiation of one) is `hidden` rather than
+    `internal`: one the final link resolves and the
+    output exports to nothing, with the `Result` ABI an exported one has. A
+    method only its own module calls stays `internal`
+    (`tests/link/package_hidden_method`, #442). The class's name stays its
+    module's: importing it is
+    `` `Space` is declared in `pkg_q` but not exported (add `export`) ``
+    (`tests/link/package_hidden_class_import`), and naming it in an annotation
+    is `` Unsupported type reference `Space` ``
+    (`tests/link/package_hidden_class_annotation`).
 - **A function name is unique across the whole program**, exported or not, in
   either mode (`tests/link/duplicate_export`, `duplicate_internal`).
   `internal` linkage keeps a name out of the linker's way but it does not buy a
@@ -3243,6 +3257,19 @@ and both come from the program as written:
     `i < n`. A constant index `w[3]` needs `w.length >= 4` instead, which a
     length guard (`if (w.length >= 4)`) or an array literal of known size
     gives.
+  - for a `u8`, `u16` or `u32` index, `toU32(i) < toU32(w.length)` — or
+    `i < toU32(w.length)` for a `u32` — the same way: an unsigned index
+    cannot be compared with the `i32` length as it is, its type is its lower
+    end, and this is the upper one. `toU32` widens a `u8` or `u16` and is the
+    identity on a `u32`, and of a length it can only answer the length or
+    less (in f64 mode it is a saturating `fptoui`), so the `u32` compare is
+    `i < w.length` or stronger. Only in the test itself: a `u32` copy of the
+    length is not a length, because `toU32(w.length) - toU32(1)` wraps on an
+    empty array. A `u64` index is not credited — `toU32` keeps its low 32
+    bits — and neither is `toI32(i) < w.length` on a `u32`, which reads an
+    index past `2^31 - 1` as negative
+    (`tests/cases/arr_bounds_unsigned_guard`, `arr_bounds_unsigned_guard_f64`;
+    `arr_bounds_unsigned_guard_kept` keeps every check).
   - **a guard that ends the path.** After `if (i < 0 || i >= w.length) { … }`
     the negation of the test holds for the rest of the block when the guarded
     branch ends in `return`, `break`, `continue`, or a call to the
@@ -3843,11 +3870,18 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   emitter writes without the flag: an element access the checker did not
   prove in range, the second check of a compound store whose right side calls
   something, an unproven `charCodeAt` or `pop`, and every `slice`, array `set`
-  and `nish:net` buffer range. A site the checker proved is not reported: the
-  flag records nothing for a check it drops, so what it proves is a subset of
-  what is proven without it, and an access left as `xs[i]` stays proven once
-  the flag is gone. Like NL7001 it is printed by default, `nish run` included,
-  and `--no-warn-performance` does not silence it. Where a rewrite says the
+  and `nish:net` buffer range. A site the checker proved is not reported, and
+  an access left as `xs[i]` stays proven once the flag is gone: the flag
+  records nothing for a check it drops, so what it proves is a subset of what
+  is proven without it. The checker adds what the build without the flag
+  learns from each check the migration leaves in place, so an access that
+  check proves is not a site either: after `const name = names[i]`, whose
+  strings have no `nish:unsafe` form, `i >= 0` holds, and with
+  `if (i < xs.length)` the access `xs[i]` is proven and stays
+  (`unsafe-index-kept`). What a caller's check would prove for its callee is
+  not added, so such a site is still rewritten, to the same meaning. Like
+  NL7001 it is printed by default, `nish run` included, and
+  `--no-warn-performance` does not silence it. Where a rewrite says the
   same thing, the warning carries it as a `fix`:
 
   | Shape | Rewrite | Case (`tests/fix/`) |
@@ -3873,9 +3907,18 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   module's fixes call: the names after its existing `nish:unsafe` import
   (`unsafe-index-extend`), else a new import after its last import, else
   before its first statement. An import that renames is called by its alias
-  (`unsafe-index-alias`). The edits are the same, so the first round applies
-  one site's fix and the second applies the rest (`unsafe-index-rounds`). The
-  program then compiles without the flag and prints what it printed with it:
+  (`unsafe-index-alias`). The edits are the same, and `nish --fix` makes an
+  edit once however many fixes carry it, so one round applies every site
+  (`unsafe-index-rounds`). To the bounds proof `uncheckedGet` and
+  `uncheckedSet` are the load and the store `xs[i]` and `xs[i] = v` are,
+  less the check: a rewritten site moves no length, so in
+  `a[at[0]] + b[at[1]]` with `at` an array of two, `at[1]` stays proven after
+  `a[at[0]]` is rewritten, and the fixed point is reached in that one round
+  (`unsafe-index-pair`). Neither records a passed check, because neither has
+  one: a checked `xs[i]` after either keeps its check, and a resize in the
+  value stored still takes the length away
+  (`tests/cases/arr_bounds_unchecked_kept`). The program then compiles without the flag and prints what it
+  printed with it:
   `tests/link/unsafe-migrate-index-flag` runs `unsafe-index-equivalence`'s
   sources under the flag and `unsafe-migrate-index-fixed` runs their
   `.fixed.ts` without it, against one `expected.out`; between them its four
@@ -5940,12 +5983,20 @@ where its memory lives and when it is reused.
    it, such as `parts.pop()` (`mem_join_parts_method`), or a `parts` that
    names another local's array (`mem_join_parts_alias`). Assigning or
    returning `parts`, and an array the function did not build itself, count
-   the same way. The rule is about what the function
-   allocates, not what it is handed: a *parameter* pushed onto `parts`
-   still counts as kept by the callee. So a loop that builds a string in a
-   pass and passes it to such a function (`jsonField(line, ...)` on a line
-   built in the pass, `replaceAll` on one) still has no scope. Passing it a
-   string older than the pass is what keeps the scope.
+   the same way. The same holds for a `string` *parameter* the function
+   pushes onto such a `parts` directly (`parts.push(word)`, parentheses
+   seen through): `join` reads it before the call returns and nothing can
+   reach it afterwards, so the callee does not keep it, the parameter is
+   `nocapture`, and a loop that builds the argument in the same pass and
+   passes it keeps its scope (`tests/cases/mem_join_parts_same_pass`: 1000
+   passes leave `Arena.used()` where one pass left it). Every negative above
+   keeps the parameter kept as well (`mem_join_parts_same_pass_kept` reads a
+   part back into an object). The rule stops at the push: a parameter that
+   is first copied into a local (`let rest = text`), returned, or handed to
+   another user function still counts as kept, since a `string` passed on is
+   not followed into its callee. So `jsonField(line, ...)` and `replaceAll`
+   on a line built in the pass still have no scope, and passing them a
+   string older than the pass is what keeps it.
 
    A value stored into an array that is returned with it is returned, not
    stored. When a function binds a local `xs` to its own fresh literal or
@@ -6152,7 +6203,7 @@ by the caller.
   checked when one of its instantiations is finished, and the padding rule below
   is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  The twelve below each name the rewrite; the class also holds NL9012, a
+  The thirteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
   ([Data parallelism](#data-parallelism-nishthreads)), and NL9014 and NL9015,
   the deprecated `--unchecked-indexing` and `--wrapping`
@@ -6194,9 +6245,35 @@ by the caller.
     memory; when the value being dropped may already be reachable from
     somewhere else, which is a question of order — a capture anywhere in the
     enclosing loop, or one that finishes before the assignment starts, leaves
-    the old value reachable and the `const` rewrite inapplicable; or when the
+    the old value reachable and the `const` rewrite inapplicable (a capture is
+    the value passed to a call or a constructor, either arm of a conditional
+    included, a method called on it unless it is a string or an array, a
+    `return`, an element of an array or object literal, or the right-hand side
+    of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
     (`tests/cases/perf_arena_quiet`).
+  - **an allocation dropped on every pass** (NL9016) — `x = <allocation>` as a
+    statement of its own at the top of a loop's body, where `x` is a local
+    declared outside that loop. Each pass drops the value the pass before gave
+    `x`, and nothing frees it while the loop runs: the pass cannot take a scope,
+    because its fresh value outlives it in `x`, and a
+    [`using a = arena()`](#using-a--arena) block refuses the same assignment
+    (NL2418). So memory grows with the number of passes; 10,000,000 passes of
+    `last = \`item ${i}\`` peaked at 392 MB where the rewrite peaks at 11 MB.
+    The hints are a `const` inside the loop when only the pass reads the value,
+    or numbers kept across passes and the value built once after the loop
+    (`tests/cases/perf_arena_pass_drop`). Reported whatever the local was
+    declared holding and whatever the function returns, since the dropped
+    values are this assignment's own; a line the rule above already reports is
+    its alone. Not reported for an assignment inside a branch, which may run
+    once, as a search loop's `found = ...` before its `break` does; in a body
+    whose top level ends the loop with `break`, `return` or `throw`, or in a
+    `do ... while (false)`, either of which runs at most once; for a local
+    declared inside the loop; when the assigned value is not an allocation; or
+    when a capture anywhere in the loop, as the rule above counts one, may keep
+    the old value reachable, as `head = new Node(i, head)`,
+    `picks.push(i > 0 ? tag : "none")` and `cur.attach(reg)` do
+    (`tests/cases/perf_arena_pass_quiet`).
   - **a loop that leaves a callee's memory behind** — a call inside a loop to
     a function that leaves arena memory behind (it allocates, lets none of it
     escape, and has no scope of its own) whose result dies with the pass,
@@ -6254,15 +6331,30 @@ by the caller.
     loaded and compared on every iteration. The hint is the guard that always
     works — `if (i >= 0 && i < a.length)` reaching the access proves both ends,
     whatever took the proof away — with an unsigned index named beside it,
-    since half the proof then comes off the declaration
-    (`tests/cases/perf_bounds_loop`). Reported on the index, once per access.
-    Where the index is an `i32` or an `i32`-based ranged integer and nothing
-    between the start of its statement and the access branches, loops,
-    calls, allocates or assigns (the README below lists the rest of the
-    conditions), the warning carries a fix: `nish --fix`
-    inserts `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`
-    at the start of that statement, a guard the proof credits, so an index in
-    range runs as before and one out of range still exits 1, at the guard
+    since half the proof then comes off the declaration; for a `u8`, `u16`
+    or `u32` index, which that `i32` test does not type-check against, the
+    hint is the other half alone, `if (toU32(i) < toU32(a.length))`
+    (`tests/cases/perf_bounds_loop`, `arr_bounds_unsigned_guard`,
+    `reject_deny_panics_index_unsigned`). Under `--number-mode f64`, where a
+    length is an `f64`, the bound is spelled `toI32(a.length)`
+    (`tests/wordings/nl9007_guard_f64_mode`, and NL2457's
+    `nl2457_deny_panics_index_f64_i32` and `_f64_ranged`). The hint names
+    only a guard that compiles and that the proof credits, so it names none
+    for an `i64`, a
+    `u64` or a float index, which no spelling compares with the length in a
+    credited way, nor where the module declares its own `toU32` (or, under
+    f64, `toI32`), which the guard would call instead of the builtin; it says
+    so instead (`tests/wordings/nl9007_guard_*`, and NL2457's
+    `nl2457_deny_panics_index_*`). Reported on the index, once per
+    access. Where the index is an `i32`, an `i32`-based ranged integer or a
+    `u8`, `u16` or `u32`, and nothing between the start of its statement and
+    the access branches, loops, calls, allocates or assigns (the README below
+    lists the rest of the conditions), the warning carries a fix: `nish --fix`
+    inserts `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`,
+    or `if (!(toU32(i) < toU32(xs.length))) { panic("index out of range") }`
+    for an unsigned index, at the start of that statement, a guard the proof
+    credits, so an index in range runs as before and one out of range still
+    exits 1, at the guard
     (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
     Silent outside a loop, where one check is not a cost anybody is paying;
     silent under `--unchecked-indexing`, where no check survives to report;
@@ -6520,6 +6612,12 @@ by the caller.
 - **`--emit-panics <file.json>`** writes every panic site of the program,
   function by function, beside the IR, and changes no byte of it; see
   [Panic sites](#panic-sites) below.
+- **`--deny-retention`** refuses a program whose own code keeps arena memory
+  that nothing can reach, for a long-running program that cannot afford it; see
+  [Retention as an error](#retention-as-an-error) below.
+- **`--emit-arena <file.json>`** writes every allocation site of the program
+  with where its memory goes, beside the IR, and changes no byte of it; see
+  [Arena placement](#arena-placement) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -6698,6 +6796,101 @@ performance warning about the same check is not printed beside the error.
 - `--deny-panics` changes no byte of the IR: a program it accepts is the one the
   build compiles without it. With `--emit-ast`, which stops before the checker,
   it is a usage error (exit 2).
+
+### Retention as an error
+
+A program that runs for a long time, a server above all, cannot afford memory
+that stays allocated after nothing can reach it: in a command-line tool it is
+returned when `main` does, and in a server it grows until the process is
+killed. Four performance warnings are exactly that finding, and
+**`--deny-retention`** makes each of them an error (NL2462) in the program's own
+modules:
+
+| Warning | What stays allocated |
+| --- | --- |
+| NL9002, quadratic string building | every intermediate string of `s = s + t` in a loop |
+| NL9003, an allocation dropped by an assignment | the value the local held |
+| NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
+| NL9016, an allocation dropped on every pass | the value each pass replaced |
+
+- **The error keeps the warning.** Its text is the warning's, after the code of
+  the rule that found it, so it names the same rewrite:
+  `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
+  (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`). The warning it
+  restates is not printed as well, and `--no-warn-performance` does not
+  silence the error.
+- **The program's own modules only.** A module of the root package is held to
+  it; a dependency's warnings stay warnings, as its panic sites stay outside
+  the [no-panic scope](#the-no-panic-scope), because the program's author
+  cannot change that code (`tests/link/deny_retention_dependency`).
+- **What it does not promise.** The four warnings are conservative in the
+  direction of silence: each fires only where the compiler can name the memory
+  and the rewrite, so a program it accepts can still retain memory in a shape
+  no rule recognises ([wp6-memory.md](wp6-memory.md), "Left out"). Nor does it
+  cover memory a program keeps on purpose: an array it pushes onto for its
+  whole run is reachable, and so not retention.
+- `--deny-retention` changes no byte of the IR: a program it accepts is the one
+  the build compiles without it (`tests/cases/deny_retention_clean`). `nish run`
+  and `--fix` accept it; with `--emit-ast`, which stops before the checker, it
+  is a usage error (exit 2).
+
+### Arena placement
+
+**`--emit-arena <file.json>`** writes where the memory of every allocation site
+goes: the decisions the [memory model](#memory-model) made, read back in the
+order the emitter applies them, so the file and the IR cannot disagree. It is
+the audit for the cases no warning names: a site a rule stays silent about is
+still in the file, with its placement.
+
+The file is one JSON object, one function per line, in module order and, in
+each module, in declaration order followed by the instantiations of its
+generic functions, and its sites in source order. The keys and their order are
+a contract, like `--emit-panics`':
+
+```
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/cases/arena_placement.ts","line":32,"sites":[{"kind":"new","line":34,"column":13,"placement":"stack"},…,{"kind":"string","line":52,"column":12,"placement":"function","accumulates":true}]}
+]}
+```
+
+Per function `{"name","symbol","module","line","sites"}`, as `--emit-panics`
+writes them, and a generic function once per instantiation. Per site
+`{"kind","line","column","placement"}`, then `"callee"` for a `call` and a
+`builtin`, then `"accumulates":true` where it applies. A site's **kind** is
+`new`, `object`, `array`, `string` (a concatenation or a template), `push`,
+`print` (a number `console.log` formats), `builtin` (a runtime function that
+allocates, such as `join`) or `call` (a user function whose memory the result
+is). Its **placement** is the first of these that holds:
+
+| Placement | Where the memory goes |
+| --- | --- |
+| `stack` | an entry-block `alloca`, reused on every pass of a loop |
+| `pass` | released at the end of each pass of the innermost scoped loop around it |
+| `block` | released when the block of the `using a = arena()` before it ends |
+| `function` | released when the function returns: its arena scope |
+| `returned` | handed to the caller with the return value, whose placement decides |
+| `caller` | released when the function returns, by every caller's reclaim of the returned string |
+| `kept` | stored into memory older than the function, and as long-lived as it |
+| `unscoped` | released by nothing in this function: it lives as long as the caller's memory, which in `main` is the rest of the run |
+
+**`accumulates`** marks a site that runs on every pass of a loop that releases
+nothing per pass — or in that loop's condition or update, which run outside
+the bracket a pass takes — and whose memory is unreachable before its
+release: `pass`, `block`, `function`, `caller` or `unscoped`. Its memory piles up pass
+after pass until then. `` last = `item ${i}` `` in a loop over ten million
+passes is a `function` site that accumulates in a `main` that earns a scope
+through its callees, and an `unscoped` one in a function that has none
+(`tests/cases/arena_placement`, `arena_placement_loops`). A `returned` or `kept`
+site is memory the program holds on purpose, so it is never marked.
+
+- **The answer is about the site's own function.** A scope in a caller can
+  still release an `unscoped` site's memory: a loop whose pass is scoped takes
+  back what its callees leave behind. Only in `main` is `unscoped` the end of
+  the run.
+- `--emit-arena` changes no byte of the IR, and it is a product, as
+  `--emit-panics` is: `nish run` and `--fix` refuse it, and so does
+  `--emit-ast`, which stops before the facts exist (exit 2).
 
 ## Forbidden constructs (Phase 0 validator)
 

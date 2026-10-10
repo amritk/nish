@@ -859,6 +859,36 @@ const runCase = async (name) => {
     }
   }
 
+  // `--emit-arena`: a case with a `<name>.arena` golden compiles a third time
+  // with the flag, which must change no byte of the IR, and the placements it
+  // writes are held against the golden, paths taken back to the repository's.
+  // Only those cases: the report reads facts the compile already has, so there
+  // is nothing a corpus-wide run would find that the goldens do not pin.
+  if (fs.existsSync(side("arena"))) {
+    const arenaLl = path.join(buildDir, `${name}.arena.ll`)
+    const arenaFile = path.join(buildDir, `${name}.arena.json`)
+    const placed = await spawnAsync(NISH, [src, "-o", arenaLl, ...args, "--emit-arena", arenaFile], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (placed.status !== 0 || !fs.existsSync(arenaLl) || !fs.existsSync(arenaFile)) {
+      expect(`${name}: --emit-arena writes the placements`, false, `exit ${placed.status}\n${placed.stderr}`)
+    } else {
+      expect(
+        `${name}: --emit-arena changes no byte of the IR`,
+        fs.readFileSync(arenaLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+        "the two .ll files differ"
+      )
+      const want = fs.readFileSync(side("arena"), "utf8").trim()
+      const got = fs.readFileSync(arenaFile, "utf8").split(`${root}/`).join("").trim()
+      expect(
+        `${name}: --emit-arena matches .arena`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
+  }
+
   if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
@@ -2741,6 +2771,30 @@ if (!only || "performance".includes(only)) {
     drop.stderr
   )
 
+  // NL9016: a local declared outside a loop and handed a new allocation on
+  // every pass. `last` was declared holding a literal, which NL9003 lets go, so
+  // this is the drop nothing reported. The pointer-returning `lastLabel` warns
+  // as well, an inner loop warns for a local of the outer one, and `row`, which
+  // was declared holding an allocation, is NL9003's alone: one line, one warning.
+  const passDrop = compile("perf_arena_pass_drop", "perf_arena_pass_drop_report.ll")
+  const passDropLines = summaries(passDrop.stderr)
+  check(
+    "performance: an allocation dropped on every pass of a loop warns, and a line NL9003 reports stays NL9003's",
+    passDrop.status === 0 &&
+      passDropLines.length === 4 &&
+      positions(passDropLines) === "18:5,26:5,34:7,45:5" &&
+      passDropLines[1].includes(
+        "`last` is given a new allocation on every pass of this loop and drops the one the pass before gave it: " +
+          "nothing can reach that value again and nothing frees it while the loop runs, so memory grows with every " +
+          "pass. Declare `last` with `const` inside the loop when only its pass reads it, or keep what the last " +
+          "pass needs as numbers and build the value once after the loop"
+      ) &&
+      passDropLines[0].includes("`label` is given a new allocation on every pass") &&
+      passDropLines[2].includes("`at` is given a new allocation on every pass") &&
+      passDropLines[3].includes("`row` already holds an allocation and this one drops it"),
+    passDrop.stderr
+  )
+
   // The arithmetic rules. These are not advice about speed: each one is a
   // program that does not compute what it was written to compute, and the
   // message has to name the rewrite all the same.
@@ -2959,6 +3013,10 @@ if (!only || "performance".includes(only)) {
     "perf_alloc_quiet",
     "perf_overflow_quiet",
     "perf_arena_quiet",
+    // A search loop, a value kept in an array or in the node that replaces it,
+    // a local of the pass, an assignment of no allocation and a loop that runs
+    // once: none of them drops a value on every pass, so NL9016 is silent.
+    "perf_arena_pass_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that
@@ -3830,6 +3888,14 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
     codeCheck(name, path.join(fixDir, `${name}.code`), plain)
     if (noFix) {
+      // A refused shape must name the diagnostic it was written for: with
+      // nothing to apply, a case whose diagnostic stopped firing, or that
+      // another diagnostic now stops first, would otherwise pass for having
+      // no fix.
+      check(
+        `fix ${name}: ${name}.code names the diagnostic the refused shape is about`,
+        sidecar(path.join(fixDir, `${name}.code`), "").length > 0
+      )
       check(
         `fix ${name}: reported with no \`fix\` key`,
         plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
@@ -4218,6 +4284,25 @@ if (!only) {
   )
 }
 
+// X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
+// `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
+// by the link loop above. This is the other half: `nish/crypto/x509` alone
+// still compiles for wasm32, which an import of the drawing module from
+// `x509.ts` would end.
+if (!only || "crypto_x509_random_wasm".includes(only)) {
+  const entry = path.join(linkDir, "crypto_x509_random_wasm", "x509-only.ts")
+  const outDir = path.join(buildDir, "x509-only-wasm") + path.sep
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const r = fs.existsSync(entry)
+    ? spawnSync(NISH, [entry, "--target", "wasm32", "-o", outDir], { cwd: root, encoding: "utf8" })
+    : null
+  check(
+    "crypto_x509_random_wasm: a wasm32 build importing nish/crypto/x509 alone compiles",
+    r !== null && r.status === 0,
+    r === null ? "no such fixture: tests/link/crypto_x509_random_wasm/x509-only.ts" : r.stderr
+  )
+}
+
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
 // exit code only, so the wording is pinned here, on stderr, the way
@@ -4548,39 +4633,45 @@ if (!only || "std_text_index_of_any".includes(only)) {
     }
   }
   // `--profile wasi` links runtime-simd.c's scalar path (scripts/build.sh), so
-  // the same program run under Node's WASI prints the same lines.
+  // the same programs run under Node's WASI print the same lines. The second is
+  // the non-ASCII edge's byte offsets, which the native build and this one both
+  // count in UTF-8 bytes and Node in UTF-16 units, so it is held to its
+  // expected.out here and natively, and never run under Node above.
+  const wasiNames = ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset"]
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasiDir = path.join(buildDir, "wasi_std_text_index_of_any")
-    const wasm = path.join(wasiDir, "app.wasm")
-    const built = spawnSync(
-      NISH,
-      [
-        path.join(linkDir, "std_text_index_of_any", "main.ts"),
-        "-o",
-        `${wasiDir}${path.sep}`,
-        "--link",
-        wasm,
-        "--profile",
-        "wasi",
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
-    const host =
-      built.status === 0
-        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
-            cwd: root,
-            encoding: "utf8",
-          })
-        : built
-    const want = fs.readFileSync(path.join(linkDir, "std_text_index_of_any", "expected.out"), "utf8")
-    check(
-      `link/std_text_index_of_any: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
-      built.status === 0 && host.status === 0 && host.stdout === want,
-      shown(host)
-    )
+    for (const name of wasiNames) {
+      const wasiDir = path.join(buildDir, `wasi_${name}`)
+      const wasm = path.join(wasiDir, "app.wasm")
+      const built = spawnSync(
+        NISH,
+        [
+          path.join(linkDir, name, "main.ts"),
+          "-o",
+          `${wasiDir}${path.sep}`,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const host =
+        built.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+              cwd: root,
+              encoding: "utf8",
+            })
+          : built
+      const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
+      check(
+        `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+        built.status === 0 && host.status === 0 && host.stdout === want,
+        shown(host)
+      )
+    }
   } else {
     skip(
-      `skipped: link/std_text_index_of_any: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
+      `skipped: link/${wasiNames.join(", link/")}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of indexOfAny is not run`
     )
   }
   const rootText = path.join(buildDir, "std_text_root.ll")
@@ -4902,6 +4993,117 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       "nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted",
       wiped.ok && plain.ok && (volatileZeros === 8 || volatileMemset) && plainStores === 0,
       `wiped: ${volatileZeros} volatile zero stores, volatile memset ${volatileMemset}\n${wiped.text}\n--- plain: ${plainStores} stores\n${plain.text}`
+    )
+  }
+}
+
+// `nish/crypto/hmac` and `nish/crypto/hkdf` wipe what their keys reach (#476),
+// and the wipes survive `-O2`. `crypto_hkdf_wycheproof` imports both modules,
+// whose every export is emitted, and the modules that define their symbols go
+// through `opt -O2`. Each root below must then reach exactly the volatile
+// wipes counted here, along every call site it keeps (a callee called twice
+// counts twice): a `wipe` is a volatile `llvm.memset` (`i1 true`) and a
+// `secureZero` a call to `nish_wipe`, while an ordinary `fill(0)` in their
+// place is neither. The count is exact rather than a floor because `-O2` can
+// duplicate a wipe: `hkdfExtractInto` inlines `hkdfWipe` into both hash
+// branches, so it reaches 50 where its source writes 49, and a floor of 49
+// would let one deleted wipe through. A deleted or weakened wipe lowers a
+// count, and so does one the optimiser removes; a wipe added on purpose
+// raises one, and the count here is raised with it.
+//
+// The roots and their counts, as LLVM 18's `opt -O2` leaves them: an HMAC
+// constructor 6 (the long-key path's hasher, three arrays, its hash and the
+// key block; the short path's key block), `digest` 7 (the inner digest, both
+// hashers' three arrays), HKDF's `expand` 15 (T(i) in the loop and the last
+// one, the constructor's 6, the digest's 7), the `Secret` HKDF 29 (the PRK,
+// `extract`'s one-shot HMAC, 13, and `expand`). The scratch: `begin` 16 (on
+// the long-key path the key's digest, `keyBlocks` and the key hash; on the
+// short path `keyBlocks`, which wipes both hashers, six arrays, and the pad),
+// `finishInto` 2 (the inner digest, the tag's copy), `wipe` 6, `HkdfScratch`'s
+// `wipe` 13 (T(i) and both hashes' scratch), and the `*Into` functions 49 or
+// 50 (both hashes' `begin` and `finishInto`, and `hkdfWipe`). Each kind was
+// checked by deleting one wipe and watching its roots' counts drop.
+if (!only || "crypto_hmac crypto_hkdf: the wipes survive -O2".includes(only)) {
+  if (!has("opt")) {
+    skip("crypto_hmac crypto_hkdf: no opt to show the wipes survive -O2")
+  } else {
+    const wipeDir = path.join(buildDir, "crypto-wipe-o2")
+    fs.rmSync(wipeDir, { recursive: true, force: true })
+    fs.mkdirSync(wipeDir, { recursive: true })
+    /** Every function `opt -O2` left in the modules that define HMAC, HKDF or SHA-2, by symbol. */
+    const bodies = new Map()
+    const c = spawnSync(
+      NISH,
+      [path.join(root, "tests", "link", "crypto_hkdf_wycheproof", "main.ts"), "-o", `${wipeDir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    let failure = c.status === 0 ? "" : c.stderr
+    const modules = c.status === 0 ? fs.readdirSync(wipeDir).filter((f) => f.endsWith(".ll")) : []
+    for (const file of modules) {
+      const ll = path.join(wipeDir, file)
+      if (!/^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha)/m.test(fs.readFileSync(ll, "utf8"))) {
+        continue
+      }
+      const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+      if (o.status !== 0) {
+        failure += o.stderr
+        continue
+      }
+      for (const m of o.stdout.matchAll(/^define [^\n]*?@"?([\w.$]+)"?\([\s\S]*?\n\}/gm)) {
+        bodies.set(m[1], m[0])
+      }
+    }
+    /** The volatile wipes `symbol` reaches, along every call site `opt` kept. */
+    const reached = new Map()
+    const wipesUnder = (symbol) => {
+      if (reached.has(symbol)) {
+        return reached.get(symbol)
+      }
+      reached.set(symbol, 0) // a recursive call adds nothing
+      const body = bodies.get(symbol)
+      let count = (body.match(/call void @llvm\.memset[^\n]*i1 true\)|call void @nish_wipe\(/g) || []).length
+      for (const m of body.matchAll(/call [^\n]*?@"?([\w.$]+)"?\(/g)) {
+        count += bodies.has(m[1]) ? wipesUnder(m[1]) : 0
+      }
+      reached.set(symbol, count)
+      return count
+    }
+    const expected = [
+      ["nish.HmacSha256.constructor", 6],
+      ["nish.HmacSha384.constructor", 6],
+      ["nish.HmacSha512.constructor", 6],
+      ["nish.HmacSha256.digest", 7],
+      ["nish.HmacSha384.digest", 7],
+      ["nish.HmacSha512.digest", 7],
+      ["nish.hkdfExpandSha256", 15],
+      ["nish.hkdfExpandSha384", 15],
+      ["nish.hkdfSha256Secret", 29],
+      ["nish.hkdfSha384Secret", 29],
+      ["nish.HmacSha256Scratch.begin", 16],
+      ["nish.HmacSha384Scratch.begin", 16],
+      ["nish.HmacSha256Scratch.finishInto", 2],
+      ["nish.HmacSha384Scratch.finishInto", 2],
+      ["nish.HmacSha256Scratch.wipe", 6],
+      ["nish.HmacSha384Scratch.wipe", 6],
+      ["nish.HkdfScratch.wipe", 13],
+      ["nish.hkdfExtractInto", 50],
+      ["nish.hkdfExpandInto", 49],
+      ["nish.hkdfExpandLabelInto", 49],
+    ]
+    const wrong = expected
+      .map(([symbol, want]) => [symbol, want, bodies.has(symbol) ? wipesUnder(symbol) : null])
+      .filter(([, want, got]) => got !== want)
+    check(
+      "crypto_hmac crypto_hkdf: the wipes survive -O2 (HMAC's key blocks, hashed key, inner digest and hashers; HKDF's T(i) and PRK)",
+      failure === "" && wrong.length === 0,
+      failure ||
+        wrong
+          .map(([symbol, want, got]) =>
+            got === null
+              ? `${symbol}: not in the optimised modules`
+              : `${symbol}: ${got} volatile wipes, want exactly ${want}`
+          )
+          .join("\n")
     )
   }
 }
@@ -12280,6 +12482,8 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-napi-async",
     "--emit-panics",
     "--deny-panics",
+    "--deny-retention",
+    "--emit-arena",
     "--target",
     "--profile",
     "--warn-portability",
@@ -12657,6 +12861,77 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       ),
     shown(denyAst)
   )
+  // `--emit-arena` is a report on the checked program like `--emit-panics`, so
+  // it is refused where the program is not checked (docs/LANGUAGE.md, "Arena placement").
+  for (const [flag, refusal] of [
+    ["--emit-ast", "`--emit-arena` reports on a checked program, and --emit-ast stops before the check"],
+    ["--fix", "`--emit-arena` cannot be used with --fix"],
+  ]) {
+    const file = path.join(capsDir, `arena${flag}.json`)
+    const refused = spawnSync(NISH, [panicsSource, flag, "--emit-arena", file], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `arena placement: --emit-arena with ${flag} is a usage error, exit 2, and writes nothing`,
+      refused.status === 2 && refused.stderr.includes(refusal) && !fs.existsSync(file),
+      shown(refused)
+    )
+  }
+  // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
+  // and those are found by the body checks and the whole-program facts, which
+  // `--emit-ast` never reaches (docs/LANGUAGE.md, "Retention as an error").
+  const retainSource = path.join(root, "tests", "cases", "reject_deny_retention_pass_drop.ts")
+  const retainAst = spawnSync(NISH, [retainSource, "--emit-ast", "--deny-retention"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "retention: --deny-retention with --emit-ast is a usage error, exit 2",
+    retainAst.status === 2 &&
+      retainAst.stdout === "" &&
+      retainAst.stderr.includes(
+        "`--deny-retention` reports on a checked program, and --emit-ast stops before the check"
+      ),
+    shown(retainAst)
+  )
+  // It decides whether the build happens and nothing else: the program it
+  // accepts is the program a compile without it writes, byte for byte.
+  const retainClean = path.join(root, "tests", "cases", "deny_retention_clean.ts")
+  const retainWith = path.join(capsDir, "retain-with.ll")
+  const retainWithout = path.join(capsDir, "retain-without.ll")
+  const withFlag = spawnSync(NISH, [retainClean, "--deny-retention", "-o", retainWith], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const withoutFlag = spawnSync(NISH, [retainClean, "-o", retainWithout], { cwd: root, encoding: "utf8" })
+  check(
+    "retention: --deny-retention changes no byte of the IR of a program it accepts",
+    withFlag.status === 0 &&
+      withoutFlag.status === 0 &&
+      fs.readFileSync(retainWith, "utf8") === fs.readFileSync(retainWithout, "utf8"),
+    `${shown(withFlag)}\n${shown(withoutFlag)}`
+  )
+  // A dependency's retention stays a warning, as its panic sites stay outside
+  // the no-panic scope: the program's author cannot change that code.
+  const retainDep = path.join(root, "tests", "link", "deny_retention_dependency", "main.ts")
+  const depRun = spawnSync(
+    NISH,
+    [retainDep, "--deny-retention", "-o", path.join(capsDir, "retain-dep") + "/"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "retention: under --deny-retention a dependency's NL9016 is still a warning, and the program compiles",
+    depRun.status === 0 &&
+      depRun.stderr.includes(
+        "retain_pkg/index.ts:5:5: performance: `label` is given a new allocation on every pass"
+      ) &&
+      !depRun.stderr.includes("error:"),
+    shown(depRun)
+  )
   const panicsChecked = path.join(capsDir, "panics-checked.json")
   const dumped = spawnSync(NISH, [panicsSource, "--emit-checked", "--emit-panics", panicsChecked], {
     cwd: root,
@@ -12989,6 +13264,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       ["-o", "x.ll"],
       ["--emit-header", "x.h"],
       ["--emit-panics", "x.json"],
+      ["--emit-arena", "x.json"],
       ["--emit-checked"],
       ["--target", "host"],
     ]) {

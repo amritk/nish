@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"words","symbol":"words","module":"tests/cases/arena_placement_loops.ts","line":10,"sites":[{"kind":"array","line":11,"column":25,"placement":"returned"},{"kind":"push","line":13,"column":5,"placement":"returned"},{"kind":"string","line":13,"column":14,"placement":"returned"}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/arena_placement_loops.ts","line":18,"sites":[{"kind":"string","line":23,"column":14,"placement":"pass","accumulates":true},{"kind":"string","line":31,"column":13,"placement":"block","accumulates":true},{"kind":"string","line":36,"column":10,"placement":"function","accumulates":true},{"kind":"call","line":39,"column":14,"placement":"function","callee":"words"},{"kind":"print","line":40,"column":3,"placement":"function"},{"kind":"string","line":41,"column":15,"placement":"function"},{"kind":"call","line":41,"column":18,"placement":"function","callee":"first<string>"},{"kind":"array","line":41,"column":45,"placement":"stack"},{"kind":"builtin","line":41,"column":59,"placement":"function","callee":"join"}]},
+{"name":"first<string>","symbol":"first$str","module":"tests/cases/arena_placement_loops.ts","line":8,"sites":[]},
+{"name":"first<i32>","symbol":"first$i32","module":"tests/cases/arena_placement_loops.ts","line":8,"sites":[]}
+]}

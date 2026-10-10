@@ -249,7 +249,7 @@ const emitCall = (
   args: Node[],
   site: Node
 ): string => {
-  const calleePrivate = privateAbi(emitter.opts, callee.exported)
+  const calleePrivate = privateAbi(emitter.opts, callee.visibleOutside())
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`]
   let i = 0
   while (i < args.length) {

@@ -11,7 +11,7 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 | `<name>.rounds` (optional) | how many rounds `--fix` takes: one `fixed <file>` line on stderr per round that rewrote the file |
 | `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
 | `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1; a program whose only diagnostics are warnings exits 0 |
-| `<name>.code` (optional) | a code the plain `--json` run must report, so a case whose diagnostic stopped firing fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it |
+| `<name>.code` | a code the plain `--json` run must report, so a case whose diagnostic stopped firing, or that another diagnostic now stops first, fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it. Required beside a `.nofix.ts`, optional beside a `.fixed.ts` |
 | `<name>.stdout` (optional) | beside a `.fixed.ts`: the input and the fixed program are each linked and run, and both must print exactly this and exit with `<name>.run-exit` (default 0). Skipped without clang |
 | `<name>/` | a case of several files, for what the command line decides: which files are named and which may be rewritten. `argv` lists the files `--fix` is given; every `x.ts` comes out as its `x.fixed.ts`, or byte-identical when there is none; `exit` (default 0) is `--fix`'s status; `rewrites` (optional) counts the `fixed <file>` lines on stderr. A case that exits 0 must then compile clean, and one that does not must still report the fix it was not allowed to apply. With `same-as-plain`, the report instead has to be byte for byte what a plain run (human and `--json`) prints about the files `--fix` leaves. `plain-exit` and `code` are the sidecars above, checked on the plain run (on the run after `--fix` under `same-as-plain`), and `code` is checked absent from the fixed program when `--fix` exits 0. `node-modules/` is copied as `node_modules/`, which git would ignore here |
 
@@ -38,9 +38,12 @@ first is applied and the second dropped as overlapping it, and the next round
 applies the other, so it takes two rounds. `decl-export-list-twice` is a fix
 whose own edits overlap — `export { f, f }` asks for `export ` before `f` twice
 — so it is dropped whole every round and the file is left as it was. Each fails
-when its half of `acceptedEdits`'s overlap test is taken out; the first half
-also fails the `unsafe-index-` directory cases, whose fixes share one import
-edit. `decl-fs-two-names` pinned the first half until #434: two names from a
+when its half of `acceptedEdits`'s overlap test is taken out. An edit
+identical to one already accepted is not an overlap but the same change, made
+once: the `unsafe-index-` directory cases' fixes share one import edit, and
+`unsafe-index-rounds` and `unsafe-index-pair` count the single round that
+takes; each needs more rounds when `sameAsAny` is taken out.
+`decl-fs-two-names` pinned the first half until #434: two names from a
 missing `fs` are one NL3015 now, not two carrying the same edit.
 
 The `guard-` cases are NL9007's, whose fix is a guard
@@ -50,11 +53,14 @@ what keeps a guard the analysis did not credit from being inserted again every
 round, and each fixed case's `code` is NL9007, which the fixed program must no
 longer report. `guard-array` and `guard-out-of-range` run the program before and after
 the fix: the same output in range, and status 1 out of range, from the
-runtime's index error before and from the guard's panic after. Each refused
-shape — an `i64` or unsigned index, an access in a loop's condition or behind
-`? :`, `&&` or `??`, a call before it in the statement, a statement that
-declares the index, a `panic` or `toI32` the module declares, as a function,
-a parameter or a local — has a case, and each fails when its refusal in `boundsGuardEdits`
+runtime's index error before and from the guard's panic after. A `u8`, `u16`
+or `u32` index gets the upper end alone, `toU32(i) < toU32(xs.length)`, whose
+type is its lower end (`guard-u8`, `guard-u16`, which runs out of range, and
+`guard-u32`). Each refused shape — an `i64` or `u64` index (`toU32` would keep
+a `u64`'s low bits), an access in a loop's condition or behind `? :`, `&&` or
+`??`, a call before it in the statement, a statement that declares the index,
+a `panic`, `toI32` or `toU32` the module declares, as a function, a parameter
+or a local — has a case, and each fails when its refusal in `boundsGuardEdits`
 (`src/checker.ts`) is taken out. `guard-nofix-deny-panics` pins the last
 refused shape: under `--deny-panics` the index is an error (NL2457), so the
 program does not check and no warning's fix is applied.
@@ -78,14 +84,28 @@ The `unsafe-index-` cases are that kind: every `argv` passes
 `--unchecked-indexing`, and each fixed shape and each refused one in the
 table in `docs/LANGUAGE.md` ("`nish:unsafe`") has its case.
 `unsafe-index-rounds` pins the convergence its `rewrites` counts: every site's
-fix carries the same import edit, so the first round over `main.ts` applies
-one fix and the second the rest, after the round that fixes `seed.ts`.
+fix carries the same import edit, and one round over `main.ts` applies them
+all, after the round that fixes `seed.ts`. `unsafe-index-pair` is #461's
+`a[at[0]] + b[at[1]]`: `uncheckedGet` is a load to the bounds analysis, so
+rewriting `a[at[0]]` leaves `at[1]` proven and both sites land in that one
+round. `unsafe-index-kept` is an access the build without the flag proves
+from a check the migration leaves in place (`names[i]`, whose strings have no
+`nish:unsafe` form): it is not a site, and stays `xs[i]`.
 `unsafe-index-equivalence`'s sources and their `.fixed.ts` are the two link
 cases `tests/link/unsafe-migrate-index-flag` (under the flag) and
 `unsafe-migrate-index-fixed` (without it), which print one `expected.out`.
 Its four modules hold every fixed shape, so each rewrite is compiled and run
 without the flag; the fix runner itself compiles the result with the case's
 `argv`, flag included.
+
+The `expr-truthy-` cases are the truthiness fixes: a condition (NL2188) takes
+`!== 0`, `!== null` or `.length !== 0`, `!x` (NL2263) the same comparison
+turned round, and a non-boolean operand of `&&` or `||` (NL2099) the
+condition's comparison, but only where the whole is read for its truthiness —
+a condition, or `!`'s operand — because elsewhere `tsc` hands on the operand
+itself (`expr-nofix-logical-value`, `-argument`). A float, a `string | null`
+and a class that cannot be `null` have no comparison, and an `&&` with one such
+operand has no fix for the other either (`expr-nofix-logical-float`).
 
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.

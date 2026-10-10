@@ -1,0 +1,2 @@
+`--deny-retention` refuses this NL9003 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more
+`p` already holds an allocation and this one drops it
