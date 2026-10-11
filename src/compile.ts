@@ -1572,7 +1572,7 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const runtime = cachedRuntime(root, outputs, profile, debugInfo, threads, json)
+  const runtime = cachedRuntime(root, quiet ? [] : outputs, profile, debugInfo, threads, json)
   if (runtime === null) {
     return 3
   }
@@ -1645,14 +1645,16 @@ const pushRecipeFlags = (argv: string[], profile: string, debugInfo: boolean, th
  * take, and a cache root that is not there or cannot be made private, so a
  * `--link` that works without the cache works without it, and an entry
  * the compile left nothing to fill. Null when the runtime did not compile,
- * which is reported here as the link's failure.
+ * which is reported here as the link's failure, naming the IR in `outputs`:
+ * empty under `run`, whose IR is in a scratch directory that is about to go.
  *
  * The root is made `0700` and its owner and mode checked on every link, hit
  * or miss, as the run cache's are (docs/security/cli.md, CLI-4, CLI-7 and
- * CLI-11): a hit links whatever objects stand beside a matching key, and the
- * key is written there first anyway, because what `cc --version` says is part
- * of it and the language has no call that answers a process's output but
- * `spawnSyncTo`, into a file.
+ * CLI-11), because a hit links whatever objects stand beside a matching key.
+ * Every link also writes one file of its own into the root before it can look
+ * anything up: the key holds what `cc --version` prints, the language reads a
+ * process's output only through `spawnSyncTo` into a file, so that output goes
+ * to `<root>/tmp-<hex>.cc`, is read back, and the file is removed.
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
@@ -1720,10 +1722,8 @@ const cachedRuntime = (
   let entry = ""
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
-    reportToolchainFailure(
-      `--link: ${script} failed (${why}) compiling the runtime; the IR is in ${outputs.join(", ")}`,
-      json
-    )
+    const where = outputs.length > 0 ? `; the IR is in ${outputs.join(", ")}` : ""
+    reportToolchainFailure(`--link: ${script} failed (${why}) compiling the runtime${where}`, json)
   } else {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--"]

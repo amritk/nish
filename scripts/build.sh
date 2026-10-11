@@ -252,6 +252,20 @@ if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
     pids=()
     return "$failed"
   }
+  # The compiles are this script's children, so a signal that stops it stops
+  # them too, before anything they write into is removed. A finished script
+  # has waited for every one of them, so there is nothing left to stop.
+  stop_jobs() {
+    if [ ${#pids[@]} -gt 0 ]; then
+      kill "${pids[@]}" 2>/dev/null || true
+      wait "${pids[@]}" 2>/dev/null || true
+      pids=()
+    fi
+  }
+  work=""
+  trap 'stop_jobs; [ -z "$work" ] || rm -rf -- "$work"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 fi
 
 if [ -n "$objects_to" ]; then
@@ -288,7 +302,6 @@ if [ -n "$objects_from" ]; then
   # The program's own objects are this link's alone, so they go in a private
   # directory of its own and go with it.
   work=$(mktemp -d "${TMPDIR:-/tmp}/nish-link.XXXXXX")
-  trap 'rm -rf -- "$work"' EXIT
   objects=()
   n=0
   for i in "${inputs[@]}"; do

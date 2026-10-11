@@ -13778,6 +13778,57 @@ if (!only || "runtime-cache".includes(only)) {
       }
     }
 
+    // A build.sh stopped by a signal stops the compiles it started. The C
+    // compiler here records its pid and sleeps, so every job is still running
+    // when the script is sent TERM; afterwards none of them may be.
+    const sleeper = path.join(tools, "cc-sleeps")
+    const sleeperPids = path.join(rcDir, "sleeper-pids")
+    fs.writeFileSync(sleeper, `#!/bin/sh\necho $$ > '${sleeperPids}'/$$\nexec sleep 60\n`, { mode: 0o755 })
+    for (const [mode, args] of [
+      [
+        "--runtime-objects",
+        [path.join(root, "runtime", "runtime.c"), "--runtime-objects", path.join(rcDir, "stopped")],
+      ],
+      [
+        "--runtime-from",
+        [
+          path.join(rcDir, "hello.ll"),
+          "--runtime-from",
+          entry.length > 0 ? entry : path.join(rcDir, "no-entry"),
+          "-o",
+          path.join(rcDir, "stopped-out"),
+        ],
+      ],
+    ]) {
+      fs.rmSync(sleeperPids, { recursive: true, force: true })
+      fs.mkdirSync(sleeperPids, { recursive: true })
+      const expected = mode === "--runtime-objects" ? units.length : 1
+      const stopped = spawnSync(
+        "bash",
+        [
+          "-c",
+          'bash "$@" & p=$!; n=0; until [ "$(ls "$PIDS" | wc -l)" -ge "$WANT" ] || [ $n -ge 300 ]; do sleep 0.1; n=$((n + 1)); done; ' +
+            'kill -TERM $p; wait $p; echo "exit $?"; for f in "$PIDS"/*; do kill -0 "$(cat "$f")" 2>/dev/null && echo "alive $(cat "$f")"; done; true',
+          "bash",
+          path.join(root, "scripts", "build.sh"),
+          ...args,
+          "--profile",
+          "debug",
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, CC: sleeper, PIDS: sleeperPids, WANT: String(expected) },
+        }
+      )
+      const started = fs.readdirSync(sleeperPids).length
+      check(
+        `runtime cache: build.sh ${mode} stopped by TERM stops every compile it started`,
+        started === expected && stopped.stdout.includes("exit 143") && !stopped.stdout.includes("alive"),
+        `${started} compiles started; ${stopped.stdout}${stopped.stderr}`
+      )
+    }
+
     // build.sh's two modes are for the profiles they cache, and a build they
     // do not cover is refused rather than half done.
     for (const [what, flags] of [
