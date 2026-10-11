@@ -4865,7 +4865,9 @@ if (!only || "std_json_tokenizer".includes(only)) {
     const problems = []
     let compared = 0
     const seen = new Set()
-    for (const line of String(run.stdout ?? "").split("\n").filter((l) => l.length > 0)) {
+    for (const line of String(run.stdout ?? "")
+      .split("\n")
+      .filter((l) => l.length > 0)) {
       const words = line.split(" ")
       const name = words[0]
       const bytes = files.get(name) ?? null
