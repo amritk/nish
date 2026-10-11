@@ -8674,7 +8674,7 @@ if (!only || "simd".includes(only)) {
   /** Build `source`, the index-of-any driver unless named, with `flags` into `out`; the compile's result. */
   const build = (flags, out, source = driver) =>
     spawnSync("clang", [...strict, ...flags, source, "-o", out], { cwd: root, encoding: "utf8" })
-  /** The check on one run of a driver: exit 0 and its summary line, which is also the check's name. */
+  /** The check on one run of a driver: exit 0 and its summary line, which is also the check's name. The line. */
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
@@ -8682,15 +8682,53 @@ if (!only || "simd".includes(only)) {
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
+    return said
   }
-  /** Build the driver with `flags` and run it with `run`. */
-  const agree = (label, flags, out, run) => {
-    const cc = build(flags, out)
-    judge(label, cc, cc.status === 0 ? run(out) : null)
+  /** Build `source` with `flags`, run it with `run`, and judge it; its summary line. */
+  const agree = (label, flags, out, run, source = driver) => {
+    const cc = build(flags, out, source)
+    return judge(label, cc, cc.status === 0 ? run(out) : null)
   }
-  agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), (exe) =>
-    spawnSync(exe, [], { encoding: "utf8" })
+  const native = (exe) => spawnSync(exe, [], { encoding: "utf8" })
+  agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), native)
+
+  // WP38 S5: runtime/runtime-aes.c runs AES-GCM on AES-NI and PCLMULQDQ, or on the
+  // ARMv8 AES and PMULL instructions, and a program takes that path or the bitsliced
+  // Nish one by what its CPU has, so a kernel wrong on one family of machines is a bug
+  // that ships. tests/simd/aes-gcm.c includes the file and holds every path this
+  // machine has to a table AES and a bit-at-a-time GHASH -- FIPS 197's blocks, the
+  // GCM test vectors, RFC 9001's header-protection samples, then every length
+  // 0..4,096 and a fuzzed corpus with counters across 2^32 -- and checks `nish_aes_hw`
+  // under each `NISH_AES`. Where /proc/cpuinfo (Linux's; elsewhere nothing is
+  // required) says the CPU has the instructions, the line must name the path, so a
+  // detector that wrongly answered no cannot pass as a machine without them. The
+  // AArch64 path also runs below, through binfmt, and natively in CI's simd-arm64 job.
+  const aesSaid = agree(
+    `aes-gcm native ${process.arch}`,
+    [],
+    path.join(simdDir, "aes-gcm"),
+    native,
+    "tests/simd/aes-gcm.c"
   )
+  const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
+  const features = new Set((cpuinfo.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
+  let wantPath = null
+  if (process.arch === "x64" && features.has("aes") && features.has("pclmulqdq")) {
+    wantPath = "aesni-pclmul"
+  } else if (process.arch === "arm64" && features.has("aes") && features.has("pmull")) {
+    wantPath = "armv8-aes-pmull"
+  }
+  if (wantPath === null) {
+    skip(
+      `simd: aes-gcm: /proc/cpuinfo names no AES and carry-less multiply for ${process.platform}-${process.arch}, so no kernel path is required to run`
+    )
+  } else {
+    check(
+      `simd: aes-gcm ran the ${wantPath} path, which /proc/cpuinfo says this CPU has`,
+      new RegExp(`cases agree across ${wantPath};`).test(aesSaid),
+      aesSaid
+    )
+  }
 
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const [label, flags] of [
@@ -8769,40 +8807,56 @@ if (!only || "simd".includes(only)) {
   // because it is the way this would fail quietly: once a link names it, its
   // constructor runs at every start-up, which is why the unit asks `cpuid` itself
   // (runtime/runtime-simd.c, `nish_cpu_has_avx2`).
+  //
+  // runtime-aes.c is held to the same, named on the link line since scripts/build.sh
+  // does not pair it with runtime.c yet (RUNTIME_C says why): hello linked with it is
+  // the same binary, byte for byte, as hello linked without it, and its control,
+  // which calls the kernels, runs them where the CPU has them.
   if (process.platform !== "linux") {
     skip(`simd section GC: read from an ELF link map, and this host is ${process.platform}`)
   } else {
     const helloLl = path.join(simdDir, "hello.ll")
     const compiled = spawnSync(NISH, ["examples/hello.ts", "-o", helloLl], { cwd: root, encoding: "utf8" })
-    const kept = (input, out, profile) => {
+    /** Links `inputs` and the runtime through build.sh; the kernels' symbols the map keeps, and the binary. */
+    const kept = (inputs, out, profile) => {
       const map = `${out}.map`
       // build.sh hands an argument it does not know to clang with the inputs.
       const b = spawnSync(
         "bash",
-        ["scripts/build.sh", input, "runtime/runtime.c", `-Wl,-Map=${map}`, "-o", out, "--profile", profile],
+        [
+          "scripts/build.sh",
+          ...inputs,
+          "runtime/runtime.c",
+          `-Wl,-Map=${map}`,
+          "-o",
+          out,
+          "--profile",
+          profile,
+        ],
         { cwd: root, encoding: "utf8" }
       )
       if (b.status !== 0) {
-        return { ok: false, names: [], why: b.stderr }
+        return { ok: false, names: [], bytes: null, why: b.stderr }
       }
       const names = fs
         .readFileSync(map, "utf8")
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_cpu_has_avx2|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
-      return { ok: true, names, why: "" }
+      return { ok: true, names, bytes: fs.readFileSync(out), why: "" }
     }
+    const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
-          ? kept(helloLl, path.join(simdDir, `hello.${profile}`), profile)
-          : { ok: false, names: [], why: compiled.stderr }
+          ? kept([helloLl], path.join(simdDir, `hello.${profile}`), profile)
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
       const ctrlExe = path.join(simdDir, `calls-kernel.${profile}`)
-      const ctrl = kept("tests/simd/calls-kernel.c", ctrlExe, profile)
+      const ctrl = kept(["tests/simd/calls-kernel.c"], ctrlExe, profile)
       const ran = ctrl.ok ? spawnSync(ctrlExe, [], { encoding: "utf8" }) : null
       const paths = ["nish_any_scalar", "nish_any_base", "nish_any_resolve"]
       if (process.arch === "x64") {
@@ -8820,140 +8874,36 @@ if (!only || "simd".includes(only)) {
         `hello keeps: ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
           `the control keeps: ${ctrl.names.join(" ")} ${ctrl.why}\nthe control printed: ${ran ? ran.stdout : "(not run)"}`
       )
-    }
-  }
-}
 
-// ---- WP38 S5: the AES kernels agree with a textbook reference -----------------------
-// runtime/runtime-aes.c runs AES-GCM on AES-NI and PCLMULQDQ, or on the ARMv8 AES and
-// PMULL instructions, and a program takes that path or the bitsliced Nish one by what
-// its CPU has, so a kernel wrong on one family of machines is a bug that ships.
-// tests/simd/aes-gcm.c includes the file and holds every path this machine has to a
-// table AES and a bit-at-a-time GHASH -- FIPS 197's blocks, the GCM test vectors,
-// RFC 9001's header-protection samples, then every length 0..4,096 and a fuzzed
-// corpus with counters across 2^32 -- and checks `nish_aes_hw` under each `NISH_AES`.
-// Where /proc/cpuinfo says the CPU has the instructions, the line must name the path,
-// so a detector that wrongly answered no cannot pass as a machine without them. The
-// AArch64 path runs above, through binfmt, and natively in CI's simd-arm64 job.
-if (!only || "simd aes-gcm".includes(only)) {
-  const aesDir = path.join(buildDir, "simd")
-  fs.mkdirSync(aesDir, { recursive: true })
-  const exe = path.join(aesDir, "aes-gcm")
-  const cc = spawnSync(
-    "clang",
-    ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/simd/aes-gcm.c", "-o", exe],
-    {
-      cwd: root,
-      encoding: "utf8",
-    }
-  )
-  const r = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
-  const said = r === null ? "" : String(r.stdout ?? "").trim()
-  check(
-    `simd: aes-gcm native ${process.arch}: ${said.replace(/^aes-gcm: /, "") || "the agreement driver"}`,
-    r !== null && r.status === 0 && /cases agree/.test(said),
-    cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
-  )
-  // The path this CPU should have run, from the kernel's own report of its features
-  // (Linux's /proc/cpuinfo; elsewhere there is none, and nothing is required).
-  const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const features = new Set((cpuinfo.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
-  let wantPath = null
-  if (process.arch === "x64" && features.has("aes") && features.has("pclmulqdq")) {
-    wantPath = "aesni-pclmul"
-  } else if (process.arch === "arm64" && features.has("aes") && features.has("pmull")) {
-    wantPath = "armv8-aes-pmull"
-  }
-  if (wantPath === null) {
-    skip(
-      `simd: aes-gcm: /proc/cpuinfo names no AES and carry-less multiply for ${process.platform}-${process.arch}, so no kernel path is required to run`
-    )
-  } else {
-    check(
-      `simd: aes-gcm ran the ${wantPath} path, which /proc/cpuinfo says this CPU has`,
-      new RegExp(`cases agree across ${wantPath};`).test(said),
-      said
-    )
-  }
-
-  // Section GC, as for runtime-simd.c above, with the unit named on the link line,
-  // since scripts/build.sh does not pair it with runtime.c yet (RUNTIME_C says why):
-  // hello linked with runtime-aes.c is the same binary, byte for byte, as hello
-  // linked without it, so a program that never calls AES pays nothing for it, and
-  // the control, which does call the kernels, links them, runs them where the CPU
-  // has them and draws in no libgcc CPU probe.
-  if (process.platform !== "linux") {
-    skip(`simd aes-gcm section GC: read from an ELF link map, and this host is ${process.platform}`)
-  } else {
-    const helloLl = path.join(aesDir, "hello-aes.ll")
-    const compiled = spawnSync(NISH, ["examples/hello.ts", "-o", helloLl], { cwd: root, encoding: "utf8" })
-    /** Links `inputs` through build.sh at `profile`; the binary's bytes and the link map's symbols. */
-    const linkAes = (inputs, out, profile) => {
-      const map = `${out}.map`
-      const b = spawnSync(
-        "bash",
-        ["scripts/build.sh", ...inputs, `-Wl,-Map=${map}`, "-o", out, "--profile", profile],
-        {
-          cwd: root,
-          encoding: "utf8",
-        }
-      )
-      if (b.status !== 0) {
-        return { ok: false, bytes: null, names: [], why: b.stderr }
-      }
-      const names = fs
-        .readFileSync(map, "utf8")
-        .split("\n")
-        .map((line) => line.trim().split(/\s+/).pop())
-        .filter((name) => /^(nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(name))
-      return { ok: true, bytes: fs.readFileSync(out), names, why: "" }
-    }
-    const fips = "69c4e0d86a7b0430d8cdb78070b4c55a"
-    const wantControl = wantPath === null ? null : `nish_aes_hw: 1\n${fips}\n`
-    for (const profile of ["speed", "size"]) {
-      const why = compiled.status === 0 ? "" : compiled.stderr
       const withAes =
         compiled.status === 0
-          ? linkAes(
-              [helloLl, "runtime/runtime.c", "runtime/runtime-aes.c"],
-              path.join(aesDir, `hello-aes.${profile}`),
-              profile
-            )
-          : { ok: false, bytes: null, names: [], why }
-      const without =
-        compiled.status === 0
-          ? linkAes([helloLl, "runtime/runtime.c"], path.join(aesDir, `hello-no-aes.${profile}`), profile)
-          : { ok: false, bytes: null, names: [], why }
-      const ctrlExe = path.join(aesDir, `calls-aes.${profile}`)
-      const ctrl = linkAes(
-        ["tests/simd/calls-aes.c", "runtime/runtime.c", "runtime/runtime-aes.c"],
-        ctrlExe,
-        profile
-      )
-      const ran = ctrl.ok ? spawnSync(ctrlExe, [], { encoding: "utf8" }) : null
-      const printed = ran === null ? "" : String(ran.stdout)
+          ? kept([helloLl, "runtime/runtime-aes.c"], path.join(simdDir, `hello-aes.${profile}`), profile)
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const aesExe = path.join(simdDir, `calls-aes.${profile}`)
+      const aesCtrl = kept(["tests/simd/calls-aes.c", "runtime/runtime-aes.c"], aesExe, profile)
+      const aesRan = aesCtrl.ok ? spawnSync(aesExe, [], { encoding: "utf8" }) : null
+      const printed = aesRan === null ? "" : String(aesRan.stdout)
       check(
         `simd: --profile ${profile} links hello with runtime-aes.c to the same bytes as without it, and a program that calls the kernels runs them`,
         withAes.ok &&
-          without.ok &&
+          quiet.ok &&
           withAes.names.length === 0 &&
-          withAes.bytes.equals(without.bytes) &&
-          ctrl.ok &&
-          !ctrl.names.includes("__cpu_model") &&
-          ran !== null &&
-          ran.status === 0 &&
-          (wantControl === null ? /^nish_aes_hw: [01]\n/.test(printed) : printed === wantControl),
+          withAes.bytes.equals(quiet.bytes) &&
+          aesCtrl.ok &&
+          !aesCtrl.names.includes("__cpu_model") &&
+          aesRan.status === 0 &&
+          (aesControl === null ? /^nish_aes_hw: [01]\n/.test(printed) : printed === aesControl),
         `hello with runtime-aes.c: ${withAes.bytes?.length ?? "(not linked)"} bytes, keeps ${withAes.names.join(" ") || "(none)"} ${withAes.why}\n` +
-          `hello without: ${without.bytes?.length ?? "(not linked)"} bytes ${without.why}\n` +
-          `the control keeps: ${ctrl.names.join(" ") || "(none)"} ${ctrl.why}\nthe control printed: ${printed || "(not run)"}`
+          `hello without: ${quiet.bytes?.length ?? "(not linked)"} bytes\n` +
+          `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
     }
   }
 
-  // `--profile wasi`: the unit compiles for wasm32 to an answer of 0 and kernels
-  // nothing reaches, so a link that names it links, and the control says 0.
+  // `--profile wasi`: runtime-aes.c compiles for wasm32 to an answer of 0 and
+  // kernels nothing reaches, so a link that names it links, and the control says 0.
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(aesDir, "calls-aes.wasm")
+    const wasm = path.join(simdDir, "calls-aes.wasm")
     const b = spawnSync(
       "bash",
       [
@@ -9056,15 +9006,11 @@ if (!only || "ct_asm constant time assembly runtime-aes".includes(only)) {
     skip("ct_asm: no clang to compile runtime-aes.c to assembly")
   } else {
     for (const r of runtimeChecks(root)) {
-      if (r.expect === null) {
-        check(
-          `ct_asm: ${r.file} ${r.fn} on ${r.target}: no branch on a secret, call, secret-indexed access or secret-dependent latency`,
-          r.ok,
-          r.detail
-        )
-      } else {
-        check(`ct_asm: ${r.file} ${r.fn} on ${r.target}: refused for ${r.expect}`, r.ok, r.detail)
-      }
+      const promise =
+        r.expect === null
+          ? "no branch on a secret, call, secret-indexed access or secret-dependent latency"
+          : `refused for ${r.expect}`
+      check(`ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promise}`, r.ok, r.detail)
     }
   }
 }

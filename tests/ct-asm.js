@@ -182,9 +182,11 @@ const LISTINGS = new WeakMap()
  * The instruction lines of `symbol` in the lines of an ELF `.s` for `target`, from its label to the
  * `.Lfunc_end` LLVM writes after it: no directives, labels or comments. `null`
  * when the symbol is not there, which the caller treats as a failure — a check
- * that read nothing has proved nothing.
+ * that read nothing has proved nothing. With `labels`, each local label is
+ * kept as its own line (`.LBB0_3:`), for tests/ct-asm-runtime.js, which reads
+ * the control flow between them.
  */
-export const functionBody = (lines, symbol, target) => {
+export const functionBody = (lines, symbol, target, { labels = false } = {}) => {
   const start = lines.findIndex((line) => line.startsWith(`${symbol}:`))
   if (start < 0) {
     return null
@@ -195,6 +197,10 @@ export const functionBody = (lines, symbol, target) => {
       break
     }
     const text = lines[i].replace(target.comment, "").trim()
+    if (labels && /^\.L\w+:$/.test(text)) {
+      body.push(text)
+      continue
+    }
     if (text.length === 0 || text.startsWith(".") || text.endsWith(":")) {
       continue
     }
@@ -428,6 +434,8 @@ export class Taint {
     this.listing = null
     this.depth = 0
     this.found = []
+    this.preciseFlags = spec.preciseFlags === true
+    this.mnemonic = ""
     // `ctSpecs` has already refused a secret that names no parameter or one
     // past the registers, so every index here is a register.
     for (const index of spec.secretArgs) {
@@ -495,15 +503,95 @@ export class Taint {
   }
 
   /**
-   * The flags only ever gain a secret: an instruction that leaves them alone
+   * By default the flags only ever gain a secret: an instruction that leaves them alone
    * must not clear one, and telling those apart per mnemonic is a table this
    * check would get wrong. A false alarm is a fixture to look at; a cleared
    * taint would be a pass nobody earned.
    */
   taintFlags(secret) {
-    if (secret) {
+    if (this.preciseFlags && (this.target.name === "aarch64" || X86_FLAGS_ASSIGN.test(this.mnemonic))) {
+      if (secret) {
+        this.secret.add("flags")
+      } else {
+        this.secret.delete("flags")
+      }
+      return
+    }
+    if (secret && !(this.preciseFlags && X86_FLAGS_KEEP.test(this.mnemonic))) {
       this.secret.add("flags")
     }
+  }
+
+  /** A copy that shares nothing mutable with this state. */
+  clone() {
+    const c = new Taint(
+      { contents: this.contents, secretArgs: [], preciseFlags: this.preciseFlags },
+      this.target
+    )
+    c.secret = new Set(this.secret)
+    c.loaded = new Set(this.loaded)
+    c.stackAt = new Map(this.stackAt)
+    c.sp = this.sp
+    c.bytes = new Map([...this.bytes].map(([at, b]) => [at, { ...b }]))
+    c.unknownSecret = this.unknownSecret
+    c.listing = this.listing
+    return c
+  }
+
+  /**
+   * This state joined with `other`, where control flow meets: everything
+   * secret on either side is secret, and a stack place the sides do not agree
+   * on is one this cannot place. A stack byte only one side wrote holds, on
+   * the other, whatever the frame held, which is secret if anything unplaced
+   * was.
+   */
+  join(other) {
+    const j = this.clone()
+    const place = (a, b) => (a === b ? a : null)
+    for (const r of other.secret) {
+      j.secret.add(r)
+    }
+    for (const r of other.loaded) {
+      j.loaded.add(r)
+    }
+    for (const r of new Set([...this.stackAt.keys(), ...other.stackAt.keys()])) {
+      j.stackAt.set(r, place(this.stackAt.get(r), other.stackAt.get(r)))
+    }
+    j.sp = place(this.sp, other.sp)
+    for (const at of new Set([...this.bytes.keys(), ...other.bytes.keys()])) {
+      const x = this.bytes.get(at)
+      const y = other.bytes.get(at)
+      if (x !== undefined && y !== undefined) {
+        const same = x.from === y.from && x.width === y.width
+        j.bytes.set(at, {
+          secret: x.secret || y.secret,
+          loaded: x.loaded || y.loaded,
+          stack: place(x.stack, y.stack),
+          from: same ? x.from : null,
+          width: same ? x.width : null,
+        })
+      } else {
+        const one = x ?? y
+        const unwritten = x === undefined ? this : other
+        j.bytes.set(at, { ...one, secret: one.secret || unwritten.unknownSecret, loaded: true, from: null })
+      }
+    }
+    j.unknownSecret = this.unknownSecret || other.unknownSecret
+    j.contents = this.contents || other.contents
+    return j
+  }
+
+  /** The state as text, for telling whether a join changed anything. */
+  key() {
+    return JSON.stringify([
+      [...this.secret].sort(),
+      [...this.loaded].sort(),
+      [...this.stackAt].sort(),
+      this.sp,
+      [...this.bytes].sort((x, y) => x[0] - y[0]),
+      this.unknownSecret,
+      this.contents,
+    ])
   }
 
   /** The stack pointer moves by `delta`, or by an amount this cannot follow when `delta` is `null`. */
@@ -690,8 +778,24 @@ const X86_PREFIX = /^(lock|notrack|bnd|data16|data32|addr32|rex64|[c-gs]s)$/
 /** An AVX-512 write under a mask that keeps the lanes it does not write (`{%k1}` without `{z}`). */
 const X86_MERGE_MASK = /\{%k\d\}(?!\s*\{z\})/
 
+/**
+ * Under `preciseFlags` (tests/ct-asm-runtime.js, which reads loops), the
+ * flags follow the last instruction that wrote them rather than only gaining a
+ * secret. These x86-64 instructions write every flag a conditional jump reads.
+ */
+const X86_FLAGS_ASSIGN = /^(cmp|test|add|sub|and|or|xor|neg|adc|sbb)[bwlq]?$|^v?(ptest|u?comis[sd])$/
+/**
+ * And these write none. `p...` is every SSE integer instruction (and `push`,
+ * `pop`, `pdep`, `pext`), less `ptest` and `popcnt`. Anything in neither list
+ * still only adds its taint. On aarch64 only a compare or an `s`-suffixed
+ * instruction writes the flags, all four at once, so there every write sets them.
+ */
+const X86_FLAGS_KEEP =
+  /^(v?mov\w*|lea[wlq]?|bswap[lq]?|not[bwlq]?|set\w+|cmov\w+|cltq|cqto|cltd|cwtl|v?p(?!test|opcnt)\w+|v?aes\w+|v?(shuf|unpck[hl]|xor|andn?|or|blend)p[sd]|v?insertps|v?extractps)$/
+
 /** One x86-64 (AT&T) instruction: the violation it is, if any, and its effect on `t`. */
 const stepX86 = (t, mnemonic, operands) => {
+  t.mnemonic = mnemonic
   if (X86_PREFIX.test(mnemonic)) {
     // What follows is the instruction itself, read as though the prefix were not there.
     return operands.length === 0 ? null : stepX86(t, ...parseInstruction(operands.join(", ")))
@@ -881,6 +985,7 @@ const armImmediate = (ops, i) => {
 
 /** One aarch64 instruction, likewise. The destination is the first operand. */
 const stepArm = (t, mnemonic, operands) => {
+  t.mnemonic = mnemonic
   if (ARM_BRANCH.test(mnemonic)) {
     return "branch"
   }

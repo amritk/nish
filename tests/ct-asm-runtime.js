@@ -22,16 +22,19 @@
  * `rounds` and `length`, which are public, and GHASH's `hHi` and `hLo`, which
  * are secret. Two things are added, because code with loops needs them:
  *
- * **Control flow.** The body is read with its labels. Each label keeps the
- * join of every state that reaches it -- a register is secret there if it is
- * secret on any edge in, a stack offset is kept only if every edge agrees --
+ * **Control flow.** The body is read with its labels (`functionBody`'s
+ * `labels`). Each label keeps the
+ * join of every state that reaches it (`Taint.join`: a register is secret
+ * there if it is secret on any edge in, a stack offset is kept only if every
+ * edge agrees)
  * and the body is walked again until no label's state changes, so a value a
  * loop's back edge carries round is seen at the loop's head. The violations
  * are those of the last walk, on the settled states.
  *
  * **The flags, per instruction.** ct-asm.js lets the flags only ever gain a
  * secret, which is right for code with no branch at all, but would refuse
- * every loop here once the first block had been XORed. So an instruction that
+ * every loop here once the first block had been XORed. So this reads with the
+ * model's `preciseFlags`, whose tables live beside the steps: an instruction that
  * writes every flag a branch reads (`cmp`, `test`, `add`, `sub`, `and`, `or`,
  * `xor`, `neg`, `adc`, `sbb`, `ptest`, `(u)comis`) sets them to its own taint,
  * one that writes none (moves, `lea`, `push`, `pop`, `bswap`, `not`, `set`,
@@ -53,7 +56,7 @@
 
 import { spawnSync } from "node:child_process"
 import path from "node:path"
-import { CT_TARGETS, parseInstruction, Taint } from "./ct-asm.js"
+import { CT_TARGETS, functionBody, parseInstruction, Taint } from "./ct-asm.js"
 
 /**
  * The kernels and what is secret in each, by argument position: the elements
@@ -75,128 +78,6 @@ const RUNTIME_LEAKS = [
   ["nish_aes_leaky_branch", "branch", "a branch on a secret"],
 ]
 
-/** x86-64 instructions that write every flag a conditional jump reads. */
-const X86_FLAGS_ASSIGN = /^(cmp|test|add|sub|and|or|xor|neg|adc|sbb)[bwlq]?$|^v?(ptest|u?comis[sd])$/
-/** x86-64 instructions that write no flag. `p...` is every SSE integer instruction (and `push`, `pop`, `pdep`, `pext`), less `ptest` and `popcnt`. */
-const X86_FLAGS_KEEP =
-  /^(v?mov\w*|lea[wlq]?|bswap[lq]?|not[bwlq]?|set\w+|cmov\w+|cltq|cqto|cltd|cwtl|v?p(?!test|opcnt)\w+|v?aes\w+|v?(shuf|unpck[hl]|xor|andn?|or|blend)p[sd]|v?insertps|v?extractps)$/
-
-/**
- * The `Taint` state with the flags followed per instruction (the header). The
- * step sets `mnemonic` before it runs.
- */
-class RuntimeTaint extends Taint {
-  taintFlags(secret) {
-    if (this.target.name === "aarch64" || X86_FLAGS_ASSIGN.test(this.mnemonic)) {
-      if (secret) {
-        this.secret.add("flags")
-      } else {
-        this.secret.delete("flags")
-      }
-      return
-    }
-    if (!X86_FLAGS_KEEP.test(this.mnemonic)) {
-      super.taintFlags(secret)
-    }
-  }
-}
-
-/** A copy of `t` that shares nothing mutable with it. */
-const cloneTaint = (t) => {
-  const c = new RuntimeTaint({ contents: t.contents, secretArgs: [] }, t.target)
-  c.secret = new Set(t.secret)
-  c.loaded = new Set(t.loaded)
-  c.stackAt = new Map(t.stackAt)
-  c.sp = t.sp
-  c.bytes = new Map([...t.bytes].map(([at, b]) => [at, { ...b }]))
-  c.unknownSecret = t.unknownSecret
-  return c
-}
-
-/** Two stack places joined: the one place if both are it, "somewhere on the stack" if either is one. */
-const joinPlace = (a, b) => (a === b ? a : null)
-
-/**
- * The join of two states where control flow meets: everything secret on
- * either side is secret, and a stack place both sides do not agree on is one
- * this cannot place. A stack byte only one side wrote holds, on the other,
- * whatever the frame held, which is secret if anything unplaced was.
- */
-const joinTaint = (a, b) => {
-  const j = cloneTaint(a)
-  for (const r of b.secret) {
-    j.secret.add(r)
-  }
-  for (const r of b.loaded) {
-    j.loaded.add(r)
-  }
-  for (const r of new Set([...a.stackAt.keys(), ...b.stackAt.keys()])) {
-    const place = joinPlace(a.stackAt.get(r), b.stackAt.get(r))
-    if (place === undefined) {
-      j.stackAt.delete(r)
-    } else {
-      j.stackAt.set(r, place)
-    }
-  }
-  j.sp = a.sp === b.sp ? a.sp : null
-  for (const at of new Set([...a.bytes.keys(), ...b.bytes.keys()])) {
-    const x = a.bytes.get(at)
-    const y = b.bytes.get(at)
-    if (x !== undefined && y !== undefined) {
-      const same = x.from === y.from && x.width === y.width
-      j.bytes.set(at, {
-        secret: x.secret || y.secret,
-        loaded: x.loaded || y.loaded,
-        stack: joinPlace(x.stack, y.stack),
-        from: same ? x.from : null,
-        width: same ? x.width : null,
-      })
-    } else {
-      const one = x ?? y
-      const other = x === undefined ? a : b
-      j.bytes.set(at, { ...one, secret: one.secret || other.unknownSecret, loaded: true, from: null })
-    }
-  }
-  j.unknownSecret = a.unknownSecret || b.unknownSecret
-  j.contents = a.contents || b.contents
-  return j
-}
-
-/** A state as text, for telling whether a join changed anything. */
-const taintKey = (t) =>
-  JSON.stringify([
-    [...t.secret].sort(),
-    [...t.loaded].sort(),
-    [...t.stackAt].sort(),
-    t.sp,
-    [...t.bytes].sort((x, y) => x[0] - y[0]),
-    t.unknownSecret,
-    t.contents,
-  ])
-
-/**
- * The lines of `symbol` in an ELF `.s` for `target`, from its label to the
- * `.Lfunc_end` after it: `{ label }` for each local label and `{ line }` for
- * each instruction, without directives or comments. `null` when the symbol is
- * not there: a check that read nothing has proved nothing.
- */
-const labelledBody = (lines, symbol, target) => {
-  const start = lines.findIndex((line) => line.startsWith(`${symbol}:`))
-  if (start < 0) {
-    return null
-  }
-  const body = []
-  for (let i = start + 1; i < lines.length && !/^\.Lfunc_end\d+:/.test(lines[i]); i++) {
-    const text = lines[i].replace(target.comment, "").trim()
-    if (/^\.L\w+:$/.test(text)) {
-      body.push({ label: text.slice(0, -1) })
-    } else if (text.length > 0 && !text.startsWith(".") && !text.endsWith(":")) {
-      body.push({ line: text })
-    }
-  }
-  return body
-}
-
 /**
  * How an instruction moves control, if it does: `{ to, conditional, on }`,
  * where `to` is the local label it may go to and `on` the register a
@@ -205,7 +86,8 @@ const labelledBody = (lines, symbol, target) => {
  * the step, which refuses it as a call.
  */
 const control = (target, mnemonic, operands) => {
-  const label = operands.length > 0 && /^\.L\w+$/.test(operands[operands.length - 1]) ? operands.at(-1) : null
+  const last = operands.at(-1)
+  const label = last !== undefined && /^\.L\w+$/.test(last) ? last : null
   if (target.name === "x86-64") {
     if (/^ret/.test(mnemonic)) {
       return { to: null, conditional: false }
@@ -243,23 +125,30 @@ const conditionSecret = (t, on) => {
   return m === null || t.secret.has(`r${m[1]}`)
 }
 
+/** Violations as text, one a line. */
+const listed = (found, separator = "\n") => found.map((v) => `${v.kind}: ${v.line}`).join(separator)
+
 /**
- * Every violation in one kernel body: `{ kind, line }`, with `kind` as
- * ct-asm.js names them, `branch` meaning a conditional branch on a secret.
- * Also counts the conditional branches it judged public, so a caller can say
- * that the loops were read rather than absent.
+ * Every violation in one kernel body, a listing with its labels kept
+ * (`functionBody`'s `labels`): `{ kind, line }`, with `kind` as ct-asm.js
+ * names them, `branch` meaning a conditional branch on a secret. Also counts
+ * the conditional branches it judged public, so a caller can say that the
+ * loops were read rather than absent. `secretArgs` are the argument positions
+ * that are secret beside every array's elements.
  */
-const runtimeViolations = (body, spec, target) => {
-  const entry = () => new RuntimeTaint({ contents: true, secretArgs: spec.secretArgs }, target)
+const runtimeViolations = (body, secretArgs, target) => {
+  const entry = () => new Taint({ contents: true, secretArgs, preciseFlags: true }, target)
+  /** Each label's joined state, with its key kept beside it so a join is compared once. */
   const at = new Map()
   /** Joins `state` into what `label` holds; whether that changed it. */
   const reach = (label, state) => {
     const old = at.get(label)
-    const joined = old === undefined ? cloneTaint(state) : joinTaint(old, state)
-    if (old !== undefined && taintKey(old) === taintKey(joined)) {
+    const joined = old === undefined ? state.clone() : old.state.join(state)
+    const key = joined.key()
+    if (old !== undefined && old.key === key) {
       return false
     }
-    at.set(label, joined)
+    at.set(label, { state: joined, key })
     return true
   }
   /** One walk of the body; whether any label's state changed, and what it found. */
@@ -268,31 +157,31 @@ const runtimeViolations = (body, spec, target) => {
     const found = []
     let branches = 0
     let t = entry()
-    for (const item of body) {
-      if (item.label !== undefined) {
+    for (const line of body) {
+      if (line.endsWith(":")) {
+        const label = line.slice(0, -1)
         if (t !== null) {
-          changed = reach(item.label, t) || changed
+          changed = reach(label, t) || changed
         }
-        t = at.has(item.label) ? cloneTaint(at.get(item.label)) : null
+        t = at.has(label) ? at.get(label).state.clone() : null
         continue
       }
       if (t === null) {
         continue
       }
-      const [mnemonic, operands] = parseInstruction(item.line)
+      const [mnemonic, operands] = parseInstruction(line)
       const flow = control(target, mnemonic, operands)
       if (flow === null) {
-        t.mnemonic = mnemonic
         const kind = target.step(t, mnemonic, operands)
         if (kind !== null) {
-          found.push({ kind, line: item.line })
+          found.push({ kind, line })
         }
         continue
       }
       if (flow.conditional) {
         branches++
         if (flow.to === null || conditionSecret(t, flow.on)) {
-          found.push({ kind: "branch", line: item.line })
+          found.push({ kind: "branch", line })
         }
       }
       if (flow.to !== null) {
@@ -344,12 +233,12 @@ const runtimeAsm = (root, file, target) => {
  */
 export const runtimeChecks = (root) => {
   const results = []
-  /** `fn` read from `asm` under `spec`: its violations and loop branches, or why there is nothing to read. */
-  const read = (asm, fn, spec, target) => {
+  /** `fn` read from `asm` with `secretArgs`: its violations and loop branches, or why there is nothing to read. */
+  const read = (asm, fn, secretArgs, target) => {
     if (!asm.ok) {
       return { why: asm.why, found: [], branches: 0 }
     }
-    const body = labelledBody(asm.lines, fn, target)
+    const body = functionBody(asm.lines, fn, target, { labels: true })
     if (body === null) {
       return {
         why: `no symbol ${fn} in the ${target.name} assembly: a check that read nothing proves nothing`,
@@ -357,13 +246,12 @@ export const runtimeChecks = (root) => {
         branches: 0,
       }
     }
-    return { why: null, ...runtimeViolations(body, spec, target) }
+    return { why: null, ...runtimeViolations(body, secretArgs, target) }
   }
-  const listed = (found) => found.map((v) => `${v.kind}: ${v.line}`).join("\n")
   for (const target of CT_TARGETS) {
     const real = runtimeAsm(root, "runtime/runtime-aes.c", target)
     for (const spec of RUNTIME_KERNELS) {
-      const { why, found, branches } = read(real, spec.name, spec, target)
+      const { why, found, branches } = read(real, spec.name, spec.secretArgs, target)
       results.push({
         file: "runtime-aes.c",
         fn: spec.name,
@@ -375,7 +263,7 @@ export const runtimeChecks = (root) => {
     }
     const leaky = runtimeAsm(root, path.join("tests", "simd", "aes-leaky.c"), target)
     for (const [fn, kind, what] of RUNTIME_LEAKS) {
-      const { why, found } = read(leaky, fn, { secretArgs: [] }, target)
+      const { why, found } = read(leaky, fn, [], target)
       results.push({
         file: "tests/simd/aes-leaky.c",
         fn,
@@ -526,11 +414,10 @@ const cornerMisses = () => {
   const missed = []
   for (const [name, secretArgs, kind, lines] of CORNERS) {
     const target = CT_TARGETS.find((t) => t.name === name)
-    const body = lines.map((line) => (line.endsWith(":") ? { label: line.slice(0, -1) } : { line }))
-    const { found } = runtimeViolations(body, { secretArgs }, target)
+    const { found } = runtimeViolations(lines, secretArgs, target)
     if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
       missed.push(
-        `${name}, expected ${kind ?? "no violation"}: ${lines.join("; ")}\n  found: ${found.map((v) => `${v.kind}: ${v.line}`).join("; ") || "nothing"}`
+        `${name}, expected ${kind ?? "no violation"}: ${lines.join("; ")}\n  found: ${listed(found, "; ") || "nothing"}`
       )
     }
   }

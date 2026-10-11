@@ -380,8 +380,8 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
 | Both targets are read, or the run fails (CT-15) | `ct_asm: clang targets x86-64 / aarch64` |
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
-| Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: no branch on a secret, call, secret-indexed access or secret-dependent latency` (8 checks) |
-| The runtime check refuses a table lookup and a branch on data in real compiler output | `ct_asm: ${r.file} ${r.fn} on ${r.target}: refused for ${r.expect}` (4 checks, `tests/simd/aes-leaky.c`) |
+| Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promise}`, the promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (8 checks) |
+| The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the promise `refused for ${r.expect}` (4 checks, `tests/simd/aes-leaky.c`) |
 | The runtime check's joins and per-instruction flags read loops as they run | `CORNERS` in `tests/ct-asm-runtime.js`, checked when the module loads |
 | A destination-reading vector instruction keeps its destination's taint (CT-17) | `AUDIT_CORNERS` in `tests/ct-asm.js` |
 
