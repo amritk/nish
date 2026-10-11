@@ -295,6 +295,54 @@ export class HoistedHeader {
   }
 }
 
+/**
+ * One array only this call reaches: a `const` the function binds to its own
+ * array literal or `new Array`, whose elements are not stored inline, and
+ * whose every reference is consumed on the spot (an element or a `.length`, a
+ * store into a slot, an array method, a `for...of`) or is an argument of a
+ * user function that keeps nothing of it. The fixpoint sets `lost` when a
+ * callee turns out to keep it, and its first store, `site`, is then a shared
+ * write after all.
+ */
+export class PrivateArray {
+  local: Local
+  site: Node | null
+  lost: boolean
+
+  constructor(local: Local) {
+    this.local = local
+    this.site = null
+    this.lost = false
+  }
+}
+
+/**
+ * One argument of a call whose callee's writes are composed with what each
+ * argument is: the callee's symbol and parameter index (`this` counts as 0),
+ * and what the argument is in the caller — one of its private arrays
+ * (`owner`), one of its own pointer parameters as it is (`param`), or
+ * anything else (neither).
+ */
+export class ArgEdge {
+  callee: string
+  param: string
+  owner: PrivateArray | null
+  index: i32
+
+  constructor(callee: string, index: i32, param: string, owner: PrivateArray | null) {
+    this.callee = callee
+    this.param = param
+    this.owner = owner
+    this.index = index
+  }
+
+  /** Whether the argument is memory only the caller reaches: a private array no callee keeps. */
+  isPrivate(): boolean {
+    const owner = this.owner
+    return owner !== null && !owner.lost
+  }
+}
+
 export class FunctionFacts {
   hasLoops: boolean
   /** The body loads from memory it does not own (a header read, a field or element read). */
@@ -354,7 +402,7 @@ export class FunctionFacts {
    * sets that parameter's `writesThrough` (fixpoint). It is what a caller
    * composes with its arguments: a function that writes only through its
    * parameters writes nothing shared when every argument it writes through is
-   * memory only its caller reaches (`privateLocals`). A callee whose
+   * memory only its caller reaches (`privateArrays`). A callee whose
    * arguments are not composed (`wholeCallees`) hands its caller its whole
    * `sharedWrite` instead.
    */
@@ -368,15 +416,9 @@ export class FunctionFacts {
   writesOutput: boolean
   /**
    * Every argument of a call this function makes whose arguments are
-   * composed, that is not one of its own private arrays: by callee symbol,
-   * parameter index (`this` counts as 0), and the name of this function's own
-   * pointer parameter when the argument is that parameter as it is (`""`
-   * otherwise). The fixpoint asks the callee whether it writes through that
-   * parameter (`composeArguments`).
+   * composed: what the fixpoint asks each callee about (`composeArguments`).
    */
-  argCallees: string[]
-  argIndices: i32[]
-  argParams: string[]
+  argEdges: ArgEdge[]
   /**
    * The user callees reached other than through a call whose arguments are
    * composed: a fused lookup, a walk's methods, a routed map instance. Their
@@ -384,23 +426,10 @@ export class FunctionFacts {
    */
   wholeCallees: StringSet
   /**
-   * The arrays only this call reaches: each a `const` this function binds to
-   * its own array literal or `new Array`, whose elements are not stored
-   * inline, and whose every reference is consumed on the spot (an element or
-   * a `.length`, a store into a slot, an array method, a `for...of`) or is an
-   * argument of a user function that keeps nothing of it (`privateArgCallees`).
-   * A store into one of their own slots writes nothing a caller, a thread or
-   * a task can see. `privateLost` is set by the fixpoint when a callee turns
-   * out to keep one, and its first store (`privateSites`) is then a shared
-   * write after all.
+   * The arrays only this call reaches (`PrivateArray`). A store into one of
+   * their own slots writes nothing a caller, a thread or a task can see.
    */
-  privateLocals: Local[]
-  privateLost: boolean[]
-  privateSites: (Node | null)[]
-  /** Each argument that is a private array: the callee, the parameter index, and the array's index in `privateLocals`. */
-  privateArgCallees: string[]
-  privateArgIndices: i32[]
-  privateArgLocals: i32[]
+  privateArrays: PrivateArray[]
   /** The first node in the body that writes shared memory; `null` when a callee is the reason. */
   writeSite: Node | null
   /**
@@ -584,16 +613,9 @@ export class FunctionFacts {
     this.resizesArray = false
     this.sharedWrite = false
     this.writesPastParams = false
-    this.argCallees = []
-    this.argIndices = []
-    this.argParams = []
+    this.argEdges = []
     this.wholeCallees = new StringSet()
-    this.privateLocals = []
-    this.privateLost = []
-    this.privateSites = []
-    this.privateArgCallees = []
-    this.privateArgIndices = []
-    this.privateArgLocals = []
+    this.privateArrays = []
     this.writesOutput = false
     this.writeSite = null
     this.writeVia = ""
@@ -1649,21 +1671,20 @@ class FactCollector {
   /**
    * `node` stores into the own slots of `receiver` (an element, a field, or
    * the header a `push` moves): nothing when it is a private array of this
-   * function (`FunctionFacts.privateLocals`), a write through the parameter
+   * function (`FunctionFacts.privateArrays`), a write through the parameter
    * when it is one of this function's pointer parameters as it is, and a
    * shared write past them otherwise.
    */
   noteSlotWrite(node: Node, receiver: Node): void {
     const e = unwrapParens(receiver)
-    const at = this.privateIndex(e)
-    if (at >= 0) {
-      if (this.facts.privateSites[at] === null) {
-        this.facts.privateSites[at] = node
+    const owned = this.privateArrayOf(e)
+    if (owned !== null) {
+      if (owned.site === null) {
+        owned.site = node
       }
       return
     }
-    const param = this.paramRef(e)
-    const pointer: PointerParamFacts | null = param.length > 0 ? this.facts.pointerParam(param) : null
+    const pointer = this.pointerParamOf(e)
     if (pointer === null) {
       this.notePastWrite(node)
       return
@@ -1672,17 +1693,27 @@ class FactCollector {
     this.noteSharedWrite(node)
   }
 
-  /** The index of the private array `e` names in `FunctionFacts.privateLocals`, or -1. */
-  privateIndex(e: Node): i32 {
-    if (e.kind !== N_IDENT) {
-      return -1
+  /** The private array `e` names (`FunctionFacts.privateArrays`), or null. */
+  privateArrayOf(e: Node): PrivateArray | null {
+    const local: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    if (local !== null) {
+      for (const owned of this.facts.privateArrays) {
+        if (owned.local === local) {
+          return owned
+        }
+      }
     }
-    const local = this.unit.program.nodeLocals[e.id]
-    return local === null ? -1 : this.facts.privateLocals.indexOf(local)
+    return null
+  }
+
+  /** The pointer facts of the parameter `e` names as it is (`this` included), or null. */
+  pointerParamOf(e: Node): PointerParamFacts | null {
+    const param = this.paramRef(e)
+    return param.length > 0 ? this.facts.pointerParam(param) : null
   }
 
   /**
-   * Find this body's private arrays (`FunctionFacts.privateLocals`) before
+   * Find this body's private arrays (`FunctionFacts.privateArrays`) before
    * the walk asks about any store into one. Every reference is classified as
    * a parameter's is (`classifyUse`), which already sees through a ternary,
    * a `??` and an inline element's address; anything it calls an escape —
@@ -1732,17 +1763,12 @@ class FactCollector {
         handed.push(found)
       }
     }
-    const at = this.facts.privateLocals.length
-    this.facts.privateLocals.push(local)
-    this.facts.privateLost.push(false)
-    const none: Node | null = null
-    this.facts.privateSites.push(none)
+    const owned = new PrivateArray(local)
+    this.facts.privateArrays.push(owned)
     for (const found of handed) {
       const callee = found.callee
       if (callee !== null) {
-        this.facts.privateArgCallees.push(callee.name)
-        this.facts.privateArgIndices.push(found.index)
-        this.facts.privateArgLocals.push(at)
+        this.facts.argEdges.push(new ArgEdge(callee.name, found.index, "", owned))
       }
     }
   }
@@ -1777,13 +1803,11 @@ class FactCollector {
 
   noteArgument(callee: FunctionSig, arg: Node, index: i32): void {
     const e = unwrapParens(arg)
-    if (this.privateIndex(e) >= 0) {
+    if (this.privateArrayOf(e) !== null) {
       return
     }
-    const param = this.paramRef(e)
-    this.facts.argCallees.push(callee.name)
-    this.facts.argIndices.push(index)
-    this.facts.argParams.push(param.length > 0 && this.facts.pointerParam(param) !== null ? param : "")
+    const pointer = this.pointerParamOf(e)
+    this.facts.argEdges.push(new ArgEdge(callee.name, index, pointer === null ? "" : pointer.name, null))
   }
 
   visit(node: Node): void {
@@ -3297,9 +3321,7 @@ const propagateCallee = (
     calleeReturns = hasAttr(rt.attrs, "willreturn")
     calleeNoReturn = rt.noreturn
   }
-  if ((!f.sharedWrite || !f.writesPastParams) && writesShared(f, calleeFacts, rt, callee)) {
-    f.sharedWrite = true
-    f.writesPastParams = true
+  if (!f.writesPastParams && writesShared(f, calleeFacts, rt, callee) && markPastWrite(f)) {
     changed = true
   }
   const merged = maxEffect(f.effect, calleeEffect)
@@ -3537,83 +3559,68 @@ const keepsArgument = (g: FunctionFacts | null, index: i32): boolean => {
   return target === null || target.captured
 }
 
+/** Mark `f` as writing shared memory past its parameters; answers whether that moved anything. */
+const markPastWrite = (f: FunctionFacts): boolean => {
+  if (f.writesPastParams) {
+    return false
+  }
+  f.sharedWrite = true
+  f.writesPastParams = true
+  return true
+}
+
+/** Whether the call along `edge` writes shared memory through its argument: one not private, that the callee writes. */
+const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
+  !edge.isPrivate() && writesArgument(facts.get(edge.callee), edge.index)
+
 /**
  * One function's arguments against what its callees now say they do
- * (`FunctionFacts.argCallees`, `privateArgCallees`); answers whether
- * anything about it moved. A private array a callee may keep is shared from
- * then on: its stores count, and so does every callee that writes through it.
- * A callee that writes through an argument writes shared memory, past this
- * function's parameters unless the argument is one of them as it is, which
- * then writes through too.
+ * (`FunctionFacts.argEdges`); answers whether anything about it moved. A
+ * private array a callee may keep is shared from then on: its first store
+ * counts, and so does every callee that writes through it. A callee that
+ * writes through an argument writes shared memory, past this function's
+ * parameters unless the argument is one of them as it is, which then writes
+ * through too. A change here is seen again on the fixpoint's next pass.
  */
 const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   let changed = false
-  let i = 0
-  while (i < f.privateArgCallees.length) {
-    const at = f.privateArgLocals[i]
-    if (!f.privateLost[at] && keepsArgument(facts.get(f.privateArgCallees[i]), f.privateArgIndices[i])) {
-      f.privateLost[at] = true
-      const site = f.privateSites[at]
-      if (site !== null) {
-        f.sharedWrite = true
-        f.writesPastParams = true
+  for (const edge of f.argEdges) {
+    const owner = edge.owner
+    if (owner !== null && !owner.lost && keepsArgument(facts.get(edge.callee), edge.index)) {
+      owner.lost = true
+      changed = true
+      if (owner.site !== null && markPastWrite(f)) {
+        changed = true
       }
+    }
+    if (!edgeWrites(facts, edge)) {
+      continue
+    }
+    const pointer: PointerParamFacts | null = edge.param.length > 0 ? f.pointerParam(edge.param) : null
+    if (pointer === null) {
+      if (markPastWrite(f)) {
+        changed = true
+      }
+      continue
+    }
+    if (!f.sharedWrite) {
+      f.sharedWrite = true
       changed = true
     }
-    i = i + 1
-  }
-  i = 0
-  while (i < f.privateArgCallees.length) {
-    const lost = f.privateLost[f.privateArgLocals[i]]
-    if (lost && writesArgument(facts.get(f.privateArgCallees[i]), f.privateArgIndices[i])) {
-      if (!f.sharedWrite || !f.writesPastParams) {
-        f.sharedWrite = true
-        f.writesPastParams = true
-        changed = true
-      }
+    if (!pointer.writesThrough) {
+      pointer.writesThrough = true
+      changed = true
     }
-    i = i + 1
-  }
-  i = 0
-  while (i < f.argCallees.length) {
-    if (writesArgument(facts.get(f.argCallees[i]), f.argIndices[i])) {
-      const pointer: PointerParamFacts | null =
-        f.argParams[i].length > 0 ? f.pointerParam(f.argParams[i]) : null
-      if (!f.sharedWrite) {
-        f.sharedWrite = true
-        changed = true
-      }
-      if (pointer === null && !f.writesPastParams) {
-        f.writesPastParams = true
-        changed = true
-      }
-      if (pointer !== null && !pointer.writesThrough) {
-        pointer.writesThrough = true
-        changed = true
-      }
-    }
-    i = i + 1
   }
   return changed
 }
 
 /** Whether `f` hands `callee` an argument it writes shared memory through (`composeArguments`). */
 const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): boolean => {
-  const g = facts.get(callee)
-  let i = 0
-  while (i < f.argCallees.length) {
-    if (f.argCallees[i] === callee && writesArgument(g, f.argIndices[i])) {
+  for (const edge of f.argEdges) {
+    if (edge.callee === callee && edgeWrites(facts, edge)) {
       return true
     }
-    i = i + 1
-  }
-  i = 0
-  while (i < f.privateArgCallees.length) {
-    const lost = f.privateLost[f.privateArgLocals[i]]
-    if (lost && f.privateArgCallees[i] === callee && writesArgument(g, f.privateArgIndices[i])) {
-      return true
-    }
-    i = i + 1
   }
   return false
 }
@@ -3632,14 +3639,12 @@ const nameWriteVia = (facts: FactsTable, runtime: RuntimeTable): void => {
       continue
     }
     // A private array a callee turned out to keep: its first store is the site.
-    let k = 0
-    while (k < f.privateLocals.length) {
-      const site = f.privateSites[k]
+    for (const owned of f.privateArrays) {
+      const site = owned.site
       const first = f.writeSite
-      if (f.privateLost[k] && site !== null && (first === null || site.start < first.start)) {
+      if (owned.lost && site !== null && (first === null || site.start < first.start)) {
         f.writeSite = site
       }
-      k = k + 1
     }
     if (f.writeSite !== null) {
       continue

@@ -1392,52 +1392,44 @@ const regionCallMessage = (
   if (isSpawnEntry(sig)) {
     return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
   }
-  const own = facts.get(sig.name)
-  if (own === null) {
-    return regionWriteMessage(state, `\`${sig.sourceName}\``)
-  }
-  for (const pp of own.pointerParams) {
-    // WP29 P3: what a call does to a channel is C4's and C5's to judge (`checkChannels`).
-    if (pp.writesThrough && !isChannelParam(program, table, sig, pp.name)) {
-      return regionWriteMessage(state, `\`${sig.sourceName}\``)
-    }
-  }
-  return ""
+  return writesThroughMessage(program, table, facts, node, sig, state)
 }
 
 /**
- * The refusal for a `new` in the region, or "": a constructor is a call, and
- * one that writes through a pointer it is handed writes memory a task may
- * read as surely as a function would (#564). Its own `this` is the fresh
- * object the `new` allocated, which no task can hold yet, so a store into it
- * is not counted; a constructor that hands `this` on does so by a store
- * through another parameter, which is.
+ * The refusal for a call or a `new` of `sig` at `node` in the region when it
+ * writes through a pointer it is handed, or "". A constructor's own `this` is
+ * the fresh object the `new` allocated, which no task can hold yet (#564), so
+ * a store into it is not counted, and neither is a constructor that writes
+ * nothing shared: `writesThrough` also marks a parameter it keeps, as
+ * `this.hist = hist` does, for an alias that may be written later, and what is
+ * written through the new object later is judged where it is. A constructor
+ * that hands `this` on does so by a store through another parameter, which is
+ * counted.
  */
-const regionNewMessage = (
+const writesThroughMessage = (
   program: CheckedProgram,
   table: TypeTable,
   facts: FactsTable,
   node: Node,
+  sig: FunctionSig,
   state: RegionState
 ): string => {
-  const sig = program.nodeCallees[node.id]
-  if (sig === null) {
-    return ""
-  }
+  const constructing = node.kind === N_NEW
   const own = facts.get(sig.name)
   if (own === null) {
-    return regionWriteMessage(state, `\`new ${node.children[0].text}\``)
+    return regionWriteMessage(state, lockCallName(node, sig))
   }
-  // `writesThrough` also marks a parameter the constructor keeps, as
-  // `this.hist = hist` does, because an alias may be written through later;
-  // what is written through the new object later is judged where it is. A
-  // constructor that writes nothing shared has made no write through one.
-  if (!own.sharedWrite) {
+  if (constructing && !own.sharedWrite) {
     return ""
   }
   for (const pp of own.pointerParams) {
-    if (pp.writesThrough && pp.name !== "this" && !isChannelParam(program, table, sig, pp.name)) {
-      return regionWriteMessage(state, `\`new ${node.children[0].text}\``)
+    // WP29 P3: what a call does to a channel is C4's and C5's to judge (`checkChannels`).
+    if (
+      pp.writesThrough &&
+      !(constructing && pp.name === "this") &&
+      !isChannelParam(program, table, sig, pp.name)
+    ) {
+      return regionWriteMessage(state, lockCallName(node, sig))
     }
   }
   return ""
@@ -1519,7 +1511,9 @@ const walkRegion = (
   } else if (node.kind === N_CALL) {
     message = regionCallMessage(program, table, facts, node, state, uses)
   } else if (node.kind === N_NEW) {
-    message = regionNewMessage(program, table, facts, node, state)
+    // #564: a constructor is a call.
+    const sig = program.nodeCallees[node.id]
+    message = sig === null ? "" : writesThroughMessage(program, table, facts, node, sig, state)
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
@@ -3306,14 +3300,12 @@ const findThisEscapes = (
     return true
   }
   parents.push(node)
+  let found = false
   for (const child of node.children) {
-    if (findThisEscapes(program, table, child, parents, out)) {
-      parents.pop()
-      return true
-    }
+    found = found || findThisEscapes(program, table, child, parents, out)
   }
   parents.pop()
-  return false
+  return found
 }
 
 /** How many of `parents` are above the node at `depth`, once the parentheses around it are counted as it. */
@@ -3347,7 +3339,7 @@ const isOwnFieldUse = (program: CheckedProgram, table: TypeTable, parents: Node[
   }
   const field = parents[fieldDepth]
   const usedAt = outsideParens(parents, fieldDepth)
-  const fieldAt = usedAt === fieldDepth ? field : parents[usedAt]
+  const fieldAt = parents[usedAt]
   if (isStoreTarget(fieldAt, parents, usedAt)) {
     return true
   }
@@ -3370,7 +3362,7 @@ const isOwnFieldUse = (program: CheckedProgram, table: TypeTable, parents: Node[
     return false
   }
   const storedAt = outsideParens(parents, usedAt - 1)
-  return isStoreTarget(storedAt === usedAt - 1 ? user : parents[storedAt], parents, storedAt)
+  return isStoreTarget(parents[storedAt], parents, storedAt)
 }
 
 /** A value of `type` reaches no object: a number, a `boolean`, an enum, a string, or an array of those. */
