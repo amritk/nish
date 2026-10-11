@@ -1,0 +1,1 @@
+`tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body

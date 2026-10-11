@@ -1,0 +1,1 @@
+This is a `i32[]` read through a guard, which is used only as the base of a field or element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock
