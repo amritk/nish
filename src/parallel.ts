@@ -1643,7 +1643,7 @@ const CHANNEL: string = "Channel"
 export const isChannelClass = (info: StructInfo): boolean => isThreadsClass(info, CHANNEL)
 
 /** Whether `type` is a `Channel<T>` from `nish/threads`. */
-export const isChannelType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+const isChannelType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isThreadsClass(classLayoutOf(program, table, type), CHANNEL)
 
 /** Whether `sig` is the method `name` of a `Channel<T>` from `nish/threads`. */
@@ -2647,6 +2647,8 @@ const walkChannelUses = (
     const used = arrowChannel(program, table, node)
     if (used !== null) {
       out.push(new ScopeFinding(used, channelArrowMessage()))
+    } else if (liftedTakesChannel(program, table, node)) {
+      out.push(new ScopeFinding(node, channelArrowMessage()))
     }
     return
   }
@@ -2692,6 +2694,24 @@ const arrowChannel = (program: CheckedProgram, table: TypeTable, node: Node): No
     }
   }
   return null
+}
+
+/**
+ * Whether the arrow `node` declares a parameter whose type holds a channel. The
+ * parameters are the lifted function's, which the checker records on the
+ * arrow, and a parameter the body never names leaves no expression of its type.
+ */
+const liftedTakesChannel = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const lifted = program.nodeCallees[node.id]
+  if (lifted === null) {
+    return false
+  }
+  for (const type of lifted.paramTypes) {
+    if (holdsChannelType(program, table, type)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** What `walkChannelUses` refuses about `node`, a channel standing as `at` under `parents`, or "". */
