@@ -655,6 +655,52 @@ const inNativeLane = (job) => {
 const NATIVE_RUN_LIMIT = { timeout: 120_000, killSignal: "SIGKILL" }
 
 /**
+ * This process's environment with `NISH_NUM_THREADS` set to `threads`, or
+ * removed when `threads` is null, so a count the developer exported cannot
+ * leak into a check that pins one.
+ */
+const envWithThreads = (threads) => {
+  const { NISH_NUM_THREADS: _inherited, ...env } = process.env
+  return threads === null ? env : { ...env, NISH_NUM_THREADS: threads }
+}
+
+/**
+ * The runtime unit test built with `-DNISH_THREADS`: `{ status, stderr, exe }`.
+ * Built once per process, on first use, by whichever section asks first, so
+ * neither depends on the other having run (.claude/testing.md, "A filtered run's
+ * count").
+ */
+let runtimeTestThreads = null
+const buildRuntimeTestThreads = () => {
+  if (runtimeTestThreads === null) {
+    const exe = path.join(buildDir, "runtime_test_threads")
+    const cc = spawnSync(
+      "clang",
+      [
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "-DNISH_THREADS=1",
+        "-pthread",
+        // Every translation unit, as its non-threaded sibling names them:
+        // `runtime-test.c` exercises the file I/O, which lives in runtime-os.c
+        // since the split, so naming only the core leaves `nish_write_file`,
+        // `nish_append_file` and `nish_read_file` undefined at link time.
+        ...RUNTIME_C,
+        "tests/runtime-test.c",
+        "-o",
+        exe,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    runtimeTestThreads = { status: cc.status, stderr: cc.stderr, exe }
+  }
+  return runtimeTestThreads
+}
+
+/**
  * Run a case's native program under `limit`: spawn's `{ status, signal,
  * stdout, stderr }`, and `death`, which is null when the program exited and
  * otherwise the FAIL a caller reports instead of comparing output. A program
@@ -4279,6 +4325,22 @@ for (const name of linkTests) {
     run.status === wantCode && String(run.stdout).trim() === wantOut,
     `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
   )
+  // The worker pool (docs/wp20-threads.md §8e) at the two sizes a default run on a
+  // big machine never sees: no workers, where the caller runs every task in spawn
+  // order, and one. wp29 C6's no-deadlock argument for channels rests on the pool's
+  // queue order at every size, so a threads program prints the same at each.
+  if (/^(thread|par)_/.test(name)) {
+    for (const threads of ["1", "2"]) {
+      const sized = await runNative(`link/${name} (NISH_NUM_THREADS=${threads})`, exe, [], {
+        env: envWithThreads(threads),
+      })
+      check(
+        sized.death ?? `link/${name}: the same exit and stdout under NISH_NUM_THREADS=${threads}`,
+        sized.death === null && sized.status === wantCode && String(sized.stdout).trim() === wantOut,
+        `--- actual exit ${sized.status}, stdout:\n${sized.stdout}${sized.stderr}`
+      )
+    }
+  }
 }
 
 // The end of a sharded run's split: shard 1 names the link programs it dealt
@@ -7614,28 +7676,9 @@ if (!only) {
   // on runs a worker thread and asserts that its arena is its own -- empty at
   // entry, disjoint from the parent's storage, and released and freed without
   // the parent losing a byte.
-  const rtThreads = spawnSync(
-    "clang",
-    [
-      "-std=c11",
-      "-Wall",
-      "-Wextra",
-      "-Werror",
-      "-O2",
-      "-DNISH_THREADS=1",
-      "-pthread",
-      // Both translation units, as its non-threaded sibling above names both:
-      // `runtime-test.c` exercises the file I/O, which lives in runtime-os.c
-      // since the split, so naming only the core leaves `nish_write_file`,
-      // `nish_append_file` and `nish_read_file` undefined at link time.
-      ...RUNTIME_C,
-      "tests/runtime-test.c",
-      "-o",
-      path.join(buildDir, "runtime_test_threads"),
-    ],
-    { cwd: root }
-  )
-  const rtThreadsRun = rtThreads.status === 0 ? spawnSync(path.join(buildDir, "runtime_test_threads")) : null
+  const rtThreads = buildRuntimeTestThreads()
+  const rtThreadsRun =
+    rtThreads.status === 0 ? spawnSync(rtThreads.exe, [], { env: envWithThreads(null) }) : null
   check(
     "runtime.c -DNISH_THREADS: every thread gets its own arena and RNG seed, and a parallel range divides",
     rtThreadsRun !== null && rtThreadsRun.status === 0,
@@ -8155,11 +8198,12 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * points as the fallback's row above, with the mutex and condition variable that let a
  * receiver wait for a sender on another thread.
  *
- * Raised to 2,816 by the worker pool, measured **2,814 bytes** on 2026-10-11 with clang
- * 18.1.3 on linux-x64 (1,403 before it). The 1,411 bytes are three things. The pool:
+ * Raised to 2,816 by the worker pool, measured **2,660 bytes** on 2026-10-11 with clang
+ * 18.1.3 on linux-x64 (1,403 before it). The 1,257 bytes are three things. The pool:
  * workers started once and parked, a first-in-first-out queue the caller drains too,
- * the spin before a thread parks, the arena rewound after each job, the fork handlers,
- * and the per-call threads it keeps for an addon (`nish_jobs_run` alone is 683 of them).
+ * the spin before a thread parks, the arena rewound after each job, the fork handler,
+ * and the per-call threads it keeps for an addon (`nish_jobs_run` is 542 bytes and the
+ * drain loop it shares with the workers 271).
  * The core count: the affinity mask, the cgroup v2 quota read up the hierarchy, and
  * `NISH_NUM_THREADS` (`nish_cpu_count` went from 48 bytes to 532 with them). And the
  * small pieces that route a region and a join through the queue. They are this file's
@@ -8289,7 +8333,8 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 // ---- The worker pool (docs/wp20-threads.md §8e) ------------------------------------
 // runtime/runtime-parallel.c hands a region's chunks and a scope's tasks to workers
 // started once and parked between calls, sized by `nish_cpu_count()`. What this
-// section holds, beyond the unit test's default run in the block above:
+// section holds, beyond the unit test's default run in section B and the link loop's
+// runs of every threads program under `NISH_NUM_THREADS=1` and `=2`:
 //   - the unit test's pool checks (`test_pool`) again at the two sizes a default run
 //     on a big machine never sees: `NISH_NUM_THREADS=1`, no workers, where the
 //     caller runs every task in spawn order, and `=2`, one worker;
@@ -8297,27 +8342,15 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 //     a malformed value is ignored, the affinity mask counts (`taskset`), and so does
 //     a cgroup v2 `cpu.max` quota, rounded up, at the process's own cgroup or any
 //     above it -- read from a `/sys/fs/cgroup` this section mounts in a private
-//     mount namespace, which is a counted skip where `unshare` is not allowed;
-//   - every threads link program prints its expected.out under `NISH_NUM_THREADS=1`
-//     and `=2`, the channel programs above all: wp29 C6's no-deadlock argument
-//     rests on the pool's queue order at every size, none and one worker included.
+//     mount namespace, which is a counted skip where `unshare` is not allowed.
 if (!only || "runtime-parallel".includes(only)) {
   if (!has("clang")) {
     skip("runtime-parallel: clang not installed: the worker pool's checks are not run")
   } else {
-    const poolDir = path.join(buildDir, "runtime_parallel")
-    fs.mkdirSync(poolDir, { recursive: true })
-    const threadsC = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-DNISH_THREADS=1", "-pthread"]
-    const unitExe = path.join(poolDir, "runtime_test_threads")
-    const unit = spawnSync("clang", [...threadsC, ...RUNTIME_C, "tests/runtime-test.c", "-o", unitExe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const unit = buildRuntimeTestThreads()
     for (const threads of ["1", "2"]) {
       const r =
-        unit.status === 0
-          ? spawnSync(unitExe, [], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
-          : unit
+        unit.status === 0 ? spawnSync(unit.exe, [], { encoding: "utf8", env: envWithThreads(threads) }) : unit
       check(
         `runtime-parallel: the runtime unit test, worker pool included, passes under NISH_NUM_THREADS=${threads}`,
         unit.status === 0 && r.status === 0,
@@ -8325,28 +8358,42 @@ if (!only || "runtime-parallel".includes(only)) {
       )
     }
 
-    // A driver that prints `nish_cpu_count()` and nothing else.
+    // A driver that prints `nish_cpu_count()` and nothing else, linked against the
+    // threaded runtime objects every `--threads` link uses.
+    const poolDir = path.join(buildDir, "runtime_parallel")
+    fs.mkdirSync(poolDir, { recursive: true })
     const countC = path.join(poolDir, "cpu_count.c")
     fs.writeFileSync(
       countC,
       '#include <stdio.h>\n#include "nish.h"\nint main(void) { printf("%lld\\n", (long long)nish_cpu_count()); return 0; }\n'
     )
     const countExe = path.join(poolDir, "cpu_count")
-    const built = spawnSync("clang", [...threadsC, "-Iruntime", ...RUNTIME_C, countC, "-o", countExe], {
-      cwd: root,
-      encoding: "utf8",
-    })
-    /** The count under `env` (layered over this process's), run as `prefix... cpu_count`, or NaN. */
-    const countWith = (env, prefix = []) => {
+    const threaded = runtimeObjects(["-DNISH_THREADS=1"])
+    const built =
+      threaded.error === null
+        ? spawnSync(
+            "clang",
+            [
+              "-O2",
+              "-DNISH_THREADS=1",
+              "-pthread",
+              "-Iruntime",
+              countC,
+              ...threaded.objects,
+              "-lm",
+              "-o",
+              countExe,
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : { status: 1, stderr: threaded.error }
+    /** The count with `NISH_NUM_THREADS` set to `threads` (null: unset), run as `prefix... cpu_count`, or NaN. */
+    const countWith = (threads, prefix = []) => {
       const argv = [...prefix, countExe]
-      const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", env: { ...process.env, ...env } })
+      const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", env: envWithThreads(threads) })
       return r.status === 0 ? Number(r.stdout.trim()) : Number.NaN
     }
-    const { NISH_NUM_THREADS: _inherited, ...plainEnv } = process.env
-    const base =
-      built.status === 0
-        ? Number(spawnSync(countExe, [], { encoding: "utf8", env: plainEnv }).stdout.trim())
-        : Number.NaN
+    const base = built.status === 0 ? countWith(null) : Number.NaN
     check(
       `runtime-parallel: nish_cpu_count() is at least 1 and at most the ${os.availableParallelism()} CPUs this process may use`,
       base >= 1 && base <= os.availableParallelism(),
@@ -8361,7 +8408,7 @@ if (!only || "runtime-parallel".includes(only)) {
       ["2x", base],
       ["", base],
     ]
-    const got = envCases.map(([value]) => countWith({ ...plainEnv, NISH_NUM_THREADS: value }))
+    const got = envCases.map(([value]) => countWith(value))
     check(
       "runtime-parallel: NISH_NUM_THREADS lowers nish_cpu_count() and never raises it, and a value that is not a positive number is ignored",
       envCases.every(([, want], i) => got[i] === want),
@@ -8376,7 +8423,7 @@ if (!only || "runtime-parallel".includes(only)) {
       )
     } else {
       if (has("taskset")) {
-        const one = countWith(plainEnv, ["taskset", "-c", "0"])
+        const one = countWith(null, ["taskset", "-c", "0"])
         check(
           "runtime-parallel: nish_cpu_count() counts the affinity mask: one CPU under taskset -c 0",
           one === 1,
@@ -8403,73 +8450,37 @@ if (!only || "runtime-parallel".includes(only)) {
           own === "/" ? ":" : `printf '%s\\n' '${leaf}' > '${dir}/cpu.max'`,
           `exec '${countExe}'`,
         ].join("\n")
-        const r = spawnSync("unshare", ["-rm", "sh", "-c", script], { encoding: "utf8", env: plainEnv })
+        const r = spawnSync("unshare", ["-rm", "sh", "-c", script], {
+          encoding: "utf8",
+          env: envWithThreads(null),
+        })
         return r.status === 0 ? Number(r.stdout.trim()) : null
       }
-      const probe = has("unshare") ? quota("max 100000", "max 100000") : null
-      if (probe === null) {
+      const rows = [
+        ["no quota anywhere", "max 100000", "max 100000", base],
+        ["1.5 CPUs at the root", "max 100000", "150000 100000", Math.min(2, base)],
+        ["one CPU at the root", "max 100000", "100000 100000", 1],
+        ["half a CPU at the root", "max 100000", "50000 100000", 1],
+      ]
+      if (own !== "/") {
+        rows.push(["2.5 CPUs at the process's own cgroup", "250000 100000", "max 100000", Math.min(3, base)])
+      }
+      // The first row doubles as the probe: no answer there means unshare was refused.
+      const answers = has("unshare") ? [quota(rows[0][1], rows[0][2])] : [null]
+      if (answers[0] === null) {
         skip(
           "runtime-parallel: unshare -rm is not allowed here (no unprivileged user namespaces): the cgroup quota's count is not checked"
         )
       } else {
-        const rows = [
-          ["no quota anywhere", "max 100000", "max 100000", base],
-          ["1.5 CPUs at the root", "max 100000", "150000 100000", Math.min(2, base)],
-          ["one CPU at the root", "max 100000", "100000 100000", 1],
-          ["half a CPU at the root", "max 100000", "50000 100000", 1],
-        ]
-        if (own !== "/") {
-          rows.push([
-            "2.5 CPUs at the process's own cgroup",
-            "250000 100000",
-            "max 100000",
-            Math.min(3, base),
-          ])
+        for (const [, leaf, top] of rows.slice(1)) {
+          answers.push(quota(leaf, top))
         }
-        const answers = rows.map(([, leaf, top]) => quota(leaf, top))
         check(
           `runtime-parallel: nish_cpu_count() takes the cgroup v2 cpu.max quota, rounded up, from the process's cgroup (${own}) or any above it`,
-          probe === base && rows.every(([, , , want], i) => answers[i] === want),
+          rows.every(([, , , want], i) => answers[i] === want),
           rows.map(([what, , , want], i) => `${what}: want ${want}, got ${answers[i]}`).join("\n")
         )
       }
-    }
-
-    // The link programs that run threads, natively, at no workers and at one.
-    const programs = fs
-      .readdirSync(linkDir)
-      .filter(
-        (name) => /^(thread|par)_/.test(name) && fs.existsSync(path.join(linkDir, name, "expected.out"))
-      )
-    for (const name of programs) {
-      const out = path.join(poolDir, name)
-      const exe = path.join(out, "app")
-      const argsFile = path.join(linkDir, name, "args")
-      const args = fs.existsSync(argsFile)
-        ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean)
-        : []
-      const linked = spawnSync(
-        NISH,
-        [path.join(linkDir, name, "main.ts"), "-o", `${out}${path.sep}`, "--link", exe, ...args],
-        { cwd: root, encoding: "utf8" }
-      )
-      const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
-      const codeFile = path.join(linkDir, name, "expected.code")
-      const wantCode = fs.existsSync(codeFile) ? Number(fs.readFileSync(codeFile, "utf8").trim()) : 0
-      const runs = ["1", "2"].map((threads) =>
-        linked.status === 0
-          ? spawnSync(exe, [], {
-              encoding: "utf8",
-              env: { ...plainEnv, NISH_NUM_THREADS: threads },
-              timeout: 60000,
-            })
-          : linked
-      )
-      check(
-        `runtime-parallel: link/${name} prints expected.out under NISH_NUM_THREADS=1 and =2`,
-        runs.every((r) => r.status === wantCode && r.stdout === want),
-        runs.map((r) => shown(r)).join("\n")
-      )
     }
   }
 }

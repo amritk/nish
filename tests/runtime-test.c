@@ -551,21 +551,23 @@ static int pool_run_tasks(int64_t count) {
   return ok;
 }
 
-/* The checks a forked child repeats: a region still partitions, a scope runs
-   every task, and a channel chain still drains. */
-static int pool_still_works(pthread_t self) {
+/* One region over `par_seen`; answers whether every index was seen once. */
+static int pool_region_partitions(pthread_t self) {
   memset(par_seen, 0, sizeof par_seen);
   pool_worker_ran = 0;
   nish_parallel_range(pool_count_body, &self, PAR_N, 1);
   int ok = 1;
   for (int i = 0; i < PAR_N; i++) ok = ok && par_seen[i] == 1;
-  return ok && pool_run_tasks(40) && pool_run_chain() == 12 * 5050;
+  return ok;
 }
 
-static int pool_status(pid_t child) {
-  int status = 0;
-  return waitpid(child, &status, 0) == child && WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+/* The checks a forked child repeats: a region still partitions, a scope runs
+   every task, and a channel chain still drains. */
+static int pool_still_works(pthread_t self) {
+  return pool_region_partitions(self) && pool_run_tasks(40) && pool_run_chain() == 12 * 5050;
 }
+
+static int sec_status(pid_t child); /* below, with the security checks: 128 + n for signal n */
 
 static void test_pool(void) {
   pthread_t self = pthread_self();
@@ -578,12 +580,7 @@ static void test_pool(void) {
      across them is a worker that outlived a region. With one CPU there are no
      workers and the caller runs every chunk. */
   pool_most_jobs = 0;
-  for (int r = 0; r < 200; r++) {
-    memset(par_seen, 0, sizeof par_seen);
-    pool_worker_ran = 0;
-    nish_parallel_range(pool_count_body, &self, PAR_N, 1);
-    for (int i = 0; i < PAR_N; i++) assert(par_seen[i] == 1);
-  }
+  for (int r = 0; r < 200; r++) assert(pool_region_partitions(self));
   if (cpus > 1) assert(pool_most_jobs > 1);
   else assert(pool_most_jobs == 0);
 
@@ -613,7 +610,7 @@ static void test_pool(void) {
     alarm(30);
     _exit(pool_still_works(self) ? 0 : 3);
   }
-  assert(pool_status(child) == 0);
+  assert(sec_status(child) == 0);
 
   /* Unpooled (a Node addon's runtime, nish.h): every worker chunk runs on a
      thread created for it, which therefore runs exactly one job, and the
@@ -629,7 +626,7 @@ static void test_pool(void) {
     for (int r = 0; r < 20; r++) ok = ok && pool_still_works(self);
     _exit(ok && pool_most_jobs <= 1 && (cpus == 1 || pool_most_jobs == 1) ? 0 : 4);
   }
-  assert(pool_status(child) == 0);
+  assert(sec_status(child) == 0);
 }
 #endif
 

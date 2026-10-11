@@ -167,15 +167,16 @@ static NISH_TLS int nish_par_depth = 0;
 /* ---- The worker pool (docs/wp20-threads.md, section 8e) ----
  *
  * One unit of work for another thread: a region's chunk or a scope's task,
- * each of which embeds one of these first. `pending` is the count its caller
- * waits on, and lives in the caller's frame until the last job is done. `th`
- * and `started` are for the unpooled path alone. */
+ * each of which embeds one of these as its first member. `pending` is the
+ * count its caller waits on, and lives in the caller's frame until the last
+ * job is done; the unpooled path waits on the job's own thread, `th`, instead. */
 typedef struct nish_job {
   struct nish_job *next;
   void (*run)(struct nish_job *);
-  int64_t *pending;
-  pthread_t th;
-  int started;
+  union {
+    int64_t *pending; /* pooled */
+    pthread_t th;     /* unpooled */
+  };
 } nish_job;
 
 /* The workers, started once and parked between calls, and the one queue they
@@ -236,43 +237,58 @@ static void nish_cpu_relax(void) {
 #endif
 }
 
-static void *nish_pool_worker(void *unused) {
-  (void)unused;
-  nish_par_depth = 1;
+/* Takes jobs off the front of the queue and runs them until `*pending` is 0,
+ * spinning and then sleeping on `cv` while the queue is empty and the count is
+ * not. A worker passes a count that never reaches 0 and sleeps on `work`; a
+ * caller passes its own count and sleeps on `done`. The count is read under
+ * the lock before the caller returns, which orders every job's writes before
+ * it. A worker's arena is its own, not a caller's: the storage class is what
+ * makes the two disjoint (WP20 T0). Nothing a job leaves in it outlives the
+ * job -- the language keeps a chunk's or a task's results out of its arena --
+ * so it is rewound for the next one rather than freed, and kept only when it
+ * is one ordinary chunk, so a job that allocated a large block does not leave
+ * a parked worker holding it. */
+static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
   pthread_mutex_lock(&nish_pool.mu);
   for (;;) {
     nish_job *j = nish_job_take();
-    if (!j) {
+    if (j) {
       pthread_mutex_unlock(&nish_pool.mu);
-      for (int i = 0; i < NISH_POOL_SPIN && !__atomic_load_n(&nish_pool.head, __ATOMIC_RELAXED); i++)
+      j->run(j);
+      if (worker) {
+        nish_reset_arena();
+        if (nish_arena.cap > 65536) nish_free_arena();
+      }
+      pthread_mutex_lock(&nish_pool.mu);
+      nish_job_done(j);
+    } else if (*pending == 0) {
+      break;
+    } else {
+      pthread_mutex_unlock(&nish_pool.mu);
+      for (int i = 0; i < NISH_POOL_SPIN && __atomic_load_n(pending, __ATOMIC_RELAXED) &&
+                      !__atomic_load_n(&nish_pool.head, __ATOMIC_RELAXED);
+           i++)
         nish_cpu_relax();
       pthread_mutex_lock(&nish_pool.mu);
-      if (!nish_pool.head) pthread_cond_wait(&nish_pool.work, &nish_pool.mu);
-      continue;
+      if (*pending != 0 && !nish_pool.head) pthread_cond_wait(cv, &nish_pool.mu);
     }
-    pthread_mutex_unlock(&nish_pool.mu);
-    j->run(j);
-    /* This thread's arena, not the caller's: the storage class is what makes
-     * the two disjoint (WP20 T0). Nothing a job leaves in it outlives the job
-     * -- the language keeps a chunk's or a task's results out of its arena --
-     * so it is rewound for the next one rather than freed, and kept only when
-     * it is one ordinary chunk, so a job that allocated a large block does not
-     * leave a parked worker holding it. */
-    nish_reset_arena();
-    if (nish_arena.cap > 65536) nish_free_arena();
-    pthread_mutex_lock(&nish_pool.mu);
-    nish_job_done(j);
   }
+  pthread_mutex_unlock(&nish_pool.mu);
+}
+
+static void *nish_pool_worker(void *unused) {
+  (void)unused;
+  nish_par_depth = 1;
+  int64_t never = 1;
+  nish_pool_drain(&never, &nish_pool.work, 1);
   return 0;
 }
 
 /* A forked child has only the thread that forked, so it starts with an empty
- * queue and no workers, and starts its own on its first divided call. The
- * lock is held across the fork, so it is consistent in the child, which takes
- * fresh copies of it and of the condition variables rather than unlocking
- * ones the parent's parked workers were waiting on. */
-static void nish_pool_lock(void) { pthread_mutex_lock(&nish_pool.mu); }
-static void nish_pool_unlock(void) { pthread_mutex_unlock(&nish_pool.mu); }
+ * queue and no workers, and starts its own on its first divided call. It takes
+ * fresh copies of the lock and the condition variables rather than the ones
+ * the parent's workers may have held or been waiting on, so nothing has to be
+ * held across the fork. */
 static void nish_pool_child(void) {
   nish_pool.head = nish_pool.tail = 0;
   if (nish_pool.state > 0) nish_pool.state = 0;
@@ -292,16 +308,13 @@ static int nish_pool_ready(void) {
   pthread_mutex_lock(&nish_pool.mu);
   if (nish_pool.state == 0) {
     int64_t n = nish_cpu_count() - 1;
-    if (n > NISH_PAR_MAX) n = NISH_PAR_MAX;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (n > NISH_PAR_MAX - 1) n = NISH_PAR_MAX - 1; /* a region queues at most this many */
     for (int64_t i = 0; i < n; i++) {
       pthread_t th;
-      if (pthread_create(&th, &attr, nish_pool_worker, 0) != 0) break;
+      if (pthread_create(&th, 0, nish_pool_worker, 0) != 0) break;
+      pthread_detach(th);
     }
-    pthread_attr_destroy(&attr);
-    pthread_atfork(nish_pool_lock, nish_pool_unlock, nish_pool_child);
+    pthread_atfork(0, 0, nish_pool_child);
     __atomic_store_n(&nish_pool.state, 1, __ATOMIC_RELEASE);
   }
   state = nish_pool.state;
@@ -333,51 +346,36 @@ static void *nish_job_thread(void *p) {
  * queued before it, and those have all been taken by a thread already. */
 static void nish_jobs_run(nish_job *lead, nish_job *rest) {
   int64_t pending = 0;
-  int pooled = rest && nish_pool_ready();
-  nish_job *last = 0;
-  for (nish_job *j = rest; j; j = j->next) {
-    j->pending = &pending;
-    pending++;
-    last = j;
-    if (!pooled) j->started = pthread_create(&j->th, 0, nish_job_thread, j) == 0;
-  }
+  int pooled = rest && nish_par_depth == 0 && nish_pool_ready();
+  nish_job *last = 0, *inline_from = 0;
   if (pooled) {
+    for (nish_job *j = rest; j; j = j->next) {
+      j->pending = &pending;
+      pending++;
+      last = j;
+    }
     pthread_mutex_lock(&nish_pool.mu);
     if (nish_pool.tail) nish_pool.tail->next = rest;
     else __atomic_store_n(&nish_pool.head, rest, __ATOMIC_RELAXED);
     nish_pool.tail = last;
-    pthread_cond_broadcast(&nish_pool.work);
+    /* One wake per job, rather than every parked worker for a job or two. */
+    for (int64_t i = 0; i < pending; i++) pthread_cond_signal(&nish_pool.work);
     pthread_mutex_unlock(&nish_pool.mu);
+  } else {
+    /* Unpooled, a thread per job, and every job from the first thread that
+     * cannot be created on runs here. Inside a job there is no thread at all:
+     * a region or a scope in a chunk or a task runs on that one thread, in
+     * order, rather than multiplying the threads by the nesting depth. */
+    for (inline_from = rest; inline_from && nish_par_depth == 0; inline_from = inline_from->next)
+      if (pthread_create(&inline_from->th, 0, nish_job_thread, inline_from) != 0) break;
   }
   nish_par_depth++;
   lead->run(lead);
   if (pooled) {
-    pthread_mutex_lock(&nish_pool.mu);
-    for (;;) {
-      nish_job *j = nish_job_take();
-      if (j) {
-        pthread_mutex_unlock(&nish_pool.mu);
-        j->run(j);
-        pthread_mutex_lock(&nish_pool.mu);
-        nish_job_done(j);
-      } else if (pending == 0) {
-        break; /* read under the lock, which orders every job's writes before it */
-      } else {
-        pthread_mutex_unlock(&nish_pool.mu);
-        for (int i = 0; i < NISH_POOL_SPIN && __atomic_load_n(&pending, __ATOMIC_RELAXED) &&
-                        !__atomic_load_n(&nish_pool.head, __ATOMIC_RELAXED);
-             i++)
-          nish_cpu_relax();
-        pthread_mutex_lock(&nish_pool.mu);
-        if (pending != 0 && !nish_pool.head) pthread_cond_wait(&nish_pool.done, &nish_pool.mu);
-      }
-    }
-    pthread_mutex_unlock(&nish_pool.mu);
+    nish_pool_drain(&pending, &nish_pool.done, 0);
   } else {
-    for (nish_job *j = rest; j; j = j->next)
-      if (!j->started) j->run(j);
-    for (nish_job *j = rest; j; j = j->next)
-      if (j->started) pthread_join(j->th, 0);
+    for (nish_job *j = inline_from; j; j = j->next) j->run(j);
+    for (nish_job *j = rest; j != inline_from; j = j->next) pthread_join(j->th, 0);
   }
   nish_par_depth--;
 }
@@ -439,7 +437,7 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
   int64_t at = 0;
   for (int64_t i = 0; i < n; i++) {
     int64_t take = base + (i < rem ? 1 : 0);
-    jobs[i].job.next = i + 1 < n ? &jobs[i + 1].job : 0;
+    jobs[i].job.next = &jobs[i + 1].job;
     jobs[i].job.run = nish_par_run;
     jobs[i].body = body;
     jobs[i].ctx = ctx;
@@ -452,6 +450,7 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
    * behaves exactly as a sequential call would -- the asymmetry is deliberate
    * and is why a body whose result is allocated is the surface's error rather
    * than this file's. */
+  jobs[n - 1].job.next = 0;
   nish_jobs_run(&jobs[0].job, jobs[0].job.next);
 #else
   (void)grain;
@@ -473,18 +472,25 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
  * joins it, so the list needs no lock, and scopes may nest: a join takes its
  * own scope's tasks out of the list and leaves the rest. */
 typedef struct nish_task {
+#ifdef NISH_PAR_REAL
+  nish_job job;
+#endif
   struct nish_task *next;
   void *scope;
   nish_task_fn run;
   nish_task_fn finish;
-#ifdef NISH_PAR_REAL
-  nish_job job;
-#endif
   /* The copied payload, aligned for any field it holds. */
   uint64_t payload[];
 } nish_task;
 
 static NISH_TLS nish_task *nish_tasks = 0;
+
+#ifdef NISH_PAR_REAL
+static void nish_task_run(nish_job *j) {
+  nish_task *t = (nish_task *)j;
+  t->run(t->payload);
+}
+#endif
 
 /* The end of the program when an allocation of this file's fails: the scope's
  * task list and a channel's buffer are the two, and neither has a way to go on
@@ -504,17 +510,13 @@ void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const 
   t->scope = scope;
   t->run = run;
   t->finish = finish;
+#ifdef NISH_PAR_REAL
+  t->job.run = nish_task_run;
+#endif
   memcpy(t->payload, payload, (size_t)size);
   t->next = nish_tasks;
   nish_tasks = t;
 }
-
-#ifdef NISH_PAR_REAL
-static void nish_task_run(nish_job *j) {
-  nish_task *t = (nish_task *)((char *)j - offsetof(nish_task, job));
-  t->run(t->payload);
-}
-#endif
 
 void nish_scope_join(void *scope) {
   /* This scope's tasks, oldest first: the list is newest first, and moving each
@@ -526,6 +528,9 @@ void nish_scope_join(void *scope) {
     if (t->scope == scope) {
       *link = t->next;
       t->next = mine;
+#ifdef NISH_PAR_REAL
+      t->job.next = (nish_job *)mine;
+#endif
       mine = t;
     } else {
       link = &t->next;
@@ -534,19 +539,10 @@ void nish_scope_join(void *scope) {
   if (!mine) return;
 #ifdef NISH_PAR_REAL
   /* The first task on this thread and the rest on the pool, in the order they
-   * were spawned, which is the order a task no worker is free for runs in here
-   * (`nish_jobs_run`). A task is one thread's work, as a chunk is, so a scope
-   * joined inside a region or another task runs its tasks here, in order, as a
-   * nested region does. */
-  if (nish_par_depth == 0) {
-    for (nish_task *t = mine; t; t = t->next) {
-      t->job.run = nish_task_run;
-      t->job.next = t->next ? &t->next->job : 0;
-    }
-    nish_jobs_run(&mine->job, mine->job.next);
-  } else {
-    for (nish_task *t = mine; t; t = t->next) t->run(t->payload);
-  }
+   * were spawned, which is the order a task no worker is free for runs in here,
+   * and the order every task runs in when the scope is joined inside another
+   * job (`nish_jobs_run`). */
+  nish_jobs_run(&mine->job, mine->job.next);
 #else
   for (nish_task *t = mine; t; t = t->next) t->run(t->payload);
 #endif
