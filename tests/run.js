@@ -4914,6 +4914,68 @@ if (!only || "std_text_index_of_any".includes(only)) {
   )
 }
 
+// WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
+// `JSON.stringify`. `tests/link/std_json_writer/node.ts` writes each of these
+// values, one line apiece and in this order, and is ASCII and i64-free, so its
+// answer does not depend on how a string or an integer is read: built natively
+// and run under `runtime/nish.mjs`, both must print `JSON.stringify` of every
+// value, computed here rather than read from a golden.
+const JSON_WRITER_NODE_VALUES = [
+  { message: "Hello, World!" },
+  [],
+  {},
+  [[], {}, { a: [{}, 1], b: { c: null } }],
+  '"\\\b\f\n\r\t',
+  `${Array.from({ length: 32 }, (_, c) => String.fromCharCode(c)).join("")}\x7f/ ~`,
+  [0, -7, 2147483647, -2147483648],
+  [0, 7, 4294967295, 2147483648, 4294967286],
+  [
+    -0,
+    1e21,
+    1e-7,
+    0.1,
+    123,
+    5e-324,
+    1.7976931348623157e308,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    1.5,
+    -2.5e-10,
+  ],
+  [true, false, null],
+  "",
+  { 'k"\n': "v" },
+  'a\t"\x01',
+]
+if (!only || "std_json_writer".includes(only)) {
+  const entry = path.join(linkDir, "std_json_writer", "node.ts")
+  const want = JSON_WRITER_NODE_VALUES.map((v) => `${JSON.stringify(v)}\n`).join("")
+  const run = runUnderPrelude(entry, [])
+  check(
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values`,
+    run.status === 0 && run.stdout === want,
+    `--- JSON.stringify\n${want}--- node\n${shown(run)}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "link", "std_json_writer_node")
+    fs.rmSync(outDir, { recursive: true, force: true })
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", `${outDir}${path.sep}`, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_writer: node.ts built natively prints the same JSON.stringify lines",
+      native.status === 0 && native.stdout === want,
+      `--- JSON.stringify\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_writer: no clang, so node.ts is not built natively")
+  }
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the
