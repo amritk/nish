@@ -1,0 +1,2 @@
+`fresh` writes memory its caller can see
+`parallelMapInto` runs it on several threads at once

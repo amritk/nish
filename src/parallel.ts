@@ -117,7 +117,7 @@ import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
 import { Local, STORAGE_PARAM } from "./symbols"
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types"
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
 const THREAD_SCOPE: string = "ThreadScope"
@@ -1405,6 +1405,44 @@ const regionCallMessage = (
   return ""
 }
 
+/**
+ * The refusal for a `new` in the region, or "": a constructor is a call, and
+ * one that writes through a pointer it is handed writes memory a task may
+ * read as surely as a function would (#564). Its own `this` is the fresh
+ * object the `new` allocated, which no task can hold yet, so a store into it
+ * is not counted; a constructor that hands `this` on does so by a store
+ * through another parameter, which is.
+ */
+const regionNewMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  node: Node,
+  state: RegionState
+): string => {
+  const sig = program.nodeCallees[node.id]
+  if (sig === null) {
+    return ""
+  }
+  const own = facts.get(sig.name)
+  if (own === null) {
+    return regionWriteMessage(state, `\`new ${node.children[0].text}\``)
+  }
+  // `writesThrough` also marks a parameter the constructor keeps, as
+  // `this.hist = hist` does, because an alias may be written through later;
+  // what is written through the new object later is judged where it is. A
+  // constructor that writes nothing shared has made no write through one.
+  if (!own.sharedWrite) {
+    return ""
+  }
+  for (const pp of own.pointerParams) {
+    if (pp.writesThrough && pp.name !== "this" && !isChannelParam(program, table, sig, pp.name)) {
+      return regionWriteMessage(state, `\`new ${node.children[0].text}\``)
+    }
+  }
+  return ""
+}
+
 /** Whether `sig`'s parameter `name` is a `Channel`. */
 const isChannelParam = (
   program: CheckedProgram,
@@ -1480,6 +1518,8 @@ const walkRegion = (
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
   } else if (node.kind === N_CALL) {
     message = regionCallMessage(program, table, facts, node, state, uses)
+  } else if (node.kind === N_NEW) {
+    message = regionNewMessage(program, table, facts, node, state)
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
@@ -3090,7 +3130,8 @@ const checkChannels = (
   const decls: Node[] = []
   checkChannelTypes(program, table, sig, body, out)
   if (sig.role === ROLE_CONSTRUCTOR && holdsChannelDeep(program, table, sig.paramTypes[0])) {
-    findThisEscapes(body, null, null, out)
+    const parents: Node[] = []
+    findThisEscapes(program, table, body, parents, out)
   }
   collectChannelLocals(program, table, body, locals, decls)
   walkChannelUses(program, table, sig, body, [], locals, out)
@@ -3236,51 +3277,112 @@ const checkLocalTypes = (
 
 /**
  * C4 in the constructor of a class that holds a channel, directly or through a
- * carrier: `this` appears only as the base of a field store, `this.f = ...`.
- * The summary of what a constructor sends follows only its parameters, so any
- * other way `this` got out — a method called on it, an argument, a store
- * elsewhere, a second name, an array element — could carry a send the sender
- * count never saw. `parent` is `node`'s, and `above` its parent's.
+ * carrier: `this` appears only as the base of an access to one of its own
+ * fields, `this.f`, that cannot carry it out (`isOwnFieldUse`). The summary of
+ * what a constructor sends follows only its parameters, so any other way
+ * `this` got out — a method called on it, an argument, a store elsewhere, a
+ * second name, an array element — could carry a send the sender count never
+ * saw. `parents` holds `node`'s ancestors, outermost first, parentheses and all.
  */
 const findThisEscapes = (
+  program: CheckedProgram,
+  table: TypeTable,
   node: Node,
-  parent: Node | null,
-  above: Node | null,
+  parents: Node[],
   out: ScopeFinding[]
 ): boolean => {
   if (node.kind === N_ARROW) {
     return false
   }
-  if (node.kind === N_THIS) {
-    const fieldStore =
-      parent !== null &&
-      parent.kind === N_MEMBER &&
-      parent.children[0] === node &&
-      above !== null &&
-      above.kind === N_BINARY &&
-      above.text === "=" &&
-      above.children[0] === parent
-    if (!fieldStore) {
-      out.push(
-        new ScopeFinding(
-          node,
-          channelSendersMessage(
-            "The constructor of a class that holds a channel uses `this` other than to set a field, `this.f = ...`, where a send made through it could not be counted"
-          )
+  if (node.kind === N_THIS && !isOwnFieldUse(program, table, parents)) {
+    out.push(
+      new ScopeFinding(
+        node,
+        channelSendersMessage(
+          "The constructor of a class that holds a channel uses `this` other than to read or set its own fields, `this.f`, where a send made through it could not be counted"
         )
       )
-      return true
-    }
+    )
+    return true
   }
+  parents.push(node)
   for (const child of node.children) {
-    // A parenthesised expression stands where its parentheses do.
-    const next = node.kind === N_PAREN ? parent : node
-    const nextAbove = node.kind === N_PAREN ? above : parent
-    if (findThisEscapes(child, next, nextAbove, out)) {
+    if (findThisEscapes(program, table, child, parents, out)) {
+      parents.pop()
       return true
     }
   }
+  parents.pop()
   return false
+}
+
+/** How many of `parents` are above the node at `depth`, once the parentheses around it are counted as it. */
+const outsideParens = (parents: Node[], depth: i32): i32 => {
+  let d = depth
+  while (d > 0 && parents[d - 1].kind === N_PAREN) {
+    d = d - 1
+  }
+  return d
+}
+
+/**
+ * Whether a `this` under `parents` (its ancestors, outermost first) is the
+ * base of a use of its own field `this.f` that cannot carry `this` out (#567):
+ *
+ *   - a store into the field, `this.f = v`, `this.f += v` or `this.f++`;
+ *   - any use but a call of a field whose value is inert (`isInertValue`): a
+ *     number, a `boolean`, an enum, a string, or an array of those, from
+ *     which nothing can reach a channel or the object;
+ *   - a store into a field or an element of the field's own value,
+ *     `this.a.b = v` or `this.a[i] = v`, where that value neither is a channel
+ *     nor holds one.
+ *
+ * What a store stores is judged on its own, so `this.f = this` and
+ * `this.a.b = this` are each refused at their right-hand `this`.
+ */
+const isOwnFieldUse = (program: CheckedProgram, table: TypeTable, parents: Node[]): boolean => {
+  const fieldDepth = outsideParens(parents, parents.length) - 1
+  if (fieldDepth < 0 || parents[fieldDepth].kind !== N_MEMBER) {
+    return false
+  }
+  const field = parents[fieldDepth]
+  const usedAt = outsideParens(parents, fieldDepth)
+  const fieldAt = usedAt === fieldDepth ? field : parents[usedAt]
+  if (isStoreTarget(fieldAt, parents, usedAt)) {
+    return true
+  }
+  const user: Node | null = usedAt > 0 ? parents[usedAt - 1] : null
+  if (user !== null && user.kind === N_CALL && user.children[0] === fieldAt) {
+    return false // `this.m()`: the method is handed `this`
+  }
+  const type = program.nodeTypes[field.id]
+  if (isInertValue(table, type)) {
+    return true
+  }
+  if (
+    user === null ||
+    (user.kind !== N_MEMBER && user.kind !== N_INDEX) ||
+    user.children[0] !== fieldAt ||
+    type < 0 ||
+    isChannelType(program, table, table.stripNull(type)) ||
+    holdsChannelDeep(program, table, table.stripNull(type))
+  ) {
+    return false
+  }
+  const storedAt = outsideParens(parents, usedAt - 1)
+  return isStoreTarget(storedAt === usedAt - 1 ? user : parents[storedAt], parents, storedAt)
+}
+
+/** A value of `type` reaches no object: a number, a `boolean`, an enum, a string, or an array of those. */
+const isInertValue = (table: TypeTable, type: i32): boolean => {
+  if (type < 0) {
+    return false
+  }
+  const t = table.stripNull(type)
+  if (t === T_STRING || isScalarArgument(table, t)) {
+    return true
+  }
+  return table.isArray(t) && isInertValue(table, table.refOf(t))
 }
 
 /** Whether the class `type` holds a channel in a field, or in a field of a class one of its fields is. */
