@@ -244,7 +244,8 @@ Threads are no longer created per region. The first region or scope join that
 divides starts a **worker pool**, and its workers park between calls
 (`runtime/runtime-parallel.c`):
 
-- There is one worker per CPU but the caller's, at most `NISH_PAR_MAX` (64).
+- There is one worker per CPU but the caller's, at most 63, one fewer than
+  `NISH_PAR_MAX`, since a region queues at most that many.
   The count is `nish_cpu_count()`, which is the smallest of the CPUs online,
   the affinity mask (`taskset`, a container's cpuset), the cgroup v2 `cpu.max`
   quota rounded up, and `NISH_NUM_THREADS` when that is a positive number. The
@@ -275,10 +276,23 @@ divides starts a **worker pool**, and its workers park between calls
 | | before the pool | with it |
 | --- | ---: | ---: |
 | a region asking for one chunk, which spawns nothing | **3 ns** | **3 ns** |
-| an empty region divided four ways | **REGION_BEFORE** | **REGION_AFTER** |
-| `bench/par-regions.ts`: a 2^17-element map called 1,000 times (min / median) | PR_BEFORE | PR_AFTER |
+| an empty region divided four ways | **100 µs** | **11 µs** |
+| `bench/par-regions.ts`: a 2^17-element map called 1,000 times (min / median) | 256 / 298 ms | 188 / 249 ms |
 
-POOL_MEASURE_PROSE
+Measured on 2026-10-11 on a four-core Intel Xeon at 2.10 GHz, a virtual
+machine, with clang 18.1.3. Each figure is the minimum and median of eleven
+interleaved rounds. The empty region is a C driver that calls
+`nish_parallel_range` 20,000 times with a body that writes one word per chunk.
+It took 100 µs median (93 µs minimum) per region with per-region threads, and
+11 µs (8 µs) with the pool. `par-regions` was timed against a byte-identical
+copy of the old binary in the same rounds, which gives the noise band:
+256 / 298 ms against 276 / 318 ms, about 8% on the minimum and 7% on the
+median. The pool's 188 / 249 ms is 26% and 16% below the old binary, outside
+that band. The loop it replaces took 440 / 549 ms. The other kernels
+(`par-compute`, `par-alloc`, `par-nbody`, `par-short`) and
+`examples/histogram.ts` and `examples/tasks.ts` print the same answers and
+move within the band, which is what they should do: each divides only a few
+regions, or none.
 
 A goroutine costs a couple of microseconds, so the pool brings a region within
 reach of one. **This is still a mechanism for dividing one loop across the
