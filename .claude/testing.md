@@ -155,8 +155,9 @@ PR adding a construct is not finished without all of them:
 3. At least one negative test: a `reject_*.ts` + `.err` naming the exact
    message.
 4. `.args` for any flag the case depends on.
-5. Its `docs/LANGUAGE.md` rule, citing the case by name, and a cookbook entry
-   (`docs/cookbook/regen.sh`).
+5. Its `docs/LANGUAGE.md` rule, citing the case by name, a cookbook entry
+   (`docs/cookbook/regen.sh`), and the user-guide page that teaches it
+   (`docs/README.md` → "Writing a guide page").
 6. One implementation, in `src/`. There is no second compiler to compare it
    with, so the golden and the native round trip are the proof, and
    `tests/nish-cmp.js` — the last release against this tree — reports every

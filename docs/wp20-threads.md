@@ -230,34 +230,83 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
 
 `runtime/runtime-parallel.c` splits `[0, len)` into contiguous chunks that
 differ in size by at most one element. There are at most `nish_cpu_count()`
-chunks and never more than `len / grain`. Chunk 0 runs on the calling thread.
-A chunk whose thread cannot be created also runs there, so a shortage of
-threads costs speed, never correctness. A nested call runs on one thread,
+chunks and never more than `len / grain`. Chunk 0 runs on the calling thread,
+and the rest go to the worker pool (§8e). A chunk no worker is free for runs
+on the calling thread too, so a shortage of threads costs speed, never
+correctness. A nested call runs on one thread,
 because the nesting guard is thread-local. Without `-DNISH_THREADS`, and on
 WASI, the same entry point runs the whole range on the calling thread. It is a
 translation unit of its own, with its own `.text*` ceiling in `tests/run.js`.
 
 ### 8e. What a region costs, and why it is not a goroutine
 
-There is no pool. Threads are created and joined **per region**, one per core
-at most.
+Threads are no longer created per region. The first region or scope join that
+divides starts a **worker pool**, and its workers park between calls
+(`runtime/runtime-parallel.c`):
 
-| | cost |
-| --- | ---: |
-| a region asking for one chunk, which spawns nothing | **3 ns** |
-| an empty region divided four ways: three `pthread_create` plus three joins | **~125 µs** |
+- There is one worker per CPU but the caller's, at most 63, one fewer than
+  `NISH_PAR_MAX`, since a region queues at most that many.
+  The count is `nish_cpu_count()`, which is the smallest of the CPUs online,
+  the affinity mask (`taskset`, a container's cpuset), the cgroup v2 `cpu.max`
+  quota rounded up, and `NISH_NUM_THREADS` when that is a positive number. The
+  variable lowers the count and never raises it.
+- A region's chunks and a scope's tasks go on one queue, strictly first in,
+  first out. The caller runs the first itself, then takes queued jobs off the
+  same front until the queue is empty, and only then waits. So a job no worker
+  is free for runs on the caller, in order. With no workers at all
+  (`NISH_NUM_THREADS=1`) the caller runs everything, in spawn order.
+- That order is what wp29's channels need. A receiving task is spawned after
+  every task that sends to it (wp29 C6), so by the time any thread takes the
+  receiver, every sender has been taken by a thread that is running it. This
+  holds for any pool size, zero included. Work stealing is declined, because a
+  deque that takes the newest job first breaks it.
+- A worker that finds nothing to do spins about 20 µs before it sleeps on a
+  condition variable, and so does a caller waiting for its last job. Back to
+  back regions then rarely pay a futex wake.
+- A worker rewinds its arena after every job, and keeps at most one ordinary
+  64 KB chunk, so a parked worker never holds a large block.
+- `nish_par_depth` is 1 in a worker, so a region or a scope inside a job still
+  runs on that one thread.
+- A Node addon keeps the old per-call threads, because Node can unload an addon
+  and a parked worker would outlive its code. The shim includes `<node_api.h>`
+  before `nish.h`, and `nish.h` then defines a constructor that calls
+  `nish_pool_disable()`. A forked child starts with no workers and starts its
+  own on its first divided call.
 
-A goroutine costs a couple of microseconds. **This is a mechanism for dividing
-one loop across the cores, not for having many tasks.** A region needs about a
-millisecond of work before the spawns are under a tenth of its cost. That is
+| | before the pool | with it |
+| --- | ---: | ---: |
+| a region asking for one chunk, which spawns nothing | **3 ns** | **3 ns** |
+| an empty region divided four ways | **100 µs** | **11 µs** |
+| `bench/par-regions.ts`: a 2^17-element map called 1,000 times (min / median) | 256 / 298 ms | 188 / 249 ms |
+
+Measured on 2026-10-11 on a four-core Intel Xeon at 2.10 GHz, a virtual
+machine, with clang 18.1.3. Each figure is the minimum and median of eleven
+interleaved rounds. The empty region is a C driver that calls
+`nish_parallel_range` 20,000 times with a body that writes one word per chunk.
+It took 100 µs median (93 µs minimum) per region with per-region threads, and
+11 µs (8 µs) with the pool. `par-regions` was timed against a byte-identical
+copy of the old binary in the same rounds, which gives the noise band:
+256 / 298 ms against 276 / 318 ms, about 8% on the minimum and 7% on the
+median. The pool's 188 / 249 ms is 26% and 16% below the old binary, outside
+that band. The loop it replaces took 440 / 549 ms. The other kernels
+(`par-compute`, `par-alloc`, `par-nbody`, `par-short`) and
+`examples/histogram.ts` and `examples/tasks.ts` print the same answers and
+move within the band, which is what they should do: each divides only a few
+regions, or none.
+
+A goroutine costs a couple of microseconds, so the pool brings a region within
+reach of one. **This is still a mechanism for dividing one loop across the
+cores, not for having many tasks.** A region needs about a millisecond of work
+before the old per-region spawns were under a tenth of its cost, and that is
 why the grain matters. P1 first used 2^20 elements per chunk. It now sizes the
 grain per call as `2^22` over a static estimate of one element's cost
-(`mapGrain` in `src/parallel.ts`, calibrated in wp29 §8a). A map within its
-grain calls its loop directly. A reduce's block width is a separate constant
-(`BLOCK` in `std/threads.ts`, 2^20), because it decides the reduce's answer,
-while the grain only decides how the work is divided. The 3 ns row was
-3,734 ns until `nish_cpu_count()` cached its `sysconf` answer. A program that
-does not use the partitioner pays nothing: `--gc-sections` drops it.
+(`mapGrain` in `src/parallel.ts`, calibrated in wp29 §8a against the spawns, and
+to be retuned against the pool). A map within its grain calls its loop
+directly. A reduce's block width is a separate constant (`BLOCK` in
+`std/threads.ts`, 2^20), because it decides the reduce's answer, while the
+grain only decides how the work is divided. The 3 ns row was 3,734 ns until
+`nish_cpu_count()` cached its answer. A program that does not use the
+partitioner pays nothing: `--gc-sections` drops it.
 
 ## 9. Appendix: the kernels and the driver
 
