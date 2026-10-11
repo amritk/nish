@@ -27,6 +27,12 @@ cases/arr_bounds_offset added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_floor added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_reach added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_wrap added after R6: no rewriter to freeze it with
+cases/arr_bounds_range added after R6: no rewriter to freeze it with
+cases/arr_bounds_range_call added after R6: no rewriter to freeze it with
+cases/arr_bounds_range_kept added after R6: no rewriter to freeze it with
+cases/arr_bounds_range_negative added after R6: no rewriter to freeze it with
+cases/arr_bounds_range_past added after R6: no rewriter to freeze it with
+cases/arr_bounds_range_wrap added after R6: no rewriter to freeze it with
 cases/arr_bounds_ranged added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
