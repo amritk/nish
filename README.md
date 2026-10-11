@@ -399,7 +399,10 @@ the IR, the recipe or the runtime is new, so the first run of an edit pays for
 one `--profile debug` link (the default here, and the fast one) and every run
 after that starts the cached binary. The cache is `$XDG_CACHE_HOME/nish/run`,
 or `~/.cache/nish/run`. Each entry is one program, so `rm -rf` of it is always
-safe. `-o`, `--link`, `--target`, the `--emit-*` sidecars and
+safe. Beside it, `nish/runtime` keeps the C runtime compiled once per profile,
+`-g`, `--threads` and C compiler, so a link (a run's or `--link`'s) compiles
+only the program's own modules, each in parallel; removing it costs one
+recompile of the runtime. `-o`, `--link`, `--target`, the `--emit-*` sidecars and
 `--profile wasi` write something a run keeps to itself, so they are usage
 errors there, and performance warnings are not printed, because stderr belongs
 to the program.
