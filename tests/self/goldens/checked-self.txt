@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 85 programs, 2167680 dump lines live, 85 distinct modules.
+# 85 programs, 2167560 dump lines live, 85 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/builtins.ts src/arrays.ts src/expressions.ts src/constants.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/options.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/target.ts src/capabilities.ts
 entry src/arena-report.ts: src/arena-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/options.ts src/symbols.ts src/checker.ts src/expressions.ts src/generics.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/builtins.ts src/expressions.ts src/constants.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/options.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/target.ts src/capabilities.ts
@@ -3539,75 +3539,73 @@ function edgeWrites(facts: FactsTable, edge: ArgEdge): boolean -> @edgeWrites
   callee 3914:39 FactsTable.get -> @FactsTable.get
 function composeArguments(facts: FactsTable, f: FunctionFacts): boolean -> @composeArguments
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 3928:5
+  sharedWrite: 3930:5
   calls: FactsTable.get FunctionFacts.pointerParam FunctionFacts.pointerParamAt anyAliased edgeWrites everything keepsArgument markPastWrite markReach
   pointer facts: size=16 writesThrough=false captured=false passedTo=anyAliased#0 anyAliased#0 FactsTable.get#0 anyAliased#0 FactsTable.get#0 anyAliased#0 FactsTable.get#0 edgeWrites#0
   pointer f: size=360 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 markReach#0 markReach#0 markReach#0 markReach#0 markReach#0 markReach#0 markPastWrite#0 FunctionFacts.pointerParam#0 markPastWrite#0
   stackSites=0 stackLocals=0
   local 3926:7 changed: boolean (let)
-  callee 3927:25 anyAliased -> @anyAliased
-  local 3933:9 self: PointerParamFacts | null (const)
-  callee 3933:58 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  callee 3934:43 markReach -> @markReach
-  callee 3934:56 everything -> @everything
-  local 3937:14 reach: Reach (const)
-  callee 3938:9 anyAliased -> @anyAliased
-  callee 3938:42 markReach -> @markReach
-  callee 3938:55 everything -> @everything
-  local 3942:14 edge: ArgEdge (const)
-  local 3943:11 g: FunctionFacts | null (const)
-  callee 3943:15 FactsTable.get -> @FactsTable.get
-  local 3944:11 writes: boolean (const)
-  callee 3945:19 markReach -> @markReach
-  callee 3948:19 anyAliased -> @anyAliased
-  callee 3948:57 markReach -> @markReach
-  callee 3948:70 everything -> @everything
-  local 3952:14 edge: ArgEdge (const)
-  local 3954:11 g: FunctionFacts | null (const)
-  callee 3954:15 FactsTable.get -> @FactsTable.get
-  local 3955:11 target: PointerParamFacts | null (const)
-  callee 3955:66 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
-  local 3956:11 reached: boolean (const)
-  local 3957:11 deep: boolean (const)
-  callee 3958:20 markReach -> @markReach
-  callee 3961:28 anyAliased -> @anyAliased
-  callee 3961:66 markReach -> @markReach
-  callee 3961:79 everything -> @everything
-  local 3964:11 owner: PrivateArray | null (const)
-  callee 3965:42 keepsArgument -> @keepsArgument
-  callee 3965:56 FactsTable.get -> @FactsTable.get
-  callee 3968:34 markPastWrite -> @markPastWrite
-  callee 3972:10 edgeWrites -> @edgeWrites
-  local 3975:11 pointer: PointerParamFacts | null (const)
-  callee 3975:71 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  callee 3977:11 markPastWrite -> @markPastWrite
+  local 3928:9 all: Reach (const)
+  callee 3928:15 everything -> @everything
+  callee 3929:25 anyAliased -> @anyAliased
+  local 3935:9 self: PointerParamFacts | null (const)
+  callee 3935:58 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee 3936:43 markReach -> @markReach
+  local 3939:14 reach: Reach (const)
+  callee 3940:9 anyAliased -> @anyAliased
+  callee 3940:42 markReach -> @markReach
+  local 3944:14 edge: ArgEdge (const)
+  local 3945:11 g: FunctionFacts | null (const)
+  callee 3945:15 FactsTable.get -> @FactsTable.get
+  local 3946:11 writes: boolean (const)
+  callee 3947:19 markReach -> @markReach
+  callee 3950:19 anyAliased -> @anyAliased
+  callee 3950:57 markReach -> @markReach
+  local 3954:14 edge: ArgEdge (const)
+  local 3956:11 g: FunctionFacts | null (const)
+  callee 3956:15 FactsTable.get -> @FactsTable.get
+  local 3957:11 target: PointerParamFacts | null (const)
+  callee 3957:66 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
+  local 3958:11 reached: boolean (const)
+  local 3959:11 deep: boolean (const)
+  callee 3960:20 markReach -> @markReach
+  callee 3963:28 anyAliased -> @anyAliased
+  callee 3963:66 markReach -> @markReach
+  local 3966:11 owner: PrivateArray | null (const)
+  callee 3967:42 keepsArgument -> @keepsArgument
+  callee 3967:56 FactsTable.get -> @FactsTable.get
+  callee 3970:34 markPastWrite -> @markPastWrite
+  callee 3974:10 edgeWrites -> @edgeWrites
+  local 3977:11 pointer: PointerParamFacts | null (const)
+  callee 3977:71 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee 3979:11 markPastWrite -> @markPastWrite
 function writesAnArgument(facts: FactsTable, f: FunctionFacts, callee: string): boolean -> @writesAnArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: edgeWrites nish_str_eq
   pointer facts: size=16 writesThrough=false captured=false passedTo=edgeWrites#0
   pointer f: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 3996:14 edge: ArgEdge (const)
-  callee 3997:35 edgeWrites -> @edgeWrites
+  local 3998:14 edge: ArgEdge (const)
+  callee 3999:35 edgeWrites -> @edgeWrites
 function nameWriteVia(facts: FactsTable, runtime: RuntimeTable): void -> @nameWriteVia
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4022:9
+  sharedWrite: 4024:9
   calls: FactsTable.get RuntimeTable.lookup StringSet.at StringSet.size writesAnArgument writesShared
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 writesAnArgument#0
   pointer runtime: size=16 writesThrough=false captured=false passedTo=RuntimeTable.lookup#0
   stackSites=0 stackLocals=0
-  local 4013:14 f: FunctionFacts (const)
-  local 4018:16 owned: PrivateArray (const)
-  local 4019:13 site: Node | null (const)
-  local 4020:13 first: Node | null (const)
-  local 4028:9 c: i32 (let)
-  callee 4029:16 StringSet.size -> @StringSet.size
-  local 4030:13 callee: string (const)
-  callee 4030:22 StringSet.at -> @StringSet.at
-  callee 4032:9 writesShared -> @writesShared
-  callee 4032:25 FactsTable.get -> @FactsTable.get
-  callee 4032:44 RuntimeTable.lookup -> @RuntimeTable.lookup
-  callee 4033:9 writesAnArgument -> @writesAnArgument
+  local 4015:14 f: FunctionFacts (const)
+  local 4020:16 owned: PrivateArray (const)
+  local 4021:13 site: Node | null (const)
+  local 4022:13 first: Node | null (const)
+  local 4030:9 c: i32 (let)
+  callee 4031:16 StringSet.size -> @StringSet.size
+  local 4032:13 callee: string (const)
+  callee 4032:22 StringSet.at -> @StringSet.at
+  callee 4034:9 writesShared -> @writesShared
+  callee 4034:25 FactsTable.get -> @FactsTable.get
+  callee 4034:44 RuntimeTable.lookup -> @RuntimeTable.lookup
+  callee 4035:9 writesAnArgument -> @writesAnArgument
 function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node, known: FactsTable | null): boolean -> @isCountedLoop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stepOf
@@ -3617,31 +3615,31 @@ function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node, known: 
   pointer loop: size=40 writesThrough=false captured=false
   pointer known: size=16 writesThrough=false captured=false passedTo=bodyMayExtend#3
   stackSites=1 stackLocals=1
-  local 4061:9 program: CheckedProgram (const)
-  callee 4068:13 bodyMayExtend -> @bodyMayExtend
-  local 4073:9 init: Node (const)
-  local 4074:9 condition: Node (const)
-  local 4075:9 step: Node (const)
-  local 4079:9 declarations: Node (const)
-  local 4083:9 iv: Local | null (const)
-  local 4088:9 cond: Node (const)
-  callee 4088:16 unwrapParens -> @unwrapParens
-  callee 4089:34 isName -> @isName
-  local 4092:9 cmp: string (const)
-  local 4093:9 upward: boolean (const)
-  local 4094:9 downward: boolean (const)
-  local 4095:9 inclusive: boolean (const)
-  local 4096:9 bound: Node (const)
-  callee 4096:17 unwrapParens -> @unwrapParens
-  local 4101:9 delta: i32 (const)
-  callee 4101:17 stepOf -> @stepOf
-  callee 4101:24 unwrapParens -> @unwrapParens
-  callee 4110:9 absOf -> @absOf
-  local 4116:11 written: f64 (const)
-  callee 4116:26 numericLiteralValue -> @numericLiteralValue
-  local 4117:11 last: f64 (const)
-  local 4124:9 guarded: string[] (const)
-  callee 4128:11 bodyDisturbs -> @bodyDisturbs
+  local 4063:9 program: CheckedProgram (const)
+  callee 4070:13 bodyMayExtend -> @bodyMayExtend
+  local 4075:9 init: Node (const)
+  local 4076:9 condition: Node (const)
+  local 4077:9 step: Node (const)
+  local 4081:9 declarations: Node (const)
+  local 4085:9 iv: Local | null (const)
+  local 4090:9 cond: Node (const)
+  callee 4090:16 unwrapParens -> @unwrapParens
+  callee 4091:34 isName -> @isName
+  local 4094:9 cmp: string (const)
+  local 4095:9 upward: boolean (const)
+  local 4096:9 downward: boolean (const)
+  local 4097:9 inclusive: boolean (const)
+  local 4098:9 bound: Node (const)
+  callee 4098:17 unwrapParens -> @unwrapParens
+  local 4103:9 delta: i32 (const)
+  callee 4103:17 stepOf -> @stepOf
+  callee 4103:24 unwrapParens -> @unwrapParens
+  callee 4112:9 absOf -> @absOf
+  local 4118:11 written: f64 (const)
+  callee 4118:26 numericLiteralValue -> @numericLiteralValue
+  local 4119:11 last: f64 (const)
+  local 4126:9 guarded: string[] (const)
+  callee 4130:11 bodyDisturbs -> @bodyDisturbs
 function absOf(value: i32): i32 -> @absOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
@@ -3652,8 +3650,8 @@ function isName(expr: Node, name: string): boolean -> @isName
   calls: nish_str_eq unwrapParens
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 4134:9 e: Node (const)
-  callee 4134:13 unwrapParens -> @unwrapParens
+  local 4136:9 e: Node (const)
+  callee 4136:13 unwrapParens -> @unwrapParens
 function stepOf(expr: Node, name: string): i32 -> @stepOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via numericLiteralValue
@@ -3661,12 +3659,12 @@ function stepOf(expr: Node, name: string): i32 -> @stepOf [exported]
   calls: isName llvm.fptosi.sat.i32.f64 nish_panic_index nish_panic_overflow nish_str_eq numericLiteralValue unwrapParens
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 4140:32 isName -> @isName
-  callee 4149:33 isName -> @isName
-  local 4150:11 rhs: Node (const)
-  callee 4150:17 unwrapParens -> @unwrapParens
-  callee 4155:20 numericLiteralValue -> @numericLiteralValue
-  callee 4158:21 numericLiteralValue -> @numericLiteralValue
+  callee 4142:32 isName -> @isName
+  callee 4151:33 isName -> @isName
+  local 4152:11 rhs: Node (const)
+  callee 4152:17 unwrapParens -> @unwrapParens
+  callee 4157:20 numericLiteralValue -> @numericLiteralValue
+  callee 4160:21 numericLiteralValue -> @numericLiteralValue
 function bodyMayExtend(unit: AnalysisUnit, table: TypeTable, body: Node, known: FactsTable | null): boolean -> @bodyMayExtend
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get bodyMayExtend isResizeCall nish_panic_index
@@ -3675,12 +3673,12 @@ function bodyMayExtend(unit: AnalysisUnit, table: TypeTable, body: Node, known: 
   pointer body: size=40 writesThrough=false captured=false passedTo=isResizeCall#2
   pointer known: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 bodyMayExtend#3
   stackSites=0 stackLocals=0
-  callee 4182:32 isResizeCall -> @isResizeCall
-  local 4188:11 callee: FunctionSig | null (const)
-  local 4195:13 calleeFacts: FunctionFacts | null (const)
-  callee 4195:27 FactsTable.get -> @FactsTable.get
-  local 4201:14 child: Node (const)
-  callee 4202:9 bodyMayExtend -> @bodyMayExtend
+  callee 4184:32 isResizeCall -> @isResizeCall
+  local 4190:11 callee: FunctionSig | null (const)
+  local 4197:13 calleeFacts: FunctionFacts | null (const)
+  callee 4197:27 FactsTable.get -> @FactsTable.get
+  local 4203:14 child: Node (const)
+  callee 4204:9 bodyMayExtend -> @bodyMayExtend
 function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @isResizeCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: arrayMethodName nish_str_eq
@@ -3688,55 +3686,55 @@ function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): bo
   pointer table: size=80 writesThrough=false captured=false passedTo=arrayMethodName#1
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2
   stackSites=0 stackLocals=0
-  local 4216:9 method: string (const)
-  callee 4216:18 arrayMethodName -> @arrayMethodName
+  local 4218:9 method: string (const)
+  callee 4218:18 arrayMethodName -> @arrayMethodName
 function bodyDisturbs(body: Node, names: string[]): boolean -> @bodyDisturbs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: bodyDisturbs isAssignmentOperator nish_panic_index nish_str_eq
   pointer body: size=40 writesThrough=false captured=false
   pointer names: size=0 writesThrough=false captured=false passedTo=bodyDisturbs#1
   stackSites=0 stackLocals=0
-  callee 4227:5 isAssignmentOperator -> @isAssignmentOperator
-  local 4241:14 child: Node (const)
-  callee 4242:9 bodyDisturbs -> @bodyDisturbs
+  callee 4229:5 isAssignmentOperator -> @isAssignmentOperator
+  local 4243:14 child: Node (const)
+  callee 4244:9 bodyDisturbs -> @bodyDisturbs
 function functionAttributes(f: FunctionFacts): string[] -> @functionAttributes [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4253:3
+  sharedWrite: 4255:3
   calls: nish_array_grow
   pointer f: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4252:9 attrs: string[] (const)
+  local 4254:9 attrs: string[] (const)
 function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts, privateAbi: boolean): string[] -> @paramAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4277:5
+  sharedWrite: 4279:5
   escaping: name type
   calls: FunctionFacts.pointerParam StringSet.has TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.refOf#0
   pointer f: size=360 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
-  local 4272:9 attrs: string[] (const)
-  callee 4276:23 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 4281:9 pointer: PointerParamFacts | null (const)
-  callee 4281:19 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  local 4282:9 kind: i32 (const)
-  callee 4282:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 4292:10 StringSet.has -> @StringSet.has
-  callee 4331:28 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 4355:9 TypeTable.refOf -> @TypeTable.refOf
-  local 4362:11 uncaptured: boolean (const)
-  callee 4362:64 StringSet.has -> @StringSet.has
+  local 4274:9 attrs: string[] (const)
+  callee 4278:23 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 4283:9 pointer: PointerParamFacts | null (const)
+  callee 4283:19 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  local 4284:9 kind: i32 (const)
+  callee 4284:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 4294:10 StringSet.has -> @StringSet.has
+  callee 4333:28 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 4357:9 TypeTable.refOf -> @TypeTable.refOf
+  local 4364:11 uncaptured: boolean (const)
+  callee 4364:64 StringSet.has -> @StringSet.has
 function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: boolean, align: i32): string[] -> @returnAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4393:3
+  sharedWrite: 4395:3
   escaping: type
   calls: TypeTable.kindOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_from_i32
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.resultByValue#0
   stackSites=0 stackLocals=0
-  local 4382:9 attrs: string[] (const)
-  local 4383:9 kind: i32 (const)
-  callee 4383:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 4390:21 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 4409:28 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 4384:9 attrs: string[] (const)
+  local 4385:9 kind: i32 (const)
+  callee 4385:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 4392:21 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 4411:28 TypeTable.resultByValue -> @TypeTable.resultByValue
 function isNumericLiteral(node: Node): boolean -> @isNumericLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq

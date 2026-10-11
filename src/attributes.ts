@@ -3924,6 +3924,8 @@ const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
  */
 const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   let changed = false
+  // One `Reach` of anything, made once: the loops below would leave one per pass behind.
+  const all = everything()
   if (!f.thisAliased && anyAliased(facts, f.thisNews)) {
     f.thisAliased = true
     changed = true
@@ -3931,11 +3933,11 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   // A `this` that may hold an argument's memory: a write past its own slots
   // may land in what any parameter reaches.
   const self: PointerParamFacts | null = f.thisAliased ? f.pointerParam("this") : null
-  if (self !== null && self.writesDeep && markReach(f, everything(), true)) {
+  if (self !== null && self.writesDeep && markReach(f, all, true)) {
     changed = true
   }
   for (const reach of f.deferredReaches) {
-    if (anyAliased(facts, reach.news) && markReach(f, everything(), true)) {
+    if (anyAliased(facts, reach.news) && markReach(f, all, true)) {
       changed = true
     }
   }
@@ -3945,7 +3947,7 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     if (writes && markReach(f, edge.reach, true)) {
       changed = true
     }
-    if (writes && anyAliased(facts, edge.reach.news) && markReach(f, everything(), true)) {
+    if (writes && anyAliased(facts, edge.reach.news) && markReach(f, all, true)) {
       changed = true
     }
   }
@@ -3958,7 +3960,7 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     if (reached && markReach(f, edge.reach, deep)) {
       changed = true
     }
-    if (reached && deep && anyAliased(facts, edge.reach.news) && markReach(f, everything(), true)) {
+    if (reached && deep && anyAliased(facts, edge.reach.news) && markReach(f, all, true)) {
       changed = true
     }
     const owner = edge.owner
