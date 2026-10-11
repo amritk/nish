@@ -360,6 +360,13 @@ export class FunctionFacts {
    */
   writesPastParams: boolean
   /**
+   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`
+   * reached other than as the tail of a `new Array` whose length is checked,
+   * which prints to fd 2 and `_exit`s as every panic does
+   * (`FunctionFacts.sharedWrite`).
+   */
+  writesOutput: boolean
+  /**
    * Every argument of a call this function makes whose arguments are
    * composed, that is not one of its own private arrays: by callee symbol,
    * parameter index (`this` counts as 0), and the name of this function's own
@@ -394,13 +401,6 @@ export class FunctionFacts {
   privateArgCallees: string[]
   privateArgIndices: i32[]
   privateArgLocals: i32[]
-  /**
-   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`
-   * reached other than as the tail of a `new Array` whose length is checked,
-   * which prints to fd 2 and `_exit`s as every panic does
-   * (`FunctionFacts.sharedWrite`).
-   */
-  writesOutput: boolean
   /** The first node in the body that writes shared memory; `null` when a callee is the reason. */
   writeSite: Node | null
   /**
