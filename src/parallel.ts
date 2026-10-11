@@ -2762,17 +2762,41 @@ const collectChannelLocals = (
   }
 }
 
-/** Every `scope()` declarator of `stmt` when it is a `using`, in order: `using s = scope(), t = scope()` opens two. */
-const scopeDeclaratorsOf = (program: CheckedProgram, stmt: Node, scopeType: i32): Node[] => {
-  const out: Node[] = []
-  if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+/** Whether `decl` is a declarator of the `using` `stmt` that opens a scope: `using s = scope(), t = scope()` has two. */
+const opensScope = (program: CheckedProgram, stmt: Node, decl: Node, scopeType: i32): boolean =>
+  stmt.kind === N_VAR &&
+  (stmt.flags & FLAG_USING) !== 0 &&
+  isScopeCall(program, unwrapParens(decl.children[2]), scopeType)
+
+/** The name of the first scope the `using` `stmt` opens, or "" when it opens none. */
+const firstScopeName = (program: CheckedProgram, stmt: Node, scopeType: i32): string => {
+  if (stmt.kind === N_VAR) {
     for (const decl of stmt.children[0].children) {
-      if (isScopeCall(program, unwrapParens(decl.children[2]), scopeType)) {
-        out.push(decl)
+      if (opensScope(program, stmt, decl, scopeType)) {
+        return decl.children[0].text
       }
     }
   }
-  return out
+  return ""
+}
+
+/** Every scope the `using` `stmt` opens, as a site whose block is `body`, onto `out`. */
+const addScopeSites = (
+  program: CheckedProgram,
+  stmt: Node,
+  scopeType: i32,
+  body: Node,
+  index: i32,
+  out: ScopeSite[]
+): void => {
+  if (stmt.kind !== N_VAR) {
+    return
+  }
+  for (const decl of stmt.children[0].children) {
+    if (opensScope(program, stmt, decl, scopeType)) {
+      out.push(new ScopeSite(decl, program.nodeLocals[decl.id], body, index))
+    }
+  }
 }
 
 /**
@@ -2801,14 +2825,10 @@ const candidateScopes = (program: CheckedProgram, block: Node, index: i32, scope
   let j = index + 1
   while (j < block.children.length) {
     const stmt = block.children[j]
-    for (const own of scopeDeclaratorsOf(program, stmt, scopeType)) {
-      out.push(new ScopeSite(own, program.nodeLocals[own.id], block, j))
-    }
+    addScopeSites(program, stmt, scopeType, block, j, out)
     if (stmt.kind === N_BLOCK) {
       for (const inner of stmt.children) {
-        for (const decl of scopeDeclaratorsOf(program, inner, scopeType)) {
-          out.push(new ScopeSite(decl, program.nodeLocals[decl.id], stmt, j))
-        }
+        addScopeSites(program, inner, scopeType, stmt, j, out)
       }
     }
     j = j + 1
@@ -2981,7 +3001,7 @@ const checkChannels = (
   const ops = new ChannelOps()
   collectChannelOps(program, sig, body, summaries, ops)
   let c = 0
-  while (c < locals.length) {
+  while (c < locals.length && c < decls.length) {
     checkChannel(program, summaries, body, locals[c], decls[c], spawns, ops, scopeType, out)
     c = c + 1
   }
@@ -3047,11 +3067,11 @@ const findScopeReceives = (
   if (node.kind === N_BLOCK) {
     let i = 0
     while (i < node.children.length) {
-      const decls = scopeDeclaratorsOf(program, node.children[i], scopeType)
-      if (decls.length > 0) {
+      const name = firstScopeName(program, node.children[i], scopeType)
+      if (name.length > 0) {
         let j = i + 1
         while (j < node.children.length) {
-          walkScopeReceives(program, facts, node.children[j], decls[0].children[0].text, out)
+          walkScopeReceives(program, facts, node.children[j], name, out)
           j = j + 1
         }
       }
@@ -3174,7 +3194,7 @@ const checkChannel = (
   // The tasks: who may send, who may receive, in statement order.
   let receiver: Node | null = null
   let k = 0
-  while (k < holders.length) {
+  while (k < holders.length && k < paths.length) {
     const spawn = holders[k]
     const callee = spawnCallee(program, spawn)
     const entry: FunctionSig | null = callee === null ? null : parallelBodyOf(callee)
