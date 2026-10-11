@@ -23,8 +23,9 @@
 #       a release carries a seed it can use and there is no row otherwise; the
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
-# simd-arm64: runtime/runtime-simd.c's agreement test on an AArch64 runner,
-#       where its native run is the NEON path no x86-64 job can run.
+# simd-arm64: runtime/runtime-simd.c's and runtime/runtime-aes.c's agreement
+#       tests on an AArch64 runner, where their native runs are the NEON and
+#       the ARMv8 AES and PMULL paths no x86-64 job can run.
 # lint: package-lock.json against package.json with no registry involved,
 #       `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
@@ -285,6 +286,15 @@ jobs:
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
+
+      # WP38 S5: likewise for runtime/runtime-aes.c, whose `simd` section passes
+      # with the reference alone on a CPU without AES-NI. These runners have it
+      # (the section also requires the path wherever /proc/cpuinfo names it).
+      - name: The AES-NI path ran
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          build/test/simd/aes-gcm | grep -E '^aes-gcm: [0-9]+ cases agree across aesni-pclmul;'
 
       #
       # `build/nish` is what the steps after the suite drive: stage1, one
@@ -783,7 +793,8 @@ jobs:
           summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
           echo "::notice::tests/nish/run.ts over tests/cases: $summary"
 
-  # WP38 S1: runtime/runtime-simd.c's NEON path, run on the hardware it is for.
+  # WP38 S1: runtime/runtime-simd.c's NEON path, run on the hardware it is for,
+  # and WP38 S5's runtime/runtime-aes.c on the ARMv8 AES and PMULL instructions.
   #
   # The kernel has a base path per architecture, and every other job here is
   # x86-64, where the `simd` section of tests/run.js runs the scalar, SSE2 and
@@ -833,6 +844,7 @@ jobs:
           set -o pipefail
           node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
 
   lint:
     name: lint

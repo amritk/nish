@@ -179,6 +179,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
+| `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
 
 **How the ceilings moved.**
 
@@ -198,6 +199,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-03 | `nish_wipe` (#385): 3,583 → 3,604 | core 3,605 |
 | after 0.16.0 | `nish_panic_overflow` (#426): 3,606 | core 3,606 |
 | 2026-10-09 | `runtime-simd.c` (675), wp38 S1 | simd 768 |
+| 2026-10-11 | `runtime-aes.c` (2,532), wp38 S5 | aes 2,560 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -250,6 +252,32 @@ without the unit on 2026-10-09. What `tests/run.js` pins on every run
 (`node tests/run.js simd`) is the part of that which can regress: at the speed
 and size profiles, the link map of hello names no symbol of the unit and no
 libgcc CPU probe, while a program that calls the kernel keeps every path.
+
+### The AES unit
+
+`runtime/runtime-aes.c` (wp38 S5, [wp38-simd.md](wp38-simd.md) §3.1) holds
+AES-128 and AES-256 in counter mode and GHASH on AES-NI and PCLMULQDQ, or on
+the ARMv8 AES and PMULL instructions: four kernels the compiler is to call in
+place of four private functions of `std/crypto/aes.ts`, behind `nish_aes_hw`.
+It has no portable path of its own; a machine without the instructions, and
+`NISH_AES=soft`, run the bitsliced Nish code. Its 2,532 bytes are the key
+schedule with H and its powers 594, one block 84, GCTR 654, GHASH 1,082 and
+`nish_aes_hw` 118.
+
+It is a seventh unit rather than more of `runtime-simd.c`, because the rule
+above decides it: folded in, the two measured 3,207 bytes against
+`runtime-simd.c`'s ceiling of 768, which would have to be raised, and a new
+unit with its own measured ceiling is the rule's answer. Apart, a program that
+searches text links no AES and one that speaks TLS no byte search.
+`nish_aes_hw` asks `cpuid` itself for the reason the vector unit does, and
+`node tests/run.js simd` holds hello, linked at the speed and size profiles
+with and without the unit, to the same bytes.
+
+`scripts/build.sh` does not pair it with `runtime.c` yet. Its `--runtime-from`
+link needs an object for every unit it pairs, and `nish run`'s runtime cache
+holds only the units `src/run-cache.ts` lists, so the pairing and that list
+change in one commit, the one in which the compiler first calls the unit.
+Until then a link that wants it names it, as the checks do.
 
 ### Checked arithmetic
 

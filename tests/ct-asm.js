@@ -412,8 +412,10 @@ const CALL_DEPTH = 8
  * and which stack offset it holds, if it holds a stack address. `flags` is the condition register, as a register of
  * its own. `sp` is the stack pointer's offset from its value on entry, or
  * `null` once an instruction moves it by something this cannot follow.
+ * Exported for tests/ct-asm-runtime.js, which runs the same steps over code
+ * with loops and joins these states where control flow meets.
  */
-class Taint {
+export class Taint {
   constructor(spec, target) {
     this.target = target
     this.secret = new Set()
@@ -650,21 +652,28 @@ class Taint {
 const X86_JUMP = /^jmp[wlq]?$/
 /** The conditional jumps: every `j<cc>` (anything `X86_JUMP` is not), the `loop` family and `jcxz`. */
 const X86_BRANCH = /^(j[a-z]+|loop\w*)$/
+/**
+ * Instructions whose last operand is only written. `pshufb` is not among them,
+ * though `pshufd` is: it shuffles its destination by its source, and reading
+ * it as an overwrite would hand a secret block the taint of a public shuffle
+ * mask (`vpshufb`, with three operands, does overwrite).
+ */
 const X86_OVERWRITE =
-  /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf|bsf|bsr|tzcnt|lzcnt|popcnt)/
+  /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf[dhlw]|vpshufb|bsf|bsr|tzcnt|lzcnt|popcnt)/
 /** A plain move: the destination is exactly the source, stack address and all. */
 const X86_COPY = /^(mov[bwlq]?|movabsq)$/
 const X86_COMPARE = /^(cmp[bwlq]?|test[bwlq]?|bt[wlq]?|v?u?comis[sd]|v?ptest)$/
-/** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers. */
-const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd])$/
+/** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers, a half moved in. */
+const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd]|movhlps|movlhps)$/
 /**
  * Three operands, and the last is only written. Any other three-operand
  * instruction is read as reading its destination too (`shld`, a fused
- * multiply-add), because a wrong guess that way costs a false alarm and the
- * other way a missed leak.
+ * multiply-add, and the SSE forms of `shufps` and `palignr`, which take half
+ * or more of their result from it; their VEX forms are under `v`), because a
+ * wrong guess that way costs a false alarm and the other way a missed leak.
  */
 const X86_THREE_OVERWRITE =
-  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|shufp|palignr|extractps|v(?!fn?m|pternlog|perm[it]2|pdp|pmadd52|psh[lr]dv))/
+  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|extractps|v(?!fn?m|pternlog|perm[it]2|pdp|pmadd52|psh[lr]dv))/
 /** An 8- or 16-bit register name: a write to one leaves the upper bits as they were. */
 const X86_PARTIAL = /^%(?:[abcd][lhx]|[sd]il?|[bs]pl?|r\d+[bw])$/
 const X86_READS_FLAGS = /^(set|cmov|sbb|adc|adox|rcl|rcr)/
@@ -856,7 +865,9 @@ const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmp
 /** A divide or square root, whose latency follows its operands. */
 const ARM_LATENCY = /^([us]div|fdiv|fsqrt)$/
 const ARM_SETS_FLAGS = /^(adds|subs|ands|bics|negs|adcs|sbcs|ngcs)$/
-const ARM_READ_MODIFY_WRITE = /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx)$/
+/** Instructions that read their destination as well as write it. `aese` and `aesd` XOR it with their key first. */
+const ARM_READ_MODIFY_WRITE =
+  /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx|aese|aesd)$/
 
 /** An aarch64 immediate operand with the `lsl #12` that may follow it, or `null`. */
 const armImmediate = (ops, i) => {
@@ -1013,7 +1024,7 @@ export const CT_TARGETS = [
 ]
 
 /** One instruction line as `[mnemonic, operands]`. */
-const parseInstruction = (line) => {
+export const parseInstruction = (line) => {
   const space = line.search(/\s/)
   return space < 0 ? [line, []] : [line.slice(0, space), splitOperands(line.slice(space + 1))]
 }
@@ -1163,6 +1174,70 @@ const AUDIT_CORNERS = [
   ["aarch64", "a", "load", ["fmov s0, w0", "fccmpe s0, s1, #0, eq", "csetm x2, gt", "ldr w3, [x4, x2]"]],
   ["aarch64", "b", "latency", ["udiv w0, w0, w1"]],
   ["aarch64", "a", null, ["udiv w0, w1, w1"]],
+  // Vector instructions that read their destination, found reading
+  // runtime/runtime-aes.c (tests/ct-asm-runtime.js): `pshufb` by a public mask,
+  // SSE `shufps` and `palignr`, `movhlps`, and `aese` with a public key each
+  // keep the secret already in the destination.
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "movdqa .LCPI0_0(%rip), %xmm1",
+      "pshufb %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "xorps %xmm1, %xmm1",
+      "shufps $0, %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "pxor %xmm1, %xmm1",
+      "palignr $8, %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "xorps %xmm1, %xmm1",
+      "movhlps %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "aarch64",
+    "a",
+    "load",
+    [
+      "fmov d0, x0",
+      "movi v1.2d, #0000000000000000",
+      "aese v0.16b, v1.16b",
+      "fmov x2, d0",
+      "ldr w3, [x4, x2]",
+    ],
+  ],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */
