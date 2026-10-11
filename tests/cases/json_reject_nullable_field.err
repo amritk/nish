@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Score.points`, which is `u64`

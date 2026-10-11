@@ -78,9 +78,11 @@ import {
   FunctionSig,
   inlineElementStruct,
   Instantiation,
+  JSON_NONE,
   STRUCT_CLASS,
   StructInfo,
 } from "./program"
+import { jsonClasses, jsonClassOf } from "./json-typed"
 import { computeLayout } from "./structs"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isFloat, TypeTable } from "./types"
@@ -746,6 +748,35 @@ const visitInstance = (
  * instantiations included, and before the call-site ranges and the attribute
  * analysis, which read the layout.
  */
+/**
+ * Typed JSON: the code written for a call of `jsonDecode` or `jsonEncode`
+ * passes every array field of every class it reaches to a function and
+ * assigns it the array that function answers (`src/emit-json.ts`). None of
+ * that is a node any walk here reads, so each of those fields keeps the
+ * pointer layout.
+ */
+const spoilJsonRoutes = (walk: InlineWalk): void => {
+  for (const ctx of walk.contexts) {
+    for (const instance of ctx.program.instantiationList) {
+      if (instance.jsonRoute === JSON_NONE || instance.typeArgs.length !== 1) {
+        continue
+      }
+      const root = jsonClassOf(ctx.program, walk.table, instance.typeArgs[0])
+      if (root === null) {
+        continue
+      }
+      for (const info of jsonClasses(ctx.program, walk.table, root)) {
+        for (const field of info.fields) {
+          const at = walk.byKey.get(`${info.name}.${field.name}`, -1)
+          if (at >= 0) {
+            walk.candidates[at].ok = false
+          }
+        }
+      }
+    }
+  }
+}
+
 export const layoutInlineArrays = (contexts: CheckContext[], mode: BuildMode): void => {
   if (contexts.length === 0 || mode.layoutsShared) {
     return
@@ -770,6 +801,7 @@ export const layoutInlineArrays = (contexts: CheckContext[], mode: BuildMode): v
   if (walk.candidates.length === 0) {
     return
   }
+  spoilJsonRoutes(walk)
   for (const ctx of contexts) {
     const program = ctx.program
     for (const sig of program.functions) {

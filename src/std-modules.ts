@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, json, map, net/hpack, net/http-fields, net/http1, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/tls, net/tls-tcp, net/tls/codec, net/tls/record, net/tls/record-server, net/tls/schedule, net/websocket, net/webtransport, pair, secret, testing, text, threads"
+  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, json, json-tokenizer, json-typed, map, net/hpack, net/http-fields, net/http1, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/tls, net/tls-tcp, net/tls/codec, net/tls/record, net/tls/record-server, net/tls/schedule, net/websocket, net/webtransport, pair, secret, testing, text, threads"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -119,6 +119,18 @@ const MAP_EXTRAS_SPECIFIER: string = "nish/map"
 /** Whether a module is the standard library's `std/map.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isMapExtrasModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(MAP_EXTRAS_SPECIFIER)
+
+/**
+ * `nish/json-typed`: ordinary Nish but for `jsonDecode` and `jsonEncode`,
+ * whose every call the compiler lowers in place to code it writes from the
+ * class's fields (`src/json-typed.ts`, `src/emit-json.ts`). The module writes
+ * a `.ll` of its own for everything else in it.
+ */
+const JSON_TYPED_SPECIFIER: string = "nish/json-typed"
+
+/** Whether a module is the standard library's `std/json-typed.ts`: the package is part of the test, as for `isCollectionsModule`. */
+export const isJsonTypedModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(JSON_TYPED_SPECIFIER)
 
 /**
  * `std/secret.ts`, the source behind the builtin module `nish:secret`

@@ -1285,8 +1285,18 @@ const emitElementEquals = (emitter: Emitter, elem: i32, a: string, b: string): s
 
 /** `a.push(v)`: grow when full, store at `len`, and answer the new length. */
 const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
-  const fn = emitter.fn
   const value = emitter.emitExpression(expr.children[1].children[0])
+  return emitNumberFromI64(emitter, emitPushValue(emitter, arr, elem, value), expr)
+}
+
+/**
+ * Append `value` to `arr`, growing it first when it is full, and answer the
+ * new length as an `i64`: the whole of `a.push(v)` once `v` is lowered, for
+ * the code typed JSON writes too (`src/emit-json.ts`).
+ */
+export const emitPushValue = (emitter: Emitter, arr: string, elem: i32, value: string): string => {
+  const fn = emitter.fn
+  emitter.declareType(ARRAY_TYPE)
   const lenPtr = headerFieldPointer(emitter, arr, 0)
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
   const cap = loadHeaderField(emitter, arr, 1, "i64")
@@ -1303,7 +1313,32 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   storeElement(emitter, elementPointer(emitter, new ArrayBase(arr, null), elem, len), elem, value)
   const newLen = fn.emitValue(`add i64 ${len}, 1`)
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
-  return emitNumberFromI64(emitter, newLen, expr)
+  return newLen
+}
+
+// ---- For code with no node behind it (typed JSON) ------------------------------------
+
+/** `arr.length` as the `i64` the header holds. */
+export const emitLengthOf = (emitter: Emitter, arr: string): string => loadLength(emitter, arr)
+
+/** Element `idx` (an `i64` below the length, which the caller has compared) of `arr`. */
+export const emitElementAt = (emitter: Emitter, arr: string, elem: i32, idx: string): string =>
+  loadElement(emitter, new ArrayBase(arr, null), elem, idx)
+
+/** Drop every element of `arr` from `len` on, as that many `pop()`s would: the slots stay, for the next `push`. */
+export const emitShorten = (emitter: Emitter, arr: string, len: string): void => {
+  storeHeaderField(emitter, arr, 0, len, "i64")
+}
+
+/** A new empty array in the arena, as `[]` makes one. */
+export const emitEmptyArray = (emitter: Emitter): string => {
+  emitter.declareType(ARRAY_TYPE)
+  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
+  const arr = emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`)
+  storeHeaderField(emitter, arr, 0, "0", "i64")
+  storeHeaderField(emitter, arr, 1, "0", "i64")
+  storeData(emitter, arr, "null")
+  return arr
 }
 
 /**

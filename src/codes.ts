@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 609
+export const RULE_COUNT: i32 = 613
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -145,10 +145,14 @@ const diagnosticRules = (): string[] => [
   "NL2430",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",
   "NL2364",
+  ": a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`",
+  "NL2485",
   "` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release may see or move the mark",
   "NL2417",
   "`secret` takes a value only it will hold: a fresh value (a call, `new`, a literal) or a local it moves, not a parameter, a field or an element, whose owner would keep the plain bytes",
   "NL2447",
+  "`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version",
+  "NL2486",
   "`new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full",
   "NL2478",
   " and cannot be returned: a value that may be missing does not cross a call; return a default with `??`, or bind it to a `const` and return it where `!== undefined` has narrowed it",
@@ -213,6 +217,8 @@ const diagnosticRules = (): string[] => [
   "NL2374",
   "` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory",
   "NL2348",
+  " parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none",
+  "NL2488",
   "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
   "NL3028",
   "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block",
@@ -415,6 +421,8 @@ const diagnosticRules = (): string[] => [
   "NL1057",
   " is not well-formed JSON, so this compiler could not read an entry point out of it",
   "NL3021",
+  "` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into",
+  "NL2487",
   "`; check the nullable side against `null` first, then compare the narrowed values",
   "NL2114",
   ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",

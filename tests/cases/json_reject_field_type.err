@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`

@@ -1669,6 +1669,57 @@ export const main = (): i32 => {
 };
 ```
 
+### Typed JSON: `nish/json-typed`
+
+`jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
+value)` writes one; the compiler writes the code at each call from the class's
+fields. A field is `i32`, `u32`, `i64`, `f64`, `boolean`, `string`, a class, an
+array of one of those, or a `string`, class or array `| null`; anything else is
+refused at the call (NL2485), and so is a value that is not a class (NL2486).
+Decoding is strict: every field required, each key once, an unknown key an
+error unless `d.ignoreUnknown`, and every outcome a sticky negative code in
+`d.failed`, never a panic. A class the decoder makes (an array's element, a
+`| null` field's object) has a constructor with no parameters (NL2488).
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
+
+class Point {
+  x: i32 = 0;
+  y: i32 = 0;
+}
+
+export const main = (): i32 => {
+  const text = `{"x":3,"y":4}`;
+  const body = new Array<u8>(toI32(text.length));
+  for (let i: i32 = 0; i < toI32(body.length) && i < toI32(text.length); i += 1) {
+    body[i] = toU8(text.charCodeAt(i));
+  }
+  const p = new Point();
+  const code = jsonDecode(new JsonDecoder(body, 0, toI32(body.length), new JsonLimits()), p);
+  const w = new JsonWriter(new Array<u8>(64), 0);
+  jsonEncode(w, p);                     // {"x":3,"y":4}
+  return code;                          // 0, or a JSON_DECODE_* / JSON_TOK_ERR_* code
+};
+```
+
+```ts nish:err NL2485
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+class Reading {
+  value: f32 = 0;                       // no JSON reading: use f64
+}
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, new Reading());
+  return w.failed;
+};
+```
+
 ## Memory
 
 There is **no garbage collector and no `free`**, and nothing about this changes
