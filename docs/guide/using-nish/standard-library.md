@@ -25,6 +25,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
+| [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
@@ -166,6 +167,76 @@ buffer or a call out of order — a value where a key belongs, say — does not
 panic: it sets a negative `JSON_WRITE_*` code in `w.failed`, and every later
 call does nothing, so you write the whole value and check once at the end.
 `jsonStringifyString(s)` answers one string as a JSON string literal.
+
+## `nish/json-tokenizer`
+
+`jsonField` trusts its input. When the JSON comes from someone else — a
+request body, a file a user hands you — read it with `JsonTokenizer`, which
+checks every byte against the JSON grammar and gives you the document one
+token at a time: an object or array opening or closing, a key, a string, a
+number, `true`, `false` or `null`. It reads a window of a `u8[]` and
+allocates nothing per token, so one tokenizer, `reset` for each new body,
+serves a whole connection.
+
+```ts nish:ok
+import { JSON_TOK_END, JSON_TOK_KEY, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  const n: i32 = toI32(text.length);
+  for (let i: i32 = 0; i < n; i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const body = bytesOf(`{"item":"tea","qty":3,"price":2.5}`);
+  const t = new JsonTokenizer(body, 0, toI32(body.length), new JsonLimits());
+  let total: f64 = 1;
+  let k: i32 = t.next();
+  while (k > 0) {
+    if (k === JSON_TOK_KEY && (t.keyEquals("qty") || t.keyEquals("price"))) {
+      if (t.next() === JSON_TOK_NUMBER) {
+        total = total * t.numberF64();
+      }
+    }
+    k = t.next();
+  }
+  if (k !== JSON_TOK_END) {
+    console.log(`refused: code ${t.failed} at byte ${t.errorAt}`);
+    return 1;
+  }
+  console.log(`${total}`); // 7.5
+  return 0;
+};
+```
+
+`next()` answers each token's kind, then `JSON_TOK_END` once the whole
+document has been read and nothing but whitespace follows it. A malformed
+document answers a negative `JSON_TOK_ERR_*` code instead; the code stays in
+`failed`, with the byte it was found at in `errorAt`, and every later call
+answers it again. Nothing in the input can make it panic or read outside the
+window you gave it.
+
+- **Strings.** `stringInto(out, at)` copies the current key or string into
+  your array with its escapes decoded, and `keyEquals(name)` compares it
+  without copying. Strings must be valid UTF-8, and a `\u` escape of half a
+  surrogate pair on its own is refused, so what you copy out is always valid
+  UTF-8.
+- **Numbers.** `numberF64()` reads the current number as `JSON.parse` would,
+  correctly rounded, and `isInteger()` and `numberI64()` read one that fits
+  in an `i64`.
+- **Skipping.** `skipValue()` steps over whatever value comes next, however
+  deeply it nests: use it for a field you do not want.
+- **Limits.** `JsonLimits` caps nesting depth (128), the bytes in one string
+  (1 MiB), in one number (256) and in the whole input (16 MiB). Each limit
+  has its own error code, and you can lower or raise each field before you
+  make the tokenizer.
+- **Duplicate keys.** `{"a":1,"a":2}` is two keys. The tokenizer reports
+  both, and what to do with the second is your decision.
+
+Its security record is [docs/security/json.md](../../security/json.md).
 
 ## `nish/json-typed`
 

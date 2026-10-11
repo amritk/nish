@@ -43,6 +43,7 @@ PASS  SYNTAX: a misspelt literal
 PASS  SYNTAX: a literal in capitals
 PASS  SYNTAX: a literal that goes wrong on its last letter
 PASS  SYNTAX: a leading zero is a 0 and then a stray digit
+PASS  TRAILING: a leading zero at the top level is a 0 and then trailing data
 PASS  SYNTAX: a letter after a number
 PASS  SYNTAX: a single quote
 PASS  SYNTAX: a form feed is not a blank
@@ -111,6 +112,19 @@ PASS  SURROGATE: a low then a high
 PASS  TRUNCATED: a high surrogate at the end of the window
 PASS  TRUNCATED: a high surrogate and a backslash at the end of the window
 PASS  a surrogate pair is accepted
+PASS  SURROGATE: a high surrogate and U+E000, one past the low range
+PASS  SURROGATE: a lone U+DFFF, the last low surrogate
+PASS  U+D7FF, one below the surrogates, is accepted alone
+PASS  U+E000, one above the surrogates, is accepted alone
+PASS  \uDBFF\uDFFF, the last pair, decodes to U+10FFFF
+PASS  \uD7FF decodes to its three bytes
+PASS  \u007F decodes to one byte
+PASS  \u0080 decodes to two bytes
+PASS  \u07FF decodes to two bytes
+PASS  \u0800 decodes to three bytes
+PASS  \uFFFF decodes to three bytes
+PASS  \uD800\uDC00, the first pair, decodes to U+10000's four bytes
+PASS  \uE000 decodes to its three bytes
 PASS  \u0000 is accepted
 PASS  stringLength: the short escapes decode to one byte each
 PASS  stringInto answers the decoded length
@@ -183,6 +197,7 @@ PASS  numberF64(0.1), the fast path's divide
 PASS  numberF64(1e22), the largest exact power
 PASS  numberF64(1e23), parseFloat's path
 PASS  numberF64(1e-23), parseFloat's path
+PASS  numberF64 of 17 significant digits goes to parseFloat
 PASS  numberF64 of 16 significant digits goes to parseFloat
 PASS  numberF64 of 15 significant digits after leading zeros
 PASS  numberF64(123456789012345678)
@@ -239,6 +254,7 @@ PASS  a window's first token
 PASS  ...is at its offset
 PASS  keyEquals inside a window
 PASS  the window ends after its last byte
+PASS  a window that stops after a comma
 PASS  a window that stops inside a value
 PASS  a window that stops before the closing quote
 PASS  a window that stops inside a literal
@@ -247,6 +263,8 @@ PASS  WINDOW: a negative offset
 PASS  WINDOW: a negative length
 PASS  WINDOW: a window past the end
 PASS  WINDOW: an offset past the end
+PASS  WINDOW: an offset and a length of 2^31 - 1, refused without overflow
+PASS  WINDOW: a length of 2^31 - 1 from 0
 PASS  an empty window at the end is only truncated
 PASS  an error is answered by next()
 PASS  ...and recorded in failed
@@ -302,4 +320,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 304 passed, 0 failed, 0 skipped
+std/json-tokenizer: 322 passed, 0 failed, 0 skipped

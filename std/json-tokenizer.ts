@@ -314,7 +314,7 @@ const jsonTokHex4 = (src: u8[], at: i32, end: i32): i32 => {
   return value
 }
 
-/** Whether `b` is a continuation byte between `low` and `high`, inclusive. */
+/** Whether byte `b`, a lead or a continuation, lies between `low` and `high`, inclusive; `-1`, past the window, never does. */
 const jsonTokInRange = (b: i32, low: i32, high: i32): boolean => b >= low && b <= high
 
 /**
@@ -463,9 +463,13 @@ export class JsonTokenizer {
   tokEnd: i32
   /** The sticky error, a negative `JSON_TOK_ERR_*` code; `0` until one. */
   failed: i32
-  /** The byte offset in `src` the error was found at; `-1` until one. */
+  /**
+   * The byte offset in `src` the error was found at, and `-1` until one. Read
+   * it only once `failed` is set: a `JSON_TOK_ERR_WINDOW` records the `off`
+   * the caller passed, which may itself be negative or past the end of `src`.
+   */
   errorAt: i32
-  /** The current string's or key's length once decoded, and whether it holds a backslash. */
+  /** The current string's or key's length once decoded; shorter than its raw length exactly when it holds an escape. */
   stringBytes: i32
   /** Whether the current number has neither a fraction nor an exponent. */
   integral: boolean
@@ -689,7 +693,8 @@ export class JsonTokenizer {
    * A number at `at`, to RFC 8259 §6: `-`? then `0` or a digit run not
    * starting with `0`, then `.` and digits, then `e` or `E`, a sign and
    * digits. What follows it is the next call's to judge, so `01` is a `0`
-   * and then a syntax error, and `1x` is a `1` and then one.
+   * and then an error: `JSON_TOK_ERR_SYNTAX` inside a container (`[01]`),
+   * `JSON_TOK_ERR_TRAILING` at the top level. `1x` is a `1` and then the same.
    *
    * Nothing past the limit is read: the scan stops one byte past it, and a
    * number that reaches that byte is refused for its length, whatever the
@@ -918,9 +923,12 @@ export class JsonTokenizer {
   /**
    * Whether the current key or string, decoded, is exactly `name`'s bytes;
    * `false` when the token is neither. Nothing is allocated or written.
-   * `name.length` and `charCodeAt` are bytes natively; under Node they are
-   * UTF-16 code units, so a non-ASCII name matches only natively, the bytes
-   * against code units divergence `docs/wp33-round-trip.md` §3.2 records.
+   * `name.length` and `charCodeAt` are bytes natively. Under Node they are
+   * UTF-16 code units, compared one by one against the decoded UTF-8 bytes:
+   * an ASCII name answers the same both ways, a genuine non-ASCII name does
+   * not match there, and a name whose code units 0x80 to 0xFF spell those
+   * bytes does (`"Ã©"` matches a key `"é"`). That is the bytes against code
+   * units divergence `docs/wp33-round-trip.md` §3.2 records.
    */
   keyEquals(name: string): boolean {
     const n: i32 = toI32(name.length)

@@ -57,6 +57,16 @@
  * the loops over blocks — is the discipline above and not a verified
  * property.
  *
+ * **The seams.** Four private functions are the whole of the cipher's work,
+ * each called from exactly one place: `aesScheduleInto` (the key schedule),
+ * `aesBlockInto` (one block), `aesCtrInto` (GCTR over a run of bytes) and
+ * `ghashBlocksInto` (GHASH over a run of bytes). Each takes the arrays its
+ * caller passes, writes into them and allocates nothing the caller needs
+ * back, and its one caller checks every precondition it names first, so the
+ * compiler may replace that one call with a runtime kernel that does no
+ * bounds checks of its own (WP38 S5, `docs/wp38-simd.md`). The bodies here
+ * are the bitsliced code, and keep their own defensive checks.
+ *
  * **What is refused.** A key of any length but 16 or 32 bytes (AES-192 is out
  * of scope), a block or a sample that is not 16 bytes, an empty IV (SP 800-38D
  * §5.2.1.1 asks for at least one bit), a sealed input shorter than its tag, a
@@ -439,17 +449,19 @@ export const aesBitslicedRound = (q: u64[], rk: u64[], at: i32): void => {
   aesAddRoundKey(q, rk, at)
 }
 
-/** The cipher (FIPS 197 §5.1) on the four blocks of `buf[0 .. 64)`, in place. `q` is scratch. */
-const aesEncryptBatch = (key: AesKey, buf: u8[], q: u64[]): void => {
-  const rk: u64[] = key.roundKeys
+/**
+ * The cipher (FIPS 197 §5.1) on the four blocks of `buf[0 .. 64)`, in place,
+ * under the bitsliced round keys `rk`. `q` is scratch.
+ */
+const aesEncryptBatch = (rk: u64[], rounds: i32, buf: u8[], q: u64[]): void => {
   aesPack(q, buf)
   aesAddRoundKey(q, rk, 0)
-  for (let round: i32 = 1; round < key.rounds; round++) {
+  for (let round: i32 = 1; round < rounds; round++) {
     aesBitslicedRound(q, rk, 8 * round)
   }
   aesSbox(q)
   aesShiftRows(q)
-  aesAddRoundKey(q, rk, 8 * key.rounds)
+  aesAddRoundKey(q, rk, 8 * rounds)
   aesUnpack(buf, q)
 }
 
@@ -496,12 +508,17 @@ const aesStore32 = (out: u8[], at: i32, w: u32): void => {
 }
 
 /**
- * KeyExpansion (FIPS 197 §5.2) for Nk = 4 or 8, then every round key
- * bitsliced and replicated into the four block lanes. `w` holds the words
- * big-endian, byte 0 of the key in the high byte of `w[0]`, as the standard
- * writes them. Branches only on the word number.
+ * The key-schedule seam: KeyExpansion (FIPS 197 §5.2) for Nk = 4 or 8 into
+ * `rk`, every round key bitsliced and replicated into the four block lanes.
+ * `w` holds the words big-endian, byte 0 of the key in the high byte of
+ * `w[0]`, as the standard writes them. Branches only on the word number.
+ *
+ * Its one caller, `aesKeyInto`, has checked that `key` is 16 or 32 bytes,
+ * that `rounds` is 10 or 14 to match, and that `rk` holds the
+ * `8 * (rounds + 1)` words this writes; the compiler may replace that call
+ * with a runtime kernel, which writes its own layout into the same words.
  */
-const aesExpand = (key: u8[], rounds: i32): u64[] => {
+const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
   const nk: i32 = rounds - 6
   const total: i32 = (rounds + 1) * 4
   const w: u32[] = new Array<u32>(total)
@@ -528,8 +545,8 @@ const aesExpand = (key: u8[], rounds: i32): u64[] => {
     }
   }
   // Each round key, written into all four blocks of a batch and packed.
-  const rk: u64[] = new Array<u64>((rounds + 1) * 8)
   const buf: u8[] = new Array<u8>(AES_BATCH)
+  const rkLength: i32 = toI32(rk.length)
   for (let round: i32 = 0; round <= rounds; round++) {
     for (let k: i32 = 0; k < 4; k++) {
       for (let j: i32 = 0; j < 4; j++) {
@@ -538,10 +555,12 @@ const aesExpand = (key: u8[], rounds: i32): u64[] => {
     }
     aesPack(q, buf)
     for (let b: i32 = 0; b < 8; b++) {
-      rk[8 * round + b] = q[b]
+      const at: i32 = 8 * round + b
+      if (at < rkLength) {
+        rk[at] = q[b]
+      }
     }
   }
-  return rk
 }
 
 /**
@@ -596,14 +615,36 @@ const aesKeyUsable = (key: AesKey): boolean => {
 }
 
 /**
- * The first 16 bytes of `block` encrypted, in the first 16 bytes of a fresh
- * batch; the rest of the batch is the cipher of zeros and is not read.
+ * The single-block seam: `dst[0 .. 16) = E(K, src[0 .. 16))` under the round
+ * keys `rk`. The block goes through the first lane of a batch whose other
+ * three are zeros and not read, and the batch is zeroed before it is
+ * released.
+ *
+ * Its one caller, `aesEncryptOne`, has checked that `rk` is a schedule of
+ * `rounds` rounds and that `src` and `dst` each hold 16 bytes; the compiler
+ * may replace that call with a runtime kernel.
  */
-const aesEncryptOne = (key: AesKey, block: u8[]): u8[] => {
+const aesBlockInto = (rk: u64[], rounds: i32, src: u8[], dst: u8[]): void => {
   const buf: u8[] = new Array<u8>(AES_BATCH)
-  aesCopyPrefix(buf, block, AES_BLOCK)
-  aesEncryptBatch(key, buf, new Array<u64>(8))
-  return buf
+  aesCopyPrefix(buf, src, AES_BLOCK)
+  aesEncryptBatch(rk, rounds, buf, new Array<u64>(8))
+  aesCopyPrefix(dst, buf, AES_BLOCK)
+  for (let i: i32 = 0; i < toI32(buf.length); i++) {
+    buf[i] = 0
+  }
+}
+
+/**
+ * The first 16 bytes of `src` encrypted into the first 16 of `dst`: the one
+ * call of `aesBlockInto`, so the checks its contract needs are made here. A
+ * key of the wrong shape, or a block shorter than 16 bytes, leaves `dst` as it
+ * was; no caller passes one.
+ */
+const aesEncryptOne = (key: AesKey, src: u8[], dst: u8[]): void => {
+  if (!aesKeyUsable(key) || toI32(src.length) < AES_BLOCK || toI32(dst.length) < AES_BLOCK) {
+    return
+  }
+  aesBlockInto(key.roundKeys, key.rounds, src, dst)
 }
 
 /**
@@ -617,10 +658,10 @@ export const aesKey = (key: u8[]): AesKey | null => {
     return null
   }
   const rounds: i32 = length === 16 ? 10 : 14
-  const expanded: AesKey = new AesKey(rounds, aesExpand(key, rounds))
-  const buf: u8[] = aesEncryptOne(expanded, [])
-  expanded.hHi = aesLoad64(buf, 0, 8)
-  expanded.hLo = aesLoad64(buf, 8, 16)
+  const expanded: AesKey = new AesKey(rounds, new Array<u64>((rounds + 1) * 8))
+  if (!aesKeyInto(key, expanded)) {
+    return null
+  }
   return expanded
 }
 
@@ -636,9 +677,13 @@ export const aesKey = (key: u8[]): AesKey | null => {
  * arena scope may be put around; this stores numbers only, so a caller that
  * keeps one `AesKey` per connection installs every key inside a `using a =
  * arena()` block and leaves the arena where it was. The schedule and H are
- * secret: the caller wipes `out` when it is done with the key. The working
- * copy of the schedule is zeroed before it is released, by stores that stand
- * no better than `aesKey`'s own temporaries do.
+ * secret: the caller wipes `out` when it is done with the key. The schedule
+ * is written straight into `out.roundKeys`, with no working copy, and the
+ * blocks H passes through are zeroed before they are released, by stores that
+ * stand no better than `aesKey`'s own temporaries do.
+ *
+ * `aesKey` makes its key through this, so this is the one call of
+ * `aesScheduleInto`, and the checks its contract needs are made here.
  */
 export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   const length: i32 = toI32(key.length)
@@ -647,21 +692,17 @@ export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   }
   const rounds: i32 = length === 16 ? 10 : 14
   const roundKeys: u64[] = out.roundKeys
-  const words: i32 = (rounds + 1) * 8
-  if (toI32(roundKeys.length) !== words) {
+  if (toI32(roundKeys.length) !== (rounds + 1) * 8) {
     return false
   }
-  const expanded: u64[] = aesExpand(key, rounds)
-  for (let i: i32 = 0; i < toI32(roundKeys.length) && i < toI32(expanded.length); i++) {
-    roundKeys[i] = expanded[i]
-    expanded[i] = 0
-  }
+  aesScheduleInto(key, rounds, roundKeys)
   out.rounds = rounds
-  const buf: u8[] = aesEncryptOne(out, [])
-  out.hHi = aesLoad64(buf, 0, 8)
-  out.hLo = aesLoad64(buf, 8, 16)
-  for (let i: i32 = 0; i < toI32(buf.length); i++) {
-    buf[i] = 0
+  const h: u8[] = new Array<u8>(AES_BLOCK)
+  aesEncryptOne(out, new Array<u8>(AES_BLOCK), h)
+  out.hHi = aesLoad64(h, 0, 8)
+  out.hLo = aesLoad64(h, 8, 16)
+  for (let i: i32 = 0; i < toI32(h.length); i++) {
+    h[i] = 0
   }
   return true
 }
@@ -672,7 +713,7 @@ export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
     return null
   }
   const out: u8[] = new Array<u8>(AES_BLOCK)
-  aesCopyPrefix(out, aesEncryptOne(key, block), AES_BLOCK)
+  aesEncryptOne(key, block, out)
   return out
 }
 
@@ -685,8 +726,10 @@ export const aesHeaderMask = (key: AesKey, sample: u8[]): u8[] | null => {
   if (!aesKeyUsable(key) || toI32(sample.length) !== AES_BLOCK) {
     return null
   }
+  const block: u8[] = new Array<u8>(AES_BLOCK)
+  aesEncryptOne(key, sample, block)
   const mask: u8[] = new Array<u8>(5)
-  aesCopyPrefix(mask, aesEncryptOne(key, sample), 5)
+  aesCopyPrefix(mask, block, 5)
   return mask
 }
 
@@ -798,10 +841,17 @@ export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
 }
 
 /**
- * Absorbs `data[0 .. length)` into the GHASH state `y`, 16 bytes at a time,
- * the last block padded with zeros (SP 800-38D §6.4, §7.1 step 5).
+ * The GHASH seam: absorbs `data[0 .. length)` into the GHASH state `y` under
+ * H = `hHi:hLo`, 16 bytes at a time, the last block padded with zeros
+ * (SP 800-38D §6.4, §7.1 step 5). `_rk` is the key's round keys, which this
+ * body does not read: a runtime kernel may keep powers of H after its own
+ * schedule there.
+ *
+ * Its one caller, `ghashUpdate`, has checked that `y` holds two words, that
+ * `0 <= length <= data.length` and that `_rk` is a whole schedule; the
+ * compiler may replace that call with a runtime kernel.
  */
-const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
+const ghashBlocksInto = (y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], length: i32): void => {
   if (toI32(y.length) < 2) {
     return
   }
@@ -812,8 +862,21 @@ const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
     const at: i32 = block * 16
     y[0] = y[0] ^ aesLoad64(data, at, length)
     y[1] = y[1] ^ aesLoad64(data, at + 8, length)
-    ghashMultiply(y, key.hHi, key.hLo)
+    ghashMultiply(y, hHi, hLo)
   }
+}
+
+/**
+ * Absorbs `data[0 .. length)` into the GHASH state `y` under `key`'s H: the
+ * one call of `ghashBlocksInto`, so the checks its contract needs are made
+ * here. A state, length or key that fails them leaves `y` as it was; no
+ * caller passes one.
+ */
+const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
+  if (toI32(y.length) < 2 || length < 0 || length > toI32(data.length) || !aesKeyUsable(key)) {
+    return
+  }
+  ghashBlocksInto(y, key.hHi, key.hLo, key.roundKeys, data, length)
 }
 
 /** The last GHASH block: the AAD's and the ciphertext's lengths in bits, 64 bits each. */
@@ -856,12 +919,19 @@ const aesGcmLengthFits = (length: i32): boolean =>
   (toI64(length) + toI64(15)) >> toI64(4) <= (toI64(1) << toI64(32)) - toI64(2)
 
 /**
- * GCTR (SP 800-38D §6.5) from inc32(J0): `dst[i] = src[i] ⊕ keystream[i]` for
- * `i` below `length`, four blocks per pass of the cipher. The counter is the
- * last four bytes of J0 as a big-endian `u32` and wraps modulo 2^32, as
- * inc32 does, while the first twelve bytes stay as they are.
+ * The GCTR seam (SP 800-38D §6.5) from inc32(J0): `dst[i] = src[i] ⊕
+ * keystream[i]` for `i` below `length`, four blocks per pass of the cipher,
+ * under the round keys `rk`. The counter is the last four bytes of J0 as a
+ * big-endian `u32` and wraps modulo 2^32, as inc32 does, while the first
+ * twelve bytes stay as they are. `dst` may be `src`: each byte is read before
+ * it is written.
+ *
+ * Its one caller, `aesGcmCtr`, has checked that `rk` is a schedule of
+ * `rounds` rounds, that `j0` is 16 bytes and that `0 <= length` and `length`
+ * is within both `src` and `dst`; the compiler may replace that call with a
+ * runtime kernel.
  */
-const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void => {
+const aesCtrInto = (rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], length: i32): void => {
   if (toI32(j0.length) < 16) {
     return
   }
@@ -870,6 +940,7 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
   const q: u64[] = new Array<u64>(8)
   const srcLength: i32 = toI32(src.length)
   const dstLength: i32 = toI32(dst.length)
+  const bufLength: i32 = toI32(buf.length)
   // Counted in batches, like `ghashUpdate`'s blocks, so `base` never passes `length`.
   const batches: i32 = (length >> 6) + ((length & 63) !== 0 ? 1 : 0)
   for (let batch: i32 = 0; batch < batches; batch++) {
@@ -880,14 +951,38 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
       }
       aesStore32(buf, 16 * k + 12, counter + toU32((base >> 4) + k + 1))
     }
-    aesEncryptBatch(key, buf, q)
-    for (let j: i32 = 0; j < AES_BATCH && j < toI32(buf.length); j++) {
-      const at: i32 = base + j
-      if (at >= 0 && at < length && at < srcLength && at < dstLength) {
+    aesEncryptBatch(rk, rounds, buf, q)
+    // Every bound is in the loop's condition, where LLVM folds them into one
+    // trip count and vectorises the XOR; the same tests inside the body, once
+    // `aesGcmCtr`'s checks were inlined above them, became three compares a
+    // byte and cost seal and open 6%. The body's test is only for the bounds
+    // prover, and is always true.
+    for (let at: i32 = base; at < length && at < srcLength && at < dstLength && at - base < bufLength; at++) {
+      const j: i32 = at - base
+      if (at >= 0 && j >= 0 && j < bufLength) {
         dst[at] = src[at] ^ buf[j]
       }
     }
   }
+}
+
+/**
+ * GCTR from inc32(J0) over `src[0 .. length)` into `dst` under `key`: the one
+ * call of `aesCtrInto`, so the checks its contract needs are made here. A
+ * key, J0 or length that fails them leaves `dst` as it was; no caller passes
+ * one.
+ */
+const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void => {
+  if (
+    !aesKeyUsable(key) ||
+    toI32(j0.length) !== AES_BLOCK ||
+    length < 0 ||
+    length > toI32(src.length) ||
+    length > toI32(dst.length)
+  ) {
+    return
+  }
+  aesCtrInto(key.roundKeys, key.rounds, j0, src, dst, length)
 }
 
 /**
@@ -900,7 +995,8 @@ const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textL
   ghashUpdate(y, key, aad, aadLength)
   ghashUpdate(y, key, text, textLength)
   ghashLengths(y, key, aadLength, textLength)
-  const mask: u8[] = aesEncryptOne(key, j0)
+  const mask: u8[] = new Array<u8>(AES_BLOCK)
+  aesEncryptOne(key, j0, mask)
   y[0] = y[0] ^ aesLoad64(mask, 0, 16)
   y[1] = y[1] ^ aesLoad64(mask, 8, 16)
 }
