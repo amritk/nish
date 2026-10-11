@@ -50,7 +50,7 @@
 #endif
 
 /* The ceiling on how many threads one region may use. A fixed bound keeps the
- * job array on the stack -- 64 jobs is 4.5 KB -- so a region never allocates
+ * job array on the stack -- 64 jobs is 3.5 KB -- so a region never allocates
  * to divide itself, which matters because the arena it would allocate from is
  * the very thing being made per-thread. */
 #define NISH_PAR_MAX 64

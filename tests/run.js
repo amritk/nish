@@ -8540,10 +8540,29 @@ if (!only || "runtime-parallel".includes(only)) {
         `runtime-parallel: the affinity and cgroup counts are Linux's, and this host is ${process.platform}`
       )
     } else {
-      if (has("taskset")) {
-        const one = countWith(null, ["taskset", "-c", "0"])
+      // The CPUs this process may run on, from the kernel's own list (`0-3,6`), so
+      // neither check below assumes CPU 0 is one of them or measures its expected
+      // count through the function under test.
+      const allowed = (/^Cpus_allowed_list:\s*(\S+)$/m.exec(fs.readFileSync("/proc/self/status", "utf8")) ?? [
+        "",
+        "",
+      ])[1]
+        .split(",")
+        .filter(Boolean)
+        .flatMap((span) => {
+          const [lo, hi = lo] = span.split("-").map(Number)
+          return Array.from({ length: hi - lo + 1 }, (_, k) => lo + k)
+        })
+      if (allowed.length === 0) {
         check(
-          "runtime-parallel: nish_cpu_count() counts the affinity mask: one CPU under taskset -c 0",
+          "runtime-parallel: /proc/self/status names the CPUs this process may run on",
+          false,
+          "no Cpus_allowed_list"
+        )
+      } else if (has("taskset")) {
+        const one = countWith(null, ["taskset", "-c", String(allowed[0])])
+        check(
+          `runtime-parallel: nish_cpu_count() counts the affinity mask: one CPU under taskset -c ${allowed[0]}`,
           one === 1,
           `answered ${one}`
         )
@@ -8552,47 +8571,55 @@ if (!only || "runtime-parallel".includes(only)) {
       }
       // A private mount namespace, a tmpfs over /sys/fs/cgroup, and `cpu.max` files
       // at the process's own cgroup and at the root: the count is the smallest quota
-      // on the way up, rounded up to whole CPUs, and `max` is no quota at all.
+      // on the way up, rounded up to whole CPUs, and `max` is no quota at all. The
+      // tmpfs hides any quota the host really has, so the count with no quota is the
+      // affinity mask's, read above rather than from this process's own count.
       const line = fs
         .readFileSync("/proc/self/cgroup", "utf8")
         .split("\n")
         .find((l) => l.startsWith("0::/"))
       const own = line === undefined ? "/" : line.slice(3)
-      const quota = (leaf, top) => {
-        const dir = `/sys/fs/cgroup${own === "/" ? "" : own}`
-        const script = [
-          "set -e",
-          "mount -t tmpfs none /sys/fs/cgroup",
-          `mkdir -p '${dir}'`,
-          `printf '%s\\n' '${top}' > /sys/fs/cgroup/cpu.max`,
-          own === "/" ? ":" : `printf '%s\\n' '${leaf}' > '${dir}/cpu.max'`,
-          `exec '${countExe}'`,
-        ].join("\n")
-        const r = spawnSync("unshare", ["-rm", "sh", "-c", script], {
+      const sandbox = (body) =>
+        spawnSync("unshare", ["-rm", "sh", "-c", `set -e\nmount -t tmpfs none /sys/fs/cgroup\n${body}`], {
           encoding: "utf8",
           env: envWithThreads(null),
         })
-        return r.status === 0 ? Number(r.stdout.trim()) : null
+      const quota = (leaf, top) => {
+        const dir = `/sys/fs/cgroup${own === "/" ? "" : own}`
+        const r = sandbox(
+          [
+            `mkdir -p '${dir}'`,
+            `printf '%s\\n' '${top}' > /sys/fs/cgroup/cpu.max`,
+            own === "/" ? ":" : `printf '%s\\n' '${leaf}' > '${dir}/cpu.max'`,
+            `exec '${countExe}'`,
+          ].join("\n")
+        )
+        return r.status === 0 ? Number(r.stdout.trim()) : `exit ${r.status}: ${r.stderr.trim()}`
       }
+      const unquoted = allowed.length
       const rows = [
-        ["no quota anywhere", "max 100000", "max 100000", base],
-        ["1.5 CPUs at the root", "max 100000", "150000 100000", Math.min(2, base)],
+        ["no quota anywhere", "max 100000", "max 100000", unquoted],
+        ["1.5 CPUs at the root", "max 100000", "150000 100000", Math.min(2, unquoted)],
         ["one CPU at the root", "max 100000", "100000 100000", 1],
         ["half a CPU at the root", "max 100000", "50000 100000", 1],
       ]
       if (own !== "/") {
-        rows.push(["2.5 CPUs at the process's own cgroup", "250000 100000", "max 100000", Math.min(3, base)])
+        rows.push([
+          "2.5 CPUs at the process's own cgroup",
+          "250000 100000",
+          "max 100000",
+          Math.min(3, unquoted),
+        ])
       }
-      // The first row doubles as the probe: no answer there means unshare was refused.
-      const answers = has("unshare") ? [quota(rows[0][1], rows[0][2])] : [null]
-      if (answers[0] === null) {
+      // Whether the sandbox can be built at all is asked on its own, with nothing of
+      // the runtime in it, so that only a host that refuses it is a skip: once it
+      // can be built, a count that is wrong, or a driver that fails, is a FAIL.
+      if (!has("unshare") || allowed.length === 0 || sandbox("true").status !== 0) {
         skip(
-          "runtime-parallel: unshare -rm is not allowed here (no unprivileged user namespaces): the cgroup quota's count is not checked"
+          "runtime-parallel: unshare -rm cannot mount a tmpfs here (no unprivileged user namespaces): the cgroup quota's count is not checked"
         )
       } else {
-        for (const [, leaf, top] of rows.slice(1)) {
-          answers.push(quota(leaf, top))
-        }
+        const answers = rows.map(([, leaf, top]) => quota(leaf, top))
         check(
           `runtime-parallel: nish_cpu_count() takes the cgroup v2 cpu.max quota, rounded up, from the process's cgroup (${own}) or any above it`,
           rows.every(([, , , want], i) => answers[i] === want),
