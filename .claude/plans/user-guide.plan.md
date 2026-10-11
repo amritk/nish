@@ -96,6 +96,20 @@ stages:
       - id: un-threads
         content: Write docs/guide/using-nish/threads.md — see Using Nish
         status: pending
+  - id: agent-rules
+    title: "docs: require the user guide to move with the language"
+    goal: Every instruction file that says what a change ships with also says it updates the user guide, so the guide stays current after this run
+    verification: node docs/check-links.mjs && npm run lint
+    todos:
+      - id: ar-definition-of-done
+        content: Add the guide to the definition of done in CLAUDE.md, the house rules in AGENTS.md, .claude/testing.md, the docs/ARCHITECTURE.md checklist and docs/MASTER_PLAN.md section 7 — see Agent rules
+        status: pending
+      - id: ar-keep-current
+        content: State in CLAUDE.md and AGENTS.md that a user-visible change updates or removes the guide page describing it in the same PR — see Agent rules
+        status: pending
+      - id: ar-entry-points
+        content: Point readers to the guide from CLAUDE.md, AGENTS.md, .claude/orientation.md and llms.txt — see Agent rules
+        status: pending
 ---
 
 # User guide — a user-facing docs section, ready for Scalar
@@ -202,6 +216,31 @@ arithmetic and what overflow does), `arrays-and-strings.md` (literals, `push`,
 - Each page links the `LANGUAGE.md` section that is normative for it.
 - No internal vocabulary (stage0, seed, Nish-0, work packages) on any page.
 
+## Agent rules
+
+Added at the user's request during the run. The guide only stays current if the
+files agents and contributors read say it must. Five places list what a change
+ships with, and none names the guide: `CLAUDE.md` (Definition of done),
+`AGENTS.md` (House rules), `.claude/testing.md` (What every construct ships
+with), `docs/ARCHITECTURE.md` (How to add a construct) and
+`docs/MASTER_PLAN.md` §7. Each gains the guide beside the `LANGUAGE.md` rule and
+the cookbook entry, worded as each file words its other items.
+
+- **What triggers an update** — anything a user of the language sees: a
+  construct, a builtin or `nish:` module, a `std/` module, a CLI flag or exit
+  code, an install step, a diagnostic a guide page shows. The guide page
+  describing it changes in the same PR; a new topic gets a new page and a route
+  in `scalar.config.json`; a removed or renamed feature leaves the guide in the
+  same PR. Purely internal changes (the IR, `src/` structure, CI) do not touch
+  it. Each file links `docs/README.md#writing-a-guide-page` for the page rules
+  rather than restating them.
+- **Entry points** — `CLAUDE.md` and `AGENTS.md` name the guide beside
+  `docs/AI.md` for people writing programs; `.claude/orientation.md` gets a
+  "Where to read next" row; `llms.txt` lists it under "Writing Nish".
+- Nothing here adds a check: `tests/run.js` already compiles the guide's
+  examples, so a guide that falls behind the language turns `npm test` red as
+  soon as an example stops compiling.
+
 ## Ownership and order
 
 | stage | Owns | depends on |
@@ -211,6 +250,7 @@ arithmetic and what overflow does), `arrays-and-strings.md` (literals, `push`,
 | language-basics | `docs/guide/language/{types,functions,control-flow,arrays-and-strings,classes-and-interfaces}.md` | foundation (development) |
 | language-advanced | `docs/guide/language/{errors,maps-and-sets,generics,modules,memory}.md` | foundation (development) |
 | using-nish | `docs/guide/using-nish/**` | foundation (development) |
+| agent-rules | `CLAUDE.md`, `AGENTS.md`, `.claude/orientation.md`, `.claude/testing.md`, `docs/ARCHITECTURE.md`, `docs/MASTER_PLAN.md`, `llms.txt` | foundation (development) |
 
 The four content stages start once foundation is merged, run in parallel, and
 own disjoint files. A content stage that finds a page in another stage worth
