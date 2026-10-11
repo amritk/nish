@@ -36,9 +36,8 @@ hello from Nish
 
 `nish run` compiles the file, links it, and starts it. Anything after the file
 name is passed to the program as its arguments, which it reads from
-`process.argv`. The binary is kept in a cache under `~/.cache/nish/run`, so
-running the file again without changing it reuses that binary instead of
-linking a new one.
+`process.argv`. The binary is cached, so running an unchanged file again
+skips the link.
 
 ## Compile it to a native binary
 
@@ -55,17 +54,13 @@ hello from Nish
 
 The first two lines come from `nish`. It wrote `hello.ll`, the LLVM IR for the
 program, then linked an executable named `hello` beside it. The byte count
-depends on your platform and version. `speed` is the default optimisation
-profile; `--profile size` makes the smallest binary and `--profile debug`
-keeps debug symbols. The last line is `./hello` running. The binary needs
+depends on your platform and version, and `speed` is the default build
+profile; [the CLI page](../using-nish/cli.md) has the others. The last line is `./hello` running. The binary needs
 nothing installed beside the system's C library: no Node, no runtime and no
 garbage collector.
 
-To stop at the IR, ask for it with `-o`:
-
-```bash
-nish hello.ts -o hello.ll
-```
+Without `--link`, `nish hello.ts -o hello.ll` stops after writing the IR and
+needs no `clang`.
 
 ## When it does not compile
 
@@ -97,8 +92,8 @@ greet.ts:8:17: error: Argument 2 of `greet`: expected i32, got string
 
 An error names the file, the line and the column (`greet.ts:8:17`), says what
 is wrong, and underlines the place. Nothing runs, and `nish` exits with 1.
-When a file has several errors, the compiler reports as many as it can find,
-up to 20, in the order they appear in the file.
+When a file has several errors, the compiler reports them in the order they
+appear in the file.
 
 Every error also has a **code**, a stable name for the rule that was broken.
 Add `--json` to see it. With `nish run`, flags go before the file name:
@@ -111,10 +106,9 @@ nish run --json greet.ts
 {"file":"greet.ts","line":8,"column":17,"endLine":8,"endColumn":20,"severity":"error","code":"NL2117","message":"Argument 2 of `greet`: expected i32, got string"}
 ```
 
-The code here is `NL2117`. The wording of a message can improve from one
-release to the next, but a code always means the same rule. That makes it the
-thing to search for, and the thing an editor or a script should key on. The
-first digit says which stage of the compiler refused the program: `NL1…` for
+The code here is `NL2117`. A message's wording can change between releases,
+but a code always means the same rule, so search for the code, and key editors
+and scripts on it. The first digit says which stage of the compiler refused the program: `NL1…` for
 syntax Nish forbids outright, `NL2…` for the type checker, `NL3…` for modules
 and packages. The reference's
 [Rejected by the checker](../../LANGUAGE.md#rejected-by-the-checker) and

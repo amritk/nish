@@ -1,12 +1,11 @@
 # Coming from TypeScript
 
 A Nish program is a TypeScript file: every line of it is TypeScript syntax.
-What Nish leaves out is everything that only works because JavaScript decides
-things while the program runs: what type a value has, whether an exception
-unwinds, which method a call reaches. Nish decides all of that when it
-compiles, so it refuses the constructs that would need a decision at run time.
-This page lists what carries over, what is refused, and what to write instead
-of each refused construct.
+JavaScript decides some things while the program runs: what type a value has,
+whether an exception unwinds, which method a call reaches. Nish decides all of
+them when it compiles, so it refuses the constructs that need a run-time
+decision. This page lists what carries over, what is refused, and what to
+write instead.
 
 ## What carries over
 
@@ -66,16 +65,13 @@ That program prints `total: 11`. It uses `const` and `let`, arrow functions,
 interfaces, classes with fields and methods, numeric enums, object and array
 literals, `for...of`, `switch`, the ternary operator and template literals,
 all as TypeScript has them. `if`, `while`, `do...while`, `break`, `continue`,
-`===` and named `import` and `export` work too. With the declarations the
-package ships in `runtime/nish.d.ts` (which declare `i32`, `f64`, `Result` and
-the other built-in names) on the include path, the program also type-checks
-under `tsc --strict`, so your editor keeps working on it. `tsc` accepting a
-program does not mean `nish` will: `nish` is the authority, as the
-reference's [It is still TypeScript](../../LANGUAGE.md#it-is-still-typescript)
-says.
+`===` and named `import` and `export` work too. The package ships type
+declarations for `i32`, `Result` and the other built-in names
+(`runtime/nish.d.ts`), so `tsc` and your editor understand a Nish file. The
+reverse does not hold: `nish` is the authority, as the reference's
+[It is still TypeScript](../../LANGUAGE.md#it-is-still-typescript) says.
 
-The rest of this page is the difference. Each refusal below is shown as the
-compiler reports it, with its error code.
+Each refusal below gives the error code the compiler reports.
 
 ## `number` is an integer
 
@@ -115,9 +111,10 @@ const total = (n: i32, r: f64): f64 => {
 ```
 
 Integer arithmetic is also checked: an `i32` or `i64` that overflows stops the
-program instead of wrapping round. The `--number-mode f64` flag makes `number`
-mean `f64` for a whole program, which is closer to JavaScript; writing `i32`
-or `f64` directly reads the same in both modes. See
+program instead of wrapping round, as
+[Your first program](first-program.md#exit-codes) shows. `--number-mode f64`
+makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
+`i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's
 [Types](../../LANGUAGE.md#types) and
 [Numeric literals](../../LANGUAGE.md#numeric-literals).
@@ -176,8 +173,8 @@ const nextValue = (n: Node): i32 => {
 };
 ```
 
-Narrowing works on a local variable or a parameter, never on a property path
-such as `n.next`, which is why the example copies `n.next` into `next` first.
+Narrowing works only on a local or a parameter, never on a property path such
+as `n.next`; hence the copy.
 `??` is refused on its own as well (`NL1048`), with one exception: the result
 of `Map.get`, as in `counts.get(key) ?? 0`. See the reference's
 [Nullable types](../../LANGUAGE.md#nullable-types).
@@ -195,9 +192,8 @@ const half = (n: i32): i32 => {
 };
 ```
 
-A function that can fail says so in its return type, with `Result<T, E>`. It
-returns `Ok(value)` or `Err(error)`, and the caller has to check which before
-it can read the value:
+A function that can fail says so in its return type, with `Result<T, E>`, and
+returns `Ok(value)` or `Err(error)`:
 
 ```ts nish:ok
 const half = (n: i32): Result<i32, string> => {
@@ -223,8 +219,7 @@ Seven is odd, so this program prints `odd` on stderr and exits with 1.
 A `Result` cannot be ignored: a call that returns one cannot stand on its own
 as a statement, and reading `r.value` before checking `r.isErr()` or
 `r.isOk()` is an error. For a state the program cannot recover from, call
-`panic("message")`, which prints the message and ends the program with exit
-code 1. [Errors and `Result`](../language/errors.md) covers the rest,
+`panic("message")`, which ends the program the way an overflow does. [Errors and `Result`](../language/errors.md) covers the rest,
 including `orReturn()`, which passes an error up to the caller like Rust's
 `?`. The reference is
 [Result and error handling](../../LANGUAGE.md#result-and-error-handling).
@@ -299,7 +294,8 @@ These come up often enough to know before you meet them:
 | `String(n)`, `n.toString()` | `NL2247`: unknown function, `NL2249`: unknown method | `` `${n}` `` |
 | `async`, `await`, `Promise` | `NL1015` for `async`: there is no event loop | the file and process functions are synchronous |
 
-`nish --fix` rewrites the first, second and fourth of these for you, as
+`nish --fix` rewrites `if (xs.length)`, `==` and `String(n)` / `n.toString()`
+for you, as
 [Your first program](first-program.md#fixes-the-compiler-can-make-for-you)
 shows.
 

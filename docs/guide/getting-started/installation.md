@@ -32,8 +32,8 @@ export CC=clang-18        # add this line to your shell profile
 ```
 
 Debian and Ubuntu name the versioned compiler `clang-18`, which is why `CC`
-points at it. On Ubuntu 24.04 the plain `clang` is already version 18, so if
-`clang --version` reports 18 you do not need `CC`.
+points at it. On Ubuntu 24.04 the plain `clang` is already version 18, so you
+can leave `CC` unset there (step 3 shows how to check).
 
 **Fedora**
 
@@ -44,17 +44,17 @@ sudo dnf install clang lld llvm
 **macOS**
 
 ```bash
-brew install llvm@18
-export PATH="$(brew --prefix llvm@18)/bin:$PATH"   # add this line to your shell profile
+xcode-select --install
 ```
 
-Xcode's command-line tools (`xcode-select --install`) also build native
-binaries. Homebrew's LLVM is needed only for the WebAssembly targets.
+Xcode's command-line tools are enough to build native binaries. For the
+WebAssembly targets, install Homebrew's LLVM instead, as
+[INSTALL.md](../../INSTALL.md#macos) describes.
 
 ## 2. Install the compiler
 
-There are two ways to install it. Both put the same compiler on your machine,
-already built: nothing is compiled during the install.
+Either way below installs the same prebuilt compiler; nothing is compiled
+during the install.
 
 **With npm.** This needs Node.js 22.18 or newer. The package is
 `@amritk/nish` and the command it installs is `nish`. The unscoped `nish`
@@ -78,7 +78,12 @@ The script installs into `~/.nish`. It ends by printing the `export PATH=…`
 line to add to your shell profile; run that line in your shell too, or open a
 new terminal. To upgrade later, run the same command again. Ending the
 command with `| sh -s -- --help` instead of `| sh` lists the script's other
-options: a particular version, another directory, and uninstalling.
+options: another directory, and uninstalling.
+
+Nish is pre-alpha and changes between minor releases, so you may want to pin
+an exact version: `npm install -g @amritk/nish@0.18.0`, or end the install
+script's command with `| sh -s 0.18.0`. Read the
+[changelog](../../../CHANGELOG.md) before you upgrade.
 
 ## 3. Check that it worked
 
@@ -88,17 +93,11 @@ clang --version           # or: $CC --version
 ```
 
 The first command prints `nish` and a version number, for example
-`nish 0.18.0`. The second prints the LLVM version. If `nish` is not found,
-the directory it was installed into is not on your `PATH` yet.
+`nish 0.18.0`. If `nish` is not found, the directory it was installed into is
+not on your `PATH` yet. The second prints the LLVM version; on Ubuntu, if the
+plain `clang --version` already reports 18, you can drop `CC`.
 
-The real test is building a program, which is the next page:
-[your first program](first-program.md). If `nish` cannot find a C compiler
+The real test is building a program: see
+[Your first program](first-program.md). If `nish` cannot find a C compiler
 when it builds a binary, it prints `no usable C compiler found` and the
 install command for your platform, and exits with code 3.
-
-## Pre-alpha
-
-Nish is pre-alpha, and the language and its flags change between minor
-releases. Pin an exact version (`npm install -g @amritk/nish@0.18.0`, or end the
-install script's command with `| sh -s 0.18.0`) and read the
-[changelog](../../../CHANGELOG.md) before you upgrade.
