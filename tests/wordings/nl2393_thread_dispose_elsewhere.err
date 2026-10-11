@@ -1,1 +1,1 @@
-`Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a disposal method of any other class would never be called
+`Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called

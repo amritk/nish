@@ -88477,7 +88477,7 @@ function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.construc
   escaping: x y
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-reject tests/parser/using.ts: error: `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a disposal method of any other class would never be called
+reject tests/parser/using.ts: error: `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called
 program tests/differential/corpus/argv_words.ts
 module tests/differential/corpus/argv_words.ts (entry)
 function longest(words: string[]): string -> @longest

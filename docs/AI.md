@@ -953,9 +953,16 @@ export const main = (): i32 => {
   method through them (no `push`).
 - **Make the data fresh all the way down**: `new Mutex<Hist>(new Hist())`, not
   `new Hist(bins)` with a `bins` you still hold.
+- **`lock()` only as `using g = m.lock()`**, one lock per `using`. The lock is
+  released at every exit of the block, and at a `return` after the returned
+  value is computed, so `return g.value.n` reads under the lock.
 - **One lock at a time, and no waiting while it is held**: inside the guard's
-  block, directly or through any call, no second `lock()`, no `scope()` or
-  `spawn`, no `parallelMapInto`. So a program cannot deadlock.
+  block, directly or through any call or `new`, no second `lock()`, no
+  `scope()` or `spawn`, no `parallelMapInto` or `parallelReduce`. So a program
+  cannot deadlock.
+- **Only a scope's tasks and the thread that opened it lock**: the function
+  given to `parallelMapInto` or `parallelReduce` takes no lock, even through a
+  call (NL2474).
 - **A `Mutex` reaches a task as its argument or a field of its argument's
   class** — not in an array. From the statement holding a scope's first
   `spawn` to its block's end the parent doesn't lock what the tasks share,

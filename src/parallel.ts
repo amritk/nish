@@ -117,9 +117,9 @@ export const DISPOSE_METHOD: string = "[Symbol.dispose]"
 
 /** The refusal of a `[Symbol.dispose]` method anywhere but `nish/threads`'s `ThreadScope`. */
 export const disposeElsewhereMessage = (owner: string): string =>
-  `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only a \`scope()\` or a ` +
-  "`lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a " +
-  "disposal method of any other class would never be called"
+  `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only \`scope()\` or a ` +
+  "`Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, " +
+  "so a disposal method of any other class would never be called"
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
 export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`)
@@ -801,6 +801,20 @@ const threadsLoaded = (programs: CheckedProgram[]): boolean => {
   return false
 }
 
+/** The symbol `nish/threads`'s `scope()` is called by, or "" when no program loaded the module. */
+const scopeSymbol = (programs: CheckedProgram[]): string => {
+  for (const program of programs) {
+    if (isThreadsModule(program)) {
+      for (const sig of program.functions) {
+        if (sig.sourceName === "scope" && sig.instance === null && sig.owner === null) {
+          return sig.name
+        }
+      }
+    }
+  }
+  return ""
+}
+
 /** Whether `call` is `scope()` from `nish/threads`: a call of a free function answering a `ThreadScope`. */
 const isScopeCall = (program: CheckedProgram, call: Node, scopeType: i32): boolean => {
   if (call.kind !== N_CALL || program.nodeTypes[call.id] !== scopeType) {
@@ -945,7 +959,7 @@ export const scopeFindings = (
     if (loaded) {
       checkBody(program, table, facts, body, out)
       walkMutexes(program, table, body, parents, out)
-      findGuardBlocks(program, facts, body, scopeType, out)
+      findGuardBlocks(program, facts, body, new HeldContext(scopeType, scopeSymbol(programs)), out)
     }
     if (instance !== null) {
       program.leaveInstance()
@@ -1385,7 +1399,7 @@ const walkRegion = (
   // WP29 P3, R7: a lock anywhere from the statement that holds the first
   // `spawn` — before that spawn too, as on a loop's next pass — to the end of
   // the block, directly or through a call.
-  if (node.kind === N_CALL) {
+  if (node.kind === N_CALL || node.kind === N_NEW) {
     const locked = regionLockMessageFor(program, table, facts, node, state)
     if (locked.length > 0) {
       out.push(new ScopeFinding(node, locked))
@@ -1627,13 +1641,13 @@ const guardUseMessage = (name: string): string =>
   "read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock"
 
 const guardDerivedMessage = (table: TypeTable, type: i32): string =>
-  `This is a \`${table.typeName(type)}\` read through a guard, which is used only as the base of a field or ` +
+  `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
   "element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock"
 
 const guardStoreMessage = (table: TypeTable, type: i32): string =>
-  `This stores a \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\` or ` +
-  "an enum, into a field or an element that already exists: a task's arena is freed when it is joined, and " +
-  "a pointer into it stored here would dangle"
+  `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\` or ` +
+  "an enum, into a field or an element that already exists: anything else is a pointer, which may point into " +
+  "a task's arena, freed when the task is joined"
 
 const guardMethodMessage = (name: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
@@ -1698,21 +1712,36 @@ const isFreshValue = (program: CheckedProgram, table: TypeTable, init: Node): bo
   return true
 }
 
-/** Whether `name`, among the runtime symbols a call can reach, is one R5 refuses while a lock is held. */
-const isWaitSymbol = (name: string, locksOnly: boolean): boolean =>
+/**
+ * Whether `name`, among the symbols a call can reach, is one R5 refuses while
+ * a lock is held: the lock's wait, or — unless `locksOnly` — a task filed, a
+ * data-parallel region, or `scopeName`, the symbol of `nish/threads`'s
+ * `scope()`, whose block joins when it ends.
+ */
+const isWaitSymbol = (name: string, locksOnly: boolean, scopeName: string): boolean =>
   name === "nish_mutex_wait" ||
   (!locksOnly &&
-    (name === "nish_scope_spawn" || name === "nish_parallel_range" || name === "nish_scope_join"))
+    (name === "nish_scope_spawn" ||
+      name === "nish_parallel_range" ||
+      name === "nish_scope_join" ||
+      name === scopeName))
 
 /**
  * Whether a call of `name` reaches, through its callees, a lock (`locksOnly`)
- * or anything R5 refuses inside a guard's block: a lock, a task filed or
- * joined, or a data-parallel region. Each is a runtime symbol the fixpoint has
- * put among the callees of the function that reaches it (`markLock`,
- * `markParallelEntry` in `src/attributes.ts`).
+ * or anything R5 refuses inside a guard's block: a lock, a scope opened, a
+ * task filed or joined, or a data-parallel region. Each is a symbol the
+ * fixpoint has put among the callees of the function that reaches it
+ * (`markLock`, `markParallelEntry` in `src/attributes.ts`); a constructor a
+ * `new` runs is one of them, as any callee is.
  */
-const reachesWait = (facts: FactsTable, name: string, locksOnly: boolean, seen: StringSet): boolean => {
-  if (isWaitSymbol(name, locksOnly)) {
+const reachesWait = (
+  facts: FactsTable,
+  name: string,
+  locksOnly: boolean,
+  scopeName: string,
+  seen: StringSet
+): boolean => {
+  if (isWaitSymbol(name, locksOnly, scopeName)) {
     return true
   }
   if (!seen.add(name)) {
@@ -1724,7 +1753,7 @@ const reachesWait = (facts: FactsTable, name: string, locksOnly: boolean, seen: 
   }
   let c = 0
   while (c < own.callees.size()) {
-    if (reachesWait(facts, own.callees.at(c), locksOnly, seen)) {
+    if (reachesWait(facts, own.callees.at(c), locksOnly, scopeName, seen)) {
       return true
     }
     c = c + 1
@@ -1734,7 +1763,7 @@ const reachesWait = (facts: FactsTable, name: string, locksOnly: boolean, seen: 
 
 /** Whether a call of `fn` takes a lock, directly or through any callee. */
 const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
-  reachesWait(facts, fn.name, true, new StringSet())
+  reachesWait(facts, fn.name, true, "", new StringSet())
 
 /** The refusal of a parallel body that takes a lock, or "". */
 export const bodyLockMessageFor = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string =>
@@ -1923,9 +1952,22 @@ const walkMutexes = (
   parents.pop()
 }
 
-/** What R5 refuses at `node` while a lock is held, in words, or "". */
-const heldWhat = (program: CheckedProgram, facts: FactsTable, node: Node, scopeType: i32): string => {
-  if (node.kind !== N_CALL) {
+/**
+ * How a diagnostic names the call `node` makes of `callee`: the function by its
+ * name, or a `new` by the class it makes, whose constructor is the callee.
+ */
+const lockCallName = (node: Node, callee: FunctionSig): string =>
+  node.kind === N_NEW ? `\`new ${node.children[0].text}\`` : `\`${callee.sourceName}\``
+
+/** What R5 refuses at `node`, a call or a `new`, while a lock is held, in words, or "". */
+const heldWhat = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  node: Node,
+  scopeType: i32,
+  scopeName: string
+): string => {
+  if (node.kind !== N_CALL && node.kind !== N_NEW) {
     return ""
   }
   if (isLockCall(program, node)) {
@@ -1941,40 +1983,60 @@ const heldWhat = (program: CheckedProgram, facts: FactsTable, node: Node, scopeT
   if (isSpawnEntry(callee) || isParallelEntry(callee)) {
     return `\`${intrinsicName(callee)}\``
   }
-  if (reachesWait(facts, callee.name, false, new StringSet())) {
-    return `\`${callee.sourceName}\`, which takes a lock or waits for threads,`
+  if (reachesWait(facts, callee.name, false, scopeName, new StringSet())) {
+    return `${lockCallName(node, callee)}, which takes a lock or waits for threads,`
   }
   return ""
 }
 
-/** R5 over `node`, a statement after the `using` that bound the guard `name`, and everything under it. */
+/** The two `nish/threads` facts R5 needs: the type `scope()` answers, and the symbol it is called by. */
+class HeldContext {
+  scopeType: i32
+  scopeName: string
+
+  constructor(scopeType: i32, scopeName: string) {
+    this.scopeType = scopeType
+    this.scopeName = scopeName
+  }
+}
+
+/**
+ * R5 over `node`, which runs after the `using` that bound the guard `name` —
+ * a later statement of its block, or a later declarator of the same `using` —
+ * and everything under it.
+ */
 const walkHeld = (
   program: CheckedProgram,
   facts: FactsTable,
   node: Node,
   name: string,
-  scopeType: i32,
+  held: HeldContext,
   out: ScopeFinding[]
 ): void => {
   if (node.kind === N_ARROW) {
     return // a lifted function of its own; a call that runs it is judged where it is
   }
-  const what = heldWhat(program, facts, node, scopeType)
+  const what = heldWhat(program, facts, node, held.scopeType, held.scopeName)
   if (what.length > 0) {
     out.push(new ScopeFinding(node, guardHeldMessage(what, name)))
     return
   }
   for (const child of node.children) {
-    walkHeld(program, facts, child, name, scopeType, out)
+    walkHeld(program, facts, child, name, held, out)
   }
 }
 
-/** Every block under `node` that binds a guard, with R5 judged from the `using` to the block's end. */
+/**
+ * Every block under `node` that binds a guard, with R5 judged from the guard's
+ * declarator to the block's end: the later declarators of its own `using`
+ * (`using g = a.lock(), h = b.lock()` takes two locks), then every later
+ * statement.
+ */
 const findGuardBlocks = (
   program: CheckedProgram,
   facts: FactsTable,
   node: Node,
-  scopeType: i32,
+  held: HeldContext,
   out: ScopeFinding[]
 ): void => {
   if (node.kind === N_BLOCK) {
@@ -1982,21 +2044,30 @@ const findGuardBlocks = (
     while (i < node.children.length) {
       const stmt = node.children[i]
       if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
-        for (const decl of stmt.children[0].children) {
-          if (isLockCall(program, unwrapParens(decl.children[2]))) {
+        const decls = stmt.children[0].children
+        let d = 0
+        while (d < decls.length) {
+          const name = decls[d].children[0].text
+          if (isLockCall(program, unwrapParens(decls[d].children[2]))) {
+            let e = d + 1
+            while (e < decls.length) {
+              walkHeld(program, facts, decls[e].children[2], name, held, out)
+              e = e + 1
+            }
             let j = i + 1
             while (j < node.children.length) {
-              walkHeld(program, facts, node.children[j], decl.children[0].text, scopeType, out)
+              walkHeld(program, facts, node.children[j], name, held, out)
               j = j + 1
             }
           }
+          d = d + 1
         }
       }
       i = i + 1
     }
   }
   for (const child of node.children) {
-    findGuardBlocks(program, facts, child, scopeType, out)
+    findGuardBlocks(program, facts, child, held, out)
   }
 }
 
@@ -2018,7 +2089,7 @@ const regionLockMessageFor = (
     return ""
   }
   let want = -1
-  let what = `\`${callee.sourceName}\``
+  let what = lockCallName(node, callee)
   if (isLockMethod(callee)) {
     want = program.nodeTypes[unwrapParens(node.children[0].children[0]).id]
     what = "This `lock()`"

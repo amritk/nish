@@ -2,7 +2,8 @@
 // `i32[]`, taking the lock once per element, and the parent prints the bins
 // after the join. Adding to a bin commutes, so the bins are the same whatever
 // order the critical sections ran in: natively, on four threads, and under
-// Node, in spawn order.
+// Node, in spawn order. The last line is the bins' sum beside the number of
+// elements the tasks binned: equal exactly when no guarded increment was lost.
 import { Mutex, scope } from "nish/threads";
 
 class Hist {

@@ -1520,32 +1520,20 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ### `nish/threads`: a lock that owns its data
 
 `using g = m.lock()` calls the `Mutex`'s `lock()`, and each exit of the block
-is a release store of 0 into the guard's lock word: below, after the returned
-value has been read through the guard, since the value may need the lock. The
-`lock()` instance, in `nish/threads`'s own module, is written by the emitter in
-place of its source body (`return this.guard`): it loads the one guard the
-`Mutex` holds and takes the guard's word with an acquire compare-and-swap,
-calling the runtime only when the word was already held:
-
-```llvm
-%guard = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %0, align 8
-%word = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %guard, i32 0, i32 1
-%swap = cmpxchg i32* %word, i32 0, i32 1 acquire monotonic
-%took = extractvalue { i32, i1 } %swap, 1
-br i1 %took, label %lock.held, label %lock.wait
-lock.wait:
-  call void @nish_mutex_wait(i32* %word)    ; spins briefly, then yields, until it takes the word
-  br label %lock.held
-lock.held:
-  ret %struct.MutexGuard$$Tally* %guard
-```
-
-The acquire keeps every guarded access after the swap and the release every
-one before the store, which is all a lock has to promise; nothing is allocated
-per lock, and nothing is destroyed, because the word is a field of the guard
-the `Mutex` made when it was made. The whole of both modules is
-`tests/link/thread_mutex_counter`'s golden (docs/LANGUAGE.md, "A lock that owns
-its data").
+is a release store of 0 into the guard's lock word, `store atomic i32 0, …
+release`: below, after the returned value has been read through the guard,
+since the value may need the lock. The `lock()` instance lives in
+`nish/threads`'s own module, and the emitter writes its body in place of the
+source's `return this.guard`. It loads the one guard the `Mutex` holds, takes
+the guard's word with `cmpxchg … i32 0, i32 1 acquire monotonic`, and calls
+`nish_mutex_wait` (which spins briefly, then yields, until it takes the word)
+only when the swap found the word held. The acquire keeps every guarded
+access after the swap and the release every one before the store, which is
+all a lock has to promise. Nothing is allocated per lock, and nothing is
+destroyed, because the word is a field of the guard the `Mutex` made when it
+was made. That instance, exactly as emitted, is in
+`tests/link/thread_mutex_counter/threads.ll`, whose golden holds both modules
+(docs/LANGUAGE.md, "A lock that owns its data").
 
 <!-- cookbook:begin thread-mutex -->
 ```ts

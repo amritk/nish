@@ -2555,7 +2555,7 @@ export const main = (): i32 => {
   `MutexGuard` declare one, so TypeScript and Node accept `using s = scope()`
   and `using g = m.lock()`; the compiler emits the join and the release itself
   and never calls it. Any other class's is
-  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a disposal method of any other class would never be called ``
+  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called ``
   (`tests/cases/reject_thread_dispose_elsewhere`).
 - **There is no thread count.** Each spawn is one task and each task one
   thread; a scope with more tasks than cores leaves the scheduler to share them
@@ -2643,8 +2643,9 @@ export const main = (): i32 => {
   briefly and then yields until it can take it (`tests/link/thread_mutex_counter`,
   whose `threads.ll` is the lowering, and `tests/link/thread_mutex_histogram`).
   On `wasm32` a scope's tasks run one after another, as they do for every
-  scope there, and the same program prints the same total
-  (`tests/run.js`, "the `--profile wasi` build").
+  scope there, so no lock is ever found held: the same program links for
+  `--profile wasi`, its atomics lowered for a module without shared memory,
+  and prints the same total (`tests/run.js`, "the `--profile wasi` build").
 - **The release is emitted at every exit of the guard's block**: its end, a
   `break` or `continue` that leaves it, and a `return` or an `orReturn` — after
   the returned value is computed and before control leaves, unlike a scope's
@@ -2664,15 +2665,17 @@ breaks one is refused with that rule's own code:
   because a value the program already holds would be a path to the data that
   skips the lock:
   `` `new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock ``
-  (NL2463, `tests/cases/reject_mutex_not_fresh`, and
-  `reject_mutex_not_fresh_deep` for `new Hist(bins)` with a named `bins`;
+  (NL2463, `tests/cases/reject_mutex_not_fresh`,
+  `reject_mutex_not_fresh_deep` for `new Hist(bins)` with a named `bins`, and
+  `reject_mutex_not_fresh_literal` for `[row]` with a named `row`;
   `new Mutex<Label>(new Label("total", 0))` compiles,
   `tests/link/thread_mutex_scalar`). And `lock` is the only member
   of a `Mutex` a program may name:
   `` `guard` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock ``
   (NL2464, `reject_mutex_member`).
 - **R2: `m.lock()` is only the initialiser of a `using` declaration**, the
-  third disposable beside `scope()` and `arena()`:
+  third disposable beside `scope()` and `arena()`, and one `using` takes one
+  lock (a second declarator's `lock()` is R5's, below):
   `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
   (NL2465, `reject_mutex_lock_not_using`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
@@ -2681,10 +2684,13 @@ breaks one is refused with that rule's own code:
   (NL2466, `reject_mutex_guard_passed`), and anything read through it that is
   not a number, a `boolean` or an enum — `const c = g.value`, `g.value.xs` as a
   value, a `for...of` over it — is
-  `` This is a `Counter` read through a guard, which is used only as the base of a field or element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock ``
-  (NL2467, `reject_mutex_guard_alias`, and `reject_mutex_guard_alias_array` for
+  `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock ``
+  (NL2467, `reject_mutex_guard_alias`; `reject_mutex_guard_alias_array` for
   `const b = g.value.bins`, which would race a guarded write once the block
-  ends). A scalar read through the guard is a value like any other, `.length`
+  ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
+  return; `reject_mutex_guard_store_field` and `reject_mutex_guard_store_element`
+  for a store; `reject_mutex_guard_for_of` for a walk). An arrow cannot capture
+  a guard any more than any other local (`reject_mutex_guard_capture`). A scalar read through the guard is a value like any other, `.length`
   of an array it reaches included. When `T` is itself a scalar, `g.value` is
   read and stored directly — `g.value = g.value + 1` on a `Mutex<i32>` — and
   the store reaches the `Mutex` under Node as natively, because the guard is
@@ -2692,7 +2698,7 @@ breaks one is refused with that rule's own code:
 - **R4: a store through a guard stores a scalar, and no method is called
   through it.** A number, a `boolean` or an enum, into a field or an element of
   an array that already exists:
-  `` This stores a `string` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: a task's arena is freed when it is joined, and a pointer into it stored here would dangle ``
+  `` This stores `string` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined ``
   (NL2468, `reject_mutex_guard_store`). `push` — which can move the array into
   the task's arena — and every other method are
   `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined ``
@@ -2702,21 +2708,30 @@ breaks one is refused with that rule's own code:
   guard's block — directly, or through any function it calls — a second
   `lock()`, `scope()`, `spawn`, `parallelMapInto` or `parallelReduce` is
   `` A second `lock()` is reached while `ga` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held ``
-  (NL2470; `reject_mutex_nested_lock`, `reject_mutex_lock_through_call` for a
-  callee that locks, `reject_mutex_held_scope` for a scope). That is the whole
+  (NL2470; `reject_mutex_nested_lock`, and `reject_mutex_using_two_locks` and
+  `reject_mutex_using_two_mutexes` for a second declarator of the same `using`;
+  `reject_mutex_lock_through_call` for a callee that locks, and
+  `reject_mutex_held_new` for a constructor that does, reached by `new`;
+  `reject_mutex_held_scope` and `reject_mutex_held_scope_call` for a scope;
+  `reject_mutex_held_map` and `reject_mutex_held_reduce` for the data-parallel
+  calls). That is the whole
   argument that **a program cannot deadlock**: a task holding a lock never
   waits for anything, so every lock is given back.
 - **R6: a store through a guard is the one shared write a task may make.** P2's
   rule is otherwise unchanged (above, NL2471).
 - **R7: from the statement that holds a scope's first `spawn` to the end of
   its block, the parent does not lock what the scope's tasks share**, directly
-  or through any function it calls — P2's own window, so a lock before the
-  `spawn` in the same loop body is inside it (`reject_mutex_region_lock_loop`).
+  or through any function or constructor it calls — P2's own window, so a lock
+  before the `spawn` in the same loop body is inside it: on the loop's second
+  pass that lock runs after the first pass's `spawn`
+  (`reject_mutex_region_lock_loop`).
   Natively the tasks have not run yet there, and under Node each has run at its
   spawn, so the parent would see a different value:
   `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join ``
-  (NL2472, `reject_mutex_region_lock`, and `reject_mutex_region_lock_call` for a
-  call that takes the lock). It is asked by type: a `Mutex<T>` of the
+  (NL2472, `reject_mutex_region_lock`; `reject_mutex_region_lock_field` for a
+  `Mutex` the task reaches as a field of its argument;
+  `reject_mutex_region_lock_call` for a call that takes the lock, and
+  `reject_mutex_region_lock_new` for a `new` whose constructor does). It is asked by type: a `Mutex<T>` of the
   type a task's argument reaches, or, for a call that takes a lock, any
   `Mutex` a task reaches. Before the first `spawn` and after the join the
   parent locks freely, as `tests/link/thread_mutex_counter` does.
@@ -2730,8 +2745,9 @@ breaks one is refused with that rule's own code:
 And a lock is a scope's: the body of `parallelMapInto` or `parallelReduce`,
 which runs on many threads at once, takes none
 (`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body ``,
-NL2474, `reject_mutex_parallel_body`, and `reject_mutex_parallel_body_call` for
-a lock taken in a callee).
+NL2474, `reject_mutex_parallel_body`; `reject_mutex_parallel_body_call` and
+`reject_mutex_parallel_body_new` for a lock taken in a callee or a
+constructor).
 
 **What a guarded program means.** The tasks' critical sections run one at a
 time, in some order. Natively the order is the scheduler's; under Node, where

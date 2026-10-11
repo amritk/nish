@@ -196,9 +196,10 @@ no prelude can reach it. They are language decisions
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes
   ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)). A task writes
-  nothing another can see and cannot print, and the checker refuses a program
-  that reads a destination, or writes what a task may read, before the block
-  ends, so the two print the same. `using` itself needs `--js-explicit-resource-management` on Node
+  nothing another can see except through a `Mutex`'s guard (the next item), and
+  cannot print, and the checker refuses a program that reads a destination, or
+  writes what a task may read, before the block ends, so the two print the same
+  — for guarded writes, when they commute, as the next item says. `using` itself needs `--js-explicit-resource-management` on Node
   22 and is native from Node 24; Node 22's flagged `using` never calls
   `[Symbol.dispose]`, and nothing here needs it to, because every task has run
   by the time the block ends.
@@ -230,11 +231,15 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 node tests/differential/unmodified.js --verbose
 ```
 
-Six `nish/threads` programs are held to the same claim by name,
-`tests/link/par_map`, `tests/link/par_reduce` and the four
-`tests/link/thread_scope_*`: each prints under Node, run with
-`--js-explicit-resource-management`, what its native binary prints
-(`node tests/run.js threads-under-node`).
+Ten `nish/threads` programs are held to the same claim by name,
+`tests/link/par_map`, `tests/link/par_reduce`, the four
+`tests/link/thread_scope_*`, and the four lock programs
+`tests/link/thread_mutex_counter`, `thread_mutex_exit_paths`,
+`thread_mutex_histogram` and `thread_mutex_scalar`: each prints under Node, run
+with `--js-explicit-resource-management`, what its native binary prints
+(`node tests/run.js threads-under-node`). The fifth lock program,
+`tests/link/thread_mutex_or_return`, is native only, because it releases its
+lock through `orReturn`, which does not propagate under Node (above).
 
 Today: **7 of 11 agree, 4 known divergences, 0 unexpected.**
 

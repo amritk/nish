@@ -2,6 +2,8 @@
 // threads at once, and the parent reads the total after the join. Every
 // increment is a read and a store under the lock, so none is lost: the total
 // is 4 * 100000 natively, and under Node, where the tasks run one at a time.
+// The second number is the tasks' own count of the increments they made, so
+// the line prints two equal numbers exactly when the lock lost none.
 import { Mutex, scope } from "nish/threads";
 
 class Counter {

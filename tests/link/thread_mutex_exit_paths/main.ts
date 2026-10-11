@@ -50,7 +50,18 @@ const labelled = (m: Mutex<Tally>): i32 => {
   return g.value.n;
 };
 
-const work = (m: Mutex<Tally>): i32 => firstOver(m, 1000000) + evensToSix(m);
+/**
+ * Each pass takes the lock 101 times through `firstOver`'s `return` and up to
+ * 8 times through `evensToSix`'s `continue` and `break`, and 2,000 passes on
+ * three threads keep those exits contending for one `Mutex`.
+ */
+const work = (m: Mutex<Tally>): i32 => {
+  let last: i32 = 0;
+  for (let pass: i32 = 0; pass < 2000; pass++) {
+    last = firstOver(m, 1000000000) + evensToSix(m);
+  }
+  return last;
+};
 
 export const main = (): i32 => {
   const a = new Mutex<Tally>(new Tally());

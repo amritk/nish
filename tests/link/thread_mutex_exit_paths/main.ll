@@ -262,15 +262,38 @@ ovf.fail:
 
 define hidden noundef i32 @work(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %m) #0 {
 entry:
-  %0 = call i32 @firstOver(%struct.Mutex$$Tally* %m, i32 1000000)
-  %1 = call i32 @evensToSix(%struct.Mutex$$Tally* %m)
-  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %1)
-  %3 = extractvalue { i32, i1 } %2, 0
-  %4 = extractvalue { i32, i1 } %2, 1
-  br i1 %4, label %ovf.fail, label %ovf.ok
+  %last.addr = alloca i32, align 4
+  %pass.addr = alloca i32, align 4
+  store i32 0, i32* %last.addr, align 4
+  store i32 0, i32* %pass.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %pass.addr, align 4
+  %1 = icmp slt i32 %0, 2000
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = call i32 @firstOver(%struct.Mutex$$Tally* %m, i32 1000000000)
+  %3 = call i32 @evensToSix(%struct.Mutex$$Tally* %m)
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %3
+  store i32 %5, i32* %last.addr, align 4
+  br label %for.inc
+
+for.inc:
+  %7 = load i32, i32* %pass.addr, align 4
+  %8 = add nsw i32 %7, 1
+  store i32 %8, i32* %pass.addr, align 4
+  br label %for.cond
+
+for.end:
+  %9 = load i32, i32* %last.addr, align 4
+  ret i32 %9
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

@@ -4616,11 +4616,52 @@ for (const name of [
   )
 }
 
+// WP29 P3, R2: a guard's lock is released at a `return` (and an `orReturn`)
+// after the returned value is computed and before control leaves, unlike a
+// scope's join, which runs before the value. The link goldens hold the whole
+// IR; this names the order itself, so a golden regenerated with the release
+// moved ahead of the value fails here rather than passing as a new golden.
+// In each function below every `ret` with a value is preceded by the release
+// store, and the value it returns is computed before that store.
+if (!only || "thread_mutex".includes(only)) {
+  for (const [name, fn] of [
+    ["thread_mutex_or_return", "addOk"],
+    ["thread_mutex_exit_paths", "firstOver"],
+    ["thread_mutex_exit_paths", "evensToSix"],
+  ]) {
+    const golden = path.join(linkDir, name, "main.ll")
+    const text = fs.existsSync(golden) ? fs.readFileSync(golden, "utf8") : ""
+    const body = new RegExp(`^define [^\\n]*@${fn}\\(.*?^}$`, "ms").exec(text)
+    const lines = body === null ? [] : body[0].split("\n").map((l) => l.trim())
+    const rets = []
+    const bad = []
+    lines.forEach((line, i) => {
+      const ret = /^ret .+ (%\d+)$/.exec(line)
+      if (ret === null) {
+        return
+      }
+      rets.push(i)
+      const release = lines[i - 1] ?? ""
+      const computed = lines.slice(0, i - 1).some((l) => l.startsWith(`${ret[1]} = `))
+      if (!/^store atomic i32 0, i32\* %\d+ release, align 4$/.test(release) || !computed) {
+        bad.push(`${line} (preceded by: ${release})`)
+      }
+    })
+    check(
+      `link/${name}: ${fn} releases its lock after the returned value is computed, and before each \`ret\``,
+      rets.length > 0 && bad.length === 0,
+      body === null ? `no @${fn} in ${golden}` : bad.join("\n") || "no `ret` with a value"
+    )
+  }
+}
+
 // WP29 P3: on wasm32 a scope's tasks run one after another on the one
-// thread there is, as they do for `scope()` today (runtime/runtime-parallel.c),
-// and the lock's compare-and-swap and release store are what LLVM lowers for
-// a module without shared memory. So the counter links for `--profile wasi`
-// and prints what the native binary prints: no lock is ever found held.
+// thread there is, as they do for `scope()` today (runtime/runtime-parallel.c).
+// What this pins is that the lock's compare-and-swap and release store lower
+// for a module without shared memory, and that `nish_mutex_wait` links on
+// WASI: the counter builds for `--profile wasi` and prints what the native
+// binary prints. It cannot tell a lock from none, because nothing on wasm32
+// runs two tasks at once; the native round trips are what test exclusion.
 if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
   if (WASI_SYSROOT && has("wasm-ld")) {
     const mutexDir = path.join(buildDir, "wasi_thread_mutex_counter")
@@ -7943,6 +7984,10 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840
  * it at the spawn instead would give a program that reads its destination early a
  * different answer. That is the fallback's own semantics rather than room spent, and
  * 34 bytes of slack are left, not 207.
+ *
+ * wp29 P3 adds `nish_mutex_wait`, a lock's contended path, which every configuration
+ * defines so that a `nish/threads` program links on WASI too: measured **304 bytes** on
+ * 2026-10-11 with clang 18.1.3 on linux-x64, 18 more, inside the same ceiling.
  */
 const RUNTIME_PARALLEL_TEXT_BUDGET = 320
 /**
@@ -7964,6 +8009,9 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 320
  * one thread each and joins them, and the worker that frees each thread's arena. They
  * are this file's subject, the language's other way of dividing work across threads,
  * and a program that never opens a scope still pays none of it.
+ *
+ * wp29 P3's `nish_mutex_wait` measured **954 bytes** in all on 2026-10-11 with clang
+ * 18.1.3 on linux-x64, 49 more for the spin and the yield, inside the same ceiling.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
 /**
