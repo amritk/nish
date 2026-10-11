@@ -27,7 +27,15 @@
  * waits here when it finds its word held (`nish_mutex_wait`), and P3's
  * channels keep their buffers here (`nish_channel_send`, `nish_channel_count`,
  * `nish_channel_receive`).
+ *
+ * Since the pool (docs/wp20-threads.md, section 8e) a divided region or a
+ * joined scope no longer creates a thread per chunk or task: it hands them to
+ * workers that are started once, on the first region or join that divides, and
+ * park between calls.
  */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE /* `sched_getaffinity` and `CPU_COUNT`, for `nish_cpu_count` */
+#endif
 #include "nish.h"
 
 #include <stdlib.h>
@@ -36,39 +44,110 @@
 
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
+#include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
-#include <unistd.h>
 #endif
 
 /* The ceiling on how many threads one region may use. A fixed bound keeps the
- * job and handle arrays on the stack -- 64 jobs is 2 KB and 64 handles 512
- * bytes -- so a region never allocates to divide itself, which matters because
- * the arena it would allocate from is the very thing being made per-thread. */
+ * job array on the stack -- 64 jobs is 3.5 KB -- so a region never allocates
+ * to divide itself, which matters because the arena it would allocate from is
+ * the very thing being made per-thread. */
 #define NISH_PAR_MAX 64
 
-/* Cached, because `sysconf(_SC_NPROCESSORS_ONLN)` is not a cheap read: glibc
- * answers it from `sched_getaffinity` or by parsing
- * /sys/devices/system/cpu/online, and measured here it is 3.7 us -- which
+/* Cached, because the answer is not a cheap read: `sysconf` alone was 3.7 us
+ * measured here (glibc parses /sys/devices/system/cpu/online), and the affinity
+ * mask and the cgroup quota below are more system calls on top -- which
  * `nish_parallel_range` would otherwise pay on every region, including the ones
  * too small to divide, where it was the entire cost. The race between two
  * threads filling it is benign (both compute the same number) but it is still a
  * race, so the word is read and written with relaxed atomic builtins (a plain
  * `int64_t`, since `__atomic_*` does not take an `_Atomic`-qualified pointer):
- * on x86-64 that is
- * a plain load and store and costs nothing, and it is defined behaviour.
+ * on x86-64 that is a plain load and store and costs nothing, and it is
+ * defined behaviour.
  *
- * A machine whose online CPU count changes under a running process therefore
- * keeps the count it started with, which is the right trade for a number that
+ * A machine whose CPU count changes under a running process therefore keeps
+ * the count it started with, which is the right trade for a number that
  * decides how many threads a loop is divided into. */
 static int64_t nish_cpu_cached = 0;
 
+#if defined(NISH_PAR_REAL) && defined(__linux__)
+/* Reads up to `cap - 1` bytes of a small file into `buf`, terminated; 0 bytes
+ * when it cannot be opened. */
+static void nish_read_small(const char *path, char *buf, size_t cap) {
+  ssize_t got = -1;
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd >= 0) {
+    got = read(fd, buf, cap - 1);
+    close(fd);
+  }
+  buf[got > 0 ? got : 0] = 0;
+}
+
+/* The cgroup v2 CPU quota of this process and of every cgroup above it, as a
+ * whole number of CPUs rounded up, and `n` when it is lower or there is none.
+ * A container limited to 1.5 CPUs on a 64-core host is what this is for: its
+ * affinity mask still names all 64, and 63 workers time-sliced into a budget
+ * of 1.5 cores is the slowest way there is to run a loop. `cpu.max` reads
+ * `<quota> <period>`, or `max <period>` when there is no limit, which the
+ * digit test leaves out. The path is the `0::` line of /proc/self/cgroup under
+ * /sys/fs/cgroup, where a v2-only system and a container mount the hierarchy;
+ * a v1 system has no `cpu.max` there and keeps `n`. */
+static int64_t nish_cgroup_cpus(int64_t n) {
+  char text[512];
+  char path[512] = "/sys/fs/cgroup";
+  nish_read_small("/proc/self/cgroup", text, sizeof text);
+  char *at = strstr(text, "0::/");
+  if (!at || (at != text && at[-1] != '\n')) return n;
+  size_t len = strcspn(at + 3, "\n");
+  if (len > sizeof path - 24) return n;
+  memcpy(path + 14, at + 3, len);
+  for (;;) {
+    memcpy(path + 14 + len, "/cpu.max", 9);
+    nish_read_small(path, text, sizeof text);
+    if (text[0] >= '1' && text[0] <= '9') {
+      char *rest;
+      int64_t quota = strtoll(text, &rest, 10);
+      int64_t period = strtoll(rest, 0, 10);
+      if (period > 0) {
+        int64_t cpus = quota / period + (quota % period != 0);
+        if (cpus < n) n = cpus;
+      }
+    }
+    /* Up one level, by dropping the last component, until the root is read. */
+    if (len <= 1) return n;
+    while (len > 1 && path[14 + len - 1] != '/') len--;
+    if (len > 1) len--;
+  }
+}
+#endif
+
+/* The CPUs a region may use: the smallest of the CPUs online, the ones this
+ * thread may run on (`taskset`, a container's cpuset), the cgroup quota, and
+ * `NISH_NUM_THREADS` when it is a positive number. The variable can lower the
+ * count and never raise it, so it caps a program's threads (a CI job sharing
+ * its machine, a benchmark pinned to one core) without ever putting more of
+ * them on the machine than it has. */
 int64_t nish_cpu_count(void) {
   int64_t n = __atomic_load_n(&nish_cpu_cached, __ATOMIC_RELAXED);
   if (n != 0) return n;
 #ifdef NISH_PAR_REAL
   long got = sysconf(_SC_NPROCESSORS_ONLN);
   n = got > 0 ? (int64_t)got : 1;
+#ifdef __linux__
+  cpu_set_t set;
+  if (sched_getaffinity(0, sizeof set, &set) == 0) {
+    int mine = CPU_COUNT(&set);
+    if (mine > 0 && mine < n) n = mine;
+  }
+  n = nish_cgroup_cpus(n);
+#endif
+  const char *env = getenv("NISH_NUM_THREADS");
+  if (env) {
+    char *end;
+    long long want = strtoll(env, &end, 10);
+    if (end != env && *end == 0 && want > 0 && want < n) n = (int64_t)want;
+  }
 #else
   n = 1;
 #endif
@@ -77,15 +156,6 @@ int64_t nish_cpu_count(void) {
 }
 
 #ifdef NISH_PAR_REAL
-/* One chunk of the range, and where to run it. Passed by pointer to the
- * worker, so it lives in the caller's frame until the join. */
-typedef struct {
-  nish_par_body body;
-  void *ctx;
-  int64_t lo;
-  int64_t hi;
-} nish_par_job;
-
 /* Non-zero inside a region, so a body that itself calls `nish_parallel_range`
  * runs its range on one thread instead of multiplying the thread count by the
  * nesting depth. Thread-local, so the guard is per worker rather than a lock.
@@ -94,18 +164,249 @@ typedef struct {
  * this file is for. */
 static NISH_TLS int nish_par_depth = 0;
 
-static void *nish_par_worker(void *p) {
-  nish_par_job *j = (nish_par_job *)p;
+/* ---- The worker pool (docs/wp20-threads.md, section 8e) ----
+ *
+ * One unit of work for another thread: a region's chunk or a scope's task,
+ * each of which embeds one of these as its first member. `pending` is the
+ * count its caller waits on, and lives in the caller's frame until the last
+ * job is done; the unpooled path waits on the job's own thread, `th`, instead. */
+typedef struct nish_job {
+  struct nish_job *next;
+  void (*run)(struct nish_job *);
+  union {
+    int64_t *pending; /* pooled */
+    pthread_t th;     /* unpooled */
+  };
+} nish_job;
+
+/* The workers, started once and parked between calls, and the one queue they
+ * take jobs from. It is strictly first in, first out, and the thread that
+ * hands jobs in takes them off the same front until the queue is empty, which
+ * is what keeps channels deadlock-free with any number of workers, none
+ * included: a receiving task is spawned after every task that sends to it
+ * (wp29 C6, docs/wp29-thread-surface.md section 4.4), so by the time any
+ * thread takes the receiver off the queue, every sender has already been
+ * taken by a thread that is running it. A work-stealing deque, which takes
+ * the newest job first, would break that, and is declined for that reason.
+ *
+ * `state` is 0 until the first divided region or join starts the workers, 1
+ * once it has, and -1 when `nish_pool_disable` keeps the runtime unpooled. It
+ * changes only under the lock, and is read without it once it is not 0. */
+static struct {
+  pthread_mutex_t mu;
+  pthread_cond_t work; /* a worker waits here for a job */
+  pthread_cond_t done; /* a caller waits here for its count to reach 0 */
+  nish_job *head, *tail;
+  int state;
+} nish_pool = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0};
+
+/* The front of the queue, or 0 when it is empty. The lock is held. `head` is
+ * also read without it, by a thread spinning before it parks, so it is
+ * written with an atomic store (relaxed: the lock still orders the job's
+ * contents, since nothing takes a job without it). */
+static nish_job *nish_job_take(void) {
+  nish_job *j = nish_pool.head;
+  if (j) {
+    __atomic_store_n(&nish_pool.head, j->next, __ATOMIC_RELAXED);
+    if (!j->next) nish_pool.tail = 0;
+  }
+  return j;
+}
+
+/* One job finished, with the lock held. Nothing may touch `j` after the count
+ * reaches 0, since its caller is then free to return and take its frame. The
+ * count is read without the lock by a caller spinning, as `head` is. */
+static void nish_job_done(nish_job *j) {
+  if (__atomic_sub_fetch(j->pending, 1, __ATOMIC_RELAXED) == 0) pthread_cond_broadcast(&nish_pool.done);
+}
+
+/* How long a thread that finds nothing to do looks again before it sleeps:
+ * 2,048 pauses, measured at 18 us on the four-core Xeon of docs/wp20-threads.md
+ * section 8e. A program that divides one region usually divides the next one
+ * straight after it, and a worker still spinning picks that up without the
+ * futex wake that costs more than the spin; a caller still spinning sees its
+ * last job finish without one either. The look is a relaxed load and a pause,
+ * which leaves the core to its hyperthread sibling meanwhile. */
+#define NISH_POOL_SPIN 2048
+
+static void nish_cpu_relax(void) {
+#if defined(__x86_64__) || defined(__i386__)
+  __builtin_ia32_pause();
+#elif defined(__aarch64__)
+  __asm__ __volatile__("yield");
+#endif
+}
+
+/* Takes jobs off the front of the queue and runs them until `*pending` is 0,
+ * spinning and then sleeping on `cv` while the queue is empty and the count is
+ * not. A worker passes a count that never reaches 0 and sleeps on `work`; a
+ * caller passes its own count and sleeps on `done`. The count is read under
+ * the lock before the caller returns, which orders every job's writes before
+ * it. A worker's arena is its own, not a caller's: the storage class is what
+ * makes the two disjoint (WP20 T0). Nothing a job leaves in it outlives the
+ * job -- the language keeps a chunk's or a task's results out of its arena --
+ * so it is rewound for the next one rather than freed, and kept only when it
+ * is one ordinary chunk, so a job that allocated a large block does not leave
+ * a parked worker holding it. */
+static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
+  pthread_mutex_lock(&nish_pool.mu);
+  for (;;) {
+    nish_job *j = nish_job_take();
+    if (j) {
+      pthread_mutex_unlock(&nish_pool.mu);
+      j->run(j);
+      if (worker) {
+        nish_reset_arena();
+        if (nish_arena.cap > 65536) nish_free_arena();
+      }
+      pthread_mutex_lock(&nish_pool.mu);
+      nish_job_done(j);
+    } else if (*pending == 0) {
+      break;
+    } else {
+      pthread_mutex_unlock(&nish_pool.mu);
+      for (int i = 0; i < NISH_POOL_SPIN && __atomic_load_n(pending, __ATOMIC_RELAXED) &&
+                      !__atomic_load_n(&nish_pool.head, __ATOMIC_RELAXED);
+           i++)
+        nish_cpu_relax();
+      pthread_mutex_lock(&nish_pool.mu);
+      if (*pending != 0 && !nish_pool.head) pthread_cond_wait(cv, &nish_pool.mu);
+    }
+  }
+  pthread_mutex_unlock(&nish_pool.mu);
+}
+
+static void *nish_pool_worker(void *unused) {
+  (void)unused;
   nish_par_depth = 1;
-  j->body(j->lo, j->hi, j->ctx);
-  /* This thread's arena, not the parent's: the storage class is what makes the
-   * two disjoint (WP20 T0), so a worker can release every byte it bumped
-   * without the parent losing one. A worker that did not do this would leak its
-   * whole arena at thread exit, since nothing else has a pointer to it. */
+  int64_t never = 1;
+  nish_pool_drain(&never, &nish_pool.work, 1);
+  return 0;
+}
+
+/* A forked child has only the thread that forked, so it starts with an empty
+ * queue and no workers, and starts its own on its first divided call. It takes
+ * fresh copies of the lock and the condition variables rather than the ones
+ * the parent's workers may have held or been waiting on, so nothing has to be
+ * held across the fork. */
+static void nish_pool_child(void) {
+  nish_pool.head = nish_pool.tail = 0;
+  if (nish_pool.state > 0) nish_pool.state = 0;
+  pthread_mutex_init(&nish_pool.mu, 0);
+  pthread_cond_init(&nish_pool.work, 0);
+  pthread_cond_init(&nish_pool.done, 0);
+}
+
+/* Whether jobs go to the pool, starting it on the first call: one worker per
+ * CPU but the caller's, up to `NISH_PAR_MAX`. A worker that cannot be created
+ * leaves fewer, and none is a pool that works, because the caller drains the
+ * queue itself. Detached, since nothing joins a worker: it parks until the
+ * process exits. */
+static int nish_pool_ready(void) {
+  int state = __atomic_load_n(&nish_pool.state, __ATOMIC_ACQUIRE);
+  if (state != 0) return state > 0;
+  pthread_mutex_lock(&nish_pool.mu);
+  if (nish_pool.state == 0) {
+    int64_t n = nish_cpu_count() - 1;
+    if (n > NISH_PAR_MAX - 1) n = NISH_PAR_MAX - 1; /* a region queues at most this many */
+    for (int64_t i = 0; i < n; i++) {
+      pthread_t th;
+      if (pthread_create(&th, 0, nish_pool_worker, 0) != 0) break;
+      pthread_detach(th);
+    }
+    pthread_atfork(0, 0, nish_pool_child);
+    __atomic_store_n(&nish_pool.state, 1, __ATOMIC_RELEASE);
+  }
+  state = nish_pool.state;
+  pthread_mutex_unlock(&nish_pool.mu);
+  return state > 0;
+}
+
+/* The unpooled path's thread: one job, then the arena freed, since nothing
+ * else has a pointer to it once the thread exits. */
+static void *nish_job_thread(void *p) {
+  nish_job *j = (nish_job *)p;
+  nish_par_depth = 1;
+  j->run(j);
   nish_free_arena();
   return 0;
 }
+
+/* Runs `lead` on this thread and the list `rest` elsewhere, oldest first, and
+ * returns once every one of them has finished. The caller runs `lead` itself,
+ * so N jobs keep N-1 other threads busy and this one is not idle, and then
+ * takes queued jobs off the front until the queue is empty: a job no worker is
+ * free for runs here, in order, so running short of threads costs speed and
+ * never an answer, and a region never waits for a worker to wake when it
+ * could be doing the work. A job taken here runs in this thread's arena, as
+ * `lead` does.
+ *
+ * The queue is shared, so a caller can take a job another caller queued. That
+ * is safe for the same reason the order is: a job only ever waits on jobs
+ * queued before it, and those have all been taken by a thread already. */
+static void nish_jobs_run(nish_job *lead, nish_job *rest) {
+  int64_t pending = 0;
+  int pooled = rest && nish_par_depth == 0 && nish_pool_ready();
+  nish_job *last = 0, *inline_from = 0;
+  if (pooled) {
+    for (nish_job *j = rest; j; j = j->next) {
+      j->pending = &pending;
+      pending++;
+      last = j;
+    }
+    pthread_mutex_lock(&nish_pool.mu);
+    if (nish_pool.tail) nish_pool.tail->next = rest;
+    else __atomic_store_n(&nish_pool.head, rest, __ATOMIC_RELAXED);
+    nish_pool.tail = last;
+    /* One wake per job, rather than every parked worker for a job or two. */
+    for (int64_t i = 0; i < pending; i++) pthread_cond_signal(&nish_pool.work);
+    pthread_mutex_unlock(&nish_pool.mu);
+  } else {
+    /* Unpooled, a thread per job, and every job from the first thread that
+     * cannot be created on runs here. Inside a job there is no thread at all:
+     * a region or a scope in a chunk or a task runs on that one thread, in
+     * order, rather than multiplying the threads by the nesting depth. */
+    for (inline_from = rest; inline_from && nish_par_depth == 0; inline_from = inline_from->next)
+      if (pthread_create(&inline_from->th, 0, nish_job_thread, inline_from) != 0) break;
+  }
+  nish_par_depth++;
+  lead->run(lead);
+  if (pooled) {
+    nish_pool_drain(&pending, &nish_pool.done, 0);
+  } else {
+    for (nish_job *j = inline_from; j; j = j->next) j->run(j);
+    for (nish_job *j = rest; j != inline_from; j = j->next) pthread_join(j->th, 0);
+  }
+  nish_par_depth--;
+}
+
+/* One chunk of the range, and where to run it. It lives in the caller's frame
+ * until every chunk has run. */
+typedef struct {
+  nish_job job;
+  nish_par_body body;
+  void *ctx;
+  int64_t lo;
+  int64_t hi;
+} nish_par_job;
+
+static void nish_par_run(nish_job *j) {
+  nish_par_job *p = (nish_par_job *)j;
+  p->body(p->lo, p->hi, p->ctx);
+}
 #endif
+
+/* Without the pool every later region and join creates its threads and joins
+ * them, as before it existed. For a library that can be unloaded, a Node addon
+ * above all: a parked worker would outlive the code it runs. nish.h calls this
+ * from a constructor in the shim, before any call can start the pool. */
+void nish_pool_disable(void) {
+#ifdef NISH_PAR_REAL
+  pthread_mutex_lock(&nish_pool.mu);
+  if (nish_pool.state == 0) __atomic_store_n(&nish_pool.state, -1, __ATOMIC_RELAXED);
+  pthread_mutex_unlock(&nish_pool.mu);
+#endif
+}
 
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain) {
   if (len <= 0) return;
@@ -127,7 +428,6 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
   }
 
   nish_par_job jobs[NISH_PAR_MAX];
-  pthread_t th[NISH_PAR_MAX];
   /* Contiguous chunks, the remainder spread one element at a time over the
    * first `len % n` of them, so the longest chunk is never more than one
    * element longer than the shortest. Contiguous rather than strided because
@@ -137,6 +437,8 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
   int64_t at = 0;
   for (int64_t i = 0; i < n; i++) {
     int64_t take = base + (i < rem ? 1 : 0);
+    jobs[i].job.next = &jobs[i + 1].job;
+    jobs[i].job.run = nish_par_run;
     jobs[i].body = body;
     jobs[i].ctx = ctx;
     jobs[i].lo = at;
@@ -144,24 +446,12 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
     at += take;
   }
 
-  /* The caller runs chunk 0 itself, so N-way parallelism costs N-1 spawns and
-   * the calling thread is not idle while it waits. Its chunk also runs in the
-   * caller's arena, which means chunk 0 behaves exactly as a sequential call
-   * would -- the asymmetry is deliberate and is why a body whose result is
-   * allocated is the surface's error rather than this file's. */
-  int started = 0;
-  for (int64_t i = 1; i < n; i++) {
-    if (pthread_create(&th[started], 0, nish_par_worker, &jobs[i]) != 0) break;
-    started++;
-  }
-  nish_par_depth++;
-  jobs[0].body(jobs[0].lo, jobs[0].hi, jobs[0].ctx);
-  /* A chunk whose thread could not be created runs here. Running short of
-   * threads must cost speed and never correctness, so there is no path on which
-   * a range is silently skipped. */
-  for (int64_t i = (int64_t)started + 1; i < n; i++) jobs[i].body(jobs[i].lo, jobs[i].hi, jobs[i].ctx);
-  nish_par_depth--;
-  for (int i = 0; i < started; i++) pthread_join(th[i], 0);
+  /* The caller runs chunk 0 itself, in its own arena, which means chunk 0
+   * behaves exactly as a sequential call would -- the asymmetry is deliberate
+   * and is why a body whose result is allocated is the surface's error rather
+   * than this file's. */
+  jobs[n - 1].job.next = 0;
+  nish_jobs_run(&jobs[0].job, jobs[0].job.next);
 #else
   (void)grain;
   body(0, len, ctx);
@@ -182,19 +472,25 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
  * joins it, so the list needs no lock, and scopes may nest: a join takes its
  * own scope's tasks out of the list and leaves the rest. */
 typedef struct nish_task {
+#ifdef NISH_PAR_REAL
+  nish_job job;
+#endif
   struct nish_task *next;
   void *scope;
   nish_task_fn run;
   nish_task_fn finish;
-#ifdef NISH_PAR_REAL
-  pthread_t th;
-  int started;
-#endif
   /* The copied payload, aligned for any field it holds. */
   uint64_t payload[];
 } nish_task;
 
 static NISH_TLS nish_task *nish_tasks = 0;
+
+#ifdef NISH_PAR_REAL
+static void nish_task_run(nish_job *j) {
+  nish_task *t = (nish_task *)j;
+  t->run(t->payload);
+}
+#endif
 
 /* The end of the program when an allocation of this file's fails: the scope's
  * task list and a channel's buffer are the two, and neither has a way to go on
@@ -214,22 +510,13 @@ void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const 
   t->scope = scope;
   t->run = run;
   t->finish = finish;
+#ifdef NISH_PAR_REAL
+  t->job.run = nish_task_run;
+#endif
   memcpy(t->payload, payload, (size_t)size);
   t->next = nish_tasks;
   nish_tasks = t;
 }
-
-#ifdef NISH_PAR_REAL
-static void *nish_task_worker(void *p) {
-  nish_task *t = (nish_task *)p;
-  /* A task is one thread's work, as a chunk is, so a region inside it runs on
-   * this thread rather than multiplying the threads. */
-  nish_par_depth = 1;
-  t->run(t->payload);
-  nish_free_arena(); /* as `nish_par_worker`: this thread's arena, and only it */
-  return 0;
-}
-#endif
 
 void nish_scope_join(void *scope) {
   /* This scope's tasks, oldest first: the list is newest first, and moving each
@@ -241,6 +528,9 @@ void nish_scope_join(void *scope) {
     if (t->scope == scope) {
       *link = t->next;
       t->next = mine;
+#ifdef NISH_PAR_REAL
+      t->job.next = (nish_job *)mine;
+#endif
       mine = t;
     } else {
       link = &t->next;
@@ -248,21 +538,11 @@ void nish_scope_join(void *scope) {
   }
   if (!mine) return;
 #ifdef NISH_PAR_REAL
-  /* Every task but the first on a thread of its own, and the first on this
-   * one, so N tasks cost N-1 spawns and this thread is not idle. A task inside
-   * a region or another task's thread runs here, as a nested region does. */
-  for (nish_task *t = mine->next; t; t = t->next) {
-    t->started = nish_par_depth == 0 && pthread_create(&t->th, 0, nish_task_worker, t) == 0;
-  }
-  nish_par_depth++;
-  mine->run(mine->payload);
-  for (nish_task *t = mine->next; t; t = t->next) {
-    if (!t->started) t->run(t->payload);
-  }
-  nish_par_depth--;
-  for (nish_task *t = mine->next; t; t = t->next) {
-    if (t->started) pthread_join(t->th, 0);
-  }
+  /* The first task on this thread and the rest on the pool, in the order they
+   * were spawned, which is the order a task no worker is free for runs in here,
+   * and the order every task runs in when the scope is joined inside another
+   * job (`nish_jobs_run`). */
+  nish_jobs_run(&mine->job, mine->job.next);
 #else
   for (nish_task *t = mine; t; t = t->next) t->run(t->payload);
 #endif
