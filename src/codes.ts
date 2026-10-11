@@ -1263,7 +1263,9 @@ const deprecationRules = (): string[] => [
 /** The code of the first fragment of one table that `text` contains, or `UNCODED`. */
 const firstMatch = (rules: string[], text: string): string => {
   let i: i32 = 0
-  while (i < rules.length) {
+  // A table is fragment, code, fragment, code: the test on the code is the
+  // one that proves both reads of a pair.
+  while (i + 1 < rules.length) {
     if (text.indexOf(rules[i]) >= 0) {
       return rules[i + 1]
     }

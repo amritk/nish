@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 960 programs, 89248 dump lines.
+# 961 programs, 89260 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -47656,6 +47656,16 @@ function weigh(ys: i32[]): i32 -> @weigh
   calls: nish_array_grow nish_panic_index
   pointer ys: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+program tests/cases/perf_bounds_offset.ts
+module tests/cases/perf_bounds_offset.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  stackSites=2 stackLocals=2
+  local 7:9 xs: i32[] (const)
+  local 8:9 ys: i32[] (const)
+  local 9:7 total: i32 (let)
+  local 10:12 i: i32 (let)
 program tests/cases/perf_bounds_quiet.ts
 module tests/cases/perf_bounds_quiet.ts (entry)
 function test(): i32 -> @test [exported]
@@ -55184,7 +55194,7 @@ function hkdfLabel(caller: string, label: string, context: u8[], length: i32): u
   local 326:9 contextLength: i32 (const)
   local 327:9 out: u8[] (const)
   local 331:12 k: i32 (let)
-  callee 335:3 hkdfAppend -> @nish.hkdfAppend
+  callee 342:3 hkdfAppend -> @nish.hkdfAppend
 function hkdfExpandLabelSha256(prk: u8[], label: string, context: u8[], length: i32): u8[] -> @nish.hkdfExpandLabelSha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandSha256
@@ -55193,9 +55203,9 @@ function hkdfExpandLabelSha256(prk: u8[], label: string, context: u8[], length: 
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandSha256#0
   pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfLabel#2
   stackSites=0 stackLocals=0
-  local 345:9 okm: u8[] | null (const)
-  callee 345:28 hkdfExpandSha256 -> @nish.hkdfExpandSha256
-  callee 347:5 hkdfLabel -> @nish.hkdfLabel
+  local 352:9 okm: u8[] | null (const)
+  callee 352:28 hkdfExpandSha256 -> @nish.hkdfExpandSha256
+  callee 354:5 hkdfLabel -> @nish.hkdfLabel
 function hkdfExpandLabelSha384(prk: u8[], label: string, context: u8[], length: i32): u8[] -> @nish.hkdfExpandLabelSha384 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandSha384
@@ -55204,25 +55214,25 @@ function hkdfExpandLabelSha384(prk: u8[], label: string, context: u8[], length: 
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandSha384#0
   pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfLabel#2
   stackSites=0 stackLocals=0
-  local 362:9 okm: u8[] | null (const)
-  callee 362:28 hkdfExpandSha384 -> @nish.hkdfExpandSha384
-  callee 364:5 hkdfLabel -> @nish.hkdfLabel
+  local 369:9 okm: u8[] | null (const)
+  callee 369:28 hkdfExpandSha384 -> @nish.hkdfExpandSha384
+  callee 371:5 hkdfLabel -> @nish.hkdfLabel
 function HkdfScratch.constructor(this: HkdfScratch): void -> @nish.HkdfScratch.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.HmacSha256Scratch.constructor
   calls: nish.HmacSha256Scratch.constructor nish.HmacSha384Scratch.constructor nish_alloc_struct nish_exit nish_write
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 395:19 new HmacSha256Scratch -> @nish.HmacSha256Scratch.constructor
-  callee 396:19 new HmacSha384Scratch -> @nish.HmacSha384Scratch.constructor
+  callee 402:19 new HmacSha256Scratch -> @nish.HmacSha256Scratch.constructor
+  callee 403:19 new HmacSha384Scratch -> @nish.HmacSha384Scratch.constructor
 function HkdfScratch.wipe(this: HkdfScratch): void -> @nish.HkdfScratch.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 404:5
+  sharedWrite: 411:5
   calls: nish.HmacSha256Scratch.wipe nish.HmacSha384Scratch.wipe nish_wipe
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 405:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
-  callee 406:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
+  callee 412:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
+  callee 413:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
 function hkdfCheckHash(caller: string, hashLength: i32): void -> @nish.hkdfCheckHash
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -55236,12 +55246,12 @@ function hkdfCheckOutput(caller: string, out: u8[], at: i32, length: i32): void 
   stackSites=0 stackLocals=0
 function hkdfWipe(s: HkdfScratch, hashLength: i32): void -> @nish.hkdfWipe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 426:3
+  sharedWrite: 433:3
   calls: nish.HmacSha256Scratch.wipe nish.HmacSha384Scratch.wipe nish_wipe
   pointer s: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 428:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
-  callee 430:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
+  callee 435:5 HmacSha384Scratch.wipe -> @nish.HmacSha384Scratch.wipe
+  callee 437:5 HmacSha256Scratch.wipe -> @nish.HmacSha256Scratch.wipe
 function hkdfMacBegin(s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len: i32): void -> @nish.hkdfMacBegin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha384Scratch.begin
@@ -55250,8 +55260,8 @@ function hkdfMacBegin(s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len:
   pointer s: size=40 writesThrough=false captured=false
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.begin#1 nish.HmacSha256Scratch.begin#1
   stackSites=0 stackLocals=0
-  callee 437:5 HmacSha384Scratch.begin -> @nish.HmacSha384Scratch.begin
-  callee 439:5 HmacSha256Scratch.begin -> @nish.HmacSha256Scratch.begin
+  callee 444:5 HmacSha384Scratch.begin -> @nish.HmacSha384Scratch.begin
+  callee 446:5 HmacSha256Scratch.begin -> @nish.HmacSha256Scratch.begin
 function hkdfMacUpdate(s: HkdfScratch, hashLength: i32, data: u8[], off: i32, len: i32): void -> @nish.hkdfMacUpdate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha384Scratch.update
@@ -55260,8 +55270,8 @@ function hkdfMacUpdate(s: HkdfScratch, hashLength: i32, data: u8[], off: i32, le
   pointer s: size=40 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.update#1 nish.HmacSha256Scratch.update#1
   stackSites=0 stackLocals=0
-  callee 446:5 HmacSha384Scratch.update -> @nish.HmacSha384Scratch.update
-  callee 448:5 HmacSha256Scratch.update -> @nish.HmacSha256Scratch.update
+  callee 453:5 HmacSha384Scratch.update -> @nish.HmacSha384Scratch.update
+  callee 455:5 HmacSha256Scratch.update -> @nish.HmacSha256Scratch.update
 function hkdfMacFinish(s: HkdfScratch, hashLength: i32, out: u8[], at: i32): void -> @nish.hkdfMacFinish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha384Scratch.finishInto
@@ -55270,8 +55280,8 @@ function hkdfMacFinish(s: HkdfScratch, hashLength: i32, out: u8[], at: i32): voi
   pointer s: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.HmacSha384Scratch.finishInto#1 nish.HmacSha256Scratch.finishInto#1
   stackSites=0 stackLocals=0
-  callee 455:5 HmacSha384Scratch.finishInto -> @nish.HmacSha384Scratch.finishInto
-  callee 457:5 HmacSha256Scratch.finishInto -> @nish.HmacSha256Scratch.finishInto
+  callee 462:5 HmacSha384Scratch.finishInto -> @nish.HmacSha384Scratch.finishInto
+  callee 464:5 HmacSha256Scratch.finishInto -> @nish.HmacSha256Scratch.finishInto
 function hkdfExtractInto(s: HkdfScratch, hashLength: i32, salt: u8[], ikm: u8[], out: u8[], at: i32): void -> @nish.hkdfExtractInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfCheckHash
@@ -55282,15 +55292,15 @@ function hkdfExtractInto(s: HkdfScratch, hashLength: i32, salt: u8[], ikm: u8[],
   pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hkdfMacUpdate#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfCheckOutput#1 nish.hkdfMacFinish#2
   stackSites=0 stackLocals=0
-  callee 476:3 hkdfCheckHash -> @nish.hkdfCheckHash
-  callee 477:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
-  callee 481:3 hkdfMacBegin -> @nish.hkdfMacBegin
-  callee 482:3 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 483:3 hkdfMacFinish -> @nish.hkdfMacFinish
-  callee 484:3 hkdfWipe -> @nish.hkdfWipe
+  callee 483:3 hkdfCheckHash -> @nish.hkdfCheckHash
+  callee 484:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
+  callee 488:3 hkdfMacBegin -> @nish.hkdfMacBegin
+  callee 489:3 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 490:3 hkdfMacFinish -> @nish.hkdfMacFinish
+  callee 491:3 hkdfWipe -> @nish.hkdfWipe
 function hkdfExpandWindow(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[], infoLen: i32, out: u8[], at: i32, length: i32): void -> @nish.hkdfExpandWindow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 511:5
+  sharedWrite: 518:5
   escaping: hashLength infoLen
   calls: nish.hkdfMacBegin nish.hkdfMacFinish nish.hkdfMacUpdate nish.hkdfWipe nish_panic_index nish_panic_overflow
   pointer s: size=40 writesThrough=false captured=false passedTo=nish.hkdfMacBegin#0 nish.hkdfMacUpdate#0 nish.hkdfMacUpdate#0 nish.hkdfMacUpdate#0 nish.hkdfMacFinish#0 nish.hkdfWipe#0
@@ -55298,16 +55308,16 @@ function hkdfExpandWindow(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[]
   pointer info: size=0 writesThrough=false captured=false passedTo=nish.hkdfMacUpdate#2
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 502:9 counterLength: i32 (const)
-  local 503:7 done: i32 (let)
-  local 504:7 i: i32 (let)
-  callee 506:5 hkdfMacBegin -> @nish.hkdfMacBegin
-  callee 508:7 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 510:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 512:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
-  callee 513:5 hkdfMacFinish -> @nish.hkdfMacFinish
-  local 514:14 k: i32 (let)
-  callee 520:3 hkdfWipe -> @nish.hkdfWipe
+  local 509:9 counterLength: i32 (const)
+  local 510:7 done: i32 (let)
+  local 511:7 i: i32 (let)
+  callee 513:5 hkdfMacBegin -> @nish.hkdfMacBegin
+  callee 515:7 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 517:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 519:5 hkdfMacUpdate -> @nish.hkdfMacUpdate
+  callee 520:5 hkdfMacFinish -> @nish.hkdfMacFinish
+  local 521:14 k: i32 (let)
+  callee 527:3 hkdfWipe -> @nish.hkdfWipe
 function hkdfExpandInto(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[], out: u8[], at: i32, length: i32): boolean -> @nish.hkdfExpandInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfCheckHash
@@ -55318,12 +55328,12 @@ function hkdfExpandInto(s: HkdfScratch, hashLength: i32, prk: u8[], info: u8[], 
   pointer info: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandWindow#3
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfCheckOutput#1 nish.hkdfExpandWindow#5
   stackSites=0 stackLocals=0
-  callee 539:3 hkdfCheckHash -> @nish.hkdfCheckHash
-  callee 548:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
-  callee 549:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
+  callee 546:3 hkdfCheckHash -> @nish.hkdfCheckHash
+  callee 555:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
+  callee 556:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
 function hkdfExpandLabelInto(s: HkdfScratch, hashLength: i32, prk: u8[], label: string, context: u8[], contextOff: i32, contextLen: i32, out: u8[], at: i32, length: i32): void -> @nish.hkdfExpandLabelInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 597:3
+  sharedWrite: 604:3
   escaping: at hashLength length
   calls: nish.hkdfCheckHash nish.hkdfCheckOutput nish.hkdfExpandWindow nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_write
   pointer s: size=40 writesThrough=false captured=false passedTo=nish.hkdfExpandWindow#0
@@ -55331,17 +55341,17 @@ function hkdfExpandLabelInto(s: HkdfScratch, hashLength: i32, prk: u8[], label: 
   pointer context: size=0 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfCheckOutput#1 nish.hkdfExpandWindow#5
   stackSites=0 stackLocals=0
-  callee 573:3 hkdfCheckHash -> @nish.hkdfCheckHash
-  callee 591:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
-  local 593:9 prefixLength: i32 (const)
-  local 594:9 labelLength: i32 (const)
-  local 595:9 fullLength: i32 (const)
-  local 596:9 info: u8[] (const)
-  local 600:12 k: i32 (let)
-  local 603:12 k: i32 (let)
-  local 606:9 contextAt: i32 (const)
-  local 608:12 k: i32 (let)
-  callee 611:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
+  callee 580:3 hkdfCheckHash -> @nish.hkdfCheckHash
+  callee 598:3 hkdfCheckOutput -> @nish.hkdfCheckOutput
+  local 600:9 prefixLength: i32 (const)
+  local 601:9 labelLength: i32 (const)
+  local 602:9 fullLength: i32 (const)
+  local 603:9 info: u8[] (const)
+  local 607:12 k: i32 (let)
+  local 610:12 k: i32 (let)
+  local 613:9 contextAt: i32 (const)
+  local 615:12 k: i32 (let)
+  callee 618:3 hkdfExpandWindow -> @nish.hkdfExpandWindow
 module std/crypto/hmac.ts [package nish]
 import SHA256_BLOCK from "nish/crypto/sha256" -> const SHA256_BLOCK
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
@@ -68020,7 +68030,7 @@ function tlsParseClientHello(data: u8[], off: i32, len: i32): TlsClientHello -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=120
   sharedWrite: 653:3
   escaping: len off
-  calls: nish.TlsClientHello.constructor nish.TlsClientHelloView.constructor nish.tlsCopyU16Window nish.tlsCopyWindow nish.tlsReadClientHello nish.tlsWindowString nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
+  calls: nish.TlsClientHello.constructor nish.TlsClientHelloView.constructor nish.tlsCopyU16Window nish.tlsCopyWindow nish.tlsReadClientHello nish.tlsWindowString nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer data: size=0 writesThrough=true captured=true passedTo=nish.tlsReadClientHello#1 nish.tlsCopyWindow#0 nish.tlsCopyWindow#0 nish.tlsCopyU16Window#0 nish.tlsCopyU16Window#0 nish.tlsCopyU16Window#0 nish.tlsCopyU16Window#0 nish.tlsCopyWindow#0 nish.tlsWindowString#0 nish.tlsCopyWindow#0 nish.tlsCopyWindow#0
   stackSites=1 stackLocals=1
   local 650:9 view: TlsClientHelloView (const)
@@ -68038,11 +68048,15 @@ function tlsParseClientHello(data: u8[], off: i32, len: i32): TlsClientHello -> 
   callee 665:22 tlsWindowString -> @nish.tlsWindowString
   callee 666:35 tlsCopyWindow -> @nish.tlsCopyWindow
   local 669:7 at: i32 (let)
-  local 681:11 n: i32 (const)
-  callee 682:21 tlsCopyWindow -> @nish.tlsCopyWindow
+  local 678:11 group: i32 (const)
+  local 679:11 skip: i32 (const)
+  local 685:11 n: i32 (const)
+  callee 686:21 tlsCopyWindow -> @nish.tlsCopyWindow
+  local 697:11 kind: i32 (const)
+  local 698:11 skip: i32 (const)
 function tlsPutU8(out: u8[], at: i32, v: i32): i32 -> @nish.tlsPutU8
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 719:5
+  sharedWrite: 726:5
   escaping: at
   calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
@@ -68054,8 +68068,8 @@ function tlsPutU16(out: u8[], at: i32, v: i32): i32 -> @nish.tlsPutU16
   calls: nish.tlsPutU8
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0 nish.tlsPutU8#0
   stackSites=0 stackLocals=0
-  callee 724:56 tlsPutU8 -> @nish.tlsPutU8
-  callee 724:70 tlsPutU8 -> @nish.tlsPutU8
+  callee 731:56 tlsPutU8 -> @nish.tlsPutU8
+  callee 731:70 tlsPutU8 -> @nish.tlsPutU8
 function tlsPutWindow(out: u8[], at: i32, bytes: u8[], off: i32, len: i32): i32 -> @nish.tlsPutWindow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
@@ -68063,8 +68077,8 @@ function tlsPutWindow(out: u8[], at: i32, bytes: u8[], off: i32, len: i32): i32 
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 732:12 k: i32 (let)
-  callee 733:5 tlsPutU8 -> @nish.tlsPutU8
+  local 739:12 k: i32 (let)
+  callee 740:5 tlsPutU8 -> @nish.tlsPutU8
 function tlsPutBytes(out: u8[], at: i32, b: u8[]): i32 -> @nish.tlsPutBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutWindow
@@ -68073,25 +68087,25 @@ function tlsPutBytes(out: u8[], at: i32, b: u8[]): i32 -> @nish.tlsPutBytes
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutWindow#0
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   stackSites=0 stackLocals=0
-  callee 739:3 tlsPutWindow -> @nish.tlsPutWindow
+  callee 746:3 tlsPutWindow -> @nish.tlsPutWindow
 function tlsPutAscii(out: u8[], at: i32, text: string): i32 -> @nish.tlsPutAscii
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
   calls: nish.tlsPutU8 nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0
   stackSites=0 stackLocals=0
-  local 743:9 length: i32 (const)
-  local 744:12 k: i32 (let)
-  callee 745:5 tlsPutU8 -> @nish.tlsPutU8
+  local 750:9 length: i32 (const)
+  local 751:12 k: i32 (let)
+  callee 752:5 tlsPutU8 -> @nish.tlsPutU8
 function tlsPutLength(out: u8[], start: i32, end: i32, width: i32): void -> @nish.tlsPutLength
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
   calls: nish.tlsPutU8 nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0
   stackSites=0 stackLocals=0
-  local 756:7 n: i32 (let)
-  local 757:12 at: i32 (let)
-  callee 758:5 tlsPutU8 -> @nish.tlsPutU8
+  local 763:7 n: i32 (let)
+  local 764:12 at: i32 (let)
+  callee 765:5 tlsPutU8 -> @nish.tlsPutU8
 function tlsPutHeader(out: u8[], at: i32, type: i32, end: i32): void -> @nish.tlsPutHeader
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
@@ -68099,8 +68113,8 @@ function tlsPutHeader(out: u8[], at: i32, type: i32, end: i32): void -> @nish.tl
   calls: nish.tlsPutLength nish.tlsPutU8 nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0 nish.tlsPutLength#0
   stackSites=0 stackLocals=0
-  callee 765:3 tlsPutU8 -> @nish.tlsPutU8
-  callee 766:3 tlsPutLength -> @nish.tlsPutLength
+  callee 772:3 tlsPutU8 -> @nish.tlsPutU8
+  callee 773:3 tlsPutLength -> @nish.tlsPutLength
 function tlsHexNibble(c: i32): i32 -> @nish.tlsHexNibble
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
@@ -68111,13 +68125,13 @@ function tlsHexInto(text: string, out: u8[], at: i32): i32 -> @nish.tlsHexInto [
   calls: nish.tlsHexNibble nish.tlsPutU8 nish_panic_index nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0
   stackSites=0 stackLocals=0
-  local 781:9 length: i32 (const)
-  local 782:12 k: i32 (let)
-  local 783:11 hi: i32 (const)
-  callee 783:21 tlsHexNibble -> @nish.tlsHexNibble
-  local 784:11 lo: i32 (const)
-  callee 784:21 tlsHexNibble -> @nish.tlsHexNibble
-  callee 785:5 tlsPutU8 -> @nish.tlsPutU8
+  local 788:9 length: i32 (const)
+  local 789:12 k: i32 (let)
+  local 790:11 hi: i32 (const)
+  callee 790:21 tlsHexNibble -> @nish.tlsHexNibble
+  local 791:11 lo: i32 (const)
+  callee 791:21 tlsHexNibble -> @nish.tlsHexNibble
+  callee 792:5 tlsPutU8 -> @nish.tlsPutU8
 function tlsPutSelectedVersion(out: u8[], at: i32): i32 -> @nish.tlsPutSelectedVersion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU16
@@ -68125,9 +68139,9 @@ function tlsPutSelectedVersion(out: u8[], at: i32): i32 -> @nish.tlsPutSelectedV
   calls: nish.tlsPutU16
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0
   stackSites=0 stackLocals=0
-  callee 792:3 tlsPutU16 -> @nish.tlsPutU16
-  callee 792:18 tlsPutU16 -> @nish.tlsPutU16
-  callee 792:33 tlsPutU16 -> @nish.tlsPutU16
+  callee 799:3 tlsPutU16 -> @nish.tlsPutU16
+  callee 799:18 tlsPutU16 -> @nish.tlsPutU16
+  callee 799:33 tlsPutU16 -> @nish.tlsPutU16
 function tlsPutHelloHead(out: u8[], at: i32, random: u8[], retry: boolean, sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32): i32 -> @nish.tlsPutHelloHead
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU16
@@ -68137,14 +68151,14 @@ function tlsPutHelloHead(out: u8[], at: i32, random: u8[], retry: boolean, sessi
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   stackSites=0 stackLocals=0
-  local 809:7 p: i32 (let)
-  callee 809:16 tlsPutU16 -> @nish.tlsPutU16
-  callee 810:15 tlsHexInto -> @nish.tlsHexInto
-  callee 810:60 tlsPutBytes -> @nish.tlsPutBytes
-  callee 811:7 tlsPutU8 -> @nish.tlsPutU8
-  callee 812:7 tlsPutWindow -> @nish.tlsPutWindow
-  callee 813:7 tlsPutU16 -> @nish.tlsPutU16
-  callee 814:10 tlsPutU8 -> @nish.tlsPutU8
+  local 816:7 p: i32 (let)
+  callee 816:16 tlsPutU16 -> @nish.tlsPutU16
+  callee 817:15 tlsHexInto -> @nish.tlsHexInto
+  callee 817:60 tlsPutBytes -> @nish.tlsPutBytes
+  callee 818:7 tlsPutU8 -> @nish.tlsPutU8
+  callee 819:7 tlsPutWindow -> @nish.tlsPutWindow
+  callee 820:7 tlsPutU16 -> @nish.tlsPutU16
+  callee 821:10 tlsPutU8 -> @nish.tlsPutU8
 function tlsWriteServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, x25519Public: u8[]): i32 -> @nish.tlsWriteServerHello [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutHelloHead
@@ -68155,19 +68169,19 @@ function tlsWriteServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], 
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutHelloHead#4
   pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   stackSites=0 stackLocals=0
-  local 834:7 p: i32 (let)
-  callee 834:16 tlsPutHelloHead -> @nish.tlsPutHelloHead
-  local 835:9 extensions: i32 (const)
-  callee 836:7 tlsPutU16 -> @nish.tlsPutU16
-  local 837:9 share: i32 (const)
-  callee 838:7 tlsPutU16 -> @nish.tlsPutU16
-  local 839:9 key: i32 (const)
-  callee 840:7 tlsPutBytes -> @nish.tlsPutBytes
-  callee 841:3 tlsPutLength -> @nish.tlsPutLength
-  callee 842:3 tlsPutLength -> @nish.tlsPutLength
-  callee 843:7 tlsPutSelectedVersion -> @nish.tlsPutSelectedVersion
-  callee 844:3 tlsPutLength -> @nish.tlsPutLength
-  callee 845:3 tlsPutHeader -> @nish.tlsPutHeader
+  local 841:7 p: i32 (let)
+  callee 841:16 tlsPutHelloHead -> @nish.tlsPutHelloHead
+  local 842:9 extensions: i32 (const)
+  callee 843:7 tlsPutU16 -> @nish.tlsPutU16
+  local 844:9 share: i32 (const)
+  callee 845:7 tlsPutU16 -> @nish.tlsPutU16
+  local 846:9 key: i32 (const)
+  callee 847:7 tlsPutBytes -> @nish.tlsPutBytes
+  callee 848:3 tlsPutLength -> @nish.tlsPutLength
+  callee 849:3 tlsPutLength -> @nish.tlsPutLength
+  callee 850:7 tlsPutSelectedVersion -> @nish.tlsPutSelectedVersion
+  callee 851:3 tlsPutLength -> @nish.tlsPutLength
+  callee 852:3 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteHelloRetryRequest(out: u8[], at: i32, sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, group: i32): i32 -> @nish.tlsWriteHelloRetryRequest [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutHelloHead
@@ -68176,16 +68190,16 @@ function tlsWriteHelloRetryRequest(out: u8[], at: i32, sessionId: u8[], sessionI
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutHelloHead#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutSelectedVersion#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutHelloHead#4
   stackSites=1 stackLocals=1
-  local 864:9 none: u8[] (const)
-  local 865:7 p: i32 (let)
-  callee 865:16 tlsPutHelloHead -> @nish.tlsPutHelloHead
-  local 866:9 extensions: i32 (const)
-  callee 867:7 tlsPutU16 -> @nish.tlsPutU16
-  callee 868:7 tlsPutU16 -> @nish.tlsPutU16
-  callee 869:7 tlsPutU16 -> @nish.tlsPutU16
-  callee 870:7 tlsPutSelectedVersion -> @nish.tlsPutSelectedVersion
-  callee 871:3 tlsPutLength -> @nish.tlsPutLength
-  callee 872:3 tlsPutHeader -> @nish.tlsPutHeader
+  local 871:9 none: u8[] (const)
+  local 872:7 p: i32 (let)
+  callee 872:16 tlsPutHelloHead -> @nish.tlsPutHelloHead
+  local 873:9 extensions: i32 (const)
+  callee 874:7 tlsPutU16 -> @nish.tlsPutU16
+  callee 875:7 tlsPutU16 -> @nish.tlsPutU16
+  callee 876:7 tlsPutU16 -> @nish.tlsPutU16
+  callee 877:7 tlsPutSelectedVersion -> @nish.tlsPutSelectedVersion
+  callee 878:3 tlsPutLength -> @nish.tlsPutLength
+  callee 879:3 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteEncryptedExtensions(out: u8[], at: i32, extra: u8[], alpn: string, acknowledgeServerName: boolean, quicTransportParameters: u8[] | null): i32 -> @nish.tlsWriteEncryptedExtensions [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutBytes
@@ -68195,25 +68209,25 @@ function tlsWriteEncryptedExtensions(out: u8[], at: i32, extra: u8[], alpn: stri
   pointer extra: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   pointer quicTransportParameters: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   stackSites=0 stackLocals=0
-  local 892:9 extensions: i32 (const)
-  local 893:7 p: i32 (let)
-  callee 893:16 tlsPutBytes -> @nish.tlsPutBytes
-  callee 895:9 tlsPutU16 -> @nish.tlsPutU16
-  local 896:11 body: i32 (const)
-  local 897:11 list: i32 (const)
-  local 898:11 name: i32 (const)
-  callee 899:9 tlsPutAscii -> @nish.tlsPutAscii
-  callee 900:5 tlsPutLength -> @nish.tlsPutLength
-  callee 901:5 tlsPutLength -> @nish.tlsPutLength
-  callee 902:5 tlsPutLength -> @nish.tlsPutLength
-  callee 905:9 tlsPutU16 -> @nish.tlsPutU16
-  callee 905:24 tlsPutU16 -> @nish.tlsPutU16
-  callee 908:9 tlsPutU16 -> @nish.tlsPutU16
-  local 909:11 body: i32 (const)
-  callee 910:9 tlsPutBytes -> @nish.tlsPutBytes
-  callee 911:5 tlsPutLength -> @nish.tlsPutLength
-  callee 913:3 tlsPutLength -> @nish.tlsPutLength
-  callee 914:3 tlsPutHeader -> @nish.tlsPutHeader
+  local 899:9 extensions: i32 (const)
+  local 900:7 p: i32 (let)
+  callee 900:16 tlsPutBytes -> @nish.tlsPutBytes
+  callee 902:9 tlsPutU16 -> @nish.tlsPutU16
+  local 903:11 body: i32 (const)
+  local 904:11 list: i32 (const)
+  local 905:11 name: i32 (const)
+  callee 906:9 tlsPutAscii -> @nish.tlsPutAscii
+  callee 907:5 tlsPutLength -> @nish.tlsPutLength
+  callee 908:5 tlsPutLength -> @nish.tlsPutLength
+  callee 909:5 tlsPutLength -> @nish.tlsPutLength
+  callee 912:9 tlsPutU16 -> @nish.tlsPutU16
+  callee 912:24 tlsPutU16 -> @nish.tlsPutU16
+  callee 915:9 tlsPutU16 -> @nish.tlsPutU16
+  local 916:11 body: i32 (const)
+  callee 917:9 tlsPutBytes -> @nish.tlsPutBytes
+  callee 918:5 tlsPutLength -> @nish.tlsPutLength
+  callee 920:3 tlsPutLength -> @nish.tlsPutLength
+  callee 921:3 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteCertificate(out: u8[], at: i32, chain: u8[][]): i32 -> @nish.tlsWriteCertificate [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
@@ -68222,16 +68236,16 @@ function tlsWriteCertificate(out: u8[], at: i32, chain: u8[][]): i32 -> @nish.tl
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
   pointer chain: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 924:9 list: i32 (const)
-  callee 924:21 tlsPutU8 -> @nish.tlsPutU8
-  local 925:7 p: i32 (let)
-  local 926:14 certificate: u8[] (const)
-  local 927:11 entry: i32 (const)
-  callee 928:9 tlsPutBytes -> @nish.tlsPutBytes
-  callee 929:5 tlsPutLength -> @nish.tlsPutLength
-  callee 930:9 tlsPutU16 -> @nish.tlsPutU16
-  callee 932:3 tlsPutLength -> @nish.tlsPutLength
-  callee 933:3 tlsPutHeader -> @nish.tlsPutHeader
+  local 931:9 list: i32 (const)
+  callee 931:21 tlsPutU8 -> @nish.tlsPutU8
+  local 932:7 p: i32 (let)
+  local 933:14 certificate: u8[] (const)
+  local 934:11 entry: i32 (const)
+  callee 935:9 tlsPutBytes -> @nish.tlsPutBytes
+  callee 936:5 tlsPutLength -> @nish.tlsPutLength
+  callee 937:9 tlsPutU16 -> @nish.tlsPutU16
+  callee 939:3 tlsPutLength -> @nish.tlsPutLength
+  callee 940:3 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteCertificateVerify(out: u8[], at: i32, scheme: i32, signature: u8[]): i32 -> @nish.tlsWriteCertificateVerify [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU16
@@ -68240,12 +68254,12 @@ function tlsWriteCertificateVerify(out: u8[], at: i32, scheme: i32, signature: u
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   stackSites=0 stackLocals=0
-  local 939:9 body: i32 (const)
-  callee 939:21 tlsPutU16 -> @nish.tlsPutU16
-  local 940:9 p: i32 (const)
-  callee 940:18 tlsPutBytes -> @nish.tlsPutBytes
-  callee 941:3 tlsPutLength -> @nish.tlsPutLength
-  callee 942:3 tlsPutHeader -> @nish.tlsPutHeader
+  local 946:9 body: i32 (const)
+  callee 946:21 tlsPutU16 -> @nish.tlsPutU16
+  local 947:9 p: i32 (const)
+  callee 947:18 tlsPutBytes -> @nish.tlsPutBytes
+  callee 948:3 tlsPutLength -> @nish.tlsPutLength
+  callee 949:3 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteFinished(out: u8[], at: i32, verifyData: u8[], off: i32, len: i32): i32 -> @nish.tlsWriteFinished [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutWindow
@@ -68254,9 +68268,9 @@ function tlsWriteFinished(out: u8[], at: i32, verifyData: u8[], off: i32, len: i
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutWindow#0 nish.tlsPutHeader#0
   pointer verifyData: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   stackSites=0 stackLocals=0
-  local 948:9 p: i32 (const)
-  callee 948:18 tlsPutWindow -> @nish.tlsPutWindow
-  callee 949:3 tlsPutHeader -> @nish.tlsPutHeader
+  local 955:9 p: i32 (const)
+  callee 955:18 tlsPutWindow -> @nish.tlsPutWindow
+  callee 956:3 tlsPutHeader -> @nish.tlsPutHeader
 function tlsWriteCertificateVerifyContent(out: u8[], at: i32, transcriptHash: u8[], off: i32, len: i32): i32 -> @nish.tlsWriteCertificateVerifyContent [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutU8
@@ -68265,18 +68279,18 @@ function tlsWriteCertificateVerifyContent(out: u8[], at: i32, transcriptHash: u8
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU8#0 nish.tlsPutAscii#0 nish.tlsPutU8#0 nish.tlsPutWindow#0
   pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.tlsPutWindow#2
   stackSites=0 stackLocals=0
-  local 966:7 p: i32 (let)
-  local 967:12 k: i32 (let)
-  callee 968:9 tlsPutU8 -> @nish.tlsPutU8
-  callee 970:7 tlsPutAscii -> @nish.tlsPutAscii
-  callee 971:7 tlsPutU8 -> @nish.tlsPutU8
-  callee 972:10 tlsPutWindow -> @nish.tlsPutWindow
+  local 973:7 p: i32 (let)
+  local 974:12 k: i32 (let)
+  callee 975:9 tlsPutU8 -> @nish.tlsPutU8
+  callee 977:7 tlsPutAscii -> @nish.tlsPutAscii
+  callee 978:7 tlsPutU8 -> @nish.tlsPutU8
+  callee 979:10 tlsPutWindow -> @nish.tlsPutWindow
 function tlsBytesString(name: u8[]): string -> @nish.tlsBytesString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsWindowString
   pointer name: size=0 writesThrough=false captured=false passedTo=nish.tlsWindowString#0
   stackSites=0 stackLocals=0
-  callee 976:48 tlsWindowString -> @nish.tlsWindowString
+  callee 983:48 tlsWindowString -> @nish.tlsWindowString
 function tlsEncodeServerHello(random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[]): u8[] -> @nish.tlsEncodeServerHello [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -68286,11 +68300,11 @@ function tlsEncodeServerHello(random: u8[], sessionId: u8[], suite: i32, x25519P
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHello#3 nish.tlsWriteServerHello#3
   pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHello#7 nish.tlsWriteServerHello#7
   stackSites=1 stackLocals=1
-  local 984:9 none: u8[] (const)
-  local 985:9 sessionIdLength: i32 (const)
-  local 986:9 out: u8[] (const)
-  callee 987:5 tlsWriteServerHello -> @nish.tlsWriteServerHello
-  callee 998:3 tlsWriteServerHello -> @nish.tlsWriteServerHello
+  local 991:9 none: u8[] (const)
+  local 992:9 sessionIdLength: i32 (const)
+  local 993:9 out: u8[] (const)
+  callee 994:5 tlsWriteServerHello -> @nish.tlsWriteServerHello
+  callee 1005:3 tlsWriteServerHello -> @nish.tlsWriteServerHello
 function tlsEncodeHelloRetryRequest(sessionId: u8[], suite: i32, group: i32): u8[] -> @nish.tlsEncodeHelloRetryRequest [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -68298,11 +68312,11 @@ function tlsEncodeHelloRetryRequest(sessionId: u8[], suite: i32, group: i32): u8
   calls: nish.tlsWriteHelloRetryRequest nish_exit nish_write
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteHelloRetryRequest#2 nish.tlsWriteHelloRetryRequest#2
   stackSites=1 stackLocals=1
-  local 1013:9 none: u8[] (const)
-  local 1014:9 sessionIdLength: i32 (const)
-  local 1015:9 out: u8[] (const)
-  callee 1016:5 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  callee 1018:3 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  local 1020:9 none: u8[] (const)
+  local 1021:9 sessionIdLength: i32 (const)
+  local 1022:9 out: u8[] (const)
+  callee 1023:5 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  callee 1025:3 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
 function tlsEncodeEncryptedExtensions(extra: u8[], alpn: u8[], acknowledgeServerName: boolean, quicTransportParameters: u8[] | null): u8[] -> @nish.tlsEncodeEncryptedExtensions [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -68312,22 +68326,22 @@ function tlsEncodeEncryptedExtensions(extra: u8[], alpn: u8[], acknowledgeServer
   pointer alpn: size=0 writesThrough=false captured=false passedTo=nish.tlsBytesString#0
   pointer quicTransportParameters: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteEncryptedExtensions#5 nish.tlsWriteEncryptedExtensions#5
   stackSites=1 stackLocals=1
-  local 1032:9 none: u8[] (const)
-  local 1033:9 protocol: string (const)
-  callee 1033:28 tlsBytesString -> @nish.tlsBytesString
-  local 1034:9 out: u8[] (const)
-  callee 1035:5 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  callee 1044:3 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  local 1039:9 none: u8[] (const)
+  local 1040:9 protocol: string (const)
+  callee 1040:28 tlsBytesString -> @nish.tlsBytesString
+  local 1041:9 out: u8[] (const)
+  callee 1042:5 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  callee 1051:3 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
 function tlsEncodeCertificate(chain: u8[][]): u8[] -> @nish.tlsEncodeCertificate [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: nish.tlsWriteCertificate nish_exit nish_write
   pointer chain: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteCertificate#2 nish.tlsWriteCertificate#2
   stackSites=1 stackLocals=1
-  local 1057:9 none: u8[] (const)
-  local 1058:9 out: u8[] (const)
-  callee 1058:35 tlsWriteCertificate -> @nish.tlsWriteCertificate
-  callee 1059:3 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  local 1064:9 none: u8[] (const)
+  local 1065:9 out: u8[] (const)
+  callee 1065:35 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  callee 1066:3 tlsWriteCertificate -> @nish.tlsWriteCertificate
 function tlsEncodeCertificateVerify(scheme: i32, signature: u8[]): u8[] -> @nish.tlsEncodeCertificateVerify [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -68335,32 +68349,32 @@ function tlsEncodeCertificateVerify(scheme: i32, signature: u8[]): u8[] -> @nish
   calls: nish.tlsWriteCertificateVerify nish_exit nish_write
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteCertificateVerify#3 nish.tlsWriteCertificateVerify#3
   stackSites=1 stackLocals=1
-  local 1065:9 none: u8[] (const)
-  local 1066:9 out: u8[] (const)
-  callee 1066:35 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
-  callee 1067:3 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
+  local 1072:9 none: u8[] (const)
+  local 1073:9 out: u8[] (const)
+  callee 1073:35 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
+  callee 1074:3 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
 function tlsEncodeFinished(verifyData: u8[]): u8[] -> @nish.tlsEncodeFinished [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: nish.tlsWriteFinished nish_exit nish_write
   pointer verifyData: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteFinished#2 nish.tlsWriteFinished#2
   stackSites=1 stackLocals=1
-  local 1073:9 none: u8[] (const)
-  local 1074:9 length: i32 (const)
-  local 1075:9 out: u8[] (const)
-  callee 1075:35 tlsWriteFinished -> @nish.tlsWriteFinished
-  callee 1076:3 tlsWriteFinished -> @nish.tlsWriteFinished
+  local 1080:9 none: u8[] (const)
+  local 1081:9 length: i32 (const)
+  local 1082:9 out: u8[] (const)
+  callee 1082:35 tlsWriteFinished -> @nish.tlsWriteFinished
+  callee 1083:3 tlsWriteFinished -> @nish.tlsWriteFinished
 function tlsCertificateVerifyContent(transcriptHash: u8[]): u8[] -> @nish.tlsCertificateVerifyContent [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: nish.tlsWriteCertificateVerifyContent nish_exit nish_write
   pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteCertificateVerifyContent#2 nish.tlsWriteCertificateVerifyContent#2
   stackSites=1 stackLocals=1
-  local 1082:9 none: u8[] (const)
-  local 1083:9 length: i32 (const)
-  local 1084:9 out: u8[] (const)
-  callee 1085:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
-  callee 1087:3 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
+  local 1089:9 none: u8[] (const)
+  local 1090:9 length: i32 (const)
+  local 1091:9 out: u8[] (const)
+  callee 1092:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
+  callee 1094:3 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
 module std/net/tls/schedule.ts [package nish]
 import HkdfScratch from "nish/crypto/hkdf" -> struct HkdfScratch
 import hkdfExpandLabelInto from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelInto
@@ -72996,28 +73010,27 @@ function relayOptionsFromEnv(o: RelayOptions): void -> @relayOptionsFromEnv [exp
   local 130:9 offload: string | null (const)
 function relayParseArgs(o: RelayOptions, argv: readonly string[], from: i32): void -> @relayParseArgs [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 142:7
+  sharedWrite: 141:7
   escaping: from
   calls: nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq relayIsAddress relayPortOf
   pointer o: size=72 writesThrough=true captured=false
   pointer argv: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 136:9 argc: i32 (const)
-  local 137:7 i: i32 (let)
-  local 139:11 flag: string (const)
-  local 151:11 value: string (const)
-  callee 153:11 relayPortOf -> @relayPortOf
-  callee 157:16 relayPortOf -> @relayPortOf
-  callee 159:12 relayIsAddress -> @relayIsAddress
+  local 136:7 i: i32 (let)
+  local 138:11 flag: string (const)
+  local 153:11 value: string (const)
+  callee 155:11 relayPortOf -> @relayPortOf
+  callee 159:16 relayPortOf -> @relayPortOf
+  callee 161:12 relayIsAddress -> @relayIsAddress
 function relayNamed(sans: string[]): boolean -> @relayNamed [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via relayIsAddress
   calls: nish_str_eq relayIsAddress
   pointer sans: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 193:7 named: boolean (let)
-  local 194:14 san: string (const)
-  callee 195:65 relayIsAddress -> @relayIsAddress
+  local 195:7 named: boolean (let)
+  local 196:14 san: string (const)
+  callee 197:65 relayIsAddress -> @relayIsAddress
 module examples/relay/relay.ts
 import netAddress from "nish:net" -> builtin netAddress
 import netClose from "nish:net" -> builtin netClose

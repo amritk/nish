@@ -6375,11 +6375,18 @@ by the caller.
     (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
     Silent outside a loop, where one check is not a cost anybody is paying;
     silent under `--unchecked-indexing`, where no check survives to report;
-    and silent unless the receiver and the index are both plain locals, which
-    is the shape the analysis knows how to prove — a field receiver
-    (`this.source.charCodeAt(this.pos)`) or a computed index was never a
-    candidate, and the rewrite there is to bind them to locals first
-    (`tests/cases/perf_bounds_quiet`).
+    and silent unless the receiver is a plain local and the index a plain
+    local or an offset from one, `i + c`, which are the shapes the analysis
+    knows how to prove — a field receiver
+    (`this.source.charCodeAt(this.pos)`) or any other computed index was
+    never a candidate, and the rewrite there is to bind them to locals first
+    (`tests/cases/perf_bounds_quiet`). An offset index is named as written
+    and the guard offered is one on the sum,
+    `` `if (i >= 0 && i + 1 < ys.length)` proves both ends, and so does a loop condition `i + 1 < ys.length` on a counter that starts at 0 ``,
+    with `toI32(ys.length)` under f64 (`tests/cases/perf_bounds_offset`,
+    `tests/wordings/nl9007_offset`, `nl9007_offset_f64_mode`). It carries no
+    fix: an inserted guard would stop at `i === -1`, whose index `i + 1` is
+    in range, so it could change what a program that works today does.
   - **a range entry that was not proven** — a value entering an
     `integer<Lo, Hi>` inside a loop where the proof above did not place it in
     the range, so the compare and its cold panic run on every iteration. A

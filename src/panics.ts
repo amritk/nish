@@ -192,15 +192,30 @@ export const builtinPanicKind = (name: string): i32 => {
 
 /** Order `sites` by position, keeping the walk's order between sites at one offset. */
 const sortByPosition = (sites: PanicSite[]): void => {
+  // `j` is the hole the site goes into, and `prev` the slot before it: both
+  // plain locals the bounds proof follows, where `j + 1` against a `j` that
+  // may reach -1 was a check on every move. The step is `j = j - 1` and not
+  // `j = prev`: a decrement keeps `j < sites.length` and lowers the floor
+  // `j > 0` gave to `j >= 0`, which the store after the loop needs, while a
+  // plain assignment starts `j` over with no facts at all.
   let i = 1
   while (i < sites.length) {
     const site = sites[i]
-    let j = i - 1
-    while (j >= 0 && sites[j].node.start > site.node.start) {
-      sites[j + 1] = sites[j]
+    let j = i
+    while (j > 0) {
+      const prev = j - 1
+      if (sites[prev].node.start <= site.node.start) {
+        break
+      }
+      sites[j] = sites[prev]
       j = j - 1
     }
-    sites[j + 1] = site
+    // `j` stops at 0 at the latest, which the proof cannot carry out of a
+    // loop that counts down: this says so, and is what proves the store.
+    if (j < 0) {
+      panic("sortByPosition: the hole left the list")
+    }
+    sites[j] = site
     i = i + 1
   }
 }
@@ -211,15 +226,23 @@ const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
   for (const site of sites) {
     out.push(site)
   }
+  // The hole and the slot before it, as in `sortByPosition`.
   let i = 1
   while (i < out.length) {
     const site = out[i]
-    let j = i - 1
-    while (j >= 0 && out[j].order > site.order) {
-      out[j + 1] = out[j]
+    let j = i
+    while (j > 0) {
+      const prev = j - 1
+      if (out[prev].order <= site.order) {
+        break
+      }
+      out[j] = out[prev]
       j = j - 1
     }
-    out[j + 1] = site
+    if (j < 0) {
+      panic("inEvaluationOrder: the hole left the list")
+    }
+    out[j] = site
     i = i + 1
   }
   return out

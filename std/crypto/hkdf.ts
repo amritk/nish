@@ -329,6 +329,13 @@ const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u
   out[1] = toU8(length & 0xff)
   out[2] = toU8(fullLength)
   for (let k: i32 = 0; k < fullLength; k += 1) {
+    // `out` is longer than `3 + fullLength`, but the proof cannot read that
+    // off the sum it was allocated with; this test is what proves the store.
+    // It sits in the body rather than the loop condition, which stays the
+    // plain `k < fullLength` the attribute pass counts as a bounded loop.
+    if (3 + k >= toI32(out.length)) {
+      panic("hkdfLabel: the label overran its buffer")
+    }
     out[3 + k] = toU8(toI32(full.charCodeAt(k)))
   }
   out[3 + fullLength] = toU8(contextLength)

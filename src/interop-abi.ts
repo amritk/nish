@@ -911,9 +911,11 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
       }
     }
   }
+  // The clashes come in pairs, and the test on the second of each is what
+  // proves both reads.
   const clashes = cNameClashes(compilation.table, cDeclared)
   let i = 0
-  while (i < clashes.length) {
+  while (i + 1 < clashes.length) {
     const first = clashes[i].sig
     const second = clashes[i + 1]
     const at = sigNameNode(second.sig)

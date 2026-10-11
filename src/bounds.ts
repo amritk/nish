@@ -1185,7 +1185,7 @@ const indexLocal = (ctx: CheckContext, expr: Node): Local | null => {
 }
 
 /** An index local and the literal added to it: `i + c`, as `offsetIndex` reads it. */
-class Offset {
+export class Offset {
   v: Local
   c: i32
 
@@ -1204,7 +1204,7 @@ class Offset {
  * the sum is one about `i`. Under `--wrapping`, and for an unsigned `i`, whose
  * add wraps by definition, there is no such sum, and nothing is read.
  */
-const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
+export const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
   const e = unwrapBoundsParens(expr)
   if (ctx.wrapping || e.kind !== N_BINARY || e.text !== "+" || !checksOverflow(ctx.program, ctx.table, e)) {
     return null
@@ -2347,7 +2347,9 @@ const judge = (
   if (walk.loops === 0 || walk.uncheckedIndexing || lengthHolder(ctx, receiver) === null) {
     return
   }
-  if (indexLocal(ctx, index) === null) {
+  // A local and an offset from one are the indices a guard can prove, so they
+  // are the ones the warning can name a rewrite for.
+  if (indexLocal(ctx, index) === null && offsetIndex(ctx, index) === null) {
     return
   }
   walk.unproven.push(node)

@@ -673,8 +673,12 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
     at < toI32(data.length) &&
     at + 3 < toI32(data.length)
   ) {
-    hello.shareGroups.push((toI32(data[at]) << 8) | toI32(data[at + 1]))
-    at = at + 4 + ((toI32(data[at + 2]) << 8) | toI32(data[at + 3]))
+    // All four bytes are read before the `push`, which is a call and so
+    // forgets what the guard said about `data.length`.
+    const group: i32 = (toI32(data[at]) << 8) | toI32(data[at + 1])
+    const skip: i32 = (toI32(data[at + 2]) << 8) | toI32(data[at + 3])
+    hello.shareGroups.push(group)
+    at = at + 4 + skip
   }
   at = view.alpnAt
   while (at < view.alpnAt + view.alpnLength && at >= 0 && at < toI32(data.length)) {
@@ -689,8 +693,11 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
     at < toI32(data.length) &&
     at + 3 < toI32(data.length)
   ) {
-    hello.extensionTypes.push((toI32(data[at]) << 8) | toI32(data[at + 1]))
-    at = at + 4 + ((toI32(data[at + 2]) << 8) | toI32(data[at + 3]))
+    // Read before the `push`, as in the key-share walk above.
+    const kind: i32 = (toI32(data[at]) << 8) | toI32(data[at + 1])
+    const skip: i32 = (toI32(data[at + 2]) << 8) | toI32(data[at + 3])
+    hello.extensionTypes.push(kind)
+    at = at + 4 + skip
   }
   hello.nullCompressionOnly = view.nullCompressionOnly
   hello.hasSupportedVersions = view.hasSupportedVersions
