@@ -1372,11 +1372,18 @@ const regionCallMessage = (
     return regionWriteMessage(state, `\`${sig.sourceName}\``)
   }
   for (const pp of own.pointerParams) {
-    if (pp.writesThrough) {
+    // WP29 P3: what a call does to a channel is C4's and C5's to judge (`checkChannels`).
+    if (pp.writesThrough && !isChannelParam(program, table, sig, pp.name)) {
       return regionWriteMessage(state, `\`${sig.sourceName}\``)
     }
   }
   return ""
+}
+
+/** Whether `sig`'s parameter `name` is a `Channel`. */
+const isChannelParam = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, name: string): boolean => {
+  const at = sig.paramNames.indexOf(name)
+  return at >= 0 && isChannelType(program, table, sig.paramTypes[at])
 }
 
 /** Walk `node`, parent code inside `state`'s region, pushing each refusal. */
@@ -2172,11 +2179,6 @@ const guardReceiveMessage = (what: string, guard: string): string =>
   "held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` " +
   "never waits, and may stay)"
 
-const bodyChannelMessage = (sig: FunctionSig, fn: FunctionSig): string =>
-  `\`${fn.sourceName}\` sends or receives on a \`Channel\`, and \`${intrinsicName(sig)}\` runs it on several ` +
-  "threads at once: a channel is used by a scope's tasks and the thread that opened the scope, never by a " +
-  "parallel body"
-
 /** Whether a call of `name` reaches the runtime symbol `symbol`, through its callees. */
 const reachesSymbol = (facts: FactsTable, name: string, symbol: string, seen: StringSet): boolean => {
   if (name === symbol) {
@@ -2202,12 +2204,6 @@ const reachesSymbol = (facts: FactsTable, name: string, symbol: string, seen: St
 /** Whether a call of `fn` receives on a channel, directly or through any callee. */
 const receivesAnywhere = (facts: FactsTable, fn: FunctionSig): boolean =>
   reachesSymbol(facts, fn.name, "nish_channel_receive", new StringSet())
-
-/** The refusal of a parallel body that sends or receives on a channel, or "". */
-export const bodyChannelMessageFor = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string =>
-  reachesSymbol(facts, fn.name, "nish_channel_send", new StringSet()) || receivesAnywhere(facts, fn)
-    ? bodyChannelMessage(sig, fn)
-    : ""
 
 /** A reference to a channel, as a function's body names it. */
 const REF_UNKNOWN: i32 = 0
@@ -2666,7 +2662,8 @@ const collectChannelLocals = (
   if (node.kind === N_ARROW) {
     return
   }
-  if (node.kind === N_VAR && isConstDeclaration(node)) {
+  // A `let` is C2's to refuse, once; its channel is still the function's own.
+  if (node.kind === N_VAR) {
     for (const decl of node.children[0].children) {
       const local = program.nodeLocals[decl.id]
       if (local !== null && isNewChannel(program, table, decl.children[2])) {
@@ -2680,17 +2677,17 @@ const collectChannelLocals = (
   }
 }
 
-/** The `scope()` declarator of `stmt` when it is a `using` that opens a scope, or `null`. */
-const scopeDeclaratorOf = (program: CheckedProgram, stmt: Node, scopeType: i32): Node | null => {
-  if (stmt.kind !== N_VAR || (stmt.flags & FLAG_USING) === 0) {
-    return null
-  }
-  for (const decl of stmt.children[0].children) {
-    if (isScopeCall(program, unwrapParens(decl.children[2]), scopeType)) {
-      return decl
+/** Every `scope()` declarator of `stmt` when it is a `using`, in order: `using s = scope(), t = scope()` opens two. */
+const scopeDeclaratorsOf = (program: CheckedProgram, stmt: Node, scopeType: i32): Node[] => {
+  const out: Node[] = []
+  if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+    for (const decl of stmt.children[0].children) {
+      if (isScopeCall(program, unwrapParens(decl.children[2]), scopeType)) {
+        out.push(decl)
+      }
     }
   }
-  return null
+  return out
 }
 
 /**
@@ -2719,13 +2716,12 @@ const candidateScopes = (program: CheckedProgram, block: Node, index: i32, scope
   let j = index + 1
   while (j < block.children.length) {
     const stmt = block.children[j]
-    const own = scopeDeclaratorOf(program, stmt, scopeType)
-    if (own !== null) {
+    for (const own of scopeDeclaratorsOf(program, stmt, scopeType)) {
       out.push(new ScopeSite(own, program.nodeLocals[own.id], block, j))
-    } else if (stmt.kind === N_BLOCK) {
+    }
+    if (stmt.kind === N_BLOCK) {
       for (const inner of stmt.children) {
-        const decl = scopeDeclaratorOf(program, inner, scopeType)
-        if (decl !== null) {
+        for (const decl of scopeDeclaratorsOf(program, inner, scopeType)) {
           out.push(new ScopeSite(decl, program.nodeLocals[decl.id], stmt, j))
         }
       }
@@ -2966,11 +2962,11 @@ const findScopeReceives = (
   if (node.kind === N_BLOCK) {
     let i = 0
     while (i < node.children.length) {
-      const decl = scopeDeclaratorOf(program, node.children[i], scopeType)
-      if (decl !== null) {
+      const decls = scopeDeclaratorsOf(program, node.children[i], scopeType)
+      if (decls.length > 0) {
         let j = i + 1
         while (j < node.children.length) {
-          walkScopeReceives(program, facts, node.children[j], decl.children[0].text, out)
+          walkScopeReceives(program, facts, node.children[j], decls[0].children[0].text, out)
           j = j + 1
         }
       }
@@ -3012,7 +3008,8 @@ const receiveWhat = (program: CheckedProgram, facts: FactsTable, node: Node): st
     const read = program.nodeCallees[node.id]
     return read !== null && isChannelReader(read) ? "A loop over a channel" : ""
   }
-  if (node.kind !== N_CALL) {
+  // A `new` is a call of its class's constructor.
+  if (node.kind !== N_CALL && node.kind !== N_NEW) {
     return ""
   }
   const callee = program.nodeCallees[node.id]

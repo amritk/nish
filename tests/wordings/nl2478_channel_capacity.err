@@ -1,0 +1,1 @@
+`new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full

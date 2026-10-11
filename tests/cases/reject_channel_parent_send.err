@@ -1,0 +1,1 @@
+This sends on `ch` once its scope's block has begun: a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned

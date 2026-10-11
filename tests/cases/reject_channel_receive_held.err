@@ -1,0 +1,1 @@
+`Tally.constructor`, which receives on a channel, is reached while `g` holds its lock: a receive waits, and nothing waits while a lock is held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` never waits, and may stay)

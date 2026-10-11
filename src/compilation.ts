@@ -153,7 +153,6 @@ import {
   scopeFindings,
   sharedWriteMessage,
   bodyLockMessageFor,
-  bodyChannelMessageFor,
   channelSummaries,
   taskMutexMessageFor,
   taskArgumentMessage,
@@ -1667,7 +1666,6 @@ export class Compilation {
         messages.push(reachesDstMessage(this.table, program, sig, fn))
         messages.push(sharedWriteMessage(sig, fn, facts))
         messages.push(bodyLockMessageFor(sig, fn, facts))
-        messages.push(bodyChannelMessageFor(sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))
         messages.push(escapeMessage(sig, fn, facts))
         messages.push(

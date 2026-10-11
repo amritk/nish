@@ -1,0 +1,1 @@
+`produce` may send on `ch` and is spawned after its receiver: under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, and no task both sends and receives on one channel, which is also what keeps channels from deadlocking

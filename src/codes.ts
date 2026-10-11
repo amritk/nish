@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 608
+export const RULE_COUNT: i32 = 607
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -229,8 +229,6 @@ const diagnosticRules = (): string[] => [
   "NL1001",
   " and stores an allocation into memory, where this analysis stops following it: what it stores may be the block's and outlive the release",
   "NL2424",
-  " runs it on several threads at once: a channel is used by a scope's tasks and the thread that opened the scope, never by a parallel body",
-  "NL2483",
   "` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body",
   "NL2474",
   "`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function",

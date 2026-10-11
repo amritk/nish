@@ -1,0 +1,1 @@
+A `Channel` carries a number, a `boolean` or an enum, and this one would carry `string`: a sender's arena is freed when its scope joins, so anything else would point into freed memory

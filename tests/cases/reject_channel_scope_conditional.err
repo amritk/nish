@@ -1,0 +1,1 @@
+`ch` is not declared for the scope of this `spawn`: a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope
