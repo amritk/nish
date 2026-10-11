@@ -4561,7 +4561,7 @@ if (!only || "par_alloc".includes(only)) {
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
 //
-// WP29 P3 adds the lock's four. Under Node the tasks' critical sections run
+// WP29 P3 adds the lock's five. Under Node the tasks' critical sections run
 // in spawn order, one of the orders the native threads can run them in, and
 // each program's guarded updates commute exactly (integer counts, a histogram,
 // a running total), so the totals print the same both ways.
@@ -4590,6 +4590,7 @@ for (const name of [
   "thread_mutex_exit_paths",
   "thread_mutex_histogram",
   "thread_mutex_scalar",
+  "thread_mutex_using_mixed",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
@@ -4625,11 +4626,52 @@ for (const name of [
   )
 }
 
+// WP29 P3, R2: a guard's lock is released at a `return` (and an `orReturn`)
+// after the returned value is computed and before control leaves, unlike a
+// scope's join, which runs before the value. The link goldens hold the whole
+// IR; this names the order itself, so a golden regenerated with the release
+// moved ahead of the value fails here rather than passing as a new golden.
+// In each function below every `ret` with a value is preceded by the release
+// store, and the value it returns is computed before that store.
+if (!only || "thread_mutex".includes(only)) {
+  for (const [name, fn] of [
+    ["thread_mutex_or_return", "addOk"],
+    ["thread_mutex_exit_paths", "firstOver"],
+    ["thread_mutex_exit_paths", "evensToSix"],
+  ]) {
+    const golden = path.join(linkDir, name, "main.ll")
+    const text = fs.existsSync(golden) ? fs.readFileSync(golden, "utf8") : ""
+    const body = new RegExp(`^define [^\\n]*@${fn}\\(.*?^}$`, "ms").exec(text)
+    const lines = body === null ? [] : body[0].split("\n").map((l) => l.trim())
+    const rets = []
+    const bad = []
+    lines.forEach((line, i) => {
+      const ret = /^ret .+ (%\d+)$/.exec(line)
+      if (ret === null) {
+        return
+      }
+      rets.push(i)
+      const release = lines[i - 1] ?? ""
+      const computed = lines.slice(0, i - 1).some((l) => l.startsWith(`${ret[1]} = `))
+      if (!/^store atomic i32 0, i32\* %\d+ release, align 4$/.test(release) || !computed) {
+        bad.push(`${line} (preceded by: ${release})`)
+      }
+    })
+    check(
+      `link/${name}: ${fn} releases its lock after the returned value is computed, and before each \`ret\``,
+      rets.length > 0 && bad.length === 0,
+      body === null ? `no @${fn} in ${golden}` : bad.join("\n") || "no `ret` with a value"
+    )
+  }
+}
+
 // WP29 P3: on wasm32 a scope's tasks run one after another on the one
-// thread there is, as they do for `scope()` today (runtime/runtime-parallel.c),
-// and the lock's compare-and-swap and release store are what LLVM lowers for
-// a module without shared memory. So the counter links for `--profile wasi`
-// and prints what the native binary prints: no lock is ever found held.
+// thread there is, as they do for `scope()` today (runtime/runtime-parallel.c).
+// What this pins is that the lock's compare-and-swap and release store lower
+// for a module without shared memory, and that `nish_mutex_wait` links on
+// WASI: the counter builds for `--profile wasi` and prints what the native
+// binary prints. It cannot tell a lock from none, because nothing on wasm32
+// runs two tasks at once; the native round trips are what test exclusion.
 if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
   if (WASI_SYSROOT && has("wasm-ld")) {
     const mutexDir = path.join(buildDir, "wasi_thread_mutex_counter")
@@ -5788,6 +5830,59 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
       const exe = path.join(buildDir, name)
       const host = path.join(casesDir, `${name}.c`)
       const cc = linkNative(exe, ll, { driver: fs.existsSync(host) ? host : null })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+}
+
+// An offset index (`offsetIndex` in `src/bounds.ts`). `arr_bounds_offset` is
+// the positive: a guard on the sum `i + c` proves `xs[i + c]`, so every
+// function in it keeps no check but `passed`, whose first access proves the
+// two after it. Each negative breaks one rule the proof rests on — the reach,
+// the floor, the exact sum — keeps its check, and panics when run. The
+// released compiler keeps twelve checks in the positive; this one keeps one.
+if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_offset")) {
+  for (const [name, fn, count] of [
+    ["arr_bounds_offset", "sum4", 0],
+    ["arr_bounds_offset", "pairs", 0],
+    ["arr_bounds_offset", "window2", 0],
+    ["arr_bounds_offset", "tail", 0],
+    ["arr_bounds_offset", "passed", 1],
+    ["arr_bounds_offset_reach", "tooFar", 1],
+    ["arr_bounds_offset_floor", "pick", 1],
+    ["arr_bounds_offset_wrap", "pick", 1],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      continue
+    }
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn)
+    check(
+      `${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    )
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_bounds_offset_reach", "a guard that reaches one short", "", "3 >= 3"],
+      ["arr_bounds_offset_floor", "a sum with no floor under its local", "2", "18446744073709551612 >= 3"],
+      ["arr_bounds_offset_wrap", "a sum that wraps under `--wrapping`", "3", "18446744071562067968 >= 3"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`)
+      if (!fs.existsSync(ll)) {
+        continue
+      }
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { driver: null })
       const run = cc.status === 0 ? spawnSync(exe) : null
       check(
         `${name}: ${rule} keeps the check, and the access panics`,
@@ -7990,6 +8085,10 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840
  * different answer. That is the fallback's own semantics rather than room spent, and
  * 34 bytes of slack are left, not 207.
  *
+ * wp29 P3 adds `nish_mutex_wait`, a lock's contended path, which every configuration
+ * defines so that a `nish/threads` program links on WASI too: measured **304 bytes** on
+ * 2026-10-11 with clang 18.1.3 on linux-x64, 18 more, inside the same ceiling.
+ *
  * Raised to 768 by wp29 P3's channels, measured **597 bytes** on 2026-10-11 with clang
  * 18.1.3 on linux-x64 (304 before them, with P3's `nish_mutex_wait`): `nish_channel_send`,
  * `nish_channel_count` and `nish_channel_receive` and the helper that makes a channel's
@@ -8019,6 +8118,9 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * one thread each and joins them, and the worker that frees each thread's arena. They
  * are this file's subject, the language's other way of dividing work across threads,
  * and a program that never opens a scope still pays none of it.
+ *
+ * wp29 P3's `nish_mutex_wait` measured **954 bytes** in all on 2026-10-11 with clang
+ * 18.1.3 on linux-x64, 49 more for the spin and the yield, inside the same ceiling.
  *
  * Raised to 1,536 by wp29 P3's channels, measured **1,403 bytes** on 2026-10-11 with clang
  * 18.1.3 on linux-x64 (954 before them, with `nish_mutex_wait`): the same three entry
