@@ -17,9 +17,15 @@
 // (docs/security/cli.md, CLI-8). The key file is written last, after the
 // binary is in place, which is what makes its presence mean "the binary here is
 // complete".
+//
+// The runtime cache beside it (`runtimeCacheRoot`, `runtimeCacheKey`) keeps
+// the C runtime compiled once per recipe, for every `--link` and every run's
+// link: an entry there holds the runtime's six objects and a key, on the same
+// terms. It is a cache of what a link reads, so this key does not mention it.
 
 import { CLI, RUNTIME_HEADER, VERSION } from "./branding"
 import { EmittedModule } from "./compilation"
+import { dirname } from "./paths"
 import { hexDigitLower, StringBuilder } from "./strings"
 
 /**
@@ -48,6 +54,31 @@ export const runCacheRoot = (): string => {
   }
   return ""
 }
+
+/**
+ * Where `--link` and `nish run` keep the compiled runtime, `runCacheRoot`'s
+ * sibling: `$XDG_CACHE_HOME/nish/runtime` or `$HOME/.cache/nish/runtime`, by
+ * the same rules and for the same reasons. Empty when there is no absolute
+ * root, and the link then compiles the runtime itself, as it always did.
+ */
+export const runtimeCacheRoot = (): string => {
+  const runs = runCacheRoot()
+  return runs.length === 0 ? "" : `${dirname(runs)}/runtime`
+}
+
+/**
+ * The runtime's translation units, in the order `scripts/build.sh` compiles
+ * and links them: `runtime.c` and the five it pairs with it. One list for both
+ * keys below and for the objects a runtime entry holds.
+ */
+export const runtimeUnits = (): string[] => [
+  "runtime.c",
+  "runtime-os.c",
+  "runtime-parallel.c",
+  "runtime-host.c",
+  "runtime-net.c",
+  "runtime-simd.c",
+]
 
 /**
  * The file an entry keeps the binary in: the script's own name, unless that
@@ -210,6 +241,31 @@ const fileFingerprint = (path: string): string => {
 }
 
 /**
+ * One line per file of the package a link reads: `scripts/build.sh`, every
+ * runtime unit and `nish.h`, the only header they include. Both keys carry
+ * these lines, so a file added to the runtime is added to both at once.
+ */
+const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
+  key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
+  addUnitFingerprints(key, root, runtimeUnits(), 0)
+  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
+}
+
+/**
+ * The lines of `units` from `at` on. Recursive rather than a loop, because a
+ * loop would keep every file it hashed alive until the key is done (NL9011),
+ * and a call gives each file's text back when it returns.
+ */
+const addUnitFingerprints = (key: StringBuilder, root: string, units: string[], at: i32): void => {
+  if (at < 0 || at >= units.length) {
+    return
+  }
+  const unit = units[at]
+  key.add(`${unit} ${fileFingerprint(`${root}/runtime/${unit}`)}\n`)
+  addUnitFingerprints(key, root, units, at + 1)
+}
+
+/**
  * Everything a link's result depends on, as one text: a header line per
  * input to the recipe, then each module's name and IR. `name` is the file the
  * binary is kept in (`runBinaryName`), which is part of what a hit hands
@@ -233,17 +289,41 @@ export const runCacheKey = (
   key.add(`run ${name}\n`)
   key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`)
   key.add(`cc ${cc}\n`)
-  key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
-  key.add(`runtime.c ${fileFingerprint(`${root}/runtime/runtime.c`)}\n`)
-  key.add(`runtime-os.c ${fileFingerprint(`${root}/runtime/runtime-os.c`)}\n`)
-  key.add(`runtime-parallel.c ${fileFingerprint(`${root}/runtime/runtime-parallel.c`)}\n`)
-  key.add(`runtime-host.c ${fileFingerprint(`${root}/runtime/runtime-host.c`)}\n`)
-  key.add(`runtime-net.c ${fileFingerprint(`${root}/runtime/runtime-net.c`)}\n`)
-  key.add(`runtime-simd.c ${fileFingerprint(`${root}/runtime/runtime-simd.c`)}\n`)
-  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
+  addRecipeFingerprints(key, root)
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`)
     key.add(module.ir)
   }
+  return key.toText()
+}
+
+/**
+ * Everything the compiled runtime depends on, as one text, in `runCacheKey`'s
+ * shape. `ccVersion` is what `cc --version` printed: speed and size keep LTO
+ * bitcode, which only the LLVM that wrote it reads, and a compiler upgraded in
+ * place keeps its name. It names the target too, so a cache shared between
+ * machines never hands one another's objects. `runtimeDir` is the runtime's
+ * real directory, which `-g` writes into the objects as where their source is.
+ * The flags each profile compiles with are `scripts/build.sh`'s, whose bytes
+ * are fingerprinted; it reads no variable but `CC` for these profiles.
+ */
+export const runtimeCacheKey = (
+  root: string,
+  runtimeDir: string,
+  profile: string,
+  debugInfo: boolean,
+  threads: boolean,
+  cc: string,
+  ccVersion: string
+): string => {
+  const key = new StringBuilder()
+  key.add(`${CLI} ${VERSION}\n`)
+  key.add("runtime-objects\n")
+  key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`)
+  key.add(`cc ${cc}\n`)
+  key.add(`cc-version ${ccVersion.length}\n`)
+  key.add(ccVersion)
+  key.add(`runtime-dir ${runtimeDir}\n`)
+  addRecipeFingerprints(key, root)
   return key.toText()
 }

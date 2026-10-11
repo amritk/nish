@@ -479,6 +479,18 @@ refuses the run without one rather than keep a binary in a shared directory.
 The first run that builds into the cache makes its root `0700`, so no other
 user can plant a binary in it ([docs/security/cli.md](security/cli.md)).
 
+Every link with the debug, speed or size profile, `nish run`'s and `--link`'s
+alike, keeps the compiled C runtime in `$XDG_CACHE_HOME/nish/runtime` (or
+`~/.cache/nish/runtime`), one entry per profile, `-g`, `--threads`, `CC` and
+the version that compiler reports, made `0700` the same way. The first link
+compiles the runtime's six files at once into it, and every later link
+compiles only the program's modules, also at once, and links against the
+entry: a `hello.ts` debug link goes from about half a second to about a
+tenth. `--link` with no absolute `HOME` or `XDG_CACHE_HOME`, or with a root
+it cannot make private, compiles the runtime itself as it always did; the
+wasi profile and `scripts/build.sh` called directly never use the cache.
+Removing the directory is always safe.
+
 ## 4. Exit codes
 
 | Code | Meaning |
