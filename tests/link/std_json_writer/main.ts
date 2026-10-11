@@ -317,6 +317,7 @@ export const main = (): number => {
 
   t.eqStr("jsonStringifyString quotes and escapes", jsonStringifyString(`a\t"${byte(1)}`), '"a\\t\\"\\u0001"');
   t.eqStr("jsonStringifyString of the empty string", jsonStringifyString(""), '""');
+  t.eqStr("jsonStringifyString of a string with nothing to escape", jsonStringifyString("a/b c"), '"a/b c"');
 
   // ---- Numbers -----------------------------------------------------------------
   const negZero: f64 = -0.0;

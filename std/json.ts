@@ -810,8 +810,6 @@ const JSON_DIGIT_ZERO: i32 = 48
 const JSON_MINUS: i32 = 45
 const JSON_DECIMAL_BASE: i32 = 10
 const JSON_LOWER_A: i32 = 97
-/** The first byte JSON lets a string carry as itself. */
-const JSON_FIRST_PLAIN_BYTE: i32 = 32
 
 /**
  * The letter of the short escape for `code` — `"`, `\`, backspace, form feed,
@@ -843,12 +841,16 @@ const jsonShortEscape = (code: i32): i32 => {
 const jsonHexByte = (nibble: i32): i32 =>
   nibble < JSON_DECIMAL_BASE ? JSON_DIGIT_ZERO + nibble : JSON_LOWER_A + nibble - JSON_DECIMAL_BASE
 
+/** Whether byte `code` of a string goes inside the quotes as itself: JSON escapes only `"`, `\` and the bytes below a space. */
+const jsonIsPlainByte = (code: i32): boolean =>
+  code >= JSON_SPACE && code !== JSON_QUOTE && code !== JSON_BACKSLASH
+
 /**
  * How many bytes byte `code` of a string takes inside the quotes: itself, a
  * two-byte short escape, or the six bytes of `\u00xx`.
  */
 const jsonEscapedWidth = (code: i32): i32 => {
-  if (code >= JSON_FIRST_PLAIN_BYTE && code !== JSON_QUOTE && code !== JSON_BACKSLASH) {
+  if (jsonIsPlainByte(code)) {
     return 1
   }
   return jsonShortEscape(code) !== 0 ? 2 : 6
@@ -939,7 +941,12 @@ export class JsonWriter {
    * bytes; a server sends `buf` itself.
    */
   text(): string {
-    return jsonBytesText(this.buf, this.start, this.end)
+    const buf: u8[] = this.buf
+    const parts: string[] = []
+    for (let k: i32 = this.start; k >= 0 && k < this.end && k < toI32(buf.length); k += 1) {
+      parts.push(String.fromCharCode(toI32(buf[k])))
+    }
+    return parts.join("")
   }
 
   beginObject(): void {
@@ -1028,17 +1035,10 @@ export class JsonWriter {
    * and both infinities, which JSON cannot spell.
    */
   f64(v: f64): void {
-    if (!jsonWriterValueDue(this)) {
-      return
-    }
     // `v - v` is `0` for every finite `v`, and NaN for NaN and both infinities.
     if (v - v !== toF64(0)) {
-      if (jsonWriterPutText(this, "null")) {
-        jsonWriterValueDone(this)
-      }
-      return
-    }
-    if (jsonWriterPutF64(this, v)) {
+      this.nullValue()
+    } else if (jsonWriterValueDue(this) && jsonWriterPutF64(this, v)) {
       jsonWriterValueDone(this)
     }
   }
@@ -1235,7 +1235,7 @@ const jsonWriterPutString = (w: JsonWriter, s: string): boolean => {
     // A plain byte is almost every byte, and costs one test of the room.
     // Each branch moves the cursor by a constant, which is what lets the
     // bounds proof keep `at >= 0` from one byte to the next.
-    if (code >= JSON_FIRST_PLAIN_BYTE && code !== JSON_QUOTE && code !== JSON_BACKSLASH) {
+    if (jsonIsPlainByte(code)) {
       if (at >= cap) {
         w.failed = JSON_WRITE_FULL
         return false
@@ -1360,25 +1360,20 @@ const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
  */
 const jsonWriterPutF64 = (w: JsonWriter, v: f64): boolean => jsonWriterPutText(w, `${v}`)
 
-/** `buf[from .. to)` as a string of one character a byte. */
-const jsonBytesText = (buf: u8[], from: i32, to: i32): string => {
-  const parts: string[] = []
-  for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
-    parts.push(String.fromCharCode(toI32(buf[k])))
-  }
-  return parts.join("")
-}
-
 /**
  * `s` as `JSON.stringify(s)` writes it — quoted, with the escapes
  * `JsonWriter.string` writes — as a string. A thin layer on the writer: it
- * sizes a buffer to fit exactly, writes into it and reads it back.
+ * sizes a buffer to fit exactly, writes into it and reads it back. A string
+ * with nothing to escape skips the writer and is only quoted.
  */
 export const jsonStringifyString = (s: string): string => {
   const n: i32 = toI32(s.length)
   let width: i32 = 2
   for (let i: i32 = 0; i < n; i += 1) {
     width += jsonEscapedWidth(toI32(s.charCodeAt(i)))
+  }
+  if (width === n + 2) {
+    return `"${s}"`
   }
   const w: JsonWriter = new JsonWriter(new Array<u8>(width), 0)
   w.string(s)
