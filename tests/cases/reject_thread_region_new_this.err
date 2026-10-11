@@ -1,2 +1,2 @@
-reject_thread_region_new_this.ts:29:15
+reject_thread_region_new_this.ts:32:15
 `new Register` writes memory a task of `s` may read, before the scope joins

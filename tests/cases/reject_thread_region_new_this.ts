@@ -1,6 +1,9 @@
-// #564: a constructor that hands `this` out stores it through another of its
-// parameters, which is a write the region refuses: the task reading the
-// holder would see the new object natively and not under Node.
+// #564, `this` leaving a constructor. There is no rule of its own for it: a
+// constructor reaches only what its parameters reach, so it can hand `this`
+// out only by storing it through another parameter, and that store is a write
+// the region refuses like any other. This case pins that the route through
+// `this` is one: the task reading the holder would see the new object
+// natively and not under Node.
 import { scope } from "nish/threads";
 
 class Holder {

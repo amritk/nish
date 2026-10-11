@@ -1,30 +1,20 @@
-// A parallel body's own array handed to a function that writes what it is
-// handed and keeps it in the element: the element is shared by the caller,
-// so the body writes memory its caller can see.
+// A parallel body's own array handed to a function that keeps it is private
+// no longer: `pass` hands the array back, writing nothing itself, so the
+// body's store into it, before the call, is a shared write.
 import { parallelMapInto } from "nish/threads";
 
-class Cell {
-  xs: f64[];
+const pass = (xs: f64[]): f64[] => xs;
 
-  constructor() {
-    this.xs = [];
-  }
-}
-
-const attach = (c: Cell, xs: f64[]): void => {
+const fresh = (x: i32): i32 => {
+  const xs = new Array<f64>(x + 1);
   xs[0] = 1.0;
-  c.xs = xs;
-};
-
-const fresh = (c: Cell): i32 => {
-  const xs = new Array<f64>(4);
-  attach(c, xs);
-  return 0;
+  pass(xs);
+  return x;
 };
 
 export const main = (): i32 => {
-  const cs: Cell[] = [new Cell(), new Cell()];
+  const src: i32[] = [1, 2];
   const out: i32[] = [0, 0];
-  parallelMapInto(cs, out, fresh);
+  parallelMapInto(src, out, fresh);
   return out[0];
 };

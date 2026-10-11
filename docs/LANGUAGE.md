@@ -2608,8 +2608,10 @@ element's arena, which a task does not share, and each rule is reported at the
   bound to a second name in a later declarator, or reached through `this` a
   constructor hands on, the array is shared
   (`tests/cases/reject_thread_task_private_returned`, `_field`, `_pushed`,
-  `_kept`, `_new`, `_declarator`, `_this`), and an element of a private array
-  of arrays is the array it holds (`reject_thread_task_private_nested`). A task inside a task, or
+  `_kept`, `_new`, `_declarator`, `_this`). A store through a `?:` with the
+  array in one arm is a store into either (`_ternary`), and an element of a
+  private array of arrays is the array it holds
+  (`reject_thread_task_private_nested`). A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
@@ -2961,7 +2963,7 @@ sends and receives:
   In the constructor of a class that holds a channel, directly or through a
   field's class, `this` appears only as the base of its own field, `this.f`,
   used in one of three ways: as the target of a store (`this.f = ...`,
-  `this.f += ...`); as any value but a method's receiver when the field is a
+  `this.f += ...`); as any value, except as the callee of a call, when the field is a
   number, a `boolean`, an enum, a string or an array of those, from which
   nothing reaches a channel (`this.total = this.a + this.b`,
   `this.width = this.name.length`, `this.items.push(x)`); or as the base of a
@@ -2975,7 +2977,7 @@ sends and receives:
   (NL2479; `reject_channel_ctor_this`, `reject_channel_ctor_this_stored`,
   `reject_channel_ctor_this_bound`, `reject_channel_ctor_this_array`,
   `reject_channel_ctor_this_new`, `reject_channel_ctor_this_declarator`,
-  `reject_channel_ctor_this_self`, `reject_channel_ctor_this_field_store`,
+  `reject_channel_ctor_this_self`, `reject_channel_ctor_this_deep_carrier`,
   `reject_channel_ctor_this_send`, `reject_channel_ctor_this_carrier`).
 - **C5: a channel has one receiver** — one task, from a `spawn` outside any
   loop, or the parent in a later statement of the block that has the scope's

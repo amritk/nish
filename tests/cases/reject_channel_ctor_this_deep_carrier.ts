@@ -1,6 +1,8 @@
-// #567, `this` out of its constructor: a store into a field of the object a
-// field holds is admitted only when that object cannot reach a channel, and
-// `Box` can, through the `Late` it holds: storing `this` there hands it on.
+// #567: a store into a field of what a field holds is admitted only when that
+// value neither is a channel nor holds one, two levels deep. `Box` holds a
+// `Late`, which holds the channel, so `this.box` is refused as the base of
+// `this.box.l = ...` whatever is stored. (A store of `this` itself is pinned
+// at its right-hand side by `reject_channel_ctor_this_self`.)
 import { Channel, scope } from "nish/threads";
 
 class Box {

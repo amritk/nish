@@ -1,2 +1,2 @@
 `keep` writes memory its caller can see at 
-reject_thread_task_private_kept.ts:20:3, and `spawn`
+reject_thread_task_private_kept.ts:11:3, and `spawn`

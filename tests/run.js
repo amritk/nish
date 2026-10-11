@@ -4795,12 +4795,15 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // is the scope that closes its channels whether or not its join runs a task,
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
+// `thread_channel_ctor_reads` is the carrier whose constructor reads and
+// updates its own fields (#567).
 for (const name of [
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
   "thread_channel_exit_paths",
   "thread_channel_kinds",
+  "thread_channel_ctor_reads",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
