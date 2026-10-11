@@ -302,7 +302,12 @@ export const main = (): number => {
   t.eqStr("0x7f goes through as itself", stringText(`a${byte(127)}`), `"a${byte(127)}"`);
   t.eqStr("and / is not escaped", stringText("a/b"), '"a/b"');
   t.eqStr("the empty string", stringText(""), '""');
-  t.eqStr("a key is escaped as a string is", jsonStringifyString('k"\n'), '"k\\"\\n"');
+  w.reset(out, 0);
+  w.beginObject();
+  w.key('k"\n');
+  w.i32(1);
+  w.endObject();
+  t.eqStr("a key is escaped as a string is", w.text(), '{"k\\"\\n":1}');
 
   // WP33 class C: a string is UTF-8 bytes here and UTF-16 units under Node. A
   // non-ASCII string's bytes go through, which is the UTF-8 `JSON.stringify`
@@ -412,7 +417,9 @@ export const main = (): number => {
   w.endArray();
   t.eqI32("a closer after the value is whole is JSON_WRITE_UNBALANCED", w.failed, JSON_WRITE_UNBALANCED);
 
-  const deep = new Array<u8>(256);
+  // Room to spare past the 256 bytes 64 levels take at most, so a write that
+  // ran out of room could not pass for one that wrote nothing.
+  const deep = new Array<u8>(260);
   w.reset(deep, 0);
   for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
     w.beginArray();

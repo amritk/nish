@@ -130,6 +130,7 @@ takes `src/` to the fixed point with `scripts/bootstrap.sh --verify`.
 | How do I add a construct? | `docs/ARCHITECTURE.md` → "How to add a construct" |
 | What does the language allow? | `docs/LANGUAGE.md` |
 | I am writing a *program*, not the compiler | `docs/AI.md` — the same rules in one pass, examples compiled by `npm test` |
+| How do I learn the language, or teach a change to it? | `docs/guide/index.md` — the user guide; its page rules are `docs/README.md` → "Writing a guide page" |
 | What IR does X compile to? | `docs/IR_COOKBOOK.md` |
 | How do I write the code? | [`typescript.md`](./typescript.md) |
 | What does the linter enforce, and why? | [`linting.md`](./linting.md) |
