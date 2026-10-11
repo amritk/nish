@@ -3,8 +3,8 @@
 // `main.ll` beside it is the golden of the code written for `Hello`, one
 // string field, so a change to what the compiler writes reads as a diff of a
 // few dozen lines. `checks.ts` is the rest of the suite, `models.ts` the
-// classes, and `round-trip.txt` the inputs `tests/run.js` holds to Node's
-// `JSON.stringify(JSON.parse(x))`.
+// classes, `node.ts` what Node is held to, and `round-trip.txt` the inputs
+// `tests/run.js` holds to Node's `JSON.stringify(JSON.parse(x))`.
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";

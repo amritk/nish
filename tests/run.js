@@ -5179,7 +5179,7 @@ if (!only || "std_json_typed".includes(only)) {
   } else {
     skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
   }
-  const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+  const run = runUnderPrelude(path.join(dir, "node.ts"), [])
   check(
     "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
     run.status === 1 &&
