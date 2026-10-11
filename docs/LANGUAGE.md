@@ -2646,20 +2646,28 @@ export const main = (): i32 => {
   scope there, and the same program prints the same total
   (`tests/run.js`, "the `--profile wasi` build").
 - **The release is emitted at every exit of the guard's block**: its end, a
-  `break` or `continue` that leaves it, and a `return` — after the returned
-  value is computed, since the value may read through the guard — and inside
-  an `arena()` block it is given back before the arena releases
+  `break` or `continue` that leaves it, and a `return` or an `orReturn` — after
+  the returned value is computed and before control leaves, unlike a scope's
+  join, which runs before the value, so `return g.value.n` reads under the
+  lock (`tests/link/thread_mutex_or_return`, whose `main.ll` pins the order) —
+  and inside an `arena()` block it is given back before the arena releases
   (`tests/link/thread_mutex_exit_paths`, which locks again after each exit and
   would wait on itself if one kept the lock).
 
 Eight rules keep every path to the data behind the lock, and a program that
 breaks one is refused with that rule's own code:
 
-- **R1: the data is fresh, and only the guard reaches it.** `new Mutex<T>(init)`
-  takes a `new` expression or a literal, because a value the program already
-  holds would be a path to the data that skips the lock:
-  `` `new Mutex` takes a fresh value — a `new` expression or a literal — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock ``
-  (NL2463, `tests/cases/reject_mutex_not_fresh`). And `lock` is the only member
+- **R1: the data is fresh all the way down, and only the guard reaches it.**
+  `new Mutex<T>(init)` takes a scalar, or a `new` expression or a literal whose
+  every argument, element or value is a number, a `boolean`, an enum, a string
+  literal — immutable, and never stored over — or itself fresh by this rule,
+  because a value the program already holds would be a path to the data that
+  skips the lock:
+  `` `new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock ``
+  (NL2463, `tests/cases/reject_mutex_not_fresh`, and
+  `reject_mutex_not_fresh_deep` for `new Hist(bins)` with a named `bins`;
+  `new Mutex<Label>(new Label("total", 0))` compiles,
+  `tests/link/thread_mutex_scalar`). And `lock` is the only member
   of a `Mutex` a program may name:
   `` `guard` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock ``
   (NL2464, `reject_mutex_member`).
@@ -2674,8 +2682,13 @@ breaks one is refused with that rule's own code:
   not a number, a `boolean` or an enum — `const c = g.value`, `g.value.xs` as a
   value, a `for...of` over it — is
   `` This is a `Counter` read through a guard, which is used only as the base of a field or element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock ``
-  (NL2467, `reject_mutex_guard_alias`). A scalar read through the guard is a
-  value like any other, `.length` of an array it reaches included.
+  (NL2467, `reject_mutex_guard_alias`, and `reject_mutex_guard_alias_array` for
+  `const b = g.value.bins`, which would race a guarded write once the block
+  ends). A scalar read through the guard is a value like any other, `.length`
+  of an array it reaches included. When `T` is itself a scalar, `g.value` is
+  read and stored directly — `g.value = g.value + 1` on a `Mutex<i32>` — and
+  the store reaches the `Mutex` under Node as natively, because the guard is
+  the `Mutex`'s own storage rather than a copy (`tests/link/thread_mutex_scalar`).
 - **R4: a store through a guard stores a scalar, and no method is called
   through it.** A number, a `boolean` or an enum, into a field or an element of
   an array that already exists:
@@ -2695,12 +2708,15 @@ breaks one is refused with that rule's own code:
   waits for anything, so every lock is given back.
 - **R6: a store through a guard is the one shared write a task may make.** P2's
   rule is otherwise unchanged (above, NL2471).
-- **R7: between a scope's first `spawn` and the end of its block, the parent
-  does not lock what the scope's tasks share.** Natively the tasks have not run
-  yet there, and under Node each has run at its spawn, so the parent would see
-  a different value:
-  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the first `spawn` or after the join ``
-  (NL2472, `reject_mutex_region_lock`). It is asked by type: a `Mutex<T>` of the
+- **R7: from the statement that holds a scope's first `spawn` to the end of
+  its block, the parent does not lock what the scope's tasks share**, directly
+  or through any function it calls — P2's own window, so a lock before the
+  `spawn` in the same loop body is inside it (`reject_mutex_region_lock_loop`).
+  Natively the tasks have not run yet there, and under Node each has run at its
+  spawn, so the parent would see a different value:
+  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join ``
+  (NL2472, `reject_mutex_region_lock`, and `reject_mutex_region_lock_call` for a
+  call that takes the lock). It is asked by type: a `Mutex<T>` of the
   type a task's argument reaches, or, for a call that takes a lock, any
   `Mutex` a task reaches. Before the first `spawn` and after the join the
   parent locks freely, as `tests/link/thread_mutex_counter` does.
@@ -2714,17 +2730,21 @@ breaks one is refused with that rule's own code:
 And a lock is a scope's: the body of `parallelMapInto` or `parallelReduce`,
 which runs on many threads at once, takes none
 (`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body ``,
-NL2474, `reject_mutex_parallel_body`).
+NL2474, `reject_mutex_parallel_body`, and `reject_mutex_parallel_body_call` for
+a lock taken in a callee).
 
 **What a guarded program means.** The tasks' critical sections run one at a
 time, in some order. Natively the order is the scheduler's; under Node, where
 `lock()` answers the guard at once and its `[Symbol.dispose]` does nothing, it
 is spawn order, which is one of the native orders
-([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). So a program whose guarded updates
-commute — a sum, a count, a minimum, a histogram — prints the same both ways,
-and one whose updates do not is its author's obligation, as an associative
-operator is for a named function given to `parallelReduce`. The checker does
-not try to prove commutativity.
+([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). A program prints the same both ways
+when its guarded updates commute exactly — integer sums and counts, a minimum,
+a histogram; an `f64` sum does not, because the order changes its bits — and
+no task's answer or control flow depends on guarded state it read. Anything
+else is its author's obligation, as an associative operator is for a named
+function given to `parallelReduce`; the checker does not try to prove it. It
+is the one place the lock weakens the scope's promise above, that the checker
+refuses anything that could tell the two orders apart.
 
 ### Byte search: `indexOfAny` in `nish/text`
 

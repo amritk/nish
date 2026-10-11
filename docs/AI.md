@@ -947,16 +947,21 @@ export const main = (): i32 => {
 
 - **Only `g.value`, and only as the base of a field or element access.** Read
   a number, a `boolean` or an enum through it, or store one into a field or an
-  element that already exists. Don't bind `g`, `g.value` or an array it holds,
-  don't pass them, and call no method through them (no `push`).
+  element that already exists (for a `Mutex<i32>`, `g.value = g.value + 1`).
+  Don't bind `g`, `g.value` or an array it holds, don't pass them, and call no
+  method through them (no `push`).
+- **Make the data fresh all the way down**: `new Mutex<Hist>(new Hist())`, not
+  `new Hist(bins)` with a `bins` you still hold.
 - **One lock at a time, and no waiting while it is held**: inside the guard's
   block, directly or through any call, no second `lock()`, no `scope()` or
   `spawn`, no `parallelMapInto`. So a program cannot deadlock.
 - **A `Mutex` reaches a task as its argument or a field of its argument's
-  class** — not in an array. Between a scope's first `spawn` and its block's
-  end the parent doesn't lock what the tasks share; before and after, it may.
-- **Make the updates commute** (a sum, a count, a histogram): the critical
-  sections run in the scheduler's order natively and in spawn order under Node.
+  class** — not in an array. From the statement holding a scope's first
+  `spawn` to its block's end the parent doesn't lock what the tasks share,
+  even through a call; before and after, it may.
+- **Make the updates commute exactly** (an integer sum or count, a histogram;
+  not an `f64` sum): the critical sections run in the scheduler's order
+  natively and in spawn order under Node.
 
 ```ts nish:err NL2467
 import { Mutex } from "nish/threads";

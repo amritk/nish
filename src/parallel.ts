@@ -69,6 +69,7 @@ import {
   N_MEMBER,
   N_PAREN,
   N_PARAM,
+  N_PROPERTY,
   N_VAR_DECL,
   FLAG_USING,
   N_DO,
@@ -1381,6 +1382,16 @@ const walkRegion = (
     state.addDestination(spawnDestination(program, node))
     return
   }
+  // WP29 P3, R7: a lock anywhere from the statement that holds the first
+  // `spawn` — before that spawn too, as on a loop's next pass — to the end of
+  // the block, directly or through a call.
+  if (node.kind === N_CALL) {
+    const locked = regionLockMessageFor(program, table, facts, node, state)
+    if (locked.length > 0) {
+      out.push(new ScopeFinding(node, locked))
+      return
+    }
+  }
   // Until a task can have been filed, nothing can tell when it runs.
   if (!state.live()) {
     for (const child of node.children) {
@@ -1406,9 +1417,6 @@ const walkRegion = (
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
   } else if (node.kind === N_CALL) {
     message = regionCallMessage(program, table, facts, node, state, uses)
-    if (message.length === 0) {
-      message = regionLockMessageFor(program, table, facts, node, state)
-    }
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
@@ -1601,8 +1609,10 @@ const GUARD_HELD_TAIL: string =
   "and nothing is waited on while it is held"
 
 const mutexFreshMessage = (): string =>
-  "`new Mutex` takes a fresh value — a `new` expression or a literal — because the data a `Mutex` owns is " +
-  "reachable only through its guard, and a value the program already holds would be a path to it that skips the lock"
+  "`new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every " +
+  "argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a " +
+  "`Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to " +
+  "it that skips the lock"
 
 const mutexMemberMessage = (name: string): string =>
   `\`${name}\` is not a member a program may name: the data a \`Mutex\` owns is reachable only through ` +
@@ -1640,7 +1650,7 @@ const TASK_WRITE_TAIL: string =
 const regionLockMessage = (state: RegionState, what: string, path: string): string =>
   `${what} locks a \`Mutex\` a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
-  "so the parent locks what they share only before the first `spawn` or after the join"
+  "so the parent locks what they share only before the statement that holds the first `spawn` or after the join"
 
 const taskMutexMessage = (table: TypeTable, type: i32, path: string): string =>
   `The argument of \`spawn\` is \`${table.typeName(type)}\`, which reaches a \`Mutex\` through \`${path}\`: ` +
@@ -1651,21 +1661,41 @@ const bodyLockMessage = (sig: FunctionSig, fn: FunctionSig): string =>
   `\`${fn.sourceName}\` takes a \`Mutex\`'s lock, and \`${intrinsicName(sig)}\` runs it on several threads ` +
   "at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body"
 
-/** Whether `init`, the argument of `new Mutex`, is fresh: a `new` expression or a literal. */
-const isFreshValue = (init: Node): boolean => {
+/**
+ * Whether `init`, the argument of `new Mutex` or a part of it, is fresh all
+ * the way down (R1): a scalar, which is copied in; a string literal, which is
+ * immutable and which R4 never stores over; or a `new` expression, an array
+ * literal or an object literal whose every argument, element or value is
+ * fresh by this rule. `new Hist(bins)` with a named `bins` is not: the
+ * program would still hold `bins` after the lock owned it.
+ */
+const isFreshValue = (program: CheckedProgram, table: TypeTable, init: Node): boolean => {
   const e = unwrapParens(init)
-  if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
-    return unwrapParens(e.children[0]).kind === N_NUMBER
+  const type = program.nodeTypes[e.id]
+  if ((type >= 0 && isScalarArgument(table, type)) || e.kind === N_STRING) {
+    return true
   }
-  return (
-    e.kind === N_NEW ||
-    e.kind === N_ARRAY ||
-    e.kind === N_OBJECT ||
-    e.kind === N_NUMBER ||
-    e.kind === N_STRING ||
-    e.kind === N_TRUE ||
-    e.kind === N_FALSE
-  )
+  let parts: Node[] = []
+  if (e.kind === N_NEW) {
+    parts = e.children[2].children
+  } else if (e.kind === N_ARRAY) {
+    parts = e.children
+  } else if (e.kind === N_OBJECT) {
+    for (const property of e.children) {
+      if (property.kind !== N_PROPERTY) {
+        return false // a spread copies what another object holds
+      }
+      parts.push(property.children[0])
+    }
+  } else {
+    return false
+  }
+  for (const part of parts) {
+    if (!isFreshValue(program, table, part)) {
+      return false
+    }
+  }
+  return true
 }
 
 /** Whether `name`, among the runtime symbols a call can reach, is one R5 refuses while a lock is held. */
@@ -1837,7 +1867,7 @@ const walkMutexes = (
     // judged as what it wraps, or a declaration rather than a use
   } else if (node.kind === N_NEW && isMutexType(program, table, type)) {
     const args = node.children[2].children
-    if (args.length > 0 && !isFreshValue(args[0])) {
+    if (args.length > 0 && !isFreshValue(program, table, args[0])) {
       out.push(new ScopeFinding(args[0], mutexFreshMessage()))
     }
   } else if (node.kind === N_MEMBER && isMutexType(program, table, program.nodeTypes[node.children[0].id])) {

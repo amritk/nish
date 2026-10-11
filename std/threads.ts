@@ -12,12 +12,6 @@
  *       s.spawn(maxOf, ys, out, 1);
  *     } // both tasks have run, and `out` holds both answers
  *
- *     const total = new Mutex<Counter>(new Counter());
- *     {
- *       using g = total.lock();
- *       g.value.n = g.value.n + 1;
- *     } // released here, and at every other exit of the block
- *
  * **What is written here is the meaning, not the implementation.** Each body
  * below is the sequential program, and it is what runs under Node, what
  * `npm run check` type-checks, and what the compiler checks the call against.

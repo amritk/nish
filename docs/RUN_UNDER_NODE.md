@@ -207,9 +207,12 @@ no prelude can reach it. They are language decisions
   a time, at their spawns, so their critical sections run in spawn order —
   one of the orders the native threads can run them in
   ([LANGUAGE.md](LANGUAGE.md#a-lock-that-owns-its-data-mutext)). A program
-  whose guarded updates commute prints the same both ways; the checker refuses
-  the parent locking what a scope's tasks share between the first `spawn` and
-  the end of the block, where the two would differ.
+  whose guarded updates commute exactly (integer sums and counts, a histogram,
+  not an `f64` sum) and whose tasks do not branch on what they read under the
+  lock prints the same both ways; the checker refuses the parent locking what
+  a scope's tasks share from the statement that holds the first `spawn` to the
+  end of the block, where the two would differ. A store to `g.value` itself
+  reaches the `Mutex`, because the guard is the `Mutex`'s own storage.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
   **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
   other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`

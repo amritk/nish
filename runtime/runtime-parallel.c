@@ -279,13 +279,17 @@ void nish_scope_join(void *scope) {
  * try first yields. The swap that takes the word is the acquire the inline
  * path would have made. */
 void nish_mutex_wait(int32_t *word) {
-  for (int spins = 0;; spins++) {
+#ifdef NISH_PAR_REAL
+  int spins = 0;
+#endif
+  for (;;) {
     int32_t free_word = 0;
     if (__atomic_load_n(word, __ATOMIC_RELAXED) == 0 &&
         __atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
       return;
 #ifdef NISH_PAR_REAL
-    if (spins >= 64) sched_yield();
+    if (spins < 64) spins++;
+    else sched_yield();
 #endif
   }
 }
