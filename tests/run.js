@@ -5923,9 +5923,9 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
 // `arr_bounds_range` is the positive: `c + r`, `c - r + 7` and `r * 4 + c`
 // stay inside the lengths the arrays were made with, so no check survives.
 // Each negative breaks one rule the proof rests on and keeps its check: a
-// range past the length, a range below zero and an index whose call shrinks
-// the array panic when run; an unsigned sum, a length known only at run time
-// and `--wrapping` are pinned by their counts.
+// range past the length, a range below zero, and an index whose call or whose
+// `new`'s constructor shrinks the array panic when run; an unsigned sum, a
+// length known only at run time and `--wrapping` are pinned by their counts.
 if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_range")) {
   for (const [name, fn, count] of [
     ["arr_bounds_range", "diagonals", 0],
@@ -5933,6 +5933,7 @@ if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_ra
     ["arr_bounds_range_past", "diagonals", 1],
     ["arr_bounds_range_negative", "diagonals", 1],
     ["arr_bounds_range_call", "nish_main", 1],
+    ["arr_bounds_range_new", "nish_main", 1],
     ["arr_bounds_range_kept", "unsignedSum", 1],
     ["arr_bounds_range_kept", "unknownLength", 1],
     ["arr_bounds_range_wrap", "diagonals", 2],
@@ -5953,6 +5954,7 @@ if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_ra
       ["arr_bounds_range_past", "a range that reaches the length", "", "14 >= 14"],
       ["arr_bounds_range_negative", "a range that goes below zero", "", "18446744073709551615 >= 16"],
       ["arr_bounds_range_call", "an index whose call shrinks the array", "", "15 >= 15"],
+      ["arr_bounds_range_new", "an index whose constructor shrinks the array", "", "15 >= 15"],
     ]) {
       const ll = path.join(buildDir, `${name}.ll`)
       if (!fs.existsSync(ll)) {

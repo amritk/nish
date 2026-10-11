@@ -3741,10 +3741,11 @@ and both come from the program as written:
     unsigned index, whose arithmetic wraps by definition, an `f64` one, and
     every index under `--wrapping` keep their check. The length is the one
     the index leaves behind, so a call inside the index that shrinks the
-    array proves nothing (`tests/cases/arr_bounds_range`;
-    `arr_bounds_range_past` reaches the length, `arr_bounds_range_negative`
-    goes below zero and `arr_bounds_range_call` shrinks the array, and each
-    keeps its check and panics; `arr_bounds_range_kept` and
+    array, a `new` whose constructor does included, proves nothing
+    (`tests/cases/arr_bounds_range`; `arr_bounds_range_past` reaches the
+    length, `arr_bounds_range_negative` goes below zero, and
+    `arr_bounds_range_call` and `arr_bounds_range_new` shrink the array, and
+    each keeps its check and panics; `arr_bounds_range_kept` and
     `arr_bounds_range_wrap` keep theirs).
 
 A fact ends where it stops being true: at any assignment to `i` that is not

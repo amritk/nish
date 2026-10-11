@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 971 programs, 89704 dump lines.
+# 972 programs, 89724 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -830,6 +830,27 @@ function main(): i32 -> @nish_main [exported entry]
   calls: diagonals nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 17:18 diagonals -> @diagonals
+program tests/cases/arr_bounds_range_new.ts
+module tests/cases/arr_bounds_range_new.ts (entry)
+struct Shrinker (class) size=4 align=4
+  field zero: i32 index=0 offset=0
+  constructor -> @Shrinker.constructor
+function Shrinker.constructor(this: Shrinker, xs: i32[]): void -> @Shrinker.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 8:5
+  calls: nish_panic_index
+  pointer this: size=4 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Shrinker.constructor
+  calls: Shrinker.constructor nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_from_i32
+  stackSites=2 stackLocals=1
+  local 14:9 xs: i32[] (const)
+  local 15:7 total: i32 (let)
+  local 16:12 r: i32 (let)
+  callee 17:28 new Shrinker -> @Shrinker.constructor
 program tests/cases/arr_bounds_range_past.ts
 module tests/cases/arr_bounds_range_past.ts (entry)
 function diagonals(): i32 -> @diagonals
