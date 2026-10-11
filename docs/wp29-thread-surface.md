@@ -266,7 +266,8 @@ timed against a byte-identical copy of itself in the same rounds differed by
 0.3% at the minimum and 0.6% at the median, which is the noise band. Both
 runs, and the same file under Node, print the same checksum. The example takes
 the lock once per task, not once per value: four threads contending for it on
-every value would run their critical sections one at a time.
+every value run their critical sections one at a time, and a variant that did
+ran slower than one thread.
 
 ### 4.4 Stage P3 — channels of scalars
 
@@ -476,9 +477,11 @@ default of 64 trips is what divides n-body four ways.
 
 The whole candidate surface was typechecked with
 `tsc --noEmit --strict --lib ES2022 --module Node16`, together with a program
-that used every construct, and exited 0. The P1 and P2 halves now exist as real
-code in `std/threads.ts` and `runtime/nish.d.ts`. What remains of the candidate
-is P3's half:
+that used every construct, and exited 0. All three stages now exist as real
+code in `std/threads.ts` and `runtime/nish.d.ts`, P3's `Mutex`, `MutexGuard`
+and `Channel` included, so that file is the declaration to read. What follows
+is the candidate's P3 half as it was typechecked, kept as the record, with the
+alternatives §9 did not propose:
 
 ```ts
 /** The lock owns what it protects, so there is no unguarded path to the data. */

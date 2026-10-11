@@ -6,8 +6,8 @@
 // the guard releases it when its block ends.
 //
 // Taking the lock once per task rather than once per value is the shape to
-// copy: four threads contending for the lock on every value would run their
-// critical sections one at a time and lose the speedup.
+// copy: four threads contending for the lock on every value run their critical
+// sections one at a time, and end up slower than one thread.
 //   nish examples/histogram.ts --link build/histogram && ./build/histogram
 //   ./build/histogram --sequential     the same four calls, one after another
 // Adding to a bin commutes, so the bins are the same whatever order the tasks
@@ -43,7 +43,7 @@ class Shard {
  * Bins a shard by the top four bits of each value, then merges the tally under
  * the lock. The values come from Marsaglia's xorshift32, which is shifts and
  * xors only, so it wraps the same way natively and under Node. The answer is
- * how many values the task binned, which the parent checks against the bins.
+ * how many values the task binned, which the parent prints beside the bins' total.
  */
 const binShard = (s: Shard): i32 => {
   const tally: i32[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
