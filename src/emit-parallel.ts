@@ -372,8 +372,9 @@ const taskFinish = (
 //
 // and the release is a release store of 0 into the same word, emitted at every
 // exit of the guard's block — its end, a `break` or `continue` that leaves it,
-// and a `return`, after its value is computed, since the value may read through
-// the guard. The acquire keeps every guarded access after the swap, and the
+// and a `return` or an `orReturn`, after the value is computed (unlike a
+// scope's join, which runs before it), since the value may read through the
+// guard. The acquire keeps every guarded access after the swap, and the
 // release every one before the store, which is the whole of what the lock has
 // to promise; there is nothing to create or destroy, because the word is a
 // field of the guard and lives where the `Mutex` does.

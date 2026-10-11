@@ -1701,7 +1701,8 @@ const isFreshValue = (program: CheckedProgram, table: TypeTable, init: Node): bo
 /** Whether `name`, among the runtime symbols a call can reach, is one R5 refuses while a lock is held. */
 const isWaitSymbol = (name: string, locksOnly: boolean): boolean =>
   name === "nish_mutex_wait" ||
-  (!locksOnly && (name === "nish_scope_spawn" || name === "nish_parallel_range" || name === "nish_scope_join"))
+  (!locksOnly &&
+    (name === "nish_scope_spawn" || name === "nish_parallel_range" || name === "nish_scope_join"))
 
 /**
  * Whether a call of `name` reaches, through its callees, a lock (`locksOnly`)
@@ -1894,7 +1895,13 @@ const walkMutexes = (
   } else if (isGuardedAccess(program, table, node) && parent !== null) {
     const base = (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
     const above: Node | null = depth > 1 ? parents[depth - 2] : null
-    if (base && parent.kind === N_MEMBER && above !== null && above.kind === N_CALL && above.children[0] === parent) {
+    if (
+      base &&
+      parent.kind === N_MEMBER &&
+      above !== null &&
+      above.kind === N_CALL &&
+      above.children[0] === parent
+    ) {
       out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
     } else if (base) {
       // an access through it: judged where it ends

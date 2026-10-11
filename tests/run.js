@@ -13660,9 +13660,13 @@ if (!only || "docs".includes(only) || "ai".includes(only)) {
     const body = s.wrap ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n` : `${s.source}\n`
     fs.writeFileSync(file, body)
     // A directory, because a snippet that imports `nish/threads` writes one module per file.
-    const run = spawnSync(NISH, [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args], {
-      encoding: "utf8",
-    })
+    const run = spawnSync(
+      NISH,
+      [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
+      {
+        encoding: "utf8",
+      }
+    )
     const diagnostics = run.stdout
       .split("\n")
       .filter(Boolean)
