@@ -132,9 +132,9 @@ What a channel program means: a receiver sees every value sent, each sender's va
 
 **§11.** Close "How P3 fits P2's rule" with R6 and R5, and "What a Channel<T> of a non-scalar costs" as C1 (scalars now, non-scalars with copy-at-join). Open: whether R4 widens to strings once copy-at-join exists; whether a guard may be passed to a function that provably does not keep it (escape analysis, `src/escape.ts`).
 
-_Amended 2026-10-11T01:30Z after #560's review round 2: R6 admits channel sends and receives, R7 anchors where P2 does, C2 forbids a conditional between the declaration and the scope and forbids the channel escaping, C4 anchors the parent's send on the spawning block, C5 requires a receiving spawn outside any loop and a parent receive the join dominates, C6 orders by statement order. The appendix's MutexGuard `value` is not readonly, because R3 stores to it._
+_Amended 2026-10-11T01:05Z after #560's review round 2: R6 admits channel sends and receives, R7 anchors where P2 does, C2 forbids a conditional between the declaration and the scope and forbids the channel escaping, C4 anchors the parent's send on the spawning block, C5 requires a receiving spawn outside any loop and a parent receive the join dominates, C6 orders by statement order. The appendix's MutexGuard `value` is not readonly, because R3 stores to it._
 
-_Amended 2026-10-11T01:15Z after #560's review round 1: R1 admits string literals, R2 releases after a `return`'s value, R3 admits a scalar `T`, R7 is transitive, the commutativity statement is exact, C2 ties a channel to one run of one scope, C4 closes a sender-less channel at the join, C5 allows one receiver and makes a drained loop end at once, C7 is transitive._
+_Amended 2026-10-11T00:57Z after #560's review round 1: R1 admits string literals, R2 releases after a `return`'s value, R3 admits a scalar `T`, R7 is transitive, the commutativity statement is exact, C2 ties a channel to one run of one scope, C4 closes a sender-less channel at the join, C5 allows one receiver and makes a drained loop end at once, C7 is transitive._
 
 _Amended 2026-10-11T00:55Z after #560's review: R1 made transitive, R3 limited to chains that end in a scalar, and C4 limited to one scope. The design worker found these gaps, and each change narrows a rule rather than widening it._
 
