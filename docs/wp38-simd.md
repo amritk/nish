@@ -12,7 +12,10 @@ is the owner's call (§7).
 S2's `--cpu` flag is not built: S0's figures missed its bar, and a
 re-measurement against the noise met it (§7); building it is the owner's call.
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
-small a part of the bootstrap to move it (§7). S3 has no flag, type or runtime
+small a part of the bootstrap to move it (§7). S3's bar now names the scalar
+kernel it is judged against, and its operation list leaves out a fused
+multiply-add, after a portable-vector benchmark's findings were checked
+against LLVM 18 (§3.2.1). S3 has no flag, type or runtime
 symbol yet: it arrives with its stage, and its rule goes into
 [LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
 work as additive. LANGUAGE.md stays normative and this note adds no rule to
@@ -500,8 +503,9 @@ before Nish sees the program:
 - `splat`, lane-wise arithmetic and comparisons into a mask
 - `select`, `min` and `max`, and horizontal sums
 - `extract` and `shuffle` with constant indices
-- `bitmask`, the one operation a byte scanner needs to turn a compare into an
-  offset
+- `any` and `all` on a mask, the test a byte scanner makes on every block
+- `bitmask`, which turns a compare into an offset once that test has found a
+  hit (§3.2.1 says why the test and the offset are two operations)
 
 Each one lowers to LLVM vector IR (`<16 x i8>`, `<4 x float>`) or a
 target-independent `llvm.*` intrinsic such as `llvm.vector.reduce.add`. None
@@ -548,6 +552,177 @@ before now resolves.
 **What it buys.** Hand-vectorised kernels that LLVM does not find, such as
 mat-vec in `spectral`, ChaCha20's four-lane quarter round, or a 16-byte
 compare-and-bitmask scan. Every one of them stays inside the baseline ISA.
+
+### 3.2.1 What a portable-vector benchmark adds
+
+[Erio-Harrison/simd_benchmark](https://github.com/Erio-Harrison/simd_benchmark)
+(read at `eb6294a`) compares Rust's portable `std::simd` with hand-written NEON
+on an Apple M4, in nine scenarios. Its first version had `std::simd` ranging
+from 9x faster than scalar code to 7.7x slower, and the two APIs up to 2.1x
+apart on the same scenario. Each gap traced back to the versions doing
+different work. The repository now holds both to four rules:
+the same elements per iteration, the same number of accumulators, the same
+number of horizontal reductions, and the same algorithm. Under those rules
+the two APIs run within 5% of each other in eight scenarios and 9% in the
+ninth, where the gap comes from the scalar loop around the vectors and its
+addressing mode. More than once the portable code compiled to the very
+instruction the NEON code names: a stride-3 shuffle to `ld3`, a lane shift
+to `ext`, a widen-add-narrow to `shadd`. That is evidence for §3.3's
+decline: a portable surface over LLVM's generic vector IR loses nothing to
+intrinsics.
+
+It also bears on five parts of (b) that this note had left open. Each was
+checked against LLVM 18 or measured on S0's machine (the 2.1 GHz Xeon, family
+6, model 207), at `6da23af` with the 0.16.0 seed.
+
+**1. S3's comparator has to wrap when the vector does.** The benchmark's
+fourth finding is that the scalar baseline is often vectorised already, so a
+ratio means nothing until the baseline's code has been read. Nish has the
+opposite trap. A scalar integer reduction under the checked default keeps
+its overflow exit and does not vectorise (§2.1), while `nish:simd`'s integer
+lanes wrap (Q3). A ratio of the two measures the overflow check, not the
+vectors. So the scalar kernel S3 is judged against makes the same overflow
+promise as the vector one: it wraps through `nish:unsafe`'s `wrappingAdd` and
+its siblings, and the stage records whether that scalar loop vectorises.
+
+**2. A float comparator gets the vector's summation order by having as many
+accumulators.** A one-accumulator `f32x4` loop adds in four interleaved
+chains, one per lane. A scalar loop with one accumulator cannot be turned
+into that, because without `reassoc` LLVM keeps the source's order of
+additions. The same order in scalar Nish
+is four accumulators:
+
+```ts
+const dot4 = (a: f32[], b: f32[]): f32 => {
+  let s0: f32 = 0
+  let s1: f32 = 0
+  let s2: f32 = 0
+  let s3: f32 = 0
+  for (let i = 0; i < N; i = i + 4) {
+    s0 = s0 + a[i] * b[i]
+    s1 = s1 + a[i + 1] * b[i + 1]
+    s2 = s2 + a[i + 2] * b[i + 2]
+    s3 = s3 + a[i + 3] * b[i + 3]
+  }
+  return s0 + s1 + s2 + s3
+}
+```
+
+A program timed this kernel against the one-accumulator loop. `N` was 4,096
+and the program made 200,000 calls, bumping one element before each call and
+folding every answer into a printed checksum. Each build ran seven times at
+`--profile speed`. The times are minimum / median, in ms:
+
+| Build | one accumulator | four accumulators | gain |
+| --- | ---: | ---: | ---: |
+| `--profile speed` | 542 / 563 | 384 / 415 | 1.41x / 1.36x |
+| the same, `--unchecked-indexing` | 527 / 559 | 125 / 133 | 4.2x / 4.2x |
+| 0.18.0: `if (b.length < n) { return 0 }`, then `i + 3 < n` | — | 411 / 419 | — |
+| 0.18.0: the same guard, and every access through `uncheckedGet` | — | 130 / 133 | — |
+
+With unchecked indexing, LLVM turns the four scalar chains into one loop
+over a `<4 x float>` accumulator, `mulps` then `addps`: the code a
+one-accumulator `f32x4` kernel would be. In C the same four-accumulator loop
+compiles to that loop too, and ran at 0.99x the speed of one written with
+SSE2 intrinsics and one `__m128` accumulator. With checked indexing, the
+bounds check on each element keeps the loop scalar: its optimised IR has no
+vector accumulator.
+
+`--unchecked-indexing` is deprecated (NL9014), so the last two rows repeat the
+kernel with the compiler built from `main` (0.18.0) and with `n = a.length`.
+A guard that the loop's `i + 3 < n` and `b.length >= n` hold does not help:
+the range analysis credits a test of the index itself, `i < n`, and learns
+nothing from `i + 3 < n`, so all eight accesses keep their checks. NL9007
+warns on only two of them, `a[i]` and `b[i]`, because it speaks only for an
+index that is a plain local (`checkSurvivingBoundsCheck`, `src/checker.ts`).
+The six offset accesses keep their checks without a word. Writing every
+access as `uncheckedGet` inside the same guard gives the unchecked speed
+without the flag. Crediting an offset index `i + k` from a test
+`i + c < n`, with `0 <= k <= c`, would give it with no `nish:unsafe` at all.
+
+For a float kernel, then, much of what
+S3 could show over scalar Nish is available to scalar Nish already, and the
+bounds checks stand in the way. It is (d)'s loop-shape work (§3.4) as much
+as (b)'s. S3's float comparator therefore has one scalar accumulator for
+every lane of the vector kernel's accumulators, and the stage reports it
+under both indexing modes.
+
+**3. 128-bit lanes do not split an accumulator for a program.** In the
+benchmark's dot product, `f32x8` on NEON is two registers and so two
+independent chains. A hand-written loop with one `f32x4` accumulator was
+1.4x to 2.2x slower than one with two, depending on the API and the run.
+Under Q4 no `nish:simd` type is wider than 128 bits, and LLVM does not
+reassociate a float accumulator into several, so a program gets more chains
+only by writing them. On S0's machine, an L1-resident dot product in C with
+SSE2 intrinsics, run seven times, took (minimum / median, ms): one
+accumulator 119.3 / 123.5, two 62.2 / 63.5, four 51.8 / 53.6. That is 1.9x
+from the second accumulator and 2.3x from four. The gain follows the core's
+float-add latency, so it differs from machine to machine. The S3 cookbook
+entry for a float reduction shows the several-accumulator form, and S3's
+numeric kernel and its comparator have the same number of accumulators
+(rule 2 of the four).
+
+**4. The per-block test is `any`, not `bitmask`.** Lowered by `llc -O3`
+after `opt -O2`, a 16-lane compare followed by each of the two reductions
+costs these instructions, not counting the return:
+
+| Operation | AArch64 | x86-64 baseline | x86-64-v3 | wasm simd128 |
+| --- | --- | --- | --- | --- |
+| compare, `bitcast <16 x i1> to i16` (`bitmask`) | 8: `cmeq`, a constant-pool load, `and`, `ext`, `zip1`, `addv`, … | 2: `pcmpeqb`, `pmovmskb` | 2 | 2: `i8x16.eq`, `i8x16.bitmask` |
+| compare, `llvm.vector.reduce.or.v16i1` (`any`) | 4: `cmeq`, `umaxv`, … | 4: `pcmpeqb`, `pmovmskb`, `test`, `setne` | 4 | 2: `i8x16.eq`, `v128.any_true` |
+
+NEON has no `movemask`, so a bitmask is assembled from several instructions,
+while an "any lane set?" reduction is one `umaxv`. The benchmark's byte
+search runs at about one iteration per cycle by testing `any` on every block
+and building the position only on a hit. With `bitmask` as the only
+reduction, every block on AArch64 would pay the assembly. The narrowing
+shift `runtime/runtime-simd.c` uses on NEON is cheaper, but it gives four
+bits a byte rather than one, so it is not `bitmask`. It fits an operation
+that answers the index of the first set lane, which S3 adds only if it
+measures faster than `bitmask` on AArch64.
+
+**5. A fused multiply-add is not in the baseline.** `llvm.fma.v4f32` lowers
+to one `fmla` on AArch64 and one `vfmadd213ps` at `x86-64-v3`. At the x86-64
+baseline and on wasm simd128 it becomes **four calls to the C library's
+`fmaf`**, one per lane. The
+benchmark recommends `mul_add` for Rust, but Nish's default target is the
+baseline (Q2) and the language refuses contraction (§9). So (b) offers no
+`mulAdd`. A multiply and an add stay two operations, rounded twice, as
+scalar `*` and `+` are. One would come back only with a CPU level that has
+FMA (S2), and it would have its own rule.
+
+**Q4's cost: a deinterleaving load.** The benchmark's RGB scenario loads 48
+bytes and takes every third byte with three shuffles. On AArch64 that
+compiles to one `ld3`, the instruction NEON's `vld3q_u8` names. Q4 allows no
+48-byte vector, so a `nish:simd` program writes three 16-byte loads and
+two-input shuffles, and LLVM does not find the `ld3`:
+
+| The same three lanes, from | AArch64 | x86-64 baseline | x86-64-v3 | wasm simd128 |
+| --- | ---: | ---: | ---: | ---: |
+| one `<48 x i8>` load and three stride-3 shuffles | 4, with `ld3` | 113 | 18 | 6 `i8x16.shuffle` |
+| three `<16 x i8>` loads and two-input shuffles | 23, with 6 `tbl` | 113 | 24 | 6 `i8x16.shuffle` |
+
+On the x86-64 baseline and on wasm the two forms cost the same. AArch64
+loses the most, and `x86-64-v3` a little. Q4 stands. This is the price of it, recorded so that an
+interleaved-data kernel that misses S3's bar on AArch64 is read correctly.
+
+To reproduce the lowering tables, write each row as a function in a `.ll`
+file and run `opt -O2 -mtriple=<t> f.ll -S -o - | llc -O3 -mtriple=<t>`,
+with `-mcpu=x86-64-v3` or `-mattr=+simd128` for those columns. The
+`bitmask` and `fma` rows are:
+
+```llvm
+define i16 @bitmask(<16 x i8> %v, <16 x i8> %w) {
+  %c = icmp eq <16 x i8> %v, %w
+  %m = bitcast <16 x i1> %c to i16
+  ret i16 %m
+}
+define <4 x float> @fma(<4 x float> %a, <4 x float> %b, <4 x float> %c) {
+  %r = call <4 x float> @llvm.fma.v4f32(<4 x float> %a, <4 x float> %b, <4 x float> %c)
+  ret <4 x float> %r
+}
+declare <4 x float> @llvm.fma.v4f32(<4 x float>, <4 x float>, <4 x float>)
+```
 
 ### 3.3 (c) Explicit target intrinsics
 
@@ -673,7 +848,7 @@ a printed checksum.
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
-| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
+| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
