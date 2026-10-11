@@ -1,7 +1,7 @@
-// #564, `this` leaving a constructor. There is no rule of its own for it: a
-// constructor reaches only what its parameters reach, so it can hand `this`
-// out only by storing it through another parameter, and that store is a write
-// the region refuses like any other. This case pins that the route through
+// #564, `this` leaving a constructor. There is no rule of its own for it:
+// there is no module state to keep `this` in, so a constructor can hand `this`
+// out only by storing it into memory an argument reaches, and that store is a
+// write the region refuses like any other. This case pins that the route through
 // `this` is one: the task reading the holder would see the new object
 // natively and not under Node.
 import { scope } from "nish/threads";

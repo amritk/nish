@@ -2542,7 +2542,17 @@ export const main = (): i32 => {
     `_new_element`, `_new_helper`, `_new_method`, `_call_deep`,
     `_call_element`, `_call_alias`, `_call_loop`). Its stores into
     the fresh object itself are not counted, so `new Point(3, 4)` is fine
-    there (`tests/link/thread_task_private`). A task argument read out of a
+    there (`tests/link/thread_task_private`), until the constructor keeps
+    memory an argument reaches in a field of `this` (`this.inner = h.inner`,
+    an element of the argument's array, what a helper hands back, or `this`
+    handed to a method): from then on a write past `this`'s own slots counts
+    as a write to every argument (`reject_thread_region_new_alias_field`,
+    `_alias_push`, `_alias_element`, `_alias_const`, `_alias_helper`,
+    `_alias_method`, `_alias_item`). The same holds for any function: a write
+    into a field of an object it built is its own unless that object's
+    constructor keeps an argument's memory (`reject_thread_region_call_wrap`;
+    `tests/link/thread_scope_region_fresh_object` writes its own `new Grid()`
+    inside the block). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the

@@ -105,6 +105,7 @@ import {
   N_LIST,
   N_MEMBER,
   N_NEW,
+  N_NULL,
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
@@ -344,17 +345,25 @@ export class ReachRoot {
  * Where the memory an expression names may come from, for
  * `PointerParamFacts.writesReach`: the pointer parameters it is reached from
  * (`roots`), the function's own fresh allocation named as it is (`fresh`),
- * or anything at all (`all`) when the path leaves what the analysis follows —
- * a call's result, a `let`, a loop variable, or a field of a fresh object,
- * which may hold a parameter's memory.
+ * a field of an object a constructor made (`news`), or anything at all
+ * (`all`) when the path leaves what the analysis follows — a call's result, a
+ * `let`, a loop variable, or a field of an array or object literal, which may
+ * hold a parameter's memory.
  */
 export class Reach {
   roots: ReachRoot[]
+  /**
+   * The constructors of the fresh objects the path goes into a field of: the
+   * function's own memory unless a constructor kept a parameter's memory in
+   * `this` (`FunctionFacts.thisAliased`), which the fixpoint asks.
+   */
+  news: string[]
   fresh: boolean
   all: boolean
 
   constructor() {
     this.roots = []
+    this.news = []
     this.fresh = false
     this.all = false
   }
@@ -473,6 +482,24 @@ export class FunctionFacts {
    * receiver reaches (`composeArguments`).
    */
   wholeReaches: ArgEdge[]
+  /**
+   * The reaches of this body's own stores that go into a field of an object a
+   * constructor made (`Reach.news`): the fixpoint marks every parameter for
+   * each one whose constructor turns out to keep a parameter's memory.
+   */
+  deferredReaches: Reach[]
+  /**
+   * A constructor that keeps memory a parameter may reach in `this`: it
+   * stores into what `this` reaches a value that is not fresh, hands `this`
+   * to a call, or stores an object whose own constructor is one (`thisNews`,
+   * fixpoint). Such a `this` is fresh no longer: a write past its own slots
+   * may land in an argument's memory, so it marks every pointer parameter
+   * (`composeArguments`), and a `new` of the class is not the caller's own
+   * memory below its fields (`Reach.news`).
+   */
+  thisAliased: boolean
+  /** The constructors of the objects this constructor stores into what `this` reaches. */
+  thisNews: string[]
   /**
    * The user callees reached other than through a call whose arguments are
    * composed: a fused lookup, a walk's methods, a routed map instance. Their
@@ -669,6 +696,9 @@ export class FunctionFacts {
     this.writesPastParams = false
     this.argEdges = []
     this.wholeReaches = []
+    this.deferredReaches = []
+    this.thisAliased = false
+    this.thisNews = []
     this.wholeCallees = new StringSet()
     this.privateArrays = []
     this.writesOutput = false
@@ -1739,7 +1769,11 @@ class FactCollector {
       }
       return
     }
-    markReach(this.facts, this.reachOf(e, 0), false)
+    const reach = this.reachOf(e, 0)
+    markReach(this.facts, reach, false)
+    if (reach.news.length > 0) {
+      this.facts.deferredReaches.push(reach)
+    }
     const pointer = this.pointerParamOf(e)
     if (pointer === null) {
       this.notePastWrite(node)
@@ -1793,16 +1827,143 @@ class FactCollector {
     if (init === null) {
       out.all = true
     } else if (init.kind === N_NEW || init.kind === N_ARRAY || init.kind === N_OBJECT) {
-      if (below > 0) {
-        out.all = true
-      } else {
+      if (below === 0) {
         out.fresh = true
+      } else {
+        this.followFresh(init, out)
       }
     } else if (depth < 8) {
       this.followReach(init, below, out, depth + 1)
     } else {
       out.all = true
     }
+  }
+
+  /**
+   * A path that goes into a field or an element of `init`, a fresh
+   * allocation: a class's object is the function's own memory there unless
+   * its constructor keeps a parameter's memory (`Reach.news`); an array or an
+   * object literal may hold anything.
+   */
+  followFresh(init: Node, out: Reach): void {
+    const program = this.unit.program
+    const type = program.nodeTypes[init.id]
+    if (init.kind !== N_NEW || type < 0 || !this.table.isStruct(type)) {
+      out.all = true
+      return
+    }
+    const ctor = constructorOf(program, this.table, intrinsicType(program, init))
+    if (ctor !== null) {
+      out.news.push(ctor.name)
+    }
+  }
+
+  /**
+   * In a constructor, what `node` does to `FunctionFacts.thisAliased`: a store
+   * into what `this` reaches of a value that is not fresh, a `push` of one
+   * onto an array `this` reaches, or `this` handed to a call as an argument or
+   * a receiver.
+   */
+  noteThisStore(node: Node): void {
+    if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+      if (this.reachesThis(node.children[0])) {
+        this.noteThisValue(node.children[1], 0)
+      }
+      return
+    }
+    if (node.kind === N_THIS) {
+      const above = this.unit.parents.parentOf(node)
+      const call: Node | null = above === null ? null : this.unit.parents.parentOf(above)
+      const handed = above !== null && above.kind === N_LIST
+      const receiver =
+        above !== null &&
+        above.kind === N_MEMBER &&
+        call !== null &&
+        call.kind === N_CALL &&
+        call.children[0] === above
+      if (handed || receiver) {
+        this.facts.thisAliased = true
+      }
+      return
+    }
+    const method = arrayMethodName(this.unit.program, this.table, node)
+    const receiver = methodReceiver(node)
+    if (method === "push" && receiver !== null && this.reachesThis(receiver)) {
+      for (const arg of node.children[1].children) {
+        this.noteThisValue(arg, 0)
+      }
+    }
+  }
+
+  /** Whether the memory `target` names is reached from `this`. */
+  reachesThis(target: Node): boolean {
+    const reach = this.reachOf(target, 0)
+    if (reach.all) {
+      return true
+    }
+    for (const root of reach.roots) {
+      if (root.name === "this") {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * `value`, stored into what `this` reaches: a number, a `boolean`, an enum,
+   * a string, `null`, `new Array(n)`, a literal of such values, or a `const`
+   * bound to one leaves `this` fresh; a class's `new` does unless its own
+   * constructor keeps a parameter's memory (`thisNews`); anything else may be
+   * memory an argument reaches.
+   */
+  noteThisValue(value: Node, depth: i32): void {
+    const program = this.unit.program
+    const table = this.table
+    const v = unwrapParens(value)
+    const type = program.nodeTypes[v.id]
+    if (type >= 0 && (type === T_STRING || isScalarArgument(table, table.stripNull(type)))) {
+      return
+    }
+    if (v.kind === N_NULL) {
+      return
+    }
+    if (v.kind === N_NEW && type >= 0 && table.isArray(type)) {
+      return
+    }
+    if (v.kind === N_NEW && type >= 0 && table.isStruct(type)) {
+      const ctor = constructorOf(program, table, intrinsicType(program, v))
+      if (ctor !== null) {
+        this.facts.thisNews.push(ctor.name)
+      }
+      for (const arg of v.children[2].children) {
+        this.noteThisValue(arg, depth)
+      }
+      return
+    }
+    if (v.kind === N_ARRAY) {
+      for (const element of v.children) {
+        this.noteThisValue(element, depth)
+      }
+      return
+    }
+    if (v.kind === N_OBJECT) {
+      for (const property of v.children) {
+        const last = property.children.length > 0 ? property.children[property.children.length - 1] : property
+        this.noteThisValue(last, depth)
+      }
+      return
+    }
+    const local: Local | null = v.kind === N_IDENT ? program.nodeLocals[v.id] : null
+    const body = this.sig.body()
+    const decl: Node | null =
+      local === null || local.mutable || local.storage === STORAGE_PARAM || body === null || depth >= 8
+        ? null
+        : declarationIn(program, body, local)
+    if (decl !== null) {
+      this.noteThisValue(decl.children[2], depth + 1)
+      return
+    }
+    this.facts.thisAliased = true
   }
 
   /** The private array `e` names (`FunctionFacts.privateArrays`), or null. */
@@ -1992,6 +2153,9 @@ class FactCollector {
       this.noteUse(param, node)
     }
     this.collectStringFacts(node)
+    if (this.facts.freshThis) {
+      this.noteThisStore(node)
+    }
     this.collectClassFacts(node)
     this.collectResultFacts(node)
     this.collectArrayFacts(node)
@@ -3717,6 +3881,24 @@ const markReach = (f: FunctionFacts, reach: Reach, deep: boolean): boolean => {
   return changed
 }
 
+/** A `Reach` of anything at all. */
+const everything = (): Reach => {
+  const reach = new Reach()
+  reach.all = true
+  return reach
+}
+
+/** Whether a constructor among `ctors` keeps a parameter's memory in `this`, or is unknown. */
+const anyAliased = (facts: FactsTable, ctors: string[]): boolean => {
+  for (const name of ctors) {
+    const g = facts.get(name)
+    if (g === null || g.thisAliased) {
+      return true
+    }
+  }
+  return false
+}
+
 /** Mark `f` as writing shared memory past its parameters; answers whether that moved anything. */
 const markPastWrite = (f: FunctionFacts): boolean => {
   if (f.writesPastParams) {
@@ -3742,9 +3924,28 @@ const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
  */
 const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   let changed = false
+  if (!f.thisAliased && anyAliased(facts, f.thisNews)) {
+    f.thisAliased = true
+    changed = true
+  }
+  // A `this` that may hold an argument's memory: a write past its own slots
+  // may land in what any parameter reaches.
+  const self: PointerParamFacts | null = f.thisAliased ? f.pointerParam("this") : null
+  if (self !== null && self.writesDeep && markReach(f, everything(), true)) {
+    changed = true
+  }
+  for (const reach of f.deferredReaches) {
+    if (anyAliased(facts, reach.news) && markReach(f, everything(), true)) {
+      changed = true
+    }
+  }
   for (const edge of f.wholeReaches) {
     const g = facts.get(edge.callee)
-    if ((g === null || g.sharedWrite) && markReach(f, edge.reach, true)) {
+    const writes = g === null || g.sharedWrite
+    if (writes && markReach(f, edge.reach, true)) {
+      changed = true
+    }
+    if (writes && anyAliased(facts, edge.reach.news) && markReach(f, everything(), true)) {
       changed = true
     }
   }
@@ -3753,7 +3954,11 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     const g = facts.get(edge.callee)
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     const reached = g === null || (target !== null && target.writesReach && g.sharedWrite)
-    if (reached && markReach(f, edge.reach, target === null || target.writesDeep)) {
+    const deep = target === null || target.writesDeep
+    if (reached && markReach(f, edge.reach, deep)) {
+      changed = true
+    }
+    if (reached && deep && anyAliased(facts, edge.reach.news) && markReach(f, everything(), true)) {
       changed = true
     }
     const owner = edge.owner
