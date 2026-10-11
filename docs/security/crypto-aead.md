@@ -19,6 +19,12 @@ found, and which test now pins each property.
 - The disassembly fixtures `tests/cases/ct_asm_chacha20poly1305` and
   `tests/cases/ct_asm_aes`, and the link tests `tests/link/crypto_aes*` and
   `tests/link/crypto_chacha20poly1305*`, in both number modes.
+- Since WP38 S5 (at `74c2716`): `runtime/runtime-aes.c`, the C kernels for
+  AES-NI and PCLMULQDQ and for the ARMv8 AES and PMULL instructions that the
+  compiler is to call in place of four of `std/crypto/aes.ts`'s private
+  functions, and its tests `tests/simd/aes-gcm.c` and
+  `tests/ct-asm-runtime.js`. Its constant time is recorded in
+  [ct-verification.md](ct-verification.md#the-runtimes-aes-kernels).
 
 Out of scope: the constant-time helpers the modules call (`ctEq`,
 `ctSelect`, `std/crypto/ct.ts`), the disassembly checker itself
@@ -89,7 +95,10 @@ finding.
 | AEAD-2 | Low | `std/crypto/aes.ts:435` (`aesEncryptBatch`), through every entry point | An `AesKey` whose `rounds` disagrees with its `roundKeys` (built or edited by hand) made every entry point index past the round keys and panic (`index out of range: 88 >= 88` for 14 rounds over AES-128's 88 words). A crash, but not on peer input. | **Fixed.** `aesKeyUsable` (10 or 14 rounds, `(rounds + 1) * 8` words) guards `aesEncryptBlock`, `aesHeaderMask`, `aesGcmSeal` and `aesGcmOpen`, which answer `null`. Tests: "seal under an AesKey with 14 rounds and 11 round keys answers null", "open under it …", "aesEncryptBlock under it …", "aesHeaderMask under it …", "an AesKey with 12 rounds, AES-192's count, answers null". |
 | AEAD-3 | Low | `std/crypto/chacha20poly1305.ts:629`, `:661`; `std/crypto/aes.ts:851`, `:876` | Hardening, no defect. The AEADs' counters cannot wrap only because an array length is below 2^31: ChaCha20-Poly1305 needs at most 2^25 blocks from counter 1 against 2^32 - 1, and GCM at most 2^27 blocks against SP 800-38D's 2^32 - 2. Nothing at the counter said so, so a wider array length would have silently removed the bound. | **Fixed.** Seal and Open call `chacha20CounterFits(1, len)` and `aesGcmLengthFits(length)`, which state the bound where the counter is. They cannot refuse while array lengths are `i32`, so no test can fail on base; the boundary of `chacha20CounterFits` itself is pinned by the existing "a 65th byte at counter 2^32 - 1 would wrap the counter, and answers null". |
 
-No Critical, High or Medium finding. No finding is left open.
+| AEAD-4 | Low | `runtime/runtime-aes.c:288` (`nish_aes_schedule`), `:327` (`nish_aes_ctr`), `:361` (`nish_aes_ghash`), `:130` (`nish_aes_wipe16`) (at `74c2716`) | **What the AES kernels cannot wipe.** On the kernel path the round keys, H and its powers, every counter block, every keystream block and the GHASH state pass through XMM or NEON registers, and the compiler may spill any of them to the stack. When a kernel returns they stay there until later code overwrites them, and a later memory disclosure, or a core dump, could read them. No store written in C can name a register or a spill slot, which is the position ECC-2 ([crypto-ecc.md](crypto-ecc.md)) and X509-7 ([crypto-x509.md](crypto-x509.md)) record for scalars in registers. | **Open, and recorded:** neither C nor the language can reach it. What the kernels own is wiped: the two stack buffers they declare, the keystream of a partial last block in `nish_aes_ctr` and the zero-padded last block in `nish_aes_ghash`, are zeroed before return by volatile stores (`nish_aes_wipe16`), the mechanism of `nish:secret`'s wipe. The kernels keep no other copy on purpose: round keys and H's powers are read from `rk` at each use rather than copied to locals, and the schedule is written straight into `rk`. `rk` itself, H's powers in its tail included, is the caller's array, and is wiped exactly when the bitsliced schedule in it would be: TLS and QUIC do not wipe their keys yet (TLS-1 in [tls.md](tls.md), QUIC-1 in [quic.md](quic.md), #430). **What is still not reached:** the vector registers, and any spill of them; the `debug` profile's `-O0`, which keeps every intermediate on the stack; and the stack of the bitsliced path, which is `std/crypto/aes.ts`'s. Tests: `runtime-aes.c on ${target.name}: the wipes survive clang -O2 (two volatile zeros of 8 bytes in nish_aes_ctr and nish_aes_ghash), where a twin without volatile loses nish_aes_ctr's`. |
+
+No Critical, High or Medium finding. AEAD-4 is open: it is recorded rather
+than fixed, because neither the language nor C has a way to reach it.
 
 ## Properties verified
 
@@ -108,6 +117,11 @@ No Critical, High or Medium finding. No finding is left open.
 | A hand-built or edited `AesKey` cannot forge or crash | AEAD-1, AEAD-2 | the tests named in the findings |
 | The same answers in both number modes | Every width is spelled in both modules | Each check above runs in `crypto_aes_f64` and `crypto_chacha20poly1305_f64` with identical expected output |
 | Lengths cannot overflow `i32` | Seal refuses a plaintext over 2^31 - 17 bytes; Open's `total - 16` and `length + 8` stay below 2^31; GHASH and GCTR count in blocks, never forming an offset past the length | By reading; a 2 GiB input is too large for the suite |
+| The AES kernels answer what FIPS 197 and SP 800-38D say, on every path a machine has, for AES-128 and AES-256 (WP38 S5) | `tests/simd/aes-gcm.c`: a table AES and a bit-at-a-time GHASH, held first to FIPS 197 C.1 and C.3, the GCM test cases 1–4 and 13–16 and RFC 9001 A.2's and A.3's header masks, then the kernels to them on every length 0 to 4,096, 2,000 random lengths and keys, and 500 whole seals | `simd: aes-gcm native ${process.arch}: ${said.replace(/^aes-gcm: /, "") \|\| "the agreement driver"}`; on AArch64 the same line (CI's `simd-arm64` job requires `armv8-aes-pmull`) |
+| GCTR's counter wraps modulo 2^32 on the kernel path too, and `dst` may be `src` | J0s within 300 of 2^32 in a third of the exhaustive lengths and half the random ones; every GCTR run again in place | the same |
+| A CPU with the instructions runs them | The agreement line must name the path wherever `/proc/cpuinfo` lists `aes` and `pclmulqdq` (or `pmull`) | `simd: aes-gcm ran the ${wantPath} path, which /proc/cpuinfo says this CPU has` |
+| `NISH_AES=soft` pins the bitsliced path, and the answer is fixed once given | The driver resets the stored answer and asks under `soft`, unset, `hw` and an unknown value, then changes the environment and asks again | the same agreement line ("the resolver picks every pin") |
+| A program that calls no AES pays nothing for the unit; wasm32 links it and answers 0 | Section GC; the wasm32 build defines only stubs | `simd: --profile ${profile} links hello with runtime-aes.c to the same bytes as without it, and a program that calls the kernels runs them`; `simd: --profile wasi links runtime-aes.c, and nish_aes_hw answers 0 there` |
 
 ## Doc corrections for the security-policy stage
 
