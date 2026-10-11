@@ -96,6 +96,7 @@ import {
 import {
   CheckedProgram,
   FunctionSig,
+  Instantiation,
   PAR_CHUNK,
   PAR_MAP,
   PAR_NONE,
@@ -2997,6 +2998,13 @@ const checkChannels = (
   const spawns: Node[] = []
   collectSpawns(program, body, spawns)
   recordSenders(program, table, summaries, spawns)
+  for (const spawn of spawns) {
+    if (handsNullableChannel(program, table, spawn)) {
+      out.push(
+        new ScopeFinding(spawn, channelUseMessage("This task's argument holds a channel that may be `null`"))
+      )
+    }
+  }
   findScopeReceives(program, facts, body, scopeType, out)
   const ops = new ChannelOps()
   collectChannelOps(program, sig, body, summaries, ops)
@@ -3005,6 +3013,46 @@ const checkChannels = (
     checkChannel(program, summaries, body, locals[c], decls[c], spawns, ops, scopeType, out)
     c = c + 1
   }
+}
+
+/**
+ * Whether the argument a `spawn` hands its task is `null`-able and holds a
+ * channel, or holds one in a field that may be `null`. The spawn counts a
+ * sender by reading the channel out of the argument, and one it cannot read
+ * would be a sender the count never saw, which could close the channel early.
+ */
+const handsNullableChannel = (program: CheckedProgram, table: TypeTable, spawn: Node): boolean => {
+  const callee = spawnCallee(program, spawn)
+  const instance: Instantiation | null = callee === null ? null : callee.instance
+  if (instance === null || instance.typeArgs.length === 0) {
+    return false
+  }
+  const arg = instance.typeArgs[0]
+  if (table.isNullable(arg)) {
+    const inner = table.stripNull(arg)
+    return isChannelType(program, table, inner) || holdsChannelField(program, table, inner, false)
+  }
+  return holdsChannelField(program, table, arg, true)
+}
+
+/** Whether the class `type` has a field of a channel type — only a `null`-able one when `nullable` is set. */
+const holdsChannelField = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  nullable: boolean
+): boolean => {
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return false
+  }
+  for (const field of info.fields) {
+    const maybe = table.isNullable(field.type)
+    if ((maybe || !nullable) && isChannelType(program, table, table.stripNull(field.type))) {
+      return true
+    }
+  }
+  return false
 }
 
 /**

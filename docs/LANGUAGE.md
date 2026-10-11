@@ -2874,9 +2874,11 @@ refused with that rule's own code:
   sets from a parameter — never bound to another name, stored, returned or
   compared, and no member but `send` is named:
   `` A `Channel` cannot be bound, stored, returned or compared here: a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer ``
-  (NL2477, `reject_channel_bound`, `reject_channel_member`, and
-  `reject_channel_stored` for a class that holds one made anywhere but at the
-  `spawn`). It reaches a task as R8 says a `Mutex` does: as the task's
+  (NL2477, `reject_channel_bound`, `reject_channel_bound_arrow` inside an
+  arrow, `reject_channel_member`, and `reject_channel_stored` for a class that
+  holds one made anywhere but at the `spawn`; `reject_channel_nullable` for a
+  task's argument whose channel may be `null`, which the `spawn` could not
+  count as a sender). It reaches a task as R8 says a `Mutex` does: as the task's
   argument, or as a field of the object made for it at the `spawn`,
   `new Pipe(ch, 100)`.
 - **C3: a channel is unbounded**, so `send` never waits, because under Node a
