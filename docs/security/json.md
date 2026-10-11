@@ -8,7 +8,7 @@ pins each property. It is written with the code rather than after an audit, so
 that the audit of the JSON layer starts from evidence. The typed layer that
 decodes into a class (#573) will extend this record.
 
-**Anchors.** Every `file:line` below is at `dca8d0a`, the module's head in this
+**Anchors.** Every `file:line` below is at `4411ea9`, the module's head in this
 change, on top of `main` at `ce9d394`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
@@ -46,7 +46,7 @@ answered with `JSON_TOK_ERR_WINDOW` rather than a panic.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| JSON-1 | Low | `std/json-tokenizer.ts:930` (`keyEquals`), `:875` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
+| JSON-1 | Low | `std/json-tokenizer.ts:933` (`keyEquals`), `:875` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
 | JSON-2 | Low | `std/json-tokenizer.ts:255` (`JSON_TOK_END_CEILING`), `:505` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. The guard's other arm, that `off + len` is not added before `off <= src.length - len` has proven it fits, is pinned by "WINDOW: an offset and a length of 2^31 - 1, refused without overflow" and "WINDOW: a length of 2^31 - 1 from 0": with a naive `off + len > src.length` the first panics with `attempt to add with overflow`. The ceiling arm itself is not reached by any test: a window passes the first test only inside its array, so ending past 2,147,483,583 takes an array of at least that many bytes. The language allows such a `u8[]` (`NISH_ARRAY_MAX` in `runtime/runtime.c` is 2^31 − 1 elements), but it is 2 GiB of memory on the host that runs the suite, which is the reason, not a limit of the language. | **Open.** The ceiling is one compare in `reset`; a test of it would allocate 2 GiB. |
 | JSON-3 | Low | `std/json-tokenizer.ts:542` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Open, by design.** The tokenizer reports what is there; refusing duplicates is the typed layer's rule (#573, which rejects them). A program reading tokens itself decides, and is told so in the module header. |
 
@@ -79,7 +79,7 @@ constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
 128 levels fit the default". There is no recursion anywhere in the module, and
 `skipValue` loops over `next`.
 
-**Huge numbers** (`:703`, `number`; `:1034`, `numberF64`; `:1004`,
+**Huge numbers** (`:703`, `number`; `:1037`, `numberF64`; `:1007`,
 `integerScan`): a number longer than `maxNumberBytes` (256 by default) is
 refused with `JSON_TOK_ERR_NUMBER_LIMIT` ("NUMBER_LIMIT: 257 do not"); within
 it, an exponent stops being added up at 100,000 and the text goes to
@@ -135,7 +135,7 @@ padded window, every mutant has one verdict", with the seed's totals pinned
 and where it stopped"). Errors are sticky, and an error leaves the token
 before it readable ("an error in the string after a string token").
 
-**No allocation per body** (`:505`, `reset`; `:1109`, `numberSlow`): "alloc:
+**No allocation per body** (`:505`, `reset`; `:1112`, `numberSlow`): "alloc:
 Arena.used() is flat across every one, parseFloat's numbers included" measures
 10,000 bodies through one reused tokenizer, each call measured as
 `tests/link/net_loopback/common.ts`'s `LbMeter` measures a server's wake; the
