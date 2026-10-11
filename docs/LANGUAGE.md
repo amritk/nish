@@ -3325,6 +3325,23 @@ and both come from the program as written:
     `let j = i` has every bound `i` has
     (`tests/cases/arr_range_call_countdown`).
 
+  - **`i + c`** (`c` a literal of 1 or more) is an index too, and a test on
+    it is a bound on `i`. `i + c < w.length` says the length reaches `c`
+    past `i`, and so does `i + c < n` with `n` a hoisted length;
+    `i + c <= w.length` reaches `c - 1`; `i + c < N`, for a literal `N`, is
+    `i < N - c`. An access `w[i + k]` then needs `i >= 0` and a reach of at
+    least `k`, or a literal bound `i < M` with `w.length >= M + k`, so a
+    loop that reads four elements a pass under `i + 3 < w.length` keeps none
+    of its four checks. A checked `w[i + c]` that ran leaves
+    `i + c < w.length` behind, and nothing about `i >= 0`. Both halves rest
+    on the sum being exact: a signed `i + c` panics on overflow or is proven
+    not to overflow, so it is never a wrap to a small value. Under
+    `--wrapping`, and for an unsigned `i`, whose add wraps by definition, an
+    offset proves nothing and the check stays (`tests/cases/arr_bounds_offset`;
+    `arr_bounds_offset_reach` reads one past its reach, `arr_bounds_offset_floor`
+    has no floor, and `arr_bounds_offset_wrap` wraps `INT_MAX + 1`, and each
+    keeps its check and panics).
+
 A fact ends where it stops being true: at any assignment to `i` that is not
 `i = i + <non-negative literal>` (`i++` and `i += n` included) or
 `i = i - <non-negative literal>` (`i--` and `i -= n` included), at any

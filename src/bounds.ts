@@ -206,7 +206,8 @@ const FACT_EXCLUDES: i32 = 6
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
  * is the length holder; `w` is the length holder of `below` and `atMost`; `n`
- * is the literal of the three constant families.
+ * is the literal of the three constant families, and the reach of a `below`:
+ * `v + n < w.length`, 0 for the plain `v < w.length`.
  */
 class Fact {
   kind: i32
@@ -247,6 +248,14 @@ export class State {
   nonNegative: Local[]
   belowIndex: Local[]
   belowHolder: Local[]
+  /**
+   * How far past the index the length is known to reach: `i + reach <
+   * w.length`. A guard written as `i + 3 < n` is what records more than 0,
+   * and it is what proves `w[i + 1]` through `w[i + 3]` in a loop that reads
+   * four elements a pass. Every reader of the plain fact reads any reach,
+   * because `i + c < w.length` with `c >= 0` is `i < w.length` or stronger.
+   */
+  belowOffset: i32[]
   atMostIndex: Local[]
   atMostHolder: Local[]
   maxIndexVar: Local[]
@@ -267,6 +276,7 @@ export class State {
     this.nonNegative = []
     this.belowIndex = []
     this.belowHolder = []
+    this.belowOffset = []
     this.atMostIndex = []
     this.atMostHolder = []
     this.maxIndexVar = []
@@ -289,6 +299,7 @@ const cloneState = (s: State): State => {
   while (k < s.belowIndex.length) {
     out.belowIndex.push(s.belowIndex[k])
     out.belowHolder.push(s.belowHolder[k])
+    out.belowOffset.push(s.belowOffset[k])
     k = k + 1
   }
   k = 0
@@ -334,6 +345,7 @@ const copyInto = (into: State, from: State): void => {
   into.nonNegative = from.nonNegative
   into.belowIndex = from.belowIndex
   into.belowHolder = from.belowHolder
+  into.belowOffset = from.belowOffset
   into.atMostIndex = from.atMostIndex
   into.atMostHolder = from.atMostHolder
   into.maxIndexVar = from.maxIndexVar
@@ -367,17 +379,24 @@ const knownNonNegative = (state: State, v: Local): boolean => {
   return false
 }
 
-/** `i < w.length` is recorded here. */
-const knownBelow = (state: State, i: Local, w: Local): boolean => {
+/**
+ * The largest recorded `c` with `i + c < w.length`, or -1 when `i` is not
+ * known below `w.length` at all. 0 is the plain fact.
+ */
+const belowReach = (state: State, i: Local, w: Local): i32 => {
+  let best = -1
   let k = 0
   while (k < state.belowIndex.length) {
-    if (state.belowIndex[k] === i && state.belowHolder[k] === w) {
-      return true
+    if (state.belowIndex[k] === i && state.belowHolder[k] === w && state.belowOffset[k] > best) {
+      best = state.belowOffset[k]
     }
     k = k + 1
   }
-  return false
+  return best
 }
+
+/** `i < w.length` is recorded here. */
+const knownBelow = (state: State, i: Local, w: Local): boolean => belowReach(state, i, w) >= 0
 
 /**
  * `i <= w.length`, which a strict `i < w.length` gives as well. The holders it
@@ -510,10 +529,12 @@ const addFact = (state: State, fact: Fact): void => {
     return
   }
   if (fact.kind === FACT_BELOW) {
+    // A shorter reach than one already recorded changes no answer.
     const w = fact.w
-    if (w !== null && !knownBelow(state, fact.v, w)) {
+    if (w !== null && belowReach(state, fact.v, w) < fact.n) {
       state.belowIndex.push(fact.v)
       state.belowHolder.push(w)
+      state.belowOffset.push(fact.n)
     }
     return
   }
@@ -633,16 +654,19 @@ const forgetUpperBounds = (state: State, v: Local): void => {
   }
   const index: Local[] = []
   const holder: Local[] = []
+  const reach: i32[] = []
   let k = 0
   while (k < state.belowIndex.length) {
     if (state.belowIndex[k] !== v) {
       index.push(state.belowIndex[k])
       holder.push(state.belowHolder[k])
+      reach.push(state.belowOffset[k])
     }
     k = k + 1
   }
   state.belowIndex = index
   state.belowHolder = holder
+  state.belowOffset = reach
   const atIndex: Local[] = []
   const atHolder: Local[] = []
   k = 0
@@ -687,16 +711,19 @@ const forget = (state: State, v: Local): void => {
   state.nonNegative = kept
   const index: Local[] = []
   const holder: Local[] = []
+  const reach: i32[] = []
   let k = 0
   while (k < state.belowIndex.length) {
     if (state.belowIndex[k] !== v && state.belowHolder[k] !== v) {
       index.push(state.belowIndex[k])
       holder.push(state.belowHolder[k])
+      reach.push(state.belowOffset[k])
     }
     k = k + 1
   }
   state.belowIndex = index
   state.belowHolder = holder
+  state.belowOffset = reach
   const atIndex: Local[] = []
   const atHolder: Local[] = []
   k = 0
@@ -778,16 +805,19 @@ const forgetArrayLengths = (ctx: CheckContext, state: State): void => {
   }
   const index: Local[] = []
   const holder: Local[] = []
+  const reach: i32[] = []
   let k = 0
   while (k < state.belowIndex.length) {
     if (!ctx.table.isArray(state.belowHolder[k].type)) {
       index.push(state.belowIndex[k])
       holder.push(state.belowHolder[k])
+      reach.push(state.belowOffset[k])
     }
     k = k + 1
   }
   state.belowIndex = index
   state.belowHolder = holder
+  state.belowOffset = reach
   const atIndex: Local[] = []
   const atHolder: Local[] = []
   k = 0
@@ -825,11 +855,14 @@ const intersect = (a: State, b: State): State => {
       out.nonNegative.push(v)
     }
   }
+  // The shorter of two reaches survives, as the weaker of two bounds does.
   let k = 0
   while (k < a.belowIndex.length) {
-    if (knownBelow(b, a.belowIndex[k], a.belowHolder[k])) {
+    const other = belowReach(b, a.belowIndex[k], a.belowHolder[k])
+    if (other >= 0) {
       out.belowIndex.push(a.belowIndex[k])
       out.belowHolder.push(a.belowHolder[k])
+      out.belowOffset.push(a.belowOffset[k] < other ? a.belowOffset[k] : other)
     }
     k = k + 1
   }
@@ -1149,6 +1182,42 @@ const indexLocal = (ctx: CheckContext, expr: Node): Local | null => {
     return null
   }
   return v
+}
+
+/** An index local and the literal added to it: `i + c`, as `offsetIndex` reads it. */
+class Offset {
+  v: Local
+  c: i32
+
+  constructor(v: Local, c: i32) {
+    this.v = v
+    this.c = c
+  }
+}
+
+/**
+ * `i + c` or `c + i`, with `c` a literal of 1 or more and `i` an index local:
+ * the second, third and fourth element of a loop that reads several a pass.
+ * Only where the sum is exact. A signed add is checked or proven unless
+ * `--wrapping` is given, so outside it `i + c` either panics or is the true
+ * sum, never a wrap to a small value, and a fact or an access stated about
+ * the sum is one about `i`. Under `--wrapping`, and for an unsigned `i`, whose
+ * add wraps by definition, there is no such sum, and nothing is read.
+ */
+const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
+  const e = unwrapBoundsParens(expr)
+  if (ctx.wrapping || e.kind !== N_BINARY || e.text !== "+" || !checksOverflow(ctx.program, ctx.table, e)) {
+    return null
+  }
+  const left = indexLocal(ctx, e.children[0])
+  const right = indexLocal(ctx, e.children[1])
+  if (left !== null && literalValue(e.children[1]) >= 1) {
+    return new Offset(left, literalValue(e.children[1]))
+  }
+  if (right !== null && literalValue(e.children[0]) >= 1) {
+    return new Offset(right, literalValue(e.children[0]))
+  }
+  return null
 }
 
 /**
@@ -1485,6 +1554,30 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   if (loVar !== null && hiLength !== null && strict) {
     out.push(new Fact(FACT_BELOW, loVar, hiLength, 0))
   }
+  // `i + c < w.length`, `i + c < n` with `n` a hoisted length, and `i + c < N`
+  // for a literal `N`: the guard of a loop that reads `c + 1` elements a pass.
+  // The sum is exact (`offsetIndex`), so the bound is one on `i`, `c` short of
+  // the plain one. A non-strict compare reaches one less, and nothing at all
+  // past a length when `c` is 0, which `offsetIndex` does not answer.
+  const loOffset = offsetIndex(ctx, lo)
+  if (loOffset !== null) {
+    const reach = strict ? loOffset.c : loOffset.c - 1
+    if (hiLength !== null) {
+      out.push(new Fact(FACT_BELOW, loOffset.v, hiLength, reach))
+    }
+    if (hiVar !== null) {
+      // `n <= w.length` passes the reach on as it is, and `n < w.length` one further.
+      for (const above of holdersAbove(state, hiVar)) {
+        out.push(new Fact(FACT_BELOW, loOffset.v, above, knownBelow(state, hiVar, above) ? reach + 1 : reach))
+      }
+    }
+    if (hiConst >= 0) {
+      const bound = (strict ? hiConst : hiConst + 1) - loOffset.c
+      if (bound >= 1) {
+        out.push(new Fact(FACT_MAX_INDEX, loOffset.v, null, bound))
+      }
+    }
+  }
   // `toU32(i) < toU32(w.length)`: the same fact, for the unsigned index that
   // cannot be compared with the `i32` length as it is.
   const unsignedVar = unsignedIndexOf(ctx, lo)
@@ -1707,7 +1800,7 @@ const factsOf = (state: State): Fact[] => {
   }
   let k = 0
   while (k < state.belowIndex.length) {
-    out.push(new Fact(FACT_BELOW, state.belowIndex[k], state.belowHolder[k], 0))
+    out.push(new Fact(FACT_BELOW, state.belowIndex[k], state.belowHolder[k], state.belowOffset[k]))
     k = k + 1
   }
   k = 0
@@ -2200,6 +2293,13 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, node: Node, holder: L
     addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, constant + 1))
     return
   }
+  // A passed `w[i + c]` leaves `i + c < w.length` behind, and nothing about
+  // `i >= 0`: the sum can be in range while `i` is not.
+  const offset = offsetIndex(walk.ctx, index)
+  if (offset !== null) {
+    addFact(state, new Fact(FACT_BELOW, offset.v, holder, offset.c))
+    return
+  }
   const i = indexLocal(walk.ctx, index)
   if (i === null) {
     return
@@ -2547,6 +2647,20 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
   const constant = literalValue(index)
   if (constant >= 0) {
     return knownMinLength(state, holder, constant + 1)
+  }
+  // `w[i + k]`: `i >= 0` keeps the exact sum non-negative, and a reach of `k`
+  // or more, or a literal bound on `i` that `k` more still fits under a known
+  // length, keeps it below.
+  const offset = offsetIndex(ctx, index)
+  if (offset !== null) {
+    if (!knownNonNegative(state, offset.v)) {
+      return false
+    }
+    if (belowReach(state, offset.v, holder) >= offset.c) {
+      return true
+    }
+    const top = maxIndexOf(state, offset.v)
+    return top >= 0 && toI64(top) + toI64(offset.c) < I32_MAX && knownMinLength(state, holder, top + offset.c)
   }
   const i = indexLocal(ctx, index)
   if (i === null || !knownNonNegative(state, i)) {
@@ -4049,14 +4163,22 @@ const fitsType = (op: string, a: Interval, b: Interval, type: i32): boolean => {
   return product !== null && product.lo >= min && product.hi <= max
 }
 
-/** Whether `i < w.length` is recorded for any holder, which puts `i` at most one below the top. */
-const knownBelowSome = (state: State, i: Local): boolean => {
-  for (const x of state.belowIndex) {
-    if (x === i) {
-      return true
+/**
+ * The longest reach recorded for `i` against any holder, or -1 when `i` is
+ * known below no length. `i + c < w.length` puts `i` at least `c + 1` below
+ * the top, which is what lets the `i + 4` that steps a four-wide loop stay
+ * unchecked.
+ */
+const longestReach = (state: State, i: Local): i32 => {
+  let best = -1
+  let k = 0
+  while (k < state.belowIndex.length) {
+    if (state.belowIndex[k] === i && state.belowOffset[k] > best) {
+      best = state.belowOffset[k]
     }
+    k = k + 1
   }
-  return false
+  return best
 }
 
 /** The range a local holds here: its type's, or its declared one, narrowed by the state. */
@@ -4085,9 +4207,11 @@ const localHigh = (state: State, v: Local, type: i32): i64 => {
   if (bound >= 0 && toI64(bound) - toI64(1) < hi) {
     hi = toI64(bound) - toI64(1)
   }
-  // A length is at most the type's top, so an index below one is below the top.
-  if (knownBelowSome(state, v) && hi > typeMax(type) - toI64(1)) {
-    hi = typeMax(type) - toI64(1)
+  // A length is at most the type's top, so an index below one is below the
+  // top, and one whose length reaches `c` further is `c` further below it.
+  const reach = longestReach(state, v)
+  if (reach >= 0 && hi > typeMax(type) - toI64(1) - toI64(reach)) {
+    hi = typeMax(type) - toI64(1) - toI64(reach)
   }
   return hi
 }
