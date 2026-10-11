@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 964 programs, 89578 dump lines.
+# 965 programs, 89656 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -87683,6 +87683,85 @@ function mapRange<Probe, f64, accel>(src: Probe[], dst: f64[], f: void, lo: i32,
   local 65:12 i: i32 (let)
   local 66:11 y: f64 (const)
   callee 66:15 accel -> @accel
+program bench/par-regions.ts
+module bench/par-regions.ts (entry)
+import parallelMapInto from "nish/threads" -> generic function parallelMapInto
+function scramble(x: i32): i32 -> @scramble
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  stackSites=0 stackLocals=0
+  local 13:7 h: i32 (let)
+  local 14:12 k: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 29:5
+  calls: nish.parallelMapInto$i32$i32$fn.8.scramble nish_exit nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_write scramble
+  stackSites=0 stackLocals=0
+  local 23:9 rounds: i32 (const)
+  local 24:9 n: i32 (const)
+  local 25:9 par: boolean (const)
+  local 26:9 src: i32[] (const)
+  local 27:9 dst: i32[] (const)
+  local 28:12 i: i32 (let)
+  local 31:7 check: i32 (let)
+  local 32:12 r: i32 (let)
+  callee 34:7 parallelMapInto<i32, i32, scramble> -> @nish.parallelMapInto$i32$i32$fn.8.scramble
+  local 36:16 i: i32 (let)
+  local 37:15 y: i32 (const)
+  callee 37:19 scramble -> @scramble
+  local 43:11 at: i32 (const)
+  local 49:7 sum: i32 (let)
+  local 50:12 i: i32 (let)
+module std/threads.ts [package nish]
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 92:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function parallelMapInto<i32, i32, scramble>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.8.scramble [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.dstTooShort
+  escaping: dst f src
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.8.scramble nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.8.scramble#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.8.scramble#1
+  stackSites=0 stackLocals=0
+  local 149:9 n: i32 (const)
+  callee 151:5 dstTooShort -> @nish.dstTooShort
+  callee 153:3 mapRange<i32, i32, scramble> -> @nish.mapRange$i32$i32$fn.8.scramble
+function mapRange<i32, i32, scramble>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.8.scramble [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 68:7
+  escaping: lo
+  calls: scramble
+  pointer src: size=0 writesThrough=true captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 65:12 i: i32 (let)
+  local 66:11 y: i32 (const)
+  callee 66:15 scramble -> @scramble
 program bench/par-short.ts
 module bench/par-short.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
