@@ -26,6 +26,58 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-11
+
+### Added
+
+- checker: Warn when a loop drops an allocation on every pass ([#533](https://github.com/amritk/nish/pull/533))
+- net: Derive the TLS resumption master secret, completing RFC 8448 §3 ([#539](https://github.com/amritk/nish/pull/539))
+- crypto: Run Wycheproof for HMAC and HKDF, and wipe their state ([#542](https://github.com/amritk/nish/pull/542))
+- cli: Refuse retained arena memory with --deny-retention ([#544](https://github.com/amritk/nish/pull/544))
+- cli: Report where every allocation's memory goes with --emit-arena ([#547](https://github.com/amritk/nish/pull/547))
+- checker: Fixes for !xs.length and non-boolean && / || operands, and code-checked nofix cases ([#550](https://github.com/amritk/nish/pull/550))
+- crypto: A native-only helper that draws the key and serial for x509MintSelfSigned ([#540](https://github.com/amritk/nish/pull/540))
+
+### Fixed
+
+- codegen: Do not hoist a loop's array header across a new whose constructor resizes it ([#541](https://github.com/amritk/nish/pull/541))
+- checker: A method of a non-exported class called from another module links ([#543](https://github.com/amritk/nish/pull/543))
+- checker: The diagnostic-fix-2 follow-ups — NL9007 wording, uncheckedGet in the range analysis, one-round migration ([#548](https://github.com/amritk/nish/pull/548))
+- checker: NL9007 and NL2457 offer only a guard that compiles and is credited ([#552](https://github.com/amritk/nish/pull/552))
+- cli: Check the owner of the run cache root and the package root, and take the first executable nish on PATH ([#546](https://github.com/amritk/nish/pull/546))
+
+### Performance
+
+- std: Skip JSON string bodies with a memchr search ([#532](https://github.com/amritk/nish/pull/532))
+- codegen: Release a loop pass whose own string goes to a parts + join callee ([#549](https://github.com/amritk/nish/pull/549))
+- cli: Cache the compiled runtime between links ([#557](https://github.com/amritk/nish/pull/557))
+- checker: Prove an offset index `xs[i + c]` from a guard on the sum ([#561](https://github.com/amritk/nish/pull/561))
+
+### Documentation
+
+- Record that WP38's --cpu bar is met once the noise is measured ([#527](https://github.com/amritk/nish/pull/527))
+- security: Record the readdirSync listing fixes from #520 in CG-5 ([#529](https://github.com/amritk/nish/pull/529))
+- Record that WP38's S4, the lexer on indexOfAny, is declined for now ([#530](https://github.com/amritk/nish/pull/530))
+- Record WP38 S1's bench/json measurement ([#538](https://github.com/amritk/nish/pull/538))
+- interop: Plan WP27 S3, strings across the C boundary ([#545](https://github.com/amritk/nish/pull/545))
+- security: Recount the README rows after the sweep ([#551](https://github.com/amritk/nish/pull/551))
+- Record six review lessons in CLAUDE.md ([#553](https://github.com/amritk/nish/pull/553))
+- Record the issue-sweep-2 review lessons and correct two stale records ([#554](https://github.com/amritk/nish/pull/554))
+- Name the wasi section, not the web filter, as the check that links src/ as nish.wasm ([#556](https://github.com/amritk/nish/pull/556))
+- Restate WP38's S3 bar after checking a portable-SIMD benchmark against LLVM 18 ([#558](https://github.com/amritk/nish/pull/558))
+- threads: Decide WP29 P3, the lock and the channel ([#560](https://github.com/amritk/nish/pull/560))
+- Record three review lessons from the runtime cache in CLAUDE.md ([#563](https://github.com/amritk/nish/pull/563))
+
+### Tests
+
+- ct: Hold the x25519 timing to its domain and re-measure CT-13 ([#537](https://github.com/amritk/nish/pull/537))
+- std: Compare indexOfAny's non-ASCII byte offset between native and --profile wasi ([#536](https://github.com/amritk/nish/pull/536))
+
+### Build
+
+- Regenerate package-lock.json for v0.18.0 ([#526](https://github.com/amritk/nish/pull/526))
+
+
 ## [0.18.0] - 2026-10-09
 
 ### Added
@@ -780,3 +832,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.16.0]: https://github.com/amritk/nish/releases/tag/v0.16.0
 [0.17.0]: https://github.com/amritk/nish/releases/tag/v0.17.0
 [0.18.0]: https://github.com/amritk/nish/releases/tag/v0.18.0
+[0.19.0]: https://github.com/amritk/nish/releases/tag/v0.19.0
