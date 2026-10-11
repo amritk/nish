@@ -824,12 +824,18 @@ const loadHeaderField = (emitter: Emitter, arr: string, index: i32, type: string
 }
 
 /** Store `value` into header field `index`, in the header alias domain. */
-const storeHeaderField = (emitter: Emitter, arr: string, index: i32, value: string, type: string): void => {
+export const storeHeaderField = (
+  emitter: Emitter,
+  arr: string,
+  index: i32,
+  value: string,
+  type: string
+): void => {
   const ptr = headerFieldPointer(emitter, arr, index)
   emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter, index)}`)
 }
 
-const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64")
+export const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64")
 
 /**
  * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`. For
@@ -956,6 +962,12 @@ const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: N
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
 }
 
+/** A header's 24 bytes from the arena, its fields not yet stored. */
+const arenaHeader = (emitter: Emitter): string => {
+  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
+  return emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`)
+}
+
 /**
  * Allocate a header with `len = cap = n`; `data` is stored by `storeData`.
  * Answers the `%struct.nish_array*`: an alloca when `site` is on the stack.
@@ -966,10 +978,7 @@ const emitHeader = (emitter: Emitter, n: string, site: Node): string => {
   if (emitter.isStackSite(site)) {
     arr = emitter.fn.emitAlloca("arr.hdr", HEADER, 8)
   } else {
-    const raw = emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`
-    )
-    arr = emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`)
+    arr = arenaHeader(emitter)
   }
   storeHeaderField(emitter, arr, 0, n, "i64")
   storeHeaderField(emitter, arr, 1, n, "i64")
@@ -1318,23 +1327,14 @@ export const emitPushValue = (emitter: Emitter, arr: string, elem: i32, value: s
 
 // ---- For code with no node behind it (typed JSON) ------------------------------------
 
-/** `arr.length` as the `i64` the header holds. */
-export const emitLengthOf = (emitter: Emitter, arr: string): string => loadLength(emitter, arr)
-
 /** Element `idx` (an `i64` below the length, which the caller has compared) of `arr`. */
 export const emitElementAt = (emitter: Emitter, arr: string, elem: i32, idx: string): string =>
   loadElement(emitter, new ArrayBase(arr, null), elem, idx)
 
-/** Drop every element of `arr` from `len` on, as that many `pop()`s would: the slots stay, for the next `push`. */
-export const emitShorten = (emitter: Emitter, arr: string, len: string): void => {
-  storeHeaderField(emitter, arr, 0, len, "i64")
-}
-
 /** A new empty array in the arena, as `[]` makes one. */
 export const emitEmptyArray = (emitter: Emitter): string => {
   emitter.declareType(ARRAY_TYPE)
-  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
-  const arr = emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`)
+  const arr = arenaHeader(emitter)
   storeHeaderField(emitter, arr, 0, "0", "i64")
   storeHeaderField(emitter, arr, 1, "0", "i64")
   storeData(emitter, arr, "null")

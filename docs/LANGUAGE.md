@@ -6107,7 +6107,7 @@ export const main = (): i32 => {
   `` `Key.id` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into ``
   (NL2487, `json_reject_readonly`). A decode stores what it makes into the
   object it fills, so a call inside a `using a = arena()` block is the NL2424
-  of [that block](#using-a--arena) (`json_reject_arena_block`). Two fields
+  of [that block](#using-a--arena) (`json_reject_arena_block`). An encoding only reads the object and keeps nothing, so it may run inside one (`tests/link/std_json_typed`). Two fields
   holding one object are decoded into it twice, the second winning.
 - **Encoding is `JSON.stringify`'s text** for the same object, its keys in
   declaration order, which is also the order an object's keys come back in

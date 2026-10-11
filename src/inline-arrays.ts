@@ -743,12 +743,6 @@ const visitInstance = (
 }
 
 /**
- * Decide which array fields of the program are stored inline, and lay their
- * classes out again. Runs once every body of every module is checked,
- * instantiations included, and before the call-site ranges and the attribute
- * analysis, which read the layout.
- */
-/**
  * Typed JSON: the code written for a call of `jsonDecode` or `jsonEncode`
  * passes every array field of every class it reaches to a function and
  * assigns it the array that function answers (`src/emit-json.ts`). None of
@@ -777,6 +771,12 @@ const spoilJsonRoutes = (walk: InlineWalk): void => {
   }
 }
 
+/**
+ * Decide which array fields of the program are stored inline, and lay their
+ * classes out again. Runs once every body of every module is checked,
+ * instantiations included, and before the call-site ranges and the attribute
+ * analysis, which read the layout.
+ */
 export const layoutInlineArrays = (contexts: CheckContext[], mode: BuildMode): void => {
   if (contexts.length === 0 || mode.layoutsShared) {
     return

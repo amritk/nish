@@ -103,6 +103,11 @@ const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
   if (emitter.isStackSite(site)) {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8)
   }
+  return arenaObject(emitter, info)
+}
+
+/** `info.size` bytes from the arena, as a `%struct.X*`. */
+const arenaObject = (emitter: Emitter, info: StructInfo): string => {
   const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`)
 }
@@ -223,8 +228,7 @@ export const emitNew = (emitter: Emitter, expr: Node): string => {
  * never read.
  */
 export const emitNewWithoutArguments = (emitter: Emitter, info: StructInfo, site: Node): string => {
-  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
-  const obj = emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`)
+  const obj = arenaObject(emitter, info)
   initInlineArrays(emitter, info, obj)
   const none: Node[] = []
   constructObject(emitter, info, obj, none, site)

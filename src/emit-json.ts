@@ -33,7 +33,7 @@
 // carry no attributes: LLVM infers what it can.
 
 import { Emitter } from "./emit"
-import { emitElementAt, emitEmptyArray, emitLengthOf, emitPushValue, emitShorten } from "./emit-arrays"
+import { emitElementAt, emitEmptyArray, emitPushValue, loadLength, storeHeaderField } from "./emit-arrays"
 import { emitNewWithoutArguments, loadField, storeField, structInfoOf } from "./emit-classes"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
@@ -41,7 +41,6 @@ import { IRFunction, IRParam } from "./ir"
 import {
   JSON_FIELD_ARRAY,
   JSON_FIELD_CLASS,
-  JSON_FIELD_CLASS_ARRAY,
   JSON_FIELD_SCALAR,
   JsonField,
   jsonDecodeMethod,
@@ -49,7 +48,7 @@ import {
   jsonFieldOf,
   jsonScalarMethod,
 } from "./json-typed"
-import { FunctionSig, JSON_DECODE, StructInfo, TemplateInfo } from "./program"
+import { CheckedProgram, FunctionSig, JSON_DECODE, StructInfo, TemplateInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { T_STRING, T_VOID } from "./types"
 
@@ -69,14 +68,17 @@ export class JsonPart {
   info: StructInfo
   /** `JsonDecoder` for a decoding, `JsonWriter` for an encoding. */
   receiver: StructInfo
-  /** `nish/json-typed`'s own functions: the encoding helpers are found among them by name. */
-  helpers: FunctionSig[]
+  /** `nish/json-typed`, whose encoding helpers an encoding calls by name. */
+  home: CheckedProgram
+  /** The symbol it is written under (`jsonPartName`). */
+  name: string
 
-  constructor(kind: i32, info: StructInfo, receiver: StructInfo, helpers: FunctionSig[]) {
+  constructor(kind: i32, info: StructInfo, receiver: StructInfo, home: CheckedProgram) {
     this.kind = kind
     this.info = info
     this.receiver = receiver
-    this.helpers = helpers
+    this.home = home
+    this.name = jsonPartName(kind, info)
   }
 }
 
@@ -98,7 +100,7 @@ const jsonPartName = (kind: i32, info: StructInfo): string => {
 const jsonRequestPart = (emitter: Emitter, kind: i32, info: StructInfo, from: JsonPart): string => {
   const name = jsonPartName(kind, info)
   if (emitter.jsonPartNames.add(name)) {
-    emitter.jsonParts.push(new JsonPart(kind, info, from.receiver, from.helpers))
+    emitter.jsonParts.push(new JsonPart(kind, info, from.receiver, from.home))
   }
   return name
 }
@@ -149,13 +151,14 @@ const jsonCallSig = (emitter: Emitter, sig: FunctionSig, operands: string[]): st
 
 /** `nish/json-typed`'s function `name`. */
 const jsonHelper = (emitter: Emitter, part: JsonPart, name: string): FunctionSig => {
-  for (const sig of part.helpers) {
-    if (sig.sourceName === name) {
+  const home = part.home
+  for (const sig of home.functions) {
+    if (sig.sourceName === name && sig.instance === null && sig.definedIn(home.source)) {
       return sig
     }
   }
   jsonFail(emitter, `\`nish/json-typed\` has no \`${name}\``)
-  return part.helpers[0]
+  return home.functions[0]
 }
 
 /** Every field of `info` as the checker's rule classifies it. */
@@ -203,14 +206,7 @@ export const emitJsonRoute = (emitter: Emitter, sig: FunctionSig, values: string
   }
   const info = structInfoOf(emitter, instance.typeArgs[0])
   const receiver = structInfoOf(emitter, sig.paramTypes[0])
-  const helpers: FunctionSig[] = []
-  const home = template.home.program
-  for (const fn of home.functions) {
-    if (fn.instance === null && fn.definedIn(home.source)) {
-      helpers.push(fn)
-    }
-  }
-  const root = new JsonPart(0, info, receiver, helpers)
+  const root = new JsonPart(0, info, receiver, template.home.program)
   const self = `${jsonObjectType(receiver)} ${values[0]}`
   const object = `${jsonObjectType(info)} ${values[1]}`
   if (instance.jsonRoute === JSON_DECODE) {
@@ -239,7 +235,7 @@ export const emitJsonParts = (emitter: Emitter): void => {
 }
 
 const emitJsonPart = (emitter: Emitter, part: JsonPart): IRFunction => {
-  const name = jsonPartName(part.kind, part.info)
+  const name = part.name
   const params: IRParam[] = []
   let ret = "void"
   if (part.kind === PART_NEW) {
@@ -349,125 +345,105 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
 /** Read one field's value from the decoder and store it into `%v`. */
 const emitJsonDecodeField = (emitter: Emitter, part: JsonPart, f: JsonField): void => {
   const fn = emitter.fn
-  const info = part.info
   const field = f.field
-  const fieldType = emitter.llvm(field.type)
-  if (f.kind === JSON_FIELD_SCALAR && f.scalar === T_STRING) {
-    // A string field keeps its string when the input's is equal; a `null`
-    // one is compared with `""`, which no input string it could keep is.
-    let cur = loadField(emitter, info, "%v", field)
-    if (f.nullable) {
-      const isNull = jsonCallMethod(emitter, part.receiver, "takeNull", "%r", [])
-      const empty = fn.newBlock("json.null")
-      const text = fn.newBlock("json.text")
-      const join = fn.newBlock("json.stored")
-      jsonBranch(emitter, isNull, empty.label, text.label)
-      fn.placeBlock(empty)
-      storeField(emitter, info, "%v", field, "null")
-      fn.emit(`br label %${join.label}`)
-      fn.placeBlock(text)
-      const absent = fn.emitValue(`icmp eq i8* ${cur}, null`)
-      cur = fn.emitValue(`select i1 ${absent}, i8* ${emitter.stringConstant("")}, i8* ${cur}`)
-      storeField(
-        emitter,
-        info,
-        "%v",
-        field,
-        jsonCallMethod(emitter, part.receiver, "string", "%r", [`i8* ${cur}`])
-      )
-      fn.emit(`br label %${join.label}`)
-      fn.placeBlock(join)
-      return
-    }
-    storeField(
-      emitter,
-      info,
-      "%v",
-      field,
-      jsonCallMethod(emitter, part.receiver, "string", "%r", [`i8* ${cur}`])
-    )
+  if (f.kind === JSON_FIELD_SCALAR && f.scalar !== T_STRING) {
+    const read = jsonCallMethod(emitter, part.receiver, jsonScalarMethod(f.scalar), "%r", [])
+    storeField(emitter, part.info, "%v", field, read)
     return
   }
-  if (f.kind === JSON_FIELD_SCALAR) {
-    storeField(
-      emitter,
-      info,
-      "%v",
-      field,
-      jsonCallMethod(emitter, part.receiver, jsonScalarMethod(f.scalar), "%r", [])
-    )
-    return
-  }
+  let cur = loadField(emitter, part.info, "%v", field)
   if (f.kind === JSON_FIELD_ARRAY) {
-    const cur = loadField(emitter, info, "%v", field)
-    const read = jsonCallMethod(emitter, part.receiver, jsonDecodeMethod(f), "%r", [`${fieldType} ${cur}`])
-    storeField(emitter, info, "%v", field, read)
+    const read = jsonCallMethod(emitter, part.receiver, jsonDecodeMethod(f), "%r", [
+      `${emitter.llvm(field.type)} ${cur}`,
+    ])
+    storeField(emitter, part.info, "%v", field, read)
     return
   }
-  const cls = jsonFieldClass(emitter, f)
-  if (f.kind === JSON_FIELD_CLASS && !f.nullable) {
-    // Into the object the field holds, which is never `null`.
-    const cur = loadField(emitter, info, "%v", field)
-    fn.emit(
-      `call void @${jsonRequestPart(emitter, PART_DECODE, cls, part)}(${jsonObjectType(part.receiver)} %r, ${fieldType} ${cur})`
-    )
+  // A string, an object or an array of objects is decoded into what the field
+  // holds. A `| null` one is `null`, or what it holds once it holds something.
+  if (!f.nullable) {
+    emitJsonDecodeInto(emitter, part, f, cur)
     return
   }
-  if (f.kind === JSON_FIELD_CLASS_ARRAY && !f.nullable) {
-    const cur = loadField(emitter, info, "%v", field)
-    const callee = jsonRequestPart(emitter, PART_DECODE_ARRAY, cls, part)
-    const got = fn.emitValue(
-      `call ${ARRAY_PTR} @${callee}(${jsonObjectType(part.receiver)} %r, ${ARRAY_PTR} ${cur})`
-    )
-    storeField(emitter, info, "%v", field, got)
-    return
-  }
-  if (f.kind !== JSON_FIELD_CLASS && f.kind !== JSON_FIELD_CLASS_ARRAY) {
-    jsonFail(emitter, `\`${field.name}\` is of no kind`)
-  }
-  // A `| null` object or array of objects: `null`, or what the field holds
-  // decoded into, made first when the field holds `null`.
   const isNull = jsonCallMethod(emitter, part.receiver, "takeNull", "%r", [])
   const empty = fn.newBlock("json.null")
   const value = fn.newBlock("json.value")
-  const make = fn.newBlock("json.make")
-  const into = fn.newBlock("json.into")
   const join = fn.newBlock("json.stored")
   jsonBranch(emitter, isNull, empty.label, value.label)
   fn.placeBlock(empty)
-  storeField(emitter, info, "%v", field, "null")
+  storeField(emitter, part.info, "%v", field, "null")
   fn.emit(`br label %${join.label}`)
   fn.placeBlock(value)
-  const cur = loadField(emitter, info, "%v", field)
+  cur = emitJsonSomething(emitter, part, f, cur, value.label)
+  emitJsonDecodeInto(emitter, part, f, cur)
+  // The object decoded into may be the one just made, which the field does not hold yet.
+  if (f.kind === JSON_FIELD_CLASS) {
+    storeField(emitter, part.info, "%v", field, cur)
+  }
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(join)
+}
+
+/**
+ * What a `| null` field that holds `null` is decoded into: `""` for a string,
+ * which no input string equals unless it is empty, and a new object or array
+ * for the others. `cur` is the field's value, loaded in `from`.
+ */
+const emitJsonSomething = (
+  emitter: Emitter,
+  part: JsonPart,
+  f: JsonField,
+  cur: string,
+  from: string
+): string => {
+  const fn = emitter.fn
+  const fieldType = emitter.llvm(f.field.type)
   const absent = fn.emitValue(`icmp eq ${fieldType} ${cur}, null`)
+  if (f.kind === JSON_FIELD_SCALAR) {
+    return fn.emitValue(`select i1 ${absent}, i8* ${emitter.stringConstant("")}, i8* ${cur}`)
+  }
+  const make = fn.newBlock("json.make")
+  const into = fn.newBlock("json.into")
   jsonBranch(emitter, absent, make.label, into.label)
   fn.placeBlock(make)
   let made = ""
   if (f.kind === JSON_FIELD_CLASS) {
-    made = fn.emitValue(`call ${fieldType} @${jsonRequestPart(emitter, PART_NEW, cls, part)}()`)
+    made = fn.emitValue(
+      `call ${fieldType} @${jsonRequestPart(emitter, PART_NEW, jsonFieldClass(emitter, f), part)}()`
+    )
   } else {
     made = emitEmptyArray(emitter)
   }
   const madeEdge = fn.currentBlock().label
   fn.emit(`br label %${into.label}`)
   fn.placeBlock(into)
-  const target = fn.emitValue(`phi ${fieldType} [ ${cur}, %${value.label} ], [ ${made}, %${madeEdge} ]`)
+  return fn.emitValue(`phi ${fieldType} [ ${cur}, %${from} ], [ ${made}, %${madeEdge} ]`)
+}
+
+/**
+ * Decode a string, an object or an array of objects into `target`, and store
+ * what comes back into the field: the string, or the array. An object is
+ * decoded where it is, so its field is the caller's to store.
+ */
+const emitJsonDecodeInto = (emitter: Emitter, part: JsonPart, f: JsonField, target: string): void => {
+  const field = f.field
+  const fieldType = emitter.llvm(field.type)
   const self = `${jsonObjectType(part.receiver)} %r`
-  if (f.kind === JSON_FIELD_CLASS) {
-    fn.emit(`call void @${jsonRequestPart(emitter, PART_DECODE, cls, part)}(${self}, ${fieldType} ${target})`)
-    storeField(emitter, info, "%v", field, target)
-  } else {
-    const callee = jsonRequestPart(emitter, PART_DECODE_ARRAY, cls, part)
-    storeField(
-      emitter,
-      info,
-      "%v",
-      field,
-      fn.emitValue(`call ${ARRAY_PTR} @${callee}(${self}, ${ARRAY_PTR} ${target})`)
-    )
+  if (f.kind === JSON_FIELD_SCALAR) {
+    const read = jsonCallMethod(emitter, part.receiver, "string", "%r", [`i8* ${target}`])
+    storeField(emitter, part.info, "%v", field, read)
+    return
   }
-  fn.emit(`br label %${join.label}`)
-  fn.placeBlock(join)
+  const cls = jsonFieldClass(emitter, f)
+  if (f.kind === JSON_FIELD_CLASS) {
+    emitter.fn.emit(
+      `call void @${jsonRequestPart(emitter, PART_DECODE, cls, part)}(${self}, ${fieldType} ${target})`
+    )
+    return
+  }
+  const callee = jsonRequestPart(emitter, PART_DECODE_ARRAY, cls, part)
+  const got = emitter.fn.emitValue(`call ${ARRAY_PTR} @${callee}(${self}, ${ARRAY_PTR} ${target})`)
+  storeField(emitter, part.info, "%v", field, got)
 }
 
 /**
@@ -497,7 +473,7 @@ const emitJsonDecodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
 
   fn.placeBlock(element)
   const at = fn.emitValue(`load i64, i64* ${counter}, align 8`)
-  const has = fn.emitValue(`icmp ult i64 ${at}, ${emitLengthOf(emitter, "%v")}`)
+  const has = fn.emitValue(`icmp ult i64 ${at}, ${loadLength(emitter, "%v")}`)
   jsonBranch(emitter, has, reuse.label, grow.label)
   fn.placeBlock(reuse)
   const old = emitElementAt(emitter, "%v", elem, at)
@@ -522,10 +498,10 @@ const emitJsonDecodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
 
   fn.placeBlock(end)
   const count = fn.emitValue(`load i64, i64* ${counter}, align 8`)
-  const over = fn.emitValue(`icmp ult i64 ${count}, ${emitLengthOf(emitter, "%v")}`)
+  const over = fn.emitValue(`icmp ult i64 ${count}, ${loadLength(emitter, "%v")}`)
   jsonBranch(emitter, over, cut.label, done.label)
   fn.placeBlock(cut)
-  emitShorten(emitter, "%v", count)
+  storeHeaderField(emitter, "%v", 0, count, "i64")
   fn.emit(`br label %${done.label}`)
 
   fn.placeBlock(done)
@@ -619,7 +595,7 @@ const emitJsonEncodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
   fn.emit(`br label %${loop.label}`)
   fn.placeBlock(loop)
   const at = fn.emitValue(`load i64, i64* ${counter}, align 8`)
-  const more = fn.emitValue(`icmp ult i64 ${at}, ${emitLengthOf(emitter, "%v")}`)
+  const more = fn.emitValue(`icmp ult i64 ${at}, ${loadLength(emitter, "%v")}`)
   jsonBranch(emitter, more, body.label, end.label)
   fn.placeBlock(body)
   const element = emitElementAt(emitter, "%v", part.info.type, at)

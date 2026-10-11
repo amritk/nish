@@ -163,39 +163,30 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
 }
 
 /**
- * Whether decoding has to make an object of `info` itself: it is an array's
- * element, which the decoder makes past the array's end, or a `| null`
- * field's class, which it makes when the field holds `null`.
+ * The classes of a decode from `root` that the decoder makes itself, with
+ * `new C()`: each class an array of objects holds, which it makes past the
+ * array's end, and each `| null` field's class, which it makes when the
+ * field holds `null`. One pass over the fields `jsonClasses` reaches.
  */
-const jsonMadeByDecoder = (
-  program: CheckedProgram,
-  table: TypeTable,
-  classes: StructInfo[],
-  info: StructInfo
-): boolean => {
-  for (const owner of classes) {
-    for (const field of owner.fields) {
-      const f = jsonFieldOf(program, table, field)
-      const cls: StructInfo | null = f === null ? null : f.cls
-      if (f !== null && cls !== null && cls === info && (f.kind === JSON_FIELD_CLASS_ARRAY || f.nullable)) {
-        return true
-      }
-    }
-  }
-  return false
-}
-
-/** The classes of a decode from `root` that the decoder makes with `new C()`. */
 export const jsonMadeClasses = (
   program: CheckedProgram,
   table: TypeTable,
   root: StructInfo
 ): StructInfo[] => {
-  const classes = jsonClasses(program, table, root)
   const out: StructInfo[] = []
-  for (const info of classes) {
-    if (jsonMadeByDecoder(program, table, classes, info)) {
-      out.push(info)
+  const made = new StringSet()
+  for (const info of jsonClasses(program, table, root)) {
+    for (const field of info.fields) {
+      const f = jsonFieldOf(program, table, field)
+      const cls: StructInfo | null = f === null ? null : f.cls
+      if (
+        f !== null &&
+        cls !== null &&
+        (f.kind === JSON_FIELD_CLASS_ARRAY || f.nullable) &&
+        made.add(cls.name)
+      ) {
+        out.push(cls)
+      }
     }
   }
   return out
@@ -237,10 +228,10 @@ export const jsonRefusal = (
     }
   }
   if (role === JSON_DECODE) {
-    for (const info of classes) {
+    for (const info of jsonMadeClasses(program, table, root)) {
       const ctor = info.ctor
       // A constructor's first parameter is `this`.
-      if (ctor !== null && ctor.paramTypes.length > 1 && jsonMadeByDecoder(program, table, classes, info)) {
+      if (ctor !== null && ctor.paramTypes.length > 1) {
         return (
           `\`jsonDecode\` makes a \`${info.name}\` with \`new ${info.name}()\`, and its constructor takes ${ctor.paramTypes.length - 1} parameter(s): ` +
           "an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none"

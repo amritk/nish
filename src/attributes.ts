@@ -136,6 +136,7 @@ import {
   CheckedProgram,
   FunctionSig,
   inlineElementStruct,
+  JSON_DECODE,
   JSON_NONE,
   PAR_MAP,
   ROLE_CONSTRUCTOR,
@@ -2527,19 +2528,21 @@ const markChannelSend = (facts: FunctionFacts): void => {
  * Typed JSON: an instantiation of `jsonDecode` or `jsonEncode` is never called
  * and never defined. Every call of it is lowered in place to code written from
  * the class's fields (`src/emit-json.ts`), and its source body is Node's, so
- * nothing is read off it: the instance says what that code may do, and says
- * the worst of it, because the code reaches every class the route does.
+ * nothing is read off it: the instance says what that code does.
  *
- *   - It calls the receiver's methods, `nish/json-typed`'s helpers and the
- *     constructors of the classes a decode makes (`jsonRouteCallees`), and the
- *     arena and the array growth itself, so their facts flow to the caller.
- *   - It reads and writes through both parameters, keeps what it is handed
- *     (a decode stores into the object it fills, and each string, array and
- *     object it makes is stored there too), and loops for as long as the input
- *     has members, so it is not `willreturn`.
- *   - What it allocates is stored where the caller can reach it, so
- *     `allocEscapes`: a loop or a `using a = arena()` block around a call
- *     reclaims none of it (NL2424 refuses the block).
+ *   - Both call the receiver's methods and `nish/json-typed`'s helpers that
+ *     `jsonRouteCallees` names, each with the receiver as its first argument,
+ *     so the fixpoint gives the receiver what those callees do with theirs and
+ *     the instance their effects, allocations and termination. Both recurse
+ *     as the data does and loop over arrays, so neither is `willreturn`.
+ *   - An encoding only reads `value`: it loads fields and hands what they hold
+ *     to the writer, so `value` keeps the facts of a parameter nothing writes
+ *     or keeps, and the encoding allocates only what its callees do.
+ *   - A decoding writes into `out` and stores into it every string, array and
+ *     object it makes, constructors included, so it says the worst of every
+ *     parameter, as a parallel entry does, and that what it allocates escapes:
+ *     no loop, arena scope or `using a = arena()` block around a call
+ *     reclaims it (NL2424 refuses the block).
  */
 const markJsonRoute = (
   program: CheckedProgram,
@@ -2547,28 +2550,29 @@ const markJsonRoute = (
   sig: FunctionSig,
   facts: FunctionFacts
 ): void => {
-  facts.effect = EFFECT_WRITE
   facts.readsMemory = true
-  facts.sharedWrite = true
   facts.hasLoops = true
   facts.loopsBounded = false
   facts.willReturn = false
-  facts.allocates = true
-  facts.allocatesItself = true
-  facts.allocLeaks = true
-  facts.allocEscapes = true
-  facts.resizesArray = true
-  facts.callees.add("nish_alloc_struct")
-  facts.callees.add("nish_array_grow")
+  const receiver: PointerParamFacts | null =
+    sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null
   for (const callee of jsonRouteCallees(program, table, sig)) {
     facts.callees.add(callee.name)
+    if (receiver !== null && callee.role !== ROLE_CONSTRUCTOR) {
+      receiver.passedToCallees.push(callee.name)
+      receiver.passedToIndices.push(0)
+    }
   }
-  for (const name of facts.paramNames) {
-    facts.escaping.add(name)
-  }
-  for (const pp of facts.pointerParams) {
-    pp.captured = true
-    pp.writesThrough = true
+  if (jsonRouteOf(sig) === JSON_DECODE) {
+    facts.effect = EFFECT_WRITE
+    facts.sharedWrite = true
+    facts.allocates = true
+    facts.allocatesItself = true
+    facts.allocLeaks = true
+    facts.allocEscapes = true
+    facts.resizesArray = true
+    facts.callees.add("nish_array_grow")
+    markParallelEntry(facts, "nish_alloc_struct")
   }
 }
 

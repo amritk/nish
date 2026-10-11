@@ -303,18 +303,9 @@ export class JsonDecoder {
 
   /** Any integer `isInteger` accepts fits an `i64`, so the range is the type's. */
   i64(): i64 {
-    const k: i32 = this.take()
-    if (k !== JSON_TOK_NUMBER) {
-      if (k >= 0) {
-        this.wrongType()
-      }
-      return 0
-    }
-    if (!this.tok.isInteger()) {
-      this.fail(JSON_DECODE_RANGE, this.tok.tokStart)
-      return 0
-    }
-    return this.tok.numberI64()
+    const one: i64 = 1
+    const lo: i64 = one << toI64(63)
+    return this.integer(lo, -(lo + one))
   }
 
   f64(): f64 {
@@ -356,13 +347,21 @@ export class JsonDecoder {
     if (tok.keyEquals(cur)) {
       return cur
     }
-    // The bytes are a temporary: a caller that keeps only the string it
+    // The pieces are temporaries: a caller that keeps only the string it
     // answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
     const n: i32 = tok.stringLength()
+    const parts: string[] = []
+    if (n === tok.tokEnd - tok.tokStart - 2) {
+      // No escape, so the bytes between the quotes are the string's.
+      const src: u8[] = tok.src
+      for (let i: i32 = tok.tokStart + 1; i >= 0 && i < tok.tokEnd - 1 && i < toI32(src.length); i += 1) {
+        parts.push(String.fromCharCode(toI32(src[i])))
+      }
+      return parts.join("")
+    }
     const bytes: u8[] = new Array<u8>(n)
     const at: i32 = 0
     tok.stringInto(bytes, at)
-    const parts: string[] = []
     for (let i: i32 = 0; i < n && i < toI32(bytes.length); i += 1) {
       parts.push(String.fromCharCode(toI32(bytes[i])))
     }

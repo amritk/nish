@@ -7221,7 +7221,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @greet(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) %d, %struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) %w) #0 {
+define noundef i32 @greet(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) %d, %struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture %w) #0 {
 entry:
   %g.addr = alloca %struct.Greeting*, align 8
   %code.addr = alloca i32, align 4

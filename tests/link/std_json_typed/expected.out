@@ -90,4 +90,5 @@ PASS  encode: a buffer too small is the writer's code
 PASS  encode: an object that holds itself ends at the writer's depth
 PASS  encode: and through an array
 PASS  encode: a new Match
-std_json_typed: 91 passed, 0 failed, 0 skipped
+PASS  encode: inside a using arena() block, every pass writes the same text
+std_json_typed: 92 passed, 0 failed, 0 skipped

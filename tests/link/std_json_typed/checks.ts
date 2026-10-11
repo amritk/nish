@@ -281,6 +281,28 @@ const jtEncodings = (t: Suite): void => {
   );
 };
 
+/**
+ * An encoding only reads the object and keeps nothing it allocates, so it may
+ * run inside a `using a = arena()` block, which releases what the writer's
+ * calls allocated at the end of each pass. A decoding there is refused
+ * (`tests/cases/json_reject_arena_block`).
+ */
+const jtEncodeInArena = (t: Suite): void => {
+  const m = new Match();
+  jtDecode(FULL, m, new JsonLimits(), false);
+  const w = new JsonWriter(new Array<u8>(4096), 0);
+  let same: i32 = 0;
+  for (let i: i32 = 0; i < 3; i += 1) {
+    using a = arena();
+    w.reset(w.buf, 0);
+    jsonEncode(w, m);
+    if (w.text() === FULL) {
+      same += 1;
+    }
+  }
+  t.eqI32("encode: inside a using arena() block, every pass writes the same text", same, 3);
+};
+
 /** The suite. */
 export const jtChecks = (): i32 => {
   const t = new Suite("std_json_typed");
@@ -289,6 +311,7 @@ export const jtChecks = (): i32 => {
   jtErrors(t);
   jtLimits(t);
   jtEncodings(t);
+  jtEncodeInArena(t);
   return t.done();
 };
 
