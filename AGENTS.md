@@ -4,7 +4,8 @@ Guidance for AI coding agents (Cursor, Copilot, Claude Code, …) working **on
 this compiler**. If you are instead **writing a program in the language**, this
 is the wrong file: read [`docs/AI.md`](./docs/AI.md), which is the whole
 language stated as rules in one pass, with the TypeScript reflexes Nish rejects
-listed first. [`llms.txt`](./llms.txt) indexes both.
+listed first, or the [user guide](./docs/guide/index.md), which teaches it page
+by page. [`llms.txt`](./llms.txt) indexes them.
 
 For Claude Code the same rules live in
 [`CLAUDE.md`](./CLAUDE.md); the detailed developer guidelines are in
@@ -292,11 +293,21 @@ what is blocking and what you need — and keep watching.
 
 - **`npm test` must be green**, and every new construct ships with a golden
   `.ll`, an `llvm-as` pass, a native round trip with expected stdout, at least
-  one negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
-  conventional commit message. There is no changesets flow here: the commit
-  subject and body are the changelog entry, and `scripts/changelog-gen.mjs`
-  writes `CHANGELOG.md` from them when a release is cut, so the file is never
-  edited by hand.
+  one negative test, its `docs/LANGUAGE.md` rule, cookbook entry and
+  user-guide page, and a conventional commit message. There is no changesets
+  flow here: the commit subject and body are the changelog entry, and
+  `scripts/changelog-gen.mjs` writes `CHANGELOG.md` from them when a release
+  is cut, so the file is never edited by hand.
+- **The [user guide](./docs/guide/index.md) moves with the language.** A
+  change a user of Nish sees — a construct, a builtin or `nish:` module, a
+  `std/` module, a CLI flag or exit code, an install step, a diagnostic a
+  guide page shows — updates the guide page describing it in the same pull
+  request: a new topic gets a page and a route in
+  [`scalar.config.json`](./scalar.config.json), a removed or renamed feature
+  leaves the guide. Internal changes (the IR, the
+  structure of `src/`, CI) do not touch it. The page rules are in
+  [`docs/README.md`](./docs/README.md#writing-a-guide-page), and
+  `node tests/run.js guide` compiles every marked example.
 - **A construct is implemented once, in `src/`.** There is no second
   implementation to compare it with since WP19 R6
   ([wp19](./docs/wp19-stage0-retirement.md)), so its golden `.ll`, its native
