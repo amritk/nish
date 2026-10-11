@@ -8,7 +8,7 @@ pins each property. It is written with the code rather than after an audit, so
 that the audit of the JSON layer starts from evidence. The typed layer that
 decodes into a class (#573) will extend this record.
 
-**Anchors.** Every `file:line` below is at `814f366`, the module's head in this
+**Anchors.** Every `file:line` below is at `335efe2`, the module's head in this
 change, on top of `main` at `ce9d394`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
@@ -24,7 +24,7 @@ flat. Two findings are open and one is accepted, all Low.
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escape`, `escapeCodePoint`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokMatches`, `jsonTokPowerOfTen` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -46,9 +46,9 @@ answered with `JSON_TOK_ERR_WINDOW` rather than a panic.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| JSON-1 | Low | `std/json-tokenizer.ts:943` (`keyEquals`), `:900` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
-| JSON-2 | Low | `std/json-tokenizer.ts:256` (`JSON_TOK_END_CEILING`), `:520` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve bytes past a checked position) can overflow and panic. No test reaches it: it takes a 2 GiB array. | **Open.** The guard is one compare in `reset`; a test needs a machine that can allocate 2 GiB in CI. |
-| JSON-3 | Low | `std/json-tokenizer.ts:564` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Open, by design.** The tokenizer reports what is there; refusing duplicates is the typed layer's rule (#573, which rejects them). A program reading tokens itself decides, and is told so in the module header. |
+| JSON-1 | Low | `std/json-tokenizer.ts:925` (`keyEquals`), `:870` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
+| JSON-2 | Low | `std/json-tokenizer.ts:255` (`JSON_TOK_END_CEILING`), `:501` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. No test reaches it: it takes a 2 GiB array. | **Open.** The guard is one compare in `reset`; a test needs a machine that can allocate 2 GiB in CI. |
+| JSON-3 | Low | `std/json-tokenizer.ts:538` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Open, by design.** The tokenizer reports what is there; refusing duplicates is the typed layer's rule (#573, which rejects them). A program reading tokens itself decides, and is told so in the module header. |
 
 ## Properties verified
 
@@ -71,7 +71,7 @@ depth of 128 and are refused at the 129th opener. The Node check holds every
 `y_` file's token stream, strings as UTF-8 and numbers as `numberF64`'s bits,
 to a walk of `JSON.parse`'s value.
 
-**Depth bombs** (`std/json-tokenizer.ts:654`, `open`): an opener past
+**Depth bombs** (`std/json-tokenizer.ts:626`, `open`): an opener past
 `maxDepth` is refused with `JSON_TOK_ERR_DEPTH` at its byte, before anything is
 pushed, and the depth stack is `maxDepth` bytes allocated once in the
 constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
@@ -79,8 +79,8 @@ constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
 128 levels fit the default". There is no recursion anywhere in the module, and
 `skipValue` loops over `next`.
 
-**Huge numbers** (`:722`, `number`; `:1059`, `numberF64`; `:1013`,
-`integerOrOverflow`): a number longer than `maxNumberBytes` (256 by default) is
+**Huge numbers** (`:698`, `number`; `:1027`, `numberF64`; `:999`,
+`integerScan`): a number longer than `maxNumberBytes` (256 by default) is
 refused with `JSON_TOK_ERR_NUMBER_LIMIT` ("NUMBER_LIMIT: 257 do not"); within
 it, an exponent stops being added up at 100,000 and the text goes to
 `parseFloat`, so `1e9999999999` is an infinity without overflow ("numberF64 of
@@ -92,7 +92,7 @@ significant digits and a decimal exponent within ±22, `strtod` otherwise
 ("numberF64(9007199254740993) rounds to even", "numberF64(5e-324), the
 smallest subnormal", and the Node check's bitwise comparison over the corpus).
 
-**Long strings** (`:780`, `string`): the limit counts raw bytes between the
+**Long strings** (`:764`, `string`): the limit counts raw bytes between the
 quotes and is checked before every byte, so an over-long string is refused
 where it crosses `maxStringBytes`, not where it ends ("STRING_LIMIT: the fourth
 byte is refused where it stands"), and a multi-byte step that jumps past the
@@ -103,12 +103,14 @@ to an offset, so `maxStringBytes` of 2^31 − 1 cannot overflow.
 **Invalid UTF-8** (`:329`, `jsonTokUtf8Length`): RFC 3629 §4's table row by
 row, the second byte's range set by the lead, which refuses overlong forms,
 surrogates, code points past U+10FFFF and stray or missing continuation bytes
-("UTF8: C0, an overlong lead" through "UTF8: a four-byte form the window cuts
-short", and each row's edges accepted). A byte of 0x80 or above outside a
+("UTF8: C0, an overlong lead" through "UTF8: an invalid byte in a key", and
+each row's edges accepted). A sequence that is well formed as far as the
+window goes is cut short, not invalid: "TRUNCATED: a four-byte form the window
+cuts short". A byte of 0x80 or above outside a
 string is a syntax error. So `stringInto` only ever hands the caller valid
 UTF-8.
 
-**Lone surrogates** (`:851`, `escapeCodePoint`): a `\u` escape of a high
+**Lone surrogates** (`:818`, `escapeCodePoint`): a `\u` escape of a high
 surrogate must be followed at once by a `\u` escape of a low one, and a low
 surrogate may not stand alone; anything else is `JSON_TOK_ERR_SURROGATE`
 ("SURROGATE: a lone high surrogate" and six more). RFC 8259 §8.2 allows them,
@@ -118,12 +120,12 @@ refuses would see different strings, which is the disagreement this record's
 threat model counts as a win. Refusing is the stricter reading, and it is what
 lets `stringInto` promise UTF-8.
 
-**Trailing garbage** (`:564`, `next`): after the top-level value only the four
+**Trailing garbage** (`:538`, `next`): after the top-level value only the four
 RFC 8259 blanks may follow; anything else, a second document or a NUL
 included, is `JSON_TOK_ERR_TRAILING` at its byte ("TRAILING: a second
 document", "TRAILING: a NUL after the value").
 
-**Nothing outside the window, nothing that panics** (`:259`,
+**Nothing outside the window, nothing that panics** (`:258`,
 `jsonTokByteAt`): every read goes through one function that answers −1 outside
 `[off, end)`, and a window outside the array is refused in `reset`. The fuzz
 pins it: "fuzz: 20,000 mutants were tokenized, none panicked", "fuzz: every run
@@ -133,7 +135,7 @@ padded window, every mutant has one verdict", with the seed's totals pinned
 and where it stopped"). Errors are sticky, and an error leaves the token
 before it readable ("an error in the string after a string token").
 
-**No allocation per body** (`:520`, `reset`; `:1129`, `numberSlow`): "alloc:
+**No allocation per body** (`:501`, `reset`; `:1097`, `numberSlow`): "alloc:
 Arena.used() is flat across every one, parseFloat's numbers included" measures
 10,000 bodies through one reused tokenizer, each call measured as
 `tests/link/net_loopback/common.ts`'s `LbMeter` measures a server's wake; the
