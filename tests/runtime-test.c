@@ -44,6 +44,13 @@ double nish_random(void);
 typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
 int64_t nish_cpu_count(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
+void nish_pool_disable(void);
+typedef void (*nish_task_fn)(void *payload);
+void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const void *payload, int64_t size);
+void nish_scope_join(void *scope);
+void nish_channel_send(int64_t *state, int64_t value);
+void nish_channel_count(int64_t *state, int64_t delta);
+int32_t nish_channel_receive(int64_t *state, int64_t *out);
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
@@ -220,6 +227,9 @@ static void test_parallel_common(void) {
 
 #ifdef NISH_THREADS
 #include <pthread.h>
+#include <sched.h>
+#include <stdlib.h>
+#include <sys/resource.h>
 
 /* What the worker thread saw in its own arena, read by the parent after join. */
 static struct {
@@ -312,26 +322,28 @@ static void test_parallel_threads(void) {
      is the whole point and the one thing a sequential build cannot assert. */
   if (nish_cpu_count() > 1) assert(n > 1);
 
-  /* Chunk 0 runs on the calling thread, so exactly one chunk's thread id is
-     this one: N-way parallelism costs N-1 spawns. */
+  /* Chunk 0 runs on the calling thread, and so does any chunk no worker took
+     first, since the caller drains the pool's queue while it waits. So at least
+     one chunk's thread id is this one, and on a machine with workers to take
+     them, not every chunk's. */
   int64_t on_caller = 0;
   for (int64_t i = 0; i < n; i++)
     if (pthread_equal(par_tid[i], pthread_self())) on_caller++;
-  assert(on_caller == 1);
+  assert(on_caller >= 1);
 
-  /* Every chunk but the caller's began with an empty arena, because the arena
-     is per thread (WP20 T0) -- and the caller's began with what the parent had
-     bumped, which is the asymmetry runtime-parallel.c documents rather than
-     hides. */
+  /* Every chunk a worker ran began with an empty arena, because the arena is
+     per thread (WP20 T0) and a worker's is rewound after every job -- and the
+     caller's began with what the parent had bumped, which is the asymmetry
+     runtime-parallel.c documents rather than hides. */
   for (int64_t i = 0; i < n; i++) {
-    if (pthread_equal(par_tid[i], pthread_self())) assert(par_used_at_entry[i] == used_before);
+    if (pthread_equal(par_tid[i], pthread_self())) assert(par_used_at_entry[i] >= used_before);
     else assert(par_used_at_entry[i] == 0);
   }
 
-  /* The parent's arena came through with only its own chunk's allocation added,
-     and its contents intact: every worker freed its own and reached none of
-     the parent's. */
-  assert(nish_arena_used() == used_before + 64);
+  /* The parent's arena came through with only its own chunks' allocations
+     added, and its contents intact: every worker rewound its own and reached
+     none of the parent's. */
+  assert(nish_arena_used() == used_before + 64 * (uint64_t)on_caller);
   assert(parent_block[0] == 'p');
   expect_str(parent, "parent string", "the parent's string survives a parallel range");
 
@@ -376,6 +388,248 @@ static void test_threads(void) {
   double r = nish_random();
   assert(r >= 0.0 && r < 1.0);
   nish_free_arena();
+}
+
+/* ---- The worker pool (runtime-parallel.c) ----------------------------------
+ *
+ * What the pool promises beyond the partition: that its workers outlive a
+ * region and run the next one, that each rewinds its arena between jobs, that a
+ * scope with more tasks than workers still runs every task, in spawn order
+ * where nothing is free to take them, and that a forked child and an unpooled
+ * runtime get the same answers. tests/run.js runs this binary again under
+ * `NISH_NUM_THREADS=1` (no workers: the caller runs everything) and `=2` (one
+ * worker), so every assertion holds at those sizes too. */
+
+/* How many jobs this thread has run: a worker created for one job sees 1 and
+   then exits, while a pooled worker sees its count climb from region to
+   region. */
+static _Thread_local int64_t pool_jobs_here;
+static int64_t pool_most_jobs; /* the highest count any worker reached */
+
+static int pool_worker_ran; /* set by a worker's chunk; chunk 0 waits on it */
+
+static void pool_count_body(int64_t lo, int64_t hi, void *ctx) {
+  pthread_t caller = *(pthread_t *)ctx;
+  for (int64_t i = lo; i < hi; i++) par_seen[i]++;
+  if (pthread_equal(pthread_self(), caller)) {
+    /* Chunk 0 waits, up to a second, for a worker to take a chunk, because a
+       caller that finished first would drain the queue itself and a worker
+       might never be seen to run anything. The wait is bounded, so a pool
+       with no workers costs a second per region here rather than a hang. */
+    if (lo == 0 && nish_cpu_count() > 1)
+      for (int i = 0; i < 1000000 && !__atomic_load_n(&pool_worker_ran, __ATOMIC_ACQUIRE); i++) sched_yield();
+    return;
+  }
+  __atomic_store_n(&pool_worker_ran, 1, __ATOMIC_RELEASE);
+  int64_t mine = ++pool_jobs_here;
+  PAR_LOCK();
+  if (mine > pool_most_jobs) pool_most_jobs = mine;
+  PAR_UNLOCK();
+}
+
+/* A worker's arena as a job finds it, and a body that leaves plenty behind:
+   twenty ordinary chunks' worth and one block larger than a chunk, the large
+   block last on every other job, so the chunk a rewind would keep is the
+   large one half the time (and is freed) and an ordinary one the other half
+   (and is kept). */
+static uint64_t pool_dirty_entries; /* worker jobs that began on a used arena */
+static int pool_alloc_turn;
+
+static void pool_alloc_body(int64_t lo, int64_t hi, void *ctx) {
+  pthread_t caller = *(pthread_t *)ctx;
+  (void)lo;
+  (void)hi;
+  int on_worker = !pthread_equal(pthread_self(), caller);
+  if (on_worker && (nish_arena_used() != 0 || nish_arena.cap > 65536)) {
+    PAR_LOCK();
+    pool_dirty_entries++;
+    PAR_UNLOCK();
+  }
+  if (!on_worker) return; /* the caller's arena is the caller's: leave it be */
+  int large_last = __atomic_fetch_add(&pool_alloc_turn, 1, __ATOMIC_RELAXED) & 1;
+  if (!large_last) memset(nish_alloc_struct(300000), 1, 300000);
+  for (int k = 0; k < 20; k++) memset(nish_alloc_struct(60000), 1, 60000);
+  if (large_last) memset(nish_alloc_struct(300000), 1, 300000);
+}
+
+static long pool_peak_rss_kb(void) {
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return ru.ru_maxrss;
+}
+
+/* A scope's task: an index in, a square out, through `finish` on the caller. */
+typedef struct {
+  int64_t index;
+  int64_t out;
+} pool_task;
+static int64_t pool_task_done[64];
+static int64_t pool_finished[64];
+static int64_t pool_finish_count;
+
+static void pool_task_run(void *p) {
+  pool_task *t = (pool_task *)p;
+  t->out = t->index * t->index;
+  __atomic_add_fetch(&pool_task_done[t->index], 1, __ATOMIC_RELAXED);
+}
+
+static void pool_task_finish(void *p) {
+  pool_task *t = (pool_task *)p;
+  assert(t->out == t->index * t->index);
+  pool_finished[pool_finish_count++] = t->index;
+}
+
+/* Channels, spelled as the compiler spells them (src/emit-parallel.ts): a
+   sender is counted at its spawn and uncounted when it returns, the scope's
+   own 1 is taken away just before the join, and the receiver drains until
+   the channel closes. Every sender is spawned before its receiver (wp29 C6),
+   which is what the pool's queue order has to keep deadlock-free. */
+typedef struct {
+  int64_t *from; /* the channel received from, or 0 for a first sender */
+  int64_t *to;   /* the channel sent to, or 0 for the last receiver */
+  int64_t n;     /* values a first sender sends */
+  int64_t sum;   /* what a receiver added up */
+} pool_stage;
+
+static void pool_stage_run(void *p) {
+  pool_stage *st = (pool_stage *)p;
+  if (st->from) {
+    int64_t v;
+    while (nish_channel_receive(st->from, &v)) {
+      st->sum += v;
+      if (st->to) nish_channel_send(st->to, v);
+    }
+  } else {
+    for (int64_t i = 1; i <= st->n; i++) nish_channel_send(st->to, i);
+  }
+  if (st->to) nish_channel_count(st->to, -1);
+}
+
+static int64_t pool_chain_sum;
+static void pool_stage_finish(void *p) {
+  pool_stage *st = (pool_stage *)p;
+  if (!st->to) pool_chain_sum = st->sum;
+}
+
+/* Twelve senders into `a`, one stage from `a` into `b`, one receiver of `b`,
+   spawned in that order: more tasks than workers on any machine this runs on,
+   and two receivers that wait on tasks queued before them. Answers the sum the
+   last receiver saw, 12 * (1 + ... + 100) when nothing was lost. */
+static int64_t pool_run_chain(void) {
+  int64_t a = 0, b = 0;
+  int scope;
+  pool_stage st = {0, &a, 100, 0};
+  for (int i = 0; i < 12; i++) {
+    nish_channel_count(&a, 1);
+    nish_scope_spawn(&scope, pool_stage_run, pool_stage_finish, &st, sizeof st);
+  }
+  st = (pool_stage){&a, &b, 0, 0};
+  nish_channel_count(&b, 1);
+  nish_scope_spawn(&scope, pool_stage_run, pool_stage_finish, &st, sizeof st);
+  st = (pool_stage){&b, 0, 0, 0};
+  nish_scope_spawn(&scope, pool_stage_run, pool_stage_finish, &st, sizeof st);
+  nish_channel_count(&a, -1);
+  nish_channel_count(&b, -1);
+  pool_chain_sum = -1;
+  nish_scope_join(&scope);
+  return pool_chain_sum;
+}
+
+/* One scope with `count` tasks; answers whether each ran once and the
+   answers were stored in spawn order. */
+static int pool_run_tasks(int64_t count) {
+  int scope;
+  memset(pool_task_done, 0, sizeof pool_task_done);
+  pool_finish_count = 0;
+  for (int64_t i = 0; i < count; i++) {
+    pool_task t = {i, 0};
+    nish_scope_spawn(&scope, pool_task_run, pool_task_finish, &t, sizeof t);
+  }
+  nish_scope_join(&scope);
+  int ok = pool_finish_count == count;
+  for (int64_t i = 0; i < count; i++) ok = ok && pool_task_done[i] == 1 && pool_finished[i] == i;
+  return ok;
+}
+
+/* The checks a forked child repeats: a region still partitions, a scope runs
+   every task, and a channel chain still drains. */
+static int pool_still_works(pthread_t self) {
+  memset(par_seen, 0, sizeof par_seen);
+  pool_worker_ran = 0;
+  nish_parallel_range(pool_count_body, &self, PAR_N, 1);
+  int ok = 1;
+  for (int i = 0; i < PAR_N; i++) ok = ok && par_seen[i] == 1;
+  return ok && pool_run_tasks(40) && pool_run_chain() == 12 * 5050;
+}
+
+static int pool_status(pid_t child) {
+  int status = 0;
+  return waitpid(child, &status, 0) == child && WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+static void test_pool(void) {
+  pthread_t self = pthread_self();
+  int64_t cpus = nish_cpu_count();
+  const char *env = getenv("NISH_NUM_THREADS");
+  if (env && strcmp(env, "1") == 0) assert(cpus == 1);
+  if (env && strcmp(env, "2") == 0) assert(cpus <= 2);
+
+  /* Reused: two hundred regions, and a worker that ran more than one chunk
+     across them is a worker that outlived a region. With one CPU there are no
+     workers and the caller runs every chunk. */
+  pool_most_jobs = 0;
+  for (int r = 0; r < 200; r++) {
+    memset(par_seen, 0, sizeof par_seen);
+    pool_worker_ran = 0;
+    nish_parallel_range(pool_count_body, &self, PAR_N, 1);
+    for (int i = 0; i < PAR_N; i++) assert(par_seen[i] == 1);
+  }
+  if (cpus > 1) assert(pool_most_jobs > 1);
+  else assert(pool_most_jobs == 0);
+
+  /* Rewound: three hundred regions whose worker chunks each leave about 1.5 MB
+     in the worker's arena -- 1.3 GB at four cores if any of it were kept. Each
+     job finds its arena empty and holding one ordinary chunk at most, and the
+     process's peak grows by a few megabytes, not by the total. */
+  long rss_before = pool_peak_rss_kb();
+  pool_dirty_entries = 0;
+  for (int r = 0; r < 300; r++) nish_parallel_range(pool_alloc_body, &self, PAR_N, 1);
+  assert(pool_dirty_entries == 0);
+  assert(pool_peak_rss_kb() - rss_before < 64 * 1024);
+
+  /* More tasks than workers, at every size the pool can have: each runs once
+     and each answer is stored in spawn order. */
+  assert(pool_run_tasks(1));
+  assert(pool_run_tasks(3 * cpus + 5 <= 64 ? 3 * cpus + 5 : 64));
+
+  /* Receivers queued behind their senders drain, with no worker (the caller
+     runs all fourteen in spawn order), one, or one per CPU. */
+  for (int r = 0; r < 50; r++) assert(pool_run_chain() == 12 * 5050);
+
+  /* A forked child has no workers, starts its own, and gets the same answers.
+     The alarm turns a hang into a failure rather than a stuck suite. */
+  pid_t child = fork();
+  if (child == 0) {
+    alarm(30);
+    _exit(pool_still_works(self) ? 0 : 3);
+  }
+  assert(pool_status(child) == 0);
+
+  /* Unpooled (a Node addon's runtime, nish.h): every worker chunk runs on a
+     thread created for it, which therefore runs exactly one job, and the
+     answers are the same. The fork gives a runtime whose pool has not started,
+     which is the only state the switch takes effect in. */
+  child = fork();
+  if (child == 0) {
+    alarm(30);
+    nish_pool_disable();
+    pool_most_jobs = 0;
+    pool_jobs_here = 0;
+    int ok = 1;
+    for (int r = 0; r < 20; r++) ok = ok && pool_still_works(self);
+    _exit(ok && pool_most_jobs <= 1 && (cpus == 1 || pool_most_jobs == 1) ? 0 : 4);
+  }
+  assert(pool_status(child) == 0);
 }
 #endif
 
@@ -1605,6 +1859,7 @@ int main(void) {
 #ifdef NISH_THREADS
   test_threads();
   test_parallel_threads();
+  test_pool();
   test_host_signal_threads();
   puts("runtime_test: ok (threads)");
 #else

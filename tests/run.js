@@ -8120,6 +8120,11 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840
  * its own or, as here, on the calling thread at the join, so the fallback carries all of
  * it but the lock and the wait. The ceiling is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * The worker pool measured **610 bytes** on 2026-10-11 with clang 18.1.3 on linux-x64,
+ * 13 more, inside the same ceiling: `nish_pool_disable`, which a Node addon's shim
+ * calls whatever the build, and which does nothing in this one. The pool itself is
+ * `-DNISH_THREADS` only.
  */
 const RUNTIME_PARALLEL_TEXT_BUDGET = 768
 /**
@@ -8149,8 +8154,19 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * 18.1.3 on linux-x64 (954 before them, with `nish_mutex_wait`): the same three entry
  * points as the fallback's row above, with the mutex and condition variable that let a
  * receiver wait for a sender on another thread.
+ *
+ * Raised to 2,816 by the worker pool, measured **2,814 bytes** on 2026-10-11 with clang
+ * 18.1.3 on linux-x64 (1,403 before it). The 1,411 bytes are three things. The pool:
+ * workers started once and parked, a first-in-first-out queue the caller drains too,
+ * the spin before a thread parks, the arena rewound after each job, the fork handlers,
+ * and the per-call threads it keeps for an addon (`nish_jobs_run` alone is 683 of them).
+ * The core count: the affinity mask, the cgroup v2 quota read up the hierarchy, and
+ * `NISH_NUM_THREADS` (`nish_cpu_count` went from 48 bytes to 532 with them). And the
+ * small pieces that route a region and a join through the queue. They are this file's
+ * subject, and they took a divided region from ~100 us to ~10 us (docs/wp20-threads.md
+ * §8e). A program that never divides a region or joins a scope still pays none of it.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1536
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor
@@ -8265,6 +8281,194 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         `${label}: .text* at -Oz fits the ${budget} byte budget`,
         cc.status === 0 && sections.length > 0 && total <= budget,
         sizeFailure(cc, sz, sections, total, breakdown, budget, constant)
+      )
+    }
+  }
+}
+
+// ---- The worker pool (docs/wp20-threads.md §8e) ------------------------------------
+// runtime/runtime-parallel.c hands a region's chunks and a scope's tasks to workers
+// started once and parked between calls, sized by `nish_cpu_count()`. What this
+// section holds, beyond the unit test's default run in the block above:
+//   - the unit test's pool checks (`test_pool`) again at the two sizes a default run
+//     on a big machine never sees: `NISH_NUM_THREADS=1`, no workers, where the
+//     caller runs every task in spawn order, and `=2`, one worker;
+//   - `nish_cpu_count()` itself: the variable lowers the count and never raises it,
+//     a malformed value is ignored, the affinity mask counts (`taskset`), and so does
+//     a cgroup v2 `cpu.max` quota, rounded up, at the process's own cgroup or any
+//     above it -- read from a `/sys/fs/cgroup` this section mounts in a private
+//     mount namespace, which is a counted skip where `unshare` is not allowed;
+//   - every threads link program prints its expected.out under `NISH_NUM_THREADS=1`
+//     and `=2`, the channel programs above all: wp29 C6's no-deadlock argument
+//     rests on the pool's queue order at every size, none and one worker included.
+if (!only || "runtime-parallel".includes(only)) {
+  if (!has("clang")) {
+    skip("runtime-parallel: clang not installed: the worker pool's checks are not run")
+  } else {
+    const poolDir = path.join(buildDir, "runtime_parallel")
+    fs.mkdirSync(poolDir, { recursive: true })
+    const threadsC = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-DNISH_THREADS=1", "-pthread"]
+    const unitExe = path.join(poolDir, "runtime_test_threads")
+    const unit = spawnSync("clang", [...threadsC, ...RUNTIME_C, "tests/runtime-test.c", "-o", unitExe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    for (const threads of ["1", "2"]) {
+      const r =
+        unit.status === 0
+          ? spawnSync(unitExe, [], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+          : unit
+      check(
+        `runtime-parallel: the runtime unit test, worker pool included, passes under NISH_NUM_THREADS=${threads}`,
+        unit.status === 0 && r.status === 0,
+        shown(r)
+      )
+    }
+
+    // A driver that prints `nish_cpu_count()` and nothing else.
+    const countC = path.join(poolDir, "cpu_count.c")
+    fs.writeFileSync(
+      countC,
+      '#include <stdio.h>\n#include "nish.h"\nint main(void) { printf("%lld\\n", (long long)nish_cpu_count()); return 0; }\n'
+    )
+    const countExe = path.join(poolDir, "cpu_count")
+    const built = spawnSync("clang", [...threadsC, "-Iruntime", ...RUNTIME_C, countC, "-o", countExe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    /** The count under `env` (layered over this process's), run as `prefix... cpu_count`, or NaN. */
+    const countWith = (env, prefix = []) => {
+      const argv = [...prefix, countExe]
+      const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", env: { ...process.env, ...env } })
+      return r.status === 0 ? Number(r.stdout.trim()) : Number.NaN
+    }
+    const { NISH_NUM_THREADS: _inherited, ...plainEnv } = process.env
+    const base =
+      built.status === 0
+        ? Number(spawnSync(countExe, [], { encoding: "utf8", env: plainEnv }).stdout.trim())
+        : Number.NaN
+    check(
+      `runtime-parallel: nish_cpu_count() is at least 1 and at most the ${os.availableParallelism()} CPUs this process may use`,
+      base >= 1 && base <= os.availableParallelism(),
+      built.status === 0 ? `answered ${base}` : built.stderr
+    )
+    const envCases = [
+      ["1", 1],
+      ["2", Math.min(2, base)],
+      ["100000", base],
+      ["0", base],
+      ["-3", base],
+      ["2x", base],
+      ["", base],
+    ]
+    const got = envCases.map(([value]) => countWith({ ...plainEnv, NISH_NUM_THREADS: value }))
+    check(
+      "runtime-parallel: NISH_NUM_THREADS lowers nish_cpu_count() and never raises it, and a value that is not a positive number is ignored",
+      envCases.every(([, want], i) => got[i] === want),
+      envCases
+        .map(([value, want], i) => `NISH_NUM_THREADS=${JSON.stringify(value)}: want ${want}, got ${got[i]}`)
+        .join("\n")
+    )
+
+    if (process.platform !== "linux") {
+      skip(
+        `runtime-parallel: the affinity and cgroup counts are Linux's, and this host is ${process.platform}`
+      )
+    } else {
+      if (has("taskset")) {
+        const one = countWith(plainEnv, ["taskset", "-c", "0"])
+        check(
+          "runtime-parallel: nish_cpu_count() counts the affinity mask: one CPU under taskset -c 0",
+          one === 1,
+          `answered ${one}`
+        )
+      } else {
+        skip("runtime-parallel: taskset not installed: the affinity mask's count is not checked")
+      }
+      // A private mount namespace, a tmpfs over /sys/fs/cgroup, and `cpu.max` files
+      // at the process's own cgroup and at the root: the count is the smallest quota
+      // on the way up, rounded up to whole CPUs, and `max` is no quota at all.
+      const line = fs
+        .readFileSync("/proc/self/cgroup", "utf8")
+        .split("\n")
+        .find((l) => l.startsWith("0::/"))
+      const own = line === undefined ? "/" : line.slice(3)
+      const quota = (leaf, top) => {
+        const dir = `/sys/fs/cgroup${own === "/" ? "" : own}`
+        const script = [
+          "set -e",
+          "mount -t tmpfs none /sys/fs/cgroup",
+          `mkdir -p '${dir}'`,
+          `printf '%s\\n' '${top}' > /sys/fs/cgroup/cpu.max`,
+          own === "/" ? ":" : `printf '%s\\n' '${leaf}' > '${dir}/cpu.max'`,
+          `exec '${countExe}'`,
+        ].join("\n")
+        const r = spawnSync("unshare", ["-rm", "sh", "-c", script], { encoding: "utf8", env: plainEnv })
+        return r.status === 0 ? Number(r.stdout.trim()) : null
+      }
+      const probe = has("unshare") ? quota("max 100000", "max 100000") : null
+      if (probe === null) {
+        skip(
+          "runtime-parallel: unshare -rm is not allowed here (no unprivileged user namespaces): the cgroup quota's count is not checked"
+        )
+      } else {
+        const rows = [
+          ["no quota anywhere", "max 100000", "max 100000", base],
+          ["1.5 CPUs at the root", "max 100000", "150000 100000", Math.min(2, base)],
+          ["one CPU at the root", "max 100000", "100000 100000", 1],
+          ["half a CPU at the root", "max 100000", "50000 100000", 1],
+        ]
+        if (own !== "/") {
+          rows.push([
+            "2.5 CPUs at the process's own cgroup",
+            "250000 100000",
+            "max 100000",
+            Math.min(3, base),
+          ])
+        }
+        const answers = rows.map(([, leaf, top]) => quota(leaf, top))
+        check(
+          `runtime-parallel: nish_cpu_count() takes the cgroup v2 cpu.max quota, rounded up, from the process's cgroup (${own}) or any above it`,
+          probe === base && rows.every(([, , , want], i) => answers[i] === want),
+          rows.map(([what, , , want], i) => `${what}: want ${want}, got ${answers[i]}`).join("\n")
+        )
+      }
+    }
+
+    // The link programs that run threads, natively, at no workers and at one.
+    const programs = fs
+      .readdirSync(linkDir)
+      .filter(
+        (name) => /^(thread|par)_/.test(name) && fs.existsSync(path.join(linkDir, name, "expected.out"))
+      )
+    for (const name of programs) {
+      const out = path.join(poolDir, name)
+      const exe = path.join(out, "app")
+      const argsFile = path.join(linkDir, name, "args")
+      const args = fs.existsSync(argsFile)
+        ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean)
+        : []
+      const linked = spawnSync(
+        NISH,
+        [path.join(linkDir, name, "main.ts"), "-o", `${out}${path.sep}`, "--link", exe, ...args],
+        { cwd: root, encoding: "utf8" }
+      )
+      const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
+      const codeFile = path.join(linkDir, name, "expected.code")
+      const wantCode = fs.existsSync(codeFile) ? Number(fs.readFileSync(codeFile, "utf8").trim()) : 0
+      const runs = ["1", "2"].map((threads) =>
+        linked.status === 0
+          ? spawnSync(exe, [], {
+              encoding: "utf8",
+              env: { ...plainEnv, NISH_NUM_THREADS: threads },
+              timeout: 60000,
+            })
+          : linked
+      )
+      check(
+        `runtime-parallel: link/${name} prints expected.out under NISH_NUM_THREADS=1 and =2`,
+        runs.every((r) => r.status === wantCode && r.stdout === want),
+        runs.map((r) => shown(r)).join("\n")
       )
     }
   }
@@ -9565,6 +9769,25 @@ if (!only || "interop".includes(only)) {
       "interop-async.napi.c compiles under -std=c11 -Wall -Wextra -Werror with -DNISH_THREADS",
       withThreads.status === 0,
       String(withThreads.stderr)
+    )
+    // An addon can be unloaded, and a parked pool worker would outlive the code it
+    // runs, so an addon's runtime creates and joins its threads per call as before
+    // the pool (runtime/runtime-parallel.c). The switch is a constructor nish.h
+    // defines only after <node_api.h>, which the shim includes first: this reads
+    // the preprocessed shim for it, so a shim that included the two the other way
+    // round, and silently started a pool in the addon, fails here.
+    const preprocessed = spawnSync(
+      "clang",
+      [...strictC, `-I${nodeInclude}`, "-DNISH_THREADS=1", "-E", sidecar("interop-async", "napi.c")],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    )
+    check(
+      "interop-async.napi.c includes <node_api.h> before nish.h, whose constructor keeps an addon's runtime off the worker pool",
+      preprocessed.status === 0 &&
+        /__attribute__\(\(constructor\)\) static void nish_napi_unpooled\(void\) \{ nish_pool_disable\(\); \}/.test(
+          preprocessed.stdout
+        ),
+      String(preprocessed.stderr)
     )
     // The guard is the whole defence against two threads bumping one arena, so
     // it is checked by compiling, not only by reading the `#error` out of the text.
