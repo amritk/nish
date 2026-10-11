@@ -59,10 +59,11 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp31-ranged-integers.md](wp31-ranged-integers.md) | Landed in 0.13.0. `integer<Lo, Hi>`: the type, the proofs, the host boundary and DWARF. |
 | [wp32-map.md](wp32-map.md) | Landed, one item open. The global `Map` and `Set` written in Nish: the layout prototypes, the decisions, and the measurement against Node. |
 | [wp33-round-trip.md](wp33-round-trip.md) | In progress. TypeScript into Nish and back out: the portability class, the typed-array rows and `nish --fix` built; the runtime split and `--emit ts` next. |
-| [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3 (T1, T2) and QUIC packets and connections (Q1, Q2) built; QUIC Q3–Q4, the HTTP/1.1 and HTTP/2 servers, HTTP/3 and WebTransport next. |
+| [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3, the HTTP/1.1 server and WebSocket, HTTP/2, QUIC, HTTP/3, WebTransport and the relay (A1) built, with the interop job; the key wipes (#430) and the cs side of the relay next. |
 | [wp35-capabilities.md](wp35-capabilities.md) | Landed. The capability report: what every function, module and package can reach, with a witness chain. |
 | [wp36-capability-policy.md](wp36-capability-policy.md) | Landed. Refusing at compile time what `--allow`, `--deny` or the root manifest does not grant, and the bridge to an OS sandbox. |
 | [wp38-simd.md](wp38-simd.md) | In progress. SIMD: what vectorises today and what does not, four ways further (runtime kernels, `nish:simd` vector types, target intrinsics, a CPU level), the baseline-target policy, constant-time code, and the measured bar for each stage. S0's baselines, the runtime kernel and `indexOfAny` built; the `--cpu` level's bar met but the flag unbuilt; the lexer on `indexOfAny` declined for now; `std/json` on the kernel next. |
+| [wp39-http-server.md](wp39-http-server.md) | Proposed. The HTTP server beyond the relay: a TechEmpower entry first (more than one core, a JSON writer, an HTTP date, a Postgres client and the six test types), then a general-purpose server across HTTP/1.1, 2 and 3 (the missing interop, the open timeouts, TLS resumption, AES-NI, QUIC's congestion and MTU work, one handler for every version). |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
