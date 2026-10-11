@@ -381,6 +381,36 @@ run on macOS. So on any other host, or where valgrind is not on `PATH`, the chec
 is a counted skip that names the reason. CI's Linux job installs valgrind beside
 LLVM, so the check runs there on every push.
 
+## AES-GCM
+
+`aes-gcm.ts` times the AEADs on the sizes a server seals and opens. AES-128-GCM
+seal and open run on 16 KiB, a full TLS record, and on 1,200 bytes, a QUIC
+packet. ChaCha20-Poly1305 runs on the same sizes, and `aesHeaderMask` on
+16-byte samples. It is
+[WP38 S5](../docs/wp38-simd.md#s5-aes-gcm-the-baseline)'s baseline, and the
+measure the AES kernel is judged by. It is not in this suite's tables, and it
+has no twins. `aes-gcm.mjs` builds it and drives it:
+
+```bash
+npm run build
+node bench/aes-gcm.mjs --check                      # one short run; its checksum against the pinned one
+node bench/aes-gcm.mjs --self --runs 15             # the baseline against a copy of itself: the noise band
+node bench/aes-gcm.mjs --env NISH_AES=soft          # a column under an environment variable
+node bench/aes-gcm.mjs --binary <other build>       # a column for another build of bench/aes-gcm.ts
+```
+
+The program times each workload alone, inside one process, so a figure leaves
+out start-up, the key schedule and the sealing of the messages an open reads.
+Every input changes on every iteration, and every answer goes into the
+printed checksum. The driver runs all its columns in rotating rounds, each
+going first equally often, and stops when two runs print different
+checksums. It reports the minimum and median time of each workload, as MB/s
+and cycles per byte. Cycles are derived: the time multiplied by the CPU's
+nominal clock, taken from its model name or from `--ghz`, and not counted.
+`--check` runs at a 64th of the size, and fails if the checksum differs from
+the one pinned in the driver. Every build of `std/crypto/aes.ts`, kernel or
+bitsliced, must keep printing that checksum.
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
