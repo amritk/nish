@@ -81,7 +81,7 @@ export const main = (): i32 => {
 
 ## Different tasks at once: `using s = scope()`
 
-A scope runs different functions side by side, one thread each. Open it with
+A scope runs different functions side by side, each on a thread. Open it with
 `using`, hand it tasks with `s.spawn(entry, arg, dst, at)`, and when the block
 ends every task has run and `entry(arg)` is stored in `dst[at]`:
 
@@ -143,8 +143,10 @@ export const main = (): i32 => {
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
 
-Each task runs on a thread of its own; a scope with more tasks than cores
-leaves the operating system to share them out.
+The first task runs on the thread that opened the scope, which would otherwise
+wait, and each other task on a thread of its own, so `N` tasks start `N - 1`
+threads. A scope with more tasks than cores leaves the operating system to
+share them out.
 
 ## Sharing a value: `Mutex<T>`
 

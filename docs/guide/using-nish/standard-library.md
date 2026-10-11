@@ -24,7 +24,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
-| [`nish/json`](#nishjson) | `jsonField` and `jsonFields`: read the fields of one flat JSON object |
+| [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
@@ -136,6 +136,35 @@ true
 A string value comes back unquoted; any other value comes back as written, so
 `parseInt` reads a number. `jsonFields(object, names)` reads several fields in
 one pass.
+
+`JsonWriter` goes the other way: it writes any JSON value into a `u8[]` you
+own, placing every comma and colon itself, byte for byte what
+`JSON.stringify` writes. You say only what the value is:
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+
+export const main = (): i32 => {
+  const out = new Array<u8>(256);
+  const w = new JsonWriter(out, 0);
+  w.beginObject();
+  w.key("message");
+  w.string("Hello, \"World\"");
+  w.key("count");
+  w.i32(3);
+  w.endObject();
+  if (w.complete()) {
+    console.log(w.text()); // {"message":"Hello, \"World\"","count":3}
+  }
+  return 0;
+};
+```
+
+The JSON is `out[0 .. w.end)`, and `text()` copies it into a string. A full
+buffer or a call out of order — a value where a key belongs, say — does not
+panic: it sets a negative `JSON_WRITE_*` code in `w.failed`, and every later
+call does nothing, so you write the whole value and check once at the end.
+`jsonStringifyString(s)` answers one string as a JSON string literal.
 
 ## `nish/pair`
 
@@ -263,6 +292,8 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
+| `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
+| `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
 ```ts nish:ok
 import { base64urlEncode } from "nish/crypto/base64url";
@@ -290,9 +321,10 @@ ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0
 
 A function that returns `u8[] | null` answers `null` for an input it refuses —
 a bad key length, a tag that does not verify — so narrow the result before you
-use it. The modules that hold a private key (`p256`, `x25519`, `x509`) take
-and give it as a `Secret<u8[]>`. Every module has been through a security
-audit; the records are in [docs/security/](../../security/README.md).
+use it. The modules that hold a private key (`p256`, `x25519`, `x509`,
+`x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1`,
+which came later, has been through a security audit; the records are in
+[docs/security/](../../security/README.md).
 
 ## `nish/net`
 
@@ -302,9 +334,13 @@ The protocol stack written on `nish/crypto`: TLS 1.3 (`nish/net/tls`), QUIC
 HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`) and WebTransport.
 Most of these modules are *sans-IO*: they take bytes and answer bytes, and
 never read a socket or a clock themselves, so you drive them from your own
-loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The carriers
-`nish/net/tls-tcp`, `nish/net/http2-tls` and `nish/net/http3-server` are the
-ones that sit on sockets.
+loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The ones
+that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
+`Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
+`nish/net/http3-server`; like `nish:net` itself, they are native only. The
+HTTP/1.1 and WebSocket modules were written with a security record of their
+own ([docs/security/http1.md](../../security/http1.md)) rather than audited
+after the fact.
 
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
