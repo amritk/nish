@@ -11,6 +11,11 @@
 // headingSlugs below, which is written to agree with github-slugger rather than
 // to approximate it). A bare `#fragment` refers to the current file. Absolute
 // paths and directories are allowed as targets.
+//
+// It also reads scalar.config.json, the navigation of the user guide's site:
+// every route's `filepath` must be an existing .md file, and every page under
+// docs/guide/ must be reached by some route, so a page cannot be written and
+// then never published.
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -153,9 +158,41 @@ for (const file of files) {
   })
 }
 
+// The guide's navigation. A route to anything but an existing .md file (a typo,
+// a directory) is a dead page on the site, and a guide page no route names is
+// one nobody can reach from it.
+const scalarConfig = path.join(root, "scalar.config.json")
+const routed = new Set()
+const walkRoutes = (routes, prefix) => {
+  for (const [route, entry] of Object.entries(routes)) {
+    // A page must name its file; a group or a link legitimately has none.
+    if (entry.type === "page" || entry.filepath !== undefined) {
+      const file = path.join(root, entry.filepath ?? "")
+      routed.add(file)
+      if (!(file.endsWith(".md") && fs.existsSync(file) && fs.statSync(file).isFile())) {
+        problems.push(
+          `scalar.config.json: route \`${prefix}${route}\` names no Markdown page: ${entry.filepath ?? "(no filepath)"}`
+        )
+      }
+    }
+    if (entry.children !== undefined) {
+      walkRoutes(entry.children, prefix + route)
+    }
+  }
+}
+walkRoutes(JSON.parse(fs.readFileSync(scalarConfig, "utf8")).navigation.routes, "")
+const guideDir = path.join(root, "docs", "guide") + path.sep
+for (const page of files.filter((f) => f.startsWith(guideDir))) {
+  if (!routed.has(page)) {
+    problems.push(`${path.relative(root, page)}: no route in scalar.config.json reaches this guide page`)
+  }
+}
+
 if (problems.length > 0) {
   console.error(problems.join("\n"))
-  console.error(`\n${problems.length} broken link(s) in ${files.length} files (${checked} links checked)`)
+  console.error(
+    `\n${problems.length} broken link(s) or route(s) in ${files.length} files (${checked} links checked)`
+  )
   process.exit(1)
 }
 console.log(`ok: ${checked} links in ${files.length} Markdown files`)

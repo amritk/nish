@@ -250,6 +250,7 @@ is its plan. [README.md](README.md) indexes them.
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | proposed; no note yet | — |
 | 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, `std/json` on the kernel pending #507, S3 unbuilt | [wp38](wp38-simd.md) |
+| 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -413,6 +414,19 @@ major. Whether it happens at all is still wp22 §10's open question.
    capability report ([wp35-capabilities.md](wp35-capabilities.md)), and
    WP36, the compile-time policy
    ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.
+4. **WP39, the HTTP server** ([wp39-http-server.md](wp39-http-server.md)):
+   everything a server needs beyond the relay, in one list. Part A is a
+   TechEmpower entry on HTTP/1.1: more than one core by `SO_REUSEPORT` on TCP
+   ([#478](https://github.com/amritk/nish/issues/478)), `TCP_NODELAY`, a JSON
+   writer (WP34 N11's first half), an HTTP date, the `json` and `plaintext`
+   tests, a sans-IO Postgres client, and then `db`, `query`, `update`,
+   `cached-query` and `fortune`. Part B is the general-purpose server across
+   all three versions: the interop still missing (`curl`, Autobahn, Chrome
+   over TCP), the open timeouts and allocation findings, TLS resumption,
+   AES-GCM on AES-NI and PMULL as a runtime kernel, QUIC's congestion, ECN and
+   path MTU work, QUIC on more than one core, one handler for HTTP/1.1, 2 and
+   3 with `Alt-Svc` and h2c, and `h2load` numbers. Submitting to TechEmpower
+   is the owner's call (§4 there).
 
 #### Additive and unscheduled
 
