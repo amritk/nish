@@ -1,5 +1,5 @@
-// C2: a constructor uses a channel it is handed only to set a field from it.
-// A send there runs in the parent at the `spawn`, inside the scope's block.
+// C2: a constructor uses a channel it is handed only to set a field from it:
+// bound to another name there, it could go anywhere the checker cannot follow.
 import { Channel, scope } from "nish/threads";
 
 class Pipe {
@@ -7,7 +7,7 @@ class Pipe {
 
   constructor(ch: Channel<i32>) {
     this.ch = ch;
-    this.ch.send(7);
+    const kept = ch;
   }
 }
 

@@ -2677,7 +2677,13 @@ const walkChannelUses = (
 /** The first expression of a channel type under `node`, an arrow's body, or `null`. */
 const arrowChannel = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
   for (const child of node.children) {
-    if (child.kind !== N_PAREN && isChannelType(program, table, program.nodeTypes[child.id])) {
+    const local: Local | null =
+      child.kind === N_VAR_DECL || child.kind === N_PARAM ? program.nodeLocals[child.id] : null
+    let type = child.kind === N_PAREN ? -1 : program.nodeTypes[child.id]
+    if (local !== null) {
+      type = local.type
+    }
+    if (holdsChannelType(program, table, type)) {
       return child
     }
     const below = arrowChannel(program, table, child)
@@ -3063,8 +3069,8 @@ const checkChannels = (
   const locals: Local[] = []
   const decls: Node[] = []
   checkChannelTypes(program, table, sig, body, out)
-  if (sig.role === ROLE_CONSTRUCTOR && holdsChannelField(program, table, sig.paramTypes[0], false)) {
-    findThisHandedOn(body, out)
+  if (sig.role === ROLE_CONSTRUCTOR && holdsChannelDeep(program, table, sig.paramTypes[0])) {
+    findThisEscapes(body, null, null, out)
   }
   collectChannelLocals(program, table, body, locals, decls)
   walkChannelUses(program, table, sig, body, [], locals, out)
@@ -3146,7 +3152,9 @@ const checkChannelTypes = (
   body: Node,
   out: ScopeFinding[]
 ): void => {
-  let k = 0
+  // An instantiation's types are its type arguments', which are refused where
+  // they are written (a field, a local, an argument), not again in each member.
+  let k = sig.instance === null ? 0 : sig.paramTypes.length
   while (k < sig.paramTypes.length) {
     if (wrapsChannel(program, table, sig.paramTypes[k])) {
       out.push(new ScopeFinding(sig.decl, wrappedChannelMessage(table, sig.paramTypes[k])))
@@ -3154,7 +3162,7 @@ const checkChannelTypes = (
     }
     k = k + 1
   }
-  if (wrapsChannel(program, table, sig.returnType)) {
+  if (sig.instance === null && wrapsChannel(program, table, sig.returnType)) {
     out.push(new ScopeFinding(sig.decl, wrappedChannelMessage(table, sig.returnType)))
     return
   }
@@ -3207,29 +3215,37 @@ const checkLocalTypes = (
 }
 
 /**
- * C4 in the constructor of a class that holds a channel: no method is called
- * on `this` and `this` is handed to nothing, because the summary of what a
- * constructor sends follows only its parameters, and a send made through the
- * object it is building would be one the sender count never saw.
+ * C4 in the constructor of a class that holds a channel, directly or through a
+ * carrier: `this` appears only as the base of a field store, `this.f = ...`.
+ * The summary of what a constructor sends follows only its parameters, so any
+ * other way `this` got out — a method called on it, an argument, a store
+ * elsewhere, a second name, an array element — could carry a send the sender
+ * count never saw. `parent` is `node`'s, and `above` its parent's.
  */
-const findThisHandedOn = (node: Node, out: ScopeFinding[]): boolean => {
+const findThisEscapes = (
+  node: Node,
+  parent: Node | null,
+  above: Node | null,
+  out: ScopeFinding[]
+): boolean => {
   if (node.kind === N_ARROW) {
     return false
   }
-  if (node.kind === N_CALL || node.kind === N_NEW) {
-    const target = node.kind === N_CALL ? unwrapParens(node.children[0]) : node
-    const viaThis = target.kind === N_MEMBER && unwrapParens(target.children[0]).kind === N_THIS
-    let handed = false
-    const args = node.kind === N_NEW ? node.children[2].children : node.children[1].children
-    for (const arg of args) {
-      handed = handed || unwrapParens(arg).kind === N_THIS
-    }
-    if (viaThis || handed) {
+  if (node.kind === N_THIS) {
+    const fieldStore =
+      parent !== null &&
+      parent.kind === N_MEMBER &&
+      parent.children[0] === node &&
+      above !== null &&
+      above.kind === N_BINARY &&
+      above.text === "=" &&
+      above.children[0] === parent
+    if (!fieldStore) {
       out.push(
         new ScopeFinding(
           node,
           channelSendersMessage(
-            "The constructor of a class that holds a channel calls a method of `this` or hands `this` on, where the sends it makes could not be counted"
+            "The constructor of a class that holds a channel uses `this` other than to set a field, `this.f = ...`, where a send made through it could not be counted"
           )
         )
       )
@@ -3237,7 +3253,27 @@ const findThisHandedOn = (node: Node, out: ScopeFinding[]): boolean => {
     }
   }
   for (const child of node.children) {
-    if (findThisHandedOn(child, out)) {
+    // A parenthesised expression stands where its parentheses do.
+    const next = node.kind === N_PAREN ? parent : node
+    const nextAbove = node.kind === N_PAREN ? above : parent
+    if (findThisEscapes(child, next, nextAbove, out)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether the class `type` holds a channel in a field, or in a field of a class one of its fields is. */
+const holdsChannelDeep = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  if (holdsChannelField(program, table, type, false)) {
+    return true
+  }
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return false
+  }
+  for (const field of info.fields) {
+    if (holdsChannelField(program, table, table.stripNull(field.type), false)) {
       return true
     }
   }
