@@ -4852,6 +4852,68 @@ if (!only || "std_text_index_of_any".includes(only)) {
   )
 }
 
+// WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
+// `JSON.stringify`. `tests/link/std_json_writer/node.ts` writes each of these
+// values, one line apiece and in this order, and is ASCII and i64-free, so its
+// answer does not depend on how a string or an integer is read: built natively
+// and run under `runtime/nish.mjs`, both must print `JSON.stringify` of every
+// value, computed here rather than read from a golden.
+const JSON_WRITER_NODE_VALUES = [
+  { message: "Hello, World!" },
+  [],
+  {},
+  [[], {}, { a: [{}, 1], b: { c: null } }],
+  '"\\\b\f\n\r\t',
+  `${Array.from({ length: 32 }, (_, c) => String.fromCharCode(c)).join("")}\x7f/ ~`,
+  [0, -7, 2147483647, -2147483648],
+  [0, 7, 4294967295, 2147483648, 4294967286],
+  [
+    -0,
+    1e21,
+    1e-7,
+    0.1,
+    123,
+    5e-324,
+    1.7976931348623157e308,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    1.5,
+    -2.5e-10,
+  ],
+  [true, false, null],
+  "",
+  { 'k"\n': "v" },
+  'a\t"\x01',
+]
+if (!only || "std_json_writer".includes(only)) {
+  const entry = path.join(linkDir, "std_json_writer", "node.ts")
+  const want = JSON_WRITER_NODE_VALUES.map((v) => `${JSON.stringify(v)}\n`).join("")
+  const run = runUnderPrelude(entry, [])
+  check(
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values`,
+    run.status === 0 && run.stdout === want,
+    `--- JSON.stringify\n${want}--- node\n${shown(run)}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "link", "std_json_writer_node")
+    fs.rmSync(outDir, { recursive: true, force: true })
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", `${outDir}${path.sep}`, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_writer: node.ts built natively prints the same JSON.stringify lines",
+      native.status === 0 && native.stdout === want,
+      `--- JSON.stringify\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_writer: no clang, so node.ts is not built natively")
+  }
+}
+
 // One file named twice on a command line is one module, whichever way the
 // second name is spelled. `tests/link/root_named_twice` runs the entry by
 // absolute path and the second root from the repository root; these are the
@@ -5899,6 +5961,62 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
       ["arr_bounds_offset_reach", "a guard that reaches one short", "", "3 >= 3"],
       ["arr_bounds_offset_floor", "a sum with no floor under its local", "2", "18446744073709551612 >= 3"],
       ["arr_bounds_offset_wrap", "a sum that wraps under `--wrapping`", "3", "18446744071562067968 >= 3"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`)
+      if (!fs.existsSync(ll)) {
+        continue
+      }
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { driver: null })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+}
+
+// A computed index proved by its range (`provesByRange` in `src/bounds.ts`).
+// `arr_bounds_range` is the positive: `c + r`, `c - r + 7` and `r * 4 + c`
+// stay inside the lengths the arrays were made with, so no check survives.
+// Each negative breaks one rule the proof rests on and keeps its check: a
+// range past the length, a range below zero, and an index whose call or whose
+// `new`'s constructor shrinks the array panic when run; an unsigned sum, a
+// length known only at run time and `--wrapping` are pinned by their counts.
+if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_range")) {
+  for (const [name, fn, count] of [
+    ["arr_bounds_range", "diagonals", 0],
+    ["arr_bounds_range", "board", 0],
+    ["arr_bounds_range_past", "diagonals", 1],
+    ["arr_bounds_range_negative", "diagonals", 1],
+    ["arr_bounds_range_call", "nish_main", 1],
+    ["arr_bounds_range_new", "nish_main", 1],
+    ["arr_bounds_range_kept", "unsignedSum", 1],
+    ["arr_bounds_range_kept", "unknownLength", 1],
+    ["arr_bounds_range_wrap", "diagonals", 2],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      continue
+    }
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn)
+    check(
+      `${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    )
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_bounds_range_past", "a range that reaches the length", "", "14 >= 14"],
+      ["arr_bounds_range_negative", "a range that goes below zero", "", "18446744073709551615 >= 16"],
+      ["arr_bounds_range_call", "an index whose call shrinks the array", "", "15 >= 15"],
+      ["arr_bounds_range_new", "an index whose constructor shrinks the array", "", "15 >= 15"],
     ]) {
       const ll = path.join(buildDir, `${name}.ll`)
       if (!fs.existsSync(ll)) {
