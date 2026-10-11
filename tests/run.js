@@ -2877,6 +2877,21 @@ if (!only || "performance".includes(only)) {
     bounds.stderr
   )
 
+  // An offset index that keeps its check warns too, and names a guard on the
+  // sum: `ys[i + 1]` under a loop bounded by `xs` warns, and `xs[i + 1]`, which
+  // the loop condition proves, is quiet.
+  const offsets = compile("perf_bounds_offset", "perf_bounds_offset.ll")
+  const offsetLines = summaries(offsets.stderr)
+  check(
+    "performance: an offset index that survived the proof warns, naming a guard on the sum",
+    offsets.status === 0 &&
+      offsetLines.length === 1 &&
+      positions(offsetLines) === "11:36" &&
+      offsetLines[0].includes("`i + 1` is not proven to be in range for `ys` here") &&
+      offsetLines[0].includes("`if (i >= 0 && i + 1 < ys.length)` proves both ends"),
+    offsets.stderr
+  )
+
   // WP15 §4/§8: a `substring` bound the proof could not place in [0, s.length]
   // keeps JavaScript's clamp, and is reported once per bound -- so the one call
   // here, with neither end proven, warns twice and names each bound.

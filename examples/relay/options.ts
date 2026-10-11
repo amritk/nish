@@ -133,7 +133,6 @@ export const relayOptionsFromEnv = (o: RelayOptions): void => {
 
 /** The command line `argv[from ..]` over `o`; a refusal is `o.error`. */
 export const relayParseArgs = (o: RelayOptions, argv: readonly string[], from: i32): void => {
-  const argc: i32 = toI32(argv.length)
   let i: i32 = from
   while (i >= 0 && i < toI32(argv.length)) {
     const flag: string = argv[i]
@@ -144,7 +143,10 @@ export const relayParseArgs = (o: RelayOptions, argv: readonly string[], from: i
       i = i + 1
       continue
     }
-    if (i + 1 >= argc) {
+    // Against the length itself, not a copy hoisted above the loop: the calls
+    // in the body forget what a hoisted copy said about `argv`, and this guard
+    // is what proves the read of the value after it.
+    if (i + 1 >= toI32(argv.length)) {
       o.error = `${flag} needs a value`
       return
     }
