@@ -21074,7 +21074,7 @@ function isMutexType(program: CheckedProgram, table: TypeTable, type: i32): bool
   stackSites=0 stackLocals=0
   callee 1568:3 isThreadsClass -> @isThreadsClass
   callee 1568:18 classLayoutOf -> @classLayoutOf
-function isGuardType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isGuardType [exported]
+function isGuardType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isGuardType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: classLayoutOf isThreadsClass
@@ -21203,7 +21203,7 @@ function reachesWait(facts: FactsTable, name: string, locksOnly: boolean, seen: 
   callee 1726:14 StringSet.size -> @StringSet.size
   callee 1727:9 reachesWait -> @reachesWait
   callee 1727:28 StringSet.at -> @StringSet.at
-function takesLock(facts: FactsTable, fn: FunctionSig): boolean -> @takesLock [exported]
+function takesLock(facts: FactsTable, fn: FunctionSig): boolean -> @takesLock
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachesWait
   calls: StringSet.constructor reachesWait

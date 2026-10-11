@@ -1568,7 +1568,7 @@ const isMutexType = (program: CheckedProgram, table: TypeTable, type: i32): bool
   isThreadsClass(classLayoutOf(program, table, type), MUTEX)
 
 /** Whether `type` is a `MutexGuard<T>` from `nish/threads`. */
-export const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isThreadsClass(classLayoutOf(program, table, type), MUTEX_GUARD)
 
 /** Whether `sig` is `Mutex<T>.lock` from `nish/threads`, whose body the emitter writes. */
@@ -1733,7 +1733,7 @@ const reachesWait = (facts: FactsTable, name: string, locksOnly: boolean, seen: 
 }
 
 /** Whether a call of `fn` takes a lock, directly or through any callee. */
-export const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
+const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
   reachesWait(facts, fn.name, true, new StringSet())
 
 /** The refusal of a parallel body that takes a lock, or "". */
