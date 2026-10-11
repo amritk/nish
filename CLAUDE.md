@@ -51,6 +51,23 @@ after `churn()`: #520's second review round reproduced a use-after-free through
 regenerates every golden the wider rule moved, not only the new cases — #520's
 `perf_alloc_quiet.ll` kept the wider rule's release and turned CI red.
 
+**A checker rule covers every way in, not only the one its tests write.**
+Three shapes recur. Each reached a soundness hole past review rounds that had
+read the rule and found it sound.
+- A walk over what a function calls covers `new` too: a constructor is a call.
+  #562 accepted a lock taken in a constructor reached by `new`. #566 accepted a
+  constructor that sent on a channel, and native and Node printed different
+  answers.
+- A rule about a `using` binding covers every declarator of the statement.
+  `using a = m.lock(), b = n.lock()` slipped past #562's no-second-lock rule
+  and hung.
+- A rule about what may reach an object also follows `this` out of its
+  constructor. In #566, `h.l = this` handed the parent a way to send inside the
+  scope's block.
+
+Each shape gets its own negative case. When a review finds one of them, probe
+its siblings in the same round.
+
 **There is one compiler, and a construct is written once, in `src/`.** The
 TypeScript implementation that used to sit beside it, stage0, was deleted in
 WP19 R6 (`docs/wp19-stage0-retirement.md`). `src/` is built by the last
@@ -182,6 +199,10 @@ Tests: tests/cases/arr_alias_domains
   State the noise band too — the baseline timed against a byte-identical copy
   of itself in the same interleaved rounds — and read every delta against it:
   "faster", or "none faster", is claimed only outside that band (#538).
+  Copy a figure from where the repository records it (the comment beside a
+  ceiling in `tests/run.js`, the benchmark's own output) on the head being
+  merged, not from the pull request body. #566's entry carried 609 / 1,424
+  bytes from an earlier head, while `tests/run.js` recorded 597 / 1,403.
   `Refs:` and `Tests:` link the rule and the golden that pins it.
 - **`Release-Note:`** replaces the body in public notes, for when the body is
   about the review rather than about the change.
