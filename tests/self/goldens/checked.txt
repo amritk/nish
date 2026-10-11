@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 972 programs, 89724 dump lines.
+# 973 programs, 90927 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -81710,6 +81710,1210 @@ function both(h: i32, c: i32): i32 -> @both [exported]
   stackSites=0 stackLocals=0
   callee 7:46 hashStep -> @hashStep
   callee 7:63 plainStep -> @plainStep
+program bench/aes-gcm.ts
+module bench/aes-gcm.ts (entry)
+import aesGcmOpen from "nish/crypto/aes" -> function @nish.aesGcmOpen
+import aesGcmSeal from "nish/crypto/aes" -> function @nish.aesGcmSeal
+import aesHeaderMask from "nish/crypto/aes" -> function @nish.aesHeaderMask
+import AesKey from "nish/crypto/aes" -> struct AesKey
+import aesKey from "nish/crypto/aes" -> function @nish.aesKey
+import chacha20Poly1305Open from "nish/crypto/chacha20poly1305" -> function @nish.chacha20Poly1305Open
+import chacha20Poly1305Seal from "nish/crypto/chacha20poly1305" -> function @nish.chacha20Poly1305Seal
+import monotonicNanos from "nish:process" -> builtin monotonicNanos
+const RING: i32 = 16
+const RECORDS_16K: i32 = 256
+const PACKETS_1200: i32 = 3496
+const MASKS: i32 = 65536
+struct Fold (class) size=4 align=4
+  field sum: u32 index=0 offset=0 initialized
+function foldWord(sum: u32, bytes: u8[], at: i32): u32 -> @foldWord
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at sum
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 55:9 w: u32 (const)
+function pattern(length: i32, seed: i32): u8[] -> @pattern
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 67:5
+  escaping: length
+  calls: nish_exit nish_panic_overflow nish_write
+  stackSites=0 stackLocals=0
+  local 65:9 out: u8[] (const)
+  local 66:12 i: i32 (let)
+function stamp(bytes: u8[], at: i32, n: i32): void -> @stamp
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 77:3
+  escaping: at
+  pointer bytes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function fail(what: string): i32 -> @fail
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_str_concat nish_write
+  stackSites=0 stackLocals=0
+function aeadSeal(aes: boolean, key: AesKey, chachaKey: u8[], iv: u8[], aad: u8[], plaintext: u8[]): u8[] | null -> @aeadSeal
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesGcmSeal
+  calls: nish.aesGcmSeal nish.chacha20Poly1305Seal
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesGcmSeal#0
+  pointer chachaKey: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Seal#0
+  pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmSeal#1 nish.chacha20Poly1305Seal#1
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmSeal#2 nish.chacha20Poly1305Seal#2
+  pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.aesGcmSeal#3 nish.chacha20Poly1305Seal#3
+  stackSites=0 stackLocals=0
+  callee 97:9 aesGcmSeal -> @nish.aesGcmSeal
+  callee 97:47 chacha20Poly1305Seal -> @nish.chacha20Poly1305Seal
+function aeadOpen(aes: boolean, key: AesKey, chachaKey: u8[], iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @aeadOpen
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesGcmOpen
+  calls: nish.aesGcmOpen nish.chacha20Poly1305Open
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesGcmOpen#0
+  pointer chachaKey: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Open#0
+  pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmOpen#1 nish.chacha20Poly1305Open#1
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmOpen#2 nish.chacha20Poly1305Open#2
+  pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.aesGcmOpen#3 nish.chacha20Poly1305Open#3
+  stackSites=0 stackLocals=0
+  callee 107:26 aesGcmOpen -> @nish.aesGcmOpen
+  callee 107:61 chacha20Poly1305Open -> @nish.chacha20Poly1305Open
+function report(name: string, started: i64, bytes: i32): void -> @report
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+function sealLoop(name: string, aes: boolean, key: AesKey, chachaKey: u8[], size: i32, count: i32, f: Fold): i32 -> @sealLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 143:3
+  escaping: aes name size
+  calls: aeadSeal fail foldWord nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_overflow pattern report stamp
+  pointer key: size=32 writesThrough=false captured=false passedTo=aeadSeal#1
+  pointer chachaKey: size=0 writesThrough=false captured=false passedTo=aeadSeal#2
+  pointer f: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 123:9 iv: u8[] (const)
+  callee 123:20 pattern -> @pattern
+  local 124:9 aad: u8[] (const)
+  callee 124:21 pattern -> @pattern
+  local 125:9 plaintext: u8[] (const)
+  callee 125:27 pattern -> @pattern
+  local 126:7 sum: u32 (let)
+  local 127:9 started: i64 (const)
+  local 128:12 i: i32 (let)
+  callee 129:5 stamp -> @stamp
+  callee 130:5 stamp -> @stamp
+  local 131:11 sealed: u8[] | null (const)
+  callee 131:33 aeadSeal -> @aeadSeal
+  callee 133:14 fail -> @fail
+  local 135:11 tag: i32 (const)
+  callee 136:11 foldWord -> @foldWord
+  callee 137:11 foldWord -> @foldWord
+  callee 138:11 foldWord -> @foldWord
+  callee 139:11 foldWord -> @foldWord
+  callee 140:11 foldWord -> @foldWord
+  callee 142:3 report -> @report
+function openLoop(name: string, aes: boolean, key: AesKey, chachaKey: u8[], size: i32, count: i32, f: Fold): i32 -> @openLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 190:3
+  escaping: aes name size
+  calls: aeadOpen aeadSeal fail foldWord nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic_overflow pattern report stamp
+  pointer key: size=32 writesThrough=false captured=false passedTo=aeadSeal#1 aeadOpen#1
+  pointer chachaKey: size=0 writesThrough=false captured=false passedTo=aeadSeal#2 aeadOpen#2
+  pointer f: size=4 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 157:9 aad: u8[] (const)
+  callee 157:21 pattern -> @pattern
+  local 160:9 iv: u8[] (const)
+  callee 160:20 pattern -> @pattern
+  local 161:9 plaintext: u8[] (const)
+  callee 161:27 pattern -> @pattern
+  local 162:9 sealed: u8[][] (const)
+  local 163:12 r: i32 (let)
+  callee 164:5 stamp -> @stamp
+  callee 165:5 stamp -> @stamp
+  local 166:11 s: u8[] | null (const)
+  callee 166:28 aeadSeal -> @aeadSeal
+  callee 168:14 fail -> @fail
+  local 172:7 sum: u32 (let)
+  local 173:9 started: i64 (const)
+  local 174:12 i: i32 (let)
+  local 175:11 r: i32 (const)
+  callee 179:14 fail -> @fail
+  callee 181:5 stamp -> @stamp
+  local 182:11 opened: u8[] | null (const)
+  callee 182:33 aeadOpen -> @aeadOpen
+  callee 184:14 fail -> @fail
+  callee 186:11 foldWord -> @foldWord
+  callee 187:11 foldWord -> @foldWord
+  callee 189:3 report -> @report
+function maskLoop(key: AesKey, count: i32, f: Fold): i32 -> @maskLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 210:3
+  calls: fail foldWord nish.aesHeaderMask nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_overflow pattern report stamp
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesHeaderMask#0
+  pointer f: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 196:9 sample: u8[] (const)
+  callee 196:24 pattern -> @pattern
+  local 197:7 sum: u32 (let)
+  local 198:9 started: i64 (const)
+  local 199:12 i: i32 (let)
+  callee 200:5 stamp -> @stamp
+  local 201:11 mask: u8[] | null (const)
+  callee 201:31 aesHeaderMask -> @nish.aesHeaderMask
+  callee 203:14 fail -> @fail
+  callee 206:11 foldWord -> @foldWord
+  callee 207:11 foldWord -> @foldWord
+  callee 209:3 report -> @report
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: fail llvm.fptosi.sat.i32.f64 maskLoop nish.aesKey nish_arena_mark nish_arena_release nish_panic_index nish_parse_number nish_print nish_str_concat nish_str_from_u64 nish_write openLoop pattern sealLoop
+  stackSites=1 stackLocals=1
+  local 215:7 scale: i32 (let)
+  local 223:9 key: AesKey | null (const)
+  callee 223:30 aesKey -> @nish.aesKey
+  callee 223:37 pattern -> @pattern
+  callee 225:12 fail -> @fail
+  local 227:9 chachaKey: u8[] (const)
+  callee 227:27 pattern -> @pattern
+  local 228:9 records: i32 (const)
+  local 229:9 packets: i32 (const)
+  local 230:9 f: Fold (const)
+  local 231:7 failed: i32 (let)
+  callee 232:21 sealLoop -> @sealLoop
+  callee 233:21 openLoop -> @openLoop
+  callee 234:21 sealLoop -> @sealLoop
+  callee 235:21 openLoop -> @openLoop
+  callee 236:21 sealLoop -> @sealLoop
+  callee 237:21 openLoop -> @openLoop
+  callee 238:21 sealLoop -> @sealLoop
+  callee 239:21 openLoop -> @openLoop
+  callee 240:21 maskLoop -> @maskLoop
+module std/crypto/aes.ts [package nish]
+const AES_BLOCK: i32 = 16 [exported]
+const AES_GCM_TAG_SIZE: i32 = 16 [exported]
+const AES_BATCH: i32 = 64
+struct AesKey (class) size=32 align=8 exported
+  field rounds: i32 index=0 offset=0 initialized
+  field roundKeys: u64[] index=1 offset=8
+  field hHi: u64 index=2 offset=16 initialized
+  field hLo: u64 index=3 offset=24 initialized
+  constructor -> @nish.AesKey.constructor
+function AesKey.constructor(this: AesKey, rounds: i32, roundKeys: u64[]): void -> @nish.AesKey.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: roundKeys rounds
+  pointer this: size=32 writesThrough=true captured=false
+  pointer roundKeys: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function aesLanes(pattern: u64): u64 -> @nish.aesLanes
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 112:9 two: u64 (const)
+function aesBytes(pattern: u64): u64 -> @nish.aesBytes
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.aesLanes
+  stackSites=0 stackLocals=0
+  callee 117:41 aesLanes -> @nish.aesLanes
+function aesSwapBits(q: u64[], i: i32, j: i32, mask: u64, shift: u64): void -> @nish.aesSwapBits
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 125:3
+  escaping: i j
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 124:9 t: u64 (const)
+function aesTranspose(q: u64[]): void -> @nish.aesTranspose
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesSwapBits
+  calls: nish.aesBytes nish.aesSwapBits
+  pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0
+  stackSites=0 stackLocals=0
+  local 137:9 m1: u64 (const)
+  callee 137:19 aesBytes -> @nish.aesBytes
+  local 138:9 m2: u64 (const)
+  callee 138:19 aesBytes -> @nish.aesBytes
+  local 139:9 m4: u64 (const)
+  callee 139:19 aesBytes -> @nish.aesBytes
+  callee 140:3 aesSwapBits -> @nish.aesSwapBits
+  callee 141:3 aesSwapBits -> @nish.aesSwapBits
+  callee 142:3 aesSwapBits -> @nish.aesSwapBits
+  callee 143:3 aesSwapBits -> @nish.aesSwapBits
+  callee 144:3 aesSwapBits -> @nish.aesSwapBits
+  callee 145:3 aesSwapBits -> @nish.aesSwapBits
+  callee 146:3 aesSwapBits -> @nish.aesSwapBits
+  callee 147:3 aesSwapBits -> @nish.aesSwapBits
+  callee 148:3 aesSwapBits -> @nish.aesSwapBits
+  callee 149:3 aesSwapBits -> @nish.aesSwapBits
+  callee 150:3 aesSwapBits -> @nish.aesSwapBits
+  callee 151:3 aesSwapBits -> @nish.aesSwapBits
+function aesPack(q: u64[], buf: u8[]): void -> @nish.aesPack
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 166:5
+  calls: nish.aesTranspose
+  pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesTranspose#0
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 165:12 i: i32 (let)
+  local 168:12 k: i32 (let)
+  local 169:11 low: u64 (const)
+  local 170:11 high: u64 (const)
+  local 171:14 c: i32 (let)
+  callee 176:3 aesTranspose -> @nish.aesTranspose
+function aesUnpack(buf: u8[], q: u64[]): void -> @nish.aesUnpack
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 190:7
+  calls: nish.aesTranspose
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesTranspose#0
+  stackSites=0 stackLocals=0
+  callee 184:3 aesTranspose -> @nish.aesTranspose
+  local 186:12 k: i32 (let)
+  local 187:11 low: u64 (const)
+  local 188:11 high: u64 (const)
+  local 189:14 c: i32 (let)
+function aesSbox(q: u64[]): void -> @nish.aesSbox
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 337:3
+  calls: nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 205:9 x0: u64 (const)
+  local 206:9 x1: u64 (const)
+  local 207:9 x2: u64 (const)
+  local 208:9 x3: u64 (const)
+  local 209:9 x4: u64 (const)
+  local 210:9 x5: u64 (const)
+  local 211:9 x6: u64 (const)
+  local 212:9 x7: u64 (const)
+  local 215:9 y14: u64 (const)
+  local 216:9 y13: u64 (const)
+  local 217:9 y9: u64 (const)
+  local 218:9 y8: u64 (const)
+  local 219:9 t0: u64 (const)
+  local 220:9 y1: u64 (const)
+  local 221:9 y4: u64 (const)
+  local 222:9 y12: u64 (const)
+  local 223:9 y2: u64 (const)
+  local 224:9 y5: u64 (const)
+  local 225:9 y3: u64 (const)
+  local 226:9 t1: u64 (const)
+  local 227:9 y15: u64 (const)
+  local 228:9 y20: u64 (const)
+  local 229:9 y6: u64 (const)
+  local 230:9 y10: u64 (const)
+  local 231:9 y11: u64 (const)
+  local 232:9 y7: u64 (const)
+  local 233:9 y17: u64 (const)
+  local 234:9 y19: u64 (const)
+  local 235:9 y16: u64 (const)
+  local 236:9 y21: u64 (const)
+  local 237:9 y18: u64 (const)
+  local 240:9 t2: u64 (const)
+  local 241:9 t3: u64 (const)
+  local 242:9 t4: u64 (const)
+  local 243:9 t5: u64 (const)
+  local 244:9 t6: u64 (const)
+  local 245:9 t7: u64 (const)
+  local 246:9 t8: u64 (const)
+  local 247:9 t9: u64 (const)
+  local 248:9 t10: u64 (const)
+  local 249:9 t11: u64 (const)
+  local 250:9 t12: u64 (const)
+  local 251:9 t13: u64 (const)
+  local 252:9 t14: u64 (const)
+  local 253:9 t15: u64 (const)
+  local 254:9 t16: u64 (const)
+  local 255:9 t17: u64 (const)
+  local 256:9 t18: u64 (const)
+  local 257:9 t19: u64 (const)
+  local 258:9 t20: u64 (const)
+  local 259:9 t21: u64 (const)
+  local 260:9 t22: u64 (const)
+  local 261:9 t23: u64 (const)
+  local 262:9 t24: u64 (const)
+  local 264:9 t25: u64 (const)
+  local 265:9 t26: u64 (const)
+  local 266:9 t27: u64 (const)
+  local 267:9 t28: u64 (const)
+  local 268:9 t29: u64 (const)
+  local 269:9 t30: u64 (const)
+  local 270:9 t31: u64 (const)
+  local 271:9 t32: u64 (const)
+  local 272:9 t33: u64 (const)
+  local 273:9 t34: u64 (const)
+  local 274:9 t35: u64 (const)
+  local 275:9 t36: u64 (const)
+  local 276:9 t37: u64 (const)
+  local 277:9 t38: u64 (const)
+  local 278:9 t39: u64 (const)
+  local 279:9 t40: u64 (const)
+  local 281:9 t41: u64 (const)
+  local 282:9 t42: u64 (const)
+  local 283:9 t43: u64 (const)
+  local 284:9 t44: u64 (const)
+  local 285:9 t45: u64 (const)
+  local 286:9 z0: u64 (const)
+  local 287:9 z1: u64 (const)
+  local 288:9 z2: u64 (const)
+  local 289:9 z3: u64 (const)
+  local 290:9 z4: u64 (const)
+  local 291:9 z5: u64 (const)
+  local 292:9 z6: u64 (const)
+  local 293:9 z7: u64 (const)
+  local 294:9 z8: u64 (const)
+  local 295:9 z9: u64 (const)
+  local 296:9 z10: u64 (const)
+  local 297:9 z11: u64 (const)
+  local 298:9 z12: u64 (const)
+  local 299:9 z13: u64 (const)
+  local 300:9 z14: u64 (const)
+  local 301:9 z15: u64 (const)
+  local 302:9 z16: u64 (const)
+  local 303:9 z17: u64 (const)
+  local 306:9 t46: u64 (const)
+  local 307:9 t47: u64 (const)
+  local 308:9 t48: u64 (const)
+  local 309:9 t49: u64 (const)
+  local 310:9 t50: u64 (const)
+  local 311:9 t51: u64 (const)
+  local 312:9 t52: u64 (const)
+  local 313:9 t53: u64 (const)
+  local 314:9 t54: u64 (const)
+  local 315:9 t55: u64 (const)
+  local 316:9 t56: u64 (const)
+  local 317:9 t57: u64 (const)
+  local 318:9 t58: u64 (const)
+  local 319:9 t59: u64 (const)
+  local 320:9 t60: u64 (const)
+  local 321:9 t61: u64 (const)
+  local 322:9 t62: u64 (const)
+  local 323:9 t63: u64 (const)
+  local 324:9 t64: u64 (const)
+  local 325:9 t65: u64 (const)
+  local 326:9 t66: u64 (const)
+  local 327:9 s0: u64 (const)
+  local 328:9 s6: u64 (const)
+  local 329:9 s7: u64 (const)
+  local 330:9 t67: u64 (const)
+  local 331:9 s3: u64 (const)
+  local 332:9 s4: u64 (const)
+  local 333:9 s5: u64 (const)
+  local 334:9 s1: u64 (const)
+  local 335:9 s2: u64 (const)
+function aesShiftPlane(x: u64): u64 -> @nish.aesShiftPlane
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.aesLanes
+  stackSites=0 stackLocals=0
+  callee 352:8 aesLanes -> @nish.aesLanes
+  callee 353:22 aesLanes -> @nish.aesLanes
+  callee 354:22 aesLanes -> @nish.aesLanes
+  callee 355:22 aesLanes -> @nish.aesLanes
+  callee 356:22 aesLanes -> @nish.aesLanes
+  callee 357:22 aesLanes -> @nish.aesLanes
+  callee 358:22 aesLanes -> @nish.aesLanes
+function aesShiftRows(q: u64[]): void -> @nish.aesShiftRows
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 362:3
+  calls: nish.aesShiftPlane nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 362:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 363:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 364:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 365:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 366:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 367:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 368:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 369:10 aesShiftPlane -> @nish.aesShiftPlane
+function aesNextRow(x: u64): u64 -> @nish.aesNextRow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.aesLanes
+  stackSites=0 stackLocals=0
+  callee 374:22 aesLanes -> @nish.aesLanes
+  callee 374:69 aesLanes -> @nish.aesLanes
+function aesRowAfterNext(x: u64): u64 -> @nish.aesRowAfterNext
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.aesLanes
+  stackSites=0 stackLocals=0
+  callee 378:22 aesLanes -> @nish.aesLanes
+  callee 378:68 aesLanes -> @nish.aesLanes
+function aesMixColumns(q: u64[]): void -> @nish.aesMixColumns
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 404:3
+  calls: nish.aesNextRow nish.aesRowAfterNext nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 388:9 n0: u64 (const)
+  callee 388:19 aesNextRow -> @nish.aesNextRow
+  local 389:9 n1: u64 (const)
+  callee 389:19 aesNextRow -> @nish.aesNextRow
+  local 390:9 n2: u64 (const)
+  callee 390:19 aesNextRow -> @nish.aesNextRow
+  local 391:9 n3: u64 (const)
+  callee 391:19 aesNextRow -> @nish.aesNextRow
+  local 392:9 n4: u64 (const)
+  callee 392:19 aesNextRow -> @nish.aesNextRow
+  local 393:9 n5: u64 (const)
+  callee 393:19 aesNextRow -> @nish.aesNextRow
+  local 394:9 n6: u64 (const)
+  callee 394:19 aesNextRow -> @nish.aesNextRow
+  local 395:9 n7: u64 (const)
+  callee 395:19 aesNextRow -> @nish.aesNextRow
+  local 396:9 t0: u64 (const)
+  local 397:9 t1: u64 (const)
+  local 398:9 t2: u64 (const)
+  local 399:9 t3: u64 (const)
+  local 400:9 t4: u64 (const)
+  local 401:9 t5: u64 (const)
+  local 402:9 t6: u64 (const)
+  local 403:9 t7: u64 (const)
+  callee 404:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 405:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 406:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 407:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 408:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 409:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 410:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 411:20 aesRowAfterNext -> @nish.aesRowAfterNext
+function aesAddRoundKey(q: u64[], rk: u64[], at: i32): void -> @nish.aesAddRoundKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 417:3
+  calls: nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  pointer rk: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 416:9 p: u32 (const)
+function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @nish.aesBitslicedRound [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesSbox
+  escaping: at
+  calls: nish.aesAddRoundKey nish.aesMixColumns nish.aesSbox nish.aesShiftRows
+  pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSbox#0 nish.aesShiftRows#0 nish.aesMixColumns#0 nish.aesAddRoundKey#0
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesAddRoundKey#1
+  stackSites=0 stackLocals=0
+  callee 436:3 aesSbox -> @nish.aesSbox
+  callee 437:3 aesShiftRows -> @nish.aesShiftRows
+  callee 438:3 aesMixColumns -> @nish.aesMixColumns
+  callee 439:3 aesAddRoundKey -> @nish.aesAddRoundKey
+function aesEncryptBatch(key: AesKey, buf: u8[], q: u64[]): void -> @nish.aesEncryptBatch
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesPack
+  calls: nish.aesAddRoundKey nish.aesBitslicedRound nish.aesPack nish.aesSbox nish.aesShiftRows nish.aesUnpack nish_panic_overflow
+  pointer key: size=32 writesThrough=false captured=false
+  pointer buf: size=0 writesThrough=true captured=false passedTo=nish.aesPack#1 nish.aesUnpack#0
+  pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesPack#0 nish.aesAddRoundKey#0 nish.aesBitslicedRound#0 nish.aesSbox#0 nish.aesShiftRows#0 nish.aesAddRoundKey#0 nish.aesUnpack#1
+  stackSites=0 stackLocals=0
+  local 444:9 rk: u64[] (const)
+  callee 445:3 aesPack -> @nish.aesPack
+  callee 446:3 aesAddRoundKey -> @nish.aesAddRoundKey
+  local 447:12 round: i32 (let)
+  callee 448:5 aesBitslicedRound -> @nish.aesBitslicedRound
+  callee 450:3 aesSbox -> @nish.aesSbox
+  callee 451:3 aesShiftRows -> @nish.aesShiftRows
+  callee 452:3 aesAddRoundKey -> @nish.aesAddRoundKey
+  callee 453:3 aesUnpack -> @nish.aesUnpack
+function aesSubWord(w: u32, q: u64[]): u32 -> @nish.aesSubWord
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 471:5
+  calls: nish.aesSbox
+  pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSbox#0
+  stackSites=0 stackLocals=0
+  local 466:12 b: i32 (let)
+  local 467:9 plane: u64 (let)
+  local 468:14 m: i32 (let)
+  callee 473:3 aesSbox -> @nish.aesSbox
+  local 474:7 out: u32 (let)
+  local 475:12 b: i32 (let)
+  local 476:14 m: i32 (let)
+function aesLoad32(data: u8[], at: i32): u32 -> @nish.aesLoad32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_panic_index
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function aesStore32(out: u8[], at: i32, w: u32): void -> @nish.aesStore32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 492:3
+  escaping: at
+  calls: nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function aesExpand(key: u8[], rounds: i32): u64[] -> @nish.aesExpand
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 517:9
+  calls: nish.aesLoad32 nish.aesPack nish.aesStore32 nish.aesSubWord nish_exit nish_panic_div nish_panic_index nish_panic_overflow nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
+  stackSites=1 stackLocals=1
+  local 505:9 nk: i32 (const)
+  local 506:9 total: i32 (const)
+  local 507:9 w: u32[] (const)
+  local 508:9 q: u64[] (const)
+  local 509:9 keyLength: i32 (const)
+  local 510:9 wLength: i32 (const)
+  local 512:7 rcon: u32 (let)
+  local 513:12 i: i32 (let)
+  local 515:13 at: i32 (const)
+  callee 517:16 aesLoad32 -> @nish.aesLoad32
+  local 520:11 temp: u32 (let)
+  callee 522:16 aesSubWord -> @nish.aesSubWord
+  callee 525:16 aesSubWord -> @nish.aesSubWord
+  local 531:9 rk: u64[] (const)
+  local 532:9 buf: u8[] (const)
+  local 533:12 round: i32 (let)
+  local 534:14 k: i32 (let)
+  local 535:16 j: i32 (let)
+  callee 536:9 aesStore32 -> @nish.aesStore32
+  callee 539:5 aesPack -> @nish.aesPack
+  local 540:14 b: i32 (let)
+function aesLoad64(data: u8[], at: i32, end: i32): u64 -> @nish.aesLoad64
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 552:9 length: i32 (const)
+  local 553:7 v: u64 (let)
+  local 554:12 i: i32 (let)
+  local 555:11 from: i32 (const)
+  local 556:9 byte: u64 (let)
+function aesStore64(out: u8[], at: i32, v: u64): void -> @nish.aesStore64
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 571:7
+  calls: nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 567:9 length: i32 (const)
+  local 568:12 i: i32 (let)
+  local 569:11 to: i32 (const)
+function aesCopyPrefix(dst: u8[], src: u8[], count: i32): void -> @nish.aesCopyPrefix
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 581:5
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 578:9 dstLength: i32 (const)
+  local 579:9 srcLength: i32 (const)
+  local 580:12 i: i32 (let)
+function aesKeyUsable(key: AesKey): boolean -> @nish.aesKeyUsable
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer key: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 593:9 rounds: i32 (const)
+  local 594:9 words: i32 (const)
+function aesEncryptOne(key: AesKey, block: u8[]): u8[] -> @nish.aesEncryptOne
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish.aesCopyPrefix nish.aesEncryptBatch nish_exit nish_write
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
+  pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1
+  stackSites=1 stackLocals=0
+  local 603:9 buf: u8[] (const)
+  callee 604:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  callee 605:3 aesEncryptBatch -> @nish.aesEncryptBatch
+function aesKey(key: u8[]): AesKey | null -> @nish.aesKey [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 622:3
+  calls: nish.AesKey.constructor nish.aesEncryptOne nish.aesExpand nish.aesLoad64 nish_alloc_struct
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesExpand#0
+  stackSites=1 stackLocals=0
+  local 615:9 length: i32 (const)
+  local 619:9 rounds: i32 (const)
+  local 620:9 expanded: AesKey (const)
+  callee 620:28 new AesKey -> @nish.AesKey.constructor
+  callee 620:47 aesExpand -> @nish.aesExpand
+  local 621:9 buf: u8[] (const)
+  callee 621:21 aesEncryptOne -> @nish.aesEncryptOne
+  callee 622:18 aesLoad64 -> @nish.aesLoad64
+  callee 623:18 aesLoad64 -> @nish.aesLoad64
+function aesKeyInto(key: u8[], out: AesKey): boolean -> @nish.aesKeyInto [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 656:5
+  calls: nish.aesEncryptOne nish.aesExpand nish.aesLoad64 nish_arena_mark nish_arena_release nish_panic_overflow
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesExpand#0
+  pointer out: size=32 writesThrough=true captured=false passedTo=nish.aesEncryptOne#0
+  stackSites=1 stackLocals=0
+  local 644:9 length: i32 (const)
+  local 648:9 rounds: i32 (const)
+  local 649:9 roundKeys: u64[] (const)
+  local 650:9 words: i32 (const)
+  local 654:9 expanded: u64[] (const)
+  callee 654:27 aesExpand -> @nish.aesExpand
+  local 655:12 i: i32 (let)
+  local 660:9 buf: u8[] (const)
+  callee 660:21 aesEncryptOne -> @nish.aesEncryptOne
+  callee 661:13 aesLoad64 -> @nish.aesLoad64
+  callee 662:13 aesLoad64 -> @nish.aesLoad64
+  local 663:12 i: i32 (let)
+function aesEncryptBlock(key: AesKey, block: u8[]): u8[] | null -> @nish.aesEncryptBlock [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
+  pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
+  stackSites=0 stackLocals=0
+  callee 671:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 674:9 out: u8[] (const)
+  callee 675:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  callee 675:22 aesEncryptOne -> @nish.aesEncryptOne
+function aesHeaderMask(key: AesKey, sample: u8[]): u8[] | null -> @nish.aesHeaderMask [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesCopyPrefix
+  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
+  pointer sample: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
+  stackSites=0 stackLocals=0
+  callee 685:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 688:9 mask: u8[] (const)
+  callee 689:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  callee 689:23 aesEncryptOne -> @nish.aesEncryptOne
+function ghashMul32(x: u64, y: u64): u64 -> @nish.ghashMul32
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 707:9 m0: u64 (const)
+  local 708:9 m1: u64 (const)
+  local 709:9 m2: u64 (const)
+  local 710:9 m3: u64 (const)
+  local 711:9 x0: u64 (const)
+  local 712:9 x1: u64 (const)
+  local 713:9 x2: u64 (const)
+  local 714:9 x3: u64 (const)
+  local 715:9 y0: u64 (const)
+  local 716:9 y1: u64 (const)
+  local 717:9 y2: u64 (const)
+  local 718:9 y3: u64 (const)
+  local 719:9 z0: u64 (const)
+  local 720:9 z1: u64 (const)
+  local 721:9 z2: u64 (const)
+  local 722:9 z3: u64 (const)
+  local 723:9 w0: u64 (const)
+function ghashMultiply(y: u64[], hHi: u64, hLo: u64): void -> @nish.ghashMultiply [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 788:3
+  calls: nish.ghashMul32 nish_panic_index
+  pointer y: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 746:9 low32: u64 (const)
+  local 747:9 thirtyTwo: u64 (const)
+  local 748:9 a1: u64 (const)
+  local 749:9 a0: u64 (const)
+  local 750:9 a2: u64 (const)
+  local 751:9 b2: u64 (const)
+  local 754:9 l0: u64 (const)
+  callee 754:19 ghashMul32 -> @nish.ghashMul32
+  local 755:9 l1: u64 (const)
+  callee 755:19 ghashMul32 -> @nish.ghashMul32
+  local 756:9 l2: u64 (const)
+  callee 756:19 ghashMul32 -> @nish.ghashMul32
+  local 757:9 lHi: u64 (const)
+  local 758:9 lLo: u64 (const)
+  local 761:9 h0: u64 (const)
+  callee 761:19 ghashMul32 -> @nish.ghashMul32
+  local 762:9 h1: u64 (const)
+  callee 762:19 ghashMul32 -> @nish.ghashMul32
+  local 763:9 h2: u64 (const)
+  callee 763:19 ghashMul32 -> @nish.ghashMul32
+  local 764:9 hiHi: u64 (const)
+  local 765:9 hiLo: u64 (const)
+  local 768:9 m0: u64 (const)
+  callee 768:19 ghashMul32 -> @nish.ghashMul32
+  local 769:9 m1: u64 (const)
+  callee 769:19 ghashMul32 -> @nish.ghashMul32
+  local 770:9 m2: u64 (const)
+  callee 770:19 ghashMul32 -> @nish.ghashMul32
+  local 771:9 mHi: u64 (const)
+  local 772:9 mLo: u64 (const)
+  local 775:9 r3: u64 (const)
+  local 776:9 r2: u64 (const)
+  local 777:9 r1: u64 (const)
+  local 778:9 r0: u64 (const)
+  local 779:9 one: u64 (const)
+  local 780:9 top: u64 (const)
+  local 781:9 p3: u64 (const)
+  local 782:9 p2: u64 (const)
+  local 783:9 p1: u64 (const)
+  local 784:9 p0: u64 (const)
+  local 787:9 d1: u64 (const)
+function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @nish.ghashUpdate
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 813:5
+  escaping: length
+  calls: nish.aesLoad64 nish.ghashMultiply nish_panic_overflow
+  pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashMultiply#0
+  pointer key: size=32 writesThrough=false captured=false
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.aesLoad64#0 nish.aesLoad64#0
+  stackSites=0 stackLocals=0
+  local 810:9 blocks: i32 (const)
+  local 811:12 block: i32 (let)
+  local 812:11 at: i32 (const)
+  callee 813:19 aesLoad64 -> @nish.aesLoad64
+  callee 814:19 aesLoad64 -> @nish.aesLoad64
+  callee 815:5 ghashMultiply -> @nish.ghashMultiply
+function ghashLengths(y: u64[], key: AesKey, aadLength: i32, textLength: i32): void -> @nish.ghashLengths
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 821:3
+  calls: nish.ghashMultiply
+  pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashMultiply#0
+  pointer key: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 823:3 ghashMultiply -> @nish.ghashMultiply
+function aesGcmJ0(key: AesKey, iv: u8[]): u8[] -> @nish.aesGcmJ0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 836:5
+  calls: nish.aesCopyPrefix nish.aesStore64 nish.ghashLengths nish.ghashUpdate nish_exit nish_panic_index nish_write
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashLengths#1
+  pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1 nish.ghashUpdate#2
+  stackSites=1 stackLocals=1
+  local 832:9 length: i32 (const)
+  local 833:9 j0: u8[] (const)
+  callee 835:5 aesCopyPrefix -> @nish.aesCopyPrefix
+  local 839:9 y: u64[] (const)
+  callee 840:3 ghashUpdate -> @nish.ghashUpdate
+  callee 841:3 ghashLengths -> @nish.ghashLengths
+  callee 842:3 aesStore64 -> @nish.aesStore64
+  callee 843:3 aesStore64 -> @nish.aesStore64
+function aesGcmLengthFits(length: i32): boolean -> @nish.aesGcmLengthFits
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 879:9
+  calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
+  pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
+  pointer src: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 868:9 counter: u32 (const)
+  callee 868:24 aesLoad32 -> @nish.aesLoad32
+  local 869:9 buf: u8[] (const)
+  local 870:9 q: u64[] (const)
+  local 871:9 srcLength: i32 (const)
+  local 872:9 dstLength: i32 (const)
+  local 874:9 batches: i32 (const)
+  local 875:12 batch: i32 (let)
+  local 876:11 base: i32 (const)
+  local 877:14 k: i32 (let)
+  local 878:16 i: i32 (let)
+  callee 881:7 aesStore32 -> @nish.aesStore32
+  callee 883:5 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 884:14 j: i32 (let)
+  local 885:13 at: i32 (const)
+function aesGcmTag(y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void -> @nish.aesGcmTag
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 904:3
+  escaping: textLength
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release
+  pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashUpdate#0 nish.ghashUpdate#0 nish.ghashLengths#0
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashUpdate#1 nish.ghashLengths#1 nish.aesEncryptOne#0
+  pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
+  pointer text: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
+  stackSites=0 stackLocals=0
+  local 899:9 aadLength: i32 (const)
+  callee 900:3 ghashUpdate -> @nish.ghashUpdate
+  callee 901:3 ghashUpdate -> @nish.ghashUpdate
+  callee 902:3 ghashLengths -> @nish.ghashLengths
+  local 903:9 mask: u8[] (const)
+  callee 903:22 aesEncryptOne -> @nish.aesEncryptOne
+  callee 904:17 aesLoad64 -> @nish.aesLoad64
+  callee 905:17 aesLoad64 -> @nish.aesLoad64
+function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @nish.aesGcmTagMask [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | null -> @nish.aesGcmSeal [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesGcmJ0
+  calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesKeyUsable nish.aesStore64 nish_exit nish_panic_overflow nish_write
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmCtr#0 nish.aesGcmTag#1
+  pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#1
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
+  pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.aesGcmCtr#2
+  stackSites=1 stackLocals=1
+  local 926:9 length: i32 (const)
+  local 929:9 longest: i32 (const)
+  callee 930:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 930:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 933:9 j0: u8[] (const)
+  callee 933:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 934:9 out: u8[] (const)
+  callee 935:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 936:9 tag: u64[] (const)
+  callee 937:3 aesGcmTag -> @nish.aesGcmTag
+  callee 938:3 aesStore64 -> @nish.aesStore64
+  callee 939:3 aesStore64 -> @nish.aesStore64
+function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesGcmJ0
+  calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish_exit nish_write
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmTag#1 nish.aesGcmCtr#0
+  pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#1
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
+  pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#4 nish.aesLoad64#0 nish.aesLoad64#0 nish.aesGcmCtr#2
+  stackSites=1 stackLocals=1
+  local 952:9 total: i32 (const)
+  callee 953:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 958:9 length: i32 (const)
+  callee 959:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 962:9 j0: u8[] (const)
+  callee 962:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 963:9 tag: u64[] (const)
+  callee 964:3 aesGcmTag -> @nish.aesGcmTag
+  local 965:9 same: u64 (const)
+  callee 965:21 aesGcmTagMask -> @nish.aesGcmTagMask
+  callee 968:5 aesLoad64 -> @nish.aesLoad64
+  callee 969:5 aesLoad64 -> @nish.aesLoad64
+  local 975:9 hashKeySet: u64 (const)
+  local 979:9 out: u8[] (const)
+  callee 980:3 aesGcmCtr -> @nish.aesGcmCtr
+module std/crypto/chacha20poly1305.ts [package nish]
+const CHACHA20_KEY_SIZE: i32 = 32 [exported]
+const CHACHA20POLY1305_NONCE_SIZE: i32 = 12 [exported]
+const POLY1305_TAG_SIZE: i32 = 16 [exported]
+const POLY1305_KEY_SIZE: i32 = 32 [exported]
+const CHACHA20_BLOCK_SIZE: i32 = 64 [exported]
+const CHACHA20_HEADER_SAMPLE_SIZE: i32 = 16 [exported]
+const CHACHA20_HEADER_MASK_SIZE: i32 = 5 [exported]
+const POLY1305_HIGH_BIT: i32 = 16777216
+function chacha20Rotl(x: u32, n: u32): u32 -> @nish.chacha20Rotl
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function chacha20Word(buf: u8[], at: i32): u32 -> @nish.chacha20Word
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 97:9 p: u32 (const)
+function chacha20State(key: u8[], counter: u32, nonce: u8[], nonceAt: i32): u32[] -> @nish.chacha20State
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 109:3
+  escaping: counter nonceAt
+  calls: nish.chacha20Word
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20Word#0
+  pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20Word#0 nish.chacha20Word#0 nish.chacha20Word#0
+  stackSites=0 stackLocals=0
+  local 108:9 state: u32[] (const)
+  local 113:12 i: i32 (let)
+  callee 114:20 chacha20Word -> @nish.chacha20Word
+  callee 117:15 chacha20Word -> @nish.chacha20Word
+  callee 118:15 chacha20Word -> @nish.chacha20Word
+  callee 119:15 chacha20Word -> @nish.chacha20Word
+function chacha20Core(state: u32[], out: u32[]): void -> @nish.chacha20Core
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 221:3
+  calls: nish.chacha20Rotl
+  pointer state: size=0 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 137:7 x0: u32 (let)
+  local 138:7 x1: u32 (let)
+  local 139:7 x2: u32 (let)
+  local 140:7 x3: u32 (let)
+  local 141:7 x4: u32 (let)
+  local 142:7 x5: u32 (let)
+  local 143:7 x6: u32 (let)
+  local 144:7 x7: u32 (let)
+  local 145:7 x8: u32 (let)
+  local 146:7 x9: u32 (let)
+  local 147:7 x10: u32 (let)
+  local 148:7 x11: u32 (let)
+  local 149:7 x12: u32 (let)
+  local 150:7 x13: u32 (let)
+  local 151:7 x14: u32 (let)
+  local 152:7 x15: u32 (let)
+  local 153:12 round: i32 (let)
+  callee 156:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 158:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 160:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 162:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 164:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 166:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 168:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 170:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 172:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 174:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 176:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 178:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 180:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 182:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 184:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 186:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 189:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 191:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 193:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 195:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 197:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 199:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 201:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 203:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 205:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 207:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 209:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 211:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 213:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 215:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 217:11 chacha20Rotl -> @nish.chacha20Rotl
+  callee 219:10 chacha20Rotl -> @nish.chacha20Rotl
+function chacha20XorInto(state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[], dstAt: i32): void -> @nish.chacha20XorInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 250:5
+  calls: nish.chacha20Core nish_panic_index nish_panic_overflow
+  pointer state: size=0 writesThrough=true captured=false passedTo=nish.chacha20Core#0
+  pointer src: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 246:9 keystream: u32[] (const)
+  local 247:7 done: i32 (let)
+  callee 249:5 chacha20Core -> @nish.chacha20Core
+  local 251:11 take: i32 (const)
+  local 252:14 w: i32 (let)
+  local 253:13 word: u32 (const)
+  local 254:13 at: i32 (const)
+  local 262:18 k: i32 (let)
+function chacha20Poly1305Setup(state: u32[]): u8[] -> @nish.chacha20Poly1305Setup
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish.chacha20XorInto nish_exit nish_write
+  pointer state: size=0 writesThrough=true captured=false passedTo=nish.chacha20XorInto#0
+  stackSites=0 stackLocals=0
+  local 277:9 polyKey: u8[] (const)
+  callee 278:3 chacha20XorInto -> @nish.chacha20XorInto
+function chacha20CounterFits(counter: u32, len: i32): boolean -> @nish.chacha20CounterFits
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 292:9 blocks: i64 (const)
+function chacha20QuarterRound(state: u32[], a: i32, b: i32, c: i32, d: i32): u32[] | null -> @nish.chacha20QuarterRound [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 309:5
+  escaping: a b c d
+  calls: nish.chacha20Rotl nish_exit nish_panic_index nish_write
+  pointer state: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 303:9 n: i32 (const)
+  local 307:9 x: u32[] (const)
+  local 308:12 i: i32 (let)
+  callee 312:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 314:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 316:10 chacha20Rotl -> @nish.chacha20Rotl
+  callee 318:10 chacha20Rotl -> @nish.chacha20Rotl
+function chacha20Block(key: u8[], counter: u32, nonce: u8[]): u8[] | null -> @nish.chacha20Block [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: counter
+  calls: nish.chacha20State nish.chacha20XorInto nish_exit nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
+  pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
+  stackSites=0 stackLocals=0
+  local 331:9 out: u8[] (const)
+  callee 332:3 chacha20XorInto -> @nish.chacha20XorInto
+  callee 332:19 chacha20State -> @nish.chacha20State
+function chacha20(key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[] | null -> @nish.chacha20 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: counter
+  calls: nish.chacha20CounterFits nish.chacha20State nish.chacha20XorInto nish_exit nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
+  pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.chacha20XorInto#1
+  stackSites=0 stackLocals=0
+  local 344:9 len: i32 (const)
+  callee 348:6 chacha20CounterFits -> @nish.chacha20CounterFits
+  local 352:9 out: u8[] (const)
+  callee 353:3 chacha20XorInto -> @nish.chacha20XorInto
+  callee 353:19 chacha20State -> @nish.chacha20State
+function poly1305Le64(buf: u8[], at: i32): u64 -> @nish.poly1305Le64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 359:9 p: u32 (const)
+function poly1305Clamp(key: u8[], r: u64[]): void -> @nish.poly1305Clamp
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 384:3
+  calls: nish.poly1305Le64
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.poly1305Le64#0 nish.poly1305Le64#0
+  pointer r: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 382:9 lo: u64 (const)
+  callee 382:19 poly1305Le64 -> @nish.poly1305Le64
+  local 383:9 hi: u64 (const)
+  callee 383:19 poly1305Le64 -> @nish.poly1305Le64
+function poly1305Block(h: u64[], r: u64[], m: u8[], at: i32, high: u64): void -> @nish.poly1305Block
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 445:3
+  escaping: at
+  calls: nish.poly1305Le64
+  pointer h: size=0 writesThrough=true captured=false
+  pointer r: size=0 writesThrough=false captured=false
+  pointer m: size=0 writesThrough=false captured=false passedTo=nish.poly1305Le64#0 nish.poly1305Le64#0
+  stackSites=0 stackLocals=0
+  local 412:9 lo: u64 (const)
+  callee 412:19 poly1305Le64 -> @nish.poly1305Le64
+  local 413:9 hi: u64 (const)
+  callee 413:19 poly1305Le64 -> @nish.poly1305Le64
+  local 414:9 h0: u64 (const)
+  local 415:9 h1: u64 (const)
+  local 416:9 h2: u64 (const)
+  local 417:9 h3: u64 (const)
+  local 418:9 h4: u64 (const)
+  local 420:9 r0: u64 (const)
+  local 421:9 r1: u64 (const)
+  local 422:9 r2: u64 (const)
+  local 423:9 r3: u64 (const)
+  local 424:9 r4: u64 (const)
+  local 427:9 s1: u64 (const)
+  local 428:9 s2: u64 (const)
+  local 429:9 s3: u64 (const)
+  local 430:9 s4: u64 (const)
+  local 432:7 d0: u64 (let)
+  local 433:7 d1: u64 (let)
+  local 434:7 d2: u64 (let)
+  local 435:7 d3: u64 (let)
+  local 436:7 d4: u64 (let)
+function poly1305Finish(h: u64[], key: u8[], tag: u8[]): void -> @nish.poly1305Finish
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 505:3
+  calls: nish.chacha20Word nish_panic_index
+  pointer h: size=0 writesThrough=false captured=false
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20Word#0 nish.chacha20Word#0 nish.chacha20Word#0 nish.chacha20Word#0
+  pointer tag: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 471:7 h0: u64 (let)
+  local 472:7 h1: u64 (let)
+  local 473:7 h2: u64 (let)
+  local 474:7 h3: u64 (let)
+  local 475:7 h4: u64 (let)
+  local 476:12 pass: i32 (let)
+  local 489:9 g0: u64 (const)
+  local 490:9 g1: u64 (const)
+  local 491:9 g2: u64 (const)
+  local 492:9 g3: u64 (const)
+  local 493:9 g4: u64 (const)
+  local 496:9 keep: u64 (const)
+  local 503:9 word: u64 (const)
+  local 504:7 f: u64 (let)
+  callee 504:51 chacha20Word -> @nish.chacha20Word
+  callee 509:50 chacha20Word -> @nish.chacha20Word
+  callee 514:51 chacha20Word -> @nish.chacha20Word
+  callee 519:50 chacha20Word -> @nish.chacha20Word
+function poly1305Absorb(h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPad: boolean): void -> @nish.poly1305Absorb
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.poly1305Block
+  calls: nish.poly1305Block nish_panic_index nish_panic_overflow
+  pointer h: size=0 writesThrough=true captured=false passedTo=nish.poly1305Block#0 nish.poly1305Block#0 nish.poly1305Block#0
+  pointer r: size=0 writesThrough=false captured=false passedTo=nish.poly1305Block#1 nish.poly1305Block#1 nish.poly1305Block#1
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.poly1305Block#2
+  stackSites=1 stackLocals=1
+  local 534:9 whole: i32 (const)
+  local 535:12 i: i32 (let)
+  callee 536:5 poly1305Block -> @nish.poly1305Block
+  local 538:9 tail: i32 (const)
+  local 540:11 last: u8[] (const)
+  local 541:14 i: i32 (let)
+  callee 545:7 poly1305Block -> @nish.poly1305Block
+  callee 548:7 poly1305Block -> @nish.poly1305Block
+function poly1305(key: u8[], msg: u8[]): u8[] | null -> @nish.poly1305 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.poly1305Clamp
+  calls: nish.poly1305Absorb nish.poly1305Clamp nish.poly1305Finish nish_exit nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.poly1305Clamp#0 nish.poly1305Finish#1
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.poly1305Absorb#2
+  stackSites=2 stackLocals=2
+  local 563:9 h: u64[] (const)
+  local 564:9 r: u64[] (const)
+  callee 565:3 poly1305Clamp -> @nish.poly1305Clamp
+  callee 566:3 poly1305Absorb -> @nish.poly1305Absorb
+  local 567:9 tag: u8[] (const)
+  callee 568:3 poly1305Finish -> @nish.poly1305Finish
+function poly1305KeyGen(key: u8[], nonce: u8[]): u8[] | null -> @nish.poly1305KeyGen [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.chacha20Poly1305Setup
+  calls: nish.chacha20Poly1305Setup nish.chacha20State
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
+  pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
+  stackSites=0 stackLocals=0
+  callee 582:10 chacha20Poly1305Setup -> @nish.chacha20Poly1305Setup
+  callee 582:32 chacha20State -> @nish.chacha20State
+function chacha20Poly1305Tag(polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i32): u8[] -> @nish.chacha20Poly1305Tag
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.poly1305Clamp
+  escaping: at len
+  calls: nish.poly1305Absorb nish.poly1305Block nish.poly1305Clamp nish.poly1305Finish nish_exit nish_write
+  pointer polyKey: size=0 writesThrough=false captured=false passedTo=nish.poly1305Clamp#0 nish.poly1305Finish#1
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.poly1305Absorb#2
+  pointer ct: size=0 writesThrough=false captured=false passedTo=nish.poly1305Absorb#2
+  stackSites=3 stackLocals=3
+  local 591:9 aadLen: i32 (const)
+  local 592:9 h: u64[] (const)
+  local 593:9 r: u64[] (const)
+  callee 594:3 poly1305Clamp -> @nish.poly1305Clamp
+  callee 595:3 poly1305Absorb -> @nish.poly1305Absorb
+  callee 596:3 poly1305Absorb -> @nish.poly1305Absorb
+  local 597:9 lengths: u8[] (const)
+  local 598:12 i: i32 (let)
+  callee 602:3 poly1305Block -> @nish.poly1305Block
+  local 603:9 tag: u8[] (const)
+  callee 604:3 poly1305Finish -> @nish.poly1305Finish
+function chacha20Poly1305TagMatch(tag: u8[], sealed: u8[], at: i32): u32 -> @nish.chacha20Poly1305TagMatch
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer tag: size=0 writesThrough=false captured=false
+  pointer sealed: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 618:9 p: u32 (const)
+  local 619:9 diff: u32 (const)
+function chacha20Poly1305Seal(key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]): u8[] | null -> @nish.chacha20Poly1305Seal [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 665:5
+  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20State nish.chacha20XorInto nish_exit nish_panic_index nish_panic_overflow nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
+  pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#1
+  pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.chacha20XorInto#1
+  stackSites=0 stackLocals=0
+  local 647:9 len: i32 (const)
+  local 650:9 longest: i32 (const)
+  callee 655:6 chacha20CounterFits -> @nish.chacha20CounterFits
+  local 659:9 state: u32[] (const)
+  callee 659:24 chacha20State -> @nish.chacha20State
+  local 660:9 polyKey: u8[] (const)
+  callee 660:25 chacha20Poly1305Setup -> @nish.chacha20Poly1305Setup
+  local 661:9 sealed: u8[] (const)
+  callee 662:3 chacha20XorInto -> @nish.chacha20XorInto
+  local 663:9 tag: u8[] (const)
+  callee 663:21 chacha20Poly1305Tag -> @nish.chacha20Poly1305Tag
+  local 664:12 i: i32 (let)
+function chacha20Poly1305Open(key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.chacha20Poly1305Open [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.chacha20State
+  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish_exit nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
+  pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
+  pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#1
+  pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#2 nish.chacha20Poly1305TagMatch#1 nish.chacha20XorInto#1
+  stackSites=0 stackLocals=0
+  local 680:9 total: i32 (const)
+  local 688:9 len: i32 (const)
+  callee 689:8 chacha20CounterFits -> @nish.chacha20CounterFits
+  local 692:9 state: u32[] (const)
+  callee 692:24 chacha20State -> @nish.chacha20State
+  local 693:9 polyKey: u8[] (const)
+  callee 693:25 chacha20Poly1305Setup -> @nish.chacha20Poly1305Setup
+  local 694:9 tag: u8[] (const)
+  callee 694:21 chacha20Poly1305Tag -> @nish.chacha20Poly1305Tag
+  callee 697:7 chacha20Poly1305TagMatch -> @nish.chacha20Poly1305TagMatch
+  local 700:9 plaintext: u8[] (const)
+  callee 701:3 chacha20XorInto -> @nish.chacha20XorInto
+function chacha20HeaderMask(hpKey: u8[], sample: u8[]): u8[] | null -> @nish.chacha20HeaderMask [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish.chacha20State nish.chacha20Word nish.chacha20XorInto nish_exit nish_write
+  pointer hpKey: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
+  pointer sample: size=0 writesThrough=false captured=false passedTo=nish.chacha20Word#0 nish.chacha20State#2
+  stackSites=0 stackLocals=0
+  local 716:9 mask: u8[] (const)
+  callee 717:3 chacha20XorInto -> @nish.chacha20XorInto
+  callee 717:19 chacha20State -> @nish.chacha20State
+  callee 717:40 chacha20Word -> @nish.chacha20Word
 program bench/awfy/main.ts
 module bench/awfy/main.ts (entry)
 import Bounce from "./bounce" -> struct Bounce
