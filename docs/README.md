@@ -1,6 +1,8 @@
 # Nish documentation
 
-Start with the [README](../README.md) for the tour, then:
+Start with the [README](../README.md) for the tour. To learn to write Nish,
+read the [user guide](guide/index.md); everything else here is reference or
+the compiler's own records:
 
 ## Reference
 
@@ -59,19 +61,48 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp31-ranged-integers.md](wp31-ranged-integers.md) | Landed in 0.13.0. `integer<Lo, Hi>`: the type, the proofs, the host boundary and DWARF. |
 | [wp32-map.md](wp32-map.md) | Landed, one item open. The global `Map` and `Set` written in Nish: the layout prototypes, the decisions, and the measurement against Node. |
 | [wp33-round-trip.md](wp33-round-trip.md) | In progress. TypeScript into Nish and back out: the portability class, the typed-array rows and `nish --fix` built; the runtime split and `--emit ts` next. |
-| [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3 (T1, T2) and QUIC packets and connections (Q1, Q2) built; QUIC Q3–Q4, the HTTP/1.1 and HTTP/2 servers, HTTP/3 and WebTransport next. |
+| [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3, the HTTP/1.1 server and WebSocket, HTTP/2, QUIC, HTTP/3, WebTransport and the relay (A1) built, with the interop job; the key wipes (#430) and the cs side of the relay next. |
 | [wp35-capabilities.md](wp35-capabilities.md) | Landed. The capability report: what every function, module and package can reach, with a witness chain. |
 | [wp36-capability-policy.md](wp36-capability-policy.md) | Landed. Refusing at compile time what `--allow`, `--deny` or the root manifest does not grant, and the bridge to an OS sandbox. |
 | [wp38-simd.md](wp38-simd.md) | In progress. SIMD: what vectorises today and what does not, four ways further (runtime kernels, `nish:simd` vector types, target intrinsics, a CPU level), the baseline-target policy, constant-time code, and the measured bar for each stage. S0's baselines, the runtime kernel and `indexOfAny` built; the `--cpu` level's bar met but the flag unbuilt; the lexer on `indexOfAny` declined for now; `std/json` on the kernel next. |
+| [wp39-http-server.md](wp39-http-server.md) | Proposed. The HTTP server beyond the relay: a TechEmpower entry first (more than one core, a JSON writer, an HTTP date, a Postgres client and the six test types), then a general-purpose server across HTTP/1.1, 2 and 3 (the missing interop, the open timeouts, TLS resumption, AES-NI, QUIC's congestion and MTU work, one handler for every version). |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
 `-2147483648`) have no design note of their own; LANGUAGE.md and
 [CHANGELOG.md](../CHANGELOG.md) describe them.
 
+## Writing a guide page
+
+The [user guide](guide/index.md) is the part of these docs written for people
+who write programs in Nish. A page there follows these rules:
+
+- **The reader writes programs, not the compiler.** Explain what a construct
+  does and how to use it; leave the IR, the checker and the runtime's layout
+  to the reference. No internal vocabulary: stage0, the seed, Nish-0 and work
+  packages do not appear.
+- **Examples are compiled.** A program is a fence marked for compilation —
+  ` ```ts nish:ok `, `nish:ok-body` (wrapped in a `main` body),
+  `nish:err CODE` or `nish:err-body CODE` (must be rejected with that code) —
+  and `node tests/run.js guide` compiles it. Every page but
+  `installation.md` carries at least one once it is more than a stub (its
+  title and one paragraph). A fragment that cannot compile on its own is a
+  plain ` ```ts ` block, and short.
+- **The reference is normative.** Each page links the
+  [LANGUAGE.md](LANGUAGE.md) section that governs it and describes nothing
+  that section does not say; where the two disagree, the guide is wrong.
+- **No links to the compiler's records**: not to `wp*.md`,
+  `MASTER_PLAN.md` or `.claude/`.
+- **Every page has a route.** The site's navigation is
+  [`scalar.config.json`](../scalar.config.json) at the repository root, read
+  by [Scalar Docs](https://scalar.com/products/docs); a new page gets a route
+  there, and `node docs/check-links.mjs` fails on a page no route reaches or a
+  route to a missing file.
+
 ## Tooling for these docs
 
 - `docs/cookbook/regen.sh` rebuilds every IR listing in IR_COOKBOOK.md from
   `docs/cookbook/*.ts`; `--check` fails when the doc is stale.
 - `node docs/check-links.mjs` verifies every relative link and heading
-  anchor in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`.
+  anchor in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`, and that
+  `scalar.config.json`'s routes and the pages under `docs/guide/` match.

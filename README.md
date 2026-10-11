@@ -145,6 +145,10 @@ is in [docs/IR_COOKBOOK.md](docs/IR_COOKBOOK.md).
 
 ## The language
 
+New to Nish? The [user guide](docs/guide/index.md) teaches the language page
+by page, from installing it to threads, with every example compiled by
+`npm test`.
+
 The full reference is [docs/LANGUAGE.md](docs/LANGUAGE.md); every rule
 there cites the test case that proves it. If an **AI** is writing the program —
 or you want the whole language in one pass rather than as a reference to browse
