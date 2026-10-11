@@ -22,7 +22,7 @@ import {
 } from "../../../std/json-tokenizer";
 import { messageInto } from "../../../docs/cookbook/json-tokenizer";
 import { Suite } from "../../../std/testing";
-import { jtBytes, jtCodeName, jtTokens, jtTokensOf, jtVerdict, jtVerdictOf } from "./common";
+import { jtBytes, jtCodeName, jtHex, jtTokens, jtTokensOf, jtVerdict, jtVerdictOf } from "./common";
 
 /** Limits of `depth`, `stringBytes`, `numberBytes` and `totalBytes`. */
 const jtLimits = (depth: i32, stringBytes: i32, numberBytes: i32, totalBytes: i32): JsonLimits => {
@@ -219,6 +219,18 @@ const strings = (t: Suite): void => {
   t.eqStr("TRUNCATED: a high surrogate at the end of the window", jtVerdict('"\\uDBFF'), "TRUNCATED@7");
   t.eqStr("TRUNCATED: a high surrogate and a backslash at the end of the window", jtVerdict('"\\uDBFF\\'), "TRUNCATED@8");
   t.eqStr("a surrogate pair is accepted", jtVerdict('"\\uD834\\uDD1E"'), "END");
+  // Each edge of both halves' ranges, from both sides.
+  t.eqStr("SURROGATE: a high surrogate and U+E000, one past the low range", jtVerdict('"\\uD800\\uE000"'), "SURROGATE@1");
+  t.eqStr("SURROGATE: a lone U+DFFF, the last low surrogate", jtVerdict('"\\uDFFF"'), "SURROGATE@1");
+  t.eqStr("U+D7FF, one below the surrogates, is accepted alone", jtVerdict('"\\uD7FF"'), "END");
+  t.eqStr("U+E000, one above the surrogates, is accepted alone", jtVerdict('"\\uE000"'), "END");
+  t.eqStr(
+    "\\uDBFF\\uDFFF, the last pair, decodes to U+10FFFF",
+    jtHexOfString('"\\uDBFF\\uDFFF"'),
+    "f48fbfbf"
+  );
+  t.eqStr("\\uD7FF decodes to its three bytes", jtHexOfString('"\\uD7FF"'), "ed9fbf");
+  t.eqStr("\\uE000 decodes to its three bytes", jtHexOfString('"\\uE000"'), "ee8080");
   t.eqStr("\\u0000 is accepted", jtVerdict('"\\u0000"'), "END");
 
   // stringInto, stringLength and keyEquals.
@@ -476,7 +488,8 @@ const windows = (t: Suite): void => {
   t.ok("keyEquals inside a window", w.keyEquals("a"));
   w.next();
   t.eqI32("the window ends after its last byte", w.next(), JSON_TOK_END);
-  t.eqStr("a window that stops inside a value", jtVerdictWindow(bytes, 2, 3), "TRUNCATED@5");
+  t.eqStr("a window that stops after a comma", jtVerdictWindow(bytes, 2, 3), "TRUNCATED@5");
+  t.eqStr("a window that stops inside a value", jtVerdictWindow(bytes, 2, 5), "TRUNCATED@7");
   t.eqStr("a window that stops before the closing quote", jtVerdictWindow(jtBytes('"abc"'), 0, 4), "TRUNCATED@4");
   t.eqStr("a window that stops inside a literal", jtVerdictWindow(jtBytes("true"), 0, 3), "TRUNCATED@3");
   t.eqStr("a window that stops inside an escape", jtVerdictWindow(jtBytes('"\\u0041"'), 0, 5), "TRUNCATED@3");
@@ -484,7 +497,20 @@ const windows = (t: Suite): void => {
   t.eqStr("WINDOW: a negative length", jtVerdictWindow(bytes, 0, -1), "WINDOW@0");
   t.eqStr("WINDOW: a window past the end", jtVerdictWindow(bytes, 5, 7), "WINDOW@5");
   t.eqStr("WINDOW: an offset past the end", jtVerdictWindow(bytes, 12, 0), "WINDOW@12");
+  // A length near 2^31: `off + len` would overflow, and the guard must refuse it before adding.
+  t.eqStr("WINDOW: an offset and a length of 2^31 - 1, refused without overflow", jtVerdictWindow(bytes, 5, 2147483647), "WINDOW@5");
+  t.eqStr("WINDOW: a length of 2^31 - 1 from 0", jtVerdictWindow(bytes, 0, 2147483647), "WINDOW@0");
   t.eqStr("an empty window at the end is only truncated", jtVerdictWindow(bytes, 11, 0), "TRUNCATED@11");
+};
+
+/** The decoded bytes, in hex, of the first string in `text`; `none` with none. */
+const jtHexOfString = (text: string): string => {
+  const t = jtAt(text, JSON_TOK_STRING);
+  if (t === null) {
+    return "none";
+  }
+  const out = new Array<u8>(8);
+  return jtHex(out, t.stringInto(out, 0));
 };
 
 /** A copy of `bytes[off, off + len)`. */
