@@ -14319,7 +14319,8 @@ if (!only || "deny_panics_clean".includes(only) || "cookbook".includes(only)) {
 // person copies its examples just as a model copies AI.md's. Its floor is per
 // page rather than a count: every page carries at least one marked example,
 // except a stub (a title and one paragraph, waiting for its content) and
-// `installation.md`, which is about the shell and has no program to show.
+// `getting-started/installation.md`, which is about the shell and has no
+// program to show.
 if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
   const guideDir = path.join(root, "docs", "guide")
   const docPages = [
@@ -14382,7 +14383,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         snippets.length >= 15,
         `${snippets.length} found`
       )
-    } else if (!isStub(text) && path.basename(page) !== "installation.md") {
+    } else if (!isStub(text) && rel !== "docs/guide/getting-started/installation.md") {
       check(`${rel} marks an example for compilation`, snippets.length > 0, "no ```ts nish: fence")
     }
     const prefix = rel.slice(0, -3).replace(/[/-]/g, "_")
