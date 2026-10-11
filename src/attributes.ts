@@ -120,6 +120,8 @@ import {
 } from "./nodes"
 import { Options } from "./options"
 import {
+  isChannelReader,
+  isChannelSend,
   isGuardedAccess,
   isLockMethod,
   isParallelEntry,
@@ -1596,7 +1598,13 @@ class FactCollector {
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.
     if (node.kind === N_FOR_OF) {
       const read = program.nodeCallees[node.id]
-      if (read !== null) {
+      if (read !== null && isChannelReader(read)) {
+        // WP29 P3: a loop over a `Channel` is the emitter's, a receive per pass
+        // (`emitChannelWalk`); the reader it records is Node's and is never called.
+        this.facts.effect = EFFECT_WRITE
+        this.facts.readsMemory = true
+        this.facts.callees.add("nish_channel_receive")
+      } else if (read !== null) {
         for (const sig of walkMethodsOf(read)) {
           this.addUserCallee(sig.name, node)
           this.noteCall(node, sig)
@@ -2239,7 +2247,9 @@ const collectFacts = (
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)
-  if (memory !== null) {
+  // WP29 P3: what a channel's `send` allocates in its source body is Node's
+  // (`markChannelSend`), so its escape analysis is not this instance's.
+  if (memory !== null && !isChannelSend(sig)) {
     facts.stackSites = memory.stackSites
     facts.stackLocals = memory.stackLocals
     facts.stackParams = memory.stackParams
@@ -2280,6 +2290,12 @@ const collectFacts = (
       )
     }
     i = i + 1
+  }
+
+  // WP29 P3: a channel's `send`, whose body the emitter writes.
+  if (isChannelSend(sig)) {
+    markChannelSend(facts)
+    return facts
   }
 
   // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
@@ -2468,6 +2484,29 @@ const markLock = (facts: FunctionFacts): void => {
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.callees.add("nish_mutex_wait")
+}
+
+/**
+ * WP29 P3: a `Channel`'s `send`. The source body is Node's, a `push` onto the
+ * channel's queue, and the emitter writes the real one, which widens the value
+ * into a slot and hands it to `nish_channel_send` with the address of the
+ * channel's `state` word (`src/emit-parallel.ts`). So nothing is read off the
+ * source: the instance allocates nothing, keeps nothing and answers nothing;
+ * it writes through `this`, whose word the runtime may set; it calls the
+ * runtime, which takes the channel's lock and so is not `willreturn`. The
+ * write is not a shared one: a send is what R6 admits in a task beside a
+ * guarded store.
+ */
+const markChannelSend = (facts: FunctionFacts): void => {
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.willReturn = false
+  facts.contained = true
+  facts.returnsScalar = true
+  facts.callees.add("nish_channel_send")
+  if (facts.pointerParams.length > 0) {
+    facts.pointerParams[0].writesThrough = true
+  }
 }
 
 // ---- The fixpoint ------------------------------------------------------------------------

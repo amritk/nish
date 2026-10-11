@@ -100,6 +100,7 @@ import {
 } from "./emit-map"
 import {
   closeBlockScopes,
+  emitChannelSendBody,
   emitLockBody,
   emitLockReleases,
   emitParallelRegion,
@@ -110,7 +111,7 @@ import {
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
-import { isLockMethod } from "./parallel"
+import { isChannelSend, isLockMethod } from "./parallel"
 import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -245,6 +246,8 @@ export class Emitter {
   openScopeArenas: boolean[]
   /** WP29 P3: true for a `using g = m.lock()`, whose entry is the address of its guard's lock word. */
   openScopeLocks: boolean[]
+  /** WP29 P3: for a scope, the `state` word of each channel it seals before it joins; empty for the rest. */
+  openScopeSeals: string[][]
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[]
   slotNames: string[]
@@ -300,6 +303,7 @@ export class Emitter {
     this.openScopeLoops = []
     this.openScopeArenas = []
     this.openScopeLocks = []
+    this.openScopeSeals = []
     this.slotLocals = []
     this.slotNames = []
     this.maybeLocals = []
@@ -460,6 +464,7 @@ export class Emitter {
     this.openScopeLoops = []
     this.openScopeArenas = []
     this.openScopeLocks = []
+    this.openScopeSeals = []
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
@@ -508,6 +513,8 @@ export class Emitter {
       emitWipeBody(this, sig)
     } else if (isLockMethod(sig)) {
       emitLockBody(this, sig) // WP29 P3
+    } else if (isChannelSend(sig)) {
+      emitChannelSendBody(this, sig) // WP29 P3
     } else if (body.kind === N_BLOCK) {
       this.emitBlock(body)
     } else {

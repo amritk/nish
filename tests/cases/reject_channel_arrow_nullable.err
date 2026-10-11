@@ -1,0 +1,1 @@
+A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body

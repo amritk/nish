@@ -1,0 +1,1 @@
+`relay` may both send and receive on `ch`, counted as using every channel it holds because it reaches one through a name the checker cannot follow (bind no other name to what holds a channel): no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return

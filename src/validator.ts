@@ -30,6 +30,7 @@ import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
 import { unwrapParens } from "./emit-util"
+import { isIteratorMethod, isThreadsSource } from "./parallel"
 import {
   FLAG_ASYNC,
   FLAG_ATTRIBUTES,
@@ -340,8 +341,13 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
     case N_FIELD:
     case N_METHOD:
       // A computed name is the member's first child, where its IDENT would be.
+      // WP29 P3: `nish/threads`'s `Channel` declares `[Symbol.iterator]`, the
+      // one computed name it may, for Node's `for...of`; it has no signature
+      // here (`collectMethod`), because the compiler lowers the loop itself.
       if ((node.flags & FLAG_COMPUTED) !== 0) {
-        ctx.error(node.children[0], computedNameForbidden())
+        if (!(isIteratorMethod(node) && isThreadsSource(ctx.program))) {
+          ctx.error(node.children[0], computedNameForbidden())
+        }
         for (let i: i32 = 1; i < node.children.length; i++) {
           visit(ctx, node.children[i], inTypePosition)
         }

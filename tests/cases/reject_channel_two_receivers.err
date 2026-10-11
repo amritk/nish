@@ -1,0 +1,1 @@
+`ch` has a second receiver here: a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join

@@ -30,10 +30,10 @@
 // ever reads it. The trampoline has no `-g` subprogram: it is not in the
 // source, and a function without one may call one that has one.
 
-import { Emitter } from "./emit"
+import { Emitter, LoopTarget } from "./emit"
 import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
-import { IRFunction, IRParam } from "./ir"
+import { IRFunction, IRParam, paramValue } from "./ir"
 import { loadLocal } from "./emit-ops"
 import { isArenaCall, unwrapParens } from "./emit-util"
 import { Node } from "./nodes"
@@ -275,6 +275,8 @@ export const emitSpawnTask = (
     fn.emit(`store ${type} ${value}, ${type}* ${at}`)
     i = i + 1
   }
+  // WP29 P3: every channel the task may send on stays open until it returns.
+  countSenders(emitter, fn, caller, values[0], 1)
   const raw = fn.emitValue(`bitcast ${payloadType}* ${slot} to i8*`)
   const scope = fn.emitValue(`bitcast ${emitter.llvm(caller.paramTypes[0])} %this to i8*`)
   const size = `ptrtoint (${payloadType}* getelementptr (${payloadType}, ${payloadType}* null, i32 1) to i64)`
@@ -283,7 +285,7 @@ export const emitSpawnTask = (
   fn.emit(
     `call void ${emitter.useRuntime("nish_scope_spawn")}(i8* ${scope}, void (i8*)* @${run}, void (i8*)* @${finish}, i8* ${raw}, i64 ${size})`
   )
-  emitter.module.addFunction(taskRun(emitter, run, body, payloadType, types[0], result))
+  emitter.module.addFunction(taskRun(emitter, run, caller, body, payloadType, types[0], result))
   emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result))
 }
 
@@ -325,6 +327,7 @@ const loadPayload = (
 const taskRun = (
   emitter: Emitter,
   name: string,
+  spawn: FunctionSig,
   body: FunctionSig,
   payloadType: string,
   argType: string,
@@ -336,6 +339,7 @@ const taskRun = (
   const r = fn.emitValue(`call ${result} @${body.name}(${argType} ${arg})`)
   const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 3`)
   fn.emit(`store ${result} ${r}, ${result}* ${at}`)
+  countSenders(emitter, fn, spawn, arg, -1) // WP29 P3: it has sent all it will
   fn.emit("ret void")
   return fn
 }
@@ -451,6 +455,29 @@ const openOneScope = (emitter: Emitter, decl: Node): void => {
   emitter.openScopeLoops.push(emitter.loops.length)
   emitter.openScopeArenas.push(arena)
   emitter.openScopeLocks.push(lock)
+  const none: string[] = []
+  emitter.openScopeSeals.push(arena || lock ? none : scopeSeals(emitter, decl))
+}
+
+/**
+ * WP29 P3: the `state` word of every channel the scope declared by `decl`
+ * seals at each exit, read once here: each is a `const` declared before the
+ * `using` (C2), so the value dominates every exit, as the scope's does.
+ */
+const scopeSeals = (emitter: Emitter, decl: Node): string[] => {
+  const seals: string[] = []
+  for (const record of emitter.program.scopeChannels) {
+    if (record.scope === decl) {
+      for (const channel of record.channels) {
+        const local = emitter.program.nodeLocals[channel.id]
+        if (local === null) {
+          process.exit(internalErrorFor("emitter: a channel with no local recorded", emitter.opts.json))
+        }
+        seals.push(channelStateIn(emitter, emitter.fn, local.type, loadLocal(emitter, local)))
+      }
+    }
+  }
+  return seals
 }
 
 /** Close open entry `i`: join a scope's tasks, release an arena to its mark, or give a lock back. */
@@ -460,6 +487,11 @@ const closeScope = (emitter: Emitter, i: i32): void => {
   } else if (emitter.openScopeArenas[i]) {
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${emitter.openScopes[i]})`)
   } else {
+    // WP29 P3: the scope's own count on each of its channels goes first, so a
+    // channel no task may send on is closed before any task waits on it.
+    for (const state of emitter.openScopeSeals[i]) {
+      emitter.fn.emit(`call void ${emitter.useRuntime("nish_channel_count")}(i64* ${state}, i64 -1)`)
+    }
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
   }
 }
@@ -503,6 +535,7 @@ export const closeBlockScopes = (emitter: Emitter, count: i32): void => {
     emitter.openScopeLoops.pop()
     emitter.openScopeArenas.pop()
     emitter.openScopeLocks.pop()
+    emitter.openScopeSeals.pop()
   }
 }
 
@@ -519,3 +552,167 @@ export const emitLockReleases = (emitter: Emitter): void => {
 
 /** Whether a lock is held where the emitter stands, which keeps a `return`'s call from being a tail call. */
 export const holdsLock = (emitter: Emitter): boolean => emitter.openScopeLocks.indexOf(true) >= 0
+
+// ---- WP29 P3: a channel of scalars ---------------------------------------------------
+//
+// A `Channel<T>` object holds an `i64` word, `state`, that the runtime owns
+// (runtime/runtime-parallel.c), and every operation passes the word's address.
+// A value travels as one `i64` slot, widened from `T` and narrowed back:
+//
+//   ch.send(x)          call void @nish_channel_send(i64* <state>, i64 <x, widened>)
+//   for (const x of ch) chan.recv:  %got = call i32 @nish_channel_receive(i64* <state>, i64* %chan.slot)
+//                                   br i1 (%got != 0), label %chan.body, label %chan.end
+//                       chan.body:  x = <the slot, narrowed>; the body; br label %chan.recv
+//
+// What closes a channel is a count the runtime keeps, which starts at one for
+// the scope: a `spawn` whose task may send on it adds one before the task is
+// filed, the task's `$run` takes it away once the task has returned, and the
+// scope's own one is taken away at every exit of its block, just before the
+// join — whether or not the join finds a task to run, so a channel whose only
+// sender was never spawned closes too. Which tasks may send, and which
+// channels a scope seals, the checker records (`Instantiation.channelSenders`,
+// `CheckedProgram.scopeChannels`).
+
+/** The address of the `state` word of the `Channel` `receiver` points at, emitted into `fn`. */
+const channelStateIn = (emitter: Emitter, fn: IRFunction, type: i32, receiver: string): string => {
+  const info = structInfoOf(emitter, type)
+  const field = info.field("state")
+  if (field === null) {
+    process.exit(internalErrorFor(`emitter: \`${info.name}\` has no \`state\``, emitter.opts.json))
+  }
+  const ty = `%struct.${info.name}`
+  return fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${field.index}`)
+}
+
+/**
+ * The `state` word of the channel at `path` from a task's argument `arg` of
+ * type `type`: the argument itself for `""`, or its field `path`, read here.
+ */
+const senderStateIn = (emitter: Emitter, fn: IRFunction, type: i32, arg: string, path: string): string => {
+  if (path.length === 0) {
+    return channelStateIn(emitter, fn, type, arg)
+  }
+  const info = structInfoOf(emitter, type)
+  const field = info.field(path)
+  if (field === null) {
+    process.exit(internalErrorFor(`emitter: \`${info.name}\` has no \`${path}\``, emitter.opts.json))
+  }
+  const ty = `%struct.${info.name}`
+  const fieldType = emitter.llvm(field.type)
+  const at = fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${arg}, i32 0, i32 ${field.index}`)
+  const channel = fn.emitValue(`load ${fieldType}, ${fieldType}* ${at}`)
+  return channelStateIn(emitter, fn, field.type, channel)
+}
+
+/** `count` added to the live count of every channel the task given `arg` may send on, emitted into `fn`. */
+const countSenders = (
+  emitter: Emitter,
+  fn: IRFunction,
+  spawn: FunctionSig,
+  arg: string,
+  count: i32
+): void => {
+  const instance = spawn.instance
+  if (instance === null || instance.typeArgs.length === 0) {
+    return
+  }
+  for (const path of instance.channelSenders) {
+    const state = senderStateIn(emitter, fn, instance.typeArgs[0], arg, path)
+    fn.emit(`call void ${emitter.useRuntime("nish_channel_count")}(i64* ${state}, i64 ${count})`)
+  }
+}
+
+/** A scalar of LLVM type `type` widened into a channel's `i64` slot. */
+const widenToSlot = (fn: IRFunction, type: string, value: string): string => {
+  if (type === "i64") {
+    return value
+  }
+  if (type === "double") {
+    return fn.emitValue(`bitcast double ${value} to i64`)
+  }
+  if (type === "float") {
+    const bits = fn.emitValue(`bitcast float ${value} to i32`)
+    return fn.emitValue(`zext i32 ${bits} to i64`)
+  }
+  return fn.emitValue(`zext ${type} ${value} to i64`)
+}
+
+/** A channel's `i64` slot narrowed back to the scalar of LLVM type `type` it was widened from. */
+const narrowFromSlot = (fn: IRFunction, type: string, raw: string): string => {
+  if (type === "i64") {
+    return raw
+  }
+  if (type === "double") {
+    return fn.emitValue(`bitcast i64 ${raw} to double`)
+  }
+  if (type === "float") {
+    const bits = fn.emitValue(`trunc i64 ${raw} to i32`)
+    return fn.emitValue(`bitcast i32 ${bits} to float`)
+  }
+  return fn.emitValue(`trunc i64 ${raw} to ${type}`)
+}
+
+/** The body of `Channel<T>.send`: the value, widened, onto the runtime's buffer. */
+export const emitChannelSendBody = (emitter: Emitter, sig: FunctionSig): void => {
+  const owner = sig.owner
+  if (owner === null || sig.paramNames.length !== 2) {
+    process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not \`send(x)\``, emitter.opts.json))
+  }
+  const fn = emitter.fn
+  const state = channelStateIn(emitter, fn, owner.type, "%this")
+  const raw = widenToSlot(fn, emitter.llvm(sig.paramTypes[1]), paramValue(sig.paramNames[1]))
+  fn.emit(`call void ${emitter.useRuntime("nish_channel_send")}(i64* ${state}, i64 ${raw})`)
+  fn.emit("ret void")
+}
+
+/**
+ * `for (const x of ch)` over a `Channel`: a receive at the top of every pass,
+ * which waits while the channel is empty and open and ends the loop once it is
+ * closed and drained. `continue` receives again and `break` leaves; nothing is
+ * left to close on either, or on a `return`, because a loop that stops early
+ * leaves the rest where it is.
+ */
+export const emitChannelWalk = (emitter: Emitter, stmt: Node): void => {
+  const decl = stmt.children[0].children[0].children[0]
+  const local = emitter.program.nodeLocals[decl.id]
+  if (local === null) {
+    process.exit(internalErrorFor("emitter: a channel loop with no variable recorded", emitter.opts.json))
+  }
+  const fn = emitter.fn
+  const elem = local.type
+  const ty = emitter.llvm(elem)
+  const recvBlock = fn.newBlock("chan.recv")
+  const bodyBlock = fn.newBlock("chan.body")
+  const endBlock = fn.newBlock("chan.end")
+  const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(elem))
+  emitter.setSlot(local, slot)
+  const debug = emitter.debug
+  if (debug !== null) {
+    debug.declareLocal(fn, local, slot, decl) // `-g`
+  }
+  const raw = fn.emitAlloca("chan.slot", "i64", emitter.opts.optimizeAttributes ? 8 : 0)
+  const iterable = stmt.children[1]
+  const channel = emitter.emitExpression(iterable)
+  const state = channelStateIn(emitter, fn, emitter.program.nodeTypes[unwrapParens(iterable).id], channel)
+  fn.emit(`br label %${recvBlock.label}`)
+
+  fn.placeBlock(recvBlock)
+  const got = fn.emitValue(
+    `call i32 ${emitter.useRuntime("nish_channel_receive")}(i64* ${state}, i64* ${raw})`
+  )
+  const more = fn.emitValue(`icmp ne i32 ${got}, 0`)
+  fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`)
+
+  fn.placeBlock(bodyBlock)
+  const bits = fn.emitValue(`load i64, i64* ${raw}${emitter.align8()}`)
+  const value = narrowFromSlot(fn, ty, bits)
+  fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`)
+  emitter.loops.push(new LoopTarget(endBlock, recvBlock))
+  emitter.emitStatement(stmt.children[2])
+  emitter.loops.pop()
+  if (!fn.currentBlock().terminated()) {
+    fn.emit(`br label %${recvBlock.label}`)
+  }
+
+  fn.placeBlock(endBlock)
+}
