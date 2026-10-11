@@ -185,9 +185,9 @@ one, which is the argument P2 used for `using`.
 
 | | Rule | Why |
 | --- | --- | --- |
-| R1 | `new Mutex<T>(init)` takes a fresh value: `init` is a `new` expression or a literal. The value inside is reachable only through a guard, and `Mutex` has no public `value`. | An alias kept outside the lock is an unguarded path to the data, which is the thing Rust's design removes. |
+| R1 | `new Mutex<T>(init)` takes a value that is fresh all the way down: `init` is a `new` expression or a literal whose every argument or element is a scalar or is itself fresh by this rule. So `new Hist(bins)` and `[row]`, with `bins` or `row` a named value, are refused. The value inside is reachable only through a guard, and `Mutex` has no public `value`. | An alias kept outside the lock is an unguarded path to the data, which is the thing Rust's design removes. A fresh outer value with a named inner one would keep that alias one level down. |
 | R2 | `m.lock()` is only ever the initialiser of a `using` declaration, the third disposable beside `scope()` and `arena()`. The release is emitted at every exit of the block, as the join is. | A guard bound any other way is one nobody releases. |
-| R3 | A guard is used only as `g.value`, and `g.value` only as the base of a member read, a member store, an element read or an element store. A guard is never bound, passed, returned, stored or captured. | Nothing derived from the guard outlives the block that holds the lock. |
+| R3 | A guard is used only as `g.value`, and `g.value` only as the base of a chain of member and element accesses. A chain that is read yields a scalar, or is itself the base of a further access or a store: `g.value.bins[i]` is a read, and `const b = g.value.bins` is refused. Neither the guard nor anything a chain reaches is bound, passed, returned, stored or captured. | Nothing derived from the guard outlives the block that holds the lock. A bound `b` would be guarded data read after the release, or by a task while another writes it under the guard: a race, since R6 restricts only a task's writes. |
 | R4 | Every store through a guard stores a scalar (a number, a `boolean` or an enum), into a field or into an element of an array that already exists. No method is called through `g.value`, so there is no `push`. | A task's arena is freed at the join (§7). A pointer into it stored in the parent's data would dangle, and a `push` can reallocate the array into that arena. |
 | R5 | Inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`. | One lock is held at a time, and nothing is waited on while it is held. So **a P3 program cannot deadlock**, by construction, with no lock-order analysis. |
 | R6 | A task may write shared memory only through a guard. P2's rule is otherwise unchanged. | The lock is the one admitted shared write, which answers §11's question of how P3 fits P2's rule. |
@@ -248,7 +248,7 @@ decisions:
 | C1 | `T` is a scalar: a number, a `boolean` or an enum. | A sender's arena is freed at the join (§7), so a non-scalar element would be a pointer into it. Non-scalars wait for copy-at-join. |
 | C2 | `new Channel<T>()` is made by the parent, and reaches a task as R8 says a `Mutex` does: as the argument, or as a field of a class the argument is. It is never a destination. | C5 and C6 are computed from that reachability. |
 | C3 | A channel is unbounded: `ch.send(x)` never blocks. | A bounded channel can block a sender under Node, where nothing else is running to drain it. |
-| C4 | There is no `close()`. A channel closes when every task of the scope that may send on it has returned. The parent may also send, before the scope's first `spawn`. "May send" is the call graph from the task's entry reaching `send` on a channel reachable from its argument, so an over-count only closes the channel later. | Go's "who closes it" question, removed: nobody can close a channel too early, or twice. |
+| C4 | A channel is reachable from the tasks of exactly one scope. The parent may send only before that scope's first `spawn`, and after the join it may only receive. There is no `close()`: a channel closes when every task of the scope that may send on it has returned. "May send" is the call graph from the task's entry reaching `send` on a channel reachable from its argument, so an over-count only closes the channel later. | Go's "who closes it" question, removed: nobody can close a channel too early, or twice. One scope is what makes "every sender has returned" a single moment, so no send can arrive after it. |
 | C5 | Receiving is `for (const x of ch)`, which ends when the channel is closed and drained. Inside a scope's block the parent never receives. After the join it may, and the loop drains what is left. | A receive is the one wait, and this keeps the parent's only wait the join. |
 | C6 | Every task that may send on a channel is spawned before every task that may receive on it, and no task both sends and receives on one channel. | Under Node a task runs at its spawn, so a receiver spawned first would wait forever. The native runtime runs a task it could not start on a thread in spawn order too (§4.3), so the rule matters there as well. The same order makes the sender-to-receiver graph acyclic, so **channels cannot deadlock** either. |
 | C7 | There is no receive inside a guard's block, which is R5's "nothing is waited on while a lock is held". A `send` there is allowed, since it never waits. | It keeps the no-deadlock argument whole where locks and channels meet. |
@@ -433,25 +433,6 @@ file at commit `c3529665`.
 - **Whether the partitioner belongs in the runtime or in emitted IR.** A
   partition loop is code the optimiser would like to see, and nobody has costed
   the move.
-- **Whether R3 covers what a read through a guard answers.** R3 holds `g.value`
-  to the base of a read or a store, but a member read through it can answer an
-  array: `const b = g.value.bins` binds part of the guarded data, and nothing
-  in R3 stops `b` being read after the block releases the lock, or by a task
-  while another writes `bins` under the guard. R6 restricts only a task's
-  writes, and P2 lets a task read anything its argument reaches, so that read
-  is a race. The narrow fix is that a read through a guard answers a scalar
-  unless it is itself the base of another read or store. It is open until the
-  build decides, and this note records it rather than changing R3.
-- **Whether R1's "fresh" is transitive.** `new Mutex<Hist>(new Hist(bins))` and
-  `new Mutex<i32[][]>([row])` meet R1 as written, but `bins` and `row` stay
-  reachable outside the lock, which is the unguarded path R1 exists to remove.
-  A `new` whose arguments, and a literal whose elements, are each scalars or
-  fresh themselves would close it.
-- **What a channel shared by two scopes means.** C4 closes a channel when the
-  senders of "the scope" have returned, and lets the parent send only before
-  that scope's first `spawn`. A channel reachable from tasks of two scopes, or
-  a parent's send after the join, is not decided. Refusing both is the narrow
-  answer.
 - **Whether R4 widens to strings.** A string stored through a guard is a pointer
   into the task's arena. Once copy-at-join (§7) exists, the store can copy into
   the parent's arena instead.
