@@ -72,7 +72,7 @@ it is ordinary Nish that the compiler recognises.
 ### 4.0 Why an import rather than a global like `Arena`
 
 `Mutex<T>` and `Channel<T>` are constructible generic types. As globals they
-would put `Mutex`, `Guard`, `Channel` and `ThreadScope` into every program's
+would put `Mutex`, `MutexGuard`, `Channel` and `ThreadScope` into every program's
 namespace. The import line also shows a reader where threads are used. A
 program that imports nothing from `nish/threads` is byte-identical to one built
 before the module existed.
@@ -153,21 +153,117 @@ TypeScript reader already knows what it means. Decisions taken in the build:
 ### 4.3 Stage P3 — a lock that owns its data
 
 ```ts
-const hits = new Mutex<Counter>(new Counter());
+import { Mutex, scope } from "nish/threads";
+
+class Hist { bins: i32[] = [0, 0, 0, 0, 0, 0, 0, 0]; }
+// `Shard` is a class with two fields: `xs: i32[]` and `hist: Mutex<Hist>`.
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    using g = s.hist.lock();
+    g.value.bins[x & 7] = g.value.bins[x & 7] + 1;
+  }
+  return 0;
+};
+
+const hist = new Mutex<Hist>(new Hist());
 {
-  using g = hits.lock();
-  g.value.n = g.value.n + 1;
+  using s = scope();
+  s.spawn(binShard, new Shard(xs0, hist), done, 0);
+  s.spawn(binShard, new Shard(xs1, hist), done, 1);
 }
 ```
 
-Rust's design, unchanged. The reason to copy it rather than ship a bare
+**Status: decided, and being built.** Rust's design, narrowed until no borrow
+checker is needed. The reason to copy it rather than ship a bare
 `lock()`/`unlock()` pair is that a bare pair leaves an unguarded path to the
-data, and this design does not. The only way to name the `Counter` is through
-a guard, and the block releases the guard. `using` is used again, for the same
-three reasons as in §4.2.
+data, and this design does not. The only way to name the `Hist` is through a
+guard, and the block releases the guard. `using` is used again, for the same
+three reasons as in §4.2. Every rule below is narrow on purpose: a narrow rule
+can be widened later without a break, and a wide one can only be narrowed by
+one, which is the argument P2 used for `using`.
 
-`Channel<T>` belongs in this stage. It is the one piece that needs design work
-rather than transcription; see §9 and §11.
+| | Rule | Why |
+| --- | --- | --- |
+| R1 | `new Mutex<T>(init)` takes a fresh value: `init` is a `new` expression or a literal. The value inside is reachable only through a guard, and `Mutex` has no public `value`. | An alias kept outside the lock is an unguarded path to the data, which is the thing Rust's design removes. |
+| R2 | `m.lock()` is only ever the initialiser of a `using` declaration, the third disposable beside `scope()` and `arena()`. The release is emitted at every exit of the block, as the join is. | A guard bound any other way is one nobody releases. |
+| R3 | A guard is used only as `g.value`, and `g.value` only as the base of a member read, a member store, an element read or an element store. A guard is never bound, passed, returned, stored or captured. | Nothing derived from the guard outlives the block that holds the lock. |
+| R4 | Every store through a guard stores a scalar (a number, a `boolean` or an enum), into a field or into an element of an array that already exists. No method is called through `g.value`, so there is no `push`. | A task's arena is freed at the join (§7). A pointer into it stored in the parent's data would dangle, and a `push` can reallocate the array into that arena. |
+| R5 | Inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`. | One lock is held at a time, and nothing is waited on while it is held. So **a P3 program cannot deadlock**, by construction, with no lock-order analysis. |
+| R6 | A task may write shared memory only through a guard. P2's rule is otherwise unchanged. | The lock is the one admitted shared write, which answers §11's question of how P3 fits P2's rule. |
+| R7 | Between a scope's first `spawn` and the end of its block, the parent does not lock a mutex that any of that scope's tasks can reach. After the join it may. | This is P2's rule that the parent "neither reads a destination nor writes memory a task may read", extended to the lock. Natively the tasks run at the join and under Node at the spawn, so a parent's guarded read or write there would see a different state in each. |
+| R8 | A `Mutex` reaches a task as the task's argument, or as a field of a class the argument is. It is never a destination. | This is how a task names shared state at all, and it keeps the reachability that R7 needs computable. |
+
+**What a guarded program means.** The tasks' critical sections run one at a
+time, in some order. Natively the order is the scheduler's. Under Node each
+task runs to its end at its `spawn` ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)),
+so the order is spawn order, and spawn order is one of the native orders. The
+native runtime uses that order too for any task it could not start on a thread
+of its own: it runs those on the joining thread, in spawn order
+(`nish_scope_join`).
+So a program whose guarded updates commute (a sum, a count, a min, a histogram)
+prints the same thing both ways. A program whose updates do not commute is its
+author's obligation, the same position `parallelReduce` takes on a named
+function's associativity (§11). The checker does not try to prove
+commutativity.
+
+Under Node the guard's `[Symbol.dispose]` does nothing, because only one task
+runs at a time and no lock is ever contended. `lock()` answers a guard over the
+value, and the program reads as the sequential one it is.
+
+### 4.4 Stage P3 — channels of scalars
+
+```ts
+import { Channel, scope } from "nish/threads";
+
+// `Pipe` is a class with two fields: `ch: Channel<i32>` and `n: i32`.
+const produce = (p: Pipe): i32 => {
+  for (let i: i32 = 1; i <= p.n; i++) {
+    p.ch.send(i);
+  }
+  return 0;
+};
+const consume = (p: Pipe): i32 => {
+  let sum: i32 = 0;
+  for (const x of p.ch) {
+    sum = sum + x;
+  }
+  return sum;
+};
+
+const ch = new Channel<i32>();
+{
+  using s = scope();
+  s.spawn(produce, new Pipe(ch, 100), done, 0); // every sender first
+  s.spawn(consume, new Pipe(ch, 0), sums, 0);   // then every receiver
+}
+```
+
+**Status: decided, and being built** after the lock. `Channel<T>` was the one
+piece of P3 that needed design rather than transcription, and these are the
+decisions:
+
+| | Rule | Why |
+| --- | --- | --- |
+| C1 | `T` is a scalar: a number, a `boolean` or an enum. | A sender's arena is freed at the join (§7), so a non-scalar element would be a pointer into it. Non-scalars wait for copy-at-join. |
+| C2 | `new Channel<T>()` is made by the parent, and reaches a task as R8 says a `Mutex` does: as the argument, or as a field of a class the argument is. It is never a destination. | C5 and C6 are computed from that reachability. |
+| C3 | A channel is unbounded: `ch.send(x)` never blocks. | A bounded channel can block a sender under Node, where nothing else is running to drain it. |
+| C4 | There is no `close()`. A channel closes when every task of the scope that may send on it has returned. The parent may also send, before the scope's first `spawn`. "May send" is the call graph from the task's entry reaching `send` on a channel reachable from its argument, so an over-count only closes the channel later. | Go's "who closes it" question, removed: nobody can close a channel too early, or twice. |
+| C5 | Receiving is `for (const x of ch)`, which ends when the channel is closed and drained. Inside a scope's block the parent never receives. After the join it may, and the loop drains what is left. | A receive is the one wait, and this keeps the parent's only wait the join. |
+| C6 | Every task that may send on a channel is spawned before every task that may receive on it, and no task both sends and receives on one channel. | Under Node a task runs at its spawn, so a receiver spawned first would wait forever. The native runtime runs a task it could not start on a thread in spawn order too (§4.3), so the rule matters there as well. The same order makes the sender-to-receiver graph acyclic, so **channels cannot deadlock** either. |
+| C7 | There is no receive inside a guard's block, which is R5's "nothing is waited on while a lock is held". A `send` there is allowed, since it never waits. | It keeps the no-deadlock argument whole where locks and channels meet. |
+
+**What a channel program means.** A receiver sees every value sent, and each
+sender's values in its send order. How two senders' values interleave is the
+scheduler's natively, and spawn order under Node. A receiver whose answer
+depends on that interleaving is its author's obligation, as for the lock.
+
+The buffer lives outside every arena, because the senders' arenas are freed at
+the join. It is given back when a receiving loop drains a closed channel. A
+channel that is never drained keeps its remainder until the program exits,
+which LANGUAGE.md states. Under Node the channel is an array queue: `send`
+pushes and the loop walks it, which C6 makes correct, because every sender has
+already run. `select` stays declined (§9).
 
 ---
 
@@ -328,20 +424,47 @@ export declare class AtomicI32 {
 }
 ```
 
-The full appendix, including `parallelFor` and the typechecked program, is this
+P3 names the guard `MutexGuard<T>` (§4.0) and adds `Channel<T>` (§4.4). The
+full appendix, including `parallelFor` and the typechecked program, is this
 file at commit `c3529665`.
 
 ## 11. Open
 
-- **How P3 fits P2's rule.** A task is held to P1's no-shared-write rule (§4.2),
-  and taking a lock and writing through its guard is a shared write. P3 has to
-  decide how a guard's write is admitted, and `using` has to take a guard as a
-  third disposable beside `scope()` and `arena()`.
-- **What a `Channel<T>` of a non-scalar costs.** This is §7's copy-at-join
-  question, and channels and non-scalar results should be designed together.
 - **Whether the partitioner belongs in the runtime or in emitted IR.** A
   partition loop is code the optimiser would like to see, and nobody has costed
   the move.
+- **Whether R3 covers what a read through a guard answers.** R3 holds `g.value`
+  to the base of a read or a store, but a member read through it can answer an
+  array: `const b = g.value.bins` binds part of the guarded data, and nothing
+  in R3 stops `b` being read after the block releases the lock, or by a task
+  while another writes `bins` under the guard. R6 restricts only a task's
+  writes, and P2 lets a task read anything its argument reaches, so that read
+  is a race. The narrow fix is that a read through a guard answers a scalar
+  unless it is itself the base of another read or store. It is open until the
+  build decides, and this note records it rather than changing R3.
+- **Whether R1's "fresh" is transitive.** `new Mutex<Hist>(new Hist(bins))` and
+  `new Mutex<i32[][]>([row])` meet R1 as written, but `bins` and `row` stay
+  reachable outside the lock, which is the unguarded path R1 exists to remove.
+  A `new` whose arguments, and a literal whose elements, are each scalars or
+  fresh themselves would close it.
+- **What a channel shared by two scopes means.** C4 closes a channel when the
+  senders of "the scope" have returned, and lets the parent send only before
+  that scope's first `spawn`. A channel reachable from tasks of two scopes, or
+  a parent's send after the join, is not decided. Refusing both is the narrow
+  answer.
+- **Whether R4 widens to strings.** A string stored through a guard is a pointer
+  into the task's arena. Once copy-at-join (§7) exists, the store can copy into
+  the parent's arena instead.
+- **Whether a guard may be passed to a function that provably does not keep
+  it.** R3 refuses every call. The escape analysis (`src/escape.ts`) could
+  admit a callee that only reads and stores through its parameter.
+- ~~How P3 fits P2's rule.~~ **Closed by P3's design (§4.3).** A task may write
+  shared memory only through a guard (R6), one lock is held at a time and
+  nothing is waited on while it is held (R5), and `using` takes `m.lock()` as
+  its third disposable (R2).
+- ~~What a `Channel<T>` of a non-scalar costs.~~ **Closed for now by C1
+  (§4.4).** A channel carries scalars. Non-scalars arrive with copy-at-join
+  (§7), designed together with non-scalar results.
 - ~~Identity or initial value for `parallelReduce`.~~ **Closed by P1: an
   identity.** `src` is split into `min(64, ceil(n / 2^20))` blocks. Each block
   is folded from the identity, and the block results are combined left to
