@@ -38,6 +38,11 @@ exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
 ported or adapted from elsewhere keeps its upstream notice and is listed in
 `THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
 
+**Read a check's exit status, never its piped tail.** `npm run lint | tail`
+reports success when lint fails: #557's shadowed variable passed a local lint
+read that way and then turned CI red. Run the command bare, or check `$?` (or
+`PIPESTATUS`) before calling it clean.
+
 **A rule that lets a value outlive its scope pins what it leaves out.** An
 escape-analysis rule that lets a value travel with a container says which
 element types it covers, and pins the excluded ones with a negative golden run
@@ -91,6 +96,10 @@ and each audited area keeps its record under
 [`docs/security/`](docs/security/README.md). A record states the commit its
 `file:line` anchors are at; a row rewritten after that base names the commit
 its own anchors are at, rather than moving them silently (#529, CG-5).
+A record's Tests list names every check it cites by its exact `check(...)`
+string, templated names as templates, so a grep from the record finds the
+test; grep each one against `tests/run.js` before pushing (#557, rounds 2 and
+4).
 
 **Secret material in `std/crypto` is a `Secret` and is wiped.** `nish:secret`
 (docs/LANGUAGE.md, "Secrets") is the primitive: a function that holds a
@@ -101,6 +110,13 @@ intermediate before it returns — a volatile store `tests/run.js` pins under
 scalar in a register, an immutable string) is recorded in its area's record,
 as ECC-2 and X509-7 do. `std/` may use `nish:secret` now; `src/` only from the
 release that ships it (the rolling freeze).
+
+**A cache entry's `key`, written last, is its only completeness signal.** A
+hit trusts the stored key alone, equal byte for byte to the computed one; a
+missing or mismatched key is a miss and the entry is rebuilt. Files removed by
+hand from an entry whose key is intact are out of scope for the run cache and
+the runtime cache alike (CLI-5, CLI-11), so a review need not raise them:
+#557's reviewers did in all five rounds, and each was refuted.
 
 ## Git & PR Guidelines
 
