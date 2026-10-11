@@ -87,9 +87,12 @@ PASS  UTF8: C0, an overlong lead
 PASS  UTF8: C1, an overlong lead
 PASS  UTF8: a two-byte lead and no continuation
 PASS  UTF8: E0 80, an overlong three-byte form
+PASS  UTF8: E0 9F BF, the last overlong three-byte form
 PASS  UTF8: ED A0, a surrogate
 PASS  UTF8: a three-byte form whose third byte is not a continuation
 PASS  UTF8: F0 80, an overlong four-byte form
+PASS  UTF8: F0 8F BF BF, the last overlong four-byte form
+PASS  UTF8: a four-byte form whose fourth byte is not a continuation
 PASS  UTF8: F4 90, past U+10FFFF
 PASS  UTF8: F5, never a lead
 PASS  UTF8: FF, never a byte
@@ -126,7 +129,11 @@ PASS  keyEquals: a byte that differs outside an escape
 PASS  a string of raw UTF-8
 PASS  stringLength of raw UTF-8 counts its bytes
 PASS  keyEquals on raw UTF-8
-PASS  stringInto of an empty string
+PASS  stringLength of an empty string
+PASS  stringInto of an empty string writes nothing and answers 0
+PASS  ...leaving out as it was
+PASS  stringInto of an empty string into an empty array
+PASS  stringInto of an empty string at the end of an array
 PASS  keyEquals: the same key
 PASS  keyEquals: a prefix is not the key
 PASS  keyEquals: a longer name is not the key
@@ -295,4 +302,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 297 passed, 0 failed, 0 skipped
+std/json-tokenizer: 304 passed, 0 failed, 0 skipped

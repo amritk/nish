@@ -46,7 +46,7 @@
  * a high one: a lone surrogate escape is an error. RFC 8259 allows one, but it
  * names no Unicode character, decodes to no valid UTF-8, and is what a peer
  * smuggles past a check done on the decoded bytes, so this module takes the
- * stricter reading (`docs/security/json.md`, JSON-5). Nothing is decoded until
+ * stricter reading (`docs/security/json.md`, "Lone surrogates"). Nothing is decoded until
  * the caller asks: `stringInto` writes the decoded bytes of the current key
  * or string into the caller's array, and `keyEquals` compares them with a
  * string without writing them anywhere.
@@ -61,7 +61,7 @@
  *
  * **Duplicate keys are tokens.** `{"a":1,"a":2}` is two keys; which one wins,
  * or whether a duplicate is an error, is the decision of whatever reads the
- * tokens (`docs/security/json.md`, JSON-6).
+ * tokens (`docs/security/json.md`, JSON-3).
  *
  * **The limits** are `JsonLimits`: nesting depth, bytes in one string, bytes
  * in one number and bytes in the whole window. Each has its own error code and
