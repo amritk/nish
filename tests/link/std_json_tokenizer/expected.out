@@ -118,6 +118,12 @@ PASS  U+D7FF, one below the surrogates, is accepted alone
 PASS  U+E000, one above the surrogates, is accepted alone
 PASS  \uDBFF\uDFFF, the last pair, decodes to U+10FFFF
 PASS  \uD7FF decodes to its three bytes
+PASS  \u007F decodes to one byte
+PASS  \u0080 decodes to two bytes
+PASS  \u07FF decodes to two bytes
+PASS  \u0800 decodes to three bytes
+PASS  \uFFFF decodes to three bytes
+PASS  \uD800\uDC00, the first pair, decodes to U+10000's four bytes
 PASS  \uE000 decodes to its three bytes
 PASS  \u0000 is accepted
 PASS  stringLength: the short escapes decode to one byte each
@@ -191,6 +197,7 @@ PASS  numberF64(0.1), the fast path's divide
 PASS  numberF64(1e22), the largest exact power
 PASS  numberF64(1e23), parseFloat's path
 PASS  numberF64(1e-23), parseFloat's path
+PASS  numberF64 of 17 significant digits goes to parseFloat
 PASS  numberF64 of 16 significant digits goes to parseFloat
 PASS  numberF64 of 15 significant digits after leading zeros
 PASS  numberF64(123456789012345678)
@@ -313,4 +320,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 315 passed, 0 failed, 0 skipped
+std/json-tokenizer: 322 passed, 0 failed, 0 skipped

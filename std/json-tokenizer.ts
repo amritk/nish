@@ -923,9 +923,12 @@ export class JsonTokenizer {
   /**
    * Whether the current key or string, decoded, is exactly `name`'s bytes;
    * `false` when the token is neither. Nothing is allocated or written.
-   * `name.length` and `charCodeAt` are bytes natively; under Node they are
-   * UTF-16 code units, so a non-ASCII name matches only natively, the bytes
-   * against code units divergence `docs/wp33-round-trip.md` §3.2 records.
+   * `name.length` and `charCodeAt` are bytes natively. Under Node they are
+   * UTF-16 code units, compared one by one against the decoded UTF-8 bytes:
+   * an ASCII name answers the same both ways, a genuine non-ASCII name does
+   * not match there, and a name whose code units 0x80 to 0xFF spell those
+   * bytes does (`"Ã©"` matches a key `"é"`). That is the bytes against code
+   * units divergence `docs/wp33-round-trip.md` §3.2 records.
    */
   keyEquals(name: string): boolean {
     const n: i32 = toI32(name.length)

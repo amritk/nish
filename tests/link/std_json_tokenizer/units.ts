@@ -230,6 +230,13 @@ const strings = (t: Suite): void => {
     "f48fbfbf"
   );
   t.eqStr("\\uD7FF decodes to its three bytes", jtHexOfString('"\\uD7FF"'), "ed9fbf");
+  // The \u width boundaries, on both sides, and the low-surrogate floor.
+  t.eqStr("\\u007F decodes to one byte", jtHexOfString('"\\u007F"'), "7f");
+  t.eqStr("\\u0080 decodes to two bytes", jtHexOfString('"\\u0080"'), "c280");
+  t.eqStr("\\u07FF decodes to two bytes", jtHexOfString('"\\u07FF"'), "dfbf");
+  t.eqStr("\\u0800 decodes to three bytes", jtHexOfString('"\\u0800"'), "e0a080");
+  t.eqStr("\\uFFFF decodes to three bytes", jtHexOfString('"\\uFFFF"'), "efbfbf");
+  t.eqStr("\\uD800\\uDC00, the first pair, decodes to U+10000's four bytes", jtHexOfString('"\\uD800\\uDC00"'), "f0908080");
   t.eqStr("\\uE000 decodes to its three bytes", jtHexOfString('"\\uE000"'), "ee8080");
   t.eqStr("\\u0000 is accepted", jtVerdict('"\\u0000"'), "END");
 
@@ -372,7 +379,14 @@ const numbers = (t: Suite): void => {
   t.eqStr("numberF64(1e22), the largest exact power", `${jtF64OfText("1e22")}`, "1e+22");
   t.eqStr("numberF64(1e23), parseFloat's path", `${jtF64OfText("1e23")}`, "1e+23");
   t.eqStr("numberF64(1e-23), parseFloat's path", `${jtF64OfText("1e-23")}`, "1e-23");
-  t.eqStr("numberF64 of 16 significant digits goes to parseFloat", `${jtF64OfText("1234567890123456.7")}`, "1234567890123456.8");
+  t.eqStr("numberF64 of 17 significant digits goes to parseFloat", `${jtF64OfText("1234567890123456.7")}`, "1234567890123456.8");
+  // 16 digits are one too many for the fast path: 9007199254740993 rounds to
+  // ...992 as a double, and ten times that is not the nearest double to the text.
+  t.eqStr(
+    "numberF64 of 16 significant digits goes to parseFloat",
+    `${jtF64OfText("9007199254740993e1")}`,
+    "90071992547409940"
+  );
   t.eqStr("numberF64 of 15 significant digits after leading zeros", `${jtF64OfText("0.000123456789012345")}`, "0.000123456789012345");
   t.eqStr("numberF64(123456789012345678)", `${jtF64OfText("123456789012345678")}`, "123456789012345680");
   t.eqI64("numberF64(2.2250738585072011e-308), the largest subnormal", jtF64Bits("2.2250738585072011e-308"), (toI64(1) << 52) - 1);
