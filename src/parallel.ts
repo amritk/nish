@@ -64,6 +64,8 @@ import {
   N_CALL,
   N_CONDITIONAL,
   N_EXPR_STMT,
+  N_CLASS,
+  N_FIELD,
   FLAG_COMPUTED,
   FLAG_CONST,
   N_INDEX,
@@ -95,6 +97,7 @@ import {
 } from "./nodes"
 import {
   CheckedProgram,
+  FieldInfo,
   FunctionSig,
   Instantiation,
   PAR_CHUNK,
@@ -970,6 +973,9 @@ export const scopeFindings = (
   }
   // No node has type -2, so without the module only the `using` rule applies.
   const scopeType = loaded ? table.structOf(THREAD_SCOPE) : -2
+  if (loaded && program.packageName !== CLI) {
+    checkFieldTypes(program, table, program.file, out)
+  }
   for (const sig of program.functions) {
     const body = sig.body()
     if (body === null || sig.lifted || !sig.definedIn(program.source)) {
@@ -2263,6 +2269,11 @@ const channelDeclareMessage = (what: string): string => `${what}${CHANNEL_DECLAR
 
 const channelUseMessage = (what: string): string => `${what}${CHANNEL_USE_TAIL}`
 
+/** A channel inside an arrow's body. */
+const channelArrowMessage = (): string =>
+  "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel " +
+  "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body"
+
 const channelSendersMessage = (what: string): string => `${what}${CHANNEL_SENDERS_TAIL}`
 
 const channelReceiverMessage = (what: string): string => `${what}${CHANNEL_RECEIVER_TAIL}`
@@ -2411,6 +2422,12 @@ export class ChannelSummaries {
   receivesHanded(name: string): boolean {
     const at = this.at(name)
     return at >= 0 && (this.receivesAny[at] || this.receives[at].size() > 0)
+  }
+
+  /** Whether `name` reaches a channel through a name the summary cannot follow, and so counts every one. */
+  untraceable(name: string): boolean {
+    const at = this.at(name)
+    return at >= 0 && (this.sendsAny[at] || this.receivesAny[at])
   }
 
   /** Whether `name` may send (`send`) or receive on the channel at `path` of its parameters. */
@@ -2624,8 +2641,15 @@ const walkChannelUses = (
   locals: Local[],
   out: ScopeFinding[]
 ): void => {
-  // An arrow is walked with the body it is written in, whose tables it shares:
-  // what it does with a channel it is handed is held to the same rule.
+  // An arrow is lifted into a function of its own, which none of the rules
+  // below follow into: a channel is refused there outright (`arrowChannel`).
+  if (node.kind === N_ARROW) {
+    const used = arrowChannel(program, table, node)
+    if (used !== null) {
+      out.push(new ScopeFinding(used, channelArrowMessage()))
+    }
+    return
+  }
   let at = node
   let depth = parents.length
   while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
@@ -2648,6 +2672,20 @@ const walkChannelUses = (
     walkChannelUses(program, table, sig, child, parents, locals, out)
   }
   parents.pop()
+}
+
+/** The first expression of a channel type under `node`, an arrow's body, or `null`. */
+const arrowChannel = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
+  for (const child of node.children) {
+    if (child.kind !== N_PAREN && isChannelType(program, table, program.nodeTypes[child.id])) {
+      return child
+    }
+    const below = arrowChannel(program, table, child)
+    if (below !== null) {
+      return below
+    }
+  }
+  return null
 }
 
 /** What `walkChannelUses` refuses about `node`, a channel standing as `at` under `parents`, or "". */
@@ -2720,6 +2758,11 @@ const channelUseFinding = (
       }
       return channelSendersMessage("A `spawn` hands its task only a channel this function declared")
     }
+  }
+  if (constructing) {
+    return channelUseMessage(
+      "A constructor uses a channel it is handed only to set a field from it, `this.ch = ch`, and sends, receives and passes on none"
+    )
   }
   return channelUseMessage("A `Channel` cannot be bound, stored, returned or compared here")
 }
@@ -3019,6 +3062,10 @@ const checkChannels = (
 ): void => {
   const locals: Local[] = []
   const decls: Node[] = []
+  checkChannelTypes(program, table, sig, body, out)
+  if (sig.role === ROLE_CONSTRUCTOR && holdsChannelField(program, table, sig.paramTypes[0], false)) {
+    findThisHandedOn(body, out)
+  }
   collectChannelLocals(program, table, body, locals, decls)
   walkChannelUses(program, table, sig, body, [], locals, out)
   const spawns: Node[] = []
@@ -3042,6 +3089,162 @@ const checkChannels = (
 }
 
 /**
+ * Whether `type` holds a channel anywhere but as exactly `Channel<T>` — as a
+ * `null`-able one, an array element, a `Result` arm or another generic's type
+ * argument — where the rules, which read a channel's type, could not see it
+ * (C2). A class with a `Channel<T>` field is a carrier and holds none.
+ */
+const wrapsChannel = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  if (type < 0 || isChannelType(program, table, type)) {
+    return false
+  }
+  return holdsChannelType(program, table, type)
+}
+
+/** Whether `type` is a channel or holds one inside a `null`-able, an array, a `Result` or a generic's type argument. */
+const holdsChannelType = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  if (type < 0) {
+    return false
+  }
+  if (isChannelType(program, table, type)) {
+    return true
+  }
+  const kind = table.kindOf(type)
+  if (kind === K_NULLABLE || kind === K_ARRAY) {
+    return holdsChannelType(program, table, table.refOf(type))
+  }
+  if (kind === K_RESULT) {
+    return (
+      holdsChannelType(program, table, table.okOf(type)) ||
+      holdsChannelType(program, table, table.errOf(type))
+    )
+  }
+  const info = classLayoutOf(program, table, type)
+  const instance: StructInstantiation | null = info === null ? null : info.instance
+  if (instance === null) {
+    return false
+  }
+  for (const arg of instance.typeArgs) {
+    if (holdsChannelType(program, table, arg)) {
+      return true
+    }
+  }
+  return false
+}
+
+const wrappedChannelMessage = (table: TypeTable, type: i32): string =>
+  channelUseMessage(`\`${table.typeName(type)}\` holds a channel other than as a \`Channel<T>\` itself`)
+
+/**
+ * C2 over the types `sig` writes: each parameter, the result and every local
+ * of its body (a class's fields are `checkFieldTypes`'s). One finding at most.
+ */
+const checkChannelTypes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  body: Node,
+  out: ScopeFinding[]
+): void => {
+  let k = 0
+  while (k < sig.paramTypes.length) {
+    if (wrapsChannel(program, table, sig.paramTypes[k])) {
+      out.push(new ScopeFinding(sig.decl, wrappedChannelMessage(table, sig.paramTypes[k])))
+      return
+    }
+    k = k + 1
+  }
+  if (wrapsChannel(program, table, sig.returnType)) {
+    out.push(new ScopeFinding(sig.decl, wrappedChannelMessage(table, sig.returnType)))
+    return
+  }
+  checkLocalTypes(program, table, body, out)
+}
+
+/** C2 over the fields of every class `node`, a module, declares: a field holds a channel only as `Channel<T>`. */
+const checkFieldTypes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  node: Node,
+  out: ScopeFinding[]
+): void => {
+  for (const decl of node.children) {
+    const info: StructInfo | null = decl.kind === N_CLASS ? program.struct(decl.children[0].text) : null
+    if (info !== null) {
+      for (const member of decl.children[3].children) {
+        const field: FieldInfo | null = member.kind === N_FIELD ? info.field(member.children[0].text) : null
+        if (field !== null && wrapsChannel(program, table, field.type)) {
+          out.push(new ScopeFinding(member, wrappedChannelMessage(table, field.type)))
+        }
+      }
+    }
+  }
+}
+
+/** The first local under `node` whose type wraps a channel. */
+const checkLocalTypes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  node: Node,
+  out: ScopeFinding[]
+): boolean => {
+  if (node.kind === N_ARROW) {
+    return false
+  }
+  if (node.kind === N_VAR_DECL) {
+    const local = program.nodeLocals[node.id]
+    if (local !== null && wrapsChannel(program, table, local.type)) {
+      out.push(new ScopeFinding(node, wrappedChannelMessage(table, local.type)))
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (checkLocalTypes(program, table, child, out)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * C4 in the constructor of a class that holds a channel: no method is called
+ * on `this` and `this` is handed to nothing, because the summary of what a
+ * constructor sends follows only its parameters, and a send made through the
+ * object it is building would be one the sender count never saw.
+ */
+const findThisHandedOn = (node: Node, out: ScopeFinding[]): boolean => {
+  if (node.kind === N_ARROW) {
+    return false
+  }
+  if (node.kind === N_CALL || node.kind === N_NEW) {
+    const target = node.kind === N_CALL ? unwrapParens(node.children[0]) : node
+    const viaThis = target.kind === N_MEMBER && unwrapParens(target.children[0]).kind === N_THIS
+    let handed = false
+    const args = node.kind === N_NEW ? node.children[2].children : node.children[1].children
+    for (const arg of args) {
+      handed = handed || unwrapParens(arg).kind === N_THIS
+    }
+    if (viaThis || handed) {
+      out.push(
+        new ScopeFinding(
+          node,
+          channelSendersMessage(
+            "The constructor of a class that holds a channel calls a method of `this` or hands `this` on, where the sends it makes could not be counted"
+          )
+        )
+      )
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (findThisHandedOn(child, out)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * Whether the argument a `spawn` hands its task is `null`-able and holds a
  * channel, or holds one in a field that may be `null`. The spawn counts a
  * sender by reading the channel out of the argument, and one it cannot read
@@ -3058,7 +3261,7 @@ const handsNullableChannel = (program: CheckedProgram, table: TypeTable, spawn: 
     const inner = table.stripNull(arg)
     return isChannelType(program, table, inner) || holdsChannelField(program, table, inner, false)
   }
-  return holdsChannelField(program, table, arg, true)
+  return false
 }
 
 /** Whether the class `type` has a field of a channel type — only a `null`-able one when `nullable` is set. */
@@ -3284,7 +3487,11 @@ const checkChannel = (
         out.push(
           new ScopeFinding(
             spawn,
-            channelBothMessage(`\`${entry.sourceName}\` may both send and receive on \`${local.name}\``)
+            channelBothMessage(
+              summaries.untraceable(entry.name)
+                ? `\`${entry.sourceName}\` may both send and receive on \`${local.name}\`, counted as using every channel it holds because it reaches one through a name the checker cannot follow (bind no other name to what holds a channel)`
+                : `\`${entry.sourceName}\` may both send and receive on \`${local.name}\``
+            )
           )
         )
         return

@@ -2857,9 +2857,10 @@ export const main = (): i32 => {
 
 Seven rules keep "every sender has returned" a single moment and the one
 receiver from waiting on what never comes, and a program that breaks one is
-refused with a code of that rule's own: nine codes, NL2475 to NL2483, because
-C2 has one for where a channel is declared and one for how it is used, and C6
-one for spawn order and one for a task that sends and receives:
+refused with a code of that rule's own: ten codes, NL2475 to NL2484, because
+C2 has one for where a channel is declared, one for how it is used and one for
+a channel inside an arrow, and C6 one for spawn order and one for a task that
+sends and receives:
 
 - **C1: a channel carries a number, a `boolean` or an enum.** A sender's arena
   is freed when its scope joins, so anything else would be a pointer into it:
@@ -2884,20 +2885,26 @@ one for spawn order and one for a task that sends and receives:
   sets from a parameter — never bound to another name, stored, returned or
   compared, and no member but `send` is named:
   `` A `Channel` cannot be bound, stored, returned or compared here: a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer ``
-  (NL2477, `reject_channel_bound`, `reject_channel_bound_arrow` inside an
-  arrow, `reject_channel_member`, `reject_channel_member_take`, `_ready`,
+  (NL2477, `reject_channel_bound`, `reject_channel_member`, `reject_channel_member_take`, `_ready`,
   `_head` and `_state`, and `reject_channel_stored` for a class that holds one
   made anywhere but at the `spawn`; `reject_channel_nullable` for a task's
   argument whose channel may be `null`, which the `spawn` could not count as a
-  sender). An argument is one only to a parameter its function declares a
-  `Channel`: not to an array's or a collection's method, which could keep it,
-  nor to a generic's `T` (`reject_channel_pushed`, `reject_channel_map_value`,
-  `reject_channel_generic_argument`). It reaches a task as R8 says a `Mutex`
+  sender). A type holds a channel only as exactly `Channel<T>`: never as one
+  that may be `null`, an array's element, a `Result`'s arm or another
+  generic's type argument, wherever the type is written — a local, a
+  parameter, a result or a field (`reject_channel_nullable`,
+  `reject_channel_array`, `reject_channel_map_value`). An argument is one only
+  to a parameter its function declares a `Channel`, not to a generic's `T`
+  (`reject_channel_generic_argument`). It reaches a task as R8 says a `Mutex`
   does: as the task's argument, or as a field of the object made for it at the
   `spawn`, `new Pipe(ch, 100)`, and by one path only, so a task never holds it
   in two fields (`reject_channel_two_paths`). A constructor uses a channel it
-  is handed only to set a field from it; one it declares itself it uses as any
-  function does.
+  is handed only to set a field from it, `this.ch = ch` (`reject_channel_ctor_send`);
+  one it declares itself it uses as any function does. And a channel is used
+  only in a top-level function's own body, never inside an arrow, which is
+  lifted into a function of its own that these rules do not follow:
+  `` A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body ``
+  (NL2484, `reject_channel_arrow`).
 - **C3: a channel is unbounded**, so `send` never waits, because under Node a
   scope's tasks run one at a time and nothing would drain a full one:
   `` `new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full ``
@@ -2913,6 +2920,9 @@ one for spawn order and one for a task that sends and receives:
   function declared, never one it was handed, so no function boundary comes
   between a channel and its scope (`reject_channel_spawn_handed`, and
   `reject_channel_spawn_handed_direct` for the channel as the argument itself).
+  The constructor of a class that holds a channel calls no method of `this`
+  and hands `this` to nothing, because what it sent that way is a send the
+  count would not see (`reject_channel_ctor_this`).
 - **C5: a channel has one receiver** — one task, from a `spawn` outside any
   loop, or the parent in a later statement of the block that has the scope's
   block as one of its statements, never both — and inside a scope's block the
@@ -2937,9 +2947,11 @@ one for spawn order and one for a task that sends and receives:
   (NL2481, `reject_channel_receiver_first`). And no task both sends and
   receives on one channel:
   `` `echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return ``
-  (NL2483, `reject_channel_send_and_receive`, and
+  (NL2483, `reject_channel_send_and_receive`,
   `reject_channel_both_through_new` for a send made by a constructor a `new`
-  runs).
+  runs, and `reject_channel_both_untraceable` for a task that reaches a
+  channel through a second name for what holds it, which counts as using
+  every channel it holds, and says so).
 - **C7: nothing receives while a lock is held**, directly or through any
   function it calls — R5's "nothing is waited on while it is held". A `send`
   never waits and may stay:

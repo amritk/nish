@@ -1,7 +1,6 @@
-// C2: a channel reaches a task as its argument or a field of it, and never
-// one that may be `null`: the `spawn` counts a sender by reading the channel
-// out of the argument, and a sender it could not read would close the channel
-// before it had sent.
+// C2: a channel is held only as `Channel<T>`, never as one that may be `null`:
+// the `spawn` counts a sender by reading the channel out of its argument, and a
+// sender it could not read would close the channel before it had sent.
 import { Channel, scope } from "nish/threads";
 
 class Pipe {
@@ -12,13 +11,7 @@ class Pipe {
   }
 }
 
-const produce = (p: Pipe): i32 => {
-  const ch = p.ch;
-  if (ch !== null) {
-    ch.send(1);
-  }
-  return 1;
-};
+const produce = (p: Pipe): i32 => (p.ch === null ? 0 : 1);
 
 export const main = (): i32 => {
   const out: i32[] = [0];

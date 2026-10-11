@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 608
+export const RULE_COUNT: i32 = 609
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -91,6 +91,8 @@ const diagnosticRules = (): string[] => [
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
   "NL2481",
+  "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body",
+  "NL2484",
   "` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined",
   "NL2468",
   "`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`",

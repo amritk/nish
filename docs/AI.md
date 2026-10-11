@@ -1045,7 +1045,9 @@ export const main = (): i32 => {
   whose parameter is declared `Channel<T>` is fine; pushing it onto an array,
   putting it in a `Map`, or passing it as a generic's `T` is not. A `spawn`
   hands a task only a channel the function itself declared, never one the
-  function was handed, and no task gets one channel in two fields.
+  function was handed, and no task gets one channel in two fields. Hold it
+  only as `Channel<T>` (no `| null`, no `Channel<T>[]`, no `Map` of them), and
+  use it only in a top-level function's body, never inside an arrow.
   `new Channel<i32>()` takes no capacity: it is unbounded.
 - **One scope, one receiver.** Only one scope's tasks use a channel. Its one
   receiver is either a single task spawned outside any loop, or the parent

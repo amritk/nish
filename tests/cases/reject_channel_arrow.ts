@@ -1,6 +1,6 @@
-// C2: a channel is never bound to a second name, inside an arrow too: the
-// arrow is lifted into a function of its own, and is held to the rule its
-// body would be.
+// A channel is used only in a top-level function's own body, never inside an
+// arrow: an arrow is lifted into a function of its own, which the channel rules
+// do not follow, so a channel there would escape every one of them.
 import { Channel, scope } from "nish/threads";
 
 class Pipe {

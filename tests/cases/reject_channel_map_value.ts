@@ -1,5 +1,5 @@
-// C2: a channel is never stored, here into a `Map`, whose own code would keep
-// it; the refusal is at the call that hands it over.
+// C2: a channel is never held by another type, here a `Map`'s values, whose own
+// code would keep it where the channel rules cannot follow.
 import { Channel, scope } from "nish/threads";
 
 class Pipe {
@@ -31,11 +31,10 @@ export const main = (): i32 => {
   const out: i32[] = [0, 0];
   const ch = new Channel<i32>();
   const m = new Map<i32, Channel<i32>>();
-  m.set(1, ch);
   {
     using s = scope();
     s.spawn(produce, new Pipe(ch, 3), out, 0);
     s.spawn(consume, new Pipe(ch, 0), out, 1);
   }
-  return out[1];
+  return out[1] + m.size;
 };

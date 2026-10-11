@@ -1,5 +1,6 @@
-// C2: a channel is never stored, here into an array by `push`, where the
-// checker could no longer tell who sends on it or receives from it.
+// C6: a task that reaches a channel through a name the checker cannot follow,
+// here a second name for its argument, counts as using every channel it holds:
+// `relay` only receives on `ch` directly, and is refused for both, by name.
 import { Channel, scope } from "nish/threads";
 
 class Pipe {
@@ -26,16 +27,18 @@ const consume = (p: Pipe): i32 => {
   }
   return sum;
 };
+const relay = (p: Pipe): i32 => {
+  const q = p;
+  q.ch.send(1);
+  return consume(p);
+};
 
 export const main = (): i32 => {
-  const out: i32[] = [0, 0];
+  const out: i32[] = [0];
   const ch = new Channel<i32>();
-  const cs: Channel<i32>[] = [];
-  cs.push(ch);
   {
     using s = scope();
-    s.spawn(produce, new Pipe(ch, 3), out, 0);
-    s.spawn(consume, new Pipe(ch, 0), out, 1);
+    s.spawn(relay, new Pipe(ch, 0), out, 0);
   }
-  return out[1];
+  return out[0];
 };
