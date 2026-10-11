@@ -3727,6 +3727,27 @@ and both come from the program as written:
     has no floor, and `arr_bounds_offset_wrap` wraps `INT_MAX + 1`, and each
     keeps its check and panics).
 
+  - **Any other integer index is proved by its range.** Where none of the
+    rules above proves `w[e]`, the values `e` can take decide: every local's
+    bounds from the facts above and its declared range, carried through
+    `+`, `-`, `*`, a mask, a conversion and a call's known return range. If
+    the lowest is not negative and the highest is below a length `w` is
+    known to have (`w.length >= n`, from an array literal, a
+    `new Array(n)`, a guard or a check that ran), the access needs no
+    check: `freeMaxs[c + r]` and `freeMins[c - r + 7]` with `r` and `c`
+    each below 8 into arrays made with 16, or `cells[r * 4 + c]` over a 4
+    by 4 board. The range is the value's own only where the arithmetic is
+    exact, which is a signed `i32` or `i64` outside `--wrapping`; an
+    unsigned index, whose arithmetic wraps by definition, an `f64` one, and
+    every index under `--wrapping` keep their check. The length is the one
+    the index leaves behind, so a call inside the index that shrinks the
+    array, a `new` whose constructor does included, proves nothing
+    (`tests/cases/arr_bounds_range`; `arr_bounds_range_past` reaches the
+    length, `arr_bounds_range_negative` goes below zero, and
+    `arr_bounds_range_call` and `arr_bounds_range_new` shrink the array, and
+    each keeps its check and panics; `arr_bounds_range_kept` and
+    `arr_bounds_range_wrap` keep theirs).
+
 A fact ends where it stops being true: at any assignment to `i` that is not
 `i = i + <non-negative literal>` (`i++` and `i += n` included) or
 `i = i - <non-negative literal>` (`i--` and `i -= n` included), at any

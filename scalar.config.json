@@ -1,0 +1,95 @@
+{
+  "$schema": "https://registry.scalar.com/@scalar/schemas/config",
+  "scalar": "2.0.0",
+  "navigation": {
+    "header": [
+      { "type": "link", "title": "GitHub", "to": "https://github.com/amritk/nish", "newTab": true },
+      {
+        "type": "link",
+        "title": "Language reference",
+        "to": "https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md",
+        "newTab": true
+      },
+      {
+        "type": "link",
+        "title": "Changelog",
+        "to": "https://github.com/amritk/nish/blob/main/CHANGELOG.md",
+        "newTab": true
+      }
+    ],
+    "routes": {
+      "/": { "type": "page", "title": "Introduction", "filepath": "docs/guide/index.md" },
+      "/getting-started": {
+        "type": "group",
+        "title": "Getting started",
+        "children": {
+          "/installation": {
+            "type": "page",
+            "title": "Installation",
+            "filepath": "docs/guide/getting-started/installation.md"
+          },
+          "/first-program": {
+            "type": "page",
+            "title": "Your first program",
+            "filepath": "docs/guide/getting-started/first-program.md"
+          },
+          "/from-typescript": {
+            "type": "page",
+            "title": "Coming from TypeScript",
+            "filepath": "docs/guide/getting-started/from-typescript.md"
+          }
+        }
+      },
+      "/language": {
+        "type": "group",
+        "title": "The language",
+        "children": {
+          "/types": { "type": "page", "title": "Types", "filepath": "docs/guide/language/types.md" },
+          "/functions": { "type": "page", "title": "Functions", "filepath": "docs/guide/language/functions.md" },
+          "/control-flow": {
+            "type": "page",
+            "title": "Control flow",
+            "filepath": "docs/guide/language/control-flow.md"
+          },
+          "/arrays-and-strings": {
+            "type": "page",
+            "title": "Arrays and strings",
+            "filepath": "docs/guide/language/arrays-and-strings.md"
+          },
+          "/classes-and-interfaces": {
+            "type": "page",
+            "title": "Classes and interfaces",
+            "filepath": "docs/guide/language/classes-and-interfaces.md"
+          },
+          "/errors": { "type": "page", "title": "Errors and Result", "filepath": "docs/guide/language/errors.md" },
+          "/maps-and-sets": {
+            "type": "page",
+            "title": "Maps and sets",
+            "filepath": "docs/guide/language/maps-and-sets.md"
+          },
+          "/generics": { "type": "page", "title": "Generics", "filepath": "docs/guide/language/generics.md" },
+          "/modules": { "type": "page", "title": "Modules", "filepath": "docs/guide/language/modules.md" },
+          "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" }
+        }
+      },
+      "/using-nish": {
+        "type": "group",
+        "title": "Using Nish",
+        "children": {
+          "/cli": { "type": "page", "title": "The CLI", "filepath": "docs/guide/using-nish/cli.md" },
+          "/standard-library": {
+            "type": "page",
+            "title": "The standard library",
+            "filepath": "docs/guide/using-nish/standard-library.md"
+          },
+          "/interop": {
+            "type": "page",
+            "title": "Calling Nish from other languages",
+            "filepath": "docs/guide/using-nish/interop.md"
+          },
+          "/threads": { "type": "page", "title": "Threads", "filepath": "docs/guide/using-nish/threads.md" }
+        }
+      }
+    }
+  }
+}

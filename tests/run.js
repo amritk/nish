@@ -5919,6 +5919,62 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
   }
 }
 
+// A computed index proved by its range (`provesByRange` in `src/bounds.ts`).
+// `arr_bounds_range` is the positive: `c + r`, `c - r + 7` and `r * 4 + c`
+// stay inside the lengths the arrays were made with, so no check survives.
+// Each negative breaks one rule the proof rests on and keeps its check: a
+// range past the length, a range below zero, and an index whose call or whose
+// `new`'s constructor shrinks the array panic when run; an unsigned sum, a
+// length known only at run time and `--wrapping` are pinned by their counts.
+if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_range")) {
+  for (const [name, fn, count] of [
+    ["arr_bounds_range", "diagonals", 0],
+    ["arr_bounds_range", "board", 0],
+    ["arr_bounds_range_past", "diagonals", 1],
+    ["arr_bounds_range_negative", "diagonals", 1],
+    ["arr_bounds_range_call", "nish_main", 1],
+    ["arr_bounds_range_new", "nish_main", 1],
+    ["arr_bounds_range_kept", "unsignedSum", 1],
+    ["arr_bounds_range_kept", "unknownLength", 1],
+    ["arr_bounds_range_wrap", "diagonals", 2],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      continue
+    }
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn)
+    check(
+      `${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    )
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_bounds_range_past", "a range that reaches the length", "", "14 >= 14"],
+      ["arr_bounds_range_negative", "a range that goes below zero", "", "18446744073709551615 >= 16"],
+      ["arr_bounds_range_call", "an index whose call shrinks the array", "", "15 >= 15"],
+      ["arr_bounds_range_new", "an index whose constructor shrinks the array", "", "15 >= 15"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`)
+      if (!fs.existsSync(ll)) {
+        continue
+      }
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { driver: null })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+}
+
 // WP15 §2.4, the build-mode rule (`hostVisible` in `src/visibility.ts`). A
 // `--link` build with no sidecar, no wasm and no C function declared is its own
 // final link, so an exported function takes the facts its call sites prove:
@@ -14293,7 +14349,7 @@ if (!only || "deny_panics_clean".includes(only) || "cookbook".includes(only)) {
   }
 }
 
-// ---- docs/AI.md: the rules card compiles ---------------------------------------------
+// ---- docs/AI.md and docs/guide: the examples compile ------------------------------------
 // `docs/AI.md` is the language written for a model that has to produce a program
 // that compiles on the first try, so its examples are the part that matters: an
 // agent copies them. A digest hand-written beside a 2,300-line reference is also
@@ -14314,13 +14370,28 @@ if (!only || "deny_panics_clean".includes(only) || "cookbook".includes(only)) {
 // because that is what the doc tells its reader to key on (`AGENTS.md`,
 // "Machine-readable surfaces"): a reworded message must not fail this, and a
 // renumbered rule must.
-if (!only || "docs".includes(only) || "ai".includes(only)) {
-  const aiDoc = path.join(root, "docs", "AI.md")
+//
+// The user guide under `docs/guide/` is held to the same markers, because a
+// person copies its examples just as a model copies AI.md's. Its floor is per
+// page rather than a count: every page carries at least one marked example,
+// except a stub (a title and one paragraph, waiting for its content) and
+// `getting-started/installation.md`, which is about the shell and has no
+// program to show.
+if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
+  const guideDir = path.join(root, "docs", "guide")
+  const docPages = [
+    path.join(root, "docs", "AI.md"),
+    ...fs
+      .readdirSync(guideDir, { recursive: true })
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .map((f) => path.join(guideDir, f)),
+  ]
   const snippetDir = path.join(buildDir, "docs-ai")
   fs.rmSync(snippetDir, { recursive: true, force: true })
   fs.mkdirSync(snippetDir, { recursive: true })
 
-  /** Fenced blocks of `docs/AI.md` that carry a `nish:` marker, with the line they start on. */
+  /** Fenced blocks of a doc page that carry a `nish:` marker, with the line they start on. */
   const markedSnippets = (text) => {
     const found = []
     const lines = text.split("\n")
@@ -14348,36 +14419,60 @@ if (!only || "docs".includes(only) || "ai".includes(only)) {
     return found
   }
 
-  const snippets = markedSnippets(fs.readFileSync(aiDoc, "utf8"))
-  // A doc whose markers all got renamed would otherwise pass by checking nothing.
-  check("docs/AI.md marks its examples for compilation", snippets.length >= 15, `${snippets.length} found`)
-  for (const s of snippets) {
-    const stem = `ai_${s.line}`
-    const file = path.join(snippetDir, `${stem}.ts`)
-    const body = s.wrap ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n` : `${s.source}\n`
-    fs.writeFileSync(file, body)
-    // A directory, because a snippet that imports `nish/threads` writes one module per file.
-    const run = spawnSync(
-      NISH,
-      [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
-      {
-        encoding: "utf8",
-      }
-    )
-    const diagnostics = run.stdout
-      .split("\n")
+  /** A stub is the page's title and a single paragraph saying what it will cover. */
+  const isStub = (text) => {
+    const paragraphs = text
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
       .filter(Boolean)
-      .map((line) => JSON.parse(line))
-    const errors = diagnostics.filter((d) => d.severity === "error")
-    const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
-    if (s.kind === "ok") {
-      check(`docs/AI.md:${s.line} compiles`, run.status === 0, detail || run.stderr)
-    } else {
+    return paragraphs.length === 2 && paragraphs[0].startsWith("# ") && !/^(#|```)/m.test(paragraphs[1])
+  }
+
+  for (const page of docPages) {
+    const rel = path.relative(root, page).split(path.sep).join("/")
+    const text = fs.readFileSync(page, "utf8")
+    const snippets = markedSnippets(text)
+    if (rel === "docs/AI.md") {
+      // A doc whose markers all got renamed would otherwise pass by checking nothing.
       check(
-        `docs/AI.md:${s.line} is rejected with ${s.code}`,
-        run.status !== 0 && errors.some((e) => e.code === s.code),
-        run.status === 0 ? "it compiled" : detail || run.stderr
+        "docs/AI.md marks its examples for compilation",
+        snippets.length >= 15,
+        `${snippets.length} found`
       )
+    } else if (!isStub(text) && rel !== "docs/guide/getting-started/installation.md") {
+      check(`${rel} marks an example for compilation`, snippets.length > 0, "no ```ts nish: fence")
+    }
+    const prefix = rel.slice(0, -3).replace(/[/-]/g, "_")
+    for (const s of snippets) {
+      const stem = `${prefix}_${s.line}`
+      const file = path.join(snippetDir, `${stem}.ts`)
+      const body = s.wrap
+        ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n`
+        : `${s.source}\n`
+      fs.writeFileSync(file, body)
+      // A directory, because a snippet that imports `nish/threads` writes one module per file.
+      const run = spawnSync(
+        NISH,
+        [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
+        {
+          encoding: "utf8",
+        }
+      )
+      const diagnostics = run.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+      const errors = diagnostics.filter((d) => d.severity === "error")
+      const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      if (s.kind === "ok") {
+        check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
+      } else {
+        check(
+          `${rel}:${s.line} is rejected with ${s.code}`,
+          run.status !== 0 && errors.some((e) => e.code === s.code),
+          run.status === 0 ? "it compiled" : detail || run.stderr
+        )
+      }
     }
   }
 }
