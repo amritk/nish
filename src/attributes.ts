@@ -119,7 +119,15 @@ import {
   Node,
 } from "./nodes"
 import { Options } from "./options"
-import { isParallelEntry, isSpawnEntry, parallelBodyOf, parallelRoleOf, recyclesPerElement } from "./parallel"
+import {
+  isGuardedAccess,
+  isLockMethod,
+  isParallelEntry,
+  isSpawnEntry,
+  parallelBodyOf,
+  parallelRoleOf,
+  recyclesPerElement,
+} from "./parallel"
 import { ParentTable } from "./parents"
 import { CheckedProgram, FunctionSig, inlineElementStruct, PAR_MAP, ROLE_CONSTRUCTOR } from "./program"
 import {
@@ -1795,7 +1803,9 @@ class FactCollector {
       }
       if (isAssignmentTarget(above, node) && above !== null) {
         this.facts.effect = EFFECT_WRITE
-        if (!this.initialisesThis(receiver)) {
+        // WP29 P3, R6: a store through a guard is made while its lock is held,
+        // the one shared write a task may make.
+        if (!this.initialisesThis(receiver) && !isGuardedAccess(program, table, node)) {
           this.noteSharedWrite(above)
         }
         if (above.text !== "=") {
@@ -1955,7 +1965,9 @@ class FactCollector {
     }
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
       this.facts.effect = EFFECT_WRITE
-      this.noteArrayWrite(node, node.children[0].children[0])
+      if (!isGuardedAccess(program, table, node.children[0])) {
+        this.noteArrayWrite(node, node.children[0].children[0]) // a guarded one is R6's, as above
+      }
       // A compound store whose right side can resize the array checks its
       // index again after it (`emitElementAssignment`, CG-10), even where the
       // first check was proved away. The emitter asks the fixpoint which calls
@@ -2337,6 +2349,9 @@ const collectFacts = (
   if (secretRoleOf(sig) === SECRET_WIPE) {
     markWipe(facts)
   }
+  if (isLockMethod(sig)) {
+    markLock(facts)
+  }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
   facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark")
@@ -2434,6 +2449,25 @@ const markWipe = (facts: FunctionFacts): void => {
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
   }
+}
+
+/**
+ * WP29 P3: a `Mutex`'s `lock()`. The source body only reads the guard out of
+ * the `Mutex`, and the emitter writes the real one, which takes the guard's
+ * lock word with a compare-and-swap and calls `nish_mutex_wait` when the word
+ * is held (`src/emit-parallel.ts`). Facts read off the source would call it
+ * `readonly` and `willreturn`, and LLVM could then drop it, or move a guarded
+ * access across it. So the instance says what its emitted body does: it
+ * writes, and it calls the wait, which is not `willreturn` and which every
+ * caller inherits through the fixpoint; R5 and R7 (`src/parallel.ts`) find a
+ * function that takes a lock by that callee. The word is reached through the
+ * guard the `Mutex` holds rather than through `this`, so `this` keeps its own
+ * facts, and the write is not a shared one: it is the lock itself (R6).
+ */
+const markLock = (facts: FunctionFacts): void => {
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.callees.add("nish_mutex_wait")
 }
 
 // ---- The fixpoint ------------------------------------------------------------------------

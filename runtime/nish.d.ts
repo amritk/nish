@@ -112,10 +112,10 @@ declare function Err<T, E>(error: E): Result<T, E>;
 
 /**
  * The disposable protocol `using` reads (WP29 P2, docs/wp29-thread-surface.md
- * §5): declared here so that a program using `nish/threads`'s scope or
- * `arena()` needs no `"ESNext.Disposable"` in its `lib`. `nish` itself takes
- * `using` only for a `scope()` or an `arena()`, and `[Symbol.dispose]` only in
- * `nish/threads`.
+ * §5): declared here so that a program using `nish/threads`'s scope, a
+ * `Mutex`'s lock or `arena()` needs no `"ESNext.Disposable"` in its `lib`.
+ * `nish` itself takes `using` only for a `scope()`, a `lock()` or an
+ * `arena()`, and `[Symbol.dispose]` only in `nish/threads`.
  */
 interface SymbolConstructor {
   readonly dispose: unique symbol;

@@ -50,7 +50,7 @@ import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types"
 // ---- Helpers ------------------------------------------------------------------------
 
 /** The `StructInfo` behind a struct-typed value; the checker resolved the same one. */
-const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
+export const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
   const info = emitter.program.struct(emitter.table.nameOf(type))
   if (info !== null) {
     return info
@@ -64,7 +64,7 @@ const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
 const structTypeName = (info: StructInfo): string => `%struct.${info.name}`
 
 /** Address of `field` inside the object `receiver` (a `%struct.X*` value). */
-const structFieldPointer = (
+export const structFieldPointer = (
   emitter: Emitter,
   info: StructInfo,
   receiver: string,
@@ -74,7 +74,7 @@ const structFieldPointer = (
   return emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${field.index}`)
 }
 
-const loadField = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
+export const loadField = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
   const tbaa = fieldTbaa(emitter, info, field)

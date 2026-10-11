@@ -1,8 +1,8 @@
 /**
- * `std/threads` — data parallelism, and a scope for heterogeneous tasks
- * (docs/wp29-thread-surface.md §4.1 and §4.2).
+ * `std/threads` — data parallelism, a scope for heterogeneous tasks, and a
+ * lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
  *
- *     import { parallelMapInto, parallelReduce, scope } from "nish/threads";
+ *     import { Mutex, parallelMapInto, parallelReduce, scope } from "nish/threads";
  *
  *     parallelMapInto(src, dst, (x) => x * 3);
  *     const total = parallelReduce(src, (a, b) => a + b, 0);
@@ -236,3 +236,68 @@ export class ThreadScope {
 
 /** A new scope, for a `using` declaration: `using s = scope()`. */
 export const scope = (): ThreadScope => new ThreadScope()
+
+/**
+ * What a `Mutex` hands out: its data, as `value`, for as long as the block of
+ * the `using` declaration that took the lock (docs/LANGUAGE.md, "A lock that
+ * owns its data"). A guard is only ever named as `g.value`, and `g.value`
+ * only as the base of a field or element access, so nothing read through it
+ * outlives the lock.
+ *
+ * Each `Mutex` makes exactly one guard, when it is made, and every lock hands
+ * out that one: taking the lock allocates nothing.
+ */
+export class MutexGuard<T> {
+  /** The data the lock owns. */
+  value: T
+
+  /**
+   * The lock word: 0 when the lock is free, 1 while a guard's block holds it.
+   * Nothing written here reads or writes it. Natively the compiler takes it
+   * with an acquire compare-and-swap in `lock()` and gives it back with a
+   * release store at every exit of the guard's block (`src/emit-parallel.ts`);
+   * under Node one task runs at a time and there is nothing to exclude.
+   */
+  word: i32 = 0
+
+  constructor(value: T) {
+    this.value = value
+  }
+
+  /**
+   * What `using` calls when the guard's block ends. Natively the compiler
+   * emits the release itself at every exit of the block, and under Node
+   * nothing was taken, so there is nothing to give back.
+   */
+  [Symbol.dispose](): void {
+    // Nothing to release: see above.
+  }
+}
+
+/**
+ * A lock that owns its data (docs/wp29-thread-surface.md §4.3). The data is
+ * reachable only through the guard `lock()` answers, bound by `using`, so no
+ * path to it skips the lock: `new Mutex<Hist>(new Hist())` takes a fresh
+ * value, and `using g = m.lock()` is the only way to read or write it.
+ *
+ * Under Node a scope's tasks run one at a time, at their spawn, so `lock()`
+ * answers the guard and waits for nothing: that is one of the orders the
+ * native program can run its critical sections in, and a program whose
+ * guarded updates commute prints the same either way.
+ */
+export class Mutex<T> {
+  /** The one guard, which holds the data; only `lock()` hands it out. */
+  guard: MutexGuard<T>
+
+  constructor(init: T) {
+    this.guard = new MutexGuard<T>(init)
+  }
+
+  /**
+   * The guard over the data, for a `using` declaration: `using g = m.lock()`.
+   * Natively the call waits until the lock is free and takes it.
+   */
+  lock(): MutexGuard<T> {
+    return this.guard
+  }
+}

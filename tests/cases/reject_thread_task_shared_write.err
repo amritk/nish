@@ -1,3 +1,3 @@
 `bump` writes memory its caller can see at 
 reject_thread_task_shared_write.ts:10:3, and `spawn`
-` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result
+` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()`

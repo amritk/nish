@@ -31,13 +31,21 @@
 // source, and a function without one may call one that has one.
 
 import { Emitter } from "./emit"
+import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
 import { IRFunction, IRParam } from "./ir"
 import { loadLocal } from "./emit-ops"
 import { isArenaCall, unwrapParens } from "./emit-util"
 import { Node } from "./nodes"
-import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf, taskStoreOf } from "./parallel"
-import { FunctionSig, PAR_CHUNK, PAR_MAP, PAR_SPAWN, PAR_TASK } from "./program"
+import {
+  isLockCall,
+  isParallelEntry,
+  mapGrain,
+  parallelBodyOf,
+  parallelRoleOf,
+  taskStoreOf,
+} from "./parallel"
+import { FieldInfo, FunctionSig, PAR_CHUNK, PAR_MAP, PAR_SPAWN, PAR_TASK, StructInfo } from "./program"
 
 /**
  * The grain the region in `caller` is divided at: for a map, the one its body
@@ -351,13 +359,66 @@ const taskFinish = (
   return fn
 }
 
+// ---- WP29 P3: a lock that owns its data -----------------------------------------------
+//
+// `using g = m.lock()` calls `Mutex<T>.lock`, whose body this file writes in
+// place of `std/threads.ts`'s `return this.guard`:
+//
+//   %guard = load %struct.MutexGuard$$T*, ... ; the one guard the `Mutex` holds
+//   %swap = cmpxchg i32* <guard.word>, i32 0, i32 1 acquire monotonic
+//   br i1 <swapped>, label %lock.held, label %lock.wait
+// lock.wait:                          ; held by another task: wait, and take it
+//   call void @nish_mutex_wait(i32* <guard.word>)
+//
+// and the release is a release store of 0 into the same word, emitted at every
+// exit of the guard's block — its end, a `break` or `continue` that leaves it,
+// and a `return` or an `orReturn`, after the value is computed (unlike a
+// scope's join, which runs before it), since the value may read through the
+// guard. The acquire keeps every guarded access after the swap, and the
+// release every one before the store, which is the whole of what the lock has
+// to promise; there is nothing to create or destroy, because the word is a
+// field of the guard and lives where the `Mutex` does.
+
+/** The guard's lock word, as `field` of its layout, or an internal error when the layout lacks it. */
+const lockWord = (emitter: Emitter, info: StructInfo, name: string): FieldInfo => {
+  const field = info.field(name)
+  if (field === null) {
+    process.exit(internalErrorFor(`emitter: \`${info.name}\` has no field \`${name}\``, emitter.opts.json))
+  }
+  return field
+}
+
+/** The body of `Mutex<T>.lock`: the guard, once its word is taken. */
+export const emitLockBody = (emitter: Emitter, sig: FunctionSig): void => {
+  const mutex = sig.owner
+  if (mutex === null) {
+    process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not a method`, emitter.opts.json))
+  }
+  const fn = emitter.fn
+  const guardField = lockWord(emitter, mutex, "guard")
+  const guardInfo = structInfoOf(emitter, guardField.type)
+  const guard = loadField(emitter, mutex, "%this", guardField)
+  const word = structFieldPointer(emitter, guardInfo, guard, lockWord(emitter, guardInfo, "word"))
+  const swap = fn.emitValue(`cmpxchg i32* ${word}, i32 0, i32 1 acquire monotonic`)
+  const took = fn.emitValue(`extractvalue { i32, i1 } ${swap}, 1`)
+  const wait = fn.newBlock("lock.wait")
+  const held = fn.newBlock("lock.held")
+  fn.emit(`br i1 ${took}, label %${held.label}, label %${wait.label}`)
+  fn.placeBlock(wait)
+  fn.emit(`call void ${emitter.useRuntime("nish_mutex_wait")}(i32* ${word})`)
+  fn.emit(`br label %${held.label}`)
+  fn.placeBlock(held)
+  fn.emit(`ret ${emitter.llvm(sig.returnType)} ${guard}`)
+}
+
 /**
  * A `using` declaration has just been emitted: its scope is open until the
  * block that declared it ends. The scope's address, as the `i8*` its tasks
  * are filed under, is read once here; every exit of the block is dominated by
  * the declaration, so each join can name the same value. A `using a = arena()`
- * goes on the same stack, as the mark its local holds, so that every exit
- * closes the two kinds in the reverse of the order they opened in.
+ * goes on the same stack, as the mark its local holds, and a guard as the
+ * address of its lock word, so that every exit closes the three kinds in the
+ * reverse of the order they opened in.
  */
 export const openScope = (emitter: Emitter, list: Node): void => {
   for (const decl of list.children) {
@@ -376,17 +437,27 @@ const openOneScope = (emitter: Emitter, decl: Node): void => {
     process.exit(internalErrorFor("emitter: a `using` declaration with no local recorded", emitter.opts.json))
   }
   const value = loadLocal(emitter, local)
-  const arena = isArenaCall(emitter.program, unwrapParens(decl.children[2]))
-  emitter.openScopes.push(
-    arena ? value : emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`)
-  )
+  const init = unwrapParens(decl.children[2])
+  const arena = isArenaCall(emitter.program, init)
+  const lock = isLockCall(emitter.program, init)
+  if (lock) {
+    const info = structInfoOf(emitter, local.type)
+    emitter.openScopes.push(structFieldPointer(emitter, info, value, lockWord(emitter, info, "word")))
+  } else {
+    emitter.openScopes.push(
+      arena ? value : emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`)
+    )
+  }
   emitter.openScopeLoops.push(emitter.loops.length)
   emitter.openScopeArenas.push(arena)
+  emitter.openScopeLocks.push(lock)
 }
 
-/** Close open entry `i`: join a scope's tasks, or release an arena to its mark. */
+/** Close open entry `i`: join a scope's tasks, release an arena to its mark, or give a lock back. */
 const closeScope = (emitter: Emitter, i: i32): void => {
-  if (emitter.openScopeArenas[i]) {
+  if (emitter.openScopeLocks[i]) {
+    emitter.fn.emit(`store atomic i32 0, i32* ${emitter.openScopes[i]} release, align 4`)
+  } else if (emitter.openScopeArenas[i]) {
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${emitter.openScopes[i]})`)
   } else {
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
@@ -400,13 +471,14 @@ const closeScope = (emitter: Emitter, i: i32): void => {
  * opened inside the loop it targets. They stay open for the paths that did
  * not take this exit. A `return` passes `arenas` false: its scopes join
  * before its value is computed, which may read what the tasks stored, and its
- * arenas release after (`Emitter.emitScopeExit`), because the value may read
- * what the block allocated.
+ * arenas and locks are given back after (`Emitter.emitScopeExit`), because the
+ * value may read what the block allocated or what a guard reaches.
  */
 export const emitScopeJoins = (emitter: Emitter, minLoops: i32, arenas: boolean): void => {
   let i = emitter.openScopes.length - 1
   while (i >= 0) {
-    if (emitter.openScopeLoops[i] >= minLoops && (arenas || !emitter.openScopeArenas[i])) {
+    const later = emitter.openScopeArenas[i] || emitter.openScopeLocks[i]
+    if (emitter.openScopeLoops[i] >= minLoops && (arenas || !later)) {
       closeScope(emitter, i)
     }
     i = i - 1
@@ -430,5 +502,20 @@ export const closeBlockScopes = (emitter: Emitter, count: i32): void => {
     emitter.openScopes.pop()
     emitter.openScopeLoops.pop()
     emitter.openScopeArenas.pop()
+    emitter.openScopeLocks.pop()
   }
 }
+
+/** Give back every lock still held, innermost first: a function's exit, after its value (`emitScopeExit`). */
+export const emitLockReleases = (emitter: Emitter): void => {
+  let i = emitter.openScopes.length - 1
+  while (i >= 0) {
+    if (emitter.openScopeLocks[i]) {
+      closeScope(emitter, i)
+    }
+    i = i - 1
+  }
+}
+
+/** Whether a lock is held where the emitter stands, which keeps a `return`'s call from being a tail call. */
+export const holdsLock = (emitter: Emitter): boolean => emitter.openScopeLocks.indexOf(true) >= 0

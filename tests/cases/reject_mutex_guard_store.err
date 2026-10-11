@@ -1,0 +1,1 @@
+This stores `string` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined
