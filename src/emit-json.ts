@@ -299,19 +299,21 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
 
   fn.placeBlock(keys)
   let k = 0
-  while (k < fields.length) {
+  while (k < fields.length && k < seen.length) {
+    // Both read before any call, which ends what the loop's test proved.
     const f = fields[k]
+    const slot = seen[k]
     const key = `i8* ${emitter.stringConstant(f.field.name)}`
     const match = jsonCallMethod(emitter, part.receiver, "keyIs", "%r", [key])
     const field = fn.newBlock("json.field")
     const next = fn.newBlock("json.next")
     jsonBranch(emitter, match, field.label, next.label)
     fn.placeBlock(field)
-    const given = fn.emitValue(`load i1, i1* ${seen[k]}, align 1`)
+    const given = fn.emitValue(`load i1, i1* ${slot}, align 1`)
     const take = fn.newBlock("json.take")
     jsonBranch(emitter, given, duplicate.label, take.label)
     fn.placeBlock(take)
-    fn.emit(`store i1 true, i1* ${seen[k]}, align 1`)
+    fn.emit(`store i1 true, i1* ${slot}, align 1`)
     emitJsonDecodeField(emitter, part, f)
     fn.emit(`br label %${loop.label}`)
     fn.placeBlock(next)
