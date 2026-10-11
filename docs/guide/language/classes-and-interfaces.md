@@ -105,8 +105,8 @@ spread, and no computed keys.
 `class C implements I` says that `C`'s first fields are exactly `I`'s
 fields, in the same order and with the same types; `C` may add more after
 them. A `C` is then accepted anywhere an `I` is expected. This is the only
-way one type converts to another in Nish, and it goes one way: nothing turns
-an `I` back into a `C`.
+widening between class and interface types, and it goes one way: nothing
+turns an `I` back into a `C`.
 
 ```ts nish:ok
 interface Shape {
