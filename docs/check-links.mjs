@@ -165,12 +165,13 @@ const scalarConfig = path.join(root, "scalar.config.json")
 const routed = new Set()
 const walkRoutes = (routes, prefix) => {
   for (const [route, entry] of Object.entries(routes)) {
-    if (entry.filepath !== undefined) {
-      const file = path.join(root, entry.filepath)
+    // A page must name its file; a group or a link legitimately has none.
+    if (entry.type === "page" || entry.filepath !== undefined) {
+      const file = path.join(root, entry.filepath ?? "")
       routed.add(file)
       if (!(file.endsWith(".md") && fs.existsSync(file) && fs.statSync(file).isFile())) {
         problems.push(
-          `scalar.config.json: route \`${prefix}${route}\` names no Markdown page: ${entry.filepath}`
+          `scalar.config.json: route \`${prefix}${route}\` names no Markdown page: ${entry.filepath ?? "(no filepath)"}`
         )
       }
     }
