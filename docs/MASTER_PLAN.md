@@ -87,7 +87,7 @@ Design rules that every WP must respect:
   | --- | ---: | ---: |
   | `runtime.c` | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
   | `runtime-os.c` | 1,530 | 1,536 |
-  | `runtime-parallel.c` | 286 (905 threaded) | 320 (1,024) |
+  | `runtime-parallel.c` | 597 (1,403 threaded) | 768 (1,536) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 675 (2026-10-09) | 768 |
@@ -190,7 +190,7 @@ modules; the table below is the inventory.
 | Interop: C header, `.d.ts` and loader, N-API (sync and async), wasm, C calls through `declare function` | done (WP8, WP17, WP24, WP27, WP30) | `src/interop-*.ts` |
 | Packages: `package.json` `exports`, bare specifiers, real-path identity, the manifest's `nish` field | S1–S2 and half of S3 (WP21) | `src/manifest.ts`, `paths.ts` |
 | Runtime: five translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
-| Threads: `parallelMapInto`, `parallelReduce`, `using s = scope()` | P1, P2 (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
+| Threads: `parallelMapInto`, `parallelReduce`, `using s = scope()`, `Mutex<T>`, `Channel<T>` | P1, P2, P3 (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
 | Standard library: testing, text, json, pair, collections, secret, threads, `nish/crypto/*`, `nish/net/*` | growing (WP26, WP34) | `std/`, [std/README.md](../std/README.md) |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, PGO | done (WP9) | `scripts/build.sh` |
 | Tests: 1,621 golden cases (946 of them `reject_*`), 335 `tests/link/` programs, `llvm-as`, native round trips, layout, runtime budgets, interop, packaging, `tests/fix/` | done | `tests/run.js`, `tests/cases/`, `link/`, `fix/` |
@@ -240,7 +240,7 @@ is its plan. [README.md](README.md) indexes them.
 | 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
 | 27 | Calling C | S1 and S2 built; S3 planned | [wp27](wp27-ffi.md) |
 | 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
-| 29 | The thread surface | P1 and P2 built; P3 proposed | [wp29](wp29-thread-surface.md) |
+| 29 | The thread surface | P1 and P2 built; P3 built, lock and channel | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |
@@ -407,10 +407,7 @@ major. Whether it happens at all is still wp22 §10's open question.
    `--emit ts` with its live differential. Its rule binds now: every construct
    states its TypeScript reading, and no stage moves a `.ll` golden or raises
    `bench/instructions.json`.
-3. **Threads P3, a lock that owns its data** ([wp29-thread-surface.md](wp29-thread-surface.md)
-   §4.3), proposed. P1 (`parallelMapInto`, `parallelReduce`, 0.11.0) and P2
-   (`using s = scope()`, 0.13.0) are built.
-4. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
+3. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
    the process with Landlock and seccomp to the capabilities the compiler
    computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. WP35, the
    capability report ([wp35-capabilities.md](wp35-capabilities.md)), and

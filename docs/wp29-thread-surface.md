@@ -1,15 +1,18 @@
 # WP29: The thread surface, and what is legal TypeScript
 
-**Status: P1 and P2 are built; P3 is decided and being built.** P1, `parallelMapInto` and
+**Status: P1 and P2 are built, and P3 is built, lock and channel.** P1, `parallelMapInto` and
 `parallelReduce`, shipped in 0.11.0 ([#219](https://github.com/amritk/nish/pull/219),
 with allocating bodies and the cost-sized grain in [#223](https://github.com/amritk/nish/pull/223)).
 P2, `using s = scope()`, shipped in 0.13.0
 ([#262](https://github.com/amritk/nish/pull/262)). Both live in
 `std/threads.ts`, and [LANGUAGE.md](LANGUAGE.md#data-parallelism-nishthreads)
 and [its next section](LANGUAGE.md#scoped-tasks-using-s--scope) state their
-rules. P3, a lock that owns its data (§4.3) and channels of scalars (§4.4),
-is decided and being built, and [MASTER_PLAN](MASTER_PLAN.md#what-remains)
-lists it as next.
+rules. P3 is built in two parts: `Mutex<T>`, a lock that owns its data
+(§4.3, [#562](https://github.com/amritk/nish/pull/562)), and `Channel<T>`, a
+channel of scalars (§4.4, [#566](https://github.com/amritk/nish/pull/566)). Both
+are on `main` for the release after 0.18.0, in `std/threads.ts`, and LANGUAGE.md
+states their rules: [the lock's](LANGUAGE.md#a-lock-that-owns-its-data-mutext)
+and [the channel's](LANGUAGE.md#channels-channelt). `examples/histogram.ts` measures the lock (§4.3).
 [wp20-threads.md](wp20-threads.md) records *whether* and *why*: 1:1 OS
 threads, data races rejected at compile time, and 3.96x on four cores
 (wp20 §8). This note answers the narrower question: **given that a Nish
@@ -186,8 +189,9 @@ class Shard {
 
 const binShard = (s: Shard): i32 => {
   for (const x of s.xs) {
+    const bin: i32 = x & 7;                 // a bitwise index is bound first (NL1042)
     using g = s.hist.lock();
-    g.value.bins[x & 7] = g.value.bins[x & 7] + 1;
+    g.value.bins[bin] = g.value.bins[bin] + 1;
   }
   return 0;
 };
@@ -210,7 +214,8 @@ export const main = (): i32 => {
 };
 ```
 
-**Status: decided, and being built.** Rust's design, narrowed until no borrow
+**Status: built** ([#562](https://github.com/amritk/nish/pull/562)), as
+[LANGUAGE.md](LANGUAGE.md#a-lock-that-owns-its-data-mutext) states it. Rust's design, narrowed until no borrow
 checker is needed. The reason to copy it rather than ship a bare
 `lock()`/`unlock()` pair is that a bare pair leaves an unguarded path to the
 data, and this design does not. The only way to name the `Hist` is through a
@@ -251,6 +256,19 @@ The other is a channel's receiver (§4.4).
 Under Node the guard's `[Symbol.dispose]` does nothing, because only one task
 runs at a time and no lock is ever contended. `lock()` answers a guard over the
 value, and the program reads as the sequential one it is.
+
+**Measured** by `examples/histogram.ts` on four logical cores (Xeon @ 2.80GHz): four
+tasks each bin 25 million xorshift values into a local tally and then add it
+to a shared `Mutex<Hist>` under one lock, over eight rounds that each seed the
+shards afresh and fold their bins into a printed checksum. **1,831 ms in
+sequence, 471 ms as one scope of four tasks, 3.89x** (minimums over eleven
+interleaved rounds; medians 1,844 and 489 ms, 3.77x). The sequential binary
+timed against a byte-identical copy of itself in the same rounds differed by
+0.3% at the minimum and 0.6% at the median, which is the noise band. Both
+runs, and the same file under Node, print the same checksum. The example takes
+the lock once per task, not once per value: four threads contending for it on
+every value run their critical sections one at a time, and a variant that did
+ran slower than one thread.
 
 ### 4.4 Stage P3 — channels of scalars
 
@@ -294,7 +312,8 @@ export const main = (): i32 => {
 };
 ```
 
-**Status: decided, and being built** after the lock. `Channel<T>` was the one
+**Status: built** ([#566](https://github.com/amritk/nish/pull/566)), after the lock, as
+[LANGUAGE.md](LANGUAGE.md#channels-channelt) states it. `Channel<T>` was the one
 piece of P3 that needed design rather than transcription, and these are the
 decisions:
 
@@ -460,9 +479,12 @@ default of 64 trips is what divides n-body four ways.
 
 The whole candidate surface was typechecked with
 `tsc --noEmit --strict --lib ES2022 --module Node16`, together with a program
-that used every construct, and exited 0. The P1 and P2 halves now exist as real
-code in `std/threads.ts` and `runtime/nish.d.ts`. What remains of the candidate
-is P3's half:
+that used every construct, and exited 0. All three stages now exist as real
+code in `std/threads.ts` (P3's `Mutex`, `MutexGuard` and `Channel` included),
+which is the declaration to read; `runtime/nish.d.ts` adds only the disposable
+protocol that `using` reads. What follows
+is the candidate's P3 half as it was typechecked, kept as the record, with the
+alternatives §9 did not propose:
 
 ```ts
 /** The lock owns what it protects, so there is no unguarded path to the data. */

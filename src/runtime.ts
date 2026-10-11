@@ -867,6 +867,40 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP29 P3: a channel of scalars (runtime/runtime-parallel.c). Each takes
+    // the address of the channel's `state` word, which it may set, and keeps
+    // a buffer outside every arena behind it. A send or a receive is the
+    // shared write the language admits in a task beside a guarded store
+    // (R6), so none is a shared write a task's rules would refuse. The
+    // receive waits, and the send and the count take the channel's lock, so
+    // none is `willreturn`.
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_channel_send",
+        "declare void @nish_channel_send(i64* noundef nonnull, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_channel_count",
+        "declare void @nish_channel_count(i64* noundef nonnull, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_channel_receive",
+        "declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // The partitioner's own question, declared because it is part of the ABI
     // nish.h publishes. It caches the answer in a word of its own, which no
     // program can observe.

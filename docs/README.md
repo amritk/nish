@@ -54,7 +54,7 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp26-stdlib.md](wp26-stdlib.md) | Landed. What a `std/` module is (source compiled into its importer, package `nish`), the module-or-builtin rule, and what the API had to absorb. |
 | [wp27-ffi.md](wp27-ffi.md) | In progress. Calling C through `declare function`: S1 (scalars) and S2 (`CPtr`) built, S3–S5 proposed. |
 | [wp28-compatibility-mode.md](wp28-compatibility-mode.md) | Proposed. A compatibility dialect that accepts ordinary statically typed TypeScript behind a flag, and the line that decides what may enter it. |
-| [wp29-thread-surface.md](wp29-thread-surface.md) | In progress. The thread surface as legal TypeScript: P1 (`parallelMapInto`, `parallelReduce`) and P2 (`using s = scope()`) built, P3 (a lock that owns its data) proposed. |
+| [wp29-thread-surface.md](wp29-thread-surface.md) | Landed. The thread surface as legal TypeScript: P1 (`parallelMapInto`, `parallelReduce`), P2 (`using s = scope()`) and P3 (`Mutex<T>`, a lock that owns its data, and `Channel<T>` of scalars) built. |
 | [wp30-bytes-interop.md](wp30-bytes-interop.md) | Landed. `u8[]` and the other unsigned arrays across the wasm and N-API boundaries as typed arrays. |
 | [wp31-ranged-integers.md](wp31-ranged-integers.md) | Landed in 0.13.0. `integer<Lo, Hi>`: the type, the proofs, the host boundary and DWARF. |
 | [wp32-map.md](wp32-map.md) | Landed, one item open. The global `Map` and `Set` written in Nish: the layout prototypes, the decisions, and the measurement against Node. |

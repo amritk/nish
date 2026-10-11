@@ -62,6 +62,7 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
+import { channelCapacityMessage, isChannelClass } from "./parallel"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
 import { Scope } from "./symbols"
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
@@ -539,6 +540,10 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       expr,
       `\`${label}\` takes no arguments in this version: a \`Map\` or \`Set\` starts empty, so create it with \`${label}()\` and \`set\` or \`add\` each entry in a loop`
     )
+  }
+  // WP29 P3, C3: a channel is unbounded, so there is no capacity to give it.
+  if (args.children.length > 0 && isChannelClass(info)) {
+    return ctx.errorType(expr, channelCapacityMessage())
   }
   const ctor = info.ctor
   if (ctor !== null) {

@@ -4584,6 +4584,11 @@ if (!only || "par_alloc".includes(only)) {
 // `Mutex` under Node. `thread_mutex_or_return` is native only, because
 // `orReturn` throws under Node (docs/RUN_UNDER_NODE.md).
 //
+// And the channel's four. Under Node every sender runs at its spawn, before the
+// one receiver (C6), so the receiver walks everything they sent; natively it
+// waits for them on another thread. Each prints only what the interleaving of
+// two senders cannot change: counts and integer sums.
+//
 // `arena_using_exit_paths` is the `using a = arena()` program: its block's
 // disposal does nothing under Node and `Arena.*` answers zero there, so the
 // lines it prints, each of which ends with how far the arena moved, are the
@@ -4601,6 +4606,10 @@ for (const name of [
   "thread_mutex_histogram",
   "thread_mutex_scalar",
   "thread_mutex_using_mixed",
+  "thread_channel_pipeline",
+  "thread_channel_two_producers",
+  "thread_channel_parent_drain",
+  "thread_channel_exit_paths",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -4704,6 +4713,51 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
   } else {
     skip(
       `skipped: link/thread_mutex_counter: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the lock is not run`
+    )
+  }
+}
+
+// WP29 P3: on wasm32 a channel's tasks run one after another in spawn order,
+// every sender before the one receiver (C6), so the receiver never finds a
+// channel empty and still open, and the runtime's fallback, which has no lock
+// and no wait, prints what the native binary prints. `thread_channel_exit_paths`
+// is the scope that closes its channels whether or not its join runs a task,
+// and `thread_channel_kinds` the widening and narrowing of each scalar type,
+// which a 32-bit target could get wrong where a 64-bit one does not.
+for (const name of [
+  "thread_channel_pipeline",
+  "thread_channel_two_producers",
+  "thread_channel_parent_drain",
+  "thread_channel_exit_paths",
+  "thread_channel_kinds",
+]) {
+  if (only && !name.includes(only) && !"wasi".includes(only)) {
+    continue
+  }
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, `wasi_${name}`)
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [path.join(linkDir, name, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
+    check(
+      `link/${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the channel is not run`
     )
   }
 }
@@ -8111,8 +8165,17 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840
  * wp29 P3 adds `nish_mutex_wait`, a lock's contended path, which every configuration
  * defines so that a `nish/threads` program links on WASI too: measured **304 bytes** on
  * 2026-10-11 with clang 18.1.3 on linux-x64, 18 more, inside the same ceiling.
+ *
+ * Raised to 768 by wp29 P3's channels, measured **597 bytes** on 2026-10-11 with clang
+ * 18.1.3 on linux-x64 (304 before them, with P3's `nish_mutex_wait`): `nish_channel_send`,
+ * `nish_channel_count` and `nish_channel_receive` and the helper that makes a channel's
+ * buffer on first use. A channel's buffer lives outside every arena in every build,
+ * because a value sent outlives its sender's arena whether the sender ran on a thread of
+ * its own or, as here, on the calling thread at the join, so the fallback carries all of
+ * it but the lock and the wait. The ceiling is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
  */
-const RUNTIME_PARALLEL_TEXT_BUDGET = 320
+const RUNTIME_PARALLEL_TEXT_BUDGET = 768
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`, which is the build `--threads`
  * links: the partitioner, the worker trampoline, `pthread_create`/`join` and the
@@ -8135,8 +8198,13 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 320
  *
  * wp29 P3's `nish_mutex_wait` measured **954 bytes** in all on 2026-10-11 with clang
  * 18.1.3 on linux-x64, 49 more for the spin and the yield, inside the same ceiling.
+ *
+ * Raised to 1,536 by wp29 P3's channels, measured **1,403 bytes** on 2026-10-11 with clang
+ * 18.1.3 on linux-x64 (954 before them, with `nish_mutex_wait`): the same three entry
+ * points as the fallback's row above, with the mutex and condition variable that let a
+ * receiver wait for a sender on another thread.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1536
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor

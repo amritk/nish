@@ -16,7 +16,7 @@
 // interface it names.
 
 import { secretFieldMessage } from "./secret"
-import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsSource } from "./parallel"
+import { DISPOSE_METHOD, disposeElsewhereMessage, isIteratorMethod, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
@@ -566,6 +566,12 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
     if (!isThreadsSource(ctx.program)) {
       ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))
     }
+    return
+  }
+  // WP29 P3: `Channel`'s `[Symbol.iterator]`, the one computed name the
+  // validator lets through, and only in `nish/threads`: it is Node's way into
+  // a `for...of`, which the compiler lowers itself (`src/emit-parallel.ts`).
+  if (isIteratorMethod(decl)) {
     return
   }
   const what = `Method \`${name}\``

@@ -538,6 +538,30 @@ void nish_scope_join(void *scope);
  * first try takes it. */
 void nish_mutex_wait(int32_t *word);
 
+/* ---- A channel of scalars (wp29 stage P3), runtime/runtime-parallel.c ----
+ *
+ * A `Channel` object holds one `int64_t` word, `state`, and each function here
+ * takes its address: 0 before first use, then the address of a buffer, a lock
+ * and a count this file keeps outside every arena, then 1 once the receiver
+ * has drained it closed and it has been given back. A value is one 8-byte
+ * slot; the compiler widens a scalar into it and narrows it back.
+ *
+ * `nish_channel_send` appends and never waits: the channel is unbounded.
+ * `nish_channel_count` moves the count that keeps it open, which starts at 1:
+ * +1 at the spawn of each task that may send on it, -1 when that task returns,
+ * and -1 just before its scope joins. At zero the channel is closed.
+ * `nish_channel_receive` takes the next value into `*out` and answers 1,
+ * waiting while the channel is empty and open, or answers 0 once it is closed
+ * and empty, giving the buffer back the first time.
+ *
+ * The preconditions are the language's (docs/LANGUAGE.md, "Channels"): one
+ * receiver, every sender spawned before it, and no send once the scope's
+ * block has begun except by its tasks, so nothing touches a channel after its
+ * receiver has drained it. */
+void nish_channel_send(int64_t *state, int64_t value);
+void nish_channel_count(int64_t *state, int64_t delta);
+int32_t nish_channel_receive(int64_t *state, int64_t *out);
+
 #ifdef __cplusplus
 }
 #endif

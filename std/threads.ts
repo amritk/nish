@@ -301,3 +301,94 @@ export class Mutex<T> {
     return this.guard
   }
 }
+
+/**
+ * A channel of scalars between a scope's tasks (docs/wp29-thread-surface.md
+ * §4.4): `send` from the tasks that produce, `for (const x of ch)` in the one
+ * that consumes, or in the parent once the scope has joined.
+ *
+ *     const ch = new Channel<i32>()
+ *     {
+ *       using s = scope()
+ *       s.spawn(produce, new Pipe(ch, 100), done, 0) // every sender first
+ *       s.spawn(consume, new Pipe(ch, 0), sums, 0)   // then the one receiver
+ *     }
+ *
+ * Nobody closes a channel: it closes when its scope has started to join and
+ * every task that may send on it has returned (docs/LANGUAGE.md, "Channels").
+ *
+ * **What is written here is the meaning under Node**, where a scope's tasks run
+ * one at a time at their spawns: `send` pushes onto `queue`, and a loop takes
+ * values off its front until it is empty. That is correct because every
+ * sender is spawned before the receiver, so every sender has run by the time
+ * the receiver's loop starts. Natively the compiler writes `send` and the loop
+ * itself (`src/emit-parallel.ts`), onto a buffer the runtime keeps outside
+ * every arena behind `state`, and the loop waits while the channel is empty
+ * and still open.
+ */
+export class Channel<T> {
+  /** Under Node: every value sent, in the order it was sent. */
+  queue: T[]
+
+  /** Under Node: how many of `queue`'s values a loop has taken. */
+  head: i32 = 0
+
+  /**
+   * Natively: the runtime's handle on the channel (runtime/runtime-parallel.c),
+   * 0 until the channel is first used. Nothing written here reads or writes it.
+   */
+  state: i64 = 0
+
+  constructor() {
+    this.queue = []
+  }
+
+  /** Hand `x` to the receiver. It never waits: a channel holds as many values as are sent. */
+  send(x: T): void {
+    this.queue.push(x)
+  }
+
+  /**
+   * The next value, for a loop that has found one waiting (`ChannelWalk`).
+   * Natively the loop is the compiler's, which takes a value with the runtime
+   * instead, and nothing calls this.
+   */
+  take(): T {
+    const x = this.queue[this.head]
+    this.head = this.head + 1
+    return x
+  }
+
+  /** Whether a value is waiting, under Node, where nothing is sent while a loop runs. */
+  ready(): boolean {
+    return this.head < toI32(this.queue.length)
+  }
+
+  /**
+   * What `for (const x of ch)` asks for under Node: a walk that takes each
+   * value as it reaches it, so a second loop over the channel finds it empty,
+   * as it does natively.
+   */
+  [Symbol.iterator](): ChannelWalk<T> {
+    return new ChannelWalk<T>(this)
+  }
+}
+
+/**
+ * The iterator a `for...of` over a `Channel` walks under Node. Natively it is
+ * never made: the compiler lowers the loop itself.
+ */
+class ChannelWalk<T> {
+  channel: Channel<T>
+
+  constructor(channel: Channel<T>) {
+    this.channel = channel
+  }
+
+  next(): IteratorResult<T> {
+    if (!this.channel.ready()) {
+      return { done: true, value: 0 }
+    }
+    return { done: false, value: this.channel.take() }
+  }
+}
