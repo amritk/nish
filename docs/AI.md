@@ -873,12 +873,13 @@ export const main = (): i32 => {
   you only index; never pass it on. Between the first `spawn` and the block's
   end, don't read a destination, and don't write memory a task could read (a
   store into an argument, a call that writes through its argument).
-- **`using` takes only `scope()`** (or `arena()`, under [Memory](#memory)), and
-  `scope()` only comes from `using`.
+- **`using` takes only `scope()`**, a `Mutex`'s `lock()` (below), or `arena()`
+  (under [Memory](#memory)), and `scope()` only comes from `using`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
 - **The task is a named top-level function**, not an arrow, and it follows the
-  data-parallel rules: it writes nothing anybody else can see, answers a number,
+  data-parallel rules: it writes nothing anybody else can see but what it
+  writes through a `Mutex`'s guard (below), answers a number,
   a `boolean` or an enum, and leaves `Arena` alone. A task cannot open a scope
   of its own or call `parallelMapInto`.
 - **Any argument will do** — an array, an object — because nothing writes
@@ -894,6 +895,81 @@ export const main = (): i32 => {
   const s = scope();   // a scope must be introduced by `using`
   s.spawn(one, 1, out, 0);
   return out[0];
+};
+```
+
+### Sharing a value between tasks: `Mutex<T>`
+
+When tasks must update one value, put it in a `Mutex` and reach it only through
+`using g = m.lock()`: the lock is held until that block ends, on every exit.
+
+```ts nish:ok
+import { Mutex, scope } from "nish/threads";
+
+class Tally {
+  bins: i32[];
+  constructor() {
+    this.bins = [0, 0, 0, 0];
+  }
+}
+
+class Shard {
+  xs: i32[];
+  tally: Mutex<Tally>;
+  constructor(xs: i32[], tally: Mutex<Tally>) {
+    this.xs = xs;
+    this.tally = tally;
+  }
+}
+
+const binAll = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    const bin: i32 = x & 3;
+    using g = s.tally.lock();                  // held to the end of this pass
+    g.value.bins[bin] = g.value.bins[bin] + 1;
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const tally = new Mutex<Tally>(new Tally()); // a fresh value: `new` or a literal
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binAll, new Shard([1, 2, 3], tally), done, 0);
+    s.spawn(binAll, new Shard([4, 5, 6], tally), done, 1);
+  }
+  using g = tally.lock();                      // after the join: lock freely
+  console.log(`${g.value.bins[1]}`);           // 2
+  return 0;
+};
+```
+
+- **Only `g.value`, and only as the base of a field or element access.** Read
+  a number, a `boolean` or an enum through it, or store one into a field or an
+  element that already exists. Don't bind `g`, `g.value` or an array it holds,
+  don't pass them, and call no method through them (no `push`).
+- **One lock at a time, and no waiting while it is held**: inside the guard's
+  block, directly or through any call, no second `lock()`, no `scope()` or
+  `spawn`, no `parallelMapInto`. So a program cannot deadlock.
+- **A `Mutex` reaches a task as its argument or a field of its argument's
+  class** — not in an array. Between a scope's first `spawn` and its block's
+  end the parent doesn't lock what the tasks share; before and after, it may.
+- **Make the updates commute** (a sum, a count, a histogram): the critical
+  sections run in the scheduler's order natively and in spawn order under Node.
+
+```ts nish:err NL2467
+import { Mutex } from "nish/threads";
+
+class Counter {
+  n: i32 = 0;
+}
+
+export const main = (): i32 => {
+  const m = new Mutex<Counter>(new Counter());
+  using g = m.lock();
+  const c = g.value;   // what the guard reaches would outlive the lock
+  return c.n;
 };
 ```
 

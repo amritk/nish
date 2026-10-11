@@ -1517,6 +1517,114 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end thread-scope -->
 
+### `nish/threads`: a lock that owns its data
+
+`using g = m.lock()` calls the `Mutex`'s `lock()`, and each exit of the block
+is a release store of 0 into the guard's lock word: below, after the returned
+value has been read through the guard, since the value may need the lock. The
+`lock()` instance, in `nish/threads`'s own module, is written by the emitter in
+place of its source body (`return this.guard`): it loads the one guard the
+`Mutex` holds and takes the guard's word with an acquire compare-and-swap,
+calling the runtime only when the word was already held:
+
+```llvm
+%guard = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %0, align 8
+%word = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %guard, i32 0, i32 1
+%swap = cmpxchg i32* %word, i32 0, i32 1 acquire monotonic
+%took = extractvalue { i32, i1 } %swap, 1
+br i1 %took, label %lock.held, label %lock.wait
+lock.wait:
+  call void @nish_mutex_wait(i32* %word)    ; spins briefly, then yields, until it takes the word
+  br label %lock.held
+lock.held:
+  ret %struct.MutexGuard$$Tally* %guard
+```
+
+The acquire keeps every guarded access after the swap and the release every
+one before the store, which is all a lock has to promise; nothing is allocated
+per lock, and nothing is destroyed, because the word is a field of the guard
+the `Mutex` made when it was made. The whole of both modules is
+`tests/link/thread_mutex_counter`'s golden (docs/LANGUAGE.md, "A lock that owns
+its data").
+
+<!-- cookbook:begin thread-mutex -->
+```ts
+import { Mutex } from "nish/threads"
+
+class Tally {
+  n: i32 = 0
+}
+
+export const bump = (m: Mutex<Tally>, k: i32): i32 => {
+  using g = m.lock()
+  g.value.n = g.value.n + k
+  return g.value.n
+}
+```
+
+```llvm
+%struct.Tally = type { i32 }
+%struct.Mutex$$Tally = type { %struct.MutexGuard$$Tally* }
+%struct.MutexGuard$$Tally = type { %struct.Tally*, i32 }
+
+declare void @nish.Mutex$$Tally.constructor(%struct.Mutex$$Tally* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
+declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #0
+declare void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define noundef i32 @bump(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %m, i32 noundef %k) #0 {
+entry:
+  %g.addr = alloca %struct.MutexGuard$$Tally*, align 8
+  %0 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
+  store %struct.MutexGuard$$Tally* %0, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %1 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %2 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %1, i32 0, i32 1
+  %3 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %4 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %3, i32 0, i32 0
+  %5 = load %struct.Tally*, %struct.Tally** %4, align 8, !tbaa !5
+  %6 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %7 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %6, i32 0, i32 0
+  %8 = load %struct.Tally*, %struct.Tally** %7, align 8, !tbaa !5
+  %9 = getelementptr inbounds %struct.Tally, %struct.Tally* %8, i32 0, i32 0
+  %10 = load i32, i32* %9, align 4, !tbaa !7
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %k)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %14 = getelementptr inbounds %struct.Tally, %struct.Tally* %5, i32 0, i32 0
+  store i32 %12, i32* %14, align 4, !tbaa !7
+  %15 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %16 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %15, i32 0, i32 0
+  %17 = load %struct.Tally*, %struct.Tally** %16, align 8, !tbaa !5
+  %18 = getelementptr inbounds %struct.Tally, %struct.Tally* %17, i32 0, i32 0
+  %19 = load i32, i32* %18, align 4, !tbaa !7
+  store atomic i32 0, i32* %2 release, align 4
+  ret i32 %19
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"i32", !1, i64 0}
+!4 = !{!"MutexGuard$$Tally", !2, i64 0, !3, i64 8}
+!5 = !{!4, !2, i64 0}
+!6 = !{!"Tally", !3, i64 0}
+!7 = !{!6, !3, i64 0}
+```
+<!-- cookbook:end thread-mutex -->
+
 ### `nish/text`: `indexOfAny` on the runtime kernel
 
 `indexOfAny` is ordinary Nish in `std/text.ts`: its checks on the set, its
@@ -17627,6 +17735,7 @@ declare extern_weak void @nish_panic_overflow(i32 noundef) #7
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
+declare void @nish_mutex_wait(i32* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #8 {

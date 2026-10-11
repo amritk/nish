@@ -202,6 +202,14 @@ no prelude can reach it. They are language decisions
   22 and is native from Node 24; Node 22's flagged `using` never calls
   `[Symbol.dispose]`, and nothing here needs it to, because every task has run
   by the time the block ends.
+- **A `Mutex`'s lock waits for nothing under Node.** `lock()` answers the guard
+  at once and its `[Symbol.dispose]` does nothing, because the tasks run one at
+  a time, at their spawns, so their critical sections run in spawn order —
+  one of the orders the native threads can run them in
+  ([LANGUAGE.md](LANGUAGE.md#a-lock-that-owns-its-data-mutext)). A program
+  whose guarded updates commute prints the same both ways; the checker refuses
+  the parent locking what a scope's tasks share between the first `spawn` and
+  the end of the block, where the two would differ.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
   **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
   other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`

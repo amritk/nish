@@ -2534,11 +2534,12 @@ export const main = (): i32 => {
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
   another). A panic ends the process and joins nothing (`throw` is refused by
   Phase 0, `reject_throw`).
-- **A scope is introduced by `using`, and `using` takes only a scope or an
+- **A scope is introduced by `using`, and `using` takes only a scope, a
+  [`Mutex`'s lock](#a-lock-that-owns-its-data-mutext) or an
   [`arena()`](#using-a--arena).** A scope bound any other way is
   `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
   (`tests/cases/reject_thread_scope_not_using`), and a `using` of anything else is
-  `` `using` takes only `scope()` from `nish/threads` or the builtin `arena()` in this version: they are the values whose disposal the language defines — a scope joins its tasks, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs ``
+  `` `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this version: they are the values whose disposal the language defines — a scope joins its tasks, a guard releases its lock, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs ``
   (`tests/cases/reject_thread_using_not_scope`). A `using` declaration is a
   statement of a block; as the body of an `if` or a loop it is
   `` A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block ``
@@ -2550,10 +2551,11 @@ export const main = (): i32 => {
   `` A `ThreadScope` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it ``
   (`tests/cases/reject_thread_scope_escapes`). That, and the join at every exit,
   is the whole proof that every task is joined: there is no handle to forget.
-- **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` declares one,
-  so TypeScript and Node accept `using s = scope()`; the compiler emits the join
-  itself and never calls it. Any other class's is
-  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method of any other class would never be called ``
+- **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` and
+  `MutexGuard` declare one, so TypeScript and Node accept `using s = scope()`
+  and `using g = m.lock()`; the compiler emits the join and the release itself
+  and never calls it. Any other class's is
+  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a disposal method of any other class would never be called ``
   (`tests/cases/reject_thread_dispose_elsewhere`).
 - **There is no thread count.** Each spawn is one task and each task one
   thread; a scope with more tasks than cores leaves the scheduler to share them
@@ -2564,10 +2566,12 @@ What a task may do is what a data-parallel body may, less the rules about an
 element's arena, which a task does not share, and each rule is reported at the
 `spawn`:
 
-- **The task writes nothing another can see**, with the words of the
-  data-parallel rule:
-  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``
-  (`tests/cases/reject_thread_task_shared_write`). A task inside a task, or
+- **The task writes nothing another can see**, except through the guard of a
+  [`Mutex`](#a-lock-that-owns-its-data-mutext), the one shared write a task may
+  make:
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
+  (NL2471; `tests/cases/reject_thread_task_shared_write`, and
+  `reject_mutex_task_unguarded` for a task that also writes through a guard). A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
@@ -2590,8 +2594,137 @@ stores the answer there; the rule above is what makes that print the same as
 the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 `--js-explicit-resource-management` on Node 22 and is native from Node 24.
 
-`parallelFor`, locks, channels, non-scalar results and `scope(n)` are not in
-this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.3, §7).
+`parallelFor`, channels, non-scalar results and `scope(n)` are not in this
+stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.4, §7); the lock is
+the next section.
+
+### A lock that owns its data: `Mutex<T>`
+
+A `Mutex` lets a scope's tasks share one value they all update: the data lives
+inside the lock, and the only way to it is the guard `lock()` answers, bound by
+`using`, which holds the lock until its block ends
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.3). It is Rust's
+`Mutex<T>`, narrowed until no borrow checker is needed.
+
+```typescript
+import { Mutex, scope } from "nish/threads";
+
+class Counter {
+  n: i32 = 0;
+}
+
+const addMany = (total: Mutex<Counter>): i32 => {
+  for (let k: i32 = 0; k < 100000; k++) {
+    using g = total.lock();          // waits for the lock, and holds it to the block's end
+    g.value.n = g.value.n + 1;
+  }                                  // released here, on every pass
+  return 0;
+};
+
+export const main = (): i32 => {
+  const total = new Mutex<Counter>(new Counter());
+  const done: i32[] = [0, 0, 0, 0];
+  {
+    using s = scope();
+    for (let t: i32 = 0; t < 4; t++) {
+      s.spawn(addMany, total, done, t);
+    }
+  }
+  using g = total.lock();
+  console.log(`${g.value.n}`);       // 400000
+  return 0;
+};
+```
+
+- **Natively the lock is one word inside the guard**, taken with an acquire
+  compare-and-swap in `lock()` and given back with a release store, so a lock
+  nobody holds costs one atomic instruction and allocates nothing; a `lock()`
+  that finds the word held calls the runtime's `nish_mutex_wait`, which spins
+  briefly and then yields until it can take it (`tests/link/thread_mutex_counter`,
+  whose `threads.ll` is the lowering, and `tests/link/thread_mutex_histogram`).
+  On `wasm32` a scope's tasks run one after another, as they do for every
+  scope there, and the same program prints the same total
+  (`tests/run.js`, "the `--profile wasi` build").
+- **The release is emitted at every exit of the guard's block**: its end, a
+  `break` or `continue` that leaves it, and a `return` — after the returned
+  value is computed, since the value may read through the guard — and inside
+  an `arena()` block it is given back before the arena releases
+  (`tests/link/thread_mutex_exit_paths`, which locks again after each exit and
+  would wait on itself if one kept the lock).
+
+Eight rules keep every path to the data behind the lock, and a program that
+breaks one is refused with that rule's own code:
+
+- **R1: the data is fresh, and only the guard reaches it.** `new Mutex<T>(init)`
+  takes a `new` expression or a literal, because a value the program already
+  holds would be a path to the data that skips the lock:
+  `` `new Mutex` takes a fresh value — a `new` expression or a literal — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock ``
+  (NL2463, `tests/cases/reject_mutex_not_fresh`). And `lock` is the only member
+  of a `Mutex` a program may name:
+  `` `guard` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock ``
+  (NL2464, `reject_mutex_member`).
+- **R2: `m.lock()` is only the initialiser of a `using` declaration**, the
+  third disposable beside `scope()` and `arena()`:
+  `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
+  (NL2465, `reject_mutex_lock_not_using`).
+- **R3: a guard is used only as `g.value`, and what it reaches only as the base
+  of another access.** Passed, bound, stored, returned or walked, a guard is
+  `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
+  (NL2466, `reject_mutex_guard_passed`), and anything read through it that is
+  not a number, a `boolean` or an enum — `const c = g.value`, `g.value.xs` as a
+  value, a `for...of` over it — is
+  `` This is a `Counter` read through a guard, which is used only as the base of a field or element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock ``
+  (NL2467, `reject_mutex_guard_alias`). A scalar read through the guard is a
+  value like any other, `.length` of an array it reaches included.
+- **R4: a store through a guard stores a scalar, and no method is called
+  through it.** A number, a `boolean` or an enum, into a field or an element of
+  an array that already exists:
+  `` This stores a `string` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: a task's arena is freed when it is joined, and a pointer into it stored here would dangle ``
+  (NL2468, `reject_mutex_guard_store`). `push` — which can move the array into
+  the task's arena — and every other method are
+  `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined ``
+  (NL2469, `reject_mutex_guard_push`). So a `Mutex<i32[]>` or a class with an
+  `i32[]` field holds a histogram, sized when it is made.
+- **R5: one lock at a time, and nothing waited on while it is held.** Inside a
+  guard's block — directly, or through any function it calls — a second
+  `lock()`, `scope()`, `spawn`, `parallelMapInto` or `parallelReduce` is
+  `` A second `lock()` is reached while `ga` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held ``
+  (NL2470; `reject_mutex_nested_lock`, `reject_mutex_lock_through_call` for a
+  callee that locks, `reject_mutex_held_scope` for a scope). That is the whole
+  argument that **a program cannot deadlock**: a task holding a lock never
+  waits for anything, so every lock is given back.
+- **R6: a store through a guard is the one shared write a task may make.** P2's
+  rule is otherwise unchanged (above, NL2471).
+- **R7: between a scope's first `spawn` and the end of its block, the parent
+  does not lock what the scope's tasks share.** Natively the tasks have not run
+  yet there, and under Node each has run at its spawn, so the parent would see
+  a different value:
+  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the first `spawn` or after the join ``
+  (NL2472, `reject_mutex_region_lock`). It is asked by type: a `Mutex<T>` of the
+  type a task's argument reaches, or, for a call that takes a lock, any
+  `Mutex` a task reaches. Before the first `spawn` and after the join the
+  parent locks freely, as `tests/link/thread_mutex_counter` does.
+- **R8: a `Mutex` reaches a task as its argument, or as a field of the class
+  its argument is.** An array of them, a deeper field, or a `Mutex` inside
+  another's data is
+  `` The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `arg[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer ``
+  (NL2473, `reject_mutex_task_array`). A task's destination holds numbers, so a
+  `Mutex` is never one.
+
+And a lock is a scope's: the body of `parallelMapInto` or `parallelReduce`,
+which runs on many threads at once, takes none
+(`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body ``,
+NL2474, `reject_mutex_parallel_body`).
+
+**What a guarded program means.** The tasks' critical sections run one at a
+time, in some order. Natively the order is the scheduler's; under Node, where
+`lock()` answers the guard at once and its `[Symbol.dispose]` does nothing, it
+is spawn order, which is one of the native orders
+([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). So a program whose guarded updates
+commute — a sum, a count, a minimum, a histogram — prints the same both ways,
+and one whose updates do not is its author's obligation, as an associative
+operator is for a named function given to `parallelReduce`. The checker does
+not try to prove commutativity.
 
 ### Byte search: `indexOfAny` in `nish/text`
 
