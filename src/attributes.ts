@@ -1722,17 +1722,14 @@ class FactCollector {
     }
     const refs: Node[] = []
     collectRefs(program, body, local, refs)
-    const callees: string[] = []
-    const indices: i32[] = []
+    const handed: ParamUse[] = []
     for (const ref of refs) {
       const found = classifyUse(this.unit, table, ref)
-      if (found.kind === USE_ESCAPE) {
+      if (found.kind === USE_ESCAPE || (found.kind === USE_ARGUMENT && found.callee === null)) {
         return
       }
-      const callee = found.callee
-      if (found.kind === USE_ARGUMENT && callee !== null) {
-        callees.push(callee.name)
-        indices.push(found.index)
+      if (found.kind === USE_ARGUMENT) {
+        handed.push(found)
       }
     }
     const at = this.facts.privateLocals.length
@@ -1740,12 +1737,13 @@ class FactCollector {
     this.facts.privateLost.push(false)
     const none: Node | null = null
     this.facts.privateSites.push(none)
-    let i = 0
-    while (i < callees.length) {
-      this.facts.privateArgCallees.push(callees[i])
-      this.facts.privateArgIndices.push(indices[i])
-      this.facts.privateArgLocals.push(at)
-      i = i + 1
+    for (const found of handed) {
+      const callee = found.callee
+      if (callee !== null) {
+        this.facts.privateArgCallees.push(callee.name)
+        this.facts.privateArgIndices.push(found.index)
+        this.facts.privateArgLocals.push(at)
+      }
     }
   }
 
