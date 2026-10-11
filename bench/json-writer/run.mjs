@@ -3,7 +3,9 @@
 // machine can see at all.
 //
 //   npm run build && node bench/json-writer/run.mjs [--rounds N] [--count N] [--compiler <nish>]
-//     --rounds N  timed rounds after one warm-up round (default 15)
+//     --rounds N  timed rounds, rounded up to an even count so each binary
+//                 goes first in half of them (default 16), after one
+//                 uncounted warm-up round
 //     --count N   writes per run (default 2,000,000)
 //
 // `main.ts` beside this file is built once with `--link` (the speed profile)
@@ -30,7 +32,7 @@ const fail = (msg) => {
   process.exit(2)
 }
 
-let rounds = 15
+let rounds = 16
 let count = 2000000
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
