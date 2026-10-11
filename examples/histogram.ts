@@ -6,8 +6,8 @@
 // the guard releases it when its block ends.
 //
 // Taking the lock once per task rather than once per value is the shape to
-// copy: the lock is cheap, but four threads contending for it on every value
-// would run their critical sections one at a time and lose the speedup.
+// copy: four threads contending for the lock on every value would run their
+// critical sections one at a time and lose the speedup.
 //   nish examples/histogram.ts --link build/histogram && ./build/histogram
 //   ./build/histogram --sequential     the same four calls, one after another
 // Adding to a bin commutes, so the bins are the same whatever order the tasks

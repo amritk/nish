@@ -8,13 +8,13 @@ The runtime partitioner, `runtime/runtime-parallel.c`, shipped in 0.3.0
 staged as T1 to T4 was redesigned and reordered by wp29. Its P1 (data
 parallelism, 0.11.0, [#219](https://github.com/amritk/nish/pull/219)) is T4, and
 its P2 (`using s = scope()`, 0.13.0, [#262](https://github.com/amritk/nish/pull/262))
-is T1. Its P3 is T3, built as `Mutex<T>`
-([#562](https://github.com/amritk/nish/pull/562)) and `Channel<T>` of scalars:
-P3 built, lock and channel. This note
+is T1. Its P3 is T3, built as the lock `Mutex<T>`
+([#562](https://github.com/amritk/nish/pull/562)) and the channel `Channel<T>`
+of scalars. This note
 remains the record of *whether* and *why*: 1:1 OS threads, with data races
 rejected at compile time. [LANGUAGE.md](LANGUAGE.md) ("Data parallelism",
-"Scoped tasks", "A lock that owns its data") is normative. The full plan, with the prototype kernels and
-driver that §8 measured, is this file at commit `2b2eb95c`
+"Scoped tasks", "A lock that owns its data") is normative. The full plan, with
+the prototype kernels and driver that §8 measured, is this file at commit `2b2eb95c`
 (`git show 2b2eb95c:docs/wp20-threads.md`).
 
 ## 1. The decision

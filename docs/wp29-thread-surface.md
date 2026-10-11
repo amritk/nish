@@ -188,7 +188,7 @@ class Shard {
 
 const binShard = (s: Shard): i32 => {
   for (const x of s.xs) {
-    const bin: i32 = x & 7;                 // an index is a name or a literal
+    const bin: i32 = x & 7;                 // a bitwise index is bound first (NL1042)
     using g = s.hist.lock();
     g.value.bins[bin] = g.value.bins[bin] + 1;
   }
