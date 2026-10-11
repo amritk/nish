@@ -201,10 +201,8 @@ const JSON_TOK_LOWER_A: i32 = 97
 const JSON_TOK_LOWER_B: i32 = 98
 const JSON_TOK_LOWER_E: i32 = 101
 const JSON_TOK_LOWER_F: i32 = 102
-const JSON_TOK_LOWER_L: i32 = 108
 const JSON_TOK_LOWER_N: i32 = 110
 const JSON_TOK_LOWER_R: i32 = 114
-const JSON_TOK_LOWER_S: i32 = 115
 const JSON_TOK_LOWER_T: i32 = 116
 const JSON_TOK_LOWER_U: i32 = 117
 const JSON_TOK_OPEN_BRACE: i32 = 123
@@ -1131,7 +1129,7 @@ export class JsonTokenizer {
   numberSlow(): f64 {
     const src: u8[] = this.src
     const end: i32 = this.tokEnd
-    using a = arena()
+    using _scope = arena()
     const parts: string[] = []
     let i: i32 = this.tokStart
     while (i < end) {

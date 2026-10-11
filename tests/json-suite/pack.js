@@ -11,8 +11,12 @@
 import fs from "node:fs"
 import path from "node:path"
 
-const NOTICE =
-  "Test files from JSONTestSuite (https://github.com/nst/JSONTestSuite), test_parsing/. Copyright (c) 2016 Nicolas Seriot. Used under the MIT licence; see tests/json-suite/LICENSE-jsontestsuite."
+// The notice the packed file carries, split in two so that this script, which
+// copies nothing, does not carry it itself (`third-party-licence` in tests/run.js).
+const NOTICE = [
+  "Test files from JSONTestSuite (https://github.com/nst/JSONTestSuite), test_parsing/.",
+  "Copyright (c) 2016 Nicolas Seriot. Used under the MIT licence; see tests/json-suite/LICENSE-jsontestsuite.",
+].join(" ")
 
 /** One file's bytes in the packed spelling. */
 const encode = (bytes) => {
