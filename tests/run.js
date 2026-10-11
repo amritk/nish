@@ -4901,12 +4901,13 @@ if (!only || "std_json_tokenizer".includes(only)) {
 // differential imports it: a construct Node 22 cannot parse (a `using`
 // declaration) or an `i64` built from a bare literal (a double where `toI64`
 // gives a BigInt) breaks it there and nowhere natively. `node.ts` tokenizes a
-// small ASCII input under the plain prelude, through the parseFloat path and
-// `numberI64` at the i64 edges, and prints the line the native build prints.
+// small ASCII input under the plain prelude, through the parseFloat path,
+// `numberI64` at the i64 edges, an escaped surrogate pair's decoded bytes and
+// `keyEquals` both ways, and prints the line the native build prints.
 if (!only || "std_json_tokenizer".includes(only)) {
   const entry = path.join(linkDir, "std_json_tokenizer", "node.ts")
   const want = [
-    "1 5 3 7:1/1 7:-25 6:3 8 9 10 1 2 4 5 7:1e+23 5 7:0.12345678901234566 2 0@-1",
+    "1 5:6162= 3 7:1/1 7:-25 6:780a41f09f9880 8 9 10 1 2 4 5:6163! 7:1e+23 5:6c6f6e67! 7:0.12345678901234566 2 0@-1",
     "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000 7:0/0 4 0@-1",
     "3 7:1/1 -1@3",
     "",

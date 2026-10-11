@@ -314,7 +314,7 @@ const jsonTokHex4 = (src: u8[], at: i32, end: i32): i32 => {
   return value
 }
 
-/** Whether `b` is a continuation byte between `low` and `high`, inclusive. */
+/** Whether byte `b`, a lead or a continuation, lies between `low` and `high`, inclusive; `-1`, past the window, never does. */
 const jsonTokInRange = (b: i32, low: i32, high: i32): boolean => b >= low && b <= high
 
 /**
@@ -463,9 +463,13 @@ export class JsonTokenizer {
   tokEnd: i32
   /** The sticky error, a negative `JSON_TOK_ERR_*` code; `0` until one. */
   failed: i32
-  /** The byte offset in `src` the error was found at; `-1` until one. */
+  /**
+   * The byte offset in `src` the error was found at, and `-1` until one. Read
+   * it only once `failed` is set: a `JSON_TOK_ERR_WINDOW` records the `off`
+   * the caller passed, which may itself be negative or past the end of `src`.
+   */
   errorAt: i32
-  /** The current string's or key's length once decoded, and whether it holds a backslash. */
+  /** The current string's or key's length once decoded; shorter than its raw length exactly when it holds an escape. */
   stringBytes: i32
   /** Whether the current number has neither a fraction nor an exponent. */
   integral: boolean
@@ -689,7 +693,8 @@ export class JsonTokenizer {
    * A number at `at`, to RFC 8259 §6: `-`? then `0` or a digit run not
    * starting with `0`, then `.` and digits, then `e` or `E`, a sign and
    * digits. What follows it is the next call's to judge, so `01` is a `0`
-   * and then a syntax error, and `1x` is a `1` and then one.
+   * and then an error: `JSON_TOK_ERR_SYNTAX` inside a container (`[01]`),
+   * `JSON_TOK_ERR_TRAILING` at the top level. `1x` is a `1` and then the same.
    *
    * Nothing past the limit is read: the scan stops one byte past it, and a
    * number that reaches that byte is refused for its length, whatever the

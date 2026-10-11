@@ -131,6 +131,7 @@ const errors = (t: Suite): void => {
   t.eqStr("SYNTAX: a literal in capitals", jtVerdict("True"), "SYNTAX@0");
   t.eqStr("SYNTAX: a literal that goes wrong on its last letter", jtVerdict("nulx"), "SYNTAX@3");
   t.eqStr("SYNTAX: a leading zero is a 0 and then a stray digit", jtVerdict("[01]"), "SYNTAX@2");
+  t.eqStr("TRAILING: a leading zero at the top level is a 0 and then trailing data", jtVerdict("01"), "TRAILING@1");
   t.eqStr("SYNTAX: a letter after a number", jtVerdict("[1x]"), "SYNTAX@2");
   t.eqStr("SYNTAX: a single quote", jtVerdict("['a']"), "SYNTAX@1");
   t.eqStr("SYNTAX: a form feed is not a blank", jtVerdict("[\f]"), "SYNTAX@1");

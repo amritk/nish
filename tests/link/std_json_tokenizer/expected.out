@@ -43,6 +43,7 @@ PASS  SYNTAX: a misspelt literal
 PASS  SYNTAX: a literal in capitals
 PASS  SYNTAX: a literal that goes wrong on its last letter
 PASS  SYNTAX: a leading zero is a 0 and then a stray digit
+PASS  TRAILING: a leading zero at the top level is a 0 and then trailing data
 PASS  SYNTAX: a letter after a number
 PASS  SYNTAX: a single quote
 PASS  SYNTAX: a form feed is not a blank
@@ -302,4 +303,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 304 passed, 0 failed, 0 skipped
+std/json-tokenizer: 305 passed, 0 failed, 0 skipped
