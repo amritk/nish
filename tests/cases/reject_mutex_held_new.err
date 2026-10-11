@@ -1,0 +1,1 @@
+`new Peek`, which takes a lock or waits for threads, is reached while `g` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held

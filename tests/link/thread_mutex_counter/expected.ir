@@ -1,0 +1,3 @@
+cmpxchg i32* %2, i32 0, i32 1 acquire monotonic
+call void @nish_mutex_wait(i32* %2)
+declare void @nish_mutex_wait(i32* noundef nonnull)

@@ -1,1 +1,1 @@
-`using` takes only `scope()` from `nish/threads` or the builtin `arena()` in this version
+`using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this version

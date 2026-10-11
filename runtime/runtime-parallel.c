@@ -22,8 +22,9 @@
  * arrives with the same macro.
  *
  * docs/wp29-thread-surface.md is the surface this is the stage under: P1's
- * `parallelMapInto` and `parallelReduce` divide a range here, and P2's scopes
- * run their tasks here (`nish_scope_spawn`, `nish_scope_join`).
+ * `parallelMapInto` and `parallelReduce` divide a range here, P2's scopes
+ * run their tasks here (`nish_scope_spawn`, `nish_scope_join`), and P3's lock
+ * waits here when it finds its word held (`nish_mutex_wait`).
  */
 #include "nish.h"
 
@@ -34,6 +35,7 @@
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
 #include <pthread.h>
+#include <sched.h>
 #include <unistd.h>
 #endif
 
@@ -264,5 +266,30 @@ void nish_scope_join(void *scope) {
     mine = t->next;
     t->finish(t->payload);
     free(t);
+  }
+}
+
+/* ---- A lock's contended path (wp29 P3) ----
+ *
+ * The compiler takes a free lock inline, so this runs only when the word was
+ * held: another task is inside its critical section, which the language keeps
+ * short -- one lock at a time, nothing waited on while it is held -- so a few
+ * relaxed reads usually see it free again. Past that the holder may have been
+ * descheduled, and spinning would only keep it off the core, so each further
+ * try first yields. The swap that takes the word is the acquire the inline
+ * path would have made. */
+void nish_mutex_wait(int32_t *word) {
+#ifdef NISH_PAR_REAL
+  int spins = 0;
+#endif
+  for (;;) {
+    int32_t free_word = 0;
+    if (__atomic_load_n(word, __ATOMIC_RELAXED) == 0 &&
+        __atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+      return;
+#ifdef NISH_PAR_REAL
+    if (spins < 64) spins++;
+    else sched_yield();
+#endif
   }
 }
