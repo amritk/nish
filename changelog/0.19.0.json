@@ -1,0 +1,674 @@
+{
+  "version": "0.19.0",
+  "date": "2026-10-11",
+  "tag": "v0.19.0",
+  "range": {
+    "from": "v0.18.0",
+    "to": "82175555"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-18-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.18.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "308a8b1"
+      ],
+      "pr": 526,
+      "author": "github-actions[bot]",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-that-wp38-s-cpu-bar-is-met",
+      "type": "docs",
+      "breaking": false,
+      "title": "record that WP38's --cpu bar is met once the noise is measured",
+      "body": "S2's opt-in `--cpu` level was declined because vec3 came out 0.3% to 1.2% slower at `-march=x86-64-v3`, and the bar allows no loss. wp38 §7 named the measurement that would settle it: a binary timed against itself.\n\n`bench/simd-s0.mjs --self` now takes that measurement. It adds a byte-for-byte copy of the baseline binary as a third column in the -march rows' rotation. The rotation takes any number of builds and rounds the count up to a multiple of it, so each build goes first equally often; with two builds it runs as before.\n\nvec3's dip does not reproduce. In two samples of fifteen rotating rounds on the same machine:\n- vec3 gains 1.1% to 1.7% on every figure, while the baseline differs from its own copy by 0.3% at most.\n- nbody's only negative figure, −0.8% on the minimum, sits inside the 1.1% by which the baseline missed its own copy in that sample.\n- spectral gains about 20%.\n\nSo the bar is met. The flag is still not built: its cost is mostly `tests/ct-asm.js` reading every level it accepts, and whether one benchmark's gain is worth that is left to the owner.",
+      "metrics": [
+        "-march=x86-64-v3 against baseline, two samples of 15 rounds of 3 (min / median): spectral +20.8% / +19.7%, +21.1% / +20.5%; vec3 +1.2% / +1.5%, +1.7% / +1.1%; nbody +0.3% / +1.1%, -0.8% / +0.9%. Baseline against its own copy: spectral -0.2% / +0.3%, 0.0% / +0.1%; vec3 0.0% / +0.2%, +0.2% / -0.3%; nbody +0.2% / +0.1%, -1.1% / -0.3%"
+      ],
+      "refs": [
+        "docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear"
+      ],
+      "tests": [],
+      "commits": [
+        "4b5bd6d"
+      ],
+      "pr": 527,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-the-readdirsync-listing-fixes-from-520-in",
+      "type": "docs",
+      "scope": "security",
+      "breaking": false,
+      "title": "record the readdirSync listing fixes from #520 in CG-5",
+      "body": "The codegen security record's CG-5 row described only the first\n`readdirSync` fix. It now also records what #520 closed: four more ways a\nlisting's name could outlive the arena scope that released it (a wrapper\nthat returns the listing, a listing passed to a function that answers one\nof its names, a name assigned to a returned local, a name stored into a\nfield), and the boundary of the carried-element rule: only `string` and\n`string | null` elements are carried with a returned array, because a\nnested row holds pointers no caller follows.\n\nThe row also records the one precision loss #520 accepted:\n`cg_sec_readdir_pass` no longer releases its arena at function exit, which\nholds memory longer but never frees it early. `mem_loop_scope_forof`\nmoved the other way and gained a tighter scope. Its line anchors are\nrefreshed and marked as being at #520's merge.\n\nRefs: docs/security/codegen.md#cg-5\nTests: tests/cases/mem_return_array_readdir, tests/cases/mem_return_array_nested, tests/cases/cg_sec_readdir_pass\n\nCloses #522",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "614265b"
+      ],
+      "pr": 529,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-that-wp38-s-s4-the-lexer-on",
+      "type": "docs",
+      "breaking": false,
+      "title": "record that WP38's S4, the lexer on indexOfAny, is declined for now",
+      "body": "WP38's S4 would have moved the compiler's lexer onto `indexOf` and `indexOfAny`, which 0.18.0 ships. Its bar is a measurably faster `scripts/bootstrap.sh --verify`, and no lexer change can meet it:\n- the lexer is about 1% of the front end;\n- the front end's three runs are about 2% of the bootstrap.\n\nA spike put `skipTrivia`'s two comment loops on `indexOf`. It produced the same token stream and identical IR. It made the lexer 4% faster at the minimum, which would save about 1 ms of a 135.6 s bootstrap.\n\nString-literal bodies have `indexOfAny`'s shape too, but they were not measured. The decline rests on the lexer's share, not on that.\n\n`docs/wp38-simd.md` §7 records the decline beside S2's paragraph:\n- the figures, the machine and the commit;\n- the spike's exact code and how to re-apply it;\n- what reopens S4: a front-end profile that shows a scan-bound loop in `src/`, or a bar restated in front-end time.\n\nThe status line, §2.2, §4 and §5, `docs/MASTER_PLAN.md` and `docs/README.md` follow it.\n\n`bench/lexer.ts` is new. It lexes one file through `src/lexer.ts` 25 times, with a different text on each pass, and folds every token into a printed checksum and token count. It refuses to time a pass that hits a lexical error. Since `bench/` is in the self-host oracle's corpus, `tests/self/goldens/checked.txt` is regenerated with it. No compiler code changes.",
+      "metrics": [
+        "lexer 9.82 ms min, 11.62 ms median per pass over src/ (2.8 MB, 338,856 tokens, 9 runs of 25); indexOf comment skips 9.46 / 10.50 ms, 4% at the min; front end 919 / 1,046 ms; bootstrap --verify 135,556 ms in one run, lexer about 30 ms of it (0.02%)"
+      ],
+      "refs": [
+        "docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear"
+      ],
+      "tests": [],
+      "commits": [
+        "283c2ee"
+      ],
+      "pr": 530,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "skip-json-string-bodies-with-a-memchr-search",
+      "type": "perf",
+      "scope": "std",
+      "breaking": false,
+      "title": "skip JSON string bodies with a memchr search",
+      "body": "A string body in std/json is read a byte at a time for its first 16\nbytes and, past them, searched for its closing quote with\ns.indexOf(\"\\\"\", from), one memchr in the runtime. The run of\nbackslashes before the quote found says whether it is escaped. This\ncovers keys, string values and strings inside nested values; answers\nare byte-identical to before.\n\nA line of short strings only is slower: 4-11% min, 10-18% median,\n+18% instructions. It pays the per-string limit check and the\nregisters the indexOf call costs, and has no long body to skip. The\nowner accepted this trade for the gain on every other shape; removing\nit is left to a noinline/cold attribute or the WP38 SIMD work.",
+      "metrics": [
+        "bench/json jsonField x3 106.4 -> 87.4 ms min (113.3 -> 93.1 median), jsonFields 95.0 -> 73.8 ms min; serde typed 81.9, gjson 127.0 on the same machine",
+        "--json diagnostic -7%/-13% min, 50 keys field last -19% min, a miss -12%/-18% min; short strings only +4% to +11% min (+18% instructions); peak RSS unchanged"
+      ],
+      "refs": [
+        "#507"
+      ],
+      "tests": [
+        "tests/link/std_json"
+      ],
+      "commits": [
+        "f33139a"
+      ],
+      "pr": 532,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "warn-when-a-loop-drops-an-allocation-on",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "warn when a loop drops an allocation on every pass",
+      "body": "A local declared outside a loop and given a new allocation on every pass\ndrops the value the pass before gave it, and nothing frees that value while\nthe loop runs. The pass cannot take an arena scope, because its fresh value\noutlives it in the local, and a `using a = arena()` block refuses the same\nassignment (NL2418), so memory grows with the number of passes:\n\n```ts\nlet last = \"\";\nfor (let i = 0; i < 10000000; i++) {\n  last = `item ${i}`;\n}\n```\n\nThis compiled with no warning at all. NL9003 reports an allocation assigned\nover an allocation, but only when the local was *declared* holding one, and\n`let last = \"\"` holds a literal. That guard is right for a local given its\none value in a branch, and wrong for a loop, where every value dropped from\nthe second pass on is the assignment's own.\n\nThe new performance warning, NL9016, reports `x = <allocation>` when the\nassignment is a statement of its own at the top of a loop body, `x` is a\nlocal declared outside that loop, and nothing in the loop may keep the old\nvalue. It names two rewrites: a `const` inside the loop when only the pass\nreads the value, or numbers kept across passes and the value built once\nafter the loop. It is silent for an assignment in a branch, which may run\nonce (a search loop's `found = ...` before its `break`), for a body that\nruns at most once (one whose top level ends the loop, or a\n`do ... while (false)`), and on a line NL9002 or NL9003 already reports.\n\nThe capture check that decides both rules now counts a constructor\nargument (`head = new Node(i, head)`), either arm of a conditional\n(`picks.push(i > 0 ? tag : \"none\")`), a method called on the value\n(`cur.attach(reg)`, which may store `this`; a string's or an array's methods\nnever do), and anything in the assignment's own right-hand side. NL9003 is\ncorrectly quieter on those shapes, and its counts over the corpus are\nunchanged. The rule errs towards silence: a few shapes that do drop a value\nevery pass (a capture after an inner loop, a `return` inside the loop) are\nnot yet reported.",
+      "metrics": [
+        "10,000,000 passes of the loop above peak at 392,156 KB RSS; the rewrite at 11,128 KB",
+        "0 warnings over std/, examples/ and src/; 1 over the 2,704 corpus programs, a real drop"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#diagnostics-and-debugging-flags",
+        "docs/wp6-memory.md"
+      ],
+      "tests": [
+        "tests/cases/perf_arena_pass_drop",
+        "perf_arena_pass_quiet",
+        "perf_arena_quiet",
+        "perf_str_concat_quiet",
+        "tests/wordings/nl9016_arena_pass_drop"
+      ],
+      "commits": [
+        "69e5fe8"
+      ],
+      "pr": 533,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "hold-the-x25519-timing-to-its-domain-and",
+      "type": "test",
+      "scope": "ct",
+      "breaking": false,
+      "title": "hold the x25519 timing to its domain and re-measure CT-13",
+      "body": "`tests/ct-timing.js` now times each x25519 fixture function on the\ninputs `std/crypto/x25519.ts` actually gives it.\n\n- Signed limbs below 2^27 go to `fieldMul`, `fieldSquare` and\n  `fieldMulA24`. Signed limbs below 2^26 go to the reduced-element\n  functions.\n- `swap` and `bit` are masked to one bit.\n- Each bound and mask in use carries its own control, a leak written in\n  C and emitted by the same `fillArray`/`fillScalar` lines, which must\n  differ. A narrowing that erases the secret, or a control that prints\n  no reading, fails the run with exit 2.\n- CT-12's `expect=branch` control is still required on its own.\n- A domain entry that names an untimed function, misses a timed one, or\n  narrows a secret the function does not take is refused.\n\nCT-13's |t| = 35–42 reading of `ladderStep` was re-measured on a 4-vCPU\nXeon VM: 34 runs, in domain and out, in the full driver and linked alone,\non today's fixture and on 0d362c59. Every run read 1.46–3.22, and the\nweekly CI run read 1.17 (x86-64) and 2.09 (aarch64). The original host\nwas never re-run and the cause is unmeasured, so CT-13 stays Open as not\nreproduced. The record now tabulates every reading, the machine and\nharness behind it, and what it does and does not establish.",
+      "metrics": [],
+      "refs": [
+        "#378"
+      ],
+      "tests": [
+        "tests/ct-timing.js --quick (41 functions",
+        "every control differed)"
+      ],
+      "commits": [
+        "f2fd9ab"
+      ],
+      "pr": 537,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "derive-the-tls-resumption-master-secret-completing-rfc",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "derive the TLS resumption master secret, completing RFC 8448 §3",
+      "body": "`TlsServer` now derives `resumption_master_secret`:\n`Derive-Secret(master, \"res master\", ClientHello..client Finished)`, per\nRFC 8446 §7.1. It is computed in `sign`, beside the client application\nsecret and the expected client Finished, and exposed as\n`resumptionSecret` only once the client's Finished verifies.\n`net_tls_rfc8448` and its f64 twin pin RFC 8448 §3's value\n(`7df235f2…`) byte for byte, from the server and from the schedule\nalone. A SHA-384 case is pinned too.\n\nThe secret lives in a ninth array of the server's secret pool. `fail`\nwipes it with `secureZero`, and a test reads the pool array after a\nforged Finished to pin that wipe. `restart` wipes it with the rest.\nTLS-1 records what the carriers' wipes do not reach: the secret stays in\nthe slot's array after a connection closes, until the slot's next\n`restart`, on TCP and QUIC alike. A `TlsServer` grows by 80 bytes, to\n31,192. NewSessionTicket, PSK and 0-RTT remain out of scope.",
+      "metrics": [],
+      "refs": [
+        "RFC 8446 §7.1",
+        "RFC 8448 §3"
+      ],
+      "tests": [
+        "tests/link/net_tls_rfc8448",
+        "tests/link/net_tls_rfc8448_f64"
+      ],
+      "commits": [
+        "a5c025e"
+      ],
+      "pr": 539,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "do-not-hoist-a-loop-s-array-header",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "do not hoist a loop's array header across a new whose constructor resizes it",
+      "body": "A loop over an array whose body ran `new C(xs)` kept the array's header\nhoisted, even when `C`'s constructor pushed to `xs`. So the loop read a\nstale length and data pointer. #435's program printed 6 where Node\nprints 706.\n\n`callMayResize` now treats a class `new` as a call to its constructor,\nusing the constructor's fixpoint `resizesArray` fact. The checker\nalready records that constructor as the node's callee. CG-10's\n`rightSideMayResize` is folded into the same predicate, now `mayResize`.\n\nThis has two effects:\n- Loops over a resizing constructor lose the hoist.\n- Compound element stores whose right side holds a non-resizing `new`\n  drop the second range check, which no constructor proven not to\n  resize can need.\n\nNo golden other than the new case moved, and no corpus program other\nthan the new case changed against main's compiler.",
+      "metrics": [],
+      "refs": [
+        "docs/security/codegen.md CG-11"
+      ],
+      "tests": [
+        "tests/cases/cg_sec_hoist_new_resize"
+      ],
+      "commits": [
+        "8c0b83c"
+      ],
+      "pr": 541,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "run-wycheproof-for-hmac-and-hkdf-and-wipe",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "run Wycheproof for HMAC and HKDF, and wipe their state",
+      "body": "HMAC-SHA-256/384/512 and HKDF-SHA-256/384 now pass Project Wycheproof. Its 522 HMAC cases and 169 HKDF cases are carried at upstream commit 3fa63dd, the same form as the K2/K3/K5 vectors. Each case is checked three ways: one-shot, streaming or scratch, and the new `Secret`-keyed entry points. All three must agree, and the oversized and truncated cases must be refused. HMAC-SHA-512 is new: `HmacSha512`, `hmacSha512` and `hmacSha512Verify`.\n\nHMAC and HKDF now wipe the secret state they used to leave behind:\n- HMAC wipes its key block, a long key's hash, the inner digest and both keyed hashers.\n- The scratch hashers wipe before every `begin`.\n- HKDF-Expand wipes every T(i).\n- `hkdfSha256Secret`/`384Secret` wipe the PRK between extract and expand.\n\n`hmacSha*Secret`, `hkdfExtract*Secret`, `hkdfExpand*Secret` and `hkdfSha*Secret` take a `Secret<u8[]>` key and read it only inside `exposeWith`. The plain-array entry points keep their signatures, so no `std/net` caller changes. Moving those callers onto `Secret` is #430's.\n\nA test in `tests/run.js` pins the wipes under `opt -O2`. It counts the volatile wipes reached from 20 roots, and each count must match exactly, so deleting any one wipe turns it red. Docs/security/crypto-k1.md records this as K1-7.\n\nRefs #476",
+      "metrics": [],
+      "refs": [
+        "docs/security/crypto-k1.md"
+      ],
+      "tests": [
+        "tests/link/crypto_hmac_wycheproof",
+        "tests/link/crypto_hkdf_wycheproof",
+        "tests/link/crypto_hmac"
+      ],
+      "commits": [
+        "6da23af"
+      ],
+      "pr": 542,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "compare-indexofany-s-non-ascii-byte-offset-between",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "compare indexOfAny's non-ASCII byte offset between native and --profile wasi",
+      "body": "`indexOfAny` counts bytes both natively and under `--profile wasi`. Node counts UTF-16 units, so the existing Node-compared fixture could not check the non-ASCII edge of the SIMD path, the case #524 raised.\n\nA sibling program, `std_text_index_of_any_non_ascii_offset`, now pins the byte offsets themselves: two-, three- and four-byte characters around the 16- and 32-byte vector boundaries, plus `from` landing on a continuation byte. A wrong offset fails the native run on its own. `tests/run.js` also builds the program under `--profile wasi` and requires the two builds to print the same thing. The program stays out of the Node comparison, and the existing Node-compared line is unchanged.\n\nFixes #524",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_text_index_of_any_non_ascii_offset"
+      ],
+      "commits": [
+        "eb31460"
+      ],
+      "pr": 536,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "a-method-of-a-non-exported-class-called",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a method of a non-exported class called from another module links",
+      "body": "A value of a non-exported class can reach another module through an exported signature, such as `Conn.space(): Space`. The rule for reachable layouts already lets the importer hold that value and call its methods. Those methods were still emitted `internal`, though. The call passed the checker and then failed at link with `undefined symbol`, whether the two modules were in one package or two.\n\nNow a method that another module calls, or an instantiation of a generic one, gets `hidden` linkage. This is the linkage WP29 already gives a private function that an imported instantiation calls. The final link resolves the method, and the output exports it to nothing. A method that only its own module calls stays `internal`. The call site picks its `Result` ABI from `visibleOutside()`, so a hidden method returning a small `Result` is called with the same ABI it is defined with. The class's name still belongs to its module, so importing it or naming it in an annotation is refused as before.\n\ndocs/LANGUAGE.md states the rule under \"Linkage\": a method another module calls is in the link.\n\nFixes #442",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#linkage"
+      ],
+      "tests": [
+        "tests/link/package_hidden_method",
+        "tests/link/package_hidden_class_import",
+        "tests/link/package_hidden_class_annotation"
+      ],
+      "commits": [
+        "e1b8d0a"
+      ],
+      "pr": 543,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "record-wp38-s1-s-bench-json-measurement-538",
+      "type": "docs",
+      "breaking": false,
+      "title": "record WP38 S1's bench/json measurement",
+      "body": "Moving std/json's scans onto indexOfAny was measured against S0 (main at\nf33139a) on one machine, interleaved, and does not ship: none of four\nvariants was reliably faster on bench/json, and none came near 1.5x, so\nstd/json is unchanged. One median leaves the noise band, and it comes\nfrom S0's own outlier median in that row. Inside bench/json's nested\nvalues a quote, brace or bracket comes every 5 to 7 bytes, about 35\ninstructions as a byte loop, and one indexOfAny call costs about 116. The\nscan parts any byte search could reach are 51 M of the 138 M instructions\nthe reader spends per 20,000 lines (37%), against the 46 M a 1.5x gain\nneeds.\n\ndocs/wp38-simd.md fills §2.3's bench/json S0 row and records the variants,\nthe profile and why they lose. §3.1 gains the block classifier's JSON\ndesign, and §7 records S1's miss and leaves designing S1b to the owner,\nwith an estimate from the profile showing it may need more than the\nclassifier to reach the bar.",
+      "metrics": [
+        "S0 bench/json jsonFields 75.7 ms min / 77.7 median, jsonField x3 (harness) 79.9 / 84.7, peak RSS 88.1 MB (Xeon 2.8 GHz)",
+        "bench/json, harness jsonField x3 vs S0, Xeon 2.8 GHz, min / median (+ is slower): A structure jump +18.9% / +18.5%, B 8-byte window then jump +7.3% / +5.0%, C closing quote on indexOfAny +12.8% / +9.3%, D every string on indexOfAny +15.3% / +12.7%",
+        "bench/json, jsonFields vs S0, Xeon 2.8 GHz, min / median (+ is slower): A +12.0% / +10.9%, B -2.8% / +1.0%, C +7.5% / +10.9%, D +12.5% / +12.3%",
+        "S0 against its own copy, up to 6.1% on a minimum and 6.7% on a median across 12 rows"
+      ],
+      "refs": [
+        "docs/wp38-simd.md#s1-stdjson-on-indexofany-the-bar-missed"
+      ],
+      "tests": [],
+      "commits": [
+        "f5e0fe6"
+      ],
+      "pr": 538,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "plan-wp27-s3-strings-across-the-c-boundary",
+      "type": "docs",
+      "scope": "interop",
+      "breaking": false,
+      "title": "plan WP27 S3, strings across the C boundary",
+      "body": "A `declare function` takes scalars and `CPtr` only, so every C API that\ntakes a name, a path or a message needs a hand-written C shim today. This\nadds the plan for S3 to `docs/wp27-ffi.md` (§8); nothing is built yet.\n\nA `string` parameter becomes `const char *`, passed without a copy because\n`nish_str` is already NUL-terminated. The string is borrowed: C may read\nit until the call returns and must not keep the address. That is a\ndecision, not a proof, in the same way S1 decided `nounwind`, and §8b\nexplains why copying every argument would not make it any safer. A string\nthat holds a NUL byte panics (the new `ffi-nul` kind) rather than being\ncut short, and a literal is proved free of the check. A returned\n`char *` is copied into the arena, and a `NULL` for a non-nullable\n`string` panics (`ffi-null`). A C allocation the caller must free comes\nback as a `CPtr` and is read with a new `nish:unsafe` function,\n`readCString`. A literal `null` may be passed for a `CPtr | null`\nparameter, so `realpath(p, null)` and `setlocale(LC_ALL, null)` become\ncallable.\n\nThe work is three pull requests (S3.1 to S3.3), each listed with its\ntests. `string[]`, byte buffers, callbacks and variadic functions stay\nrefused.",
+      "metrics": [],
+      "refs": [
+        "docs/wp27-ffi.md#8-s3-plan-string-across-the-boundary"
+      ],
+      "tests": [],
+      "commits": [
+        "1a33a0b"
+      ],
+      "pr": 545,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "refuse-retained-arena-memory-with-deny-retention-544",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "refuse retained arena memory with --deny-retention",
+      "body": "A long-running program cannot afford arena memory that stays allocated after\nnothing can reach it: in a command-line tool it is returned when `main` does,\nand in a server it grows until the process is killed. Four performance\nwarnings are exactly that finding: quadratic string building (NL9002), an\nallocation dropped by an assignment (NL9003), a loop over a call that leaves\nits memory behind (NL9011) and an allocation dropped on every pass (NL9016).\nUntil now each was advice a server could ship with.\n\n`--deny-retention` makes each of them an error, NL2462, in the program's own\nmodules. The error keeps the warning's text after the code of the rule that\nfound it, so it still names the rewrite:\n\n```\nerror: `--deny-retention` refuses this NL9016 finding, because the arena\nmemory it describes stays allocated after nothing in the program can reach it\nany more: `last` is given a new allocation on every pass of this loop ...\n```\n\nThe restated warning is not printed as well, and `--no-warn-performance` does\nnot silence the error. A dependency's warnings stay warnings, as its panic\nsites stay outside the no-panic scope: the program's author cannot change that\ncode. Like `--deny-panics` it changes no byte of the IR; `nish run` and `--fix`\naccept it, and with `--emit-ast`, which stops before the checker, it is a\nusage error.\n\nThe four rules err towards silence, so a program the flag accepts can still\nretain memory in a shape no rule recognises; docs/LANGUAGE.md says so where it\nstates the rule.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#retention-as-an-error"
+      ],
+      "tests": [
+        "tests/cases/deny_retention_clean",
+        "reject_deny_retention_{pass_drop",
+        "drop",
+        "loop",
+        "concat}",
+        "tests/link/deny_retention_dependency",
+        "tests/wordings/nl2462_deny_retention"
+      ],
+      "commits": [
+        "54ca332"
+      ],
+      "pr": 544,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "report-where-every-allocation-s-memory-goes-with",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "report where every allocation's memory goes with --emit-arena",
+      "body": "The memory model places every allocation by proof, and a performance warning\nspeaks only where it can name both the memory and a rewrite. Everything else\nit decides silently, which left no way to ask the compiler where a given\nstring's memory goes, or to find retention no rule recognises.\n\n`--emit-arena <file.json>` writes it down: every function, every allocation\nsite in it, and the placement the emitter gives it, read back from the facts\nthe build already computes, in the order the emitter applies them:\n\n| Placement | Where the memory goes |\n| --- | --- |\n| `stack` | an entry-block `alloca` |\n| `pass` | released at the end of each pass of a scoped loop |\n| `block` | released when a `using a = arena()` block ends |\n| `function` | released when the function returns |\n| `returned` | handed to the caller with the return value |\n| `caller` | released at each call by the caller's reclaim of the returned string |\n| `kept` | stored into memory older than the function |\n| `unscoped` | released by nothing in this function; in `main`, the rest of the run |\n\nA site that runs pass after pass in a loop that releases nothing per pass,\nand whose memory is unreachable before its release, is marked\n`\"accumulates\":true`: the question a long-running program asks first. The\nformat follows `--emit-panics`: one object, one function per line, a generic\nfunction once per instantiation. Like it, the flag changes no byte of the IR\nand is a product, so `nish run`, `--fix` and `--emit-ast` refuse it.\n\nThe escape analysis now keeps each arena site's flow beside the site, which\nis the one fact the report needed that the analysis used to discard: whether a\nvalue goes to the caller or nothing here releases it.",
+      "metrics": [
+        "over std/ 20 sites accumulate and 16 are unscoped; over the compiler's own source 735 accumulate and 3,789 are unscoped"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#arena-placement",
+        "docs/wp6-memory.md"
+      ],
+      "tests": [
+        "tests/cases/arena_placement",
+        "arena_placement_loops"
+      ],
+      "commits": [
+        "f06e345"
+      ],
+      "pr": 547,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "the-diagnostic-fix-2-follow-ups-nl9007-wording",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "the diagnostic-fix-2 follow-ups — NL9007 wording, uncheckedGet in the range analysis, one-round migration",
+      "body": "These are three follow-ups to the diagnostic-fix-2 work, tracked in #461.\n\n**An unsigned index needs only the upper bound.** NL9007 already said so, and the range analysis now credits it. `toU32(i) < toU32(xs.length)` removes the bounds check for a `u8`, `u16` or `u32` index, in both number modes; f64 mode goes through `llvm.fptoui.sat`. The `--fix` guard rewrite now offers that form for unsigned indices, where it used to refuse any index that was not `i32`. It is still refused for `u64`, and in a module that declares its own `toU32`. NL9007 and NL2457 name the unsigned guard when the index is unsigned.\n\n**`uncheckedGet`/`uncheckedSet` are array reads and writes, not opaque calls.** The range analysis now walks through them. An unchecked access proves nothing about a later checked one, and that is pinned by `arr_bounds_unchecked_kept`. A function with a migrated `a[at[0]] + b[at[1]]` now settles in one `--fix` round.\n\n**Migration settles in one round.** `sink.reportDeprecationFix` is added. `acceptedEdits` treats an identical edit as already applied rather than as an overlap. The `--unchecked-indexing` build records the facts it would have proven without the flag.\n\nItem 1 of #461 (unsafe-wrap) is still open.\n\nRefs #461",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/cases/arr_bounds_unsigned_guard",
+        "tests/cases/arr_bounds_unsigned_guard_f64",
+        "tests/cases/arr_bounds_unsigned_guard_kept",
+        "tests/cases/arr_bounds_unchecked_kept",
+        "tests/cases/reject_deny_panics_index_unsigned",
+        "tests/fix/unsafe-index-pair"
+      ],
+      "commits": [
+        "e091624"
+      ],
+      "pr": 548,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "release-a-loop-pass-whose-own-string-goes",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "release a loop pass whose own string goes to a parts + join callee",
+      "body": "Take a loop that builds a string in the pass and passes it to a callee. If that callee pushes the parameter onto its own local `parts` array and then joins it, the pass now releases its arena. Before this change the parameter counted as captured, so every pass kept the string alive.\n\nThe rule is narrow on purpose. The parameter is `nocapture` only when the callee's `parts` meets all of these conditions:\n- it is a fresh local `string[]`, bound to an array literal or `new Array`;\n- every reference to it is `.push(...)`, `.join(...)` or `.length`.\n\n`join` always copies into a fresh string, so its result never aliases the pushed parameter. Any other use keeps the parameter captured: indexing, iteration, aliasing, passing `parts` on, returning it, or a closure. The five #500 negative cases still keep the release off, and so does a new kept-parameter case.\n\nNo callee in `std/` or `src/` matches yet. `jsonField` and `replaceAll` need string parameters to enter the capture fixpoint, which is what #503 still asks for.\n\nMeasured: Arena.used() after 1,000 passes, 2,912 B before and 16 B after (mem_join_parts_same_pass)\nRefs #503",
+      "metrics": [],
+      "refs": [
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/mem_join_parts_same_pass",
+        "tests/cases/mem_join_parts_same_pass_kept"
+      ],
+      "commits": [
+        "8606c43"
+      ],
+      "pr": 549,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "recount-the-readme-rows-after-the-sweep-551",
+      "type": "docs",
+      "scope": "security",
+      "breaking": false,
+      "title": "recount the README rows after the sweep",
+      "body": "The security README's area rows, Total row and open-findings list now match the records on main.\n\n- **SHA-2/HMAC/HKDF row:** fixed Lows go from 3 to 4, adding K1-7 (HMAC and HKDF now wipe their state, #542).\n- **Codegen row:** fixed Lows go from 3 to 4, adding CG-11 (a loop's array header is no longer hoisted across a resizing `new`, #541).\n- **Total:** fixed Lows go from 74 to 76.\n- **Open findings:** still 21. The CT-13 entry now carries the re-measurements from #537, and the TLS-1 entry adds the resumption master secret from #539.\n\nThe x509 key/serial helper (#540) and the CLI owner checks (#546) are not merged yet. Each will change its row when it lands.",
+      "metrics": [],
+      "refs": [
+        "docs/security/README.md"
+      ],
+      "tests": [],
+      "commits": [
+        "bc1cec5"
+      ],
+      "pr": 551,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "fixes-for-xs-length-and-non-boolean-operands",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "fixes for !xs.length and non-boolean && / || operands, and code-checked nofix cases",
+      "body": "`--fix` now rewrites two truthiness diagnostics, in the cases where the rewrite keeps the program's meaning.\n\n- **NL2263:** `!xs.length` becomes `xs.length === 0`, and `!n` becomes `n === 0`, for an integer, a string, or an array or struct behind `| null`. Parentheses are added where the operand or the enclosing operator needs them. A float operand gets no fix.\n- **NL2099:** a non-boolean `&&` or `||` operand becomes an explicit comparison, so `s.length && …` turns into `s.length !== 0 && …`. This happens only where the expression is read for truthiness: an `if`, `while`, `do` or `for` condition, a `? :` test, or a `!` operand. Where the value itself is used, as in the `n || def` defaulting idiom, there is no fix, because changing `0` to `false` would change the program.\n\nEvery case where no fix is offered is pinned by a `*.nofix.ts` case. Each of those cases now has a `.code` sidecar, and the runner checks that the diagnostic named there is the one reported. A nofix case can therefore no longer pass because some other diagnostic happened to stop the program first.\n\nItems 1 and 2 of #440 are still open.\n\nRefs #440",
+      "metrics": [],
+      "refs": [
+        "docs/AI.md"
+      ],
+      "tests": [
+        "tests/fix/expr-truthy-not",
+        "tests/fix/expr-truthy-logical"
+      ],
+      "commits": [
+        "428b306"
+      ],
+      "pr": 550,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "nl9007-and-nl2457-offer-only-a-guard-that",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "NL9007 and NL2457 offer only a guard that compiles and is credited",
+      "body": "NL9007, which reports a bounds check a loop keeps, and NL2457, which reports an index under `--deny-panics`, now take their advice from one helper, `indexGuardAdvice`. It names a guard only when that guard type-checks against the length and the bounds pass credits it. When no such guard exists, the message says so and gives the reason, instead of suggesting a spelling that either fails to compile or leaves the check in place.\n\n- A `u64` or `i64` index used to be offered `if (i >= 0 && i < xs.length)`, which does not compile against the `i32` length. The message now says no guard removes the check, and names the index types that have one.\n- A `u8`, `u16` or `u32` index in a module that declares its own `toU32` used to be offered `toU32(i) < toU32(xs.length)`. That guard calls the module's function, not the credited builtin, so the message now says the module's `toU32` hides the builtin.\n- Under `--number-mode f64`, an `i32` index is offered `if (i >= 0 && i < toI32(xs.length))`, the spelling the fix already inserts. This holds for NL9007 and NL2457 alike: `CheckedProgram` now carries the number mode so that `panics.ts` can see it.\n- A float (`number`) index under `--deny-panics` is offered no guard, because no compare of a float index is credited.\n\n`docs/LANGUAGE.md` and `docs/AI.md` now say which index types have no guard.",
+      "metrics": [],
+      "refs": [
+        "#461"
+      ],
+      "tests": [
+        "tests/wordings/nl9007_guard_u64",
+        "tests/wordings/nl9007_guard_i64",
+        "tests/wordings/nl9007_guard_shadowed_to_u32",
+        "tests/wordings/nl9007_guard_f64_mode",
+        "tests/wordings/nl2457_deny_panics_index_u64",
+        "tests/wordings/nl2457_deny_panics_index_shadowed_to_u32",
+        "tests/wordings/nl2457_deny_panics_index_f64"
+      ],
+      "commits": [
+        "44e4661"
+      ],
+      "pr": 552,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "a-native-only-helper-that-draws-the-key",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "a native-only helper that draws the key and serial for x509MintSelfSigned",
+      "body": "* feat(crypto): a native-only helper that draws the key and serial for x509MintSelfSigned\n\n`nish/crypto/x509-random` draws what `x509MintSelfSigned` takes from its\ncaller, from the kernel's CSPRNG:\n\n- `x509DrawP256Key()` answers a `Secret<u8[]>` P-256 private key. It draws 32\n  octets from `crypto.getRandomValues` and draws again until `p256PublicKey`\n  accepts them as a scalar in [1, n), wiping each refused draw. Rejection\n  rather than reduction mod n, so no key is likelier than another.\n- `x509DrawSerial()` answers twenty octets whose first one's top bits are\n  `01`: a positive, non-zero serial that is always twenty octets long, with\n  158 random bits.\n- `x509MintSelfSignedDrawn(priv, commonName, notBeforeMs, days)` is the mint\n  with a drawn serial. The key stays the caller's to wipe, since the server\n  that presents the certificate signs its handshakes with it.\n\nThe module is native only: it calls `crypto.getRandomValues`, so a program\nthat imports it is refused for wasm32. That is why it is its own module and\n`nish/crypto/x509` imports nothing from it. A wasm32 program can still parse,\nverify and mint with a key and serial it is handed. This closes X509-6.\n\nRefs: docs/security/crypto-x509.md, #385\nTests: tests/link/crypto_x509_random, tests/link/crypto_x509_random_wasm\n\n* build(crypto): list nish/crypto/x509-random in the std module list and release presence gates\n\nsrc/std-modules.ts names it in the diagnostic's list of standard-library\nmodules, and each of release.yml's three presence gates names\nstd/crypto/x509-random.ts, so tests/run.js finds both lists in step with\nstd/ and a release cannot ship without the file.\n\n* build(crypto): count sixty paths in the tarball presence gate's log line\n\nThe first release.yml gate names std/crypto/x509-random.ts too, so it\nchecks sixty paths, not fifty-nine.\n\n* docs(crypto): import Secret in x509-random's example and drop the private-names note\n\nThe header's example names Secret<u8[]>, so it imports Secret too, and the\nmodule has no private functions for the prefix note to describe.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b5d9e04"
+      ],
+      "pr": 540,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "record-six-review-lessons-in-claude-md-553",
+      "type": "docs",
+      "breaking": false,
+      "title": "record six review lessons in CLAUDE.md",
+      "body": "The json-one-pass (#507) and wp38-simd (#516) runs each lost review rounds or a whole pull request to a rule nobody had written down. CLAUDE.md now states six of them, each in the section it belongs to:\n\n- An escape-analysis rule that lets a value travel with a container says which element types it covers, pins the excluded ones with a negative golden run after `churn()`, and on narrowing regenerates every golden the wider rule moved (#520).\n- `std/` changes move `tests/self/goldens/checked*.txt` as `src/` changes do, so a plan stage that changes either owns those goldens (#532).\n- A `docs/security/` row rewritten after its record's base names the commit its own anchors are at (#529).\n- A `Measured:` trailer states the noise band and claims \"faster\" only outside it (#538).\n- Before starting on an issue, search the open pull requests for it and put `Fixes #N` in the first push (#534, #536).",
+      "metrics": [],
+      "refs": [
+        "CLAUDE.md"
+      ],
+      "tests": [],
+      "commits": [
+        "8bd77b5"
+      ],
+      "pr": 553,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "record-the-issue-sweep-2-review-lessons-and",
+      "type": "docs",
+      "breaking": false,
+      "title": "record the issue-sweep-2 review lessons and correct two stale records",
+      "body": "The issue-sweep-2 run turned CI red, or lost review rounds, four times over a rule nobody had written down. CLAUDE.md now states each of them where it belongs:\n\n- `fetch-seed.sh` keeps a seed that is already there, so a session that may hold an older one refetches with `--force`. A 0.16.0 seed against `main`'s 0.18.0 made `fuzz --stage1` disagree on a clean `main` (#541, #540).\n- A change to `src/` runs `node tests/run.js web` and `node tests/run.js performance` before it is pushed. `src/` links into the web compiler's wasi module, and the ratchet allows no new NL9007 in it (#546, #550).\n- When another `src/` or `std/` pull request lands first, merge `main` and regenerate the goldens even without a textual conflict (#549 after #547).\n- A new positive `tests/cases/*` is registered with `node tests/differential/goldens.js --update` in the same commit (#548).\n\nTwo records are corrected:\n\n- TLS-3 said QUIC makes one `TlsServer` per connection. It keeps one per slot and restarts it, so the 29 KB is per slot.\n- The WP34 table's K1 row still listed the Wycheproof vectors and the `Secret` keys as left, which #542 did. What is left is the TLS and QUIC callers (#430).",
+      "metrics": [],
+      "refs": [
+        "CLAUDE.md",
+        "docs/security/tls.md",
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [],
+      "commits": [
+        "ed929f1"
+      ],
+      "pr": 554,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "name-the-wasi-section-not-the-web-filter",
+      "type": "docs",
+      "breaking": false,
+      "title": "name the wasi section, not the web filter, as the check that links src/ as nish.wasm",
+      "body": "#554 told a change to `src/` to run `node tests/run.js web` before it is pushed. That filter selects only the cases whose names contain \"web\". The checks that link `src/` as `nish.wasm` and run it in a worker, the ones #546 failed in CI, are in the `wasi` section, which skips without a WASI sysroot. CLAUDE.md now names `node tests/run.js wasi` and says to read its skip line.",
+      "metrics": [],
+      "refs": [
+        "CLAUDE.md",
+        "tests/run.js"
+      ],
+      "tests": [],
+      "commits": [
+        "ecbfd03"
+      ],
+      "pr": 556,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "check-the-owner-of-the-run-cache-root",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "check the owner of the run cache root and the package root, and take the first executable nish on PATH",
+      "body": "`nish run` now checks who owns its cache root before it starts anything from it, a cache hit included. It refuses the root with exit 3 and `NL0002` when the root:\n\n- is not a directory (a symbolic link is refused, not followed);\n- is owned by another user;\n- can be written by its group or by every user.\n\nThe message reads `run: refusing the cache root <root>, which …; remove it, and the next run makes it again`. Until now only a miss ran the `chmod 700`, so a root another user had made at your cache path, filled with a key and a binary, had its binary started by your next hit (CLI-7).\n\nThe package root that `--link` takes `scripts/build.sh` from, and that `nish/<module>` imports take `std/` from, is now refused when it is owned by neither you nor root, or when every user can write it. When no trusted candidate holds the package, every compile stops with `NL0002` and names the root it refused and why. A compiler kept directly under `/tmp/x/` used to trust `/tmp/scripts/build.sh`, which anyone can create. A root that only its group can write is still trusted: whoever can write it can already replace the compiler in `bin/`. A compiler started by a bare `nish` now takes the package of the first *executable* `nish` on `PATH`, the one the shell ran, rather than the first readable one (CLI-9).\n\nThese are behaviour changes. A world-writable checkout, or one owned by another non-root user (a root-run container over a runner's checkout, for example), compiled before and is refused now.\n\nThe checks ask `/bin/sh` and `/bin/ls` rather than calling the `lstatOwnerModeSync`, `geteuid` and `isExecutableSync` builtins. The checker refuses those three on wasm32, and `src/` is also linked as the web compiler (`nish.wasm`).\n\n- One probe per root: `ls -ldn` gives the type, mode and numeric owner without following a link, and the shell's `test -O` checks the effective uid.\n- Both tools are named by absolute path, so nothing on `PATH` is trusted. Every path is passed as an operand, never as script text.\n- A probe that cannot run, fails, or prints output that does not parse refuses the root (fail closed).\n- `--version` and `--help` spawn nothing.\n- No probe runs in the web compiler, which has no `PATH` and no package-root candidate.\n\nThe builtins, their wasm32 refusals and their LANGUAGE.md rule are unchanged.\n\nThe check only probes the root directory itself, not `scripts/`, `std/` or `build.sh` inside it. A write grant made through an ACL is not seen. `docs/security/cli.md` records both limits, the fail-closed rule and the cost.\n\nMeasured: against main ed929f1 in three interleaved rounds, each the median of 41 runs, with a byte-identical copy of main as the noise band. A compile of examples/add.ts (one probe) costs +3.11 to +3.33 ms, about 3.2 to 6.6 ms, against noise of -0.17 to -0.04 ms. A `nish run` cache hit (two probes) costs +6.00 to +6.42 ms, about 5.5 to 11.8 ms, against noise of -0.20 to +0.13 ms.\nRefs: docs/security/cli.md#status-after-the-owner-checks-486\nTests: tests/nish/cli.ts (CLI-7, CLI-9)\nFixes #486",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "53608c5"
+      ],
+      "pr": 546,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "restate-wp38-s-s3-bar-after-checking-a",
+      "type": "docs",
+      "breaking": false,
+      "title": "restate WP38's S3 bar after checking a portable-SIMD benchmark against LLVM 18",
+      "body": "Erio-Harrison/simd_benchmark found that Rust's portable `std::simd` and\nhand-written NEON run at the same speed once both versions do the same\nwork. A new §3.2.1 in `docs/wp38-simd.md` records what that means for\n`nish:simd`, with each claim checked against LLVM 18 or measured on S0's\nmachine.\n\n- **S3's comparator does the same work as the vector kernel.** Integer\n  lanes wrap, so the scalar kernel wraps too. A float comparator has one\n  accumulator per lane, and is timed with indexing checked and unchecked.\n- **Four scalar `f32` accumulators.** Unchecked, they vectorise and run\n  4.2x faster than one accumulator. A length guard alone keeps all eight\n  bounds checks, because the range analysis learns nothing from\n  `i + 3 < n`, and NL9007 warns for only two of them. `uncheckedGet`\n  inside the guard reaches the unchecked speed.\n- **`any` and `all` join `bitmask`.** On AArch64, `bitmask` lowers to 8\n  instructions and `any` to one `umaxv`.\n- **No `mulAdd`.** `llvm.fma.v4f32` becomes four calls to `fmaf` on the\n  x86-64 baseline and on wasm simd128.\n- **The 128-bit-only rule (Q4) costs `ld3` on AArch64:** 23 instructions\n  against 4. Q4 stands, and the cost is recorded.",
+      "metrics": [
+        "four f32 accumulators 4.2x over one when unchecked (125 vs 527 ms min, 133 vs 559 median); a length guard alone 411 ms, uncheckedGet inside it 130 ms; SSE2 dot product 1.9x from a second accumulator (62.2 vs 119.3 ms min), 2.3x from four. Noise not measured against a byte-identical copy; each column's seven runs spread at most 22% above its minimum, inside every ratio claimed."
+      ],
+      "refs": [
+        "docs/wp38-simd.md#321-what-a-portable-vector-benchmark-adds"
+      ],
+      "tests": [],
+      "commits": [
+        "a55502c"
+      ],
+      "pr": 558,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "decide-wp29-p3-the-lock-and-the-channel",
+      "type": "docs",
+      "scope": "threads",
+      "breaking": false,
+      "title": "decide WP29 P3, the lock and the channel",
+      "body": "WP29's third stage is now decided. It has two parts: `Mutex<T>`, a lock that owns its data, and `Channel<T>`, a channel of scalars, both from `nish/threads`. §4.3 and §4.4 give the rules and the reason for each.\n\nA lock's data is reachable only through a guard bound by `using g = m.lock()`. That data must be fresh all the way down when the lock is made. A read through the guard must end in a scalar, or lead to a further access or a store. Every store through the guard writes a scalar. The release runs at every exit of the block. At a `return` it runs after the returned value is computed, so the read happens under the lock.\n\nInside a guard's block there is no second lock, no spawn, no P1 call and no receive, directly or through any function it calls. So a P3 program cannot deadlock, and no lock-order analysis is needed.\n\nA channel is unbounded and has one receiver. It closes when every task that may send on it has returned. Senders are spawned before the receiver, so it means the same natively and under Node, where tasks run at their spawn. That same order rules out deadlock.\n\n§4.2 now lists the guarantees P3 relaxes. Guarded updates that do not commute exactly are the author's responsibility. So is a receiver whose answer depends on how two senders interleave.",
+      "metrics": [],
+      "refs": [
+        "docs/wp29-thread-surface.md#43-stage-p3--a-lock-that-owns-its-data"
+      ],
+      "tests": [],
+      "commits": [
+        "41e0d1e"
+      ],
+      "pr": 560,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "cache-the-compiled-runtime-between-links-557",
+      "type": "perf",
+      "scope": "cli",
+      "breaking": false,
+      "title": "cache the compiled runtime between links",
+      "body": "`--link` and `nish run` no longer compile the C runtime on every link.\nFor the debug, speed and size profiles, the runtime's six translation\nunits are compiled once per recipe into a private cache,\n`$XDG_CACHE_HOME/nish/runtime` (or `~/.cache/nish/runtime`), and each\nlater link compiles only the program's own modules, in parallel. The\nbinaries are byte-identical to the uncached recipe's. Speed and size\nkeep the runtime as LTO bitcode, so it is still optimised together with\nthe program.\n\nAn entry is keyed on the compiler's version, the profile, `-g`,\n`--threads`, `CC` and what `$CC --version` prints, and on the SHA-256 of\n`scripts/build.sh`, every runtime file and `nish.h`. A link reuses an\nentry only when its stored key equals this one byte for byte. The cache\nfollows the run cache's rules: an absolute XDG or HOME root only, made\n`0700` and checked for its owner on every link, filled through a\nscratch directory and one rename, with the key written last, so two\nlinks on a cold cache both succeed. `--link` with no usable root\ncompiles the runtime itself, as before. The wasi, wasm and napi\nprofiles, PGO builds and direct `scripts/build.sh` calls are unchanged.\n`scripts/build.sh` gains the `--runtime-objects <dir>` and\n`--runtime-from <dir>` modes that do the work, and stops the compiles\nit started if it is itself stopped.",
+      "metrics": [
+        "--link wall clock, median of 11 interleaved rounds, LLVM 18, 4 cores, noise band (base against a byte-identical copy) 1.4-8.8%: hello.ts debug 564 -> 130 ms warm (4.3x), 396 ms cold; hello.ts speed 731 -> 152 ms warm (4.8x), 440 ms cold; bench/awfy debug 772 -> 181 ms warm (4.3x), 422 ms cold; bench/awfy speed 1274 -> 462 ms warm (2.8x), 702 ms cold. Binaries byte-identical (hello 56,928 / 4,712 bytes, awfy 71,584 / 25,040 bytes, debug / speed)"
+      ],
+      "refs": [
+        "docs/security/cli.md#the-runtime-cache-cli-11"
+      ],
+      "tests": [
+        "tests/run.js \"runtime cache:\""
+      ],
+      "commits": [
+        "28c0ee4"
+      ],
+      "pr": 557,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "prove-an-offset-index-xs-i-c-from",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove an offset index `xs[i + c]` from a guard on the sum",
+      "body": "A loop that reads several elements a pass, such as\n`for (let i = 0; i + 3 < xs.length; i += 4)`, kept a bounds check on\nevery read: the range analysis learned nothing from a test on `i + 3`,\nand only a plain local could be an index. Now a test on `i + c` is a\nbound on `i`, and `xs[i + k]` is proven where it holds, so the loop\nkeeps none of its four checks and LLVM vectorises it with indexing\nchecked.\n\n- `i + c < w.length`, and `i + c < n` with `n` a hoisted length, say\n  the length reaches `c` past `i`; `i + c <= w.length` reaches `c - 1`;\n  `i + c < N` for a literal `N` is `i < N - c`.\n- `w[i + k]` needs `i >= 0` and a reach of at least `k`, or a literal\n  bound on `i` that `k` more still fits under a known length. A checked\n  `w[i + c]` that ran leaves its reach behind.\n- The reach also bounds `i` below `INT_MAX`, so `i + 1` through `i + 3`\n  and the step `i + 4` are `add nsw`.\n- The rule rests on the sum being exact: a signed add either panics on\n  overflow or is proven not to. Under `--wrapping`, and for an unsigned\n  index, the sum may wrap, so an offset proves nothing and the check\n  stays.\n\nThis is the safe route to the speed `--unchecked-indexing` buys on this\nshape: every access the proof cannot reach keeps its check. It does not\nreach indexes that add two variables, such as AWFY Queens's `c + r`.",
+      "metrics": [
+        "a guarded four-accumulator f32 dot product (4,096 elements, 200,000 calls, 15 interleaved rounds) runs 3.1x faster on the minimum and 3.2x on the median: 379 / 408 ms on main against 122 / 128 ms. A byte-identical copy of main's binary ran 388 / 420 ms, a noise band of 2.4% / 2.9%. The 21 programs of bench/instructions.json run identical instruction counts."
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#element-access",
+        "docs/IR_COOKBOOK.md#an-offset-index-a-guard-on-the-sum"
+      ],
+      "tests": [
+        "tests/cases/arr_bounds_offset",
+        "arr_bounds_offset_reach",
+        "arr_bounds_offset_floor",
+        "arr_bounds_offset_wrap"
+      ],
+      "commits": [
+        "a6705ed"
+      ],
+      "pr": 561,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    },
+    {
+      "id": "record-three-review-lessons-from-the-runtime-cache",
+      "type": "docs",
+      "breaking": false,
+      "title": "record three review lessons from the runtime cache in CLAUDE.md",
+      "body": "Three conventions that recurred while reviewing #557, written down so the\nnext change does not rediscover them:\n\n- Read a check's exit status, never its piped tail. `npm run lint | tail`\n  reports success when lint fails, which is how a shadowed variable reached\n  CI.\n- A security record's Tests list names each check by its exact\n  `check(...)` string, so a grep from the record finds the test.\n- A cache entry's `key`, written last, is its only completeness signal: a\n  hit trusts the key alone, and files removed by hand from a keyed entry are\n  out of scope for the run cache and the runtime cache (CLI-5, CLI-11).",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8217555"
+      ],
+      "pr": 563,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-10"
+    }
+  ]
+}
