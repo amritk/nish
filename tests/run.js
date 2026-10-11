@@ -4960,6 +4960,41 @@ if (!only || "std_json_tokenizer".includes(only)) {
   }
 }
 
+// `nish/json-tokenizer` has to load under Node, because the typed layer's Node
+// differential imports it: a construct Node 22 cannot parse (a `using`
+// declaration) or an `i64` built from a bare literal (a double where `toI64`
+// gives a BigInt) breaks it there and nowhere natively. `node.ts` tokenizes a
+// small ASCII input under the plain prelude, through the parseFloat path and
+// `numberI64` at the i64 edges, and prints the line the native build prints.
+if (!only || "std_json_tokenizer".includes(only)) {
+  const entry = path.join(linkDir, "std_json_tokenizer", "node.ts")
+  const want = [
+    "1 5 3 7:1/1 7:-25 6:3 8 9 10 1 2 4 5 7:1e+23 5 7:0.12345678901234566 2 0@-1",
+    "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000 7:0/0 4 0@-1",
+    "3 7:1/1 -1@3",
+    "",
+  ].join("\n")
+  const run = runUnderPrelude(entry, [])
+  check(
+    "link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively",
+    run.status === 0 && run.stdout === want,
+    shown(run)
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "json_tokenizer_node") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to",
+      native.status === 0 && native.stdout === want,
+      shown(native)
+    )
+  } else {
+    skip("skipped: link/std_json_tokenizer: no clang, so node.ts is not built natively")
+  }
+}
+
 // WP38 S1: `indexOfAny` from `nish/text` is the runtime kernel natively and
 // the walker `std/text.ts` writes under Node, so the four programs that call it
 // print the same and exit the same both ways: the edges, and the three sets it

@@ -46,7 +46,7 @@
  * a high one: a lone surrogate escape is an error. RFC 8259 allows one, but it
  * names no Unicode character, decodes to no valid UTF-8, and is what a peer
  * smuggles past a check done on the decoded bytes, so this module takes the
- * stricter reading (`docs/security/json.md`, JSON-5). Nothing is decoded until
+ * stricter reading (`docs/security/json.md`, "Lone surrogates"). Nothing is decoded until
  * the caller asks: `stringInto` writes the decoded bytes of the current key
  * or string into the caller's array, and `keyEquals` compares them with a
  * string without writing them anywhere.
@@ -55,13 +55,13 @@
  * `numberF64` is correctly rounded: a number of at most 15 significant digits
  * whose decimal exponent is within ±22 is one exact multiply or divide of two
  * exact doubles (Clinger's fast path), and any other goes to the runtime's
- * `parseFloat`, which is `strtod`, inside a `using a = arena()` block, so it
- * leaves the arena where it was. `isInteger` and `numberI64` read a number
+ * `parseFloat`, which is `strtod`, from a function whose own arena scope
+ * releases the copy it reads, so it leaves the arena where it was. `isInteger` and `numberI64` read a number
  * written without a fraction or an exponent that fits in an `i64`.
  *
  * **Duplicate keys are tokens.** `{"a":1,"a":2}` is two keys; which one wins,
  * or whether a duplicate is an error, is the decision of whatever reads the
- * tokens (`docs/security/json.md`, JSON-6).
+ * tokens (`docs/security/json.md`, JSON-3).
  *
  * **The limits** are `JsonLimits`: nesting depth, bytes in one string, bytes
  * in one number and bytes in the whole window. Each has its own error code and
@@ -489,7 +489,7 @@ export class JsonTokenizer {
     this.errorAt = -1
     this.stringBytes = 0
     this.integral = false
-    this.integerValue = 0
+    this.integerValue = toI64(0)
     this.reset(src, off, len)
   }
 
@@ -983,7 +983,7 @@ export class JsonTokenizer {
    */
   numberI64(): i64 {
     if (!this.isInteger()) {
-      return 0
+      return toI64(0)
     }
     const src: u8[] = this.src
     const negated: i64 = this.integerValue
@@ -1000,11 +1000,13 @@ export class JsonTokenizer {
     const src: u8[] = this.src
     const end: i32 = this.tokEnd
     const negative: boolean = jsonTokByteAt(src, this.tokStart, end) === JSON_TOK_MINUS
-    const lo: i64 = -9007199254740992
-    const min: i64 = lo << 10
-    const ten: i64 = 10
-    const bound: i64 = negative ? min : min + 1
-    let acc: i64 = 0
+    // Every `i64` here comes from `toI64`, which is a BigInt under Node, where a
+    // bare literal would be a double and the two do not mix.
+    // -2^63 has no literal (NL2055): -2^31 shifted up 32 bits.
+    const min: i64 = toI64(-2147483648) << toI64(32)
+    const ten: i64 = toI64(10)
+    const bound: i64 = negative ? min : min + toI64(1)
+    let acc: i64 = toI64(0)
     let i: i32 = negative ? this.tokStart + 1 : this.tokStart
     while (i < end) {
       const digit: i64 = toI64(jsonTokByteAt(src, i, end) - JSON_TOK_DIGIT_0)
@@ -1032,8 +1034,9 @@ export class JsonTokenizer {
     const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
     const negative: boolean = jsonTokByteAt(src, start, end) === JSON_TOK_MINUS
-    const ten: i64 = 10
-    let mantissa: i64 = 0
+    // At most 15 digits are accumulated, so the mantissa is an exact double.
+    const ten: f64 = 10
+    let mantissa: f64 = 0
     let digits: i32 = 0
     let scale: i32 = 0
     let afterDot = false
@@ -1046,7 +1049,7 @@ export class JsonTokenizer {
         if (digits > 0 || b !== JSON_TOK_DIGIT_0) {
           digits += 1
           if (digits <= JSON_TOK_FAST_DIGITS) {
-            mantissa = mantissa * ten + toI64(b - JSON_TOK_DIGIT_0)
+            mantissa = mantissa * ten + toF64(b - JSON_TOK_DIGIT_0)
           }
         }
         if (afterDot) {
@@ -1078,7 +1081,7 @@ export class JsonTokenizer {
       }
       scale += minus ? -exponent : exponent
     }
-    let value: f64 = toF64(mantissa)
+    let value: f64 = mantissa
     if (mantissa !== 0) {
       if (scale < -JSON_TOK_FAST_EXPONENT || scale > JSON_TOK_FAST_EXPONENT) {
         return this.numberSlow()
@@ -1092,12 +1095,15 @@ export class JsonTokenizer {
   /**
    * The current number through `parseFloat`, which is `strtod` and correctly
    * rounded, for the numbers Clinger's fast path cannot take. The text is
-   * copied into a string first, and the block releases the copy.
+   * copied into a string first. The function answers a number, so its own
+   * arena scope releases the copy when it returns (docs/LANGUAGE.md, "Memory
+   * model", item 2), as `JsonWriter.f64`'s digits are released. A
+   * `using a = arena()` block would say the same thing, but Node 22 cannot
+   * parse `using`, and this module also runs under Node.
    */
   numberSlow(): f64 {
     const src: u8[] = this.src
     const end: i32 = this.tokEnd
-    using _scope = arena()
     const parts: string[] = []
     let i: i32 = this.tokStart
     while (i < end) {

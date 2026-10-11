@@ -185,9 +185,12 @@ const strings = (t: Suite): void => {
   t.eqStr("UTF8: C1, an overlong lead", jtVerdictOf([34, 193, 191, 34], d), "UTF8@1");
   t.eqStr("UTF8: a two-byte lead and no continuation", jtVerdictOf([34, 195, 34], d), "UTF8@1");
   t.eqStr("UTF8: E0 80, an overlong three-byte form", jtVerdictOf([34, 224, 128, 128, 34], d), "UTF8@1");
+  t.eqStr("UTF8: E0 9F BF, the last overlong three-byte form", jtVerdictOf([34, 224, 159, 191, 34], d), "UTF8@1");
   t.eqStr("UTF8: ED A0, a surrogate", jtVerdictOf([34, 237, 160, 128, 34], d), "UTF8@1");
   t.eqStr("UTF8: a three-byte form whose third byte is not a continuation", jtVerdictOf([34, 226, 130, 34], d), "UTF8@1");
   t.eqStr("UTF8: F0 80, an overlong four-byte form", jtVerdictOf([34, 240, 128, 128, 128, 34], d), "UTF8@1");
+  t.eqStr("UTF8: F0 8F BF BF, the last overlong four-byte form", jtVerdictOf([34, 240, 143, 191, 191, 34], d), "UTF8@1");
+  t.eqStr("UTF8: a four-byte form whose fourth byte is not a continuation", jtVerdictOf([34, 240, 159, 152, 65, 34], d), "UTF8@1");
   t.eqStr("UTF8: F4 90, past U+10FFFF", jtVerdictOf([34, 244, 144, 128, 128, 34], d), "UTF8@1");
   t.eqStr("UTF8: F5, never a lead", jtVerdictOf([34, 245, 128, 128, 128, 34], d), "UTF8@1");
   t.eqStr("UTF8: FF, never a byte", jtVerdictOf([34, 255, 34], d), "UTF8@1");
@@ -263,7 +266,18 @@ const strings = (t: Suite): void => {
   t.eqI32("a string of raw UTF-8", r.next(), JSON_TOK_STRING);
   t.eqI32("stringLength of raw UTF-8 counts its bytes", r.stringLength(), 5);
   t.ok("keyEquals on raw UTF-8", r.keyEquals("café"));
-  t.eqI32("stringInto of an empty string", jtAt('""', JSON_TOK_STRING) === null ? -1 : 0, 0);
+  const e = jtAt('""', JSON_TOK_STRING);
+  if (e !== null) {
+    const kept: u8[] = [7, 7];
+    t.eqI32("stringLength of an empty string", e.stringLength(), 0);
+    t.eqI32("stringInto of an empty string writes nothing and answers 0", e.stringInto(kept, 1), 0);
+    t.ok("...leaving out as it was", toI32(kept[0]) === 7 && toI32(kept[1]) === 7);
+    const none: u8[] = [];
+    t.eqI32("stringInto of an empty string into an empty array", e.stringInto(none, 0), 0);
+    t.eqI32("stringInto of an empty string at the end of an array", e.stringInto(kept, 2), 0);
+  } else {
+    t.fail("an empty string token", "no STRING token");
+  }
 
   const k = jtAt('{"message":1}', JSON_TOK_KEY);
   if (k !== null) {
