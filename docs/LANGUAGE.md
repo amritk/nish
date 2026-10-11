@@ -2675,7 +2675,14 @@ breaks one is refused with that rule's own code:
   (NL2464, `reject_mutex_member`).
 - **R2: `m.lock()` is only the initialiser of a `using` declaration**, the
   third disposable beside `scope()` and `arena()`, and one `using` takes one
-  lock (a second declarator's `lock()` is R5's, below):
+  lock (a second declarator's `lock()` is R5's, below). A lock may share a
+  `using` with a scope opened before it or with an arena on either side, and
+  the declarators close in the reverse of the order they opened, so in
+  `using a = arena(), g = m.lock()` the lock is given back before the arena
+  releases (`tests/link/thread_mutex_using_mixed`); a scope opened after the
+  lock, `using g = m.lock(), s = scope()`, is R5's
+  (`reject_mutex_using_lock_then_scope`). A `lock()` anywhere but a `using`
+  initialiser is
   `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
   (NL2465, `reject_mutex_lock_not_using`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
@@ -2739,7 +2746,10 @@ breaks one is refused with that rule's own code:
   its argument is.** An array of them, a deeper field, or a `Mutex` inside
   another's data is
   `` The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `arg[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer ``
-  (NL2473, `reject_mutex_task_array`). A task's destination holds numbers, so a
+  (NL2473, `reject_mutex_task_array`; `reject_mutex_task_nested` for a `Mutex`
+  inside another's data, `reject_mutex_task_deep` for one two classes deep,
+  `reject_mutex_task_nullable` for a nullable carrier, `reject_mutex_task_map`
+  for a `Map` holding them). A task's destination holds numbers, so a
   `Mutex` is never one.
 
 And a lock is a scope's: the body of `parallelMapInto` or `parallelReduce`,

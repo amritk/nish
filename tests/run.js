@@ -4561,7 +4561,7 @@ if (!only || "par_alloc".includes(only)) {
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
 //
-// WP29 P3 adds the lock's four. Under Node the tasks' critical sections run
+// WP29 P3 adds the lock's five. Under Node the tasks' critical sections run
 // in spawn order, one of the orders the native threads can run them in, and
 // each program's guarded updates commute exactly (integer counts, a histogram,
 // a running total), so the totals print the same both ways.
@@ -4585,6 +4585,7 @@ for (const name of [
   "thread_mutex_exit_paths",
   "thread_mutex_histogram",
   "thread_mutex_scalar",
+  "thread_mutex_using_mixed",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue

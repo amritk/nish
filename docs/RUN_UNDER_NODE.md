@@ -231,11 +231,12 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 node tests/differential/unmodified.js --verbose
 ```
 
-Ten `nish/threads` programs are held to the same claim by name,
+Eleven `nish/threads` programs are held to the same claim by name,
 `tests/link/par_map`, `tests/link/par_reduce`, the four
-`tests/link/thread_scope_*`, and the four lock programs
+`tests/link/thread_scope_*`, and the five lock programs
 `tests/link/thread_mutex_counter`, `thread_mutex_exit_paths`,
-`thread_mutex_histogram` and `thread_mutex_scalar`: each prints under Node, run
+`thread_mutex_histogram`, `thread_mutex_scalar` and `thread_mutex_using_mixed`:
+each prints under Node, run
 with `--js-explicit-resource-management`, what its native binary prints
 (`node tests/run.js threads-under-node`). The fifth lock program,
 `tests/link/thread_mutex_or_return`, is native only, because it releases its
