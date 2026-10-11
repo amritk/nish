@@ -8,7 +8,7 @@ pins each property. It is written with the code rather than after an audit, so
 that the audit of the JSON layer starts from evidence. The typed layer that
 decodes into a class (#573) will extend this record.
 
-**Anchors.** Every `file:line` below is at `335efe2`, the module's head in this
+**Anchors.** Every `file:line` below is at `db264d5`, the module's head in this
 change, on top of `main` at `ce9d394`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
@@ -79,7 +79,7 @@ constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
 128 levels fit the default". There is no recursion anywhere in the module, and
 `skipValue` loops over `next`.
 
-**Huge numbers** (`:698`, `number`; `:1027`, `numberF64`; `:999`,
+**Huge numbers** (`:698`, `number`; `:1029`, `numberF64`; `:999`,
 `integerScan`): a number longer than `maxNumberBytes` (256 by default) is
 refused with `JSON_TOK_ERR_NUMBER_LIMIT` ("NUMBER_LIMIT: 257 do not"); within
 it, an exponent stops being added up at 100,000 and the text goes to
@@ -135,13 +135,14 @@ padded window, every mutant has one verdict", with the seed's totals pinned
 and where it stopped"). Errors are sticky, and an error leaves the token
 before it readable ("an error in the string after a string token").
 
-**No allocation per body** (`:501`, `reset`; `:1097`, `numberSlow`): "alloc:
+**No allocation per body** (`:501`, `reset`; `:1104`, `numberSlow`): "alloc:
 Arena.used() is flat across every one, parseFloat's numbers included" measures
 10,000 bodies through one reused tokenizer, each call measured as
 `tests/link/net_loopback/common.ts`'s `LbMeter` measures a server's wake; the
-one path that allocates, the copy `parseFloat` reads, is inside a
-`using a = arena()` block. "alloc: the meter sees a call that keeps a string"
-is the control.
+one path that allocates, the copy `parseFloat` reads, is made in a function
+that answers a number, whose own arena scope releases it on return (not a
+`using` block, which Node 22 cannot parse). "alloc: the meter sees a call that
+keeps a string" is the control.
 
 ## Tests
 
@@ -153,5 +154,8 @@ The checks in `tests/run.js` that hold the above:
 - `performance gate: ${source} compiles with no performance warning (--number-mode ${mode})`,
   for `std/json-tokenizer.ts` in both number modes: every index the
   scanners read is proven, with no check left in the hot loops.
+- `link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively`
+  and `link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to`:
+  the module runs under `runtime/nish.mjs`, through `parseFloat` and `numberI64`.
 - `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
   for the vendored corpus.
