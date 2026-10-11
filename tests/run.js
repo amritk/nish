@@ -5179,25 +5179,7 @@ if (!only || "std_json_typed".includes(only)) {
   } else {
     skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
   }
-  // `nish/json-tokenizer` declares `using _scope = arena()`, which Node 22
-  // parses only with V8's explicit resource management turned on; a Node that
-  // ships it, or has no such flag, is run without it.
-  const preludeArgs = (flags) => [
-    ...flags,
-    "--experimental-strip-types",
-    "--no-warnings",
-    "--import",
-    path.join(root, "runtime", "nish.mjs"),
-    "-e",
-    `const m = await import(${JSON.stringify(path.join(dir, "main.ts"))}); process.exit(m.main());`,
-  ]
-  let run = spawnSync("node", preludeArgs(["--js-explicit-resource-management"]), {
-    cwd: root,
-    encoding: "utf8",
-  })
-  if (run.stderr.includes("bad option")) {
-    run = spawnSync("node", preludeArgs([]), { cwd: root, encoding: "utf8" })
-  }
+  const run = runUnderPrelude(path.join(dir, "main.ts"), [])
   check(
     "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
     run.status === 1 &&
