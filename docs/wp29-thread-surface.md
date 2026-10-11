@@ -480,8 +480,9 @@ default of 64 trips is what divides n-body four ways.
 The whole candidate surface was typechecked with
 `tsc --noEmit --strict --lib ES2022 --module Node16`, together with a program
 that used every construct, and exited 0. All three stages now exist as real
-code in `std/threads.ts` and `runtime/nish.d.ts`, P3's `Mutex`, `MutexGuard`
-and `Channel` included, so that file is the declaration to read. What follows
+code in `std/threads.ts` (P3's `Mutex`, `MutexGuard` and `Channel` included),
+which is the declaration to read; `runtime/nish.d.ts` adds only the disposable
+protocol that `using` reads. What follows
 is the candidate's P3 half as it was typechecked, kept as the record, with the
 alternatives §9 did not propose:
 
