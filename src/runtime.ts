@@ -852,6 +852,21 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP29 P3: a lock's contended path (runtime/runtime-parallel.c). The lock
+    // word is taken inline and this runs only when it was held: it waits, so it
+    // is not `willreturn`, and it takes the word itself, a write LLVM must not
+    // move a guarded access across. The word is the one shared write the
+    // language admits in a task, and only through `lock()` (`src/parallel.ts`,
+    // R6), so it is not a shared write a task's rules would refuse.
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_mutex_wait",
+        "declare void @nish_mutex_wait(i32* noundef nonnull)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // The partitioner's own question, declared because it is part of the ABI
     // nish.h publishes. It caches the answer in a word of its own, which no
     // program can observe.

@@ -100,13 +100,17 @@ import {
 } from "./emit-map"
 import {
   closeBlockScopes,
+  emitLockBody,
+  emitLockReleases,
   emitParallelRegion,
   emitScopeJoins,
   emitSpawnTask,
+  holdsLock,
   isParallelRegionCall,
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
+import { isLockMethod } from "./parallel"
 import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -239,6 +243,8 @@ export class Emitter {
   openScopes: string[]
   openScopeLoops: i32[]
   openScopeArenas: boolean[]
+  /** WP29 P3: true for a `using g = m.lock()`, whose entry is the address of its guard's lock word. */
+  openScopeLocks: boolean[]
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[]
   slotNames: string[]
@@ -293,6 +299,7 @@ export class Emitter {
     this.openScopes = []
     this.openScopeLoops = []
     this.openScopeArenas = []
+    this.openScopeLocks = []
     this.slotLocals = []
     this.slotNames = []
     this.maybeLocals = []
@@ -452,6 +459,7 @@ export class Emitter {
     this.openScopes = []
     this.openScopeLoops = []
     this.openScopeArenas = []
+    this.openScopeLocks = []
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
@@ -498,6 +506,8 @@ export class Emitter {
     // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
     if (secretRoleOf(sig) === SECRET_WIPE) {
       emitWipeBody(this, sig)
+    } else if (isLockMethod(sig)) {
+      emitLockBody(this, sig) // WP29 P3
     } else if (body.kind === N_BLOCK) {
       this.emitBlock(body)
     } else {
@@ -573,6 +583,11 @@ export class Emitter {
     if (!marksTailCall(this.table, this.current, callee, argTypes, this.facts)) {
       return false
     }
+    // WP29 P3: a lock is given back after the value, and a tail call would
+    // take the release ahead of itself.
+    if (holdsLock(this)) {
+      return false
+    }
     // The release a tail call sinks ahead of itself is a pass's too, inside a
     // scoped loop, and a `using a = arena()` block's inside one, and the
     // callee reading the bump position is what `marksTailCall` refuses for
@@ -608,6 +623,7 @@ export class Emitter {
    */
   emitScopeExit(): void {
     emitWalkExits(this) // WP32: a `return` leaves every walk around it
+    emitLockReleases(this) // WP29 P3: after the value, which may read through a guard
     if (this.current.arenaScope) {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
       return

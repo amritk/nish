@@ -152,6 +152,8 @@ import {
   resultMessage,
   scopeFindings,
   sharedWriteMessage,
+  bodyLockMessageFor,
+  taskMutexMessageFor,
   taskArgumentMessage,
   taskArrowMessage,
   threadsModuleName,
@@ -1662,6 +1664,7 @@ export class Compilation {
         messages.push(resultMessage(this.table, sig, fn, result))
         messages.push(reachesDstMessage(this.table, program, sig, fn))
         messages.push(sharedWriteMessage(sig, fn, facts))
+        messages.push(bodyLockMessageFor(sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))
         messages.push(escapeMessage(sig, fn, facts))
         messages.push(
@@ -1734,6 +1737,7 @@ export class Compilation {
         const messages: string[] = []
         messages.push(fn.lifted ? taskArrowMessage() : "")
         messages.push(taskArgumentMessage(this.table, call.sig))
+        messages.push(taskMutexMessageFor(this.table, program, call.sig))
         messages.push(resultMessage(this.table, call.sig, fn, fn.returnType))
         messages.push(sharedWriteMessage(call.sig, fn, facts))
         messages.push(arenaMessage(call.sig, fn, facts))

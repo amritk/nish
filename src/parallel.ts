@@ -76,10 +76,12 @@ import {
   N_FOR,
   N_FOR_OF,
   N_IDENT,
+  N_METHOD,
   N_NEW,
   N_NUMBER,
   N_OBJECT,
   N_RETURN,
+  N_STRING,
   N_TRUE,
   N_UNARY,
   N_BINARY,
@@ -97,6 +99,7 @@ import {
   PAR_SPAWN,
   PAR_TASK,
   ParallelCall,
+  StructInfo,
   TemplateInfo,
 } from "./program"
 import { resultMethodName } from "./emit-result"
@@ -113,9 +116,9 @@ export const DISPOSE_METHOD: string = "[Symbol.dispose]"
 
 /** The refusal of a `[Symbol.dispose]` method anywhere but `nish/threads`'s `ThreadScope`. */
 export const disposeElsewhereMessage = (owner: string): string =>
-  `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only a \`scope()\` from ` +
-  "`nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method " +
-  "of any other class would never be called"
+  `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only a \`scope()\` or a ` +
+  "`lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a " +
+  "disposal method of any other class would never be called"
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
 export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`)
@@ -266,6 +269,11 @@ export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: Fac
     // is what a builtin such as `console.log` lowers to, by its C name.
     const via = facts.get(own.writeVia)
     where = via === null ? ` in the runtime's \`${own.writeVia}\`` : ` through \`${via.sourceName}\``
+  }
+  // WP29 P3, R6: a task's one shared write is through a guard, which the
+  // fixpoint does not count (`isGuardedAccess`), so this names what is left.
+  if (parallelRoleOf(sig) === PAR_SPAWN) {
+    return `\`${fn.sourceName}\` writes memory its caller can see${where}${TASK_WRITE_TAIL}`
   }
   return (
     `\`${fn.sourceName}\` writes memory its caller can see${where}, and \`${intrinsicName(sig)}\` runs it on several ` +
@@ -739,9 +747,10 @@ export class ScopeFinding {
 }
 
 const usingNotScopeMessage = (): string =>
-  "`using` takes only `scope()` from `nish/threads` or the builtin `arena()` in this version: they are the values " +
-  "whose disposal the language defines — a scope joins its tasks, an arena releases what its block allocated — so a " +
-  "`using` of anything else would promise a disposal nothing performs"
+  "`using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this " +
+  "version: they are the values whose disposal the language defines — a scope joins its tasks, a guard releases " +
+  "its lock, an arena releases what its block allocated — so a `using` of anything else would promise a disposal " +
+  "nothing performs"
 
 const arenaNotUsingMessage = (): string =>
   "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was " +
@@ -860,7 +869,7 @@ const walkScopes = (
         if (local !== null) {
           arenas.push(local)
         }
-      } else if (!isScopeCall(program, init, scopeType)) {
+      } else if (!isScopeCall(program, init, scopeType) && !isLockCall(program, init)) {
         out.push(new ScopeFinding(decl, usingNotScopeMessage()))
       }
     }
@@ -934,6 +943,8 @@ export const scopeFindings = (
     walkScopes(program, body, parents, scopeType, arenas, out)
     if (loaded) {
       checkBody(program, table, facts, body, out)
+      walkMutexes(program, table, body, parents, out)
+      findGuardBlocks(program, facts, body, scopeType, out)
     }
     if (instance !== null) {
       program.leaveInstance()
@@ -1153,11 +1164,14 @@ class RegionState {
   locals: Local[]
   name: string
   destinations: Local[]
+  /** WP29 P3: the argument type of every task of the scope, which is what R7 asks a lock about. */
+  taskArgs: i32[]
 
   constructor(locals: Local[], name: string) {
     this.locals = locals
     this.name = name
     this.destinations = []
+    this.taskArgs = []
   }
 
   owns(local: Local | null): boolean {
@@ -1204,6 +1218,23 @@ const holdsSpawnOn = (program: CheckedProgram, node: Node, state: RegionState): 
     }
   }
   return false
+}
+
+/** The argument type of every `spawn` on `state`'s scope under `node`, for R7. */
+const collectTaskArgs = (program: CheckedProgram, node: Node, state: RegionState): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  const callee = spawnCallee(program, node)
+  if (callee !== null && state.owns(spawnReceiver(program, node))) {
+    const instance = callee.instance
+    if (instance !== null && instance.typeArgs.length > 0) {
+      state.taskArgs.push(instance.typeArgs[0])
+    }
+  }
+  for (const child of node.children) {
+    collectTaskArgs(program, child, state)
+  }
 }
 
 /** Every destination of a `spawn` on `state`'s scope under `node`: what a loop's later passes will have stored into. */
@@ -1375,6 +1406,9 @@ const walkRegion = (
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
   } else if (node.kind === N_CALL) {
     message = regionCallMessage(program, table, facts, node, state, uses)
+    if (message.length === 0) {
+      message = regionLockMessageFor(program, table, facts, node, state)
+    }
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
@@ -1435,6 +1469,11 @@ const findRegions = (
           }
         }
         const state = new RegionState(locals, locals.length > 0 ? locals[0].name : "scope")
+        let k = i + 1
+        while (k < node.children.length) {
+          collectTaskArgs(program, node.children[k], state)
+          k = k + 1
+        }
         let started = false
         let j = i + 1
         while (j < node.children.length) {
@@ -1466,4 +1505,492 @@ const checkBody = (
   collectUses(program, body, null, uses)
   checkDestinations(program, body, uses, out)
   findRegions(program, table, facts, uses, body, out)
+}
+
+// ---- WP29 P3: a lock that owns its data ---------------------------------------------------
+//
+// `const m = new Mutex<Hist>(new Hist()); ... { using g = m.lock(); g.value.n = g.value.n + 1 }`.
+// A `Mutex`'s data is reachable only through the guard its `lock()` answers,
+// which `using` binds, and every rule below keeps it that way
+// (docs/wp29-thread-surface.md §4.3, R1–R8):
+//
+//   - R1: the data is fresh when it is locked away, and a `Mutex` has no
+//     member a program may name but `lock`;
+//   - R2: `m.lock()` is only the initialiser of a `using` declaration, whose
+//     block releases the lock at every exit (`src/emit-parallel.ts`);
+//   - R3 and R4: a guard is only `g.value`, and what is derived from it is
+//     only the base of another access, a scalar read, or a scalar store into
+//     a field or an element that already exists: nothing derived from it
+//     outlives the block, and nothing a task's arena holds is stored into it;
+//   - R5: inside a guard's block, directly or through any call, no second
+//     lock, no scope, no `spawn` and no data-parallel call, so one lock is
+//     held at a time and nothing is waited on while it is held: a program
+//     cannot deadlock;
+//   - R6: a store through a guard is the one shared write a task may make
+//     (`isGuardedAccess`, which the fixpoint asks before it counts a store);
+//   - R7: between a scope's first `spawn` and the end of its block the parent
+//     does not lock a mutex the scope's tasks can reach, because natively
+//     they have not run yet and under Node they have;
+//   - R8: a `Mutex` reaches a task as its argument or as a field of the class
+//     its argument is, which keeps R7's reachability a question about types.
+
+/** The classes `nish/threads` declares for the lock. */
+const MUTEX: string = "Mutex"
+const MUTEX_GUARD: string = "MutexGuard"
+
+/** Whether `info` is an instantiation of `nish/threads`'s generic class `name`. */
+const isThreadsClass = (info: StructInfo | null, name: string): boolean => {
+  if (info === null) {
+    return false
+  }
+  const instance = info.instance
+  return (
+    instance !== null &&
+    instance.template.sourceName === name &&
+    isThreadsModule(instance.template.home.program)
+  )
+}
+
+/** The layout of `type` when it is a class, `null` otherwise. */
+const classLayoutOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null =>
+  type >= 0 && table.isStruct(type) ? program.struct(table.nameOf(type)) : null
+
+/** Whether `type` is a `Mutex<T>` from `nish/threads`. */
+const isMutexType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+  isThreadsClass(classLayoutOf(program, table, type), MUTEX)
+
+/** Whether `type` is a `MutexGuard<T>` from `nish/threads`. */
+export const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+  isThreadsClass(classLayoutOf(program, table, type), MUTEX_GUARD)
+
+/** Whether `sig` is `Mutex<T>.lock` from `nish/threads`, whose body the emitter writes. */
+export const isLockMethod = (sig: FunctionSig): boolean =>
+  isThreadsClass(sig.owner, MUTEX) && sig.decl.kind === N_METHOD && sig.decl.children[0].text === "lock"
+
+/** Whether `node` is a call of a `Mutex`'s `lock()`. */
+export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
+  if (node.kind !== N_CALL) {
+    return false
+  }
+  const callee = program.nodeCallees[node.id]
+  return callee !== null && isLockMethod(callee)
+}
+
+/**
+ * Whether `node` is `g.value` or an access through it — `g.value.f`,
+ * `g.value.xs[i]` — for a guard `g`: what R3 and R4 hold to their rules, and
+ * the one shared memory a task may write (R6). A guard is only ever a `using`
+ * binding named as `g.value` (R3), so its type is the whole test.
+ */
+export const isGuardedAccess = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const e = unwrapParens(node)
+  if (e.kind !== N_MEMBER && e.kind !== N_INDEX) {
+    return false
+  }
+  const base = unwrapParens(e.children[0])
+  if (e.kind === N_MEMBER && e.text === "value" && isGuardType(program, table, program.nodeTypes[base.id])) {
+    return true
+  }
+  return isGuardedAccess(program, table, base)
+}
+
+/** The tail every refusal of R5 shares, which is what its code is keyed on. */
+const GUARD_HELD_TAIL: string =
+  ": inside a guard's block, directly or through any function it calls, there is no second `lock()`, " +
+  "no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time " +
+  "and nothing is waited on while it is held"
+
+const mutexFreshMessage = (): string =>
+  "`new Mutex` takes a fresh value — a `new` expression or a literal — because the data a `Mutex` owns is " +
+  "reachable only through its guard, and a value the program already holds would be a path to it that skips the lock"
+
+const mutexMemberMessage = (name: string): string =>
+  `\`${name}\` is not a member a program may name: the data a \`Mutex\` owns is reachable only through ` +
+  "the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock"
+
+const lockNotUsingMessage = (): string =>
+  "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released " +
+  "when the block that declares it ends, so a guard bound any other way would be one nobody releases"
+
+const guardUseMessage = (name: string): string =>
+  `A guard is used only as \`${name}.value\`, and \`${name}.value\` only as the base of a field or element ` +
+  "read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock"
+
+const guardDerivedMessage = (table: TypeTable, type: i32): string =>
+  `This is a \`${table.typeName(type)}\` read through a guard, which is used only as the base of a field or ` +
+  "element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock"
+
+const guardStoreMessage = (table: TypeTable, type: i32): string =>
+  `This stores a \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\` or ` +
+  "an enum, into a field or an element that already exists: a task's arena is freed when it is joined, and " +
+  "a pointer into it stored here would dangle"
+
+const guardMethodMessage = (name: string): string =>
+  `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
+  "a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined"
+
+const guardHeldMessage = (what: string, guard: string): string =>
+  `${what} is reached while \`${guard}\` holds its lock${GUARD_HELD_TAIL}`
+
+/** R6, in `sharedWriteMessage`'s words for a task. */
+const TASK_WRITE_TAIL: string =
+  ", and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the " +
+  "guard of a `Mutex`, `using g = m.lock()`"
+
+const regionLockMessage = (state: RegionState, what: string, path: string): string =>
+  `${what} locks a \`Mutex\` a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
+  "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
+  "so the parent locks what they share only before the first `spawn` or after the join"
+
+const taskMutexMessage = (table: TypeTable, type: i32, path: string): string =>
+  `The argument of \`spawn\` is \`${table.typeName(type)}\`, which reaches a \`Mutex\` through \`${path}\`: ` +
+  "a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so " +
+  "which tasks share a lock is a question the checker can answer"
+
+const bodyLockMessage = (sig: FunctionSig, fn: FunctionSig): string =>
+  `\`${fn.sourceName}\` takes a \`Mutex\`'s lock, and \`${intrinsicName(sig)}\` runs it on several threads ` +
+  "at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body"
+
+/** Whether `init`, the argument of `new Mutex`, is fresh: a `new` expression or a literal. */
+const isFreshValue = (init: Node): boolean => {
+  const e = unwrapParens(init)
+  if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
+    return unwrapParens(e.children[0]).kind === N_NUMBER
+  }
+  return (
+    e.kind === N_NEW ||
+    e.kind === N_ARRAY ||
+    e.kind === N_OBJECT ||
+    e.kind === N_NUMBER ||
+    e.kind === N_STRING ||
+    e.kind === N_TRUE ||
+    e.kind === N_FALSE
+  )
+}
+
+/** Whether `name`, among the runtime symbols a call can reach, is one R5 refuses while a lock is held. */
+const isWaitSymbol = (name: string, locksOnly: boolean): boolean =>
+  name === "nish_mutex_wait" ||
+  (!locksOnly && (name === "nish_scope_spawn" || name === "nish_parallel_range" || name === "nish_scope_join"))
+
+/**
+ * Whether a call of `name` reaches, through its callees, a lock (`locksOnly`)
+ * or anything R5 refuses inside a guard's block: a lock, a task filed or
+ * joined, or a data-parallel region. Each is a runtime symbol the fixpoint has
+ * put among the callees of the function that reaches it (`markLock`,
+ * `markParallelEntry` in `src/attributes.ts`).
+ */
+const reachesWait = (facts: FactsTable, name: string, locksOnly: boolean, seen: StringSet): boolean => {
+  if (isWaitSymbol(name, locksOnly)) {
+    return true
+  }
+  if (!seen.add(name)) {
+    return false
+  }
+  const own = facts.get(name)
+  if (own === null) {
+    return false
+  }
+  let c = 0
+  while (c < own.callees.size()) {
+    if (reachesWait(facts, own.callees.at(c), locksOnly, seen)) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
+}
+
+/** Whether a call of `fn` takes a lock, directly or through any callee. */
+export const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
+  reachesWait(facts, fn.name, true, new StringSet())
+
+/** The refusal of a parallel body that takes a lock, or "". */
+export const bodyLockMessageFor = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string =>
+  takesLock(facts, fn) ? bodyLockMessage(sig, fn) : ""
+
+/**
+ * The field path from a value of `type` to a `Mutex` — `want`, or any when
+ * `want` is -1 — or "" when there is none. `root` is how the path starts, and
+ * `seen` keeps a recursive struct from being walked twice. A `Mutex`'s own
+ * data is reached through its guard, as the program reaches it.
+ */
+const mutexPath = (
+  table: TypeTable,
+  program: CheckedProgram,
+  type: i32,
+  want: i32,
+  root: string,
+  seen: StringSet
+): string => {
+  const kind = table.kindOf(type)
+  if (kind === K_NULLABLE) {
+    return mutexPath(table, program, table.refOf(type), want, root, seen)
+  }
+  if (kind === K_ARRAY) {
+    return mutexPath(table, program, table.refOf(type), want, `${root}[i]`, seen)
+  }
+  if (kind === K_RESULT) {
+    const ok = mutexPath(table, program, table.okOf(type), want, `${root}.value`, seen)
+    return ok.length > 0 ? ok : mutexPath(table, program, table.errOf(type), want, `${root}.error`, seen)
+  }
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return ""
+  }
+  if (isThreadsClass(info, MUTEX) && (want < 0 || type === want)) {
+    return root
+  }
+  if (!seen.add(info.name)) {
+    return ""
+  }
+  for (const field of info.fields) {
+    const path = mutexPath(table, program, field.type, want, `${root}.${field.name}`, seen)
+    if (path.length > 0) {
+      return path
+    }
+  }
+  return ""
+}
+
+/**
+ * The path to a `Mutex` held inside the data of the `Mutex` `type`, which R8
+ * refuses: one task would reach the inner lock only while it holds the outer.
+ */
+const mutexInside = (table: TypeTable, program: CheckedProgram, type: i32, root: string): string => {
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return ""
+  }
+  for (const field of info.fields) {
+    const path = mutexPath(table, program, field.type, -1, `${root}.${field.name}`, new StringSet())
+    if (path.length > 0) {
+      return path
+    }
+  }
+  return ""
+}
+
+/**
+ * R8: the argument of a task reaches a `Mutex` only as itself or as a field of
+ * the class it is, and no `Mutex`'s data holds another. The refusal, or "".
+ */
+export const taskMutexMessageFor = (table: TypeTable, program: CheckedProgram, sig: FunctionSig): string => {
+  const instance = sig.instance
+  if (instance === null || instance.typeArgs.length === 0) {
+    return ""
+  }
+  const arg = instance.typeArgs[0]
+  const info = classLayoutOf(program, table, arg)
+  let path = ""
+  if (info === null) {
+    path = mutexPath(table, program, arg, -1, "arg", new StringSet())
+  } else if (isThreadsClass(info, MUTEX)) {
+    path = mutexInside(table, program, arg, "arg")
+  } else {
+    let k = 0
+    while (k < info.fields.length && path.length === 0) {
+      const field = info.fields[k]
+      const root = `arg.${field.name}`
+      path = isMutexType(program, table, field.type)
+        ? mutexInside(table, program, field.type, root)
+        : mutexPath(table, program, field.type, -1, root, new StringSet())
+      k = k + 1
+    }
+  }
+  return path.length === 0 ? "" : taskMutexMessage(table, arg, path)
+}
+
+/** Whether `node`, at `at` under the first `depth` of `parents`, is a store's target: `x = v`, `x += v`, `x++`. */
+const isStoreTarget = (at: Node, parents: Node[], depth: i32): boolean => {
+  if (depth < 1) {
+    return false
+  }
+  const parent = parents[depth - 1]
+  if (parent.kind === N_BINARY && isAssignmentOperator(parent.text)) {
+    return parent.children[0] === at
+  }
+  return parent.kind === N_UNARY && (parent.text === "++" || parent.text === "--")
+}
+
+/** R1–R4 at `node` and under it, with `parents` outermost first: every refusal is pushed onto `out`. */
+const walkMutexes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  node: Node,
+  parents: Node[],
+  out: ScopeFinding[]
+): void => {
+  // A parenthesised expression is judged as what it wraps, where it stands.
+  let at = node
+  let depth = parents.length
+  while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+    at = parents[depth - 1]
+    depth = depth - 1
+  }
+  const parent: Node | null = depth > 0 ? parents[depth - 1] : null
+  const type = program.nodeTypes[node.id]
+  const declaresName =
+    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === at
+  const called = parent !== null && parent.kind === N_CALL && parent.children[0] === at
+  if (node.kind === N_PAREN || declaresName) {
+    // judged as what it wraps, or a declaration rather than a use
+  } else if (node.kind === N_NEW && isMutexType(program, table, type)) {
+    const args = node.children[2].children
+    if (args.length > 0 && !isFreshValue(args[0])) {
+      out.push(new ScopeFinding(args[0], mutexFreshMessage()))
+    }
+  } else if (node.kind === N_MEMBER && isMutexType(program, table, program.nodeTypes[node.children[0].id])) {
+    if (!(node.text === "lock" && called)) {
+      out.push(new ScopeFinding(node, mutexMemberMessage(node.text)))
+      return
+    }
+  } else if (isLockCall(program, node)) {
+    if (!isUsingInitialiser(at, parents, depth)) {
+      out.push(new ScopeFinding(node, lockNotUsingMessage()))
+    }
+  } else if (isGuardType(program, table, type)) {
+    const named = node.kind === N_IDENT ? node.text : "g"
+    const asValue =
+      node.kind === N_IDENT &&
+      parent !== null &&
+      parent.kind === N_MEMBER &&
+      parent.text === "value" &&
+      parent.children[0] === at
+    if (!asValue) {
+      out.push(new ScopeFinding(node, guardUseMessage(named)))
+      return
+    }
+  } else if (isGuardedAccess(program, table, node) && parent !== null) {
+    const base = (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
+    const above: Node | null = depth > 1 ? parents[depth - 2] : null
+    if (base && parent.kind === N_MEMBER && above !== null && above.kind === N_CALL && above.children[0] === parent) {
+      out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
+    } else if (base) {
+      // an access through it: judged where it ends
+    } else if (isStoreTarget(at, parents, depth)) {
+      if (!isScalarArgument(table, type)) {
+        out.push(new ScopeFinding(parent, guardStoreMessage(table, type)))
+      }
+    } else if (!isScalarArgument(table, type)) {
+      out.push(new ScopeFinding(node, guardDerivedMessage(table, type)))
+      return
+    }
+  }
+  parents.push(node)
+  for (const child of node.children) {
+    walkMutexes(program, table, child, parents, out)
+  }
+  parents.pop()
+}
+
+/** What R5 refuses at `node` while a lock is held, in words, or "". */
+const heldWhat = (program: CheckedProgram, facts: FactsTable, node: Node, scopeType: i32): string => {
+  if (node.kind !== N_CALL) {
+    return ""
+  }
+  if (isLockCall(program, node)) {
+    return "A second `lock()`"
+  }
+  if (isScopeCall(program, node, scopeType)) {
+    return "`scope()`"
+  }
+  const callee = program.nodeCallees[node.id]
+  if (callee === null) {
+    return ""
+  }
+  if (isSpawnEntry(callee) || isParallelEntry(callee)) {
+    return `\`${intrinsicName(callee)}\``
+  }
+  if (reachesWait(facts, callee.name, false, new StringSet())) {
+    return `\`${callee.sourceName}\`, which takes a lock or waits for threads,`
+  }
+  return ""
+}
+
+/** R5 over `node`, a statement after the `using` that bound the guard `name`, and everything under it. */
+const walkHeld = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  node: Node,
+  name: string,
+  scopeType: i32,
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return // a lifted function of its own; a call that runs it is judged where it is
+  }
+  const what = heldWhat(program, facts, node, scopeType)
+  if (what.length > 0) {
+    out.push(new ScopeFinding(node, guardHeldMessage(what, name)))
+    return
+  }
+  for (const child of node.children) {
+    walkHeld(program, facts, child, name, scopeType, out)
+  }
+}
+
+/** Every block under `node` that binds a guard, with R5 judged from the `using` to the block's end. */
+const findGuardBlocks = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  node: Node,
+  scopeType: i32,
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_BLOCK) {
+    let i = 0
+    while (i < node.children.length) {
+      const stmt = node.children[i]
+      if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+        for (const decl of stmt.children[0].children) {
+          if (isLockCall(program, unwrapParens(decl.children[2]))) {
+            let j = i + 1
+            while (j < node.children.length) {
+              walkHeld(program, facts, node.children[j], decl.children[0].text, scopeType, out)
+              j = j + 1
+            }
+          }
+        }
+      }
+      i = i + 1
+    }
+  }
+  for (const child of node.children) {
+    findGuardBlocks(program, facts, child, scopeType, out)
+  }
+}
+
+/**
+ * R7: the refusal of `node`, a call in `state`'s region, when it takes a lock
+ * a task of the scope can reach — `m.lock()` on a `Mutex` of a type a task's
+ * argument reaches, or a call that takes any lock when a task reaches any —
+ * or "".
+ */
+const regionLockMessageFor = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  node: Node,
+  state: RegionState
+): string => {
+  const callee = program.nodeCallees[node.id]
+  if (callee === null) {
+    return ""
+  }
+  let want = -1
+  let what = `\`${callee.sourceName}\``
+  if (isLockMethod(callee)) {
+    want = program.nodeTypes[unwrapParens(node.children[0].children[0]).id]
+    what = "This `lock()`"
+  } else if (!takesLock(facts, callee)) {
+    return ""
+  }
+  for (const arg of state.taskArgs) {
+    const path = mutexPath(table, program, arg, want, "arg", new StringSet())
+    if (path.length > 0) {
+      return regionLockMessage(state, what, path)
+    }
+  }
+  return ""
 }
