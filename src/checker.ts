@@ -119,7 +119,7 @@ import {
   StructRegistry,
   StructTemplateInfo,
 } from "./program"
-import { BoundsWalk, analyzeBounds } from "./bounds"
+import { BoundsWalk, Offset, analyzeBounds, offsetIndex } from "./bounds"
 import { isAssignmentOperator } from "./emit-util"
 import { checkResultLocalsHandled } from "./result"
 import { checkSecretFlow } from "./secret"
@@ -1645,9 +1645,11 @@ const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bound
 
 /**
  * A bounds check `src/bounds.ts` could not remove, on an access inside a loop
- * whose receiver and index are both plain locals — which is the shape the
- * analysis knows how to prove, so a guard really would remove the check. The
- * advice is `indexGuardAdvice`'s, which NL2457 gives too.
+ * whose receiver is a plain local and whose index is a plain local or an
+ * offset from one, `i + c` — the shapes the analysis knows how to prove, so a
+ * guard really would remove the check. The advice for a local is
+ * `indexGuardAdvice`'s, which NL2457 gives too, and for an offset
+ * `offsetGuardAdvice`'s.
  */
 const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access
@@ -1664,6 +1666,16 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
     index = access.children[1].children[0]
   }
   const holder = perfLocalName(walk.ctx, receiver)
+  const offset = offsetIndex(walk.ctx, index)
+  if (holder.length > 0 && offset !== null) {
+    const sum = offsetSpelling(index, offset)
+    walk.ctx.performance(
+      index,
+      `\`${sum}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
+        `compares against the length on every iteration: ${offsetGuardAdvice(walk.ctx.program, offset, sum, holder)}`
+    )
+    return
+  }
   const name = perfLocalName(walk.ctx, index)
   if (holder.length === 0 || name.length === 0) {
     return
@@ -1727,6 +1739,35 @@ export const indexGuardAdvice = (
   }
   const length = f64Mode ? `toI32(${holder}.length)` : `${holder}.length`
   return `${lead}\`if (${name} >= 0 && ${name} < ${length})\` proves both ends, and an unsigned index needs only the upper one`
+}
+
+/** `i + c` or `c + i`, in the order the source wrote the offset index. */
+const offsetSpelling = (index: Node, offset: Offset): string =>
+  unwrapPerfParens(unwrapPerfParens(index).children[0]).kind === N_IDENT
+    ? `${offset.v.name} + ${offset.c}`
+    : `${offset.c} + ${offset.v.name}`
+
+/**
+ * What proves an offset index: a guard on the sum itself, which
+ * `src/bounds.ts` reads as a bound on the local (`offsetIndex`). The loop
+ * condition is the usual place for it, because a loop that reads `c + 1`
+ * elements a pass stops `c` short of the length. Under `--number-mode f64` the
+ * length is an `f64`, so the spelling is the one that compiles in both modes,
+ * and a module's own `toI32` hides the builtin that spelling calls.
+ */
+const offsetGuardAdvice = (program: CheckedProgram, offset: Offset, sum: string, holder: string): string => {
+  const f64Mode = program.f64Mode
+  if (f64Mode && declaresName(program.file, "toI32")) {
+    return (
+      "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
+      "`toI32`, which this module's own `toI32` hides: rename it to guard the access"
+    )
+  }
+  const length = f64Mode ? `toI32(${holder}.length)` : `${holder}.length`
+  return (
+    `guard the sum with a test that reaches the access — \`if (${offset.v.name} >= 0 && ${sum} < ${length})\` ` +
+    `proves both ends, and so does a loop condition \`${sum} < ${length}\` on a counter that starts at 0`
+  )
 }
 
 /**
