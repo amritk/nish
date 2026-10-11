@@ -10657,6 +10657,149 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end arr-repeat-check -->
 
+### An offset index: a guard on the sum
+
+A loop that reads four elements a pass writes its guard on the last one it
+reads, `i + 3 < xs.length`, and that is a bound on `i` that reaches three past
+it. `i` starts at 0 and only grows, so it is non-negative, and the sum is
+exact because a signed add either panics on overflow or is proven not to,
+so `xs[i]` through `xs[i + 3]` carry no check. The same reach bounds `i`
+three further below `INT_MAX`, so the three sums and the step `i + 4` are
+`add nsw`. Two kinds of overflow check are left. The loop condition's own
+`i + 3` keeps one, because after a step of four `i` may be as large as the
+length and three more may pass `INT_MAX`. The running total keeps its four,
+because they are the program's own arithmetic. Under `--wrapping` the sum
+wraps by definition and every bounds check stays.
+
+<!-- cookbook:begin arr-bounds-offset -->
+```ts
+const sum4 = (xs: i32[]): i32 => {
+  let s = 0
+  for (let i = 0; i + 3 < xs.length; i = i + 4) {
+    s = s + xs[i] + xs[i + 1] + xs[i + 2] + xs[i + 3]
+  }
+  return s
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @sum4(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %s.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  store i32 0, i32* %s.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  br label %for.cond
+
+for.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 3)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %8 = trunc i64 %1 to i32
+  %9 = icmp slt i32 %6, %8
+  br i1 %9, label %for.body, label %for.end
+
+for.body:
+  %10 = load i32, i32* %s.addr, align 4
+  %11 = load i32, i32* %i.addr, align 4
+  %12 = sext i32 %11 to i64
+  %13 = bitcast i8* %3 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %12
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %15)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = add nsw i32 %19, 1
+  %21 = sext i32 %20 to i64
+  %22 = bitcast i8* %3 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 %21
+  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %24)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = add nsw i32 %28, 2
+  %30 = sext i32 %29 to i64
+  %31 = bitcast i8* %3 to i32*
+  %32 = getelementptr inbounds i32, i32* %31, i64 %30
+  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %26, i32 %33)
+  %35 = extractvalue { i32, i1 } %34, 0
+  %36 = extractvalue { i32, i1 } %34, 1
+  br i1 %36, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %37 = load i32, i32* %i.addr, align 4
+  %38 = add nsw i32 %37, 3
+  %39 = sext i32 %38 to i64
+  %40 = bitcast i8* %3 to i32*
+  %41 = getelementptr inbounds i32, i32* %40, i64 %39
+  %42 = load i32, i32* %41, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %43 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %35, i32 %42)
+  %44 = extractvalue { i32, i1 } %43, 0
+  %45 = extractvalue { i32, i1 } %43, 1
+  br i1 %45, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  store i32 %44, i32* %s.addr, align 4
+  br label %for.inc
+
+for.inc:
+  %46 = load i32, i32* %i.addr, align 4
+  %47 = add nsw i32 %46, 4
+  store i32 %47, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %48 = load i32, i32* %s.addr, align 4
+  ret i32 %48
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end arr-bounds-offset -->
+
 ### A hoisted `toI32(s.length)`: the proof in both number modes
 
 Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can

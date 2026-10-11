@@ -5708,6 +5708,59 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
   }
 }
 
+// An offset index (`offsetIndex` in `src/bounds.ts`). `arr_bounds_offset` is
+// the positive: a guard on the sum `i + c` proves `xs[i + c]`, so every
+// function in it keeps no check but `passed`, whose first access proves the
+// two after it. Each negative breaks one rule the proof rests on — the reach,
+// the floor, the exact sum — keeps its check, and panics when run. The
+// released compiler keeps twelve checks in the positive; this one keeps one.
+if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_offset")) {
+  for (const [name, fn, count] of [
+    ["arr_bounds_offset", "sum4", 0],
+    ["arr_bounds_offset", "pairs", 0],
+    ["arr_bounds_offset", "window2", 0],
+    ["arr_bounds_offset", "tail", 0],
+    ["arr_bounds_offset", "passed", 1],
+    ["arr_bounds_offset_reach", "tooFar", 1],
+    ["arr_bounds_offset_floor", "pick", 1],
+    ["arr_bounds_offset_wrap", "pick", 1],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      continue
+    }
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn)
+    check(
+      `${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    )
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_bounds_offset_reach", "a guard that reaches one short", "", "3 >= 3"],
+      ["arr_bounds_offset_floor", "a sum with no floor under its local", "2", "18446744073709551612 >= 3"],
+      ["arr_bounds_offset_wrap", "a sum that wraps under `--wrapping`", "3", "18446744071562067968 >= 3"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`)
+      if (!fs.existsSync(ll)) {
+        continue
+      }
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { driver: null })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+}
+
 // WP15 §2.4, the build-mode rule (`hostVisible` in `src/visibility.ts`). A
 // `--link` build with no sidecar, no wasm and no C function declared is its own
 // final link, so an exported function takes the facts its call sites prove:
