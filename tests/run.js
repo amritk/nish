@@ -4071,6 +4071,7 @@ const LINK_READ_LATER = [
   "range_export_napi_async",
   "range_export_unproven",
   ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  "std_json_tokenizer",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -4758,6 +4759,140 @@ for (const name of [
   } else {
     skip(
       `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the channel is not run`
+    )
+  }
+}
+
+// `nish/json-tokenizer` against Node's own parser: the token stream the native
+// tokenizer gives every y_ file of JSONTestSuite (`app --tokens`, strings as the
+// hex of their UTF-8 and numbers as the bits of `numberF64`) is rebuilt into a
+// value with plain objects, so that a duplicate key and an integer-like key land
+// where `JSON.parse` puts them, and both values are walked into the same token
+// words. A number compares by its bits, so `numberF64` must be correctly rounded
+// for every number in the corpus, and `-0` must stay negative.
+if (!only || "std_json_tokenizer".includes(only)) {
+  const corpusFile = path.join(root, "tests", "json-suite", "test-parsing.txt")
+  const exe = path.join(buildDir, "link", "std_json_tokenizer", "app")
+  if (!HAS_CLANG) {
+    skip(
+      "skipped: link/std_json_tokenizer: no clang, so there is no native tokenizer to hold against JSON.parse"
+    )
+  } else {
+    const bits = (x) => {
+      const view = new DataView(new ArrayBuffer(8))
+      view.setFloat64(0, x)
+      return String(view.getBigInt64(0))
+    }
+    const hex = (s) => Buffer.from(s, "utf8").toString("hex")
+    const walk = (v, out) => {
+      if (Array.isArray(v)) {
+        out.push("[")
+        for (const e of v) {
+          walk(e, out)
+        }
+        out.push("]")
+      } else if (v === null) {
+        out.push("z")
+      } else if (typeof v === "object") {
+        out.push("{")
+        for (const k of Object.keys(v)) {
+          out.push(`k:${hex(k)}`)
+          walk(v[k], out)
+        }
+        out.push("}")
+      } else if (typeof v === "string") {
+        out.push(`s:${hex(v)}`)
+      } else if (typeof v === "number") {
+        out.push(`n:${bits(v)}`)
+      } else {
+        out.push(v ? "t" : "f")
+      }
+      return out
+    }
+    // The native words back into a value: the inverse of `walk`, with JSON.parse's
+    // rule for a repeated key (the last value, at the first one's place).
+    const rebuild = (words) => {
+      let at = 0
+      const value = () => {
+        const w = words[at++]
+        if (w === "[") {
+          const a = []
+          while (words[at] !== "]") {
+            a.push(value())
+          }
+          at++
+          return a
+        }
+        if (w === "{") {
+          const o = {}
+          while (words[at] !== "}") {
+            const k = Buffer.from(words[at++].slice(2), "hex").toString("utf8")
+            o[k] = value()
+          }
+          at++
+          return o
+        }
+        if (w.startsWith("s:")) {
+          return Buffer.from(w.slice(2), "hex").toString("utf8")
+        }
+        if (w.startsWith("n:")) {
+          const view = new DataView(new ArrayBuffer(8))
+          view.setBigInt64(0, BigInt(w.slice(2)))
+          return view.getFloat64(0)
+        }
+        if (w === "z") {
+          return null
+        }
+        return w === "t"
+      }
+      return value()
+    }
+    const files = new Map()
+    for (const line of fs.readFileSync(corpusFile, "utf8").split("\n")) {
+      if (line.startsWith("y_")) {
+        const space = line.indexOf(" ")
+        const packed = line.slice(space + 1)
+        files.set(
+          line.slice(0, space),
+          Buffer.from(
+            packed.replace(/%([0-9A-F]{2})/g, (_, h) => String.fromCharCode(Number.parseInt(h, 16))),
+            "latin1"
+          )
+        )
+      }
+    }
+    const run = spawnSync(exe, ["--tokens"], { cwd: root, encoding: "utf8" })
+    const problems = []
+    let compared = 0
+    const seen = new Set()
+    for (const line of String(run.stdout ?? "")
+      .split("\n")
+      .filter((l) => l.length > 0)) {
+      const words = line.split(" ")
+      const name = words[0]
+      const bytes = files.get(name) ?? null
+      seen.add(name)
+      if (bytes === null || words[words.length - 1] !== "END") {
+        problems.push(`${name}: ${bytes === null ? "not in the corpus" : words[words.length - 1]}`)
+        continue
+      }
+      const native = words.slice(1, -1)
+      const want = walk(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), []).join(" ")
+      const got = walk(rebuild(native), []).join(" ")
+      compared++
+      if (got !== want) {
+        problems.push(`${name}\n  native ${got}\n  node   ${want}`)
+      }
+    }
+    for (const name of files.keys()) {
+      if (!seen.has(name)) {
+        problems.push(`${name}: no token stream`)
+      }
+    }
+    check(
+      `link/std_json_tokenizer: the token stream of each of the ${files.size} y_ files of JSONTestSuite is JSON.parse's value, numbers bit for bit`,
+      run.status === 0 && compared === files.size && files.size > 0 && problems.length === 0,
+      run.status !== 0 ? shown(run) : problems.join("\n")
     )
   }
 }
