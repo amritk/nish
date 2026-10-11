@@ -63,8 +63,12 @@ export const main = (): i32 => {
 
 That program prints `total: 11`. It uses `const` and `let`, arrow functions,
 interfaces, classes with fields and methods, numeric enums, object and array
-literals, `for...of`, `switch`, the ternary operator and template literals,
-all as TypeScript has them. `if`, `while`, `do...while`, `break`, `continue`,
+literals, `for...of`, `switch`, the ternary operator and template literals.
+Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
+`switch` is on an integer or an enum and its cases never fall through into
+the next one's statements, and an enum value can only be compared with `===`
+and `!==`. The [language pages](../language/control-flow.md) give the details.
+`if`, `while`, `do...while`, `break`, `continue`,
 `===` and named `import` and `export` work too. The package ships type
 declarations for `i32`, `Result` and the other built-in names
 (`runtime/nish.d.ts`), so `tsc` and your editor understand a Nish file. The
@@ -140,7 +144,9 @@ const show = (x: i32 | string): void => {
 Name the real type. When a function has to take more than one, write one
 function per type. The one union Nish allows is `T | null`, where `T` is a
 class, an interface, an array or a string; the next section covers it.
-`undefined` is refused in the same way: use `null`.
+`undefined` is refused in the same way: use `null`. The one place `undefined`
+appears is in checking the result of `Map.get`, as in
+`m.get(key) === undefined`.
 
 ## No `?.` or `??`
 

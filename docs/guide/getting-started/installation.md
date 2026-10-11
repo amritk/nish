@@ -31,9 +31,8 @@ sudo apt-get install -y clang-18 lld-18 llvm-18
 export CC=clang-18        # add this line to your shell profile
 ```
 
-Debian and Ubuntu name the versioned compiler `clang-18`, which is why `CC`
-points at it. On Ubuntu 24.04 the plain `clang` is already version 18, so you
-can leave `CC` unset there (step 3 shows how to check).
+These packages install only versioned commands (`clang-18`, `ld.lld-18`), not
+a plain `clang`, which is why `CC` points at the versioned one.
 
 **Fedora**
 
@@ -89,13 +88,14 @@ script's command with `| sh -s 0.18.0`. Read the
 
 ```bash
 nish --version
-clang --version           # or: $CC --version
+"${CC:-clang}" --version
 ```
 
 The first command prints `nish` and a version number, for example
 `nish 0.18.0`. If `nish` is not found, the directory it was installed into is
-not on your `PATH` yet. The second prints the LLVM version; on Ubuntu, if the
-plain `clang --version` already reports 18, you can drop `CC`.
+not on your `PATH` yet. The second runs the C compiler `nish` will use, `$CC`
+if you set it and `clang` otherwise, and prints its LLVM version. If it is not
+found, `nish` cannot build a binary either.
 
 The real test is building a program: see
 [Your first program](first-program.md). If `nish` cannot find a C compiler
