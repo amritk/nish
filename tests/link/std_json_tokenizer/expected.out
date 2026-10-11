@@ -93,7 +93,8 @@ PASS  UTF8: F0 80, an overlong four-byte form
 PASS  UTF8: F4 90, past U+10FFFF
 PASS  UTF8: F5, never a lead
 PASS  UTF8: FF, never a byte
-PASS  UTF8: a four-byte form the window cuts short
+PASS  TRUNCATED: a four-byte form the window cuts short
+PASS  TRUNCATED: a two-byte form the window cuts short
 PASS  UTF8: an invalid byte in a key
 PASS  UTF8: C2 80, DF BF, E0 A0 80, ED 9F BF, EE 80 80, EF BF BF, F0 90 80 80, F4 8F BF BF are accepted
 PASS  UTF8: E1 80 80 and F1 80 80 80 are accepted
@@ -294,4 +295,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 296 passed, 0 failed, 0 skipped
+std/json-tokenizer: 297 passed, 0 failed, 0 skipped

@@ -54,7 +54,8 @@ const benchOne = (tok: JsonTokenizer, body: u8[], out: u8[]): i64 => {
     } else if (k === JSON_TOK_NUMBER) {
       sum = sum + toI64(tok.numberF64())
     }
-    sum = sum % toI64(1000000007)
+    // Kept below 2^40 without a divide per token: the sum of one body's tokens cannot overflow from there.
+    sum = sum & ((toI64(1) << 40) - toI64(1))
     k = tok.next()
   }
   return k === JSON_TOK_END ? sum : toI64(-1)

@@ -10,20 +10,22 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
+import { compilerFrom } from "../compiler.mjs"
+
 const root = path.resolve(import.meta.dirname, "..", "..")
+const { cmd, prefix, rest } = compilerFrom(process.argv.slice(2))
 const flag = (name, fallback) => {
-  const at = process.argv.indexOf(name)
-  return at >= 0 && at + 1 < process.argv.length ? process.argv[at + 1] : fallback
+  const at = rest.indexOf(name)
+  return at >= 0 && at + 1 < rest.length ? rest[at + 1] : fallback
 }
 const rounds = Number(flag("--rounds", "15"))
 const bodies = flag("--bodies", "200000")
-const compiler = path.resolve(root, flag("--compiler", "build/nish"))
 
 const outDir = path.join(root, "build", "bench-json-tokenizer")
 fs.rmSync(outDir, { recursive: true, force: true })
 const app = path.join(outDir, "app")
 const copy = path.join(outDir, "app-copy")
-execFileSync(compiler, ["bench/json-tokenizer/main.ts", "-o", `${outDir}/`, "--link", app], {
+execFileSync(cmd, [...prefix, "bench/json-tokenizer/main.ts", "-o", `${outDir}/`, "--link", app], {
   cwd: root,
   stdio: ["ignore", "ignore", "inherit"],
 })

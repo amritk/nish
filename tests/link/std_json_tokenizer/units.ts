@@ -191,7 +191,8 @@ const strings = (t: Suite): void => {
   t.eqStr("UTF8: F4 90, past U+10FFFF", jtVerdictOf([34, 244, 144, 128, 128, 34], d), "UTF8@1");
   t.eqStr("UTF8: F5, never a lead", jtVerdictOf([34, 245, 128, 128, 128, 34], d), "UTF8@1");
   t.eqStr("UTF8: FF, never a byte", jtVerdictOf([34, 255, 34], d), "UTF8@1");
-  t.eqStr("UTF8: a four-byte form the window cuts short", jtVerdictOf([34, 240, 159, 152], d), "UTF8@1");
+  t.eqStr("TRUNCATED: a four-byte form the window cuts short", jtVerdictOf([34, 240, 159, 152], d), "TRUNCATED@1");
+  t.eqStr("TRUNCATED: a two-byte form the window cuts short", jtVerdictOf([34, 195], d), "TRUNCATED@1");
   t.eqStr("UTF8: an invalid byte in a key", jtVerdictOf([123, 34, 255, 34, 58, 49, 125], d), "UTF8@2");
   // Every well-formed row, at its edges.
   t.eqStr(

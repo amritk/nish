@@ -154,5 +154,5 @@ export const jtFuzz = (t: Suite): void => {
     t.fail("fuzz: alone, after a reset and inside a padded window, every mutant has one verdict", firstDisagreement);
   }
   t.eqI32("fuzz: the seed's mutants, accepted", accepted, 1874);
-  t.eqI64("fuzz: the checksum of every verdict and where it stopped", checksum, toI64(-449425089));
+  t.eqI64("fuzz: the checksum of every verdict and where it stopped", checksum, toI64(-101476246));
 };

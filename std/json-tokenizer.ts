@@ -106,7 +106,7 @@ export const JSON_TOK_ERR_SYNTAX: i32 = -1
 export const JSON_TOK_ERR_TRUNCATED: i32 = -2
 /** Something other than blanks after the top-level value: `[] []`, `1 2`, a trailing NUL. */
 export const JSON_TOK_ERR_TRAILING: i32 = -3
-/** A string holds a byte sequence that is not UTF-8: an overlong form, a surrogate, a code point past U+10FFFF, a cut-short sequence, a stray continuation byte. */
+/** A string holds a byte sequence that is not UTF-8: an overlong form, a surrogate, a code point past U+10FFFF, a sequence cut short by a byte that does not continue it, a stray continuation byte. */
 export const JSON_TOK_ERR_UTF8: i32 = -4
 /** A backslash not followed by one of `"\/bfnrt`, or a `\u` not followed by four hex digits. */
 export const JSON_TOK_ERR_ESCAPE: i32 = -5
@@ -322,21 +322,19 @@ const jsonTokInRange = (b: i32, low: i32, high: i32): boolean => b >= low && b <
  * `JSON_TOK_ERR_UTF8`. RFC 3629 §4's table, row by row: the second byte's
  * range depends on the lead, which is what refuses an overlong form (`C0`,
  * `C1`, `E0 80`–`E0 9F`, `F0 80`–`F0 8F`), a surrogate (`ED A0`–`ED BF`) and a
- * code point past U+10FFFF (`F4 90` and up, `F5`–`FF`). A sequence the window
- * cuts short is refused the same way, since its bytes are all there is.
+ * code point past U+10FFFF (`F4 90` and up, `F5`–`FF`). A sequence that is
+ * well formed as far as the window goes and is cut short by its end is
+ * `JSON_TOK_ERR_TRUNCATED`, as any other value the window cuts short is.
  */
 const jsonTokUtf8Length = (src: u8[], at: i32, end: i32): i32 => {
   const lead: i32 = jsonTokByteAt(src, at, end)
   const second: i32 = jsonTokByteAt(src, at + 1, end)
-  if (jsonTokInRange(lead, JSON_TOK_LEAD_TWO_LOW, JSON_TOK_LEAD_TWO_HIGH)) {
-    return jsonTokInRange(second, JSON_TOK_CONTINUATION_LOW, JSON_TOK_CONTINUATION_HIGH)
-      ? 2
-      : JSON_TOK_ERR_UTF8
-  }
   let low: i32 = JSON_TOK_CONTINUATION_LOW
   let high: i32 = JSON_TOK_CONTINUATION_HIGH
   let length: i32 = 0
-  if (jsonTokInRange(lead, JSON_TOK_LEAD_E0, JSON_TOK_LEAD_THREE_HIGH)) {
+  if (jsonTokInRange(lead, JSON_TOK_LEAD_TWO_LOW, JSON_TOK_LEAD_TWO_HIGH)) {
+    length = 2
+  } else if (jsonTokInRange(lead, JSON_TOK_LEAD_E0, JSON_TOK_LEAD_THREE_HIGH)) {
     length = 3
     if (lead === JSON_TOK_LEAD_E0) {
       low = JSON_TOK_E0_SECOND_LOW
@@ -354,14 +352,13 @@ const jsonTokUtf8Length = (src: u8[], at: i32, end: i32): i32 => {
     return JSON_TOK_ERR_UTF8
   }
   if (!jsonTokInRange(second, low, high)) {
-    return JSON_TOK_ERR_UTF8
+    return second < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_UTF8
   }
   let k: i32 = 2
   while (k < length) {
-    if (
-      !jsonTokInRange(jsonTokByteAt(src, at + k, end), JSON_TOK_CONTINUATION_LOW, JSON_TOK_CONTINUATION_HIGH)
-    ) {
-      return JSON_TOK_ERR_UTF8
+    const next: i32 = jsonTokByteAt(src, at + k, end)
+    if (!jsonTokInRange(next, JSON_TOK_CONTINUATION_LOW, JSON_TOK_CONTINUATION_HIGH)) {
+      return next < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_UTF8
     }
     k += 1
   }
@@ -442,6 +439,8 @@ const jsonTokEscapeLength = (src: u8[], at: i32, end: i32, cp: i32): i32 => {
  */
 export class JsonTokenizer {
   src: u8[]
+  /** The integral number `integerScan` read last, negated. */
+  integerValue: i64
   /** One byte per open container, `JSON_TOK_IN_OBJECT` or `JSON_TOK_IN_ARRAY`, `maxDepth` long. */
   stack: u8[]
   /** The window: bytes `[off, end)` of `src`. */
@@ -468,9 +467,6 @@ export class JsonTokenizer {
   errorAt: i32
   /** The current string's or key's length once decoded, and whether it holds a backslash. */
   stringBytes: i32
-  escaped: boolean
-  /** How many bytes the escape `escape` last read decodes to. */
-  escapeWidth: i32
   /** Whether the current number has neither a fraction nor an exponent. */
   integral: boolean
 
@@ -492,9 +488,8 @@ export class JsonTokenizer {
     this.failed = 0
     this.errorAt = -1
     this.stringBytes = 0
-    this.escaped = false
     this.integral = false
-    this.escapeWidth = 0
+    this.integerValue = 0
     this.reset(src, off, len)
   }
 
@@ -513,7 +508,6 @@ export class JsonTokenizer {
     this.failed = 0
     this.errorAt = -1
     this.stringBytes = 0
-    this.escaped = false
     this.integral = false
     // The second test is only reached when the first proves `off + len` fits.
     if (off < 0 || len < 0 || off > toI32(src.length) - len || off + len > JSON_TOK_END_CEILING) {
@@ -776,7 +770,6 @@ export class JsonTokenizer {
     const limit: i32 = this.maxStringBytes >= room ? end : at + 1 + this.maxStringBytes
     let i: i32 = at + 1
     let decoded: i32 = 0
-    let escaped = false
     while (true) {
       const b: i32 = jsonTokByteAt(src, i, end)
       if (b === JSON_TOK_QUOTE) {
@@ -792,13 +785,12 @@ export class JsonTokenizer {
         return this.fail(JSON_TOK_ERR_CONTROL, i)
       }
       if (b === JSON_TOK_BACKSLASH) {
-        escaped = true
-        const step: i32 = this.escape(i)
-        if (step < 0) {
-          return step
+        const cp: i32 = this.escapeCodePoint(i)
+        if (cp < 0) {
+          return cp
         }
-        decoded += this.escapeWidth
-        i += step
+        decoded += jsonTokUtf8Width(cp)
+        i += jsonTokEscapeLength(src, i, end, cp)
       } else if (b < JSON_TOK_ASCII_END) {
         decoded += 1
         i += 1
@@ -815,22 +807,7 @@ export class JsonTokenizer {
       return this.fail(JSON_TOK_ERR_STRING_LIMIT, limit)
     }
     this.stringBytes = decoded
-    this.escaped = escaped
     return this.emit(k, at, i + 1)
-  }
-
-  /**
-   * Checks the escape whose backslash is at `at`, answering how many raw bytes
-   * it takes (2, 6, or 12 for a surrogate pair) or a negative error, and
-   * leaving how many bytes it decodes to in `escapeWidth`.
-   */
-  escape(at: i32): i32 {
-    const cp: i32 = this.escapeCodePoint(at)
-    if (cp < 0) {
-      return cp
-    }
-    this.escapeWidth = jsonTokUtf8Width(cp)
-    return jsonTokEscapeLength(this.src, at, this.end, cp)
   }
 
   /**
@@ -899,6 +876,15 @@ export class JsonTokenizer {
     const end: i32 = this.tokEnd - 1
     let i: i32 = this.tokStart + 1
     let o: i32 = at
+    if (n === end - i) {
+      // No escape (see `keyEquals`): the bytes are copied as they are.
+      while (i < end && i >= 0 && i < toI32(src.length) && o >= 0 && o < toI32(out.length)) {
+        out[o] = src[i]
+        o += 1
+        i += 1
+      }
+      return o - at
+    }
     while (i < end) {
       const b: i32 = jsonTokByteAt(src, i, end)
       if (b !== JSON_TOK_BACKSLASH) {
@@ -945,7 +931,9 @@ export class JsonTokenizer {
     const end: i32 = this.tokEnd - 1
     let i: i32 = this.tokStart + 1
     let o: i32 = 0
-    if (!this.escaped) {
+    // Every escape decodes to fewer bytes than it is written with, so a string
+    // whose decoded length is its raw length has none.
+    if (n === this.tokEnd - this.tokStart - 2) {
       while (o < n) {
         if (jsonTokByteAt(src, i + o, end) !== toI32(name.charCodeAt(o))) {
           return false
@@ -985,10 +973,7 @@ export class JsonTokenizer {
    * are, `1.0`, `1e2` and `9223372036854775808` are not.
    */
   isInteger(): boolean {
-    if (this.kind !== JSON_TOK_NUMBER || !this.integral) {
-      return false
-    }
-    return this.integerOrOverflow() <= 0
+    return this.kind === JSON_TOK_NUMBER && this.integral && this.integerScan()
   }
 
   /**
@@ -1000,50 +985,37 @@ export class JsonTokenizer {
     if (!this.isInteger()) {
       return 0
     }
-    const negated: i64 = this.integerNegated()
     const src: u8[] = this.src
+    const negated: i64 = this.integerValue
     return jsonTokByteAt(src, this.tokStart, this.tokEnd) === JSON_TOK_MINUS ? negated : -negated
   }
 
-  /** `1` when the integral number's magnitude is past `i64`'s range for its sign, and `0` when it fits. */
-  integerOrOverflow(): i32 {
+  /**
+   * Reads the integral number's digits into `integerValue`, negated, and
+   * answers whether its magnitude fits `i64` for its sign. Accumulating a
+   * negative number reaches -2^63, where a positive one stops at 2^63 - 1, so
+   * the bound for a positive number is one less.
+   */
+  integerScan(): boolean {
     const src: u8[] = this.src
     const end: i32 = this.tokEnd
     const negative: boolean = jsonTokByteAt(src, this.tokStart, end) === JSON_TOK_MINUS
     const lo: i64 = -9007199254740992
     const min: i64 = lo << 10
     const ten: i64 = 10
-    // Accumulated as a negative number, which reaches -2^63 where a positive
-    // one stops at 2^63 - 1; the bound for a positive number is one less.
     const bound: i64 = negative ? min : min + 1
     let acc: i64 = 0
     let i: i32 = negative ? this.tokStart + 1 : this.tokStart
     while (i < end) {
       const digit: i64 = toI64(jsonTokByteAt(src, i, end) - JSON_TOK_DIGIT_0)
       if (acc < (bound + digit) / ten) {
-        return 1
+        return false
       }
       acc = acc * ten - digit
       i += 1
     }
-    return 0
-  }
-
-  /** The integral number's magnitude, negated, which `integerOrOverflow` has said fits. */
-  integerNegated(): i64 {
-    const src: u8[] = this.src
-    const end: i32 = this.tokEnd
-    const ten: i64 = 10
-    let acc: i64 = 0
-    let i: i32 = this.tokStart
-    if (jsonTokByteAt(src, i, end) === JSON_TOK_MINUS) {
-      i += 1
-    }
-    while (i < end) {
-      acc = acc * ten - toI64(jsonTokByteAt(src, i, end) - JSON_TOK_DIGIT_0)
-      i += 1
-    }
-    return acc
+    this.integerValue = acc
+    return true
   }
 
   /**
