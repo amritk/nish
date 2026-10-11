@@ -13521,14 +13521,18 @@ if (!only || "runtime-cache".includes(only)) {
     const linkCopy = (out) =>
       link("examples/hello.ts", out, ["--profile", "debug"], {}, path.join(copy, "bin", "nish"))
     const unedited = linkCopy("hello-copy")
+    const afterCopy = runtimeEntries().length
+    fs.rmSync(ccLog, { force: true })
     const again = linkCopy("hello-copy-again")
     const copyEntries = runtimeEntries().length
     check(
       "runtime cache: a copied package links, and a second link of it reuses its entry",
       unedited.status === 0 &&
         again.status === 0 &&
-        runOut("hello-copy-again").stdout === "hello from Nish\n",
-      unedited.stderr + again.stderr
+        runOut("hello-copy-again").stdout === "hello from Nish\n" &&
+        compiledC().length === 0 &&
+        copyEntries === afterCopy,
+      `${unedited.stderr}${again.stderr}compiled on the second link: ${compiledC().join(", ")}; entries ${afterCopy} then ${copyEntries}`
     )
     for (const [what, file, line] of [
       ["runtime.c", path.join("runtime", "runtime.c"), "\n/* edited */\n"],
