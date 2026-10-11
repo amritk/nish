@@ -309,6 +309,23 @@ export class ParallelCall {
 }
 
 /**
+ * WP29 P3: the channels a scope seals before it joins (`src/emit-parallel.ts`):
+ * every `const ch = new Channel<T>()` whose scope it is (C2, C4), by the
+ * declarator, whose local the emitter reads where the scope's `using` is.
+ */
+export class ScopeChannels {
+  /** The `N_VAR_DECL` of the `using s = scope()`. */
+  scope: Node
+  /** The `N_VAR_DECL` of each channel. */
+  channels: Node[]
+
+  constructor(scope: Node) {
+    this.scope = scope
+    this.channels = []
+  }
+}
+
+/**
  * The compile-time function parameters in scope (WP29): each parameter name of
  * the instantiation whose body is being checked, and the function its call
  * site named for it. `typeBindings` is the type half of the same idea, and this
@@ -572,6 +589,13 @@ export class Instantiation {
   parallel: i32
   /** WP32: one of the `MAP_*` roles; `MAP_NONE` for everything but `std/collections.ts`'s two intrinsics. */
   mapIntrinsic: i32
+  /**
+   * WP29 P3: on a `spawn` instance, where each channel its task may send on is
+   * in the task's argument — `""` for the argument itself, or the name of its
+   * field — which the spawn counts as a sender until the task returns
+   * (`src/emit-parallel.ts`). Empty for everything else.
+   */
+  channelSenders: string[]
 
   constructor(
     template: TemplateInfo | null,
@@ -586,6 +610,7 @@ export class Instantiation {
     this.functionBindings = new FunctionBindings()
     this.parallel = PAR_NONE
     this.mapIntrinsic = MAP_NONE
+    this.channelSenders = []
     this.typeArgs = typeArgs
     this.sig = sig
     this.bindings = bindings
@@ -1245,6 +1270,8 @@ export class CheckedProgram {
   parallelCalls: ParallelCall[]
   /** WP29 P2: every `spawn` call, judged with the facts as `parallelCalls` is (`Compilation.checkParallel`). */
   spawnCalls: ParallelCall[]
+  /** WP29 P3: the channels each scope seals, recorded once the channel rules have held (`src/parallel.ts`). */
+  scopeChannels: ScopeChannels[]
   /** `nish:secret`: every `expose` and `exposeWith` call, judged once the facts are in (`Compilation.checkSecrets`). */
   exposeCalls: ParallelCall[]
   /**
@@ -1430,6 +1457,7 @@ export class CheckedProgram {
     this.panicSites = []
     this.exposeCalls = []
     this.spawnCalls = []
+    this.scopeChannels = []
     this.inlineAssignNodes = []
     this.inlineAssignLengths = []
     this.newTypeArgumentIds = new StringMap()

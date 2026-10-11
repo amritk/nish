@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 599
+export const RULE_COUNT: i32 = 608
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -67,12 +67,22 @@ const diagnosticRules = (): string[] => [
   "NL2463",
   ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read",
   "NL2394",
+  ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, and no task both sends and receives on one channel, which is also what keeps channels from deadlocking",
+  "NL2481",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
+  ": a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer",
+  "NL2477",
+  ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join",
+  "NL2480",
   "` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a disposal method of any other class would never be called",
   "NL2393",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",
   "NL2444",
+  ": a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned",
+  "NL2479",
+  ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope",
+  "NL2476",
   ": inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held",
   "NL2470",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join",
@@ -97,6 +107,8 @@ const diagnosticRules = (): string[] => [
   "NL2469",
   "A `Secret` can be compared only with another `Secret` or with `null`: comparing it with a value would answer a question about the key, in time that depends on it. Use `timingSafeEqual` inside `expose`",
   "NL2433",
+  " holds its lock: a receive waits, and nothing waits while a lock is held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` never waits, and may stay)",
+  "NL2482",
   "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases",
   "NL2465",
   "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block",
@@ -133,6 +145,8 @@ const diagnosticRules = (): string[] => [
   "NL2417",
   "`secret` takes a value only it will hold: a fresh value (a call, `new`, a literal) or a local it moves, not a parameter, a field or an element, whose owner would keep the plain bytes",
   "NL2447",
+  "`new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full",
+  "NL2478",
   " and cannot be returned: a value that may be missing does not cross a call; return a default with `??`, or bind it to a `const` and return it where `!== undefined` has narrowed it",
   "NL2363",
   " and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`",
@@ -215,6 +229,8 @@ const diagnosticRules = (): string[] => [
   "NL1001",
   " and stores an allocation into memory, where this analysis stops following it: what it stores may be the block's and outlive the release",
   "NL2424",
+  " runs it on several threads at once: a channel is used by a scope's tasks and the thread that opened the scope, never by a parallel body",
+  "NL2483",
   "` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body",
   "NL2474",
   "`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function",
@@ -307,6 +323,8 @@ const diagnosticRules = (): string[] => [
   "NL3029",
   "; if (r.isErr()) { ... }`), propagate it with `.orReturn()`, or end on it with `.expect(message)`",
   "NL2025",
+  "`: a sender's arena is freed when its scope joins, so anything else would point into freed memory",
+  "NL2475",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
   "NL2157",
   "` is read-only: it counts the entries, and `set`, `add`, `delete` and `clear` are what change it",

@@ -29,6 +29,8 @@ import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context"
 import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
+import { isChannelClass, isIteratorMethod } from "./parallel"
+import { FunctionSig } from "./program"
 import { recordGuardFusion } from "./fusion"
 import { builtinNameOf, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
@@ -453,6 +455,8 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (ctx.program.nodeCallees[stmt.id] === null && iterable !== T_ERROR) {
     if (ctx.table.isArray(iterable)) {
       element = ctx.table.refOf(iterable)
+    } else if (checkChannelWalk(ctx, stmt, iterable)) {
+      // WP29 P3: a receive per pass, recorded as a walk is
     } else if (!checkCollectionWalk(ctx, stmt, iterable)) {
       ctx.error(stmt.children[1], `\`for...of\` requires an array, got ${ctx.table.typeName(iterable)}`)
     }
@@ -761,8 +765,10 @@ const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
     } else if (
       member.kind !== N_CONSTRUCTOR &&
       member.children[0].kind !== N_IDENT &&
+      !isIteratorMethod(member) &&
       !leftToCollector(member, owner, member.kind === N_FIELD ? FLAG_STATIC : FLAG_STATIC | FLAG_READONLY)
     ) {
+      // WP29 P3: the validator lets `[Symbol.iterator]` through in `nish/threads` alone.
       ctx.error(member.children[0], `Members of \`${name}\` must have plain identifier names`)
     }
     sweepForms(ctx, member, owner)
@@ -812,6 +818,27 @@ const typeParameterSlot = (node: Node): i32 => {
  * `[key, value]` pairs that need destructuring. Answers whether `iterable` was
  * one of the two, having reported the second.
  */
+/**
+ * WP29 P3: `for (const x of ch)` over a `Channel` from `nish/threads`, which
+ * takes values off the channel until it is closed and drained
+ * (docs/LANGUAGE.md, "Channels"). The loop records the channel's `take`, as a
+ * walk records its reader, which gives the variable its type; the emitter
+ * lowers the loop onto the runtime's receive (`emitChannelWalk`) and never
+ * calls it.
+ */
+const checkChannelWalk = (ctx: CheckContext, stmt: Node, iterable: i32): boolean => {
+  if (!ctx.table.isStruct(iterable) || ctx.table.isNullable(iterable)) {
+    return false
+  }
+  const info = structOf(ctx, iterable)
+  const take: FunctionSig | null = info === null || !isChannelClass(info) ? null : info.method("take")
+  if (take === null) {
+    return false
+  }
+  ctx.program.nodeCallees[stmt.id] = take
+  return true
+}
+
 const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): boolean => {
   if (!ctx.table.isStruct(iterable) || ctx.table.isNullable(iterable)) {
     return false

@@ -153,6 +153,8 @@ import {
   scopeFindings,
   sharedWriteMessage,
   bodyLockMessageFor,
+  bodyChannelMessageFor,
+  channelSummaries,
   taskMutexMessageFor,
   taskArgumentMessage,
   taskArrowMessage,
@@ -1665,6 +1667,7 @@ export class Compilation {
         messages.push(reachesDstMessage(this.table, program, sig, fn))
         messages.push(sharedWriteMessage(sig, fn, facts))
         messages.push(bodyLockMessageFor(sig, fn, facts))
+        messages.push(bodyChannelMessageFor(sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))
         messages.push(escapeMessage(sig, fn, facts))
         messages.push(
@@ -1724,9 +1727,10 @@ export class Compilation {
     for (const unit of this.modules) {
       programs.push(unit.checker.program)
     }
+    const summaries = channelSummaries(programs)
     for (const unit of this.modules) {
       const program = unit.checker.program
-      for (const finding of scopeFindings(programs, program, this.table, facts)) {
+      for (const finding of scopeFindings(programs, program, this.table, facts, summaries)) {
         this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
       }
       for (const call of program.spawnCalls) {

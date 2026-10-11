@@ -23,8 +23,10 @@
  *
  * docs/wp29-thread-surface.md is the surface this is the stage under: P1's
  * `parallelMapInto` and `parallelReduce` divide a range here, P2's scopes
- * run their tasks here (`nish_scope_spawn`, `nish_scope_join`), and P3's lock
- * waits here when it finds its word held (`nish_mutex_wait`).
+ * run their tasks here (`nish_scope_spawn`, `nish_scope_join`), P3's lock
+ * waits here when it finds its word held (`nish_mutex_wait`), and P3's
+ * channels keep their buffers here (`nish_channel_send`, `nish_channel_count`,
+ * `nish_channel_receive`).
  */
 #include "nish.h"
 
@@ -194,16 +196,21 @@ typedef struct nish_task {
 
 static NISH_TLS nish_task *nish_tasks = 0;
 
+/* The end of the program when an allocation of this file's fails: the scope's
+ * task list and a channel's buffer are the two, and neither has a way to go on
+ * without the memory. */
+static void nish_par_oom(void) {
+  (void)!write(2, "nish: out of memory\n", 20);
+  _exit(1);
+}
+
 void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const void *payload, int64_t size) {
   nish_task *t = (nish_task *)malloc(sizeof(nish_task) + (size_t)size);
   /* Out of memory is the end of the program, as it is for every other
    * allocation the runtime makes: running the task here instead would store
    * its answer ahead of tasks filed before it, and a later spawn into the same
    * slot has to be the one that stays. */
-  if (!t) {
-    (void)!write(2, "nish: out of memory\n", 20);
-    _exit(1);
-  }
+  if (!t) nish_par_oom();
   t->scope = scope;
   t->run = run;
   t->finish = finish;
@@ -292,4 +299,119 @@ void nish_mutex_wait(int32_t *word) {
     else sched_yield();
 #endif
   }
+}
+
+/* ---- A channel of scalars (wp29 P3, section 4.4) ----
+ *
+ * The `Channel` object lives in the arena of the thread that declared it, and
+ * holds one 64-bit word, `state`, that this file owns: 0 before the channel is
+ * first used, the address of its `nish_channel` after that, and
+ * `NISH_CHANNEL_DRAINED` once its receiver has drained it closed and it has
+ * been given back. Every function here takes the address of that word.
+ *
+ * The buffer is outside every arena, because the senders' arenas are freed
+ * when their scope joins and a value sent has to outlive its sender. Each slot
+ * is 8 bytes: the compiler widens a scalar into one and narrows it back
+ * (src/emit-parallel.ts). The channel is unbounded, so `send` never waits.
+ *
+ * `pending` is what keeps the channel open: 1 for the scope that has not yet
+ * started to join, plus 1 for each task filed that may send on it. The
+ * compiler adds a sender at its spawn and takes it away when the task returns,
+ * and takes the scope's 1 away just before the join (`nish_channel_count`,
+ * -1), so the channel closes when the join has started and every sender has
+ * returned -- at once, when no task may send on it. All three happen on the
+ * thread that declared the channel until the join, so the word is made there,
+ * before any task can touch it, and never by two threads at once.
+ *
+ * One receiver, the language's rule, takes values off the front. When it
+ * finds the channel closed and empty it gives the buffer back and records
+ * that, so a second loop over the channel ends at once. Nothing is left to
+ * touch it then: every sender has returned, and the parent sends only before
+ * the scope's block (docs/LANGUAGE.md, "Channels"). */
+#define NISH_CHANNEL_DRAINED 1
+
+typedef struct {
+  int64_t *slots;
+  int64_t head, tail, cap;
+  int64_t pending;
+#ifdef NISH_PAR_REAL
+  pthread_mutex_t mu;
+  pthread_cond_t cv;
+#endif
+} nish_channel;
+
+static nish_channel *nish_channel_of(int64_t *state) {
+  nish_channel *c = (nish_channel *)(intptr_t)*state;
+  if (!c) {
+    c = (nish_channel *)calloc(1, sizeof(nish_channel));
+    if (!c) nish_par_oom();
+    c->pending = 1;
+#ifdef NISH_PAR_REAL
+    pthread_mutex_init(&c->mu, 0);
+    pthread_cond_init(&c->cv, 0);
+#endif
+    *state = (int64_t)(intptr_t)c;
+  }
+#ifdef NISH_PAR_REAL
+  pthread_mutex_lock(&c->mu);
+#endif
+  return c;
+}
+
+/* Every path out of `nish_channel_of` holds the lock; this gives it back,
+ * waking the receiver first, since whatever changed may be what it waits on. */
+static void nish_channel_done(nish_channel *c) {
+#ifdef NISH_PAR_REAL
+  pthread_cond_broadcast(&c->cv);
+  pthread_mutex_unlock(&c->mu);
+#else
+  (void)c;
+#endif
+}
+
+void nish_channel_send(int64_t *state, int64_t value) {
+  nish_channel *c = nish_channel_of(state);
+  if (c->tail == c->cap) {
+    c->cap = c->cap ? c->cap * 2 : 64;
+    c->slots = (int64_t *)realloc(c->slots, (size_t)c->cap * sizeof(int64_t));
+    if (!c->slots) nish_par_oom();
+  }
+  c->slots[c->tail++] = value;
+  nish_channel_done(c);
+}
+
+void nish_channel_count(int64_t *state, int64_t delta) {
+  nish_channel *c = nish_channel_of(state);
+  c->pending += delta;
+  nish_channel_done(c);
+}
+
+int32_t nish_channel_receive(int64_t *state, int64_t *out) {
+  if (*state == NISH_CHANNEL_DRAINED) return 0;
+  nish_channel *c = nish_channel_of(state);
+#ifdef NISH_PAR_REAL
+  while (c->head == c->tail && c->pending != 0) pthread_cond_wait(&c->cv, &c->mu);
+#endif
+  if (c->head != c->tail) {
+    *out = c->slots[c->head++];
+    /* Emptied: the next value goes back to the front, so a buffer only grows
+     * while the senders are ahead of the receiver. */
+    if (c->head == c->tail) c->head = c->tail = 0;
+    nish_channel_done(c);
+    return 1;
+  }
+  /* Without threads every sender has returned by the time a receiver runs:
+   * the tasks run one after another in spawn order, and every sender is
+   * spawned before the one receiver (C6). An empty channel that is still open
+   * here is a broken invariant, not a wait. */
+  if (c->pending != 0) __builtin_trap();
+#ifdef NISH_PAR_REAL
+  pthread_mutex_unlock(&c->mu);
+  pthread_mutex_destroy(&c->mu);
+  pthread_cond_destroy(&c->cv);
+#endif
+  free(c->slots);
+  free(c);
+  *state = NISH_CHANNEL_DRAINED;
+  return 0;
 }

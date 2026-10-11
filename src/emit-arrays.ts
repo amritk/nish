@@ -40,6 +40,8 @@ import {
 } from "./emit-ops"
 import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
+import { emitChannelWalk } from "./emit-parallel"
+import { isChannelReader } from "./parallel"
 import { emitSliceCheck } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
@@ -1661,7 +1663,12 @@ export const emitArrayMethodCall = (emitter: Emitter, expr: Node, receiver: i32)
  * `forof.end`, `continue` goes to `forof.inc`.
  */
 export const emitForOf = (emitter: Emitter, stmt: Node): void => {
-  if (emitter.program.nodeCallees[stmt.id] !== null) {
+  const read = emitter.program.nodeCallees[stmt.id]
+  if (read !== null && isChannelReader(read)) {
+    emitChannelWalk(emitter, stmt) // WP29 P3: a receive per pass
+    return
+  }
+  if (read !== null) {
     emitWalk(emitter, stmt) // WP32: a walk of the global `Map` or `Set`
     return
   }
