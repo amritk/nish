@@ -77,11 +77,13 @@ PASS  and the writer holds still after it
 PASS  alternating objects and arrays nest JSON_WRITER_MAX_DEPTH deep and close
 PASS  endArray closing an object at depth 41 is JSON_WRITE_UNBALANCED
 PASS  an object at depth 40 still takes keys after an array inside it closes
+PASS  and writes the key after the array with its comma
 PASS  a buffer too short at every length is JSON_WRITE_FULL and a clean prefix
 PASS  a short buffer is JSON_WRITE_FULL
 PASS  and the writer holds still after it
-PASS  a string one byte short of its \u0001 is JSON_WRITE_FULL
-PASS  a string one byte short of its \n is JSON_WRITE_FULL
+PASS  a \u0001 escape one byte short of room is JSON_WRITE_FULL
+PASS  a string whose \u0001 fits but whose closing quote does not is JSON_WRITE_FULL
+PASS  a \n escape one byte short of room is JSON_WRITE_FULL
 PASS  a string one byte short of its closing quote is JSON_WRITE_FULL
 PASS  an i32 one byte short is JSON_WRITE_FULL
 PASS  a u32 one byte short is JSON_WRITE_FULL
@@ -91,7 +93,9 @@ PASS  a boolean one byte short is JSON_WRITE_FULL
 PASS  a null one byte short is JSON_WRITE_FULL
 PASS  a raw window one byte short is JSON_WRITE_FULL
 PASS  an opener with no room is JSON_WRITE_FULL
+PASS  a key with no room for its closing quote is JSON_WRITE_FULL
 PASS  a key with no room for its colon is JSON_WRITE_FULL
+PASS  after the key's three bytes
 PASS  a second key with no room for its comma is JSON_WRITE_FULL
 PASS  after the six bytes that fit
 PASS  an element with no room for its comma is JSON_WRITE_FULL
@@ -116,4 +120,4 @@ PASS  and is read from start
 PASS  10,000 writes into a reused buffer all complete
 PASS  and keep nothing in the arena
 PASS  an f64 write started at the head of a chunk keeps nothing either
-json-writer: 118 passed, 0 failed, 0 skipped
+json-writer: 122 passed, 0 failed, 0 skipped

@@ -167,9 +167,9 @@ const helloAtEveryLength = (want: string): string => {
 };
 
 /**
- * Each value of `kind` written into an array in a buffer one byte too short
- * for it, after `[`: whether the write is `JSON_WRITE_FULL` and moved nothing
- * past the `[` and its comma.
+ * A value of `kind` written as the first element of an array, in a buffer of
+ * `room` bytes, too short for it: whether the write is `JSON_WRITE_FULL` and
+ * left the cursor just past the `[`.
  */
 const fullAt = (kind: i32, room: i32): boolean => {
   const buf = new Array<u8>(room);
@@ -468,9 +468,10 @@ export const main = (): number => {
   }
   w.beginArray();
   w.endArray();
-  w.endObject();
   w.key("x");
+  w.i32(1);
   t.eqI32("an object at depth 40 still takes keys after an array inside it closes", w.failed, JSON_WRITE_OK);
+  t.ok("and writes the key after the array with its comma", w.text().endsWith(':[],"x":1'));
 
   t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", helloAtEveryLength(hello), "");
   const short = new Array<u8>(4);
@@ -478,10 +479,11 @@ export const main = (): number => {
   writeHello(w, "Hello, World!");
   t.eqI32("a short buffer is JSON_WRITE_FULL", w.failed, JSON_WRITE_FULL);
   t.ok("and the writer holds still after it", stuck(w));
-  // Room for `[` and one byte less than the value: `["a\u0001"` is ten
-  // bytes and `["a\n"` six.
-  t.ok("a string one byte short of its \\u0001 is JSON_WRITE_FULL", fullAt(0, 8));
-  t.ok("a string one byte short of its \\n is JSON_WRITE_FULL", fullAt(9, 4));
+  // Room for `[` and less than the value: `["a\u0001"` is ten bytes and
+  // `["a\n"` six, so each string case is one byte short of the piece it names.
+  t.ok("a \\u0001 escape one byte short of room is JSON_WRITE_FULL", fullAt(0, 8));
+  t.ok("a string whose \\u0001 fits but whose closing quote does not is JSON_WRITE_FULL", fullAt(0, 9));
+  t.ok("a \\n escape one byte short of room is JSON_WRITE_FULL", fullAt(9, 4));
   t.ok("a string one byte short of its closing quote is JSON_WRITE_FULL", fullAt(9, 5));
   t.ok("an i32 one byte short is JSON_WRITE_FULL", fullAt(1, 4));
   t.ok("a u32 one byte short is JSON_WRITE_FULL", fullAt(2, 10));
@@ -495,7 +497,13 @@ export const main = (): number => {
   w.reset(tight, 0);
   w.beginObject();
   w.key("");
+  t.eqI32("a key with no room for its closing quote is JSON_WRITE_FULL", w.failed, JSON_WRITE_FULL);
+  const three = new Array<u8>(3);
+  w.reset(three, 0);
+  w.beginObject();
+  w.key("");
   t.eqI32("a key with no room for its colon is JSON_WRITE_FULL", w.failed, JSON_WRITE_FULL);
+  t.eqI32("after the key's three bytes", w.written(), 3);
   const six = new Array<u8>(6);
   w.reset(six, 0);
   w.beginObject();
@@ -562,17 +570,23 @@ export const main = (): number => {
   t.eqStr("and is read from start", w.text(), '{"message":"hi"}');
 
   // ---- The arena -----------------------------------------------------------------
-  // Every write into the one buffer, reset each round, with a message that
-  // changes each round so nothing is written twice the same: what the calls
-  // keep, which must be nothing. An f64 is in the round because its digits are
-  // the one string the writer builds.
+  // Every write into the one buffer, reset each round, with a message, an i32
+  // and an f64 that change each round so no two neighbouring rounds write the
+  // same: what the calls keep, which must be nothing. The messages are built
+  // before the loop, so the meter sees only the writer. An f64 is in the round
+  // because its digits are the one string the writer builds.
+  const messages: string[] = [];
+  for (let k: i32 = 0; k < 64; k += 1) {
+    messages.push(`Hello, World! ${k}`);
+  }
   const meter = new LbMeter(false);
   let finished: i32 = 0;
   for (let round: i32 = 0; round < 10000; round += 1) {
     meter.begin();
     w.reset(out, 0);
+    const pick: i32 = round % 64;
     w.beginArray();
-    writeHello(w, "Hello, World!");
+    writeHello(w, pick < toI32(messages.length) ? messages[pick] : "");
     w.i32(round);
     w.f64(toF64(round) / toF64(8));
     w.i64(lo);
