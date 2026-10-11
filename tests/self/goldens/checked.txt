@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 962 programs, 89325 dump lines.
+# 963 programs, 89433 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -81027,6 +81027,115 @@ function describe(n: i32, ok: boolean, name: string): string -> @describe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+program docs/cookbook/thread-channel.ts
+module docs/cookbook/thread-channel.ts (entry)
+import Channel from "nish/threads" -> generic class Channel
+import scope from "nish/threads" -> function @nish.scope
+function produce(ch: Channel<i32>): i32 -> @produce
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.Channel$i32.send
+  pointer ch: size=24 writesThrough=true captured=false passedTo=nish.Channel$i32.send#0 nish.Channel$i32.send#0
+  stackSites=0 stackLocals=0
+  callee 4:3 Channel<i32>.send -> @nish.Channel$i32.send
+  callee 5:3 Channel<i32>.send -> @nish.Channel$i32.send
+function total(): i32 -> @total [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce
+  calls: nish.Channel$i32.constructor nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce nish.scope nish_alloc_struct nish_arena_mark nish_arena_release nish_channel_receive nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 10:9 sent: i32[] (const)
+  local 11:9 ch: Channel<i32> (const)
+  callee 11:14 new Channel<i32> -> @nish.Channel$i32.constructor
+  local 13:11 s: ThreadScope (const)
+  callee 13:15 scope -> @nish.scope
+  callee 14:5 ThreadScope.spawn<Channel<i32>, i32, produce> -> @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce
+  local 16:7 sum: i32 (let)
+  local 17:14 x: i32 (const)
+module std/threads.ts [package nish]
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+struct Channel<i32> (class) size=24 align=8 exported
+  field queue: i32[] index=0 offset=0
+  field head: i32 index=1 offset=8 initialized
+  field state: i64 index=2 offset=16 initialized
+  constructor -> @nish.Channel$i32.constructor
+  method send -> @nish.Channel$i32.send
+  method take -> @nish.Channel$i32.take
+  method ready -> @nish.Channel$i32.ready
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 92:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function Channel<i32>.constructor(this: Channel<i32>): void -> @nish.Channel$i32.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Channel<i32>.send(this: Channel<i32>, x: i32): void -> @nish.Channel$i32.send [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_channel_send
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Channel<i32>.take(this: Channel<i32>): i32 -> @nish.Channel$i32.take [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 358:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 357:11 x: i32 (const)
+function Channel<i32>.ready(this: Channel<i32>): boolean -> @nish.Channel$i32.ready [exported method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function ThreadScope.spawn<Channel<i32>, i32, produce>(this: ThreadScope, entry: void, arg: Channel<i32>, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.slotOutOfRange
+  escaping: arg at dst entry this
+  calls: nish.runTask$$Channel$i32$i32$fn.7.produce nish.slotOutOfRange nish_scope_spawn
+  pointer this: size=4 writesThrough=true captured=true
+  pointer arg: size=24 writesThrough=true captured=true passedTo=nish.runTask$$Channel$i32$i32$fn.7.produce#1
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$$Channel$i32$i32$fn.7.produce#2
+  stackSites=0 stackLocals=0
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<Channel<i32>, i32, produce> -> @nish.runTask$$Channel$i32$i32$fn.7.produce
+function runTask<Channel<i32>, i32, produce>(entry: void, arg: Channel<i32>, dst: i32[], at: i32): void -> @nish.runTask$$Channel$i32$i32$fn.7.produce [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.storeResult$i32
+  escaping: at
+  calls: nish.storeResult$i32 produce
+  pointer arg: size=24 writesThrough=true captured=false passedTo=produce#0
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$i32#0
+  stackSites=0 stackLocals=0
+  callee 200:3 storeResult<i32> -> @nish.storeResult$i32
+  callee 200:24 produce -> @produce
+function storeResult<i32>(dst: i32[], at: i32, r: i32): void -> @nish.storeResult$i32 [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 186:5
+  escaping: at r
+  calls: nish.slotOutOfRange
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 188:5 slotOutOfRange -> @nish.slotOutOfRange
 program docs/cookbook/thread-mutex.ts
 module docs/cookbook/thread-mutex.ts (entry)
 import Mutex from "nish/threads" -> generic class Mutex
