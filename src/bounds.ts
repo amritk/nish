@@ -2333,7 +2333,7 @@ const judge = (
   if (holder === null) {
     return
   }
-  const proven = proves(ctx, state, holder, index)
+  const proven = proves(ctx, state, holder, index) || provesByRange(walk, state, holder, index)
   if (passes) {
     recordPassedCheck(walk, state, node, holder, index)
   }
@@ -2638,6 +2638,58 @@ const writesLocal = (program: CheckedProgram, node: Node, v: Local): boolean => 
   }
   for (const child of node.children) {
     if (writesLocal(program, child, v)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * A computed index proved by the values it can take: `freeMaxs[c + r]` with
+ * `c` and `r` each below 8 and the array known to hold 16. The range is the
+ * one the overflow proofs already read (`valueRange`): every local's facts and
+ * declared range, carried through `+ - *`, a mask, a conversion or a call's
+ * return summary. It is a proof only where that range is the value's own,
+ * which needs three things:
+ *
+ *   - the arithmetic is exact. A signed add, subtract or multiply panics on
+ *     overflow or is proven not to, so the value that reaches the check is
+ *     the true one and the range saturates at the type's ends. Under
+ *     `--wrapping`, and at an unsigned type, a sum wraps by definition, and
+ *     at `f64` an index is truncated; none of them is read;
+ *   - nothing in the index writes. The check is judged in the state its
+ *     operands left, so in `xs[i + (i = 0) * 0]` the left `i` would have
+ *     been read before a write the state already records, and its range
+ *     would be the new value's. The checker refuses every such index today
+ *     (an assignment, `++` or `--` is not a numeric index), so this is the
+ *     proof not resting on that refusal;
+ *   - the top of the range is below a length the state knows, and the bottom
+ *     is not negative.
+ */
+const provesByRange = (walk: BoundsWalk, state: State, holder: Local, index: Node): boolean => {
+  const ctx = walk.ctx
+  const written = ctx.program.nodeTypes[index.id]
+  if (ctx.wrapping || written < 0 || writesSomething(index)) {
+    return false
+  }
+  const type = ctx.table.baseOf(written)
+  if (type !== T_I32 && type !== T_I64) {
+    return false
+  }
+  const range = valueRange(walk, state, index, type)
+  return range.lo >= toI64(0) && range.hi < I32_MAX && knownMinLength(state, holder, toI32(range.hi) + 1)
+}
+
+/** Whether `node` assigns, increments or decrements anything, anywhere inside it. */
+const writesSomething = (node: Node): boolean => {
+  if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
+    return true
+  }
+  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    return true
+  }
+  for (const child of node.children) {
+    if (writesSomething(child)) {
       return true
     }
   }
