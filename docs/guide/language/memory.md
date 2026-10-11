@@ -47,7 +47,7 @@ call to `describe`, so the program reuses the same few bytes of arena
 throughout.
 
 None of this changes what a program computes, only where its memory lives
-and when it is reused. So, unlike in C:
+and when it is reused. Unlike in C or Rust:
 
 - you never free anything, and so never free something twice;
 - a value you can still reach is never released under you, unless you call
