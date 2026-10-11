@@ -20,9 +20,9 @@
 // plaintext's first word, the mask into the sample. Open reads sealed
 // messages made before its clock starts, a ring of `RING` of them sealed under
 // different IVs, so consecutive iterations open different messages. Each
-// answer goes into the checksum: the tag, which depends on every byte, and the
-// first word of a sealed message, the first and last words of an opened one,
-// and all five bytes of a mask. A `null` answer ends the program
+// answer goes into the checksum, a word at a time: the tag, which depends on
+// every byte, and the first word of a sealed message, the first and last
+// words of an opened one, and all five bytes of a mask. A `null` answer ends the program
 // with exit 1, so a refusal is never timed as though it had done the work.
 import { aesGcmOpen, aesGcmSeal, aesHeaderMask, AesKey, aesKey } from "nish/crypto/aes"
 import { chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
@@ -38,20 +38,26 @@ const PACKETS_1200: i32 = 3496
 /** The header masks at scale 1. */
 const MASKS: i32 = 65536
 
-/** The checksum: FNV-1a over a `u32`, which wraps, so folding costs no check of its own. */
+/** The checksum, carried between workloads: FNV-1a over `u32` words, which wraps, so folding costs no check. */
 class Fold {
   sum: u32 = 2166136261
 }
 
-const foldByte = (f: Fold, b: u8): void => {
-  f.sum = (f.sum ^ toU32(b)) * 16777619
-}
-
-/** Folds `count` bytes of `bytes` from `at`. */
-const foldRange = (f: Fold, bytes: u8[], at: i32, count: i32): void => {
-  for (let i: i32 = at; i < at + count && i >= 0 && i < toI32(bytes.length); i++) {
-    foldByte(f, bytes[i])
+/**
+ * Folds the big-endian word at `bytes[at..at + 4)` into `sum`: one xor and
+ * one multiply a word, kept in a local by each loop, so what the fold adds to
+ * a timed iteration stays small beside even a hardware AES block.
+ */
+const foldWord = (sum: u32, bytes: u8[], at: i32): u32 => {
+  if (at < 0 || at + 4 > toI32(bytes.length)) {
+    return sum
   }
+  const w: u32 =
+    (toU32(bytes[at]) << 24) |
+    (toU32(bytes[at + 1]) << 16) |
+    (toU32(bytes[at + 2]) << 8) |
+    toU32(bytes[at + 3])
+  return (sum ^ w) * 16777619
 }
 
 /** `length` bytes of a fixed pattern: no zero run for a cipher to hide in. */
@@ -79,14 +85,32 @@ const fail = (what: string): i32 => {
   return 1
 }
 
+/** Seal under the AEAD `aes` picks, so both are timed through the same loop. */
+const aeadSeal = (
+  aes: boolean,
+  key: AesKey,
+  chachaKey: u8[],
+  iv: u8[],
+  aad: u8[],
+  plaintext: u8[]
+): u8[] | null =>
+  aes ? aesGcmSeal(key, iv, aad, plaintext) : chacha20Poly1305Seal(chachaKey, iv, aad, plaintext)
+
+/** Open under the AEAD `aes` picks. */
+const aeadOpen = (
+  aes: boolean,
+  key: AesKey,
+  chachaKey: u8[],
+  iv: u8[],
+  aad: u8[],
+  sealed: u8[]
+): u8[] | null => (aes ? aesGcmOpen(key, iv, aad, sealed) : chacha20Poly1305Open(chachaKey, iv, aad, sealed))
+
 const report = (name: string, started: i64, bytes: i32): void => {
   writeError(`time ${name} ${monotonicNanos() - started} ${bytes}\n`)
 }
 
-/**
- * The work both AEADs share, so each is timed through the same loop: `aes`
- * picks the cipher. Seal answers 0, or 1 on a `null`.
- */
+/** Seal, `count` times: 0, or 1 on a `null`. `aes` picks the AEAD. */
 const sealLoop = (
   name: string,
   aes: boolean,
@@ -99,20 +123,24 @@ const sealLoop = (
   const iv: u8[] = pattern(12, 1)
   const aad: u8[] = pattern(13, 2)
   const plaintext: u8[] = pattern(size, 3)
+  let sum: u32 = f.sum
   const started: i64 = monotonicNanos()
   for (let i: i32 = 0; i < count; i++) {
     stamp(iv, 0, i)
     stamp(plaintext, 0, i)
-    const sealed: u8[] | null = aes
-      ? aesGcmSeal(key, iv, aad, plaintext)
-      : chacha20Poly1305Seal(chachaKey, iv, aad, plaintext)
+    const sealed: u8[] | null = aeadSeal(aes, key, chachaKey, iv, aad, plaintext)
     if (sealed === null) {
       return fail(name)
     }
-    foldRange(f, sealed, 0, 4)
-    foldRange(f, sealed, toI32(sealed.length) - 16, 16)
+    const tag: i32 = toI32(sealed.length) - 16
+    sum = foldWord(sum, sealed, 0)
+    sum = foldWord(sum, sealed, tag)
+    sum = foldWord(sum, sealed, tag + 4)
+    sum = foldWord(sum, sealed, tag + 8)
+    sum = foldWord(sum, sealed, tag + 12)
   }
   report(name, started, size * count)
+  f.sum = sum
   return 0
 }
 
@@ -135,14 +163,13 @@ const openLoop = (
   for (let r: i32 = 0; r < RING; r++) {
     stamp(iv, 0, r)
     stamp(plaintext, 0, r)
-    const s: u8[] | null = aes
-      ? aesGcmSeal(key, iv, aad, plaintext)
-      : chacha20Poly1305Seal(chachaKey, iv, aad, plaintext)
+    const s: u8[] | null = aeadSeal(aes, key, chachaKey, iv, aad, plaintext)
     if (s === null) {
       return fail(name)
     }
     sealed.push(s)
   }
+  let sum: u32 = f.sum
   const started: i64 = monotonicNanos()
   for (let i: i32 = 0; i < count; i++) {
     const r: i32 = i % RING
@@ -152,22 +179,22 @@ const openLoop = (
       return fail(name)
     }
     stamp(iv, 0, r)
-    const opened: u8[] | null = aes
-      ? aesGcmOpen(key, iv, aad, sealed[r])
-      : chacha20Poly1305Open(chachaKey, iv, aad, sealed[r])
+    const opened: u8[] | null = aeadOpen(aes, key, chachaKey, iv, aad, sealed[r])
     if (opened === null) {
       return fail(name)
     }
-    foldRange(f, opened, 0, 4)
-    foldRange(f, opened, toI32(opened.length) - 4, 4)
+    sum = foldWord(sum, opened, 0)
+    sum = foldWord(sum, opened, toI32(opened.length) - 4)
   }
   report(name, started, size * count)
+  f.sum = sum
   return 0
 }
 
 /** QUIC header protection: one mask per packet, the sample stamped with the iteration. */
 const maskLoop = (key: AesKey, count: i32, f: Fold): i32 => {
   const sample: u8[] = pattern(16, 6)
+  let sum: u32 = f.sum
   const started: i64 = monotonicNanos()
   for (let i: i32 = 0; i < count; i++) {
     stamp(sample, 0, i)
@@ -175,9 +202,12 @@ const maskLoop = (key: AesKey, count: i32, f: Fold): i32 => {
     if (mask === null) {
       return fail("aes-header-mask")
     }
-    foldRange(f, mask, 0, 5)
+    // Bytes 0 to 3, then 1 to 4: all five, in two words.
+    sum = foldWord(sum, mask, 0)
+    sum = foldWord(sum, mask, 1)
   }
   report("aes-header-mask", started, 16 * count)
+  f.sum = sum
   return 0
 }
 

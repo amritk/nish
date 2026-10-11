@@ -22,14 +22,10 @@
 // of every column must print the same checksum, or the run stops: two builds
 // whose answers differ are not timing the same work.
 //
-// What is timed. The program times each of its nine workloads alone, with
-// `monotonicNanos`, and prints the nanoseconds and the bytes handled to stderr.
-// A figure here is therefore the workload's own loop, not the process: the key
-// schedule, the sealing of the messages an open reads, and start-up are
-// outside it. MB/s is 10^6 bytes a second. Cycles per byte is the nanoseconds
-// times the nominal clock over the bytes: there is no `perf` on the machines
-// this was written for, so it is a derived figure, exact only at a fixed
-// clock, and the line under the table names the clock it used.
+// What is timed is each workload's own loop, as bench/aes-gcm.ts's header
+// says, not the process. MB/s is 10^6 bytes a second. Cycles per byte is the
+// nanoseconds times the nominal clock over the bytes: a derived figure, not a
+// counted one, and the line under the table names the clock it used.
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -52,7 +48,7 @@ const fail = (msg) => {
  * this number is a change to what the AEADs answer.
  */
 const CHECK_SCALE = 64
-const CHECK_SUM = "checksum 2597325539"
+const CHECK_SUM = "checksum 2203470130"
 /** The workloads bench/aes-gcm.ts times; a run that reports fewer stopped short. */
 const WORKLOADS = 9
 
@@ -219,9 +215,11 @@ const commit = (() => {
 const mbps = (ns, bytes) => (bytes * 1e3) / ns
 /** Cycles per byte, or "n/a" where the model name names no clock and `--ghz` was not given. */
 const cpb = (ns, bytes) => (Number.isNaN(nominal) ? "n/a" : ((ns * nominal) / bytes).toFixed(1))
-console.log(
-  `${"workload".padEnd(18)} ${"column".padEnd(22)} ${"min ms".padStart(9)} ${"median ms".padStart(10)} ${"MB/s".padStart(8)} ${"median".padStart(8)} ${"c/B".padStart(7)} ${"median".padStart(7)}`
-)
+/** The table's widths: the first two columns are left-aligned, the rest right-aligned. */
+const WIDTHS = [18, 22, 9, 10, 8, 8, 7, 7]
+const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
+console.log(line(["workload", "column", "min ms", "median ms", "MB/s", "median", "c/B", "median"]))
+
 const stats = columns.map(() => new Map())
 for (const name of bytesOf.keys()) {
   const bytes = bytesOf.get(name)
@@ -230,7 +228,16 @@ for (const name of bytesOf.keys()) {
     const s = { min: Math.min(...ts), median: median(ts) }
     stats[k].set(name, s)
     console.log(
-      `${name.padEnd(18)} ${columns[k].label.padEnd(22)} ${(s.min / 1e6).toFixed(2).padStart(9)} ${(s.median / 1e6).toFixed(2).padStart(10)} ${mbps(s.min, bytes).toFixed(1).padStart(8)} ${mbps(s.median, bytes).toFixed(1).padStart(8)} ${cpb(s.min, bytes).padStart(7)} ${cpb(s.median, bytes).padStart(7)}`
+      line([
+        name,
+        columns[k].label,
+        (s.min / 1e6).toFixed(2),
+        (s.median / 1e6).toFixed(2),
+        mbps(s.min, bytes).toFixed(1),
+        mbps(s.median, bytes).toFixed(1),
+        cpb(s.min, bytes),
+        cpb(s.median, bytes),
+      ])
     )
   }
 }

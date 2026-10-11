@@ -394,7 +394,7 @@ runtime kernel, as §3.1 describes and §3.3 asks. This is its baseline, taken
 before anything is built: `std/crypto/aes.ts` as it is, bitsliced, with
 ChaCha20-Poly1305 beside it for scale.
 
-**How it was measured.** `node bench/aes-gcm.mjs --self --runs 15`, twice, at
+**How it was measured.** `node bench/aes-gcm.mjs --self --runs 15`, twice, on
 `ce9d394` (`main`; the branch adds only this note and the bench files), with
 `build/nish` built from that commit by the 0.18.0 seed. The machine was an
 `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family 6, model 85; 4 vCPUs
@@ -413,18 +413,18 @@ byte-identical copy of itself. From the first sample:
 
 | Workload | min ms | median ms | MB/s at min | MB/s at median | cycles/B at min | at median |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| AES-128-GCM seal, 16 KiB | 72.42 | 78.40 | 57.9 | 53.5 | 48.3 | 52.3 |
-| AES-128-GCM open, 16 KiB | 71.36 | 78.03 | 58.8 | 53.8 | 47.6 | 52.1 |
-| AES-128-GCM seal, 1,200 B | 75.41 | 79.70 | 55.6 | 52.6 | 50.3 | 53.2 |
-| AES-128-GCM open, 1,200 B | 75.53 | 82.42 | 55.5 | 50.9 | 50.4 | 55.0 |
-| ChaCha20-Poly1305 seal, 16 KiB | 18.38 | 19.13 | 228.2 | 219.3 | 12.3 | 12.8 |
-| ChaCha20-Poly1305 open, 16 KiB | 18.39 | 19.35 | 228.1 | 216.7 | 12.3 | 12.9 |
-| ChaCha20-Poly1305 seal, 1,200 B | 19.53 | 20.55 | 214.8 | 204.2 | 13.0 | 13.7 |
-| ChaCha20-Poly1305 open, 1,200 B | 19.68 | 20.34 | 213.2 | 206.3 | 13.1 | 13.6 |
-| `aesHeaderMask`, 65,536 samples | 46.94 | 49.14 | 22.3 | 21.3 | 125.4 | 131.2 |
+| AES-128-GCM seal, 16 KiB | 76.04 | 83.31 | 55.2 | 50.3 | 50.8 | 55.6 |
+| AES-128-GCM open, 16 KiB | 72.86 | 80.52 | 57.6 | 52.1 | 48.6 | 53.8 |
+| AES-128-GCM seal, 1,200 B | 76.59 | 82.07 | 54.8 | 51.1 | 51.1 | 54.8 |
+| AES-128-GCM open, 1,200 B | 76.45 | 81.77 | 54.9 | 51.3 | 51.0 | 54.6 |
+| ChaCha20-Poly1305 seal, 16 KiB | 19.07 | 21.61 | 220.0 | 194.1 | 12.7 | 14.4 |
+| ChaCha20-Poly1305 open, 16 KiB | 19.06 | 21.10 | 220.0 | 198.8 | 12.7 | 14.1 |
+| ChaCha20-Poly1305 seal, 1,200 B | 20.24 | 21.24 | 207.3 | 197.5 | 13.5 | 14.2 |
+| ChaCha20-Poly1305 open, 1,200 B | 20.26 | 21.38 | 207.0 | 196.2 | 13.5 | 14.3 |
+| `aesHeaderMask`, 65,536 samples | 45.99 | 48.68 | 22.8 | 21.5 | 122.8 | 130.0 |
 
-So AES-128-GCM runs at about 56 MB/s, a quarter of ChaCha20-Poly1305's
-speed. One header mask costs about 716 ns, about 2,000 cycles, because the
+So AES-128-GCM runs at about 55 MB/s, a quarter of ChaCha20-Poly1305's
+speed. One header mask costs about 702 ns, about 2,000 cycles, because the
 bitsliced cipher always encrypts a batch of four blocks, and the mask needs
 one.
 
@@ -433,17 +433,17 @@ median, in both samples. + means the copy was slower:
 
 | Workload | first sample | second sample |
 | --- | ---: | ---: |
-| AES seal, 16 KiB | +2.0% / +1.8% | +2.0% / +2.3% |
-| AES open, 16 KiB | +3.8% / +7.7% | +1.4% / +3.6% |
-| AES seal, 1,200 B | +0.7% / +2.3% | −0.4% / +3.2% |
-| AES open, 1,200 B | −0.2% / 0.0% | −0.3% / +6.5% |
-| ChaCha seal, 16 KiB | −0.5% / +1.3% | −0.2% / +1.9% |
-| ChaCha open, 16 KiB | −0.7% / −0.2% | −0.2% / +0.7% |
-| ChaCha seal, 1,200 B | −0.3% / −0.1% | +0.5% / +5.8% |
-| ChaCha open, 1,200 B | −0.6% / +2.6% | −0.2% / +8.4% |
-| `aesHeaderMask` | +0.5% / +1.3% | −0.5% / +8.2% |
+| AES seal, 16 KiB | −1.2% / +2.0% | −0.2% / +10.6% |
+| AES open, 16 KiB | +3.0% / −2.4% | +0.1% / +11.1% |
+| AES seal, 1,200 B | +0.7% / +0.7% | −0.1% / +1.0% |
+| AES open, 1,200 B | +1.5% / +4.8% | −2.1% / −2.0% |
+| ChaCha seal, 16 KiB | −0.2% / −7.8% | +0.1% / −3.9% |
+| ChaCha open, 16 KiB | +1.4% / −2.9% | +1.0% / −0.3% |
+| ChaCha seal, 1,200 B | +0.9% / −0.4% | −0.1% / +1.4% |
+| ChaCha open, 1,200 B | +0.5% / +4.7% | +1.0% / +1.0% |
+| `aesHeaderMask` | −0.2% / +1.7% | +0.8% / +0.7% |
 
-A binary differs from itself by up to 3.8% at the minimum and 8.4% at the
+A binary differs from itself by up to 3.0% at the minimum and 11.1% at the
 median on this machine. A later figure has to leave that band before it says
 anything. The minima are the steadier statistic here.
 
@@ -487,10 +487,10 @@ serve both key sizes, since curl's default is AES-256.
 **The bar, set before anything is built.** AES-128-GCM seal on 16 KiB is at
 least **5x faster** on x86-64 with AES-NI, measured on this machine, or on
 another one after the baseline is re-run there. That is a minimum at or under
-14.48 ms for the 4 MiB, at least 289.5 MB/s. And the fallback path, the
+15.21 ms for the 4 MiB, at least 276 MB/s. And the fallback path, the
 bitsliced code a machine without the instructions runs (and
 `NISH_AES=soft`), is not slower than this baseline outside the noise band:
-3.8% at the minimum and 8.4% at the median, on each of the nine workloads.
+3.0% at the minimum and 11.1% at the median, on each of the nine workloads.
 
 ---
 
@@ -955,7 +955,7 @@ a printed checksum.
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
-| **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): 57.9 MB/s at the minimum, so at least 289.5 MB/s. The fallback path is not slower than that baseline, outside the noise band (3.8% at the minimum, 8.4% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites, so the stop rule does not apply. |
+| **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): 55.2 MB/s at the minimum, so at least 276 MB/s. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites, so the stop rule does not apply. |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
