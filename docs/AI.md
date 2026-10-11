@@ -880,7 +880,7 @@ export const main = (): i32 => {
   store it or return it.
 - **The task is a named top-level function**, not an arrow, and it follows the
   data-parallel rules: it writes nothing anybody else can see but what it
-  writes through a `Mutex`'s guard (below), answers a number,
+  writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
   a `boolean` or an enum, and leaves `Arena` alone. A task cannot open a scope
   of its own or call `parallelMapInto`.
 - **Any argument will do** — an array, an object — because nothing writes
@@ -976,6 +976,104 @@ export const main = (): i32 => {
   using g = m.lock();
   const c = g.value;   // what the guard reaches would outlive the lock
   return c.n;
+};
+```
+
+### Passing values between tasks: `Channel<T>`
+
+When one task produces values and another consumes them, give both a
+`Channel`: the producers `send`, and the consumer walks the channel with
+`for...of`, which waits for values and ends once every producer has returned.
+Nobody closes a channel.
+
+```ts nish:ok
+import { Channel, scope } from "nish/threads";
+
+class Pipe {
+  ch: Channel<i32>;
+  n: i32;
+  constructor(ch: Channel<i32>, n: i32) {
+    this.ch = ch;
+    this.n = n;
+  }
+}
+
+const produce = (p: Pipe): i32 => {
+  for (let i: i32 = 1; i <= p.n; i++) {
+    p.ch.send(i);                                 // never waits
+  }
+  return p.n;
+};
+
+const consume = (p: Pipe): i32 => {
+  let sum: i32 = 0;
+  for (const x of p.ch) {                         // ends once every sender has returned
+    sum = sum + x;
+  }
+  return sum;
+};
+
+export const main = (): i32 => {
+  const sent: i32[] = [0, 0];
+  const sums: i32[] = [0];
+  const ch = new Channel<i32>();                  // a `const`, right before its scope
+  {
+    using s = scope();
+    s.spawn(produce, new Pipe(ch, 10), sent, 0);  // every sender first
+    s.spawn(produce, new Pipe(ch, 20), sent, 1);
+    s.spawn(consume, new Pipe(ch, 0), sums, 0);   // then the one receiver
+  }
+  console.log(`${sums[0]}`);                      // 265
+  return 0;
+};
+```
+
+- **It carries a number, a `boolean` or an enum**, never a string, an array or
+  an object.
+- **Declare it as a `const` right before its scope** — in the block that holds
+  `using s = scope()`, or in the block around the scope's block — and hand it
+  to tasks only as the task's argument or a field of the object you build for
+  it in the `spawn` (`new Pipe(ch, 10)`). Don't bind it to another name, store
+  it, return it, or name any member but `send`; passing it to a function is
+  fine. `new Channel<i32>()` takes no capacity: it is unbounded.
+- **One scope, one receiver.** Only one scope's tasks use a channel. Its one
+  receiver is either a single task spawned outside any loop, or the parent
+  after the scope's block; never both, never two. The parent sends only before
+  the scope's block, and receives nothing inside it.
+- **Senders before the receiver.** Spawn every task that may send before the
+  task that receives, and never let one task both send and receive on the same
+  channel. So channels cannot deadlock.
+- **No receive while a lock is held**, even through a call. A `send` under a
+  guard is fine.
+- **Print what the interleaving cannot change**: two senders' values arrive in
+  the scheduler's order natively and in spawn order under Node, so a count or an
+  integer sum prints the same both ways.
+
+```ts nish:err NL2481
+import { Channel, scope } from "nish/threads";
+
+const one = (ch: Channel<i32>): i32 => {
+  ch.send(1);
+  return 1;
+};
+
+const drain = (ch: Channel<i32>): i32 => {
+  let sum: i32 = 0;
+  for (const x of ch) {
+    sum = sum + x;
+  }
+  return sum;
+};
+
+export const main = (): i32 => {
+  const out: i32[] = [0, 0];
+  const ch = new Channel<i32>();
+  {
+    using s = scope();
+    s.spawn(drain, ch, out, 0);   // the receiver first: under Node it finds nothing
+    s.spawn(one, ch, out, 1);
+  }
+  return out[0];
 };
 ```
 

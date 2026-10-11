@@ -213,6 +213,17 @@ no prelude can reach it. They are language decisions
   a scope's tasks share from the statement that holds the first `spawn` to the
   end of the block, where the two would differ. A store to `g.value` itself
   reaches the `Mutex`, because the guard is the `Mutex`'s own storage.
+- **A `Channel` is an array queue under Node.** `send` pushes, and `for (const
+  x of ch)` takes values off the front as it walks, through the channel's
+  `[Symbol.iterator]`, and ends when the queue is empty: so a loop that stops
+  early leaves the rest for the next one, and a loop over a drained channel
+  ends at once, as natively. Nothing waits, and nothing needs to: a task runs
+  at its spawn, and the checker holds every task that may send on a channel to
+  a `spawn` before the one receiver's, so every value has been sent when the
+  receiver's loop starts ([LANGUAGE.md](LANGUAGE.md#channels-channelt)). How
+  two senders' values interleave is spawn order here and the scheduler's
+  natively, so a program prints the same both ways when what it prints does
+  not depend on that order — a count, an integer sum.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
   **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
   other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`

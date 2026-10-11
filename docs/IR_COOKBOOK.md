@@ -1625,6 +1625,233 @@ attributes #3 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end thread-mutex -->
 
+### `nish/threads`: a channel of scalars
+
+A `Channel<T>` holds one `i64` word, `state`, that the runtime owns
+(runtime/runtime-parallel.c), and each operation hands the runtime the word's
+address. `send` is the `Channel`'s method, written by the emitter in place of
+its source body (Node's `this.queue.push(x)`): the value widened into an
+8-byte slot — `zext` for an integer or a `boolean`, `bitcast` for an `f64` —
+and one call that never waits:
+
+```llvm
+%0 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 2
+%1 = zext i32 %x to i64
+call void @nish_channel_send(i64* %0, i64 %1)
+```
+
+A `for...of` over a channel is a receive at the top of every pass, which
+waits while the channel is empty and open, and ends the loop once it is
+closed and drained; the slot is narrowed back to the element type. What closes
+it is a count the runtime keeps: a `spawn` whose task may send on the channel
+adds one before the task is filed (`nish_channel_count(state, 1)`, in the
+`spawn` instance), the task's `$run` takes it away once the task has returned,
+and the scope takes away its own one at every exit of its block, just before
+the join. Below, the scope's task sends and the parent is the receiver, after
+the join. The whole of both modules of a pipeline between two tasks is
+`tests/link/thread_channel_pipeline`'s golden (docs/LANGUAGE.md, "Channels").
+
+<!-- cookbook:begin thread-channel -->
+```ts
+import { Channel, scope } from "nish/threads"
+
+const produce = (ch: Channel<i32>): i32 => {
+  ch.send(20)
+  ch.send(22)
+  return 2
+}
+
+export const total = (): i32 => {
+  const sent: i32[] = [0]
+  const ch = new Channel<i32>()
+  {
+    using s = scope()
+    s.spawn(produce, ch, sent, 0)
+  }
+  let sum: i32 = 0
+  for (const x of ch) {
+    sum = sum + x
+  }
+  return sum + sent[0]
+}
+```
+
+```llvm
+%struct.Channel$i32 = type { %struct.nish_array*, i32, i64 }
+%struct.ThreadScope = type { i32 }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+
+declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
+declare void @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Channel$i32* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.Channel$i32.constructor(%struct.Channel$i32* noundef nonnull noalias align 8 dereferenceable(24) nocapture) #1
+declare void @nish.Channel$i32.send(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.Channel$i32.take(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.Channel$i32.ready(%struct.Channel$i32* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare void @nish_scope_join(i8* noundef nonnull) #0
+declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #0
+declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #0
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define hidden noundef i32 @produce(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture %ch) #0 {
+entry:
+  call void @nish.Channel$i32.send(%struct.Channel$i32* %ch, i32 20)
+  call void @nish.Channel$i32.send(%struct.Channel$i32* %ch, i32 22)
+  ret i32 2
+}
+
+define noundef i32 @total() #0 {
+entry:
+  %sent.addr = alloca %struct.nish_array*, align 8
+  %ch.addr = alloca %struct.Channel$i32*, align 8
+  %s.addr = alloca %struct.ThreadScope*, align 8
+  %sum.addr = alloca i32, align 4
+  %x.addr = alloca i32, align 4
+  %chan.slot = alloca i64, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 1, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 1, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %4 = call i8* @nish_alloc_struct(i64 4)
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %6 = bitcast i8* %4 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 0
+  store i32 0, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %1, %struct.nish_array** %sent.addr, align 8
+  %8 = call i8* @nish_alloc_struct(i64 24)
+  %9 = bitcast i8* %8 to %struct.Channel$i32*
+  call void @nish.Channel$i32.constructor(%struct.Channel$i32* %9)
+  store %struct.Channel$i32* %9, %struct.Channel$i32** %ch.addr, align 8
+  %10 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %10, %struct.ThreadScope** %s.addr, align 8
+  %11 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %12 = bitcast %struct.ThreadScope* %11 to i8*
+  %13 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
+  %14 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %13, i32 0, i32 2
+  %15 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %16 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
+  %17 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8
+  call void @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce(%struct.ThreadScope* %15, %struct.Channel$i32* %16, %struct.nish_array* %17, i32 0)
+  call void @nish_channel_count(i64* %14, i64 -1)
+  call void @nish_scope_join(i8* %12)
+  store i32 0, i32* %sum.addr, align 4
+  %18 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
+  %19 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %18, i32 0, i32 2
+  br label %chan.recv
+
+chan.recv:
+  %20 = call i32 @nish_channel_receive(i64* %19, i64* %chan.slot)
+  %21 = icmp ne i32 %20, 0
+  br i1 %21, label %chan.body, label %chan.end
+
+chan.body:
+  %22 = load i64, i64* %chan.slot, align 8
+  %23 = trunc i64 %22 to i32
+  store i32 %23, i32* %x.addr, align 4
+  %24 = load i32, i32* %sum.addr, align 4
+  %25 = load i32, i32* %x.addr, align 4
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 %25)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %27, i32* %sum.addr, align 4
+  br label %chan.recv
+
+chan.end:
+  %29 = load i32, i32* %sum.addr, align 4
+  %30 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8
+  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 0
+  %32 = load i64, i64* %31, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %33 = icmp ult i64 0, %32
+  br i1 %33, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %32)
+  unreachable
+
+bounds.ok:
+  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
+  %35 = load i8*, i8** %34, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %36 = bitcast i8* %35 to i32*
+  %37 = getelementptr inbounds i32, i32* %36, i64 0
+  %38 = load i32, i32* %37, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %39 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %29, i32 %38)
+  %40 = extractvalue { i32, i1 } %39, 0
+  %41 = extractvalue { i32, i1 } %39, 1
+  br i1 %41, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %40
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i32", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end thread-channel -->
+
 ### `nish/text`: `indexOfAny` on the runtime kernel
 
 `indexOfAny` is ordinary Nish in `std/text.ts`: its checks on the set, its
@@ -17736,6 +17963,9 @@ declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* nou
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
 declare void @nish_mutex_wait(i32* noundef nonnull) #3
+declare void @nish_channel_send(i64* noundef nonnull, i64 noundef) #3
+declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #3
+declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #8 {

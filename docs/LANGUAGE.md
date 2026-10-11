@@ -2554,7 +2554,9 @@ export const main = (): i32 => {
 - **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` and
   `MutexGuard` declare one, so TypeScript and Node accept `using s = scope()`
   and `using g = m.lock()`; the compiler emits the join and the release itself
-  and never calls it. Any other class's is
+  and never calls it. `Channel`'s `[Symbol.iterator]`, Node's way into a
+  `for...of`, is the one other computed name, and is `nish/threads`'s alone
+  too: anywhere else it is refused as every computed name is (NL1041). Any other class's is
   `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads` or the builtin `arena()`, whose join and releases the compiler emits itself, so a disposal method of any other class would never be called ``
   (`tests/cases/reject_thread_dispose_elsewhere`).
 - **There is no thread count.** Each spawn is one task and each task one
@@ -2568,7 +2570,8 @@ element's arena, which a task does not share, and each rule is reported at the
 
 - **The task writes nothing another can see**, except through the guard of a
   [`Mutex`](#a-lock-that-owns-its-data-mutext), the one shared write a task may
-  make:
+  make, or by a `send` or a receive on a [`Channel`](#channels-channelt), which
+  is not a write the rule counts:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard). A task inside a task, or
@@ -2745,6 +2748,157 @@ else is its author's obligation, as an associative operator is for a named
 function given to `parallelReduce`; the checker does not try to prove it. It
 is the one place the lock weakens the scope's promise above, that the checker
 refuses anything that could tell the two orders apart.
+
+### Channels: `Channel<T>`
+
+A `Channel` passes scalars from a scope's tasks to one receiver: the tasks that
+produce call `send`, and the one that consumes walks the channel with
+`for...of`, which waits for values and ends once every task that may send on
+it has returned and it is drained
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.4). Nobody closes a
+channel, so nobody can close one too early, or twice.
+
+```typescript
+import { Channel, scope } from "nish/threads";
+
+class Pipe {
+  ch: Channel<i32>;
+  n: i32;
+  constructor(ch: Channel<i32>, n: i32) {
+    this.ch = ch;
+    this.n = n;
+  }
+}
+
+const produce = (p: Pipe): i32 => {
+  for (let i: i32 = 1; i <= p.n; i++) {
+    p.ch.send(i);                                 // never waits
+  }
+  return p.n;
+};
+
+const consume = (p: Pipe): i32 => {
+  let sum: i32 = 0;
+  for (const x of p.ch) {                         // waits; ends once the sender has returned
+    sum = sum + x;
+  }
+  return sum;
+};
+
+export const main = (): i32 => {
+  const sent: i32[] = [0];
+  const sums: i32[] = [0];
+  const ch = new Channel<i32>();                  // for one run of the scope below
+  {
+    using s = scope();
+    s.spawn(produce, new Pipe(ch, 100), sent, 0); // every sender first
+    s.spawn(consume, new Pipe(ch, 0), sums, 0);   // then the one receiver
+  }
+  console.log(`${sums[0]}`);                      // 5050
+  return 0;
+};
+```
+
+- **Natively a channel is a buffer of 8-byte slots outside every arena**, behind
+  the channel's `state` word, with a lock, a condition to wait on and a count
+  that keeps it open (runtime/runtime-parallel.c). `send` widens the value into
+  a slot and never waits; the loop takes a slot and narrows it back, and waits
+  while the channel is empty and open. The count starts at one for the scope:
+  a `spawn` whose task may send on the channel adds one before the task is
+  filed and takes it away when the task returns, and the scope takes its own
+  away at every exit of its block, just before the join — whether or not the
+  join finds a task to run — so a channel whose only sender was never spawned
+  closes too (`tests/link/thread_channel_pipeline`, whose `main.ll` and
+  `threads.ll` are the lowering; `tests/link/thread_channel_exit_paths` for the
+  end of the block, a `return`, a `break` and a scope that runs nothing). On
+  `wasm32` a scope's tasks run one after another in spawn order, every sender
+  before the receiver, and the same programs print the same thing
+  (`tests/run.js`, "the `--profile wasi` build").
+- **The buffer is given back when a loop drains the channel closed**, and the
+  channel records that, so a second loop over it ends at once rather than
+  reading what was freed; a loop that stops early with `break` leaves the rest
+  for the next one (`tests/link/thread_channel_parent_drain`). A channel that
+  is never drained keeps its remainder until the program exits.
+- **Under Node a channel is an array queue.** `send` pushes, and the loop takes
+  values off the front as it walks, so a second loop finds what the first left
+  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). That is correct because a task runs
+  at its spawn under Node and every sender is spawned before the receiver, so
+  every value has been sent by the time the receiver's loop starts.
+
+Seven rules keep "every sender has returned" a single moment and the one
+receiver from waiting on what never comes, and a program that breaks one is
+refused with that rule's own code:
+
+- **C1: a channel carries a number, a `boolean` or an enum.** A sender's arena
+  is freed when its scope joins, so anything else would be a pointer into it:
+  `` A `Channel` carries a number, a `boolean` or an enum, and this one would carry `string`: a sender's arena is freed when its scope joins, so anything else would point into freed memory ``
+  (NL2475, `tests/cases/reject_channel_element`). `f64`, `i64` and `boolean`
+  channels compile (`tests/link/thread_channel_two_producers`,
+  `thread_channel_parent_drain`).
+- **C2: a channel is a `const` declared beside its scope, and used only as a
+  channel.** `new Channel<T>()` initialises a `const` in the block that holds
+  the scope's `using s = scope()`, or in the block that has the scope's block
+  as one of its statements, before it, with no loop, condition or function
+  between, so each run of the declaration makes a channel for one run of one
+  scope — a scope in a loop gets a fresh one every pass:
+  `` `new Channel` must be the initialiser of a `const`: a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope ``
+  (NL2476, `reject_channel_not_const`, and `reject_channel_scope_conditional`
+  for a scope inside an `if`). A channel is the receiver of `send`, the
+  iterable of a `for...of`, an argument, or a field its class's constructor
+  sets from a parameter — never bound to another name, stored, returned or
+  compared, and no member but `send` is named:
+  `` A `Channel` cannot be bound, stored, returned or compared here: a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer ``
+  (NL2477, `reject_channel_bound`, `reject_channel_member`, and
+  `reject_channel_stored` for a class that holds one made anywhere but at the
+  `spawn`). It reaches a task as R8 says a `Mutex` does: as the task's
+  argument, or as a field of the object made for it at the `spawn`,
+  `new Pipe(ch, 100)`.
+- **C3: a channel is unbounded**, so `send` never waits, because under Node a
+  scope's tasks run one at a time and nothing would drain a full one:
+  `` `new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full ``
+  (NL2478, `reject_channel_capacity`).
+- **C4: one scope's tasks reach a channel, and the parent sends on it only
+  before that scope's block.** After the join it only receives. "May send" is
+  the call graph from a task's entry reaching `send` on a channel its argument
+  holds, so an over-count only closes the channel later:
+  `` This sends on `ch` once its scope's block has begun: a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned ``
+  (NL2479, `reject_channel_parent_send`, `reject_channel_send_after_join` for a
+  send through a call after the join, and `reject_channel_two_scopes` for the
+  two scopes of one `using`). A `spawn` hands its task only a channel the
+  function declared, never one it was handed.
+- **C5: a channel has one receiver** — one task, from a `spawn` outside any
+  loop, or the parent in a later statement of the block that has the scope's
+  block as one of its statements, never both — and inside a scope's block the
+  parent receives nothing, directly or through any function it calls, so its
+  one wait is the join:
+  `` `ch` has a second receiver here: a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join ``
+  (NL2480, `reject_channel_two_receivers`, `reject_channel_parent_and_task`,
+  `reject_channel_receiver_loop`, and `reject_channel_parent_receive_inside`
+  for a call that receives inside the block). One receiver is what makes "the
+  receiver sees every value sent" true natively and under Node alike.
+- **C6: every task that may send on a channel is spawned before the one that
+  receives on it**, in the block's statement order, and no task both sends and
+  receives on one channel. Under Node a receiver spawned first would find the
+  channel empty, and the same order makes the graph from senders to receivers
+  acyclic, so **channels cannot deadlock** either:
+  `` `produce` may send on `ch` and is spawned after its receiver: under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, and no task both sends and receives on one channel, which is also what keeps channels from deadlocking ``
+  (NL2481, `reject_channel_receiver_first`, and
+  `reject_channel_send_and_receive`).
+- **C7: nothing receives while a lock is held**, directly or through any
+  function it calls, including a constructor a `new` runs — R5's "nothing is
+  waited on while it is held". A `send` never waits and may stay:
+  `` `Tally.constructor`, which receives on a channel, is reached while `g` holds its lock: a receive waits, and nothing waits while a lock is held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` never waits, and may stay) ``
+  (NL2482, `reject_channel_receive_held`).
+
+**What a channel program means.** The receiver sees every value sent, each
+sender's in its send order. How two senders' values interleave is the
+scheduler's natively and spawn order under Node, so a receiver whose answer
+depends on it — not a count or an integer sum, but the first value, or an
+`f64` sum whose partial sums are not exact — is its author's obligation, as
+for the lock. A task's channel is checked where it can be read, at the
+`spawn`; a parallel body has no way to reach one, because a task calls no
+`parallelMapInto` and a channel is made only beside a scope. `select` stays
+declined (wp29 §9).
 
 ### Byte search: `indexOfAny` in `nish/text`
 
@@ -3062,7 +3216,8 @@ The condition must be `boolean`: there is no truthiness
 - `a` must be an array (`` `for...of` requires an array, got string ``,
   `tests/cases/reject_arr_forof_non_array`), or a walk of the global `Map` or
   `Set`: `m.keys()`, `m.values()`, a `Set` itself, `s.keys()` or `s.values()`
-  ([`Map` and `Set`](#map-and-set)); `x` gets the element type and
+  ([`Map` and `Set`](#map-and-set)), or a `Channel` from `nish/threads`, which
+  takes values off it ([Channels](#channels-channelt)); `x` gets the element type and
   must not be annotated
   (`` The `for...of` variable takes the element type; remove the annotation ``,
   `tests/cases/reject_arr_forof_annotation`) or initialised

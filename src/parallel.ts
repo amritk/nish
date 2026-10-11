@@ -1381,7 +1381,12 @@ const regionCallMessage = (
 }
 
 /** Whether `sig`'s parameter `name` is a `Channel`. */
-const isChannelParam = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, name: string): boolean => {
+const isChannelParam = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  name: string
+): boolean => {
   const at = sig.paramNames.indexOf(name)
   return at >= 0 && isChannelType(program, table, sig.paramTypes[at])
 }
@@ -2473,7 +2478,7 @@ const channelOpsOf = (program: CheckedProgram, sig: FunctionSig, summaries: Chan
  */
 export const channelSummaries = (programs: CheckedProgram[]): ChannelSummaries => {
   const out = new ChannelSummaries()
-  if (!threadsLoaded(programs)) {
+  if (!threadsLoaded(programs) || !namesChannel(programs)) {
     return out
   }
   let changed = true
@@ -2488,6 +2493,16 @@ export const channelSummaries = (programs: CheckedProgram[]): ChannelSummaries =
     }
   }
   return out
+}
+
+/** Whether any module but `nish/threads` itself spells `Channel`, without which no function has a channel to summarise. */
+const namesChannel = (programs: CheckedProgram[]): boolean => {
+  for (const program of programs) {
+    if (!isThreadsModule(program) && program.source.text.indexOf(CHANNEL) >= 0) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The type `T` a `Channel<T>` carries, or -1. */
@@ -2533,9 +2548,8 @@ const walkChannelUses = (
   locals: Local[],
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
-    return
-  }
+  // An arrow is walked with the body it is written in, whose tables it shares:
+  // what it does with a channel it is handed is held to the same rule.
   let at = node
   let depth = parents.length
   while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
