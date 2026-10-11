@@ -75,7 +75,7 @@
 #include <tmmintrin.h>
 #include <wmmintrin.h>
 #define NISH_AES_X86 1
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #include <arm_neon.h>
 #define NISH_AES_ARM 1
 #endif
