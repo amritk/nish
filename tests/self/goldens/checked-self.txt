@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 87 programs, 2264917 dump lines live, 87 distinct modules.
+# 87 programs, 2264979 dump lines live, 87 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/builtins.ts src/arrays.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/symbols.ts src/validator.ts src/options.ts src/result.ts src/structs.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
 entry src/arena-report.ts: src/arena-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/options.ts src/symbols.ts src/checker.ts src/expressions.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/emit-json.ts src/debug.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/checker.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/symbols.ts src/validator.ts src/options.ts src/result.ts src/structs.ts src/expressions.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -4688,7 +4688,7 @@ function emitJsonPart(emitter: Emitter, part: JsonPart): IRFunction -> @emitJson
 function emitJsonDecodeBody(emitter: Emitter, part: JsonPart): void -> @emitJsonDecodeBody
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonFieldsOf
-  calls: Emitter.stringConstant IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitJsonDecodeField jsonBranch jsonCallMethod jsonFieldsOf nish_array_grow nish_panic_index nish_str_concat
+  calls: Emitter.stringConstant IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitJsonDecodeField jsonBranch jsonCallMethod jsonFieldsOf nish_array_grow nish_str_concat
   pointer emitter: size=240 writesThrough=false captured=false passedTo=jsonFieldsOf#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 Emitter.stringConstant#0 jsonCallMethod#0 jsonBranch#0 jsonBranch#0 emitJsonDecodeField#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0
   pointer part: size=32 writesThrough=false captured=false passedTo=emitJsonDecodeField#1
   stackSites=7 stackLocals=1
@@ -4718,47 +4718,48 @@ function emitJsonDecodeBody(emitter: Emitter, part: JsonPart): void -> @emitJson
   callee 298:3 jsonBranch -> @jsonBranch
   callee 300:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   local 301:7 k: i32 (let)
-  local 303:11 f: JsonField (const)
-  local 304:11 key: string (const)
-  callee 304:24 Emitter.stringConstant -> @Emitter.stringConstant
-  local 305:11 match: string (const)
-  callee 305:19 jsonCallMethod -> @jsonCallMethod
-  local 306:11 field: IRBlock (const)
-  callee 306:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local 307:11 next: IRBlock (const)
-  callee 307:18 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 308:5 jsonBranch -> @jsonBranch
-  callee 309:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 310:11 given: string (const)
-  callee 310:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 311:11 take: IRBlock (const)
-  callee 311:18 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 312:5 jsonBranch -> @jsonBranch
-  callee 313:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 314:5 IRFunction.emit -> @IRFunction.emit
-  callee 315:5 emitJsonDecodeField -> @emitJsonDecodeField
+  local 304:11 f: JsonField (const)
+  local 305:11 slot: string (const)
+  local 306:11 key: string (const)
+  callee 306:24 Emitter.stringConstant -> @Emitter.stringConstant
+  local 307:11 match: string (const)
+  callee 307:19 jsonCallMethod -> @jsonCallMethod
+  local 308:11 field: IRBlock (const)
+  callee 308:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local 309:11 next: IRBlock (const)
+  callee 309:18 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 310:5 jsonBranch -> @jsonBranch
+  callee 311:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 312:11 given: string (const)
+  callee 312:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 313:11 take: IRBlock (const)
+  callee 313:18 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 314:5 jsonBranch -> @jsonBranch
+  callee 315:5 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee 316:5 IRFunction.emit -> @IRFunction.emit
-  callee 317:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 320:3 jsonCallMethod -> @jsonCallMethod
-  callee 321:3 IRFunction.emit -> @IRFunction.emit
-  callee 323:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 324:3 jsonCallMethod -> @jsonCallMethod
-  callee 325:3 IRFunction.emit -> @IRFunction.emit
-  callee 328:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 329:9 missing: IRBlock (const)
-  callee 329:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local 332:11 given: string (const)
-  callee 332:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 333:11 next: IRBlock (const)
-  callee 333:18 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 334:5 jsonBranch -> @jsonBranch
-  callee 335:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 338:3 IRFunction.emit -> @IRFunction.emit
-  callee 339:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 340:3 jsonCallMethod -> @jsonCallMethod
-  callee 341:3 IRFunction.emit -> @IRFunction.emit
-  callee 343:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 344:3 IRFunction.emit -> @IRFunction.emit
+  callee 317:5 emitJsonDecodeField -> @emitJsonDecodeField
+  callee 318:5 IRFunction.emit -> @IRFunction.emit
+  callee 319:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 322:3 jsonCallMethod -> @jsonCallMethod
+  callee 323:3 IRFunction.emit -> @IRFunction.emit
+  callee 325:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 326:3 jsonCallMethod -> @jsonCallMethod
+  callee 327:3 IRFunction.emit -> @IRFunction.emit
+  callee 330:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 331:9 missing: IRBlock (const)
+  callee 331:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local 334:11 given: string (const)
+  callee 334:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 335:11 next: IRBlock (const)
+  callee 335:18 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 336:5 jsonBranch -> @jsonBranch
+  callee 337:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 340:3 IRFunction.emit -> @IRFunction.emit
+  callee 341:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 342:3 jsonCallMethod -> @jsonCallMethod
+  callee 343:3 IRFunction.emit -> @IRFunction.emit
+  callee 345:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 346:3 IRFunction.emit -> @IRFunction.emit
 function emitJsonDecodeField(emitter: Emitter, part: JsonPart, f: JsonField): void -> @emitJsonDecodeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
@@ -4767,105 +4768,105 @@ function emitJsonDecodeField(emitter: Emitter, part: JsonPart, f: JsonField): vo
   pointer part: size=32 writesThrough=false captured=false passedTo=jsonRequestPart#3 jsonRequestPart#3 jsonRequestPart#3 jsonRequestPart#3 jsonRequestPart#3
   pointer f: size=32 writesThrough=false captured=false passedTo=jsonDecodeMethod#0 jsonFieldClass#1
   stackSites=6 stackLocals=0
-  local 349:9 fn: IRFunction (const)
-  local 350:9 info: StructInfo (const)
-  local 351:9 field: FieldInfo (const)
-  local 352:9 fieldType: string (const)
-  callee 352:21 Emitter.llvm -> @Emitter.llvm
-  local 356:9 cur: string (let)
-  callee 356:15 loadField -> @loadField
-  local 358:13 isNull: string (const)
-  callee 358:22 jsonCallMethod -> @jsonCallMethod
-  local 359:13 empty: IRBlock (const)
-  callee 359:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 360:13 text: IRBlock (const)
-  callee 360:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 361:13 join: IRBlock (const)
-  callee 361:20 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 362:7 jsonBranch -> @jsonBranch
-  callee 363:7 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 364:7 storeField -> @storeField
-  callee 365:7 IRFunction.emit -> @IRFunction.emit
-  callee 366:7 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 367:13 absent: string (const)
-  callee 367:22 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 368:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 368:54 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 369:7 storeField -> @storeField
-  callee 374:9 jsonCallMethod -> @jsonCallMethod
-  callee 376:7 IRFunction.emit -> @IRFunction.emit
-  callee 377:7 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 380:5 storeField -> @storeField
-  callee 385:7 jsonCallMethod -> @jsonCallMethod
-  callee 390:5 storeField -> @storeField
-  callee 395:7 jsonCallMethod -> @jsonCallMethod
-  callee 395:46 jsonScalarMethod -> @jsonScalarMethod
-  local 400:11 cur: string (const)
-  callee 400:17 loadField -> @loadField
-  local 401:11 read: string (const)
-  callee 401:18 jsonCallMethod -> @jsonCallMethod
-  callee 401:57 jsonDecodeMethod -> @jsonDecodeMethod
-  callee 402:5 storeField -> @storeField
-  local 405:9 cls: StructInfo (const)
-  callee 405:15 jsonFieldClass -> @jsonFieldClass
-  local 408:11 cur: string (const)
-  callee 408:17 loadField -> @loadField
-  callee 409:5 IRFunction.emit -> @IRFunction.emit
-  callee 410:21 jsonRequestPart -> @jsonRequestPart
-  callee 410:73 jsonObjectType -> @jsonObjectType
-  local 415:11 cur: string (const)
-  callee 415:17 loadField -> @loadField
-  local 416:11 callee: string (const)
-  callee 416:20 jsonRequestPart -> @jsonRequestPart
-  local 417:11 got: string (const)
-  callee 417:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 418:39 jsonObjectType -> @jsonObjectType
-  callee 420:5 storeField -> @storeField
-  callee 424:5 jsonFail -> @jsonFail
-  local 428:9 isNull: string (const)
-  callee 428:18 jsonCallMethod -> @jsonCallMethod
-  local 429:9 empty: IRBlock (const)
-  callee 429:17 IRFunction.newBlock -> @IRFunction.newBlock
-  local 430:9 value: IRBlock (const)
-  callee 430:17 IRFunction.newBlock -> @IRFunction.newBlock
-  local 431:9 make: IRBlock (const)
-  callee 431:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 432:9 into: IRBlock (const)
-  callee 432:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 433:9 join: IRBlock (const)
+  local 351:9 fn: IRFunction (const)
+  local 352:9 info: StructInfo (const)
+  local 353:9 field: FieldInfo (const)
+  local 354:9 fieldType: string (const)
+  callee 354:21 Emitter.llvm -> @Emitter.llvm
+  local 358:9 cur: string (let)
+  callee 358:15 loadField -> @loadField
+  local 360:13 isNull: string (const)
+  callee 360:22 jsonCallMethod -> @jsonCallMethod
+  local 361:13 empty: IRBlock (const)
+  callee 361:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 362:13 text: IRBlock (const)
+  callee 362:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 363:13 join: IRBlock (const)
+  callee 363:20 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 364:7 jsonBranch -> @jsonBranch
+  callee 365:7 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 366:7 storeField -> @storeField
+  callee 367:7 IRFunction.emit -> @IRFunction.emit
+  callee 368:7 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 369:13 absent: string (const)
+  callee 369:22 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 370:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 370:54 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 371:7 storeField -> @storeField
+  callee 376:9 jsonCallMethod -> @jsonCallMethod
+  callee 378:7 IRFunction.emit -> @IRFunction.emit
+  callee 379:7 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 382:5 storeField -> @storeField
+  callee 387:7 jsonCallMethod -> @jsonCallMethod
+  callee 392:5 storeField -> @storeField
+  callee 397:7 jsonCallMethod -> @jsonCallMethod
+  callee 397:46 jsonScalarMethod -> @jsonScalarMethod
+  local 402:11 cur: string (const)
+  callee 402:17 loadField -> @loadField
+  local 403:11 read: string (const)
+  callee 403:18 jsonCallMethod -> @jsonCallMethod
+  callee 403:57 jsonDecodeMethod -> @jsonDecodeMethod
+  callee 404:5 storeField -> @storeField
+  local 407:9 cls: StructInfo (const)
+  callee 407:15 jsonFieldClass -> @jsonFieldClass
+  local 410:11 cur: string (const)
+  callee 410:17 loadField -> @loadField
+  callee 411:5 IRFunction.emit -> @IRFunction.emit
+  callee 412:21 jsonRequestPart -> @jsonRequestPart
+  callee 412:73 jsonObjectType -> @jsonObjectType
+  local 417:11 cur: string (const)
+  callee 417:17 loadField -> @loadField
+  local 418:11 callee: string (const)
+  callee 418:20 jsonRequestPart -> @jsonRequestPart
+  local 419:11 got: string (const)
+  callee 419:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 420:39 jsonObjectType -> @jsonObjectType
+  callee 422:5 storeField -> @storeField
+  callee 426:5 jsonFail -> @jsonFail
+  local 430:9 isNull: string (const)
+  callee 430:18 jsonCallMethod -> @jsonCallMethod
+  local 431:9 empty: IRBlock (const)
+  callee 431:17 IRFunction.newBlock -> @IRFunction.newBlock
+  local 432:9 value: IRBlock (const)
+  callee 432:17 IRFunction.newBlock -> @IRFunction.newBlock
+  local 433:9 make: IRBlock (const)
   callee 433:16 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 434:3 jsonBranch -> @jsonBranch
-  callee 435:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 436:3 storeField -> @storeField
-  callee 437:3 IRFunction.emit -> @IRFunction.emit
-  callee 438:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 439:9 cur: string (const)
-  callee 439:15 loadField -> @loadField
-  local 440:9 absent: string (const)
-  callee 440:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 441:3 jsonBranch -> @jsonBranch
-  callee 442:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 443:7 made: string (let)
-  callee 445:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 445:47 jsonRequestPart -> @jsonRequestPart
-  callee 447:12 emitEmptyArray -> @emitEmptyArray
-  local 449:9 madeEdge: string (const)
-  callee 449:20 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 450:3 IRFunction.emit -> @IRFunction.emit
-  callee 451:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 452:9 target: string (const)
-  callee 452:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 453:9 self: string (const)
-  callee 453:19 jsonObjectType -> @jsonObjectType
-  callee 455:5 IRFunction.emit -> @IRFunction.emit
-  callee 455:27 jsonRequestPart -> @jsonRequestPart
-  callee 456:5 storeField -> @storeField
-  local 458:11 callee: string (const)
-  callee 458:20 jsonRequestPart -> @jsonRequestPart
-  callee 459:5 storeField -> @storeField
-  callee 464:7 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 467:3 IRFunction.emit -> @IRFunction.emit
-  callee 468:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 434:9 into: IRBlock (const)
+  callee 434:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 435:9 join: IRBlock (const)
+  callee 435:16 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 436:3 jsonBranch -> @jsonBranch
+  callee 437:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 438:3 storeField -> @storeField
+  callee 439:3 IRFunction.emit -> @IRFunction.emit
+  callee 440:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 441:9 cur: string (const)
+  callee 441:15 loadField -> @loadField
+  local 442:9 absent: string (const)
+  callee 442:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 443:3 jsonBranch -> @jsonBranch
+  callee 444:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 445:7 made: string (let)
+  callee 447:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 447:47 jsonRequestPart -> @jsonRequestPart
+  callee 449:12 emitEmptyArray -> @emitEmptyArray
+  local 451:9 madeEdge: string (const)
+  callee 451:20 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 452:3 IRFunction.emit -> @IRFunction.emit
+  callee 453:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 454:9 target: string (const)
+  callee 454:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 455:9 self: string (const)
+  callee 455:19 jsonObjectType -> @jsonObjectType
+  callee 457:5 IRFunction.emit -> @IRFunction.emit
+  callee 457:27 jsonRequestPart -> @jsonRequestPart
+  callee 458:5 storeField -> @storeField
+  local 460:11 callee: string (const)
+  callee 460:20 jsonRequestPart -> @jsonRequestPart
+  callee 461:5 storeField -> @storeField
+  callee 466:7 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 469:3 IRFunction.emit -> @IRFunction.emit
+  callee 470:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function emitJsonDecodeArrayBody(emitter: Emitter, part: JsonPart): void -> @emitJsonDecodeArrayBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitAlloca
@@ -4873,81 +4874,81 @@ function emitJsonDecodeArrayBody(emitter: Emitter, part: JsonPart): void -> @emi
   pointer emitter: size=240 writesThrough=false captured=false passedTo=jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 emitLengthOf#0 jsonBranch#0 emitElementAt#0 jsonRequestPart#0 emitPushValue#0 jsonRequestPart#0 emitLengthOf#0 jsonBranch#0 emitShorten#0
   pointer part: size=32 writesThrough=false captured=false passedTo=jsonRequestPart#3 jsonRequestPart#3
   stackSites=2 stackLocals=0
-  local 477:9 fn: IRFunction (const)
-  local 478:9 elem: i32 (const)
-  local 479:9 counter: string (const)
-  callee 479:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 480:3 IRFunction.emit -> @IRFunction.emit
-  local 481:9 loop: IRBlock (const)
-  callee 481:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 482:9 element: IRBlock (const)
-  callee 482:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local 483:9 reuse: IRBlock (const)
-  callee 483:17 IRFunction.newBlock -> @IRFunction.newBlock
-  local 484:9 grow: IRBlock (const)
-  callee 484:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 485:9 decode: IRBlock (const)
-  callee 485:18 IRFunction.newBlock -> @IRFunction.newBlock
-  local 486:9 end: IRBlock (const)
-  callee 486:15 IRFunction.newBlock -> @IRFunction.newBlock
-  local 487:9 cut: IRBlock (const)
-  callee 487:15 IRFunction.newBlock -> @IRFunction.newBlock
-  local 488:9 done: IRBlock (const)
-  callee 488:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 489:9 open: string (const)
-  callee 489:16 jsonCallMethod -> @jsonCallMethod
-  callee 490:3 jsonBranch -> @jsonBranch
-  callee 492:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 493:9 more: string (const)
-  callee 493:16 jsonCallMethod -> @jsonCallMethod
-  callee 494:3 jsonBranch -> @jsonBranch
-  callee 496:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 497:9 at: string (const)
-  callee 497:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 498:9 has: string (const)
-  callee 498:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 498:51 emitLengthOf -> @emitLengthOf
-  callee 499:3 jsonBranch -> @jsonBranch
-  callee 500:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 501:9 old: string (const)
-  callee 501:15 emitElementAt -> @emitElementAt
-  local 502:9 reuseEdge: string (const)
-  callee 502:21 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 503:3 IRFunction.emit -> @IRFunction.emit
-  callee 504:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 505:9 made: string (const)
-  callee 505:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 506:13 jsonObjectType -> @jsonObjectType
-  callee 506:43 jsonRequestPart -> @jsonRequestPart
-  callee 508:3 emitPushValue -> @emitPushValue
-  local 509:9 growEdge: string (const)
-  callee 509:20 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 510:3 IRFunction.emit -> @IRFunction.emit
-  callee 511:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 512:9 target: string (const)
-  callee 512:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 513:12 jsonObjectType -> @jsonObjectType
-  local 515:9 callee: string (const)
-  callee 515:18 jsonRequestPart -> @jsonRequestPart
-  callee 516:3 IRFunction.emit -> @IRFunction.emit
-  callee 516:35 jsonObjectType -> @jsonObjectType
-  callee 516:72 jsonObjectType -> @jsonObjectType
-  local 517:9 next: string (const)
-  callee 517:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 479:9 fn: IRFunction (const)
+  local 480:9 elem: i32 (const)
+  local 481:9 counter: string (const)
+  callee 481:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 482:3 IRFunction.emit -> @IRFunction.emit
+  local 483:9 loop: IRBlock (const)
+  callee 483:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 484:9 element: IRBlock (const)
+  callee 484:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local 485:9 reuse: IRBlock (const)
+  callee 485:17 IRFunction.newBlock -> @IRFunction.newBlock
+  local 486:9 grow: IRBlock (const)
+  callee 486:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 487:9 decode: IRBlock (const)
+  callee 487:18 IRFunction.newBlock -> @IRFunction.newBlock
+  local 488:9 end: IRBlock (const)
+  callee 488:15 IRFunction.newBlock -> @IRFunction.newBlock
+  local 489:9 cut: IRBlock (const)
+  callee 489:15 IRFunction.newBlock -> @IRFunction.newBlock
+  local 490:9 done: IRBlock (const)
+  callee 490:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 491:9 open: string (const)
+  callee 491:16 jsonCallMethod -> @jsonCallMethod
+  callee 492:3 jsonBranch -> @jsonBranch
+  callee 494:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 495:9 more: string (const)
+  callee 495:16 jsonCallMethod -> @jsonCallMethod
+  callee 496:3 jsonBranch -> @jsonBranch
+  callee 498:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 499:9 at: string (const)
+  callee 499:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local 500:9 has: string (const)
+  callee 500:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 500:51 emitLengthOf -> @emitLengthOf
+  callee 501:3 jsonBranch -> @jsonBranch
+  callee 502:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 503:9 old: string (const)
+  callee 503:15 emitElementAt -> @emitElementAt
+  local 504:9 reuseEdge: string (const)
+  callee 504:21 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 505:3 IRFunction.emit -> @IRFunction.emit
+  callee 506:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 507:9 made: string (const)
+  callee 507:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 508:13 jsonObjectType -> @jsonObjectType
+  callee 508:43 jsonRequestPart -> @jsonRequestPart
+  callee 510:3 emitPushValue -> @emitPushValue
+  local 511:9 growEdge: string (const)
+  callee 511:20 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 512:3 IRFunction.emit -> @IRFunction.emit
+  callee 513:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 514:9 target: string (const)
+  callee 514:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 515:12 jsonObjectType -> @jsonObjectType
+  local 517:9 callee: string (const)
+  callee 517:18 jsonRequestPart -> @jsonRequestPart
   callee 518:3 IRFunction.emit -> @IRFunction.emit
-  callee 519:3 IRFunction.emit -> @IRFunction.emit
-  callee 521:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 522:9 count: string (const)
-  callee 522:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 523:9 over: string (const)
-  callee 523:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 523:55 emitLengthOf -> @emitLengthOf
-  callee 524:3 jsonBranch -> @jsonBranch
-  callee 525:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 526:3 emitShorten -> @emitShorten
-  callee 527:3 IRFunction.emit -> @IRFunction.emit
-  callee 529:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 530:3 IRFunction.emit -> @IRFunction.emit
+  callee 518:35 jsonObjectType -> @jsonObjectType
+  callee 518:72 jsonObjectType -> @jsonObjectType
+  local 519:9 next: string (const)
+  callee 519:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 520:3 IRFunction.emit -> @IRFunction.emit
+  callee 521:3 IRFunction.emit -> @IRFunction.emit
+  callee 523:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 524:9 count: string (const)
+  callee 524:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 525:9 over: string (const)
+  callee 525:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 525:55 emitLengthOf -> @emitLengthOf
+  callee 526:3 jsonBranch -> @jsonBranch
+  callee 527:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 528:3 emitShorten -> @emitShorten
+  callee 529:3 IRFunction.emit -> @IRFunction.emit
+  callee 531:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 532:3 IRFunction.emit -> @IRFunction.emit
 function emitJsonEncodeBody(emitter: Emitter, part: JsonPart): void -> @emitJsonEncodeBody
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonFieldsOf
@@ -4955,16 +4956,16 @@ function emitJsonEncodeBody(emitter: Emitter, part: JsonPart): void -> @emitJson
   pointer emitter: size=240 writesThrough=false captured=false passedTo=jsonFieldsOf#0 emitJsonStopIfFailed#0 jsonCallMethod#0 jsonCallMethod#0 Emitter.stringConstant#0 emitJsonEncodeField#0 jsonCallMethod#0
   pointer part: size=32 writesThrough=false captured=false passedTo=emitJsonStopIfFailed#1 emitJsonEncodeField#1
   stackSites=3 stackLocals=0
-  local 536:9 fields: JsonField[] (const)
-  callee 536:18 jsonFieldsOf -> @jsonFieldsOf
-  callee 537:3 emitJsonStopIfFailed -> @emitJsonStopIfFailed
-  callee 538:3 jsonCallMethod -> @jsonCallMethod
-  local 539:14 f: JsonField (const)
-  callee 540:5 jsonCallMethod -> @jsonCallMethod
-  callee 540:65 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 541:5 emitJsonEncodeField -> @emitJsonEncodeField
-  callee 543:3 jsonCallMethod -> @jsonCallMethod
-  callee 544:3 IRFunction.emit -> @IRFunction.emit
+  local 538:9 fields: JsonField[] (const)
+  callee 538:18 jsonFieldsOf -> @jsonFieldsOf
+  callee 539:3 emitJsonStopIfFailed -> @emitJsonStopIfFailed
+  callee 540:3 jsonCallMethod -> @jsonCallMethod
+  local 541:14 f: JsonField (const)
+  callee 542:5 jsonCallMethod -> @jsonCallMethod
+  callee 542:65 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 543:5 emitJsonEncodeField -> @emitJsonEncodeField
+  callee 545:3 jsonCallMethod -> @jsonCallMethod
+  callee 546:3 IRFunction.emit -> @IRFunction.emit
 function emitJsonStopIfFailed(emitter: Emitter, part: JsonPart): void -> @emitJsonStopIfFailed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonFail
@@ -4972,23 +4973,23 @@ function emitJsonStopIfFailed(emitter: Emitter, part: JsonPart): void -> @emitJs
   pointer emitter: size=240 writesThrough=false captured=false passedTo=jsonFail#0 loadField#0 Emitter.llvm#0 jsonBranch#0
   pointer part: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 555:9 fn: IRFunction (const)
-  local 556:9 failed: FieldInfo | null (const)
-  callee 556:18 StructInfo.field -> @StructInfo.field
-  callee 558:5 jsonFail -> @jsonFail
-  local 561:9 code: string (const)
-  callee 561:16 loadField -> @loadField
-  local 562:9 ok: string (const)
-  callee 562:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 562:38 Emitter.llvm -> @Emitter.llvm
-  local 563:9 stop: IRBlock (const)
-  callee 563:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 564:9 write: IRBlock (const)
-  callee 564:17 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 565:3 jsonBranch -> @jsonBranch
-  callee 566:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 567:3 IRFunction.emit -> @IRFunction.emit
+  local 557:9 fn: IRFunction (const)
+  local 558:9 failed: FieldInfo | null (const)
+  callee 558:18 StructInfo.field -> @StructInfo.field
+  callee 560:5 jsonFail -> @jsonFail
+  local 563:9 code: string (const)
+  callee 563:16 loadField -> @loadField
+  local 564:9 ok: string (const)
+  callee 564:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 564:38 Emitter.llvm -> @Emitter.llvm
+  local 565:9 stop: IRBlock (const)
+  callee 565:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 566:9 write: IRBlock (const)
+  callee 566:17 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 567:3 jsonBranch -> @jsonBranch
   callee 568:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 569:3 IRFunction.emit -> @IRFunction.emit
+  callee 570:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function emitJsonEncodeField(emitter: Emitter, part: JsonPart, f: JsonField): void -> @emitJsonEncodeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
@@ -4997,42 +4998,42 @@ function emitJsonEncodeField(emitter: Emitter, part: JsonPart, f: JsonField): vo
   pointer part: size=32 writesThrough=false captured=false passedTo=jsonHelper#1 jsonRequestPart#3
   pointer f: size=32 writesThrough=false captured=false passedTo=jsonEncodeHelper#0 jsonFieldClass#1
   stackSites=3 stackLocals=0
-  local 573:9 fn: IRFunction (const)
-  local 574:9 field: FieldInfo (const)
-  local 575:9 fieldType: string (const)
-  callee 575:21 Emitter.llvm -> @Emitter.llvm
-  local 576:9 value: string (const)
-  callee 576:17 loadField -> @loadField
-  local 577:9 self: string (const)
-  callee 577:19 jsonObjectType -> @jsonObjectType
-  local 578:9 helper: string (const)
-  callee 578:18 jsonEncodeHelper -> @jsonEncodeHelper
-  callee 580:5 jsonCallSig -> @jsonCallSig
-  callee 580:26 jsonHelper -> @jsonHelper
-  callee 584:5 jsonCallMethod -> @jsonCallMethod
-  callee 584:44 jsonScalarMethod -> @jsonScalarMethod
-  local 587:9 cls: StructInfo (const)
-  callee 587:15 jsonFieldClass -> @jsonFieldClass
-  local 588:9 kind: i32 (const)
-  local 589:9 write: string (const)
-  callee 589:31 jsonRequestPart -> @jsonRequestPart
-  callee 591:5 IRFunction.emit -> @IRFunction.emit
-  local 594:9 absent: string (const)
-  callee 594:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 595:9 empty: IRBlock (const)
-  callee 595:17 IRFunction.newBlock -> @IRFunction.newBlock
-  local 596:9 some: IRBlock (const)
-  callee 596:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 597:9 join: IRBlock (const)
-  callee 597:16 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 598:3 jsonBranch -> @jsonBranch
-  callee 599:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 600:3 jsonCallMethod -> @jsonCallMethod
-  callee 601:3 IRFunction.emit -> @IRFunction.emit
-  callee 602:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 575:9 fn: IRFunction (const)
+  local 576:9 field: FieldInfo (const)
+  local 577:9 fieldType: string (const)
+  callee 577:21 Emitter.llvm -> @Emitter.llvm
+  local 578:9 value: string (const)
+  callee 578:17 loadField -> @loadField
+  local 579:9 self: string (const)
+  callee 579:19 jsonObjectType -> @jsonObjectType
+  local 580:9 helper: string (const)
+  callee 580:18 jsonEncodeHelper -> @jsonEncodeHelper
+  callee 582:5 jsonCallSig -> @jsonCallSig
+  callee 582:26 jsonHelper -> @jsonHelper
+  callee 586:5 jsonCallMethod -> @jsonCallMethod
+  callee 586:44 jsonScalarMethod -> @jsonScalarMethod
+  local 589:9 cls: StructInfo (const)
+  callee 589:15 jsonFieldClass -> @jsonFieldClass
+  local 590:9 kind: i32 (const)
+  local 591:9 write: string (const)
+  callee 591:31 jsonRequestPart -> @jsonRequestPart
+  callee 593:5 IRFunction.emit -> @IRFunction.emit
+  local 596:9 absent: string (const)
+  callee 596:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 597:9 empty: IRBlock (const)
+  callee 597:17 IRFunction.newBlock -> @IRFunction.newBlock
+  local 598:9 some: IRBlock (const)
+  callee 598:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 599:9 join: IRBlock (const)
+  callee 599:16 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 600:3 jsonBranch -> @jsonBranch
+  callee 601:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 602:3 jsonCallMethod -> @jsonCallMethod
   callee 603:3 IRFunction.emit -> @IRFunction.emit
-  callee 604:3 IRFunction.emit -> @IRFunction.emit
-  callee 605:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 604:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 605:3 IRFunction.emit -> @IRFunction.emit
+  callee 606:3 IRFunction.emit -> @IRFunction.emit
+  callee 607:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function emitJsonEncodeArrayBody(emitter: Emitter, part: JsonPart): void -> @emitJsonEncodeArrayBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitAlloca
@@ -5040,39 +5041,39 @@ function emitJsonEncodeArrayBody(emitter: Emitter, part: JsonPart): void -> @emi
   pointer emitter: size=240 writesThrough=false captured=false passedTo=jsonCallMethod#0 emitLengthOf#0 jsonBranch#0 emitElementAt#0 jsonRequestPart#0 jsonCallMethod#0
   pointer part: size=32 writesThrough=false captured=false passedTo=jsonRequestPart#3
   stackSites=2 stackLocals=0
-  local 610:9 fn: IRFunction (const)
-  local 611:9 counter: string (const)
-  callee 611:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 612:3 IRFunction.emit -> @IRFunction.emit
-  local 613:9 loop: IRBlock (const)
-  callee 613:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 614:9 body: IRBlock (const)
-  callee 614:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local 615:9 end: IRBlock (const)
-  callee 615:15 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 616:3 jsonCallMethod -> @jsonCallMethod
-  callee 617:3 IRFunction.emit -> @IRFunction.emit
-  callee 618:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 619:9 at: string (const)
-  callee 619:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 620:9 more: string (const)
-  callee 620:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 620:52 emitLengthOf -> @emitLengthOf
-  callee 621:3 jsonBranch -> @jsonBranch
-  callee 622:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 623:9 element: string (const)
-  callee 623:19 emitElementAt -> @emitElementAt
-  local 624:9 callee: string (const)
-  callee 624:18 jsonRequestPart -> @jsonRequestPart
-  callee 625:3 IRFunction.emit -> @IRFunction.emit
-  callee 626:29 jsonObjectType -> @jsonObjectType
-  callee 626:66 jsonObjectType -> @jsonObjectType
-  callee 628:3 IRFunction.emit -> @IRFunction.emit
-  callee 628:24 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 629:3 IRFunction.emit -> @IRFunction.emit
-  callee 630:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 631:3 jsonCallMethod -> @jsonCallMethod
-  callee 632:3 IRFunction.emit -> @IRFunction.emit
+  local 612:9 fn: IRFunction (const)
+  local 613:9 counter: string (const)
+  callee 613:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 614:3 IRFunction.emit -> @IRFunction.emit
+  local 615:9 loop: IRBlock (const)
+  callee 615:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 616:9 body: IRBlock (const)
+  callee 616:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local 617:9 end: IRBlock (const)
+  callee 617:15 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 618:3 jsonCallMethod -> @jsonCallMethod
+  callee 619:3 IRFunction.emit -> @IRFunction.emit
+  callee 620:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 621:9 at: string (const)
+  callee 621:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local 622:9 more: string (const)
+  callee 622:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 622:52 emitLengthOf -> @emitLengthOf
+  callee 623:3 jsonBranch -> @jsonBranch
+  callee 624:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 625:9 element: string (const)
+  callee 625:19 emitElementAt -> @emitElementAt
+  local 626:9 callee: string (const)
+  callee 626:18 jsonRequestPart -> @jsonRequestPart
+  callee 627:3 IRFunction.emit -> @IRFunction.emit
+  callee 628:29 jsonObjectType -> @jsonObjectType
+  callee 628:66 jsonObjectType -> @jsonObjectType
+  callee 630:3 IRFunction.emit -> @IRFunction.emit
+  callee 630:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 631:3 IRFunction.emit -> @IRFunction.emit
+  callee 632:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 633:3 jsonCallMethod -> @jsonCallMethod
+  callee 634:3 IRFunction.emit -> @IRFunction.emit
 module src/emit-arrays.ts
 import HoistedHeader from "./attributes" -> struct HoistedHeader
 import isResizeCall from "./attributes" -> function @isResizeCall
