@@ -1,0 +1,1 @@
+The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `arg[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer

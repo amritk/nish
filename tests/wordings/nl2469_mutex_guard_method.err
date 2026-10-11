@@ -1,0 +1,1 @@
+`push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined

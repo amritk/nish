@@ -1,1 +1,1 @@
-`Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`
+`Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` or a `lock()` from `nish/threads`

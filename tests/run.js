@@ -4553,6 +4553,11 @@ if (!only || "par_alloc".includes(only)) {
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
 //
+// WP29 P3 adds the lock's three. Under Node the tasks' critical sections run
+// in spawn order, one of the orders the native threads can run them in, and
+// each program's guarded updates commute (a count, a histogram, a running
+// total), so the totals print the same both ways.
+//
 // `arena_using_exit_paths` is the `using a = arena()` program: its block's
 // disposal does nothing under Node and `Arena.*` answers zero there, so the
 // lines it prints, each of which ends with how far the arena moved, are the
@@ -4565,6 +4570,9 @@ for (const name of [
   "thread_scope_exit_paths",
   "thread_scope_many_arrays",
   "thread_scope_nested_arena",
+  "thread_mutex_counter",
+  "thread_mutex_exit_paths",
+  "thread_mutex_histogram",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -4594,6 +4602,41 @@ for (const name of [
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
   )
+}
+
+// WP29 P3: on wasm32 a scope's tasks run one after another on the one
+// thread there is, as they do for `scope()` today (runtime/runtime-parallel.c),
+// and the lock's compare-and-swap and release store are what LLVM lowers for
+// a module without shared memory. So the counter links for `--profile wasi`
+// and prints what the native binary prints: no lock is ever found held.
+if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const mutexDir = path.join(buildDir, "wasi_thread_mutex_counter")
+    const mutexWasm = path.join(mutexDir, "app.wasm")
+    const mutexEntry = path.join(linkDir, "thread_mutex_counter", "main.ts")
+    const mutexBuilt = spawnSync(
+      NISH,
+      [mutexEntry, "-o", `${mutexDir}${path.sep}`, "--link", mutexWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const mutexRun =
+      mutexBuilt.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", mutexWasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : mutexBuilt
+    const mutexWant = fs.readFileSync(path.join(linkDir, "thread_mutex_counter", "expected.out"), "utf8")
+    check(
+      `link/thread_mutex_counter: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      mutexBuilt.status === 0 && mutexRun.status === 0 && mutexRun.stdout === mutexWant,
+      shown(mutexRun)
+    )
+  } else {
+    skip(
+      `skipped: link/thread_mutex_counter: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the lock is not run`
+    )
+  }
 }
 
 // WP38 S1: `indexOfAny` from `nish/text` is the runtime kernel natively and

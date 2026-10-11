@@ -1869,10 +1869,12 @@ const walkMutexes = (
     } else if (base) {
       // an access through it: judged where it ends
     } else if (isStoreTarget(at, parents, depth)) {
-      if (!isScalarArgument(table, type)) {
-        out.push(new ScopeFinding(parent, guardStoreMessage(table, type)))
+      // A store's target has no type of its own in the tables; what is stored is the value's.
+      const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
+      if (stored >= 0 && !isScalarArgument(table, stored)) {
+        out.push(new ScopeFinding(parent, guardStoreMessage(table, stored)))
       }
-    } else if (!isScalarArgument(table, type)) {
+    } else if (type >= 0 && !isScalarArgument(table, type)) {
       out.push(new ScopeFinding(node, guardDerivedMessage(table, type)))
       return
     }

@@ -1,2 +1,2 @@
 `outer` writes memory its caller can see
-`spawn` runs it on several threads at once
+`spawn` runs it beside the scope's other tasks

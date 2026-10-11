@@ -1,0 +1,1 @@
+`count` writes memory its caller can see at tests/wordings/nl2471_mutex_task_unguarded.ts:23:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()`

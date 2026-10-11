@@ -1,0 +1,1 @@
+`new Mutex` takes a fresh value — a `new` expression or a literal — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock
