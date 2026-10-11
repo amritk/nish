@@ -11123,6 +11123,159 @@ attributes #2 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end arr-bounds-offset -->
 
+### A computed index: proved by its range
+
+`r * 4 + c` is no local and no offset from one, so no guard on it is
+recorded; it is proved by the values it can take. The loops put `r` and `c`
+each in [0, 3], so the product is in [0, 12] and the sum in [0, 15], and
+`cells` was made with 16, so neither access carries a check. The arithmetic
+is checked, so each value is exact: a product or a sum that overflowed would
+have panicked before the index was used, and the range saturates at the
+type's ends rather than wrapping. The same range is what makes `r * 4`,
+`+ c` and both loop steps `nsw`; the running total keeps its overflow check,
+because it is the program's own arithmetic. Under `--wrapping`, for an unsigned index and
+for an `f64` one the range is not the value's, and the check stays.
+
+<!-- cookbook:begin arr-bounds-range -->
+```ts
+const board = (): i32 => {
+  const cells = new Array<i32>(16)
+  let total = 0
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      cells[r * 4 + c] = r - c
+      total = total + cells[r * 4 + c]
+    }
+  }
+  return total
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @board() #0 {
+entry:
+  %cells.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [16 x i32], align 8
+  %total.addr = alloca i32, align 4
+  %r.addr = alloca i32, align 4
+  %c.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 16, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 16, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = mul i64 16, 4
+  %3 = bitcast [16 x i32]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !4, !noalias !3
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %cells.addr, align 8
+  store i32 0, i32* %total.addr, align 4
+  store i32 0, i32* %r.addr, align 4
+  %5 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  br label %for.cond
+
+for.cond:
+  %8 = load i32, i32* %r.addr, align 4
+  %9 = icmp slt i32 %8, 4
+  br i1 %9, label %for.body, label %for.end
+
+for.body:
+  store i32 0, i32* %c.addr, align 4
+  %10 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  br label %for.cond.1
+
+for.cond.1:
+  %13 = load i32, i32* %c.addr, align 4
+  %14 = icmp slt i32 %13, 4
+  br i1 %14, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %15 = load i32, i32* %r.addr, align 4
+  %16 = mul nsw i32 %15, 4
+  %17 = load i32, i32* %c.addr, align 4
+  %18 = add nsw i32 %16, %17
+  %19 = sext i32 %18 to i64
+  %20 = load i32, i32* %r.addr, align 4
+  %21 = load i32, i32* %c.addr, align 4
+  %22 = sub nsw i32 %20, %21
+  %23 = bitcast i8* %12 to i32*
+  %24 = getelementptr inbounds i32, i32* %23, i64 %19
+  store i32 %22, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %25 = load i32, i32* %total.addr, align 4
+  %26 = load i32, i32* %r.addr, align 4
+  %27 = mul nsw i32 %26, 4
+  %28 = load i32, i32* %c.addr, align 4
+  %29 = add nsw i32 %27, %28
+  %30 = sext i32 %29 to i64
+  %31 = bitcast i8* %12 to i32*
+  %32 = getelementptr inbounds i32, i32* %31, i64 %30
+  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %33)
+  %35 = extractvalue { i32, i1 } %34, 0
+  %36 = extractvalue { i32, i1 } %34, 1
+  br i1 %36, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %35, i32* %total.addr, align 4
+  br label %for.inc.1
+
+for.inc.1:
+  %37 = load i32, i32* %c.addr, align 4
+  %38 = add nsw i32 %37, 1
+  store i32 %38, i32* %c.addr, align 4
+  br label %for.cond.1
+
+for.end.1:
+  br label %for.inc
+
+for.inc:
+  %39 = load i32, i32* %r.addr, align 4
+  %40 = add nsw i32 %39, 1
+  store i32 %40, i32* %r.addr, align 4
+  br label %for.cond
+
+for.end:
+  %41 = load i32, i32* %total.addr, align 4
+  ret i32 %41
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i32", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end arr-bounds-range -->
+
 ### A hoisted `toI32(s.length)`: the proof in both number modes
 
 Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can
