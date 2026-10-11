@@ -113,7 +113,7 @@ UTF-8.
 **Lone surrogates** (`:823`, `escapeCodePoint`): a `\u` escape of a high
 surrogate must be followed at once by a `\u` escape of a low one, and a low
 surrogate may not stand alone; anything else is `JSON_TOK_ERR_SURROGATE`
-("SURROGATE: a lone high surrogate" and six more). RFC 8259 §8.2 allows them,
+("SURROGATE: a lone high surrogate" and eight more). RFC 8259 §8.2 allows them,
 and `JSON.parse` accepts them into a UTF-16 string, but they name no character
 and decode to no valid UTF-8: a reader that substitutes U+FFFD and one that
 refuses would see different strings, which is the disagreement this record's
