@@ -2597,9 +2597,9 @@ stores the answer there; the rule above is what makes that print the same as
 the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 `--js-explicit-resource-management` on Node 22 and is native from Node 24.
 
-`parallelFor`, channels, non-scalar results and `scope(n)` are not in this
-stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.4, §7); the lock is
-the next section.
+`parallelFor`, non-scalar results and `scope(n)` are not in this stage
+([wp29-thread-surface.md](wp29-thread-surface.md) §7); the lock is the next
+section, and [channels](#channels-channelt) the one after it.
 
 ### A lock that owns its data: `Mutex<T>`
 

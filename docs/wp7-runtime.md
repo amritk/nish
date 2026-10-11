@@ -174,8 +174,8 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,606 (`RUNTIME_TEXT_BUDGET`) | 3,606 |
 | `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`) | 3,840 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,731 |
 | `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses, `getenv`, the clock, `realpath`, platform | 1,536 (`RUNTIME_OS_TEXT_BUDGET`) | 1,530 |
-| `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 320 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 286 |
-| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner and a scope's tasks | 1,024 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 905 |
+| `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 597 (2026-10-11) |
+| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path and channels | 1,536 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 1,403 (2026-10-11) |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
@@ -193,6 +193,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-09-27 | wp29 P2's scope tasks (286 / 901) | 320 / 1,024 |
 | 2026-09-29 | `runtime-host.c` (571); `runtime-net.c` (853) | 768; 1,024 |
 | 2026-09-30 | UDP (1,782), then the readiness loop (2,071) | net 2,048, then 2,304 |
+| 2026-10-11 | wp29 P3's channels (597 / 1,403; 304 / 954 with the lock alone) | 768 / 1,536 |
 | 2026-10-02 | security audit (length limits, `nish_cpath`, `O_NOFOLLOW`, RT-9, one cold `nish_oom`) | none moved |
 | 2026-10-03 | `nish_wipe` (#385): 3,583 → 3,604 | core 3,605 |
 | after 0.16.0 | `nish_panic_overflow` (#426): 3,606 | core 3,606 |
