@@ -1041,8 +1041,12 @@ export const main = (): i32 => {
   `using s = scope()`, or in the block around the scope's block — and hand it
   to tasks only as the task's argument or a field of the object you build for
   it in the `spawn` (`new Pipe(ch, 10)`). Don't bind it to another name, store
-  it, return it, or name any member but `send`; passing it to a function is
-  fine. `new Channel<i32>()` takes no capacity: it is unbounded.
+  it, return it, or name any member but `send`. Passing it to a function
+  whose parameter is declared `Channel<T>` is fine; pushing it onto an array,
+  putting it in a `Map`, or passing it as a generic's `T` is not. A `spawn`
+  hands a task only a channel the function itself declared, never one the
+  function was handed, and no task gets one channel in two fields.
+  `new Channel<i32>()` takes no capacity: it is unbounded.
 - **One scope, one receiver.** Only one scope's tasks use a channel. Its one
   receiver is either a single task spawned outside any loop, or the parent
   after the scope's block; never both, never two. The parent sends only before

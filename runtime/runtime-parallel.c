@@ -370,6 +370,10 @@ static void nish_channel_done(nish_channel *c) {
 }
 
 void nish_channel_send(int64_t *state, int64_t value) {
+  /* The checker keeps a send off a drained channel (every sender has returned
+   * before it closes, and the parent sends only before its scope); this keeps
+   * the sentinel from being read as an address if that ever slips. */
+  if (*state == NISH_CHANNEL_DRAINED) return;
   nish_channel *c = nish_channel_of(state);
   if (c->tail == c->cap) {
     c->cap = c->cap ? c->cap * 2 : 64;
@@ -381,6 +385,7 @@ void nish_channel_send(int64_t *state, int64_t value) {
 }
 
 void nish_channel_count(int64_t *state, int64_t delta) {
+  if (*state == NISH_CHANNEL_DRAINED) return; /* as in `nish_channel_send` */
   nish_channel *c = nish_channel_of(state);
   c->pending += delta;
   nish_channel_done(c);

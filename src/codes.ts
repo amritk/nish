@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 607
+export const RULE_COUNT: i32 = 608
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -67,8 +67,6 @@ const diagnosticRules = (): string[] => [
   "NL2463",
   ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read",
   "NL2394",
-  ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, and no task both sends and receives on one channel, which is also what keeps channels from deadlocking",
-  "NL2481",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
   ": a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer",
@@ -91,6 +89,8 @@ const diagnosticRules = (): string[] => [
   "NL3031",
   "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end",
   "NL2416",
+  ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
+  "NL2481",
   "` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined",
   "NL2468",
   "`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`",
@@ -131,6 +131,8 @@ const diagnosticRules = (): string[] => [
   "NL2428",
   "; a constructor or method is named after its class, so two classes that share a name within one package cannot both declare it, whether or not either is exported; rename one of the classes",
   "NL3023",
+  ": no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return",
+  "NL2483",
   "` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is given, and this is a parameter of ",
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",

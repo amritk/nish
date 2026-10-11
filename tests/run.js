@@ -4706,8 +4706,16 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // every sender before the one receiver (C6), so the receiver never finds a
 // channel empty and still open, and the runtime's fallback, which has no lock
 // and no wait, prints what the native binary prints. `thread_channel_exit_paths`
-// is the scope that closes its channels whether or not its join runs a task.
-for (const name of ["thread_channel_pipeline", "thread_channel_exit_paths"]) {
+// is the scope that closes its channels whether or not its join runs a task,
+// and `thread_channel_kinds` the widening and narrowing of each scalar type,
+// which a 32-bit target could get wrong where a 64-bit one does not.
+for (const name of [
+  "thread_channel_pipeline",
+  "thread_channel_two_producers",
+  "thread_channel_parent_drain",
+  "thread_channel_exit_paths",
+  "thread_channel_kinds",
+]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
   }
