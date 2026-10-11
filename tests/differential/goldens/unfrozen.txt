@@ -23,6 +23,10 @@ cases/arr_bounds_generic_instances_method added after R6: no rewriter to freeze 
 cases/arr_bounds_generic_instances_prim added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
+cases/arr_bounds_offset added after R6: no rewriter to freeze it with
+cases/arr_bounds_offset_floor added after R6: no rewriter to freeze it with
+cases/arr_bounds_offset_reach added after R6: no rewriter to freeze it with
+cases/arr_bounds_offset_wrap added after R6: no rewriter to freeze it with
 cases/arr_bounds_ranged added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
