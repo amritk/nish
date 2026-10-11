@@ -92,9 +92,10 @@ export const main = (): i32 => {
 ```
 
 An array of arrays is written `i32[][]`. An array of an `interface` type
-stores the records themselves back to back, which is why holding one of its
-elements across a `push` onto the same array is refused; an array of class
-instances holds a pointer to each object
+that no class implements stores the records themselves back to back, which
+is why holding one of its elements across a `push` onto the same array is
+refused. An array of class instances, of an interface some class implements,
+or of a `T | null` holds a pointer to each element instead
 ([Arrays of records are contiguous](../../LANGUAGE.md#arrays-of-records-are-contiguous)).
 
 ## Strings

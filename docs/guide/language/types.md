@@ -31,10 +31,11 @@ export const main = (): i32 => {
 };
 ```
 
-A `let` or `const` takes its type from its initializer, so `count` and
-`ratio` above need no annotation (in the default number mode). `big` does:
-without it the literal would be an `i32`, and `9000000000` does not fit in
-one. When you write an annotation, it must match the initializer exactly.
+A `let` or `const` takes its type from its initializer, so in the default
+number mode `count` needs no annotation. The other two do: without one,
+`9000000000` would be an `i32`, which it does not fit in, and `0.5` would be
+an `i32` too, which a fraction cannot be. When you write an annotation, it
+must match the initializer exactly.
 
 **Mixing widths is always an error.** `i32 + i64`, `f64 + i32`, even
 `u32 + i32` are refused, because the compiler will not guess which width you
