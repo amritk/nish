@@ -9,9 +9,10 @@ P2, `using s = scope()`, shipped in 0.13.0
 and [its next section](LANGUAGE.md#scoped-tasks-using-s--scope) state their
 rules. P3 is built in two parts: `Mutex<T>`, a lock that owns its data
 (§4.3, [#562](https://github.com/amritk/nish/pull/562)), and `Channel<T>`, a
-channel of scalars (§4.4). Both are on `main` for the release after 0.18.0, in
-`std/threads.ts`, and [LANGUAGE.md](LANGUAGE.md#a-lock-that-owns-its-data-mutext)
-states the lock's rules. `examples/histogram.ts` measures the lock (§4.3).
+channel of scalars (§4.4, [#566](https://github.com/amritk/nish/pull/566)). Both
+are on `main` for the release after 0.18.0, in `std/threads.ts`, and LANGUAGE.md
+states their rules: [the lock's](LANGUAGE.md#a-lock-that-owns-its-data-mutext)
+and [the channel's](LANGUAGE.md#channels-channelt). `examples/histogram.ts` measures the lock (§4.3).
 [wp20-threads.md](wp20-threads.md) records *whether* and *why*: 1:1 OS
 threads, data races rejected at compile time, and 3.96x on four cores
 (wp20 §8). This note answers the narrower question: **given that a Nish
@@ -311,7 +312,8 @@ export const main = (): i32 => {
 };
 ```
 
-**Status: built**, after the lock. `Channel<T>` was the one
+**Status: built** ([#566](https://github.com/amritk/nish/pull/566)), after the lock, as
+[LANGUAGE.md](LANGUAGE.md#channels-channelt) states it. `Channel<T>` was the one
 piece of P3 that needed design rather than transcription, and these are the
 decisions:
 

@@ -10,10 +10,10 @@ parallelism, 0.11.0, [#219](https://github.com/amritk/nish/pull/219)) is T4, and
 its P2 (`using s = scope()`, 0.13.0, [#262](https://github.com/amritk/nish/pull/262))
 is T1. Its P3 is T3, built as the lock `Mutex<T>`
 ([#562](https://github.com/amritk/nish/pull/562)) and the channel `Channel<T>`
-of scalars. This note
+of scalars ([#566](https://github.com/amritk/nish/pull/566)). This note
 remains the record of *whether* and *why*: 1:1 OS threads, with data races
 rejected at compile time. [LANGUAGE.md](LANGUAGE.md) ("Data parallelism",
-"Scoped tasks", "A lock that owns its data") is normative. The full plan, with
+"Scoped tasks", "A lock that owns its data", "Channels") is normative. The full plan, with
 the prototype kernels and driver that §8 measured, is this file at commit `2b2eb95c`
 (`git show 2b2eb95c:docs/wp20-threads.md`).
 

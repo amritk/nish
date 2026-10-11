@@ -87,7 +87,7 @@ Design rules that every WP must respect:
   | --- | ---: | ---: |
   | `runtime.c` | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
   | `runtime-os.c` | 1,530 | 1,536 |
-  | `runtime-parallel.c` | 286 (905 threaded) | 320 (1,024) |
+  | `runtime-parallel.c` | 597 (1,403 threaded) | 768 (1,536) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 675 (2026-10-09) | 768 |
