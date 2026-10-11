@@ -14293,7 +14293,7 @@ if (!only || "deny_panics_clean".includes(only) || "cookbook".includes(only)) {
   }
 }
 
-// ---- docs/AI.md: the rules card compiles ---------------------------------------------
+// ---- docs/AI.md and docs/guide: the examples compile ------------------------------------
 // `docs/AI.md` is the language written for a model that has to produce a program
 // that compiles on the first try, so its examples are the part that matters: an
 // agent copies them. A digest hand-written beside a 2,300-line reference is also
@@ -14314,13 +14314,28 @@ if (!only || "deny_panics_clean".includes(only) || "cookbook".includes(only)) {
 // because that is what the doc tells its reader to key on (`AGENTS.md`,
 // "Machine-readable surfaces"): a reworded message must not fail this, and a
 // renumbered rule must.
-if (!only || "docs".includes(only) || "ai".includes(only)) {
-  const aiDoc = path.join(root, "docs", "AI.md")
+//
+// The user guide under `docs/guide/` is held to the same markers, because a
+// person copies its examples just as a model copies AI.md's. Its floor is per
+// page rather than a count: every page carries at least one marked example,
+// except a stub (a title and one paragraph, waiting for its content) and
+// `getting-started/installation.md`, which is about the shell and has no
+// program to show.
+if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
+  const guideDir = path.join(root, "docs", "guide")
+  const docPages = [
+    path.join(root, "docs", "AI.md"),
+    ...fs
+      .readdirSync(guideDir, { recursive: true })
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .map((f) => path.join(guideDir, f)),
+  ]
   const snippetDir = path.join(buildDir, "docs-ai")
   fs.rmSync(snippetDir, { recursive: true, force: true })
   fs.mkdirSync(snippetDir, { recursive: true })
 
-  /** Fenced blocks of `docs/AI.md` that carry a `nish:` marker, with the line they start on. */
+  /** Fenced blocks of a doc page that carry a `nish:` marker, with the line they start on. */
   const markedSnippets = (text) => {
     const found = []
     const lines = text.split("\n")
@@ -14348,36 +14363,60 @@ if (!only || "docs".includes(only) || "ai".includes(only)) {
     return found
   }
 
-  const snippets = markedSnippets(fs.readFileSync(aiDoc, "utf8"))
-  // A doc whose markers all got renamed would otherwise pass by checking nothing.
-  check("docs/AI.md marks its examples for compilation", snippets.length >= 15, `${snippets.length} found`)
-  for (const s of snippets) {
-    const stem = `ai_${s.line}`
-    const file = path.join(snippetDir, `${stem}.ts`)
-    const body = s.wrap ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n` : `${s.source}\n`
-    fs.writeFileSync(file, body)
-    // A directory, because a snippet that imports `nish/threads` writes one module per file.
-    const run = spawnSync(
-      NISH,
-      [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
-      {
-        encoding: "utf8",
-      }
-    )
-    const diagnostics = run.stdout
-      .split("\n")
+  /** A stub is the page's title and a single paragraph saying what it will cover. */
+  const isStub = (text) => {
+    const paragraphs = text
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
       .filter(Boolean)
-      .map((line) => JSON.parse(line))
-    const errors = diagnostics.filter((d) => d.severity === "error")
-    const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
-    if (s.kind === "ok") {
-      check(`docs/AI.md:${s.line} compiles`, run.status === 0, detail || run.stderr)
-    } else {
+    return paragraphs.length === 2 && paragraphs[0].startsWith("# ") && !/^(#|```)/m.test(paragraphs[1])
+  }
+
+  for (const page of docPages) {
+    const rel = path.relative(root, page).split(path.sep).join("/")
+    const text = fs.readFileSync(page, "utf8")
+    const snippets = markedSnippets(text)
+    if (rel === "docs/AI.md") {
+      // A doc whose markers all got renamed would otherwise pass by checking nothing.
       check(
-        `docs/AI.md:${s.line} is rejected with ${s.code}`,
-        run.status !== 0 && errors.some((e) => e.code === s.code),
-        run.status === 0 ? "it compiled" : detail || run.stderr
+        "docs/AI.md marks its examples for compilation",
+        snippets.length >= 15,
+        `${snippets.length} found`
       )
+    } else if (!isStub(text) && rel !== "docs/guide/getting-started/installation.md") {
+      check(`${rel} marks an example for compilation`, snippets.length > 0, "no ```ts nish: fence")
+    }
+    const prefix = rel.slice(0, -3).replace(/[/-]/g, "_")
+    for (const s of snippets) {
+      const stem = `${prefix}_${s.line}`
+      const file = path.join(snippetDir, `${stem}.ts`)
+      const body = s.wrap
+        ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n`
+        : `${s.source}\n`
+      fs.writeFileSync(file, body)
+      // A directory, because a snippet that imports `nish/threads` writes one module per file.
+      const run = spawnSync(
+        NISH,
+        [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
+        {
+          encoding: "utf8",
+        }
+      )
+      const diagnostics = run.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+      const errors = diagnostics.filter((d) => d.severity === "error")
+      const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      if (s.kind === "ok") {
+        check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
+      } else {
+        check(
+          `${rel}:${s.line} is rejected with ${s.code}`,
+          run.status !== 0 && errors.some((e) => e.code === s.code),
+          run.status === 0 ? "it compiled" : detail || run.stderr
+        )
+      }
     }
   }
 }

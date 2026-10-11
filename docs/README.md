@@ -1,6 +1,8 @@
 # Nish documentation
 
-Start with the [README](../README.md) for the tour, then:
+Start with the [README](../README.md) for the tour. To learn to write Nish,
+read the [user guide](guide/index.md); everything else here is reference or
+the compiler's own records:
 
 ## Reference
 
@@ -70,9 +72,37 @@ ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
 `-2147483648`) have no design note of their own; LANGUAGE.md and
 [CHANGELOG.md](../CHANGELOG.md) describe them.
 
+## Writing a guide page
+
+The [user guide](guide/index.md) is the part of these docs written for people
+who write programs in Nish. A page there follows these rules:
+
+- **The reader writes programs, not the compiler.** Explain what a construct
+  does and how to use it; leave the IR, the checker and the runtime's layout
+  to the reference. No internal vocabulary: stage0, the seed, Nish-0 and work
+  packages do not appear.
+- **Examples are compiled.** A program is a fence marked for compilation —
+  ` ```ts nish:ok `, `nish:ok-body` (wrapped in a `main` body),
+  `nish:err CODE` or `nish:err-body CODE` (must be rejected with that code) —
+  and `node tests/run.js guide` compiles it. Every page but
+  `installation.md` carries at least one once it is more than a stub (its
+  title and one paragraph). A fragment that cannot compile on its own is a
+  plain ` ```ts ` block, and short.
+- **The reference is normative.** Each page links the
+  [LANGUAGE.md](LANGUAGE.md) section that governs it and describes nothing
+  that section does not say; where the two disagree, the guide is wrong.
+- **No links to the compiler's records**: not to `wp*.md`,
+  `MASTER_PLAN.md` or `.claude/`.
+- **Every page has a route.** The site's navigation is
+  [`scalar.config.json`](../scalar.config.json) at the repository root, read
+  by [Scalar Docs](https://scalar.com/products/docs); a new page gets a route
+  there, and `node docs/check-links.mjs` fails on a page no route reaches or a
+  route to a missing file.
+
 ## Tooling for these docs
 
 - `docs/cookbook/regen.sh` rebuilds every IR listing in IR_COOKBOOK.md from
   `docs/cookbook/*.ts`; `--check` fails when the doc is stale.
 - `node docs/check-links.mjs` verifies every relative link and heading
-  anchor in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`.
+  anchor in `README.md`, `CHANGELOG.md`, and `docs/**/*.md`, and that
+  `scalar.config.json`'s routes and the pages under `docs/guide/` match.
