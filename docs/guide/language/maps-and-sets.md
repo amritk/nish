@@ -102,7 +102,7 @@ export const main = (): i32 => {
 };
 ```
 
-The update in the loop above, `counts.set(w, (counts.get(w) ?? 0) + 1)`, looks
+The update in the loop above, `counts.set(word, (counts.get(word) ?? 0) + 1)`, looks
 the key up once, not twice: the compiler recognises a `set` whose new value
 reads the same key with `get` or `has`, and reuses that first lookup. So does
 `if (!s.has(x)) { s.add(x); … }`.

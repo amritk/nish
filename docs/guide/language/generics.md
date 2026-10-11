@@ -29,7 +29,7 @@ export const main = (): i32 => {
 };
 ```
 
-This prints `7 seven`, `c` and `false`. The program contains four functions:
+This prints `7 seven`, `c` and `false`. The generics become four functions:
 `identity` at `i32` and at `string`, and `lastOf` at `string` and at
 `boolean`.
 

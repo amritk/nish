@@ -52,9 +52,8 @@ runs, so two modules may import each other.
 ## The one import form
 
 The only import is a named one, `import { a, b as c } from "…"`. Every other
-form TypeScript has is refused with a message giving the named import to
-write instead: a default import, a namespace import (`import * as m`), a
-side-effect import (`import "./m"`), `import type`, and
+form TypeScript has is refused: a default import, a namespace import
+(`import * as m`), a side-effect import (`import "./m"`), `import type`, and
 `import x = require(…)`. On the export side the same goes for
 `export default`, `export { a }` and `export * from`.
 
@@ -73,7 +72,8 @@ Three more rules come from compiling the whole program at once:
 - **A class or interface name is unique across the program too**, for the
   same reason.
 - **Classes and interfaces cannot be renamed on import.** `import { Point as P }`
-  is refused; functions, enums and generic classes can be renamed with `as`.
+  is refused, because the type's name is part of the compiled program; anything
+else, generic classes and interfaces included, can be renamed with `as`.
 
 ## Built-in modules: `nish:`
 
@@ -104,8 +104,9 @@ export const main = (): i32 => {
 element of `argv` is the program itself.
 
 Except for `nish:secret` and `nish:unsafe`, which exist only as imports, these
-are also global names, like `console.log`, so you can call them without an
-import. Importing has one advantage: an imported built-in cannot be shadowed by
+are also globals, like `console.log`, so you can call them without an import.
+The `nish:process` names are spelled `process.argv`, `process.exit`,
+`process.platform` and `process.arch` there, as in Node. Importing has one advantage: an imported built-in cannot be shadowed by
 a function of yours with the same name, whereas a global one silently can.
 `Math`, `console`, `Ok`, `Err` and the number conversions are always global.
 
@@ -163,7 +164,7 @@ so it is checked and optimised exactly as your own code is. Its
   own mode first, and a package that offers only the other mode is an error
   at the import rather than a wrong answer at run time.
 - `engines.nish` is the lowest compiler version the package needs, written
-  `>=X.Y.Z`. An older compiler refuses the package and says which version it
+  `>=X.Y.Z` or `>=X.Y`. An older compiler refuses the package and says which version it
   asked for.
 - A program compiles one copy of each package. If two of your dependencies
   bring in two different copies of `hash`, the compiler refuses the second and

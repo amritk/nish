@@ -50,7 +50,9 @@ None of this changes what a program computes, only where its memory lives
 and when it is reused. So, unlike in C:
 
 - you never free anything, and so never free something twice;
-- a value you can still reach is never released under you;
+- a value you can still reach is never released under you, unless you call
+  the deprecated `Arena.release` or `Arena.reset` (below), which skip that
+  check;
 - there are no lifetimes or ownership annotations to write.
 
 ## What you do have to think about
@@ -145,4 +147,4 @@ ends. Under Node, where the program runs as plain TypeScript, it does nothing.
 
 `Arena.release` and `Arena.reset`, the older way to do this, are deprecated:
 they release memory without checking that nothing still points into it, and
-each call compiles with a warning (NL7001) pointing to `using a = arena()`.
+each call compiles with a deprecation warning (NL7001) pointing to `using a = arena()`.
