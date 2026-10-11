@@ -8506,10 +8506,8 @@ if (!only || "runtime-parallel".includes(only)) {
           own === "/" ? ":" : `printf '%s\\n' '${leaf}' > '${dir}/cpu.max'`,
           `exec '${countExe}'`,
         ].join("\n")
-        const r = spawnSync("unshare", ["-rm", "sh", "-c", script], {
-          encoding: "utf8",
-          env: envWithThreads(null),
-        })
+        const argv = ["unshare", "-rm", "sh", "-c", script]
+        const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", env: envWithThreads(null) })
         return r.status === 0 ? Number(r.stdout.trim()) : null
       }
       const rows = [
