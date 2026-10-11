@@ -7,7 +7,8 @@ read [`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
 
 Writing a *program* in Nish rather than working on the compiler? That is
 [`docs/AI.md`](docs/AI.md) — the whole language as rules in one pass, every
-example compiled by `npm test`.
+example compiled by `npm test`; to learn it page by page, the user guide,
+[`docs/guide/index.md`](docs/guide/index.md).
 
 Developer guidelines live in the `.claude/` directory:
 
@@ -31,12 +32,21 @@ Developer guidelines live in the `.claude/` directory:
 `tests/nish/` against `runtime/nish.d.ts`) and an undegraded `npm test` green.
 A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
 trip with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
-rule and cookbook entry, and a conventional commit whose subject and body are
-its changelog entry (`CHANGELOG.md` is generated from them; see below) — see
+rule, cookbook entry and user-guide page, and a conventional commit whose
+subject and body are its changelog entry (`CHANGELOG.md` is generated from
+them; see below) — see
 `docs/MASTER_PLAN.md` §7 and the checklist in `docs/ARCHITECTURE.md`. Show the
 exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
 ported or adapted from elsewhere keeps its upstream notice and is listed in
 `THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
+
+**The user guide moves with the language.** A change a user of Nish sees — a
+construct, a builtin or `nish:` module, a `std/` module, a CLI flag or exit
+code, an install step, a diagnostic a guide page shows — updates the
+`docs/guide/` page describing it in the same PR: a new topic gets a page and a
+route in `scalar.config.json`, a removed or renamed feature leaves the guide.
+Internal changes (the IR, `src/` structure, CI) do not touch it. Page rules:
+[`docs/README.md`](docs/README.md#writing-a-guide-page).
 
 **Read a check's exit status, never its piped tail.** `npm run lint | tail`
 reports success when lint fails: #557's shadowed variable passed a local lint

@@ -484,8 +484,12 @@ void nish_panic_overflow(uint32_t op);
  * `len / grain`, with chunk 0 running on the calling thread. It returns when
  * every chunk has run.
  *
- * Under `-DNISH_THREADS` the other chunks run on their own threads, each with
- * its own arena, which it frees before exiting. Without the macro -- and on
+ * Under `-DNISH_THREADS` the other chunks run on the worker pool: threads
+ * started on the first region or join that divides, one per CPU but the
+ * caller's, which park between calls. Each has its own arena, rewound after
+ * every chunk or task it runs. The caller takes chunks off the pool's queue too
+ * while it waits, so a chunk the caller took runs in the caller's arena, as
+ * chunk 0 does. Without the macro -- and on
  * WASI, which has no threads -- the whole range runs on the calling thread, so
  * the entry point exists either way and the flag decides only whether the work
  * is divided. A body that itself calls this runs its range on one thread: the
@@ -496,10 +500,23 @@ void nish_panic_overflow(uint32_t op);
  *   - chunks run concurrently, so a body may read what the caller owns and may
  *     write only through storage the caller lent it and no two chunks share;
  *   - a body's result may not point into the arena, because a worker's arena is
- *     freed when its thread exits while chunk 0's is the caller's own. */
+ *     rewound after each chunk while chunk 0's is the caller's own. */
 typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
+/* The CPUs a region may divide over: the fewest of those online, those the
+ * affinity mask allows, the cgroup v2 `cpu.max` quota rounded up, and
+ * `NISH_NUM_THREADS` when it is set to a positive number. Read once. */
 int64_t nish_cpu_count(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
+/* Keeps every later region and join on threads created and joined per call,
+ * as before the pool existed, so no parked worker outlives the code it would
+ * run: for a host that can unload the runtime. Call it before the first region
+ * or join; a pool already started stays. A Node addon calls it from the
+ * constructor below, because its shim includes <node_api.h> before this
+ * header, and Node can unload an addon while a pool's workers are parked. */
+void nish_pool_disable(void);
+#if defined(NAPI_VERSION) && defined(NISH_THREADS)
+__attribute__((constructor)) static void nish_napi_unpooled(void) { nish_pool_disable(); }
+#endif
 
 /* ---- A scope's tasks (wp29 stage P2), runtime/runtime-parallel.c ----
  *
@@ -507,11 +524,12 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
  * alive until it joins: it copies `size` bytes of `payload` and keeps them with
  * `run` and `finish`, and runs nothing yet. `nish_scope_join` takes every task
  * filed under `scope`, runs `run(payload)` for each -- the first on the calling
- * thread and each other on a thread of its own, which frees its arena before it
- * exits -- waits for all of them, and then calls `finish(payload)` for each on
- * the calling thread, in the order they were filed. Without `-DNISH_THREADS`,
- * or when a thread cannot be created, a task runs on the calling thread, so
- * running short of threads costs speed and never an answer.
+ * thread and the others on the worker pool, oldest first, with the calling
+ * thread taking any no worker is free for, in that order -- waits for all of
+ * them, and then calls `finish(payload)` for each on the calling thread, in
+ * the order they were filed. Without `-DNISH_THREADS` every task runs on the
+ * calling thread, so running short of threads costs speed and never an
+ * answer.
  *
  * The preconditions are the language's (docs/LANGUAGE.md, "Scoped tasks"):
  * `run` writes nothing another task or the caller can see, its result is a

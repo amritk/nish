@@ -37,7 +37,7 @@
 // The data-parallel kernels (bench/par_*.ts) are not twins: each is one Nish
 // binary run twice, as the loop (`seq`) and as `parallelMapInto` (`par`), and
 // the two runs must print the same checksum. They run with the rest, or when
-// `--only` names one (`par` names all four), and are left out of
+// `--only` names one (`par` names all five), and are left out of
 // --instructions: see bench/README.md.
 //
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
@@ -120,6 +120,10 @@ const PARALLEL = [
   },
   { name: "par-nbody", what: "n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step" },
   { name: "par-short", what: "an 8-element map called 2^20 times, each call fed by the last" },
+  {
+    name: "par-regions",
+    what: "a 2^17-element map called 1,000 times, each call fed by the last: what a region costs",
+  },
 ]
 const AWFY_KEPT = 20
 
@@ -1278,7 +1282,7 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
 if (parallelRows.length > 0) {
   lines.push("## Data parallelism (ms, min / median)", "")
   lines.push(
-    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par_*.ts\`, and wp29 §8a reads the numbers.`,
+    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par_*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.`,
     ""
   )
   lines.push(
