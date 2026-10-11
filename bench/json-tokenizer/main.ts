@@ -2,7 +2,8 @@
 // token read, every string copied out with `stringInto`, every number parsed
 // with `numberF64`, and one key compared with `keyEquals`, into buffers made
 // once. One digit of the body changes every round, so no round can be
-// computed once, and every byte read is folded into the printed checksum.
+// computed once, and every token's kind, each string's length and last byte,
+// and each number's integer part are folded into the printed checksum.
 //
 //   build/nish bench/json-tokenizer/main.ts -o build/bench-json/ --link build/bench-json/app
 //   build/bench-json/app [rounds]          prints the checksum, then ns per body
@@ -45,7 +46,7 @@ const benchOne = (tok: JsonTokenizer, body: u8[], out: u8[]): i64 => {
     if (k === JSON_TOK_KEY || k === JSON_TOK_STRING) {
       const n: i32 = tok.stringInto(out, 0)
       if (n > 0 && n <= toI32(out.length)) {
-        sum = sum + toI64(out[n - 1])
+        sum = sum + toI64(n) + toI64(out[n - 1])
       }
       if (tok.keyEquals("total")) {
         sum = sum + toI64(7)

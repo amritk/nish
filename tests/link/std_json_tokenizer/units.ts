@@ -129,6 +129,7 @@ const errors = (t: Suite): void => {
   t.eqStr("SYNTAX: a leading .", jtVerdict(".5"), "SYNTAX@0");
   t.eqStr("SYNTAX: a misspelt literal", jtVerdict("[trux]"), "SYNTAX@4");
   t.eqStr("SYNTAX: a literal in capitals", jtVerdict("True"), "SYNTAX@0");
+  t.eqStr("SYNTAX: a literal that goes wrong on its last letter", jtVerdict("nulx"), "SYNTAX@3");
   t.eqStr("SYNTAX: a leading zero is a 0 and then a stray digit", jtVerdict("[01]"), "SYNTAX@2");
   t.eqStr("SYNTAX: a letter after a number", jtVerdict("[1x]"), "SYNTAX@2");
   t.eqStr("SYNTAX: a single quote", jtVerdict("['a']"), "SYNTAX@1");
@@ -210,7 +211,8 @@ const strings = (t: Suite): void => {
   t.eqStr("SURROGATE: two high surrogates", jtVerdict('"\\uD800\\uD800"'), "SURROGATE@1");
   t.eqStr("SURROGATE: a high surrogate and a non-surrogate", jtVerdict('"\\uD800\\u0041"'), "SURROGATE@1");
   t.eqStr("SURROGATE: a low then a high", jtVerdict('"\\uDC00\\uD800"'), "SURROGATE@1");
-  t.eqStr("SURROGATE: a high surrogate at the end of the window", jtVerdict('"\\uDBFF'), "SURROGATE@1");
+  t.eqStr("TRUNCATED: a high surrogate at the end of the window", jtVerdict('"\\uDBFF'), "TRUNCATED@7");
+  t.eqStr("TRUNCATED: a high surrogate and a backslash at the end of the window", jtVerdict('"\\uDBFF\\'), "TRUNCATED@8");
   t.eqStr("a surrogate pair is accepted", jtVerdict('"\\uD834\\uDD1E"'), "END");
   t.eqStr("\\u0000 is accepted", jtVerdict('"\\u0000"'), "END");
 
@@ -425,6 +427,9 @@ const limits = (t: Suite): void => {
   t.eqStr("NUMBER_LIMIT: three bytes fit a limit of 3", jtVerdictOf(jtBytes("-12"), num), "END");
   t.eqStr("NUMBER_LIMIT: four do not", jtVerdictOf(jtBytes("1234"), num), "NUMBER_LIMIT@3");
   t.eqStr("NUMBER_LIMIT: an exponent counts", jtVerdictOf(jtBytes("[1e10]"), num), "NUMBER_LIMIT@4");
+  t.eqStr("NUMBER_LIMIT: the scan stops past the limit, before the grammar fails", jtVerdictOf(jtBytes("1234.x"), num), "NUMBER_LIMIT@3");
+  t.eqStr("NUMBER_LIMIT: a fraction that runs past the limit", jtVerdictOf(jtBytes("1.2345"), num), "NUMBER_LIMIT@3");
+  t.eqStr("NUMBER_LIMIT: a number cut short at the limit is only truncated", jtVerdictOf(jtBytes("12."), num), "TRUNCATED@3");
   t.eqStr("NUMBER_LIMIT: 256 digits fit the default", jtVerdictOf(jtRuns(49, 256, 49, 0, 0), new JsonLimits()), "END");
   t.eqStr("NUMBER_LIMIT: 257 do not", jtVerdictOf(jtRuns(49, 257, 49, 0, 0), new JsonLimits()), "NUMBER_LIMIT@256");
 

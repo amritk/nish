@@ -100,7 +100,7 @@ export const JSON_TOK_FALSE: i32 = 9
 /** `null`. */
 export const JSON_TOK_NULL: i32 = 10
 
-/** A byte that cannot stand where it stands: `[1,]`, `{"a" 1}`, `[1}`, `nul`, a byte outside a string that is not ASCII. */
+/** A byte that cannot stand where it stands: `[1,]`, `{"a" 1}`, `[1}`, `[01]`, `+1`, `.5`, `nulx`, a byte outside a string that is not ASCII. */
 export const JSON_TOK_ERR_SYNTAX: i32 = -1
 /** The window ended inside a value: an empty window, `[1,`, `{"a":`, an unclosed string. */
 export const JSON_TOK_ERR_TRUNCATED: i32 = -2
@@ -114,7 +114,7 @@ export const JSON_TOK_ERR_ESCAPE: i32 = -5
 export const JSON_TOK_ERR_SURROGATE: i32 = -6
 /** A raw byte below 0x20 inside a string, which RFC 8259 §7 requires to be escaped. */
 export const JSON_TOK_ERR_CONTROL: i32 = -7
-/** A number outside the RFC 8259 §6 grammar: `01`, `1.`, `.5`, `-`, `1e`, `+1`. */
+/** A number outside the RFC 8259 §6 grammar: `-a`, `1.a`, `1ex`, `-Infinity`. A number the window cuts short (`1.`, `-`) is `JSON_TOK_ERR_TRUNCATED`. */
 export const JSON_TOK_ERR_NUMBER: i32 = -8
 /** An opening bracket or brace past `JsonLimits.maxDepth` open containers. */
 export const JSON_TOK_ERR_DEPTH: i32 = -9
@@ -168,10 +168,9 @@ export class JsonLimits {
 const JSON_TOK_WANT_VALUE: i32 = 0
 const JSON_TOK_WANT_VALUE_OR_CLOSE: i32 = 1
 const JSON_TOK_WANT_KEY_OR_CLOSE: i32 = 2
-const JSON_TOK_WANT_KEY: i32 = 3
-const JSON_TOK_WANT_COLON: i32 = 4
-const JSON_TOK_WANT_COMMA_OR_CLOSE: i32 = 5
-const JSON_TOK_WANT_NOTHING: i32 = 6
+const JSON_TOK_WANT_COLON: i32 = 3
+const JSON_TOK_WANT_COMMA_OR_CLOSE: i32 = 4
+const JSON_TOK_WANT_NOTHING: i32 = 5
 
 /** What the depth stack holds for an open container. */
 const JSON_TOK_IN_OBJECT: i32 = 1
@@ -432,19 +431,6 @@ const jsonTokEscapeLength = (src: u8[], at: i32, end: i32, cp: i32): i32 => {
   return jsonTokByteAt(src, at + 1, end) === JSON_TOK_LOWER_U ? 6 : 2
 }
 
-/** Whether the `word.length` bytes at `at` spell `word`, an ASCII literal. */
-const jsonTokMatches = (src: u8[], at: i32, end: i32, word: string): boolean => {
-  const n: i32 = toI32(word.length)
-  let k: i32 = 0
-  while (k < n) {
-    if (jsonTokByteAt(src, at + k, end) !== toI32(word.charCodeAt(k))) {
-      return false
-    }
-    k += 1
-  }
-  return true
-}
-
 /**
  * The tokenizer. One per connection or per document; `reset` reuses it, and
  * nothing it does after the constructor allocates, except `numberF64`'s
@@ -529,14 +515,8 @@ export class JsonTokenizer {
     this.stringBytes = 0
     this.escaped = false
     this.integral = false
-    if (off < 0 || len < 0 || off > toI32(src.length) - len) {
-      this.off = 0
-      this.end = 0
-      this.pos = 0
-      this.fail(JSON_TOK_ERR_WINDOW, off)
-      return
-    }
-    if (off + len > JSON_TOK_END_CEILING) {
+    // The second test is only reached when the first proves `off + len` fits.
+    if (off < 0 || len < 0 || off > toI32(src.length) - len || off + len > JSON_TOK_END_CEILING) {
       this.off = 0
       this.end = 0
       this.pos = 0
@@ -586,8 +566,6 @@ export class JsonTokenizer {
         if (b === JSON_TOK_CLOSE_BRACE) {
           return this.close(at, JSON_TOK_IN_OBJECT)
         }
-        return this.key(at)
-      case JSON_TOK_WANT_KEY:
         return this.key(at)
       case JSON_TOK_WANT_VALUE_OR_CLOSE:
         if (b === JSON_TOK_CLOSE_BRACKET) {
@@ -700,15 +678,15 @@ export class JsonTokenizer {
   /** `true`, `false` or `null` at `at`; a window that ends inside the word is truncated. */
   literal(at: i32, word: string, k: i32): i32 {
     const n: i32 = toI32(word.length)
-    if (jsonTokMatches(this.src, at, this.end, word)) {
-      return this.emit(k, at, at + n)
-    }
     let matched: i32 = 0
     while (
       matched < n &&
       jsonTokByteAt(this.src, at + matched, this.end) === toI32(word.charCodeAt(matched))
     ) {
       matched += 1
+    }
+    if (matched === n) {
+      return this.emit(k, at, at + n)
     }
     return this.fail(at + matched >= this.end ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_SYNTAX, at + matched)
   }
@@ -718,10 +696,14 @@ export class JsonTokenizer {
    * starting with `0`, then `.` and digits, then `e` or `E`, a sign and
    * digits. What follows it is the next call's to judge, so `01` is a `0`
    * and then a syntax error, and `1x` is a `1` and then one.
+   *
+   * Nothing past the limit is read: the scan stops one byte past it, and a
+   * number that reaches that byte is refused for its length, whatever the
+   * grammar would have said of the rest.
    */
   number(at: i32): i32 {
     const src: u8[] = this.src
-    const end: i32 = this.end
+    const end: i32 = this.maxNumberBytes >= this.end - at ? this.end : at + this.maxNumberBytes + 1
     let i: i32 = at
     if (jsonTokByteAt(src, i, end) === JSON_TOK_MINUS) {
       i += 1
@@ -734,7 +716,7 @@ export class JsonTokenizer {
         i += 1
       }
     } else {
-      return this.fail(first < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, i)
+      return this.numberRefused(first < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
     }
     let integral = true
     if (jsonTokByteAt(src, i, end) === JSON_TOK_DOT) {
@@ -742,7 +724,7 @@ export class JsonTokenizer {
       i += 1
       const digit: i32 = jsonTokByteAt(src, i, end)
       if (!jsonTokIsDigit(digit)) {
-        return this.fail(digit < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, i)
+        return this.numberRefused(digit < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
       }
       while (jsonTokIsDigit(jsonTokByteAt(src, i, end))) {
         i += 1
@@ -758,7 +740,7 @@ export class JsonTokenizer {
       }
       const digit: i32 = jsonTokByteAt(src, i, end)
       if (!jsonTokIsDigit(digit)) {
-        return this.fail(digit < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, i)
+        return this.numberRefused(digit < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
       }
       while (jsonTokIsDigit(jsonTokByteAt(src, i, end))) {
         i += 1
@@ -769,6 +751,14 @@ export class JsonTokenizer {
     }
     this.integral = integral
     return this.emit(JSON_TOK_NUMBER, at, i)
+  }
+
+  /** `code` at `i`, unless the number starting at `at` has run past its limit, which is the error then. */
+  numberRefused(code: i32, at: i32, i: i32): i32 {
+    if (i - at > this.maxNumberBytes) {
+      return this.fail(JSON_TOK_ERR_NUMBER_LIMIT, at + this.maxNumberBytes)
+    }
+    return this.fail(code, i)
   }
 
   /**
@@ -869,10 +859,13 @@ export class JsonTokenizer {
     if (unit >= JSON_TOK_LOW_SURROGATE) {
       return this.fail(JSON_TOK_ERR_SURROGATE, at)
     }
-    if (
-      jsonTokByteAt(src, at + 6, end) !== JSON_TOK_BACKSLASH ||
-      jsonTokByteAt(src, at + 7, end) !== JSON_TOK_LOWER_U
-    ) {
+    const slash: i32 = jsonTokByteAt(src, at + 6, end)
+    const u: i32 = jsonTokByteAt(src, at + 7, end)
+    // A window that ends where the second half should start may only be cut short.
+    if (slash < 0 || (slash === JSON_TOK_BACKSLASH && u < 0)) {
+      return this.fail(JSON_TOK_ERR_TRUNCATED, slash < 0 ? at + 6 : at + 7)
+    }
+    if (slash !== JSON_TOK_BACKSLASH || u !== JSON_TOK_LOWER_U) {
       return this.fail(JSON_TOK_ERR_SURROGATE, at)
     }
     const low: i32 = jsonTokHex4(src, at + 8, end)
@@ -939,6 +932,9 @@ export class JsonTokenizer {
   /**
    * Whether the current key or string, decoded, is exactly `name`'s bytes;
    * `false` when the token is neither. Nothing is allocated or written.
+   * `name.length` and `charCodeAt` are bytes natively; under Node they are
+   * UTF-16 code units, so a non-ASCII name matches only natively, the bytes
+   * against code units divergence `docs/wp33-round-trip.md` §3.2 records.
    */
   keyEquals(name: string): boolean {
     const n: i32 = toI32(name.length)

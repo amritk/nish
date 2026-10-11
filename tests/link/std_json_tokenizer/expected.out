@@ -41,6 +41,7 @@ PASS  SYNTAX: a leading +
 PASS  SYNTAX: a leading .
 PASS  SYNTAX: a misspelt literal
 PASS  SYNTAX: a literal in capitals
+PASS  SYNTAX: a literal that goes wrong on its last letter
 PASS  SYNTAX: a leading zero is a 0 and then a stray digit
 PASS  SYNTAX: a letter after a number
 PASS  SYNTAX: a single quote
@@ -103,7 +104,8 @@ PASS  SURROGATE: a high surrogate and a short escape
 PASS  SURROGATE: two high surrogates
 PASS  SURROGATE: a high surrogate and a non-surrogate
 PASS  SURROGATE: a low then a high
-PASS  SURROGATE: a high surrogate at the end of the window
+PASS  TRUNCATED: a high surrogate at the end of the window
+PASS  TRUNCATED: a high surrogate and a backslash at the end of the window
 PASS  a surrogate pair is accepted
 PASS  \u0000 is accepted
 PASS  stringLength: the short escapes decode to one byte each
@@ -215,6 +217,9 @@ PASS  STRING_LIMIT: a byte more does not
 PASS  NUMBER_LIMIT: three bytes fit a limit of 3
 PASS  NUMBER_LIMIT: four do not
 PASS  NUMBER_LIMIT: an exponent counts
+PASS  NUMBER_LIMIT: the scan stops past the limit, before the grammar fails
+PASS  NUMBER_LIMIT: a fraction that runs past the limit
+PASS  NUMBER_LIMIT: a number cut short at the limit is only truncated
 PASS  NUMBER_LIMIT: 256 digits fit the default
 PASS  NUMBER_LIMIT: 257 do not
 PASS  TOTAL_LIMIT: three bytes fit a total of 3
@@ -289,4 +294,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 291 passed, 0 failed, 0 skipped
+std/json-tokenizer: 296 passed, 0 failed, 0 skipped

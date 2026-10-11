@@ -18,7 +18,7 @@ outside the window is read: 20,000 seeded mutants of the corpus each end with
 one verdict, alone, after a `reset` and inside a window padded with bytes that
 would change the verdict if a read strayed. Every limit has its own code, and
 each is checked before the work it bounds. A reused tokenizer keeps the arena
-flat. Three findings are open, all Low.
+flat. Two findings are open and one is accepted, all Low.
 
 ## Scope
 
