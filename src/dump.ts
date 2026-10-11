@@ -53,15 +53,26 @@ const sortedStrings = (set: StringSet): string[] => {
   }
   // Insertion sort: these are a function's parameter names and its callees, so
   // the lists are short and the constant matters more than the exponent.
+  // `b` is the hole the key goes into and `prev` the slot before it, both
+  // plain locals the bounds proof follows.
   let a = 1
   while (a < out.length) {
     const key = out[a]
-    let b = a - 1
-    while (b >= 0 && compareStrings(out[b], key) > 0) {
-      out[b + 1] = out[b]
+    let b = a
+    while (b > 0) {
+      const prev = b - 1
+      if (compareStrings(out[prev], key) <= 0) {
+        break
+      }
+      out[b] = out[prev]
       b = b - 1
     }
-    out[b + 1] = key
+    // `b` stops at 0 at the latest, which the proof cannot carry out of a
+    // loop that counts down: this says so, and is what proves the store.
+    if (b < 0) {
+      panic("sortedStrings: the hole left the list")
+    }
+    out[b] = key
     a = a + 1
   }
   return out
