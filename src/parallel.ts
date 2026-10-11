@@ -1424,8 +1424,10 @@ const writesThroughMessage = (
   }
   for (const pp of own.pointerParams) {
     // WP29 P3: what a call does to a channel is C4's and C5's to judge (`checkChannels`).
+    // `writesReach` too: a store into `p.inner.x` is not a write through `p`
+    // for LLVM, but a task holding `p` reads it.
     if (
-      pp.writesThrough &&
+      (pp.writesThrough || pp.writesReach) &&
       !(constructing && pp.name === "this") &&
       !isChannelParam(program, table, sig, pp.name)
     ) {

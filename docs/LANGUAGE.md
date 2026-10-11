@@ -2534,7 +2534,13 @@ export const main = (): i32 => {
     `` `new Bump` writes memory a task of `s` may read, before the scope joins: … ``
     (`tests/cases/reject_thread_region_new_write`, and `_declarator` for the
     second declarator of a statement, `_nested` for a constructor that calls
-    one, `_this` for one that hands `this` to its argument). Its stores into
+    one, `_this` for one that hands `this` to its argument, which is a store
+    through that argument). A write counts however deep it lands in what the
+    argument reaches: a field of a field, a field of an element, through a
+    `const` that names one, a `for...of` variable over one, a helper, or a
+    method of what a field holds (`reject_thread_region_new_deep`,
+    `_new_element`, `_new_helper`, `_new_method`, `_call_deep`,
+    `_call_element`, `_call_alias`, `_call_loop`). Its stores into
     the fresh object itself are not counted, so `new Point(3, 4)` is fine
     there (`tests/link/thread_task_private`). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
@@ -2605,10 +2611,10 @@ element's arena, which a task does not share, and each rule is reported at the
   sieve may fill its own table, and a helper may fill the array it is handed
   (`tests/link/thread_task_private`). Returned, stored into its argument's
   field, pushed onto its argument's array, kept by a helper or a constructor,
-  bound to a second name in a later declarator, or reached through `this` a
-  constructor hands on, the array is shared
+  or bound to a second name in a later declarator, the array is shared
   (`tests/cases/reject_thread_task_private_returned`, `_field`, `_pushed`,
-  `_kept`, `_new`, `_declarator`, `_this`). A store through a `?:` with the
+  `_kept`, `_new`, `_declarator`). A constructor that hands `this` out can
+  lead to the array only by keeping it, so that route is `_new`'s. A store through a `?:` with the
   array in one arm is a store into either (`_ternary`), and an element of a
   private array of arrays is the array it holds
   (`reject_thread_task_private_nested`). A task inside a task, or

@@ -1,9 +1,9 @@
-// `this` leaving a constructor, for a private array. There is no rule of its
-// own for it: for the array to be reached through the `this` that `Reg` hands
-// the holder, `Reg` has to keep the array, and an array kept by a constructor
-// is shared (`reject_thread_task_private_new`). This case pins that the route
-// through `this` opens no way around that, so the task's store into the
-// array after the `new` is a shared write.
+// `this` leaving a constructor, for a private array: this duplicates
+// `reject_thread_task_private_new`, and is kept as the record that the route
+// opens nothing new. For the array to be reached through the `this` that
+// `Reg` hands the holder, `Reg` has to keep the array, and an array a
+// constructor keeps is shared already, so the task's store into it after the
+// `new` is a shared write with or without `h.last = this`.
 import { scope } from "nish/threads";
 
 class Holder {

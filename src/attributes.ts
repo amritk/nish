@@ -199,6 +199,17 @@ export class PointerParamFacts {
   writesThrough: boolean
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
   captured: boolean
+  /**
+   * WP29: the function writes memory reachable from the pointer, its own slots
+   * or anything deeper, directly or via a callee (fixpoint). `writesThrough`
+   * is LLVM's narrower question: a store through `p.inner.x` writes through a
+   * pointer loaded out of `*p`, not through `p`, and leaves it `readonly`. A
+   * scope's region asks this one (`writesThroughMessage` in `src/parallel.ts`),
+   * because a task holding `p` reads `p.inner.x` too (#564's review).
+   */
+  writesReach: boolean
+  /** The part of `writesReach` deeper than the pointer's own slots: through a field, an element or an alias. */
+  writesDeep: boolean
   /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
   passedToCallees: string[]
   passedToIndices: i32[]
@@ -209,6 +220,8 @@ export class PointerParamFacts {
     this.align = align
     this.writesThrough = false
     this.captured = false
+    this.writesReach = false
+    this.writesDeep = false
     this.passedToCallees = []
     this.passedToIndices = []
   }
@@ -316,6 +329,37 @@ export class PrivateArray {
   }
 }
 
+/** A pointer parameter memory is reached from, and whether the path goes past its own slots. */
+export class ReachRoot {
+  name: string
+  deep: boolean
+
+  constructor(name: string, deep: boolean) {
+    this.name = name
+    this.deep = deep
+  }
+}
+
+/**
+ * Where the memory an expression names may come from, for
+ * `PointerParamFacts.writesReach`: the pointer parameters it is reached from
+ * (`roots`), the function's own fresh allocation named as it is (`fresh`),
+ * or anything at all (`all`) when the path leaves what the analysis follows —
+ * a call's result, a `let`, a loop variable, or a field of a fresh object,
+ * which may hold a parameter's memory.
+ */
+export class Reach {
+  roots: ReachRoot[]
+  fresh: boolean
+  all: boolean
+
+  constructor() {
+    this.roots = []
+    this.fresh = false
+    this.all = false
+  }
+}
+
 /**
  * One argument of a call whose callee's writes are composed with what each
  * argument is: the callee's symbol and parameter index (`this` counts as 0),
@@ -327,12 +371,15 @@ export class ArgEdge {
   callee: string
   param: string
   owner: PrivateArray | null
+  /** Where the argument's memory may come from (`Reach`); a private array's is `fresh`. */
+  reach: Reach
   index: i32
 
-  constructor(callee: string, index: i32, param: string, owner: PrivateArray | null) {
+  constructor(callee: string, index: i32, param: string, owner: PrivateArray | null, reach: Reach) {
     this.callee = callee
     this.param = param
     this.owner = owner
+    this.reach = reach
     this.index = index
   }
 
@@ -419,6 +466,13 @@ export class FunctionFacts {
    * composed: what the fixpoint asks each callee about (`composeArguments`).
    */
   argEdges: ArgEdge[]
+  /**
+   * The receivers of calls to callees taken whole (`wholeCallees`): a fused
+   * lookup, a walk's methods, a `Map`'s value reader. Each edge's `index` is
+   * -1, and a callee that writes shared memory is taken to write anything its
+   * receiver reaches (`composeArguments`).
+   */
+  wholeReaches: ArgEdge[]
   /**
    * The user callees reached other than through a call whose arguments are
    * composed: a fused lookup, a walk's methods, a routed map instance. Their
@@ -614,6 +668,7 @@ export class FunctionFacts {
     this.sharedWrite = false
     this.writesPastParams = false
     this.argEdges = []
+    this.wholeReaches = []
     this.wholeCallees = new StringSet()
     this.privateArrays = []
     this.writesOutput = false
@@ -1684,6 +1739,7 @@ class FactCollector {
       }
       return
     }
+    markReach(this.facts, this.reachOf(e, 0), false)
     const pointer = this.pointerParamOf(e)
     if (pointer === null) {
       this.notePastWrite(node)
@@ -1691,6 +1747,62 @@ class FactCollector {
     }
     pointer.writesThrough = true
     this.noteSharedWrite(node)
+  }
+
+  /**
+   * Where the memory `expr` names may come from (`Reach`), `hops` fields or
+   * elements below where the walk started: each member or index on the way
+   * down to a name is one more. A pointer parameter is a root, deep past
+   * `hops` 0. A `const` is followed into its initialiser, unless that is a
+   * fresh allocation: the function's own memory when named as it is, and
+   * anything at all below that, because a field of a fresh object may hold a
+   * parameter's memory. Any other name or expression may be anything.
+   */
+  reachOf(expr: Node, hops: i32): Reach {
+    const out = new Reach()
+    this.followReach(expr, hops, out, 0)
+    return out
+  }
+
+  followReach(expr: Node, hops: i32, out: Reach, depth: i32): void {
+    let e = expr
+    let below = hops
+    while (e.kind === N_PAREN || e.kind === N_MEMBER || e.kind === N_INDEX) {
+      if (e.kind !== N_PAREN) {
+        below = below + 1
+      }
+      e = e.children[0]
+    }
+    if (e.kind !== N_THIS && e.kind !== N_IDENT) {
+      out.all = true
+      return
+    }
+    const pointer = this.pointerParamOf(e)
+    if (pointer !== null) {
+      out.roots.push(new ReachRoot(pointer.name, below > 0))
+      return
+    }
+    const local: Local | null = this.unit.program.nodeLocals[e.id]
+    if (local !== null && local.storage === STORAGE_PARAM) {
+      return // a number, a `boolean` or a string: nothing to write
+    }
+    const body = this.sig.body()
+    const decl: Node | null =
+      local === null || local.mutable || body === null ? null : declarationIn(this.unit.program, body, local)
+    const init: Node | null = decl === null ? null : unwrapParens(decl.children[2])
+    if (init === null) {
+      out.all = true
+    } else if (init.kind === N_NEW || init.kind === N_ARRAY || init.kind === N_OBJECT) {
+      if (below > 0) {
+        out.all = true
+      } else {
+        out.fresh = true
+      }
+    } else if (depth < 8) {
+      this.followReach(init, below, out, depth + 1)
+    } else {
+      out.all = true
+    }
   }
 
   /** The private array `e` names (`FunctionFacts.privateArrays`), or null. */
@@ -1768,7 +1880,9 @@ class FactCollector {
     for (const found of handed) {
       const callee = found.callee
       if (callee !== null) {
-        this.facts.argEdges.push(new ArgEdge(callee.name, found.index, "", owned))
+        const own = new Reach()
+        own.fresh = true
+        this.facts.argEdges.push(new ArgEdge(callee.name, found.index, "", owned, own))
       }
     }
   }
@@ -1807,7 +1921,8 @@ class FactCollector {
       return
     }
     const pointer = this.pointerParamOf(e)
-    this.facts.argEdges.push(new ArgEdge(callee.name, index, pointer === null ? "" : pointer.name, null))
+    const name = pointer === null ? "" : pointer.name
+    this.facts.argEdges.push(new ArgEdge(callee.name, index, name, null, this.reachOf(e, 0)))
   }
 
   visit(node: Node): void {
@@ -1836,6 +1951,7 @@ class FactCollector {
       for (const sig of fused) {
         this.addUserCallee(sig.name, node)
         this.noteCall(node, sig)
+        this.noteWholeReach(sig.name, methodReceiver(node))
       }
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id]
@@ -1850,6 +1966,7 @@ class FactCollector {
       if (reads !== null) {
         this.addUserCallee(reads.name, node)
         this.noteCall(node, reads)
+        this.noteWholeReach(reads.name, methodReceiver(node))
       }
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
@@ -1866,6 +1983,7 @@ class FactCollector {
         for (const sig of walkMethodsOf(read)) {
           this.addUserCallee(sig.name, node)
           this.noteCall(node, sig)
+          this.noteWholeReach(sig.name, node.children[1])
         }
       }
     }
@@ -1902,6 +2020,15 @@ class FactCollector {
   addUserCallee(callee: string, site: Node): void {
     this.facts.wholeCallees.add(callee)
     this.addComposedCallee(callee, site)
+  }
+
+  /** The receiver of a call to `callee`, taken whole: what it may write is anything `receiver` reaches (`FunctionFacts.wholeReaches`). */
+  noteWholeReach(callee: string, receiver: Node | null): void {
+    const reach = receiver === null ? new Reach() : this.reachOf(receiver, 0)
+    if (receiver === null) {
+      reach.all = true
+    }
+    this.facts.wholeReaches.push(new ArgEdge(callee, -1, "", null, reach))
   }
 
   /** `addUserCallee` for a call whose arguments are recorded (`noteArguments`), so the callee's writes through them are composed with what each argument is. */
@@ -3559,6 +3686,37 @@ const keepsArgument = (g: FunctionFacts | null, index: i32): boolean => {
   return target === null || target.captured
 }
 
+/**
+ * Mark what `reach` names as written in `f`, `deep` when the write goes past
+ * the slots of what it names (`PointerParamFacts.writesReach`); answers whether
+ * anything moved. A fresh allocation named as it is is `f`'s own memory, and
+ * is marked only by a deep write, which may land in a parameter's memory one
+ * of its fields holds.
+ */
+const markReach = (f: FunctionFacts, reach: Reach, deep: boolean): boolean => {
+  let changed = false
+  const everything = reach.all || (reach.fresh && deep)
+  for (const pp of f.pointerParams) {
+    let hit = everything
+    let below = everything
+    for (const root of reach.roots) {
+      if (root.name === pp.name) {
+        hit = true
+        below = below || root.deep || deep
+      }
+    }
+    if (hit && !pp.writesReach) {
+      pp.writesReach = true
+      changed = true
+    }
+    if (below && !pp.writesDeep) {
+      pp.writesDeep = true
+      changed = true
+    }
+  }
+  return changed
+}
+
 /** Mark `f` as writing shared memory past its parameters; answers whether that moved anything. */
 const markPastWrite = (f: FunctionFacts): boolean => {
   if (f.writesPastParams) {
@@ -3584,7 +3742,20 @@ const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
  */
 const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   let changed = false
+  for (const edge of f.wholeReaches) {
+    const g = facts.get(edge.callee)
+    if ((g === null || g.sharedWrite) && markReach(f, edge.reach, true)) {
+      changed = true
+    }
+  }
   for (const edge of f.argEdges) {
+    // What the callee writes of the argument, the caller writes of what the argument reaches.
+    const g = facts.get(edge.callee)
+    const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
+    const reached = g === null || (target !== null && target.writesReach && g.sharedWrite)
+    if (reached && markReach(f, edge.reach, target === null || target.writesDeep)) {
+      changed = true
+    }
     const owner = edge.owner
     if (owner !== null && !owner.lost && keepsArgument(facts.get(edge.callee), edge.index)) {
       owner.lost = true
