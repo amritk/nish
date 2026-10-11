@@ -95,7 +95,8 @@ and labelled statements are refused.
 A `switch` takes an integer or an [enum](../../LANGUAGE.md#enums), and every
 `case` label is a constant: a literal, a module constant or an enum member.
 **There is no implicit fallthrough** — a clause with statements must end in
-`break`, `return`, `continue` or `process.exit`. An *empty* clause still
+`break`, `return`, `continue` or `process.exit`, unless it is the last
+clause. An *empty* clause still
 falls through, which is how several labels share one body:
 
 ```ts nish:ok

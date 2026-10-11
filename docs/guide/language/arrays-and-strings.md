@@ -91,9 +91,10 @@ export const main = (): i32 => {
 };
 ```
 
-An array of arrays is written `i32[][]`, and an array of class instances
-stores the objects themselves back to back, which is why holding an element
-across a `push` onto the same array is refused
+An array of arrays is written `i32[][]`. An array of an `interface` type
+stores the records themselves back to back, which is why holding one of its
+elements across a `push` onto the same array is refused; an array of class
+instances holds a pointer to each object
 ([Arrays of records are contiguous](../../LANGUAGE.md#arrays-of-records-are-contiguous)).
 
 ## Strings
@@ -107,7 +108,7 @@ content, and these are its methods, all of them:
 | `s.charCodeAt(i)` | the byte at `i`, bounds-checked |
 | `s.substring(start, end?)` | the bytes from `start` up to `end`, clamped into range as in JavaScript |
 | `s.slice(start, end?)` | the same, but an out-of-range or reversed pair stops the program instead of being clamped |
-| `s.indexOf(sub)` | the first byte offset of `sub`, or `-1` |
+| `s.indexOf(sub, from?)` | the first byte offset of `sub` at or after `from` (default `0`), or `-1` |
 | `s.startsWith(sub)`, `s.endsWith(sub)` | a `boolean` |
 | `String.fromCharCode(c)` | the one-byte string of `c` |
 
