@@ -166,8 +166,8 @@ The checks in `tests/run.js` that hold the above:
 whose code the compiler writes at each call from the class's fields, over the
 tokenizer above and `JsonWriter`.
 
-**Anchors.** Every `file:line` in this section is at `2fa64b85`, the stage's
-head, on top of `main` at `7a7676d` and the tokenizer at `4fdc9d7`.
+**Anchors.** Every `file:line` in this section is at `b0e02caa`, the stage's
+head, on top of `main` at `8369004` and the tokenizer at `4fdc9d7`.
 
 **Result.** Every key of every object the code reads is matched against the
 fields of its class: an unknown key, a key given twice and a field not given
@@ -200,8 +200,8 @@ chooses the class, the limits and `ignoreUnknown`.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | JSON-4 | Low | `std/json-typed.ts:193` (`unknownField`) | With `ignoreUnknown` set, a key that names no field is stepped over without being remembered, so a duplicate of such a key is not refused. Its value is checked by the tokenizer and never read, so no reading of it can differ between two components of this program. | **Accepted.** Remembering every unknown key would cost an allocation per key; a program that forwards the raw body to another parser leaves `ignoreUnknown` off. |
-| JSON-5 | Low | `src/emit-json.ts:478` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
-| JSON-6 | Low | `std/json-typed.ts:347` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
+| JSON-5 | Low | `src/emit-json.ts:454` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
+| JSON-6 | Low | `std/json-typed.ts:338` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
 `JSON_DECODE_DUPLICATE` at `std/json-typed.ts:208`, before the second value is
@@ -215,7 +215,7 @@ Each is pinned by a line of `tests/link/std_json_typed`'s `expected.out`
 **Duplicate keys** are refused for a field at the top, in an array's element
 and with `ignoreUnknown` on: "a duplicate key: code", "nested: a duplicate key
 in an element", "ignoreUnknown: a duplicate field is still refused". The
-code written per class keeps one flag per field (`src/emit-json.ts:279`).
+code written per class keeps one flag per field (`src/emit-json.ts:275`).
 
 **Unknown fields** are refused by default at the key's byte ("an unknown key:
 code", "an unknown key: errorAt", "nested: an unknown key in an element"),
@@ -238,7 +238,7 @@ integer field takes only an integer written without a fraction or an exponent,
 in its range (`std/json-typed.ts:272`): "a fraction for an i32", "an exponent
 for an i32", "2^31 for an i32", "-1 for a u32", "2^32 for a u32", "2^63 for
 an i64". Which field types may be read at all is the compiler's rule, held at
-the call over every class the call reaches (`src/json-typed.ts:210`), with a
+the call over every class the call reaches (`src/json-typed.ts:201`), with a
 negative case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_nested_field`, `json_reject_nullable_field`,
 `json_reject_nested_array`, `json_reject_generic_field`,
@@ -248,7 +248,7 @@ negative case per way in: `tests/cases/json_reject_field_type`,
 **Depth.** The decoding recurses only into a container the tokenizer has
 opened, so `maxDepth` bounds it: "limits: depth", and "limits: a depth bomb"
 over 1,000 nested objects. An encoding stops at the writer's first failure
-(`src/emit-json.ts:556`), so an object that holds itself ends at the writer's
+(`src/emit-json.ts:532`), so an object that holds itself ends at the writer's
 depth limit instead of the stack: "encode: an object that holds itself ends at
 the writer's depth", "encode: and through an array".
 
@@ -261,14 +261,18 @@ same code", "sticky: at the same byte", "sticky: reset clears it". After an
 error every field still holds a value of its type, because a reader that fails
 answers the value the field held or its type's zero.
 
-**What the code may do is what its callers are told.** Every call is given
+**What the code may do is what its callers are told.** A decoding is given
 facts that say it writes through both arguments, keeps them, allocates and
-lets the allocation escape (`src/attributes.ts:2544`), so no caller's arena
+lets the allocation escape (`src/attributes.ts:2547`), so no caller's arena
 scope, loop pass or `using a = arena()` block reclaims what a decode stored
-(`tests/cases/json_reject_arena_block`, NL2424), and no array a decode
-reassigns is laid out inline (`src/inline-arrays.ts:758`). A constructor the
-decoder calls in another module is made callable there rather than linked
-`internal` (`src/generics.ts:1642`).
+(`tests/cases/json_reject_arena_block`, NL2424). An encoding hands the
+writer to the writer's methods and the helpers, whose own facts the
+fixpoint carries, and reads `value` only, which is what lets one run inside
+such a block ("encode: inside a using arena() block, every pass writes the
+same text"). No array a route reaches is laid out inline
+(`src/inline-arrays.ts:752`), and a constructor the decoder calls in another
+module is made callable there rather than linked `internal`
+(`src/generics.ts:1642`).
 
 **The arena** is flat over 1,000 decodes of one body into one object ("reuse:
 Arena.used() is flat over 1,000 decodes into one object"), and 100 decodes of
