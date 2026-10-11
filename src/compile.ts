@@ -79,7 +79,15 @@ import { Diagnostic, formatList } from "./diagnostics"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
-import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
+import {
+  runBinaryName,
+  runCacheKey,
+  runCacheRoot,
+  runtimeCacheKey,
+  runtimeCacheRoot,
+  runtimeUnits,
+  sha256Hex,
+} from "./run-cache"
 
 const usageText = (): string =>
   `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
@@ -1564,6 +1572,10 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
+  const runtime = cachedRuntime(root, quiet ? [] : outputs, profile, debugInfo, threads, json)
+  if (runtime === null) {
+    return 3
+  }
   // `bash -c 'exec "$@" >/dev/null' <argv0> bash <script> ...` runs the script
   // with its stdout dropped and nothing else changed; `$0` is the name the
   // shell would use in its own errors.
@@ -1577,23 +1589,15 @@ const linkProgram = (
   for (const file of outputs) {
     argv.push(file)
   }
-  argv.push(`${root}/runtime/runtime.c`)
+  if (runtime.length > 0) {
+    argv.push("--runtime-from")
+    argv.push(runtime)
+  } else {
+    argv.push(`${root}/runtime/runtime.c`)
+  }
   argv.push("-o")
   argv.push(link)
-  argv.push("--profile")
-  argv.push(profile)
-  // `-g` is passed on so runtime.c gets debug info too and build.sh does not
-  // strip the binary, which is what keeps the DWARF the IR already carries.
-  if (debugInfo) {
-    argv.push("-g")
-  }
-  // `--threads` likewise: it compiles runtime.c with -DNISH_THREADS, which is
-  // what makes its `nish_arena` thread-local. The two halves cannot disagree
-  // silently — ELF refuses a non-TLS reference to a TLS definition — so a
-  // mismatch is a link error rather than a program with two arenas.
-  if (threads) {
-    argv.push("--threads")
-  }
+  pushRecipeFlags(argv, profile, debugInfo, threads)
   const status = spawnSync(argv)
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
@@ -1608,6 +1612,133 @@ const linkProgram = (
     console.error(`linked ${link}: ${binary.length} bytes (${profile})`)
   }
   return 0
+}
+
+/**
+ * The flags that pick `scripts/build.sh`'s recipe, the same for the link and
+ * for the runtime it compiles alone.
+ */
+const pushRecipeFlags = (argv: string[], profile: string, debugInfo: boolean, threads: boolean): void => {
+  argv.push("--profile")
+  argv.push(profile)
+  // `-g` is passed on so runtime.c gets debug info too and build.sh does not
+  // strip the binary, which is what keeps the DWARF the IR already carries.
+  if (debugInfo) {
+    argv.push("-g")
+  }
+  // `--threads` likewise: it compiles runtime.c with -DNISH_THREADS, which is
+  // what makes its `nish_arena` thread-local. The two halves cannot disagree
+  // silently — ELF refuses a non-TLS reference to a TLS definition — so a
+  // mismatch is a link error rather than a program with two arenas.
+  if (threads) {
+    argv.push("--threads")
+  }
+}
+
+/**
+ * The runtime cache: the directory holding the runtime compiled for this
+ * recipe, compiled into it first when no link has needed it before. Nearly all
+ * of a link was the runtime's six translation units, compiled again on every
+ * one; an entry is compiled once per key (`runtimeCacheKey`) and every later
+ * link only compiles the program. Empty when the link should compile the
+ * runtime itself, as it always did: the wasi profile, which the cache does not
+ * take, and a cache root that is not there or cannot be made private, so a
+ * `--link` that works without the cache works without it, and an entry
+ * the compile left nothing to fill. Null when the runtime did not compile,
+ * which is reported here as the link's failure, naming the IR in `outputs`:
+ * empty under `run`, whose IR is in a scratch directory that is about to go.
+ *
+ * The root is made `0700` and its owner and mode checked on every link, hit
+ * or miss, as the run cache's are (docs/security/cli.md, CLI-4, CLI-7 and
+ * CLI-11), because a hit links whatever objects stand beside a matching key.
+ * Every link also writes one file of its own into the root before it can look
+ * anything up: the key holds what `cc --version` prints, the language reads a
+ * process's output only through `spawnSyncTo` into a file, so that output goes
+ * to `<root>/tmp-<hex>.cc`, is read back, and the file is removed.
+ *
+ * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
+ * compiles into a scratch directory of the entry's own, empties the entry's
+ * key, moves the six objects in with one `mv` -- a `rename` each, inside one
+ * directory -- and writes the key last, so a key on disk always stands beside
+ * six whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * their own and move them over the other's; both sets are the same recipe's,
+ * and an object is only ever replaced whole, so a link that reads one while
+ * another lands reads a whole object either way.
+ */
+const cachedRuntime = (
+  root: string,
+  outputs: string[],
+  profile: string,
+  debugInfo: boolean,
+  threads: boolean,
+  json: boolean
+): string | null => {
+  const cacheRoot = runtimeCacheRoot()
+  if (!(profile === "debug" || profile === "speed" || profile === "size") || cacheRoot.length === 0) {
+    return ""
+  }
+  if (!makeDirectory(cacheRoot)) {
+    return ""
+  }
+  const privateRoot: string[] = ["chmod", "700", cacheRoot]
+  if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
+    return ""
+  }
+  // `chmod` succeeds for root on any directory, so the owner is asked as the
+  // run cache asks it (CLI-7): a root another user made, or a link at its
+  // path, is not this user's, and its objects are not linked.
+  if (distrustOf(cacheRoot, false, true).length > 0) {
+    return ""
+  }
+  const cc = cCompiler()
+  const probe = `${cacheRoot}/tmp-${hexOfI64(monotonicNanos(), 16)}.cc`
+  const ask: string[] = [cc, "--version"]
+  const answered = spawnSyncTo(ask, probe, "/dev/null")
+  const version = readFileSyncOrNull(probe)
+  const forget: string[] = ["rm", "-f", "--", probe]
+  spawnSync(forget)
+  const runtimeDir = realpathSync(`${root}/runtime`)
+  if (answered !== 0 || version === null || runtimeDir === null) {
+    return ""
+  }
+  const key = runtimeCacheKey(root, runtimeDir, profile, debugInfo, threads, cc, version)
+  const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
+  const keyFile = `${cacheEntry}/key`
+  const stored = readFileSyncOrNull(keyFile)
+  if (stored !== null && stored === key) {
+    return cacheEntry
+  }
+  const work = `${cacheEntry}/tmp-${hexOfI64(monotonicNanos(), 16)}`
+  if (!makeDirectory(work)) {
+    return ""
+  }
+  const script = `${root}/scripts/build.sh`
+  const argv: string[] = ["bash", script, `${root}/runtime/runtime.c`, "--runtime-objects", work]
+  pushRecipeFlags(argv, profile, debugInfo, threads)
+  const status = spawnSync(argv)
+  // A compiler that answers 0 and writes no object (`CC=true`, which turns a
+  // link into a no-op) leaves nothing to move, and the entry then gets no key:
+  // the link compiles the runtime itself, as it would with no cache at all.
+  let entry = ""
+  if (status !== 0) {
+    const why = status < 0 ? "could not run bash" : `exit ${status}`
+    const where = outputs.length > 0 ? `; the IR is in ${outputs.join(", ")}` : ""
+    reportToolchainFailure(`--link: ${script} failed (${why}) compiling the runtime${where}`, json)
+  } else {
+    writeFileSync(keyFile, "")
+    const move: string[] = ["mv", "-f", "--"]
+    for (const unit of runtimeUnits()) {
+      move.push(`${work}/${unit.slice(0, unit.length - 2)}.o`)
+    }
+    move.push(`${cacheEntry}/`)
+    if (spawnSyncTo(move, "/dev/null", "/dev/null") === 0) {
+      writeFileSync(keyFile, key)
+      entry = cacheEntry
+    }
+  }
+  const clean: string[] = ["rm", "-rf", "--", work]
+  spawnSync(clean)
+  return status === 0 ? entry : null
 }
 
 /**

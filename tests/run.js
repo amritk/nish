@@ -83,6 +83,14 @@ const NISH = path.join(root, "build", "nish-test")
 const casesDir = path.join(root, "tests", "cases")
 const buildDir = path.join(root, "build", "test")
 fs.mkdirSync(buildDir, { recursive: true })
+// Every `--link` and `nish run` keeps the compiled runtime in a cache
+// (`$XDG_CACHE_HOME/nish/runtime`), so the suite has one of its own, emptied
+// each run: an entry the developer's own builds left would otherwise decide
+// what an unrelated check links, and that check would never take the miss.
+// A check that needs a cold cache, or no cache at all, still sets its own.
+const suiteCache = path.join(buildDir, "xdg-cache")
+fs.rmSync(suiteCache, { recursive: true, force: true })
+process.env.XDG_CACHE_HOME = suiteCache
 
 /**
  * The C runtime's translation units, as a direct `clang` line has to spell
@@ -13398,6 +13406,510 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
         fs.readdirSync(path.join(stubCache, "nish", "run", stubEntries[0])).length === 0,
       badLink.stderr + stubEntries.join(", ")
     )
+  }
+}
+
+// ---- the runtime cache: the C runtime compiled once per recipe -----------------------
+// `--link` and `nish run` (debug, speed, size) compile the runtime's six translation
+// units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
+// later program against those objects (src/compile.ts `cachedRuntime`,
+// docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
+// PATH that logs every `.c` it is handed and then runs clang, so "reused" means no
+// runtime source reached the compiler, not that the link was quick.
+if (!only || "runtime-cache".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("runtime cache: clang not on PATH, so nothing can be linked")
+  } else {
+    const rcDir = path.join(buildDir, "runtime-cache")
+    fs.rmSync(rcDir, { recursive: true, force: true })
+    const tools = path.join(rcDir, "tools")
+    fs.mkdirSync(tools, { recursive: true })
+    const ccLog = path.join(rcDir, "cc.log")
+    const wrapper = (name) =>
+      fs.writeFileSync(
+        path.join(tools, name),
+        `#!/bin/sh\nfor a in "$@"; do case "$a" in *.c) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+        { mode: 0o755 }
+      )
+    wrapper("cc-log")
+    wrapper("cc-log-too")
+    const compiledC = () =>
+      fs.existsSync(ccLog)
+        ? fs
+            .readFileSync(ccLog, "utf8")
+            .split("\n")
+            .filter((l) => l.length > 0)
+            .map((l) => path.basename(l))
+            .sort()
+        : []
+    const cache = path.join(rcDir, "cache")
+    const runtimeRoot = path.join(cache, "nish", "runtime")
+    const runtimeEntries = (dir = runtimeRoot) => (fs.existsSync(dir) ? fs.readdirSync(dir).sort() : [])
+    const toolEnv = { XDG_CACHE_HOME: cache, CC: "cc-log", PATH: `${tools}:${process.env.PATH}` }
+    // The debug profile unless a check names another: it is `nish run`'s, so a
+    // run and a link share its entry, and it keeps every section, so a planted
+    // object that was linked would show in the binary.
+    const link = (source, out, flags = ["--profile", "debug"], env = {}, compiler = NISH) =>
+      spawnSync(compiler, [source, "--link", path.join(rcDir, out), ...flags], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...toolEnv, ...env },
+      })
+    const runOut = (out, args = []) => spawnSync(path.join(rcDir, out), args, { encoding: "utf8" })
+    const units = [
+      "runtime.c",
+      "runtime-os.c",
+      "runtime-parallel.c",
+      "runtime-host.c",
+      "runtime-net.c",
+      "runtime-simd.c",
+    ]
+    const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
+
+    const first = link("examples/hello.ts", "hello")
+    const afterFirst = runtimeEntries()
+    const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
+    check(
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the six objects and the key and nothing else",
+      first.status === 0 &&
+        runOut("hello").stdout === "hello from Nish\n" &&
+        afterFirst.length === 1 &&
+        /^[0-9a-f]{64}$/.test(afterFirst[0]) &&
+        fs.readdirSync(entry).sort().join(",") === entryFiles,
+      first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
+    )
+    check(
+      "runtime cache: the miss compiled each of the six runtime units once",
+      compiledC().join(",") === [...units].sort().join(","),
+      compiledC().join(", ")
+    )
+    check(
+      "runtime cache: the root is private to its owner (0700)",
+      fs.existsSync(runtimeRoot) && (fs.statSync(runtimeRoot).mode & 0o777) === 0o700,
+      fs.existsSync(runtimeRoot) ? (fs.statSync(runtimeRoot).mode & 0o777).toString(8) : "no root"
+    )
+
+    fs.rmSync(ccLog, { force: true })
+    const second = link("examples/multi/main.ts", "multi")
+    check(
+      "runtime cache: a second link, of a different program, compiles no runtime source and links",
+      second.status === 0 &&
+        runOut("multi").status === 49 &&
+        compiledC().length === 0 &&
+        runtimeEntries().length === 1,
+      second.stderr + compiledC().join(", ")
+    )
+    const viaRun = spawnSync(NISH, ["run", "examples/argv.ts", "4", "5"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, ...toolEnv },
+    })
+    check(
+      "runtime cache: `nish run` links against the same entry, and compiles no runtime source either",
+      viaRun.status === 2 && viaRun.stdout.includes("sum of the integers: 9") && compiledC().length === 0,
+      viaRun.stdout + viaRun.stderr + compiledC().join(", ")
+    )
+
+    // Every input of the recipe names its own entry, and each binary runs.
+    // The entry's own runtime.o says the input reached the compile, not only
+    // the key: `--threads` puts the arena in thread-local storage (`.tbss`,
+    // `__thread_bss` on Mach-O), `-g` adds DWARF, speed and size keep LTO
+    // bitcode (`BC\xc0\xde`), and the debug entry above has none of them.
+    const objectOf = (dir) => {
+      const file = path.join(runtimeRoot, dir, "runtime.o")
+      return fs.existsSync(file) ? fs.readFileSync(file, "latin1") : ""
+    }
+    const isTls = (o) => o.includes(".tbss") || o.includes("__thread_bss")
+    const isDwarf = (o) => o.includes("debug_info")
+    const isBitcode = (o) => o.startsWith("BC\xc0\xde") || o.startsWith("\xde\xc0\x17\x0b")
+    const debugObject = objectOf(afterFirst.length === 1 ? afterFirst[0] : "")
+    check(
+      "runtime cache: the debug entry's runtime.o is native code, with no thread-local arena and no DWARF",
+      debugObject.length > 0 && !isTls(debugObject) && !isDwarf(debugObject) && !isBitcode(debugObject),
+      `${debugObject.length} bytes`
+    )
+    const variants = [
+      ["--threads", ["--profile", "debug", "--threads"], {}, (o) => isTls(o) && !isBitcode(o)],
+      ["-g", ["--profile", "debug", "-g"], {}, (o) => isDwarf(o) && !isTls(o)],
+      ["--profile speed", ["--profile", "speed"], {}, isBitcode],
+      ["--profile size", ["--profile", "size"], {}, isBitcode],
+      ["a CC of another name", ["--profile", "debug"], { CC: "cc-log-too" }, (o) => o === debugObject],
+    ]
+    for (const [what, flags, env, objectIs] of variants) {
+      const before = runtimeEntries()
+      fs.rmSync(ccLog, { force: true })
+      const out = `hello-${what.replace(/[^a-z]+/g, "-")}`
+      const r = link("examples/hello.ts", out, flags, env)
+      const ran = runOut(out)
+      const added = runtimeEntries().filter((e) => !before.includes(e))
+      const object = added.length === 1 ? objectOf(added[0]) : ""
+      check(
+        `runtime cache: ${what} is an entry of its own, compiled with it, and its binary links and runs`,
+        r.status === 0 &&
+          ran.status === 0 &&
+          ran.stdout === "hello from Nish\n" &&
+          added.length === 1 &&
+          compiledC().length === units.length &&
+          objectIs(object),
+        `${r.stderr}${ran.stdout}${ran.stderr}new entries: ${added.join(", ")}; runtime.o ${object.length} bytes`
+      )
+    }
+
+    // A fingerprinted file edited in place: one copied package, linked before
+    // and after each edit, so its path -- and the runtime directory the key
+    // also names -- stays the same and only the file's bytes change.
+    const copy = path.join(rcDir, "package")
+    fs.mkdirSync(path.join(copy, "bin"), { recursive: true })
+    fs.copyFileSync(NISH, path.join(copy, "bin", "nish"))
+    fs.chmodSync(path.join(copy, "bin", "nish"), 0o755)
+    for (const dir of ["scripts", "runtime", "std"]) {
+      fs.cpSync(path.join(root, dir), path.join(copy, dir), { recursive: true })
+    }
+    const linkCopy = (out) =>
+      link("examples/hello.ts", out, ["--profile", "debug"], {}, path.join(copy, "bin", "nish"))
+    const unedited = linkCopy("hello-copy")
+    const afterCopy = runtimeEntries().length
+    fs.rmSync(ccLog, { force: true })
+    const again = linkCopy("hello-copy-again")
+    const copyEntries = runtimeEntries().length
+    check(
+      "runtime cache: a copied package links, and a second link of it reuses its entry",
+      unedited.status === 0 &&
+        again.status === 0 &&
+        runOut("hello-copy-again").stdout === "hello from Nish\n" &&
+        compiledC().length === 0 &&
+        copyEntries === afterCopy,
+      `${unedited.stderr}${again.stderr}compiled on the second link: ${compiledC().join(", ")}; entries ${afterCopy} then ${copyEntries}`
+    )
+    for (const [what, file, line] of [
+      ["runtime.c", path.join("runtime", "runtime.c"), "\n/* edited */\n"],
+      ["nish.h", path.join("runtime", "nish.h"), "\n/* edited */\n"],
+      ["scripts/build.sh", path.join("scripts", "build.sh"), "\n# edited\n"],
+    ]) {
+      const before = runtimeEntries().length
+      fs.appendFileSync(path.join(copy, file), line)
+      fs.rmSync(ccLog, { force: true })
+      const out = `hello-edited-${path.basename(file).replace(/\W/g, "-")}`
+      const edited = linkCopy(out)
+      check(
+        `runtime cache: ${what} edited in place is an entry of its own, compiled again`,
+        before >= copyEntries &&
+          edited.status === 0 &&
+          runOut(out).stdout === "hello from Nish\n" &&
+          runtimeEntries().length === before + 1 &&
+          compiledC().length === units.length,
+        edited.stderr + runtimeEntries().join(", ")
+      )
+    }
+
+    // A damaged entry is compiled again, never linked: no key and a missing
+    // object, then a key that is not this recipe's beside a runtime.o that
+    // works and carries a marker. The debug profile keeps every section, so a
+    // planted object that was linked would leave its marker in the binary.
+    if (entry.length === 0) {
+      check(
+        "runtime cache: an entry with no key and a missing object is compiled again, and the link runs",
+        false,
+        "no entry to damage"
+      )
+      check(
+        "runtime cache: an entry whose key is not this recipe's is compiled again, and its planted object is never linked",
+        false,
+        "no entry to damage"
+      )
+    } else {
+      const debugKey = fs.readFileSync(path.join(entry, "key"), "utf8")
+      fs.rmSync(path.join(entry, "key"))
+      fs.rmSync(path.join(entry, "runtime-simd.o"))
+      fs.rmSync(ccLog, { force: true })
+      const noKey = link("examples/hello.ts", "hello-nokey")
+      check(
+        "runtime cache: an entry with no key and a missing object is compiled again, and the link runs",
+        noKey.status === 0 &&
+          runOut("hello-nokey").stdout === "hello from Nish\n" &&
+          compiledC().length === units.length &&
+          fs.readFileSync(path.join(entry, "key"), "utf8") === debugKey &&
+          fs.readdirSync(entry).sort().join(",") === entryFiles,
+        noKey.stderr + compiledC().join(", ")
+      )
+      const planted = path.join(rcDir, "planted.c")
+      fs.writeFileSync(
+        planted,
+        `#include "${path.join(root, "runtime", "runtime.c")}"\n` +
+          '__attribute__((used)) const char nish_planted_marker[] = "PLANTED-RUNTIME-OBJECT";\n'
+      )
+      const plantedBuild = spawnSync(
+        "clang",
+        ["-Wno-override-module", "-c", planted, "-o", path.join(entry, "runtime.o")],
+        {
+          encoding: "utf8",
+        }
+      )
+      fs.writeFileSync(
+        path.join(entry, "key"),
+        debugKey.replace("runtime-objects\n", "runtime-objects\nnot this recipe\n")
+      )
+      fs.rmSync(ccLog, { force: true })
+      const mismatched = link("examples/hello.ts", "hello-mismatched")
+      const mismatchedBinary = fs.existsSync(path.join(rcDir, "hello-mismatched"))
+        ? fs.readFileSync(path.join(rcDir, "hello-mismatched"), "latin1")
+        : ""
+      check(
+        "runtime cache: an entry whose key is not this recipe's is compiled again, and its planted object is never linked",
+        plantedBuild.status === 0 &&
+          mismatched.status === 0 &&
+          runOut("hello-mismatched").stdout === "hello from Nish\n" &&
+          compiledC().length === units.length &&
+          !mismatchedBinary.includes("PLANTED-RUNTIME-OBJECT") &&
+          fs.readFileSync(path.join(entry, "key"), "utf8") === debugKey,
+        plantedBuild.stderr + mismatched.stderr + compiledC().join(", ")
+      )
+    }
+
+    // Two links on a cold cache at once: each compiles, each moves its objects
+    // over the other's, and both link and run. The compiler behind them sleeps
+    // a second before each runtime unit, so the second link is sure to look
+    // while the first is still compiling, and both miss: the log then holds
+    // every unit twice.
+    const slowLog = path.join(rcDir, "slow.log")
+    fs.writeFileSync(
+      path.join(tools, "cc-slow"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in runtime*.c) echo "$a" >> '${slowLog}'; sleep 1 ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 }
+    )
+    const coldCache = path.join(rcDir, "cold")
+    const coldErr = (which) => path.join(rcDir, `cold-${which}.stderr`)
+    const both = spawnSync(
+      "bash",
+      [
+        "-c",
+        '"$1" examples/hello.ts --link "$2/cold-a" 2>"$3" & a=$!; "$1" examples/argv.ts --link "$2/cold-b" 2>"$4" & b=$!; wait $a; sa=$?; wait $b; echo "$sa $?"',
+        "bash",
+        NISH,
+        rcDir,
+        coldErr("a"),
+        coldErr("b"),
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          XDG_CACHE_HOME: coldCache,
+          CC: "cc-slow",
+          PATH: `${tools}:${process.env.PATH}`,
+        },
+      }
+    )
+    const coldEntries = runtimeEntries(path.join(coldCache, "nish", "runtime"))
+    const slowCompiles = fs.existsSync(slowLog)
+      ? fs
+          .readFileSync(slowLog, "utf8")
+          .split("\n")
+          .filter((l) => l.length > 0)
+          .sort()
+      : []
+    const readErr = (which) => (fs.existsSync(coldErr(which)) ? fs.readFileSync(coldErr(which), "utf8") : "")
+    check(
+      "runtime cache: two links on a cold cache at once both miss, both succeed, and both binaries run",
+      both.stdout.trim() === "0 0" &&
+        runOut("cold-a").stdout === "hello from Nish\n" &&
+        runOut("cold-b", ["2"]).stdout.includes("sum of the integers: 2") &&
+        slowCompiles.join(",") === [...units, ...units].sort().join(",") &&
+        coldEntries.length === 1 &&
+        fs
+          .readdirSync(path.join(coldCache, "nish", "runtime", coldEntries[0]))
+          .sort()
+          .join(",") === entryFiles,
+      `exits ${both.stdout.trim()}; compiled ${slowCompiles.join(", ")}; entries ${coldEntries.join(", ")}\n` +
+        `cold-a stderr:\n${readErr("a")}cold-b stderr:\n${readErr("b")}${both.stderr}`
+    )
+
+    // A relative XDG_CACHE_HOME is ignored, as the run cache ignores it (CLI-3);
+    // with no absolute root at all, --link compiles the runtime itself.
+    const home = path.join(rcDir, "home")
+    const relative = spawnSync(
+      NISH,
+      [path.join(root, "examples", "hello.ts"), "--link", path.join(rcDir, "hello-relative")],
+      {
+        cwd: rcDir,
+        encoding: "utf8",
+        env: { ...process.env, XDG_CACHE_HOME: "relative-cache", HOME: home },
+      }
+    )
+    check(
+      "runtime cache: a relative XDG_CACHE_HOME is ignored, and the entry goes under $HOME/.cache/nish/runtime",
+      relative.status === 0 &&
+        !fs.existsSync(path.join(rcDir, "relative-cache")) &&
+        runtimeEntries(path.join(home, ".cache", "nish", "runtime")).length === 1,
+      relative.stderr
+    )
+    // A link at the root's path is not this user's directory, whatever it
+    // names (CLI-7's owner check): the link compiles the runtime itself and
+    // keeps nothing there.
+    const linkedCache = path.join(rcDir, "linked")
+    const elsewhere = path.join(rcDir, "elsewhere")
+    fs.mkdirSync(path.join(linkedCache, "nish"), { recursive: true })
+    fs.mkdirSync(elsewhere, { recursive: true })
+    fs.symlinkSync(elsewhere, path.join(linkedCache, "nish", "runtime"))
+    const throughLink = spawnSync(NISH, ["examples/hello.ts", "--link", path.join(rcDir, "hello-linked")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: linkedCache },
+    })
+    check(
+      "runtime cache: a symbolic link at the root's path is not used -- the link compiles the runtime itself and keeps nothing there",
+      throughLink.status === 0 &&
+        runOut("hello-linked").stdout === "hello from Nish\n" &&
+        fs.readdirSync(elsewhere).length === 0,
+      throughLink.stderr + fs.readdirSync(elsewhere).join(", ")
+    )
+    const rootless = spawnSync(NISH, ["examples/hello.ts", "--link", path.join(rcDir, "hello-rootless")], {
+      cwd: root,
+      encoding: "utf8",
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([k]) => k !== "HOME" && k !== "XDG_CACHE_HOME")
+      ),
+    })
+    check(
+      "runtime cache: with neither HOME nor XDG_CACHE_HOME, --link compiles the runtime itself and links",
+      rootless.status === 0 && runOut("hello-rootless").stdout === "hello from Nish\n",
+      rootless.stderr
+    )
+
+    // The binaries are the uncached recipe's: for speed and size, the same
+    // stdout and the same size as `scripts/build.sh` compiling every source in
+    // one command, over programs of one module and of several.
+    const programs = [
+      ["examples/hello.ts", []],
+      ["examples/argv.ts", ["7", "x"]],
+      ["examples/sets.ts", []],
+      ["examples/wordcount.ts", []],
+      ["examples/multi/main.ts", []],
+    ]
+    for (const profile of ["speed", "size"]) {
+      for (const [source, args] of programs) {
+        const name = `${profile}-${path.basename(path.dirname(source))}-${path.basename(source, ".ts")}`
+        const cached = link(source, `${name}-cached`, ["--profile", profile])
+        const irDir = path.join(rcDir, `${name}-ir`)
+        const ir = spawnSync(NISH, [source, "-o", `${irDir}/`], { cwd: root, encoding: "utf8" })
+        const lls = fs.existsSync(irDir)
+          ? fs
+              .readdirSync(irDir)
+              .sort()
+              .map((f) => path.join(irDir, f))
+          : []
+        const plain = spawnSync(
+          "bash",
+          [
+            path.join(root, "scripts", "build.sh"),
+            ...lls,
+            path.join(root, "runtime", "runtime.c"),
+            "-o",
+            path.join(rcDir, `${name}-plain`),
+            "--profile",
+            profile,
+          ],
+          { cwd: root, encoding: "utf8" }
+        )
+        const a = runOut(`${name}-cached`, args)
+        const b = runOut(`${name}-plain`, args)
+        const sizeOf = (f) =>
+          fs.existsSync(path.join(rcDir, f)) ? fs.statSync(path.join(rcDir, f)).size : -1
+        check(
+          `runtime cache: ${source} under --profile ${profile} prints what the uncached recipe's binary prints, and is its size`,
+          cached.status === 0 &&
+            ir.status === 0 &&
+            plain.status === 0 &&
+            a.status === b.status &&
+            a.stdout === b.stdout &&
+            sizeOf(`${name}-cached`) === sizeOf(`${name}-plain`),
+          `${cached.stderr}${plain.stderr}sizes ${sizeOf(`${name}-cached`)} vs ${sizeOf(`${name}-plain`)}`
+        )
+      }
+    }
+
+    // A build.sh stopped by a signal stops the compiles it started. The C
+    // compiler here records its pid and sleeps, so every job is still running
+    // when the script is sent TERM; afterwards none of them may be.
+    const sleeper = path.join(tools, "cc-sleeps")
+    const sleeperPids = path.join(rcDir, "sleeper-pids")
+    fs.writeFileSync(sleeper, `#!/bin/sh\necho $$ > '${sleeperPids}'/$$\nexec sleep 60\n`, { mode: 0o755 })
+    for (const [mode, args] of [
+      [
+        "--runtime-objects",
+        [path.join(root, "runtime", "runtime.c"), "--runtime-objects", path.join(rcDir, "stopped")],
+      ],
+      [
+        "--runtime-from",
+        [
+          path.join(rcDir, "hello.ll"),
+          "--runtime-from",
+          entry.length > 0 ? entry : path.join(rcDir, "no-entry"),
+          "-o",
+          path.join(rcDir, "stopped-out"),
+        ],
+      ],
+    ]) {
+      fs.rmSync(sleeperPids, { recursive: true, force: true })
+      fs.mkdirSync(sleeperPids, { recursive: true })
+      const expected = mode === "--runtime-objects" ? units.length : 1
+      const stopped = spawnSync(
+        "bash",
+        [
+          "-c",
+          'bash "$@" & p=$!; n=0; until [ "$(ls "$PIDS" | wc -l)" -ge "$WANT" ] || [ $n -ge 300 ]; do sleep 0.1; n=$((n + 1)); done; ' +
+            'kill -TERM $p; wait $p; echo "exit $?"; for f in "$PIDS"/*; do kill -0 "$(cat "$f")" 2>/dev/null && echo "alive $(cat "$f")"; done; true',
+          "bash",
+          path.join(root, "scripts", "build.sh"),
+          ...args,
+          "--profile",
+          "debug",
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, CC: sleeper, PIDS: sleeperPids, WANT: String(expected) },
+        }
+      )
+      const started = fs.readdirSync(sleeperPids).length
+      check(
+        `runtime cache: build.sh ${mode} stopped by TERM stops every compile it started`,
+        started === expected && stopped.stdout.includes("exit 143") && !stopped.stdout.includes("alive"),
+        `${started} compiles started; ${stopped.stdout}${stopped.stderr}`
+      )
+    }
+
+    // build.sh's two modes are for the profiles they cache, and a build they
+    // do not cover is refused rather than half done.
+    for (const [what, flags] of [
+      ["--profile wasm", ["--profile", "wasm"]],
+      ["--profile napi", ["--profile", "napi"]],
+      ["--profile wasi", ["--profile", "wasi"]],
+      ["--pgo-generate", ["--profile", "speed", "--pgo-generate"]],
+    ]) {
+      for (const mode of ["--runtime-objects", "--runtime-from"]) {
+        const r = spawnSync(
+          "bash",
+          [
+            path.join(root, "scripts", "build.sh"),
+            path.join(root, "runtime", "runtime.c"),
+            mode,
+            path.join(rcDir, "refused"),
+            "-o",
+            path.join(rcDir, "refused-out"),
+            ...flags,
+          ],
+          { cwd: root, encoding: "utf8" }
+        )
+        check(
+          `runtime cache: build.sh ${mode} refuses ${what} with exit 2`,
+          r.status === 2 &&
+            r.stderr.includes(mode === "--runtime-objects" ? "--runtime-objects" : "--runtime-from"),
+          r.stderr
+        )
+      }
+    }
   }
 }
 
