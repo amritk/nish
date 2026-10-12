@@ -211,6 +211,44 @@ PASS  numberF64 of an exponent past the cap
 PASS  numberF64 of zero with an exponent past the cap
 PASS  numberF64 of an exponent with leading zeros
 PASS  numberF64(9007199254740993) rounds to even
+PASS  isU64(0)
+PASS  numberU64(0)
+PASS  isU64(1)
+PASS  numberU64(1)
+PASS  isU64(9999999999999999999)
+PASS  numberU64(9999999999999999999)
+PASS  isU64(10000000000000000000)
+PASS  numberU64(10000000000000000000)
+PASS  isU64(9223372036854775807)
+PASS  numberU64(9223372036854775807)
+PASS  isU64(10000000000000000001)
+PASS  numberU64(10000000000000000001)
+PASS  isU64(18446744073709551614)
+PASS  numberU64(18446744073709551614)
+PASS  isU64(18446744073709551615)
+PASS  numberU64(18446744073709551615)
+PASS  isU64(18446744073709551616)
+PASS  numberU64(18446744073709551616)
+PASS  isU64(18446744073709551625)
+PASS  numberU64(18446744073709551625)
+PASS  isU64(19999999999999999999)
+PASS  numberU64(19999999999999999999)
+PASS  isU64(28446744073709551615)
+PASS  numberU64(28446744073709551615)
+PASS  isU64(99999999999999999999)
+PASS  numberU64(99999999999999999999)
+PASS  isU64(100000000000000000000)
+PASS  numberU64(100000000000000000000)
+PASS  isU64(-0)
+PASS  numberU64(-0)
+PASS  isU64(-1)
+PASS  numberU64(-1)
+PASS  isU64(1.0)
+PASS  numberU64(1.0)
+PASS  isU64(1e2)
+PASS  numberU64(1e2)
+PASS  isU64 is false on a string token
+PASS  numberU64 is 0 on a string token
 PASS  JsonLimits: the default depth
 PASS  JsonLimits: the default string bytes
 PASS  JsonLimits: the default number bytes
@@ -266,6 +304,63 @@ PASS  WINDOW: an offset past the end
 PASS  WINDOW: an offset and a length of 2^31 - 1, refused without overflow
 PASS  WINDOW: a length of 2^31 - 1 from 0
 PASS  an empty window at the end is only truncated
+PASS  scan: a run of plain bytes the window cuts short is truncated, not closed by the quote past it
+PASS  scan: a string closed on the window's last byte
+PASS  scan: a run stops at the string limit
+PASS  scan: a run that ends one byte under the string limit
+PASS  scan: a run exactly as long as the string limit
+PASS  scan: a run of 1,000 plain bytes fits a limit of 1,000
+PASS  scan: ...and is refused at its last byte by a limit of 999
+PASS  scan: space and DEL, the plain bytes' edges, are plain
+PASS  scan: 0x1F after a run is CONTROL where it stands
+PASS  scan: 0x80 after a run is UTF8 where it stands
+PASS  scan: raw two-, three- and four-byte UTF-8 between runs
+PASS  scan: escapes of two-, three- and four-byte characters between runs
+PASS  scan: stringLength of those escapes between runs
+PASS  scan: keyEquals of those escapes' UTF-8
+PASS  scan: a two-byte character closed on the window's last byte
+PASS  scan: a two-byte character and no closing quote in the window
+PASS  scan: a two-byte character the window cuts after its lead
+PASS  scan: a three-byte character the window cuts after its second byte
+PASS  scan: a four-byte character closed on the window's last byte
+PASS  scan: a four-byte character the window cuts after its third byte
+PASS  scan: blanks the window cuts short are truncated, not closed by the closer past them
+PASS  scan: blanks that run on past the window are truncated at its end
+PASS  scan: blanks up to the window's last byte end a top-level value
+PASS  scan: ...and the value past them is trailing in a wider window
+PASS  scan: a run of all four blanks
+PASS  scan: an integer that ends on the window's last byte
+PASS  scan: a fraction that ends on the window's last byte
+PASS  scan: an exponent that ends on the window's last byte
+PASS  scan: parseFloat reads the token alone, not the digit past the window
+PASS  scan: an exponent's digits stop at the token's end
+PASS  scan: parseFloat of 16 significant digits that end on the window's last byte
+PASS  scan: ...and of 17, one byte wider
+PASS  scan: the number limit inside an integer's run
+PASS  scan: the number limit inside a fraction's run
+PASS  scan: a number exactly as long as the number limit
+PASS  scan: numberI64 of an integer the window cuts
+PASS  scan: numberU64 of an integer the window cuts
+PASS  long run: then a two-byte character
+PASS  long run: then a three-byte character
+PASS  long run: then a four-byte character
+PASS  long run: then 0x00 is CONTROL where it stands
+PASS  long run: then 0x1F is CONTROL where it stands
+PASS  long run: then escapes
+PASS  long run: then a \u escape the window cuts after two hex digits
+PASS  long run: then a backslash on the window's last byte
+PASS  long run: then a two-byte character the window cuts after its lead
+PASS  long run: then a four-byte character the window cuts after its third byte
+PASS  long run: then a three-byte character closed past the window
+PASS  shrunk: a blank run stops at the array's end
+PASS  shrunk: a digit run stops at the array's end
+PASS  shrunk: ...and the number is the digits left
+PASS  shrunk: a string run stops at the array's end
+PASS  shrunk: isU64 is false once the token is past the array
+PASS  shrunk: numberU64 is 0
+PASS  shrunk: isInteger is false
+PASS  shrunk: numberF64 is 0, through numberSlow
+PASS  shrunk: stringInto copies only the bytes left
 PASS  an error is answered by next()
 PASS  ...and recorded in failed
 PASS  ...at errorAt
@@ -320,4 +415,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 322 passed, 0 failed, 0 skipped
+std/json-tokenizer: 417 passed, 0 failed, 0 skipped

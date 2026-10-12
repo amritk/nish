@@ -34,7 +34,8 @@ const nodeHex = (out: u8[], n: i32): string => {
 /**
  * Every token's kind; a key's or a string's decoded bytes in hex, and for a
  * key whether `keyEquals` holds for "ab" (`=`) or not (`!`); a number's value,
- * and its `i64` when it is one; then the verdict.
+ * its `i64` after `/` when it is one, and its `u64` after `+` when it is one;
+ * then the verdict.
  */
 const nodeTokens = (text: string): string => {
   const bytes = nodeBytes(text);
@@ -44,7 +45,9 @@ const nodeTokens = (text: string): string => {
   let k: i32 = t.next();
   while (k > 0) {
     if (k === JSON_TOK_NUMBER) {
-      words.push(t.isInteger() ? `${k}:${t.numberF64()}/${t.numberI64()}` : `${k}:${t.numberF64()}`);
+      const signed = t.isInteger() ? `/${t.numberI64()}` : "";
+      const unsigned = t.isU64() ? `+${t.numberU64()}` : "";
+      words.push(`${k}:${t.numberF64()}${signed}${unsigned}`);
     } else if (k === JSON_TOK_STRING) {
       words.push(`${k}:${nodeHex(out, t.stringInto(out, 0))}`);
     } else if (k === JSON_TOK_KEY) {
@@ -66,5 +69,10 @@ export const main = (): number => {
   console.log(nodeTokens('{"a\\u0062":[1,-2.5e1,"x\\n\\u0041\\ud83d\\ude00",true,false,null,{}],"ac":1e23,"long":0.12345678901234567}'));
   console.log(nodeTokens("[-9223372036854775808,9223372036854775808,-0]"));
   console.log(nodeTokens("[1,]"));
+  // `numberU64` at the edges of a u64: 2^64 - 1 and one past it, 10^19, the
+  // first number of 20 digits, and 10^19 - 1, the last of 19.
+  console.log(
+    nodeTokens("[18446744073709551615,18446744073709551616,10000000000000000000,9999999999999999999,0]")
+  );
   return 0;
 };
