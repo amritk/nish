@@ -1,0 +1,2 @@
+reject_thread_region_walk_set_store.ts:53:5
+`bump` writes memory a task of `s` may read, before the scope joins

@@ -1,0 +1,2 @@
+`poke` writes memory its caller can see at 
+reject_thread_task_private_nested.ts:16:3, and `spawn`

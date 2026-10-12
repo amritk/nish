@@ -1,18 +1,18 @@
 module tests/cases/dump_shared_write_callee.ts (entry)
 function fill(xs: i32[], v: i32): void -> @fill
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5:5
+  sharedWrite: 7:5
   escaping: v
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 4:12 i: i32 (let)
+  local 6:12 i: i32 (let)
 function reset(xs: i32[]): void -> @reset
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fill
   calls: fill
   pointer xs: size=0 writesThrough=true captured=false passedTo=fill#0
   stackSites=0 stackLocals=0
-  callee 10:3 fill -> @fill
+  callee 12:3 fill -> @fill
 function log(n: i32): void -> @log
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -20,9 +20,9 @@ function log(n: i32): void -> @log
   stackSites=0 stackLocals=0
 function run(): i32 -> @run [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via reset
+  sharedWrite: via log
   calls: log reset
   stackSites=1 stackLocals=1
-  local 18:9 xs: i32[] (const)
-  callee 19:3 reset -> @reset
-  callee 20:3 log -> @log
+  local 20:9 xs: i32[] (const)
+  callee 21:3 reset -> @reset
+  callee 22:3 log -> @log

@@ -2461,10 +2461,27 @@ from the whole-program facts, and each rule is reported there:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``,
   naming the write, or the callee that makes it (`tests/cases/reject_par_shared_write`,
   `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
-  runtime's `nish_print`). A bounds check, an integer division and
-  `panic` are not writes: each prints and exits, and nothing runs again to see
-  memory. The instance performs every store itself, into slots the partitioner
-  has made disjoint, so a function that writes nothing cannot race.
+  runtime's `nish_print`). A bounds check, an integer division, the length
+  check of `new Array(n)` and `panic` are not writes: each prints and exits,
+  and nothing runs again to see memory. The instance performs every store
+  itself, into slots the partitioner has made disjoint, so a function that
+  writes nothing cannot race.
+- **A store into an array only this call reaches is not a shared write.** A
+  `const` the function binds to its own array literal or `new Array(n)` —
+  one whose elements are not stored inline — is *private* while every use of
+  it is an element, a store into a slot, `.length`, an array method, a
+  `for...of`, or an argument of a function that keeps nothing of it. Such a
+  function may fill it, `push` onto it, or hand it to a helper that writes
+  through its parameter, and still write nothing its caller can see: the
+  helper's writes through that parameter land in the private array
+  (`tests/link/thread_task_private`, whose body takes its element apart into a
+  scratch array). Returned, stored, pushed, bound to a second name (in any
+  declarator), named in an arrow, or handed to a function or a constructor that
+  keeps it, the array is shared, and so is every store into it
+  (`tests/cases/reject_par_private_kept`; the scoped-task twins below). What a
+  private array's slots hold is not private: a store into `rows[0][0]`, or a
+  helper that makes one, writes what `rows[0]` reaches
+  (`reject_par_private_helper_deep`).
 - **What the function allocates dies with its element.** A function may build
   strings, arrays and objects on the way to its result. They are given back
   after every element: the function gets an arena scope of its own, so each
@@ -2570,7 +2587,70 @@ export const main = (): i32 => {
     a store, `push` or `pop`, `Arena`, a call that writes through its
     argument, a task of another scope, whose join stores
     (`reject_thread_region_write`, `reject_thread_region_alias_write`,
-    `reject_thread_region_call_write`). A task argument read out of a
+    `reject_thread_region_call_write`). A constructor is a call: a `new`
+    whose constructor writes through an argument, directly or through a
+    constructor it calls, is
+    `` `new Bump` writes memory a task of `s` may read, before the scope joins: … ``
+    (`tests/cases/reject_thread_region_new_write`, and `_declarator` for the
+    second declarator of a statement, `_nested` for a constructor that calls
+    one, `_this` for one that hands `this` to its argument, which is a store
+    through that argument). A write counts however deep it lands in what the
+    argument reaches: a field of a field, a field of an element, through a
+    `const` that names one, a `for...of` variable over one, a helper, or a
+    method of what a field holds (`reject_thread_region_new_deep`,
+    `_new_element`, `_new_helper`, `_new_method`, `_call_deep`,
+    `_call_element`, `_call_alias`, `_call_loop`). Its stores into
+    the fresh object itself are not counted, so `new Point(3, 4)` is fine
+    there (`tests/link/thread_task_private`). An object a function or a
+    constructor made itself is its own memory, and a write into it counts
+    against nothing, until memory an argument reaches may have got into it:
+    stored into a field or an element at any depth, pushed, put there by a
+    method or a function it was handed to, kept by its constructor from an
+    argument, or any non-number value rooted at it — the object, a field or
+    an element of it at any depth, a constructor's `this` or `this.f` — used
+    as a value anywhere but a read, a comparison or an argument the checker
+    follows into its callee: the right side of an assignment, a `const`'s
+    initialiser, an element of an array literal, a property of an object
+    literal, `{ k: v }` or `{ k }`, an argument of `push`, of a `Map` or `Set`
+    method or of a call, an arm of a `?:`. Each position is refused for each
+    form of the value, a local, a field, an element and `this.f`
+    (`reject_thread_region_escape_<position>_<form>`, with positions
+    `assign`, `alias`, `array`, `object`, `shorthand`, `push`, `call`,
+    `ternary` and `element`, forms `local`, `member`, `index` and
+    `this_field`, and `_this` for the bare `this` in every position but
+    `shorthand`, which cannot name it). A `Map` or a `Set` keeps exactly what
+    its methods are handed — `set`'s key and value, `add`'s element,
+    `getOrInsert`'s from `nish/map` — so each is a store into the table, as a
+    `push` is (`reject_thread_region_map_value_param`, `_map_fused_value_param`,
+    `_map_own_subpath`, `_map_route_subpath`, `_map_route_value_param`,
+    `_set_own_subpath`). The iterable of a `for...of` is only read, and a
+    store through its loop variable is a store into the container
+    (`_walk_array_store`, `_walk_set_store`). An object literal
+    whose property is an argument's memory carries it however it is written
+    (`reject_thread_region_literal_object_param`, `_shorthand_param`,
+    `_array_object_param`, `_field_object_param`, `_push_object_param`,
+    `_new_object_param`, `_object_const_param`, `_object_method_param`). A
+    write below such a slot counts against the arguments
+    whose memory may be there, or against all of them when that cannot be
+    told (`reject_thread_region_new_alias_field`, `_alias_push`,
+    `_alias_element`, `_alias_const`, `_alias_helper`, `_alias_method`,
+    `_alias_item`, `_call_wrap`, `_fresh_field`, `_fresh_method_bind`,
+    `_fresh_attach`, `_fresh_push`, `_fresh_element`, `_fresh_array_field`,
+    `_fresh_nested`, `_fresh_bump_method`, `_fresh_const`, `_fresh_ctor_field`,
+    `_fresh_literal`, `_fresh_escape`, `_fresh_held`, `_fresh_held_temp`,
+    `_fresh_captured`, `_this_local`, `_this_ternary`,
+    `_this_literal`, `_this_object`). A constructor that keeps what it is
+    handed keeps it per argument, so one that keeps the caller's own array, or
+    pushes an argument's object onto an array it made, writes nothing of the
+    task's (`tests/link/thread_scope_region_fresh_object`,
+    `thread_scope_region_kept_own`), and a call that only writes its argument,
+    or returns an object of its own, keeps nothing of the caller's in it:
+    `w = build(h)` on a function that returns a fresh object, and
+    `c.reset(h.nums[0])` on a fresh counter followed by writes into `c`
+    (`thread_scope_region_own_handoff`). So a `Map` or a `Set` a function
+    makes and fills itself writes nothing of the task's
+    (`thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert`,
+    `thread_scope_region_set_add`). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the
@@ -2633,7 +2713,19 @@ element's arena, which a task does not share, and each rule is reported at the
   is not a write the rule counts:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
-  `reject_mutex_task_unguarded` for a task that also writes through a guard). A task inside a task, or
+  `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A store into an array the task allocated and hands to nothing that keeps it
+  is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
+  sieve may fill its own table, and a helper may fill the array it is handed
+  (`tests/link/thread_task_private`). Returned, stored into its argument's
+  field, pushed onto its argument's array, kept by a helper or a constructor,
+  or bound to a second name in a later declarator, the array is shared
+  (`tests/cases/reject_thread_task_private_returned`, `_field`, `_pushed`,
+  `_kept`, `_new`, `_declarator`). A constructor that hands `this` out can
+  lead to the array only by keeping it, so that route is `_new`'s. A store through a `?:` with the
+  array in one arm is a store into either (`_ternary`), and an element of a
+  private array of arrays is the array it holds
+  (`reject_thread_task_private_nested`). A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
@@ -2983,11 +3075,24 @@ sends and receives:
   between a channel and its scope (`reject_channel_spawn_handed`, and
   `reject_channel_spawn_handed_direct` for the channel as the argument itself).
   In the constructor of a class that holds a channel, directly or through a
-  field's class, `this` appears only as the base of a field store,
-  `this.f = ...`: a method called on it, an argument, a store elsewhere, a
-  second name or an array element would carry a send the count would not see
-  (`reject_channel_ctor_this`, `reject_channel_ctor_this_stored`,
-  `reject_channel_ctor_this_bound`, `reject_channel_ctor_this_array`).
+  field's class, `this` appears only as the base of its own field, `this.f`,
+  used in one of three ways: as the target of a store (`this.f = ...`,
+  `this.f += ...`); as any value, except as the callee of a call, when the field is a
+  number, a `boolean`, an enum, a string or an array of those, from which
+  nothing reaches a channel (`this.total = this.a + this.b`,
+  `this.width = this.name.length`, `this.items.push(x)`); or as the base of a
+  store into a field or element of what it holds, when that is no channel and
+  holds none (`this.span.lo = 1`; `tests/link/thread_channel_ctor_reads`). A
+  method called on it, an argument (to a function or to a constructor), a store
+  elsewhere, a second name (in any declarator), an array element, a read of the
+  channel or of an object that holds one, or `this` stored even into its own
+  field would carry a send the count would not see:
+  `` The constructor of a class that holds a channel uses `this` other than to read or set its own fields, `this.f`, where a send made through it could not be counted: … ``
+  (NL2479; `reject_channel_ctor_this`, `reject_channel_ctor_this_stored`,
+  `reject_channel_ctor_this_bound`, `reject_channel_ctor_this_array`,
+  `reject_channel_ctor_this_new`, `reject_channel_ctor_this_declarator`,
+  `reject_channel_ctor_this_self`, `reject_channel_ctor_this_deep_carrier`,
+  `reject_channel_ctor_this_send`, `reject_channel_ctor_this_carrier`).
 - **C5: a channel has one receiver** — one task, from a `spawn` outside any
   loop, or the parent in a later statement of the block that has the scope's
   block as one of its statements, never both — and inside a scope's block the

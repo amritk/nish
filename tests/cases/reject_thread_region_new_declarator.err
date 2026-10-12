@@ -1,0 +1,2 @@
+reject_thread_region_new_declarator.ts:24:11
+`new Bump` writes memory a task of `s` may read, before the scope joins
