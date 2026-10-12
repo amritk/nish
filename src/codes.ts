@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 614
+export const RULE_COUNT: i32 = 617
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -227,6 +227,8 @@ const diagnosticRules = (): string[] => [
   "NL2375",
   ", and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()`",
   "NL2471",
+  "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`",
+  "NL1062",
   "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",
   "NL2389",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
@@ -371,6 +373,8 @@ const diagnosticRules = (): string[] => [
   "NL1056",
   "` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ",
   "NL2042",
+  "` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers",
+  "NL2491",
   "`, because that entry declares none of the conditions this compiler compiles source from (`",
   "NL3020",
   "; a class or interface name is still program-wide, so two packages cannot both declare one",
@@ -547,6 +551,8 @@ const diagnosticRules = (): string[] => [
   "NL2005",
   "` is generic, so it names no one function to pass as argument ",
   "NL2341",
+  "` is never `null` here, so `?.` has nothing to skip: write `.`",
+  "NL2490",
   "` takes its signature from the arrow; drop the annotation on `",
   "NL2273",
   "A bound of `integer<Lo, Hi>` must be an integer literal, got `",

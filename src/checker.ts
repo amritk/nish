@@ -120,7 +120,7 @@ import {
   StructTemplateInfo,
 } from "./program"
 import { BoundsWalk, Offset, analyzeBounds, offsetIndex } from "./bounds"
-import { isAssignmentOperator } from "./emit-util"
+import { isAssignmentOperator, isOptionalChain, unwrapParens } from "./emit-util"
 import { checkResultLocalsHandled } from "./result"
 import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
@@ -1869,10 +1869,15 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     const first = node.children.length > 0 && node.children[0] === down
     const logical = node.kind === N_BINARY && (node.text === "&&" || node.text === "||" || node.text === "??")
     const branches = node.kind === N_IF || node.kind === N_CONDITIONAL || node.kind === N_SWITCH || logical
+    // A `?.` chain on the left of `??` may stop at any `?.` link, so not even
+    // the first operand of that `??` is sure to run.
+    const chained =
+      node.kind === N_BINARY && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
     const repeats =
       node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR || node.kind === N_FOR_OF
     const crosses =
-      down !== node && ((branches && !first) || repeats || node.kind === N_ARROW || node.kind === N_LABELED)
+      down !== node &&
+      ((branches && (!first || chained)) || repeats || node.kind === N_ARROW || node.kind === N_LABELED)
     if (crosses) {
       return null
     }

@@ -140,6 +140,7 @@ import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
+import { isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
 import {
   FLAG_CONST,
@@ -3604,7 +3605,16 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   // WP32: `a ?? d` runs `d` only where `a` is missing, the same join with no
   // condition for the right operand to assume.
   if (op === "&&" || op === "||" || op === "??") {
-    walkExpression(walk, state, left)
+    if (op === "??" && isOptionalChain(unwrapParens(left))) {
+      // A `?.` chain stops at the first link whose receiver is `null`, so any
+      // prefix of it may be all that ran: what it proves is proved where its
+      // own links run, and what reaches the default is what no part of it
+      // could have disturbed.
+      walkExpression(walk, cloneState(state), left)
+      forgetAcross(walk, state, left)
+    } else {
+      walkExpression(walk, state, left)
+    }
     if (op === "??") {
       const maybeRan = cloneState(state)
       walkExpression(walk, maybeRan, right)

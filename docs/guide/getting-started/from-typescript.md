@@ -148,9 +148,11 @@ class, an interface, an array or a string; the next section covers it.
 appears is in checking the result of `Map.get`, as in
 `m.get(key) === undefined`.
 
-## No `?.`; `??` for a nullable
+## `?.` needs a `??`
 
-```ts nish:err NL1049
+Optional chaining works as long as the chain ends in a default:
+
+```ts nish:ok
 class Node {
   value: i32 = 0;
   next: Node | null = null;
@@ -161,8 +163,24 @@ const nextValue = (n: Node): i32 => {
 };
 ```
 
-Copy the nullable value into a local, compare it with `null`, and the compiler
-narrows it to the non-null type inside the branch:
+On its own, `n.next?.value` answers `undefined` when `n.next` is `null`, and
+Nish has no `undefined` value, so a chain without `??` is refused:
+
+```ts nish:err NL1062
+class Node {
+  value: i32 = 0;
+  next: Node | null = null;
+}
+
+const nextValue = (n: Node): i32 => {
+  const v = n.next?.value;
+  return 0;
+};
+```
+
+When you need more than a default, copy the nullable value into a local and
+compare it with `null`; the compiler narrows it to the non-null type inside
+the branch:
 
 ```ts nish:ok
 class Node {
@@ -182,11 +200,12 @@ const nextValue = (n: Node): i32 => {
 Narrowing works only on a local or a parameter, never on a property path such
 as `n.next`; hence the copy.
 
-`??` works on a `T | null`, and on the result of `Map.get`, as in
-`counts.get(key) ?? 0`. `n.next ?? fallback` is a `Node`, with no narrowing
-needed. Anywhere else, such as on a number, it is refused (`NL1048`), and so
-is a default for an array element, `xs[i] ?? d` (`NL2489`): past the end of
-the array, Node answers `d` where Nish stops the program. See the reference's
+`??` works on a `T | null`, on a `?.` chain, and on the result of `Map.get`,
+as in `counts.get(key) ?? 0`. `n.next ?? fallback` is a `Node`, with no
+narrowing needed. Anywhere else, such as on a number, it is refused
+(`NL1048`), and so is a default for an array element, `xs[i] ?? d`
+(`NL2489`): past the end of the array, Node answers `d` where Nish stops the
+program. `?.[i]` and `f?.()` are not supported. See the reference's
 [Nullable types](../../LANGUAGE.md#nullable-types).
 
 ## No exceptions
