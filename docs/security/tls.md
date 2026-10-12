@@ -355,7 +355,7 @@ reads it (TLS-1).
 | Stage | Files | What |
 | --- | --- | --- |
 | psk-wire | `std/net/tls/codec.ts`, `std/net/tls/schedule.ts` | `TlsClientHelloView` reads `pre_shared_key`'s identities and binders and `psk_key_exchange_modes`; `tlsWriteNewSessionTicket` and the ServerHello `pre_shared_key` writer; the PSK early secret, binder key, binder verify and `tlsResumptionPsk`, in place |
-| ticket-seal | `std/net/tls/ticket.ts` (new, `nish/net/tls/ticket`) | `tlsTicketSeal` and `tlsTicketOpen` over ChaCha20-Poly1305 under a borrowed `Secret` key; the key-rotation helpers; `TlsTicketStrikes`, the strike register |
+| ticket-seal | `std/net/tls/ticket.ts` (new, `nish/net/tls/ticket`) | `tlsTicketSeal` and `tlsTicketOpen` over ChaCha20-Poly1305 under a borrowed `Secret` key; `TlsTicketKeyInfo`, `tlsTicketKeyDraw` and `tlsTicketKeyDue`; `TlsTicketStrikes`, the strike register |
 | server-resume | `std/net/tls.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | `TlsServer`'s ticket hand-off states and resumed path; `TlsRecordServer` sends the NewSessionTicket; `TlsTcpServer`'s per-slot calls that lend the program's keys |
 | interop-resume | `tests/link/net_interop_server`, `tests/interop`, `.github/workflows/interop.yml` | curl and Chromium each resume a session against the server |
 
@@ -396,26 +396,59 @@ network or console builtin (NL2432), so a key reaches disk or the wire only by
 the program `expose`ing it on purpose; this design never does, and the
 interop server does not.
 
-- **Lifetime.** A key seals tickets for 12 hours (its *issue window*), then is
-  kept as the *previous* key, which opens tickets but seals none, for one
-  ticket lifetime more (2 hours), then is wiped with `wipe`. A ticket sealed
-  at the last moment of its key's issue window expires exactly as that key is
-  wiped, so no ticket outlives its key and none expires early because of
-  rotation. A key exists for at most 14 hours.
-- **Rotation.** The program holds at most two keys, current and previous, and
-  the rotation helpers make the turn one call: the previous key is wiped, the
-  current becomes previous, and a fresh key and id are drawn with
-  `crypto.getRandomValues` into a plain array and moved into a `Secret`. The
-  clock is the program's, `Date.now()` in milliseconds, the clock the tickets
-  are timed by.
+- **The key's record.** Beside each key the program keeps a
+  `TlsTicketKeyInfo`, an object of public fields: the key id, the time the
+  key was drawn, and how many tickets it has sealed. It is a class, so it may
+  be a field and be kept anywhere; the key it describes may not.
+- **The clock.** Every time in this design — a key's creation, a ticket's
+  issue time and its chain's start, a strike entry's expiry — is
+  `monotonicNanos()`, never the wall clock. Keys never leave the process, so
+  no ticket outlives the process that sealed it, and a process-local clock
+  serves; unlike `Date.now()`, it cannot step. A wall clock that stepped
+  forward by a lifetime and back again would make live strike entries look
+  expired, let them be reused, and then accept their tickets a second time.
+  The clock is read outside `expose`, which reaches no clock (NL2448), and
+  handed in as `now`. A monotonic clock that stops while the machine sleeps
+  lengthens a ticket's server-side life by the sleep; the client still drops
+  it at `ticket_lifetime` by its own clock (§4.2.11.1).
+- **Lifetime, enforced.** A key seals tickets for 12 hours after it was drawn
+  (its *issue window*), and opens them for one ticket lifetime more (2 hours),
+  as the *previous* key. The module enforces both from the key's record,
+  whatever the program does: `tlsTicketSeal` refuses a key past its issue
+  window, and `tlsTicketOpen` refuses a ticket under a key past 14 hours, so
+  the client gets a full handshake. A ticket sealed at the last moment of its
+  key's issue window expires exactly as its key stops opening, so no ticket
+  outlives its key and none expires early because of rotation. What the module
+  cannot do is wipe the program's key: the wipe is the program's, at rotation.
+  A program that never rotates keeps a key's bytes in memory, but no ticket
+  under it opens after 14 hours and no client offers one after 2 hours more
+  (§4.2.11.1), so the 14-hour bound on what a leaked key opens holds either
+  way.
+- **Rotation.** The program holds at most two keys, current and previous, in
+  locals. `tlsTicketKeyDraw(info, now): Secret<u8[]>` draws a fresh key and
+  id with `crypto.getRandomValues`, moves the key into a `Secret`, fills
+  `info` (new id, `now`, a count of 0) and returns the key;
+  `tlsTicketKeyDue(info, now): boolean` says when the current key should be
+  replaced. The turn itself is the caller's, because a function hands back at
+  most one `Secret` and may not reassign a borrowed one (NL2429, NL2442,
+  NL2444): `wipe(previous)` if there is one, `previous = current`, copy the
+  current record into the previous one, then
+  `current = tlsTicketKeyDraw(currentInfo, now)`. A program written that way
+  compiles under `nish:secret` today. The interop server rotates that way.
 - **A ticket under a retired or unknown key** fails to open — its key id
   names neither key — and the client gets a full handshake (§4.2.11: unknown
   PSKs SHOULD be ignored). So does every ticket after the process restarts,
   since keys never leave memory.
-- **Nonces.** Each ticket is sealed under a fresh 12-byte random nonce. Under
-  one key, n tickets collide with probability about n² / 2^97: 2^-33 at 2^32
-  tickets, which is 12 hours at 99,000 tickets a second. The issue window is
-  what bounds n, so no count is kept.
+- **Nonces, enforced.** Each ticket is sealed under a fresh 12-byte random
+  nonce. Under one key, n tickets collide with probability about n² / 2^97.
+  The issue window bounds time, not the number of connections, so the count
+  is kept: the key's record counts the tickets it has sealed, and
+  `tlsTicketSeal` refuses a key that has sealed 2^30 (its *seal cap*, a field
+  of the record with that default), which bounds a collision at 2^60 / 2^97 =
+  2^-37 whatever the connection rate. `tlsTicketKeyDue` answers true at the
+  cap as at the end of the window, and until the program rotates, connections
+  are issued no ticket; nothing else about them changes. A repeated nonce
+  would let the attacker forge a ticket; the cap is what rules it out.
 - **The ticket.** Key id (16, public, authenticated as AAD) ‖ nonce (12) ‖
   ChaCha20-Poly1305 ciphertext of the state ‖ tag (16). The state is what a
   resumed handshake reads, and nothing else: the suite, the time the ticket
@@ -442,14 +475,19 @@ interop server does not.
   issues a ticket that carries the chain's start forward, so resumption cannot
   extend a certificate-authenticated session's keying material for ever
   (§4.6.1 RECOMMENDS a limit); a client resuming every hour pays one full
-  handshake a day. A clock that steps back makes fresh tickets look issued in
-  the future, and they fail to open: the error falls on the side of a full
-  handshake. The `ticket_lifetime` sent is 7200 seconds, under §4.6.1's
+  handshake a day. A ticket whose issue time is after `now`, which a
+  monotonic clock gives only to a ticket sealed under another process's
+  clock, fails to open. The `ticket_lifetime` sent is 7200 seconds, under §4.6.1's
   604,800 cap.
 
 To be pinned by `net_tls_ticket` (round trip, a flipped bit in each region,
-expiry at each bound, retired and unknown key ids, the chain bound) and by a
-`tests/run.js` check that the key's wipe survives `opt -O2`.
+expiry at each bound, retired and unknown key ids, the chain bound; a key past
+its issue window refused by `tlsTicketSeal` and past 14 hours by
+`tlsTicketOpen`; the seal cap, brought forward to 2 as `recordLimit` is for
+KeyUpdate; `tlsTicketKeyDue` at the window's end and at the cap; and the
+caller's rotation turn, run three times with the previous key's array zero
+after each) and by a `tests/run.js` check that the key's wipe survives `opt
+-O2`.
 
 ### Anti-replay
 
@@ -457,7 +495,8 @@ Tickets are single-use in each process (§8.1). `TlsTicketStrikes` is a strike
 register of ticket ids, each kept until its ticket expires: an open-addressed
 table made once at the capacity the program gives (65,536 ids by default; a
 12-byte id and an 8-byte expiry each, so about 1.3 MB), whose expired entries
-are reused, and which never grows. The id is the ticket's seal nonce, which
+are reused, and which never grows. The program owns it and lends it to the
+call that opens tickets, as it lends the keys. The id is the ticket's seal nonce, which
 the AEAD authenticates, so an id comes only from a ticket this server sealed.
 
 - **The order.** Identities are read in the client's order, and the first
@@ -466,18 +505,51 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   and is not in the register is selected; then its binder alone is verified
   (§4.2.11: SHOULD NOT validate multiple binders), and only once it verifies
   is its id recorded. So the register holds only ids from ClientHellos whose
-  binder verified (as §8.2 requires of a recorded ClientHello's key), and
-  an attacker who has seen a ticket but holds no PSK cannot spend it for the
-  client. A ticket already recorded is passed over like one that does not
-  open.
+  binder verified (as §8.2 requires of a recorded ClientHello's key): an
+  attacker who has seen a ticket cannot spend it with a ClientHello of its own
+  making, since it holds no PSK to bind one. It can spend it with the
+  client's: a whole ClientHello carries the client's valid binder, so an
+  on-path attacker that delivers it first, or drops the client's copy and
+  replays it, gets the id recorded, and the client's own offer is passed over
+  (row 6). What it wins is denial of resumption for that ticket — the client
+  gets a full handshake — and no key, since finishing the handshake needs the
+  client's x25519 private key. A ticket already recorded is passed over like
+  one that does not open.
+- **One call, no gap.** Opening the identities, checking the register,
+  verifying the selected binder and recording its id happen in one call, the
+  ticket hand-off for one ClientHello, which returns only once the id is
+  recorded or no identity is selected. The ClientHello is whole by then, so
+  the binder needs nothing more from the client. A carrier serves its slots
+  one call at a time on one thread, so two slots offering the same ClientHello
+  cannot both pass the check: the first records, and the second is row 6. A
+  register is not shared between threads; a program that serves on several
+  threads gives each its own register and its own keys, and is to that
+  extent several processes (Per process, below).
+- **Recorded is spent.** Once its binder has verified, a ticket is spent,
+  whatever happens after: a client Finished that fails, a stream cut, a slot
+  closed. The id is not released, because the server cannot tell a client
+  that failed from an attacker that replayed a whole ClientHello it cannot
+  finish, and releasing would let that attacker hold one ticket open for
+  replay as often as it liked. The client loses one ticket and gets a full
+  handshake next time.
 - **Full fails closed.** A register with no free entry selects no ticket, and
   the client gets a full handshake. Evicting a live entry would make a ticket
-  usable twice. Filling it takes the attacker 65,536 complete full handshakes
-  and as many resumptions within one ticket lifetime, and wins it full
-  handshakes for everyone until entries expire: a cost in CPU, not in
-  security. The program sizes the register to at least its resumption rate
-  times the ticket lifetime; the default covers about nine resumptions a
-  second.
+  usable twice. Because a resumed connection is issued a ticket of its own,
+  one full handshake starts a chain that can fill the register on its own:
+  keeping it full takes resumptions at its capacity over the ticket lifetime,
+  about 9.1 a second at the default, each a real connection with an x25519
+  exchange on the attacker's side too, sustained for as long as the effect is
+  wanted. While it lasts every client resumes no session and pays a full
+  handshake, as it would on a server without tickets: a cost in CPU, never a
+  key, a forged ticket or a ticket accepted twice. The design accepts that
+  rather than bound it per chain or per client: a per-chain allowance only
+  makes the attacker start a chain with a full handshake every few seconds,
+  and a per-client one needs an identity a server without client
+  authentication does not have. What it adds is sight and size:
+  `TlsTicketStrikes` counts the resumptions it refused for being full, which
+  the program reads to alert on or to size by, and the program sizes the
+  register at least to its legitimate resumption rate times the ticket
+  lifetime, about 20 bytes an id.
 - **Why single-use when there is no 0-RTT.** A replayed ClientHello that
   offers a ticket under `psk_dhe_ke` wins the attacker no key: completing the
   handshake needs the PSK and the private half of the client's key share, and
@@ -501,11 +573,14 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   in CPU, accepted for bounded per-connection work. A client whose
   `psk_key_exchange_modes` does not list `psk_dhe_ke`, or that sent none, is
   issued no ticket (§4.2.9: SHOULD NOT send tickets incompatible with the
-  advertised modes). The `ticket_nonce` is one byte, 0, unique among the one
-  ticket a connection gets (§4.6.1).
+  advertised modes). Nor is a connection whose current key is past its issue
+  window or at its seal cap, until the program rotates. The `ticket_nonce` is
+  one byte, 0, unique among the one ticket a connection gets (§4.6.1).
 
-To be pinned by `net_tls_ticket` (replay refused, the register full) and
-`net_tls_resume` (each row of the fallback and abort table below).
+To be pinned by `net_tls_ticket` (replay refused; the register full refusing
+and counting each refusal, and taking ids again once entries expire) and
+`net_tls_resume` (each row of the fallback and abort table below, rows 17 and
+18 included).
 
 ### 0-RTT
 
@@ -568,12 +643,22 @@ nothing a fresh anonymous connection would not.
 
 As TLS-1 records for the other secrets:
 
-- **Ticket keys** are the program's `Secret`s and are wiped by the rotation
-  helpers when retired. What the AEAD makes from a key while it runs is the
+- **Ticket keys** are the program's `Secret`s and are wiped by the program's
+  rotation turn when retired (Rotation, above). What the AEAD makes from a key while it runs is the
   primitive's, under the AEADs' own record.
-- **The opened state.** `tlsTicketOpen` decrypts into the caller's
-  `TlsTicketState`, inside `expose`, and wipes every intermediate of its own
-  with `secureZero`, a failed open's included. `TlsServer` keeps the opened
+- **The opened state.** The function `tlsTicketOpen` hands `exposeWith` may
+  not write through the argument it is given (NL2450), so it cannot decrypt
+  into the caller's state. It opens the sealed bytes into fresh arrays and
+  answers the plaintext — the suite, times, server name and resumption PSK —
+  as a plain `u8[]`, empty when the tag fails; what the AEAD makes on the way
+  is the primitive's, under the AEADs' record. Outside `expose`,
+  `tlsTicketOpen` parses that array into the caller's `TlsTicketState`,
+  copying the PSK into the state's own array, and wipes the plaintext with
+  `secureZero` on every path, a failed parse's included. Sealing is the same
+  shape the other way: the plaintext is built outside `expose` from bytes
+  that are not a `Secret`, sealed by the function `exposeWith` runs, and wiped
+  once sealed. Both run in a `using a = arena()` block, so what they allocate
+  is released once wiped (the 0 bytes per handshake below). `TlsServer` keeps the opened
   PSK in one of its secret arrays, since a `Secret` may not be a field, and
   wipes it with `secureZero` once the early secret is extracted, on failure,
   and in `restart`.
@@ -588,7 +673,8 @@ As TLS-1 records for the other secrets:
 - **Memory.** A resumed handshake through a reused slot leaves `Arena.mark()`
   where a full one leaves it: 0 bytes per handshake (TLS-3).
 
-To be pinned by `net_tls_ticket` (the wipe of a failed open) and
+To be pinned by `net_tls_ticket` (the plaintext zero after a successful and a
+failed open, and after a seal) and
 `net_tls_resume` (the PSK and resumption master secret zero after the
 handshake; 0 bytes per resumed handshake through a reused slot).
 
@@ -606,7 +692,7 @@ stage's tests cite this table by row.
 | # | The client offers | The server | Rule |
 | --- | --- | --- | --- |
 | 1 | an identity that opens, unexpired, unrecorded, under the chosen suite's hash and this ClientHello's server name, with a binder that verifies, and `psk_dhe_ke` | resumes: ServerHello with `pre_shared_key` naming it and a `key_share`, then EncryptedExtensions and Finished, no Certificate or CertificateVerify; records its id | §2.2, §4.2.9, §4.2.11 |
-| 2 | no identity that opens (tampered, truncated, an unknown or retired key id) | full handshake | §4.2.11 (unknown PSKs SHOULD be ignored) |
+| 2 | no identity that opens (tampered, truncated, an unknown or retired key id, a key past 14 hours) | full handshake | §4.2.11 (unknown PSKs SHOULD be ignored) |
 | 3 | an identity that opens but has expired, by lifetime or by the 24-hour chain bound, or is dated in the future | full handshake | §4.6.1 (a server MAY treat a ticket as valid for less) |
 | 4 | an identity whose suite's hash is not the chosen suite's | passed over; full handshake if none other qualifies | §4.2.11, §4.6.1 (same KDF hash) |
 | 5 | an identity issued for another server name | passed over; full handshake if none other qualifies | §4.6.1 (declining every other name keeps the reported name the session's) |
@@ -621,14 +707,16 @@ stage's tests cite this table by row.
 | 14 | `pre_shared_key` without `signature_algorithms`, or without the server's scheme in it, when row 1 does not apply | `missing_extension`, or `handshake_failure` for the scheme, as today | §4.2.3 (MUST abort when authenticating by certificate), §9.2 |
 | 15 | `psk_dhe_ke` without an x25519 share | one HelloRetryRequest, as today; identities are read in the second ClientHello, whose binders cover the first, the retry and the truncated second | §4.1.4, §4.2.11.2 |
 | 16 | `early_data` | the extension is ignored and the handshake goes on by the rows above; a 0-RTT record that follows is `bad_record_mac` | §4.2.10 |
+| 17 | an identity resumed as in row 1, then a client Finished that fails, a stream cut or a slot closed | the connection fails as today; the id stays recorded, and a later offer of the ticket is row 6 | §8.1; this design (recorded is spent) |
+| 18 | the same ClientHello on two slots before either finishes | the first resumes as in row 1; the second is row 6 | §8.1; this design (one call, no gap) |
 
-Rows 2 to 8 never abort: a client the server cannot resume gets the handshake
+Rows 2 to 8 and 18 never abort: a client the server cannot resume gets the handshake
 it would have had without a ticket. Row 9 is the one place a ticket that
 opened can fail a connection, and it tells the attacker that the identity
 opened and was not recorded (§E.6). Tickets are in the clear in the
 ClientHello, the attacker cannot seal one, and what it learns is whether a
 ticket it saw is still unspent; the design accepts that. Over QUIC, rows 1 to
-9 are all a full handshake, since its connections never open a ticket, and
+9, 17 and 18 are all a full handshake or today's handling, since its connections never open a ticket, and
 rows 10 to 15 hold as over TCP, the codec being shared; QUIC's own 0-RTT is
 not this record's. A ClientHello with no `pre_shared_key` is handled as today.
 
