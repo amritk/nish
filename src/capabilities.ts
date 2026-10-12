@@ -183,6 +183,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "console.log" ||
     name === "console.error" ||
     name === "String.fromCharCode" ||
+    name === "String.fromBytes" ||
     name === "Math.sqrt" ||
     name === "Math.floor" ||
     name === "Math.ceil" ||
