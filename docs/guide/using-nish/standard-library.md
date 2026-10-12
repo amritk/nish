@@ -369,7 +369,9 @@ them, exactly as `JSON.stringify` would.
 A `u64` keeps every digit up to 2^64 - 1, which a JavaScript number cannot,
 and a negative number is a range error for it. An enum is read and written as
 its number: a number that is not one of its members' values is a type error,
-and the field keeps the member it held. A `Map<string, V>` is a JSON object
+and the field keeps the member it held. An enum whose members are strings is
+not something the language has, so it cannot be a field either; use a
+`string` field and check its value yourself. A `Map<string, V>` is a JSON object
 whose keys you do not know in advance: decoding empties the map and fills it
 in the order the keys arrive, a key given twice is an error, and encoding
 writes the entries in the map's order.

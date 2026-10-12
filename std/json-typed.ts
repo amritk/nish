@@ -696,9 +696,9 @@ export const jsonEncodeStringOrNull = (w: JsonWriter, s: string | null): void =>
 
 /**
  * A `u64`, as its digits: at most 20 of them, written with `raw` from an
- * array of this call's own that nothing keeps. Every `u64` here is built
- * with `toU64`, a BigInt under Node, where the writer's own `i64` would mix
- * one with a number.
+ * array of this call's own that nothing keeps. A value past 2^63 has no
+ * `i64` to go through the writer's `i64` as, so every `u64` takes this one
+ * loop. Every `u64` here is built with `toU64`, a BigInt under Node.
  */
 export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
   const ten: u64 = toU64(10)
