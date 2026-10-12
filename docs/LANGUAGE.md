@@ -2637,8 +2637,16 @@ export const main = (): i32 => {
     `s.add(…)` — is a value rooted at that table, and escapes it wherever a
     name would (`reject_thread_region_call_escape_<position>_<form>`, with
     positions `push`, `field`, `index`, `array` and `object`, forms `goi`,
-    `set_chain` and `add_chain`). Two values
-    stay unknown: an `x ?? y`, and the variable of a walk of anything else —
+    `set_chain` and `add_chain`, and `_ternary_goi`, `_nullish_get`,
+    `_let_init_goi`, `_let_assign_goi`, `_table_arg_set_chain`). Only a call
+    that keeps what it is handed stores it — `set` its key and value, `add`
+    its element, `getOrInsert` its key and default — so a lookup, `has`,
+    `get` or `delete`, keeps nothing (`reject_thread_region_table_key_set`,
+    `_table_key_get_or_insert`); and a number, a string or a `boolean` read
+    back through `| undefined`, as `m.get(k) ?? 0`, names no memory. A `?:`
+    or a `??` stored somewhere may be either of its sides. Two values may
+    be anything where they are written through: an `x ?? y`, and the
+    variable of a walk of anything else —
     a `Channel`'s messages are another task's. An object literal
     whose property is an argument's memory carries it however it is written
     (`reject_thread_region_literal_object_param`, `_shorthand_param`,
