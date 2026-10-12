@@ -353,25 +353,18 @@ export class JsonDecoder {
     if (tok.keyEquals(cur)) {
       return cur
     }
-    // The pieces are temporaries: a caller that keeps only the string it
-    // answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
     const n: i32 = tok.stringLength()
-    const parts: string[] = []
     if (n === tok.tokEnd - tok.tokStart - 2) {
-      // No escape, so the bytes between the quotes are the string's.
-      const src: u8[] = tok.src
-      for (let i: i32 = tok.tokStart + 1; i >= 0 && i < tok.tokEnd - 1 && i < toI32(src.length); i += 1) {
-        parts.push(String.fromCharCode(toI32(src[i])))
-      }
-      return parts.join("")
+      // No escape, so the bytes between the quotes are the string's, copied
+      // once by `String.fromBytes`.
+      return String.fromBytes(tok.src, tok.tokStart + 1, tok.tokEnd - 1)
     }
+    // The unescaped bytes are a temporary: a caller that keeps only the string
+    // it answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
     const bytes: u8[] = new Array<u8>(n)
     const at: i32 = 0
     tok.stringInto(bytes, at)
-    for (let i: i32 = 0; i < n && i < toI32(bytes.length); i += 1) {
-      parts.push(String.fromCharCode(toI32(bytes[i])))
-    }
-    return parts.join("")
+    return String.fromBytes(bytes, 0, n)
   }
 
   // Arrays of scalars and strings: each element is read into the slot the

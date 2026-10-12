@@ -187,6 +187,10 @@ export const builtinPanicKind = (name: string): i32 => {
   if (isNetExport(name) && netRangeBuffer(name) >= 0) {
     return PANIC_SLICE
   }
+  // `String.fromBytes` checks the range it copies with the same panic.
+  if (name === "String.fromBytes") {
+    return PANIC_SLICE
+  }
   return -1
 }
 
@@ -789,11 +793,15 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
   return `${what}${unchecked}: ${indexGuardAdvice(program, table, index, i, xs)}`
 }
 
-/** A `slice`, an array `set` or a socket call whose buffer range is checked: no proof removes any of them. */
+/** A `slice`, an array `set`, a `String.fromBytes` or a socket call whose buffer range is checked: no proof removes any of them. */
 const sliceAdvice = (program: CheckedProgram, node: Node): string => {
   const name = calledName(program, node)
   if (name === "slice") {
     return "`slice` panics when its range is outside the string, and no proof removes that check yet: `substring` clamps the range instead"
+  }
+  // A user method cannot be a slice site, so the member name alone is `String.fromBytes`.
+  if (name === "fromBytes") {
+    return "`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: make the call from a module outside the scope"
   }
   return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: make the call from a module outside the scope`
 }
