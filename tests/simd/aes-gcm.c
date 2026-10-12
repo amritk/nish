@@ -524,10 +524,11 @@ int main(int argc, char **argv) {
       for (int klen = 16; klen <= 32; klen += 16)
         if (!fuzz_one(seed, klen, len, len % 3 == 0 ? COUNTER_NEAR_WRAP : COUNTER_RANDOM)) return 1;
     /* The wrap pinned rather than left to the draw: GCTR's block n takes the
-       counter J0 + n + 1, so these counters wrap at blocks 0, 1, 2, 4 and 6 --
-       on a four-block batch's first block, inside one, and inside the second --
+       counter J0 + n + 1, so these counters wrap at blocks 0, 1, 2, 3, 4 and 6 --
+       on a four-block batch's first block, inside one, on its last, and inside
+       the second --
        over lengths of one block to many, partial last blocks among them. */
-    static const uint32_t wraps[] = {0xffffffffu, 0xfffffffeu, 0xfffffffdu, 0xfffffffbu, 0xfffffff9u};
+    static const uint32_t wraps[] = {0xffffffffu, 0xfffffffeu, 0xfffffffdu, 0xfffffffcu, 0xfffffffbu, 0xfffffff9u};
     static const size_t wrap_lengths[] = {16, 33, 64, 100, 128, 200, 1000};
     for (size_t w = 0; w < sizeof wraps / sizeof wraps[0]; w++)
       for (size_t l = 0; l < sizeof wrap_lengths / sizeof wrap_lengths[0]; l++)

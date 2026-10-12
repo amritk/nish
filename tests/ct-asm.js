@@ -1395,6 +1395,17 @@ const AUDIT_CORNERS = [
     "load",
     ["movq %rdi, %xmm1", "pcmpistrm $0, %xmm1, %xmm2", "movq %xmm0, %rax", "movl (%rsi,%rax,4), %eax"],
   ],
+  // The arms of the step no row above reaches: an `e` form whose only secret is
+  // the length in %eax, and a secret block read from memory as the second operand.
+  ["x86-64", "a", "load", ["movl %edi, %eax", "pcmpestri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"]],
+  [
+    "x86-64",
+    "contents",
+    "load",
+    ["movq 16(%rdi), %rax", "pcmpistri $0, (%rax), %xmm1", "movl (%rsi,%rcx,4), %eax"],
+  ],
+  // And a string compare on public operands, which leaves %ecx and the flags public.
+  ["x86-64", "a", null, ["pcmpistri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"], { preciseFlags: true }],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */

@@ -38,9 +38,9 @@
  * writes every flag a branch reads (`cmp`, `test`, `add`, `sub`, `and`, `or`,
  * `xor`, `neg`, `adc`, `sbb`, `ptest`, `(u)comis`) sets them to its own taint,
  * one that writes none (moves, `lea`, `push`, `pop`, `bswap`, `not`, `set`,
- * `cmov`, and the SSE, AES-NI and PCLMULQDQ instructions but `ptest`) leaves
- * them alone, and anything else -- `inc`, a shift, a multiply -- still only
- * adds its taint. On aarch64 only a compare or an `s`-suffixed instruction
+ * `cmov`, and the SSE, AES-NI and PCLMULQDQ instructions but `ptest` and the
+ * string compares, `pcmp[ei]str[im]`) leaves them alone, and anything else --
+ * `inc`, a shift, a multiply, a string compare -- still only adds its taint. On aarch64 only a compare or an `s`-suffixed instruction
  * writes the flags, and each writes all four, so the step's own taint is the
  * flags'.
  *
@@ -225,6 +225,23 @@ const runtimeAsm = (root, file, target) => {
 }
 
 /**
+ * How a listing's exported functions (its `.globl` symbols) differ from the
+ * kernels this file reads and the resolver: `unread`, exported and never read,
+ * and `missing`, read and not exported. Both empty means a fifth kernel cannot
+ * be added without this file reading it.
+ */
+const exportGap = (lines) => {
+  const exported = lines
+    .map((line) => line.match(/^\s*\.globl\s+(\w+)/)?.[1])
+    .filter((name) => name !== undefined)
+  const named = [...RUNTIME_KERNELS.map((spec) => spec.name), "nish_aes_hw"]
+  return {
+    unread: exported.filter((name) => !named.includes(name)),
+    missing: named.filter((name) => !exported.includes(name)),
+  }
+}
+
+/**
  * Every reading this file makes, as `{ file, fn, target, kind, expect, ok, detail }`:
  * `kind` `exports` for the unit's exported functions being exactly the kernels
  * read here and the resolver, so a fifth kernel cannot go unread; `kernel` for
@@ -252,12 +269,7 @@ export const runtimeChecks = (root) => {
   }
   for (const target of CT_TARGETS) {
     const real = runtimeAsm(root, "runtime/runtime-aes.c", target)
-    const exported = real.ok
-      ? real.lines.map((line) => line.match(/^\s*\.globl\s+(\w+)/)?.[1]).filter((name) => name !== undefined)
-      : []
-    const named = [...RUNTIME_KERNELS.map((spec) => spec.name), "nish_aes_hw"]
-    const unread = exported.filter((name) => !named.includes(name))
-    const missing = named.filter((name) => !exported.includes(name))
+    const { unread, missing } = exportGap(real.ok ? real.lines : [])
     results.push({
       file: "runtime-aes.c",
       fn: "exports",
@@ -445,7 +457,28 @@ const cornerMisses = () => {
   return missed
 }
 
-const missedCorners = cornerMisses()
+/**
+ * The exports comparison's own corners: the unit's five, which pass; a sixth
+ * global, which must be named as unread; and one of the five gone, which must
+ * be named as missing.
+ */
+const exportMisses = () => {
+  const five = [...RUNTIME_KERNELS.map((spec) => spec.name), "nish_aes_hw"].map((name) => `\t.globl\t${name}`)
+  const missed = []
+  const clean = exportGap(five)
+  if (clean.unread.length > 0 || clean.missing.length > 0) {
+    missed.push("the five exports read as differing from themselves")
+  }
+  if (exportGap([...five, "\t.globl\tnish_aes_extra"]).unread.join() !== "nish_aes_extra") {
+    missed.push("a sixth exported function, nish_aes_extra, is not named as unread")
+  }
+  if (exportGap(five.slice(1)).missing.join() !== RUNTIME_KERNELS[0].name) {
+    missed.push(`${RUNTIME_KERNELS[0].name} left out of the listing is not named as missing`)
+  }
+  return missed
+}
+
+const missedCorners = [...cornerMisses(), ...exportMisses()]
 if (missedCorners.length > 0) {
   throw new Error(`tests/ct-asm-runtime.js misreads the corners of its model:\n${missedCorners.join("\n")}`)
 }
