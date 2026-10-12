@@ -809,10 +809,10 @@ export const JSON_WRITE_NON_FINITE: i32 = -8
  * `JSON_WRITE_TOO_DEEP` rather than a stack that grows.
  */
 export const JSON_WRITER_MAX_DEPTH: i32 = 64
-/** How many container kinds one of the writer's two words holds. */
-const JSON_WRITER_WORD_BITS: i32 = 32
 /** The lowest bit, spelled `i32` so that `<<` has an `i32` on its left under `--number-mode f64` too. */
 const JSON_WRITER_BIT: i32 = 1
+/** The shift that moves a word's lowest bit to its highest, and its highest to its lowest with `>>>`. */
+const JSON_WRITER_TOP_BIT: i32 = 31
 /**
  * The widest indent, in spaces: `JSON.stringify` clamps its `space` argument
  * to 10, so a wider one writes what 10 writes. At `JSON_WRITER_MAX_DEPTH` it
@@ -908,11 +908,14 @@ export class JsonWriter {
   /** How many containers are open. */
   depth: i32 = 0
   /**
-   * Bit `d` of these 64 is whether the container at depth `d + 1` is an
-   * object rather than an array: the first 32 in `objectsLow`, the rest in
-   * `objectsHigh`. Two `i32` words rather than an `i64` or an array, so that
-   * a writer allocates nothing and the module still runs under Node, where
-   * an `i64` is a BigInt.
+   * The kinds of the open containers, one bit each, 1 for an object, as a
+   * stack 64 bits deep: the innermost is bit 0 of `objectsLow`, an opener
+   * shifts the pair left by one and a closer shifts it back. So the check
+   * before every value — is the innermost container an object? — is one
+   * `and` of one word, and costs the minified text nothing a cached copy
+   * would save. Two `i32` words rather than an `i64` or an array, so that a
+   * writer allocates nothing and the module still runs under Node, where an
+   * `i64` is a BigInt.
    */
   objectsLow: i32 = 0
   objectsHigh: i32 = 0
@@ -932,15 +935,6 @@ export class JsonWriter {
   indentWidth: i32 = 0
   /** The byte an indent is made of: a space, or a tab after `setIndentTab`. */
   indentByte: i32 = 32
-  /**
-   * Whether the innermost open container is an object: bit `depth - 1` of
-   * the two words, kept here as well so that the check before every value
-   * is a load rather than the shift and word choice that read the bit.
-   * `reset`, `jsonWriterOpen` and `jsonWriterClose` write it; `key`,
-   * `jsonWriterValueDue`, `jsonWriterValueAllowed`, `jsonWriterClose` and
-   * `jsonWriterIndented` read it.
-   */
-  inObject: boolean = false
   /** Whether a key has been written in the innermost object and its value is due. */
   afterKey: boolean = false
   /** Whether the top-level value has been written whole. */
@@ -963,7 +957,8 @@ export class JsonWriter {
     this.start = start
     this.end = start
     this.depth = 0
-    this.inObject = false
+    this.objectsLow = 0
+    this.objectsHigh = 0
     this.sep = this.indentWidth !== 0 ? JSON_WRITER_SEP_INDENTED : JSON_WRITER_SEP_NONE
     this.afterKey = false
     this.done = false
@@ -1066,7 +1061,7 @@ export class JsonWriter {
       this.failed = JSON_WRITE_DONE
       return
     }
-    if (!this.inObject || this.afterKey) {
+    if (!jsonWriterInObject(this) || this.afterKey) {
       this.failed = JSON_WRITE_VALUE_EXPECTED
       return
     }
@@ -1198,14 +1193,7 @@ export class JsonWriter {
 }
 
 /** Whether the innermost open container is an object; `false` at the top level. */
-const jsonWriterInObject = (w: JsonWriter): boolean => {
-  const d: i32 = w.depth - 1
-  if (d < 0) {
-    return false
-  }
-  const word: i32 = d < JSON_WRITER_WORD_BITS ? w.objectsLow : w.objectsHigh
-  return ((word >> (d & 31)) & 1) === 1
-}
+const jsonWriterInObject = (w: JsonWriter): boolean => (w.objectsLow & JSON_WRITER_BIT) !== 0
 
 /**
  * Whether a value may be written now, with the comma before it written when
@@ -1227,7 +1215,7 @@ const jsonWriterValueDue = (w: JsonWriter): boolean => {
     w.afterKey = false
     return true
   }
-  if (w.inObject) {
+  if (jsonWriterInObject(w)) {
     w.failed = JSON_WRITE_KEY_EXPECTED
     return false
   }
@@ -1256,7 +1244,7 @@ const jsonWriterValueAllowed = (w: JsonWriter): boolean => {
     w.failed = JSON_WRITE_DONE
     return false
   }
-  if (w.depth !== 0 && w.inObject && !w.afterKey) {
+  if (w.depth !== 0 && jsonWriterInObject(w) && !w.afterKey) {
     w.failed = JSON_WRITE_KEY_EXPECTED
     return false
   }
@@ -1280,15 +1268,10 @@ const jsonWriterOpen = (w: JsonWriter, object: boolean, opener: i32): void => {
   if (!jsonWriterValueDue(w) || !jsonWriterPutByte(w, opener)) {
     return
   }
-  const d: i32 = w.depth
-  const bit: i32 = JSON_WRITER_BIT << (d & 31)
-  if (d < JSON_WRITER_WORD_BITS) {
-    w.objectsLow = object ? w.objectsLow | bit : w.objectsLow & ~bit
-  } else {
-    w.objectsHigh = object ? w.objectsHigh | bit : w.objectsHigh & ~bit
-  }
-  w.depth = d + 1
-  w.inObject = object
+  const low: i32 = w.objectsLow
+  w.objectsHigh = (w.objectsHigh << JSON_WRITER_BIT) | (low >>> JSON_WRITER_TOP_BIT)
+  w.objectsLow = (low << JSON_WRITER_BIT) | (object ? JSON_WRITER_BIT : 0)
+  w.depth = w.depth + 1
   w.sep = w.sep & JSON_WRITER_SEP_INDENTED
 }
 
@@ -1297,7 +1280,7 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
   if (w.failed !== JSON_WRITE_OK) {
     return
   }
-  if (w.depth === 0 || w.inObject !== object) {
+  if (w.depth === 0 || jsonWriterInObject(w) !== object) {
     w.failed = JSON_WRITE_UNBALANCED
     return
   }
@@ -1307,7 +1290,9 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
   }
   if (jsonWriterPutByte(w, closer)) {
     w.depth -= 1
-    w.inObject = jsonWriterInObject(w)
+    const high: i32 = w.objectsHigh
+    w.objectsLow = (w.objectsLow >>> JSON_WRITER_BIT) | ((high & JSON_WRITER_BIT) << JSON_WRITER_TOP_BIT)
+    w.objectsHigh = high >>> JSON_WRITER_BIT
     jsonWriterValueDone(w)
   }
 }
@@ -1324,7 +1309,7 @@ const jsonWriterCloseIndented = (w: JsonWriter, object: boolean, closer: i32): v
   if (
     w.failed === JSON_WRITE_OK &&
     w.depth !== 0 &&
-    w.inObject === object &&
+    jsonWriterInObject(w) === object &&
     !w.afterKey &&
     !jsonWriterIndented(w, w.depth - 1, "")
   ) {
@@ -1399,7 +1384,7 @@ const jsonWriterIndented = (w: JsonWriter, level: i32, name: string): boolean =>
   buf.fill(toU8(w.indentByte), at + 1, stop)
   w.end = stop
   // A key is the one step that is neither a closer nor an array's element.
-  if (closing || !w.inObject) {
+  if (closing || !jsonWriterInObject(w)) {
     return true
   }
   if (jsonWriterPutString(w, name) && jsonWriterPutByte(w, JSON_COLON) && jsonWriterPutByte(w, JSON_SPACE)) {

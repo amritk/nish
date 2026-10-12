@@ -1,5 +1,5 @@
 %struct.Hello = type { i8* }
-%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1, i1 }
+%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i1, i1 }
 %struct.JsonTokenizer = type { %struct.nish_array*, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
@@ -465,5 +465,5 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !19 = !{!18, !17, i64 0}
 !20 = !{!"i32", !6, i64 0}
 !21 = !{!"i1", !6, i64 0}
-!22 = !{!"JsonWriter", !17, i64 0, !20, i64 8, !20, i64 12, !20, i64 16, !20, i64 20, !20, i64 24, !20, i64 28, !20, i64 32, !20, i64 36, !20, i64 40, !21, i64 44, !21, i64 45, !21, i64 46, !21, i64 47}
+!22 = !{!"JsonWriter", !17, i64 0, !20, i64 8, !20, i64 12, !20, i64 16, !20, i64 20, !20, i64 24, !20, i64 28, !20, i64 32, !20, i64 36, !20, i64 40, !21, i64 44, !21, i64 45, !21, i64 46}
 !23 = !{!22, !20, i64 16}

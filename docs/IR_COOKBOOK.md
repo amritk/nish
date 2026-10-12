@@ -7102,7 +7102,7 @@ export const prettyBody = (w: JsonWriter, out: u8[], message: string): i32 => {
 ```
 
 ```llvm
-%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1, i1 }
+%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.nish_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"message\00" }, align 8
@@ -7402,7 +7402,7 @@ export const greet = (d: JsonDecoder, w: JsonWriter): i32 => {
 
 ```llvm
 %struct.Greeting = type { i8*, i32 }
-%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1, i1 }
+%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i1, i1 }
 %struct.JsonTokenizer = type { %struct.nish_array*, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
@@ -7664,7 +7664,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !5 = !{!4, !2, i64 0}
 !6 = !{!4, !3, i64 8}
 !7 = !{!"i1", !1, i64 0}
-!8 = !{!"JsonWriter", !2, i64 0, !3, i64 8, !3, i64 12, !3, i64 16, !3, i64 20, !3, i64 24, !3, i64 28, !3, i64 32, !3, i64 36, !3, i64 40, !7, i64 44, !7, i64 45, !7, i64 46, !7, i64 47}
+!8 = !{!"JsonWriter", !2, i64 0, !3, i64 8, !3, i64 12, !3, i64 16, !3, i64 20, !3, i64 24, !3, i64 28, !3, i64 32, !3, i64 36, !3, i64 40, !7, i64 44, !7, i64 45, !7, i64 46}
 !9 = !{!8, !3, i64 16}
 ```
 <!-- cookbook:end json-typed -->
