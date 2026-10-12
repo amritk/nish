@@ -10,7 +10,8 @@ exported in 0.14.0, [#300](https://github.com/amritk/nish/pull/300)), numeric
 compile-time function parameters (§6, 0.11.0,
 [#213](https://github.com/amritk/nish/pull/213)). Module-level mutable state
 is decided **no** (§4). Three are **declined**: `for...of` over a string (§7),
-a string `switch` (§8) and `?.` (§9). [LANGUAGE.md](LANGUAGE.md) is normative
+a string `switch` (§8) and `?.` (§9, since reversed for a chain that ends in
+`??`). [LANGUAGE.md](LANGUAGE.md) is normative
 for each rule that landed. This note keeps the reasoning. The full text,
 including the evidence traced line by line, is this file at commit `2b2eb95c`.
 
@@ -236,7 +237,7 @@ switches on those. A hash-dispatched switch would make the IR unreadable from
 the source. **Trigger:** a real program where a string dispatch is hot and
 interning is unavailable. None exists.
 
-## 9. Declined: optional chaining `?.`
+## 9. Declined: optional chaining `?.` (reversed in part, see the end)
 
 **The blocker is `undefined`.** `a?.b` evaluates to `undefined` when `a` is
 null, and `undefined` is not a value in this language. `?.` stays a Phase 0
@@ -250,6 +251,19 @@ Since 0.11.0 ([#232](https://github.com/amritk/nish/pull/232)), `undefined`
 exists in one narrow place: `Map.get` answers `V | undefined`, and `??` is
 accepted with such a result on its left. Everywhere else `??` is still
 `reject_nullish`. This does not reopen `?.`, which has no `Map.get` form.
+
+**Reversed in part, after 0.18.0.** The blocker was `undefined` as a value,
+and a chain whose only use is the left operand of `??` never makes one: the
+default stands in wherever a link is `null`, so `a?.b?.c ?? d` is a `T`,
+under `tsc` as natively. That form is accepted; every other `?.` is still
+refused, now as NL1062, which says to add the default, and `?.[i]` and
+`f?.()` keep NL1049. The objection to a construct legal in one place and
+illegal in another is answered by precedent: `Map.get`'s maybe has had
+exactly this rule, a value whose only use is the left of `??`, since 0.11.0.
+The statement form `a?.m();` stays refused, because it has no `??` to say
+what the chain stands for. The rule and its cases are in
+[LANGUAGE.md](LANGUAGE.md#nullable-types); the plan that argued it is
+`.claude/plans/nullish-on-null.plan.md`.
 
 ## 10. Where the answer is genuinely open
 

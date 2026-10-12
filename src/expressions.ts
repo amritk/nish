@@ -47,12 +47,14 @@ import {
   checkNew,
   checkObjectLiteral,
   isValueReceiver,
+  neverNullMessage,
   structOf,
 } from "./members"
 import {
   FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_CONST,
+  FLAG_OPTIONAL,
   FLAG_SATISFIES,
   N_ARRAY,
   N_ARROW,
@@ -94,7 +96,7 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
-import { unwrapParens } from "./emit-util"
+import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
@@ -1563,6 +1565,9 @@ const maybeOperand = (ctx: CheckContext, operand: Node, scope: Scope): i32 => {
  * refused, in the words it always used.
  */
 const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  if (isOptionalChain(unwrapParens(expr.children[0]))) {
+    return checkChainCoalesce(ctx, expr, scope)
+  }
   const left = maybeOperand(ctx, expr.children[0], scope)
   if (left === T_ERROR) {
     return T_ERROR
@@ -1588,6 +1593,33 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     )
   }
   return value
+}
+
+/**
+ * `a?.b ?? d`: the chain is its last link's value, or missing where a `?.`
+ * link's receiver is `null`, which is a `T | null` whose `null` is "missing"
+ * for any `T` the last link reads, a number included. So the default is
+ * typed as a nullable's is, against the last link's type made nullable where
+ * it can be: `a?.next ?? null` is the `Node | null` it is under `tsc`.
+ * Phase 0 admitted the chain's `?.` links, and `linkReceiver` reads each
+ * receiver as its `T`.
+ */
+const checkChainCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  const last = checkExpression(ctx, expr.children[0], scope, WANT_MAYBE)
+  if (last === T_ERROR) {
+    return T_ERROR
+  }
+  // A `get` at the end would make one `??` default two kinds of missing at
+  // once, a `null` link and an absent key, which the lowering keeps apart.
+  if (ctx.table.isMaybe(last)) {
+    return ctx.errorType(
+      expr.children[0],
+      `\`${ctx.textOf(expr.children[0])}\` ends a \`?.\` chain in \`get\`: give the map a default first, then default what \`get\` answers`
+    )
+  }
+  const value = ctx.table.stripNull(last)
+  const missing = ctx.table.isPointer(value) ? ctx.table.nullableOf(value) : value
+  return checkNullableCoalesce(ctx, expr, scope, missing)
 }
 
 /**
@@ -2015,6 +2047,10 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     // is a dotted builtin, told apart by whether the receiver is a value.
     if (isValueReceiver(ctx, callee.children[0], scope)) {
       return checkMethodCall(ctx, expr, scope)
+    }
+    if ((callee.flags & FLAG_OPTIONAL) !== 0) {
+      ctx.errorAtProperty(callee, neverNullMessage(ctx, callee.children[0]))
+      return T_ERROR // `console?.log(s)`: a builtin namespace is never `null`
     }
     // `nish:secret`: a builtin is never handed a `Secret`, said before its
     // own argument rules say something vaguer about the same mistake.

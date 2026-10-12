@@ -31,6 +31,15 @@ on:
     paths:
       - "std/net/**"
       - "std/crypto/**"
+      # WP38 S5: the AES kernels every TLS and QUIC connection here runs, the
+      # lowering that calls them in place of std/crypto/aes.ts's seams, their
+      # declarations, and the pairing and cache that link them.
+      - "src/kernels.ts"
+      - "src/emit.ts"
+      - "src/runtime.ts"
+      - "src/run-cache.ts"
+      - "scripts/build.sh"
+      - "runtime/runtime-aes.c"
       - "tests/interop/**"
       - "tests/link/net_interop_server*/**"
       - ".github/workflows/interop.yml"
