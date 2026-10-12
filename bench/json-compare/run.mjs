@@ -454,9 +454,8 @@ const END = "<!-- json-compare:end -->"
 
 /**
  * Writes the report into docs/BENCHMARKS.md between the markers, or after the
- * file when they are missing. bench/run.mjs writes the rest of that file, and
- * the whole of it: after it runs, this section comes back with the next
- * `--record`.
+ * file when they are missing. bench/run.mjs writes the rest of that file and
+ * carries this section over when it does.
  */
 const record = (report) => {
   const file = path.join(root, "docs", "BENCHMARKS.md")

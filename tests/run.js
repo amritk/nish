@@ -13658,6 +13658,44 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   } else {
     skip("json-compare: bench/json-compare/main.ts native run (no clang)")
   }
+  // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+  // section bench/json-compare/run.mjs --record writes there. The smallest
+  // timed run: fib(20), Nish and C only, one run, into a copy of the file.
+  if (HAS_CLANG) {
+    const out = path.join(buildDir, "json-compare", "benchmarks.md")
+    const section = "<!-- json-compare:begin -->\n## kept\n<!-- json-compare:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "json-compare: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section json-compare --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- json-compare:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  }
 }
 
 // ---- Instruction counts ------------------------------------------------------------

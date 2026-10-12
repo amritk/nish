@@ -1343,6 +1343,17 @@ lines.push(
   ""
 )
 
+// A section another script writes, between `<!-- name:begin -->` and
+// `<!-- name:end -->` (bench/json-compare/run.mjs --record's), is carried over
+// from the file this one replaces, so that rewriting the rest does not drop it.
+const kept = fs.existsSync(opts.out)
+  ? [...fs.readFileSync(opts.out, "utf8").matchAll(/<!-- ([a-z-]+):begin -->[\s\S]*?<!-- \1:end -->/g)].map(
+      (m) => m[0]
+    )
+  : []
+for (const section of kept) {
+  lines.push(section, "")
+}
 fs.mkdirSync(path.dirname(opts.out), { recursive: true })
 fs.writeFileSync(opts.out, lines.join("\n"))
 
