@@ -332,11 +332,17 @@ const runOnce = (exe, args) => {
   return { checksum: lines[0], ns: Number(ns[1]) }
 }
 
-/** A checksum line with each double written as JavaScript writes it, so that two spellings of one double compare equal. */
+/**
+ * A checksum line with its f64 sum, tokenize's fourth field, written as
+ * JavaScript writes the double it spells: each language prints a
+ * round-tripping double its own way, and a sum with no fraction can be all
+ * digits (`%.17g`'s 26602007581164608 is 26602007581164610 elsewhere), so the
+ * field is known by its place rather than by its look.
+ */
 const canonical = (line) =>
   line
     .split(" ")
-    .map((t) => (/^\d+$/.test(t) || !Number.isFinite(Number(t)) ? t : String(Number(t))))
+    .map((t, i) => (line.startsWith("tokenize ") && i === 3 ? String(Number(t)) : t))
     .join(" ")
 
 /** `impls` with Nish's copy put halfway down, so it does not always run straight after Nish. */
@@ -514,6 +520,8 @@ const tables = (cases, skipped) => {
       let cell = "-"
       if (impl.name === "nish") {
         cell = "1.00x"
+      } else if (impl.name === "nish-copy") {
+        cell = `${ratio.toFixed(2)}x, the noise band`
       } else if (Number.isFinite(ratio)) {
         cell = Math.abs(ratio - 1) <= band ? `${ratio.toFixed(2)}x, within noise` : `${ratio.toFixed(2)}x`
       }
