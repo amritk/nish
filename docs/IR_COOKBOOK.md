@@ -17710,7 +17710,7 @@ define internal noundef i32 @nish.expose$arr.u8$i32$fn.5.width(%struct.Secret$ar
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
-  %2 = call i32 @width(%struct.nish_array* %1)
+  %2 = call i32 @width$(%struct.nish_array* %1)
   ret i32 %2
 }
 
