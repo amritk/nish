@@ -3,6 +3,17 @@
 // the order a round runs its implementations in, and how two checksum lines
 // are compared.
 
+/** run.mjs's default --rounds: the least each case runs, before `roundsFor` rounds it up. */
+export const DEFAULT_ROUNDS = 9
+
+/**
+ * How many rounds a case of `n` implementations runs when `rounds` were
+ * asked for: the next multiple of 2 × n, over which `roundOrder` puts every
+ * implementation in every position equally often. Fewer would leave one
+ * order ahead, as 9 rounds of 2 left Nish first in 5.
+ */
+export const roundsFor = (n, rounds) => Math.ceil(rounds / (2 * n)) * 2 * n
+
 /**
  * The order round `round` runs `impls` in: rotated one further each round,
  * and reversed on every other block of `impls.length` rounds. Over any

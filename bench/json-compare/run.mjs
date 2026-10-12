@@ -5,7 +5,8 @@
 // citm_catalog.json and canada.json.
 //
 //   npm run build && node bench/json-compare/run.mjs [options]
-//     --rounds N        interleaved rounds (default 9)
+//     --rounds N        interleaved rounds at least (default 9); each case runs
+//                       the next multiple of twice its implementations
 //     --mb N            megabytes of input each run parses (default 128), which
 //                       sets each corpus's iteration count
 //     --only a,b        implementations to run (default all): nish, simdjson,
@@ -61,7 +62,8 @@
 //              every byte, each array's length before its elements; each
 //              iteration's h folded into the run's. `typed <h> <count>`.
 //   serialize  every byte of each iteration's output, folded from 0 and then
-//              into the run's h, outside the clock. `serialize <h> <length>`.
+//              into the run's h, outside the clock, and the last output's
+//              length. `serialize <h> <last output's length>`.
 //
 // Before each tokenize or typed iteration the byte at `at` is set to the
 // digit `iteration % 10`, so no iteration parses the input the one before
@@ -74,8 +76,10 @@
 //
 // Rounds are interleaved: each round runs every implementation once per
 // case, in rounds.mjs's order (rotated each round, reversed every other block
-// of rounds), so a slow stretch of a shared machine falls on all of them. Nish runs as two byte-identical binaries, the copy halfway down the
-// list, and the gap between their minimums is the noise band (CLAUDE.md,
+// of rounds), so a slow stretch of a shared machine falls on all of them, and
+// each case runs a multiple of twice its implementations so that every one
+// runs in every position equally often. Nish runs as two byte-identical
+// binaries, the copy halfway down the list, and the gap between their minimums is the noise band (CLAUDE.md,
 // `Measured:`): a ratio within it is marked as no difference. Each program
 // times its own loop with a monotonic clock, so start-up and reading the file
 // are not in the figure.
@@ -86,7 +90,7 @@ import path from "node:path"
 
 import { compilerFrom } from "../compiler.mjs"
 import { CACHE, fetchAll } from "./fetch.mjs"
-import { canonical, roundOrder } from "./rounds.mjs"
+import { canonical, DEFAULT_ROUNDS, roundOrder, roundsFor } from "./rounds.mjs"
 
 const here = import.meta.dirname
 const root = path.resolve(here, "..", "..")
@@ -98,7 +102,7 @@ const fail = (msg) => {
   process.exit(2)
 }
 
-const opts = { rounds: 9, mb: 128, only: null, record: false }
+const opts = { rounds: DEFAULT_ROUNDS, mb: 128, only: null, record: false }
 for (let i = 0; i < nishc.rest.length; i++) {
   const arg = nishc.rest[i]
   if (arg === "--rounds") {
@@ -162,6 +166,8 @@ const tools = {
   cc: tool(process.env.CC ?? "clang", ["--version"]),
   cxx: tool(process.env.CXX ?? "clang++", ["--version"]),
   cargo: tool("cargo", ["--version"]),
+  // What cargo builds serde with: recorded beside cargo, not instead of it.
+  rustc: tool("rustc", ["--version"]),
   // The go tool has no --version.
   go: tool("go", ["version"]),
 }
@@ -395,14 +401,16 @@ const main = () => {
       bytes,
       at,
       iterations: Math.max(1, Math.round((opts.mb * 1024 * 1024) / bytes)),
+      rounds: roundsFor(impls.length, opts.rounds),
       impls,
       runs: new Map(impls.map((impl) => [impl.name, []])),
     }
   }).filter((c) => c.impls.length > 0)
 
-  for (let round = 0; round < opts.rounds; round++) {
-    process.stderr.write(`round ${round + 1} of ${opts.rounds}\n`)
-    for (const c of cases) {
+  const rounds = Math.max(...cases.map((c) => c.rounds))
+  for (let round = 0; round < rounds; round++) {
+    process.stderr.write(`round ${round + 1} of ${rounds}\n`)
+    for (const c of cases.filter((x) => round < x.rounds)) {
       for (const impl of roundOrder(c.impls, round)) {
         c.runs.get(impl.name).push(runOnce(impl.exe, [c.workload, c.file, c.iterations, c.at]))
       }
@@ -481,8 +489,13 @@ const command = () =>
 
 const tables = (cases, skipped) => {
   // The toolchains the run used, not every one installed.
-  const used = [...new Set(cases.flatMap((c) => c.impls.map((impl) => impl.tool)))]
-  const versions = used.map((t) => tools[t].version)
+  const used = new Set(cases.flatMap((c) => c.impls.map((impl) => impl.tool)))
+  const names = { nish: "Nish", cc: "C", cxx: "C++", cargo: "Rust", go: "Go" }
+  const toolchains = [...used].map((t) =>
+    t === "cargo"
+      ? `Rust: ${tools.cargo.version}, ${tools.rustc.version}`
+      : `${names[t]}: \`${tools[t].cmd}\` ${tools[t].version}`
+  )
   const lines = [
     "| | |",
     "| --- | --- |",
@@ -490,9 +503,9 @@ const tables = (cases, skipped) => {
     `| nish | ${tools.nish.version} (commit ${commit()}) |`,
     `| CPU | ${cpuModel()}, ${os.cpus().length} logical cores |`,
     `| OS | ${os.type().toLowerCase()} ${os.release()} (${os.arch()}) |`,
-    `| Toolchains | ${[...new Set(versions.filter((v) => v !== null))].join("; ")} |`,
+    `| Toolchains | ${toolchains.join("; ")} |`,
     `| Command | \`npm run build && ${command()}\` |`,
-    `| Runs | ${opts.rounds} interleaved rounds of ${opts.mb} MB of input per run; ns per document, min and median over the rounds |`,
+    `| Runs | interleaved rounds, at least ${opts.rounds} and for each case the next multiple of twice its implementations (the round count is in each heading), ${opts.mb} MB of input per run; ns per document, min and median over the rounds |`,
   ]
   if (skipped.length > 0) {
     lines.push(`| Skipped | ${skipped.join(", ")}: toolchain missing |`)
@@ -505,7 +518,7 @@ const tables = (cases, skipped) => {
     const what = `${fmt(c.bytes)} bytes${WORKLOADS[c.workload].written ? " written" : ""}`
     lines.push(
       "",
-      `### ${c.workload}, ${c.corpus} (${what}, ${c.iterations} per run)`,
+      `### ${c.workload}, ${c.corpus} (${what}, ${c.iterations} per run, ${c.rounds} rounds)`,
       "",
       c.disagreement === undefined
         ? `Checksum \`${[...c.runs.values()][0][0].checksum}\`, the same from every implementation.`
@@ -555,8 +568,8 @@ const preamble = () => [
   "",
   "What differs between the rows:",
   "",
-  "- **Tokenize** is each library's own way of visiting every value. Nish's tokenizer copies every key and string out with `stringInto`; yyjson builds a whole tree, reading a copy of the input rather than in place; RapidJSON's Reader (SAX) calls back per value; serde_json drives a Visitor; Go's `Decoder.Token` makes an `interface{}` per token. simdjson On-Demand materialises every value as it is visited.",
-  "- **Typed decode** has no yyjson or RapidJSON row: neither has a typed layer. Every row decodes into a fresh value each iteration. simdjson On-Demand reads `performances` and nothing after it, while serde_json, Go and Nish scan the whole document, so simdjson's MB/s divides the whole document's bytes by a time that did not read all of them. The extra Nish row decodes into one value reused across iterations, which nish/json-typed supports and the others' APIs do not.",
+  "- **Tokenize** is each library's own way of visiting every value. Nish's tokenizer copies every key and string out with `stringInto`; yyjson builds a whole tree, reading a copy of the input rather than in place; RapidJSON's Reader (SAX) calls back per value; serde_json drives a Visitor; Go's `Decoder.Token` makes an `interface{}` per token. simdjson On-Demand materialises every value as it is visited. What must agree: in the timed loop, each token's kind and each key's and string's length and last byte, folded, and the sum of the numbers as a double; in an untimed pass over the last iteration's input, every byte of every key and string.",
+  "- **Typed decode** has no yyjson or RapidJSON row: neither has a typed layer. Every row decodes into a fresh value each iteration. simdjson On-Demand reads `performances` and nothing after it, while serde_json, Go and Nish scan the whole document, so simdjson's MB/s divides the whole document's bytes by a time that did not read all of them. The extra Nish row decodes into one value reused across iterations, which nish/json-typed supports and the others' APIs do not. What must agree: every decoded field of every performance, each string byte by byte, folded each iteration.",
   "- **Serialize** times the writing alone, from the same decoded values. Nish (`jsonEncode`) and serde_json (derive) write from the type, Go by reflection (its encoder's trailing newline is trimmed), and simdjson's row is builder calls written by hand, field by field, since simdjson has no type-driven writer without C++26 reflection. What must agree is a 64-bit `h * 31 + v` fold of every byte of every iteration's output, and the last output's length.",
   "",
 ]

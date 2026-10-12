@@ -66,7 +66,12 @@ import {
   sitsOnChange,
   verdict,
 } from "../scripts/arrow-verify.mjs"
-import { canonical as jsonCompareCanonical, roundOrder } from "../bench/json-compare/rounds.mjs"
+import {
+  DEFAULT_ROUNDS,
+  canonical as jsonCompareCanonical,
+  roundOrder,
+  roundsFor,
+} from "../bench/json-compare/rounds.mjs"
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
@@ -14134,19 +14139,23 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 // arguments (bench/json-compare/sample.expected). The serialize bytes are also
 // held to Node's own JSON.stringify of the same values.
 if (!only || "json-compare".includes(only) || "bench".includes(only)) {
-  // The order a round runs its implementations in: over 2n rounds each takes
-  // every position twice, and Nish and its copy take turns going first, for
-  // the two of typed-reuse as for the seven of tokenize. Reversing every
-  // other round instead undid the rotation when n was 2.
+  // The order a round runs its implementations in, over the rounds run.mjs
+  // runs by default: each case's count rounded up to a multiple of 2n, over
+  // which every implementation takes every position equally often and Nish
+  // and its copy take turns going first. Without the rounding, 9 rounds of
+  // typed-reuse's two put Nish first in 5; reversing every other round
+  // instead of every other block of n undid the rotation outright.
   // The copy sits where run.mjs's withCopy puts it: halfway down the others.
   for (const [n, copyAt] of [
     [2, 1],
+    [5, 2],
     [7, 3],
   ]) {
+    const rounds = roundsFor(n, DEFAULT_ROUNDS)
     const impls = Array.from({ length: n }, (_, k) => k)
     const counts = impls.map(() => new Array(n).fill(0))
     let nishFirst = 0
-    for (let round = 0; round < 2 * n; round++) {
+    for (let round = 0; round < rounds; round++) {
       const order = roundOrder(impls, round)
       order.forEach((impl, position) => {
         counts[impl][position] += 1
@@ -14154,9 +14163,11 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       nishFirst += order.indexOf(0) < order.indexOf(copyAt) ? 1 : 0
     }
     check(
-      `json-compare: over ${2 * n} rounds of ${n} implementations each runs in every position twice, and Nish and its copy take turns going first`,
-      counts.every((row) => row.every((c) => c === 2)) && nishFirst === n,
-      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${2 * n} rounds`
+      `json-compare: ${n} implementations run ${rounds} rounds by default, each in every position equally often, Nish and its copy taking turns going first`,
+      rounds >= DEFAULT_ROUNDS &&
+        counts.every((row) => row.every((c) => c === rounds / n)) &&
+        nishFirst === rounds / 2,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${rounds} rounds`
     )
   }
   // How two checksum lines compare: tokenize's f64 sum as the double it
