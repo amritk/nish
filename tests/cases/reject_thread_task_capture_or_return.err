@@ -1,0 +1,1 @@
+`orReturn` returns without joining `s`, before the scope joins

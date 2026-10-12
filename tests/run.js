@@ -4740,6 +4740,13 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
 // spawn order and join order print the same.
+//
+// And the task forms: `thread_task_arrow`, whose arrow tasks read their
+// function's `const` locals, which Node's arrows close over and natively each
+// travel in the task's payload; `thread_task_void`, whose tasks have no
+// destination and update a lock's data or send on a channel; and
+// `std_random`, whose generators answer the same bits both ways because
+// `nish:unsafe` names every wrap.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4774,6 +4781,9 @@ for (const name of [
   "thread_scope_region_read_back",
   "thread_scope_region_param_lookup",
   "thread_scope_libc_named_tasks",
+  "thread_task_arrow",
+  "thread_task_void",
+  "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue

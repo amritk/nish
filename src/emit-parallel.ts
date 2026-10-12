@@ -304,7 +304,10 @@ export const emitSpawnTask = (
   const written = types.length - captured
   if (caller === null || values.length !== types.length || written !== (stores ? 3 : arityOf(task))) {
     process.exit(
-      internalErrorFor(`emitter: \`${task.name}\` is not a task over its argument and captures`, emitter.opts.json)
+      internalErrorFor(
+        `emitter: \`${task.name}\` is not a task over its argument and captures`,
+        emitter.opts.json
+      )
     )
   }
   const body = taskEntryOf(emitter, task)

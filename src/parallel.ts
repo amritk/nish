@@ -240,7 +240,7 @@ export const isVoidSpawn = (sig: FunctionSig): boolean => {
  * The type of the argument a spawn instance hands its task, or -1 for
  * `spawnThunk`, whose task takes none: its first type argument is the answer.
  */
-export const taskArgTypeOf = (sig: FunctionSig): i32 => {
+const taskArgTypeOf = (sig: FunctionSig): i32 => {
   const instance = sig.instance
   const template: TemplateInfo | null = instance === null ? null : instance.template
   if (instance === null || template === null || instance.typeArgs.length === 0) {

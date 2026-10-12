@@ -8,22 +8,28 @@
  *     const die: i32 = 1 + (r.nextI32() >>> 1) % 6;
  *     const u: f64 = r.nextF64(); // in [0, 1)
  *
- * The state is one 32-bit integer stepped by Marsaglia's xorshift32
- * (G. Marsaglia, "Xorshift RNGs", Journal of Statistical Software 8(14),
- * 2003; the triple 13, 17, 5). It is an idea from a paper, not a copy of
- * anyone's code. The step is three shifts and three exclusive ors on an `i32`,
- * and each of those answers the same 32 bits in JavaScript as in the compiled
- * program: `<<` and `^` answer a signed 32-bit integer there too, and
- * `>>> 17` answers at most 2^15 - 1, which reads back the same signed or not.
- * Nothing adds or multiplies the state, so nothing overflows, natively or
- * under Node. That is the whole reason for the choice over a generator with a
- * multiply in its step: the program a test prints under Node is the one it
- * prints compiled (docs/RUN_UNDER_NODE.md).
+ * The state is one 32-bit integer. Each step adds the odd constant
+ * 0x9E3779B9 (2^32 divided by the golden ratio) to it, wrapping, so the
+ * states walk all 2^32 values before any repeats, whatever the seed — 0
+ * included. Each answer is MurmurHash3's 32-bit finaliser applied to the new
+ * state (Austin Appleby's `fmix32`; MurmurHash3 is public domain, and these
+ * are its constants): two multiplies and three shifted exclusive ors that mix
+ * every bit of the state into every bit of the answer, so seeds 1, 2 and 3
+ * answer three unrelated sequences. That pairing of a Weyl sequence with a
+ * mixing function is the shape of SplitMix (Steele, Lea and Flood, "Fast
+ * splittable pseudorandom number generators", OOPSLA 2014), on 32 bits.
  *
- * The sequence has period 2^32 - 1 and visits every nonzero state; it is fast
- * and small, and its low bits are weaker than its high ones, so a bounded draw
- * should shift before it takes a remainder, as the example above does. It is
- * not for cryptography: a key or a nonce comes from `crypto.getRandomValues`.
+ * **The same bits under Node.** The two operations that wrap are spelled
+ * `wrappingAdd` and `wrappingMul` from `nish:unsafe`, which define the
+ * two's-complement wrap natively and answer `(a + b) | 0` and `Math.imul(a, b)`
+ * under Node (docs/LANGUAGE.md, "nish:unsafe"); every shift has a constant
+ * count, and `^` and `>>> 16` answer the same 32 bits in JavaScript as in the
+ * compiled program. `nextF64` builds its double from integers below 2^53, so
+ * its products and sums are exact both ways. The program a test prints under
+ * Node is the one it prints compiled (docs/RUN_UNDER_NODE.md).
+ *
+ * It is not for cryptography: a key or a nonce comes from
+ * `crypto.getRandomValues`.
  *
  * An `Rng` is an ordinary object, so a parallel body or a task that makes one
  * of its own may step it as it likes: what a function allocates is its own
@@ -31,12 +37,16 @@
  * would be a write their caller can see, and is refused as any such write is;
  * give each task its own, seeded from its index.
  */
+import { wrappingAdd, wrappingMul } from "nish:unsafe"
 
-/**
- * The state a seed of 0 starts from, since xorshift32 never leaves 0: an
- * arbitrary odd constant below 2^31, so that it is an `i32` literal.
- */
-const ZERO_SEED: i32 = 1831565813
+/** 0x9E3779B9 as an `i32`: the Weyl increment, odd, so the walk visits every state. */
+const GOLDEN: i32 = -1640531527
+
+/** 0x85EBCA6B as an `i32`: MurmurHash3's first finaliser multiplier (public domain). */
+const MIX_1: i32 = -2048144789
+
+/** 0xC2B2AE35 as an `i32`: MurmurHash3's second finaliser multiplier (public domain). */
+const MIX_2: i32 = -1028477387
 
 /** 2^26, the weight of the high draw in `nextF64`'s 53 bits. */
 const TWO_26: f64 = 67108864.0
@@ -44,31 +54,37 @@ const TWO_26: f64 = 67108864.0
 /** 2^53, which scales a 53-bit integer into [0, 1). */
 const TWO_53: f64 = 9007199254740992.0
 
-/** A generator of pseudo-random numbers, stepped by xorshift32 from its seed. */
+/** MurmurHash3's `fmix32`: every bit of `h` into every bit of the answer, a bijection on 32 bits. */
+const mix = (h: i32): i32 => {
+  let x: i32 = h
+  x = x ^ (x >>> 16)
+  x = wrappingMul(x, MIX_1)
+  x = x ^ (x >>> 13)
+  x = wrappingMul(x, MIX_2)
+  x = x ^ (x >>> 16)
+  return x
+}
+
+/** A generator of pseudo-random numbers: a Weyl sequence from its seed, each state mixed. */
 export class Rng {
-  /** The last value stepped to; never 0. */
+  /** Where the walk is: the seed plus the increment times the steps taken, wrapped. */
   state: i32
 
   /** A generator whose sequence `seed` decides: two made from one seed answer the same numbers. */
   constructor(seed: i32) {
-    this.state = seed === 0 ? ZERO_SEED : seed
+    this.state = seed
   }
 
-  /** The next 32 bits, as an `i32`: any value but 0, each as likely as the others over a whole period. */
+  /** The next 32 bits, as an `i32`: over 2^32 steps each value is answered exactly once. */
   nextI32(): i32 {
-    let x: i32 = this.state
-    x = x ^ (x << 13)
-    x = x ^ (x >>> 17)
-    x = x ^ (x << 5)
-    this.state = x
-    return x
+    this.state = wrappingAdd(this.state, GOLDEN)
+    return mix(this.state)
   }
 
   /**
    * The next number in [0, 1), from two steps: the high 27 bits of one and
    * the high 26 of the next make a 53-bit integer, which a double holds
-   * exactly, scaled by 2^-53. Every product and sum is exact, so the answer
-   * is the same bits natively and under Node.
+   * exactly, scaled by 2^-53.
    */
   nextF64(): f64 {
     const hi: i32 = this.nextI32() >>> 5
