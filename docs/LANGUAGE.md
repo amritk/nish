@@ -3944,13 +3944,21 @@ and both come from the program as written:
     helper's body is read as written, so the rule takes only what it can see
     there: a plain function, not a method, a generic or an arrow; a body
     with no arrow, nested function, class or `try`; a size whose name the
-    body never declares again or writes. Handing the array to a function,
-    storing it, `pop` or any other use gives no length, because each is a way
-    another holder could shrink it. A store `recv.f = filled(8)` gives one
-    only when `recv` is `this` or a `const` local, which the call cannot
-    point elsewhere (`tests/cases/arr_bounds_returned`;
+    body never declares again or writes. The array may be handed to a
+    function of the same module whose parameter keeps its length in turn:
+    the parameter is only indexed, read for `.length`, pushed to, or handed
+    on to another such parameter, recursion included, and never returned.
+    Storing the array, `pop`, returning it from a callee, a method's or a
+    builtin's argument, or any other use gives no length, because each is a
+    way another holder could shrink it; so does a helper in another module
+    that hands its array on, whose call the caller's module cannot resolve.
+    A store `recv.f = filled(8)` gives one only when `recv` is `this` or a
+    `const` local, which the call cannot point elsewhere
+    (`tests/cases/arr_bounds_returned`, `arr_bounds_returned_through`;
     `arr_bounds_returned_pop`, `_passed`, `_stored`, `_least`, `_rebind`,
-    `_shadow` and `_shadow_param` each keep their check and panic;
+    `_shadow`, `_shadow_param`, `_through_return`, `_through_deep`,
+    `_through_cycle`, `_through_store`, `_through_param` and `_through_memo`
+    each keep their check and panic; `tests/link/arr_bounds_returned_import` keeps its check;
     `arr_bounds_returned_kept` keeps its seven).
 
 A fact ends where it stops being true: at any assignment to `i` that is not

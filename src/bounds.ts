@@ -2102,9 +2102,11 @@ const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]
 //   typed-array `new`, or a literal without a spread) or one `const` local
 //   initialised with one, declared once, returned only after its declaration
 //   in its own block;
-// - that local is only ever indexed, read for its `.length` and `push`ed to,
-//   so nothing passes it on, stores it, or shrinks it: its length when
-//   returned is at least the one it was built with;
+// - that local is only ever indexed, read for its `.length`, `push`ed to,
+//   or handed to a parameter of this module's functions that does the same
+//   and never returns it (`keepsParameter`), so nothing stores it, aliases it
+//   or shrinks it: its length when returned is at least the one it was built
+//   with;
 // - each size is a literal, a constant of the callee's own module read where
 //   the call is in that module, or a parameter the body never declares again
 //   or writes, whose argument has a declared floor (`declaredValueRange`).
@@ -2166,16 +2168,55 @@ const writesName = (n: Node, name: string): boolean => {
   return false
 }
 
+/** How many functions deep `keepsParameter` follows an array before it gives up. */
+const KEEP_DEPTH: i32 = 8
+
 /**
- * Whether every use of the array local `name` in `n` keeps its length at
- * least what it was built with and the array inside the body: `name[i]`, read
- * or written, `name.length` read, `name.push(...)`, `return name` and the
- * declaration itself. Any other use — an argument, a store, a copy, `pop` — is
- * one this rule does not follow.
+ * The parameters `keepsParameter` is following, each as `symbol#index`, so
+ * that a recursion is read once, and how many answers below rested on an
+ * assumption: a parameter taken to keep the length because it was already
+ * being followed, or one refused at `KEEP_DEPTH`. An answer reached with that
+ * count unchanged is exact, and only such an answer is remembered.
  */
-const usesKeepLength = (n: Node, name: string): boolean => {
+class KeepTrail {
+  visiting: string[]
+  assumed: i32
+
+  constructor() {
+    this.visiting = []
+    this.assumed = 0
+  }
+}
+
+/**
+ * The body `usesKeepLength` reads: whose it is, so that a call in it names a
+ * function of that body's module, and the trail of parameters being followed.
+ */
+class KeepScan {
+  ctx: CheckContext
+  sig: FunctionSig
+  body: Node
+  trail: KeepTrail
+
+  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, trail: KeepTrail) {
+    this.ctx = ctx
+    this.sig = sig
+    this.body = body
+    this.trail = trail
+  }
+}
+
+/**
+ * Whether every use of the array `name` in `n` keeps its length at least what
+ * it was and the array inside the body: `name[i]`, read or written,
+ * `name.length` read, `name.push(...)`, the declaration itself, `return name`
+ * where `returnable`, and `name` as an argument to a parameter that keeps its
+ * length too (`keepsParameter`). Any other use — a store, a copy, `pop`, a
+ * method's or a builtin's argument — is one this rule does not follow.
+ */
+const usesKeepLength = (scan: KeepScan, n: Node, name: string, returnable: boolean): boolean => {
   if (n.kind === N_INDEX && isNamed(n.children[0], name)) {
-    return usesKeepLength(n.children[1], name)
+    return usesKeepLength(scan, n.children[1], name, returnable)
   }
   if (n.kind === N_MEMBER && n.text === "length" && isNamed(n.children[0], name)) {
     return true
@@ -2195,24 +2236,109 @@ const usesKeepLength = (n: Node, name: string): boolean => {
   if (n.kind === N_CALL) {
     const target = n.children[0]
     if (target.kind === N_MEMBER && target.text === "push" && isNamed(target.children[0], name)) {
-      return usesKeepLength(n.children[1], name)
+      return usesKeepLength(scan, n.children[1], name, returnable)
+    }
+    if (target.kind === N_IDENT) {
+      const args = n.children[1].children
+      let k = 0
+      while (k < args.length) {
+        const arg = args[k]
+        const kept = isNamed(arg, name)
+          ? passesKeepingLength(scan, target.text, k)
+          : usesKeepLength(scan, arg, name, returnable)
+        if (!kept) {
+          return false
+        }
+        k = k + 1
+      }
+      return true
     }
   }
   if (n.kind === N_RETURN && n.children.length > 0 && isNamed(n.children[0], name)) {
-    return true
+    return returnable
   }
   if (n.kind === N_VAR_DECL && isNamed(n.children[0], name)) {
-    return usesKeepLength(n.children[2], name)
+    return usesKeepLength(scan, n.children[2], name, returnable)
   }
   if (isNamed(n, name)) {
     return false
   }
   for (const child of n.children) {
-    if (!usesKeepLength(child, name)) {
+    if (!usesKeepLength(scan, child, name, returnable)) {
       return false
     }
   }
   return true
+}
+
+/**
+ * Whether `callee(...)`, called in `scan`'s body with the array as argument
+ * `k`, keeps its length: `callee` names a function of this module, which is
+ * the body's own module, and no parameter or local of the body is called
+ * that.
+ */
+const passesKeepingLength = (scan: KeepScan, callee: string, k: i32): boolean => {
+  const home = scan.sig.origin
+  if (home === null || home !== scan.ctx.source) {
+    return false
+  }
+  if (scan.sig.paramNames.indexOf(callee) >= 0 || declarationsOf(scan.body, callee) > 0) {
+    return false
+  }
+  const sig = scan.ctx.signature(callee)
+  return sig !== null && keepsParameter(scan.ctx, sig, k, scan.trail)
+}
+
+/**
+ * Whether `sig` keeps the length of the array its parameter `k` is handed:
+ * a plain function of this module, whose body holds nothing that outlives a
+ * call (`gatherReturns`) and never declares the parameter's name again, and
+ * which uses the parameter only in the ways `usesKeepLength` follows, without
+ * returning it. A parameter already being read is taken to keep it: a
+ * shrink needs a `pop` or a store somewhere the walk reaches, and the walk
+ * reaches every body of the cycle from where it entered it. The answer is
+ * remembered on `sig` when it rested on no such assumption.
+ */
+const keepsParameter = (ctx: CheckContext, sig: FunctionSig, k: i32, trail: KeepTrail): boolean => {
+  const home = sig.origin
+  if (home === null || home !== ctx.source || sig.role !== ROLE_FUNCTION || sig.instance !== null) {
+    return false
+  }
+  if (sig.compileTimeOnly() || k >= sig.paramNames.length || !ctx.table.isArray(sig.paramTypes[k])) {
+    return false
+  }
+  if (k < sig.keepsLength.length && sig.keepsLength[k] !== 0) {
+    return sig.keepsLength[k] === 1
+  }
+  const body = sig.body()
+  if (body === null || body.kind !== N_BLOCK) {
+    return false
+  }
+  const key = `${sig.name}#${k}`
+  if (trail.visiting.indexOf(key) >= 0) {
+    trail.assumed = trail.assumed + 1
+    return true
+  }
+  if (trail.visiting.length >= KEEP_DEPTH) {
+    trail.assumed = trail.assumed + 1
+    return false
+  }
+  const returns: Node[] = []
+  const name = sig.paramNames[k]
+  const before = trail.assumed
+  let kept = false
+  if (gatherReturns(body, returns) && declarationsOf(body, name) === 0) {
+    trail.visiting.push(key)
+    kept = usesKeepLength(new KeepScan(ctx, sig, body, trail), body, name, false)
+    trail.visiting.pop()
+  }
+  if (trail.assumed === before) {
+    while (sig.keepsLength.length < sig.paramNames.length) {
+      sig.keepsLength.push(0)
+    }
+    sig.keepsLength[k] = kept ? 1 : 2
+  }
+  return kept
 }
 
 /** How many statements under `n` are `return name`. */
@@ -2376,7 +2502,10 @@ const returnedLength = (ctx: CheckContext, value: Node): i32 => {
   if (name === "") {
     return least
   }
-  if (declarationsOf(body, name) !== 1 || !usesKeepLength(body, name)) {
+  if (
+    declarationsOf(body, name) !== 1 ||
+    !usesKeepLength(new KeepScan(ctx, sig, body, new KeepTrail()), body, name, true)
+  ) {
     return -1
   }
   const init = soleConstInitialiser(body, name, returnsOfName(body, name))
