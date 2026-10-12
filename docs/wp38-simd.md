@@ -2,7 +2,8 @@
 
 **Status: accepted; S0 and S1's kernel and surface landed, S1's `bench/json`
 bar missed and S1b proposed, S2's bar met on a re-measurement but its flag not
-built, S4 declined for now, S5's 5x bar met (tracking issues #516 and #577).** The owner took the
+built, S4 declined for now, S5's 5x bar met, S3a and S6 proposed (tracking
+issues #516 and #577).** The owner took the first four
 decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
@@ -11,11 +12,18 @@ was reliably faster than S0 on `bench/json`, and none came near 1.5x, so
 is the owner's call (§7).
 S2's `--cpu` flag is not built: S0's figures missed its bar, and a
 re-measurement against the noise met it (§7); building it is the owner's call.
+What reading every level costs the constant-time checkers was measured: the
+x86-64 levels and ARMv8 without SVE already pass, the SVE levels do not, and
+`native` cannot be read. The flag is recommended with one value,
+`x86-64-v3` (§7; §8, Q5, open).
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
 small a part of the bootstrap to move it (§7). S3's bar now names the scalar
 kernel it is judged against, and its operation list leaves out a fused
 multiply-add, after a portable-vector benchmark's findings were checked
-against LLVM 18 (§3.2.1). S5 put `std/crypto/aes.ts`'s key schedule, block,
+against LLVM 18 (§3.2.1). It is recommended to wait: first S6, crediting an
+offset index from the test that bounds it, then S3a, S3's two bar kernels
+measured without a surface, and S3 decided on those figures (§7; §8, Q6 and
+Q7, open). S5 put `std/crypto/aes.ts`'s key schedule, block,
 GCTR and GHASH on AES-NI and PCLMULQDQ, and on ARMv8's AES and PMULL, as a
 runtime kernel behind a run-time branch that keeps the bitsliced code as the
 fallback: 38.5x on a 16 KiB AES-128-GCM seal (§2.3, §7). S3 has no flag, type or runtime
@@ -1014,7 +1022,9 @@ holding key material would need a record in its area's audit, as ECC-2 and
 X509-7 have for scalars. `Secret<T>` does not take a vector until that record
 exists. (c) and (d) both leave the checker's reach: CT-16 is open for exactly
 that reason. So the `--cpu` flag of (d) ships only once `tests/ct-asm.js`
-reads each level the flag accepts (§7 S2). Refusing the flag for programs
+reads each level the flag accepts (§7 S2), and `tests/ct-asm-runtime.js`
+reads the runtime's kernels at it too, since the flag compiles the runtime at
+the level. §7 measures what that costs at each level. Refusing the flag for programs
 that import `std/crypto` is not offered instead: a package can reach
 `std/crypto` through another package, and the checker's reading, not an
 import rule, is what the constant-time promise rests on.
@@ -1035,10 +1045,12 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
-| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. Recommended with one value, `x86-64-v3`, after S6 (Q5, open). |
+| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Not built; S6 and S3a first (Q6, open)**: see below. |
+| **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S6. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Proposed (Q6, open)**: see below. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 | **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). At the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and in three samples read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). |
+| **S6** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Proposed (Q7, open)**: see below. |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
@@ -1098,6 +1110,113 @@ it. The flag is still not built: what it costs is mostly `tests/ct-asm.js`
 reading every level it accepts (§6), and whether a gain on one benchmark of
 three is worth that is the owner's decision.
 
+**What reading every level costs, measured.** §6 lets the flag ship only once
+`tests/ct-asm.js` reads every level it accepts. Whether that is new modelling
+or only more runs was measured before anything is built, at `6752a82` with the
+0.18.0 seed and Ubuntu clang 18.1.3. The nine `tests/cases/ct_asm_*.ts`
+fixtures were compiled to `.ll` as `tests/run.js` compiles them, then to `.s`
+with its own `clang -O2 -S` line plus one `-march` or `-mcpu`, and every
+`ct-check` function was read with `ctViolations`, 50 readings a target.
+`runtime/runtime-aes.c` was compiled with `tests/ct-asm-runtime.js`'s line plus
+the same flag and read by that file's checker: its export check, its four
+kernels and its two leaky variants, seven readings a target.
+
+| Level | Nish fixtures, 50 readings | `runtime-aes.c`, 7 readings |
+| --- | --- | --- |
+| baseline, both targets | all pass | all pass |
+| `x86-64-v2`, `x86-64-v3`, `x86-64-v4` | all pass | all pass |
+| `armv8.2-a`, `armv8.4-a+crypto`, `-mcpu=apple-m1` | all pass | all pass |
+| `armv9-a`, `-mcpu=neoverse-v1` (SVE) | **3 fail** | **1 fails** |
+| `native` | — | — |
+
+- **The passes read real code above the baseline.** At `x86-64-v3`,
+  `ct_asm_x25519`'s listing holds 270 BMI2 and AVX instructions (`mulx`,
+  `shlx`, `rorx`, `andn`, `v…`) and `runtime-aes.c`'s holds 196 VEX-encoded
+  `vaesenc`, `vpxor`, `vpshufb` and `vpclmulqdq`, where the baseline holds
+  none. CT-5, CT-6, CT-17 and CT-18 had already taught the model those
+  instructions. A pass says the model finds no violation, not that it is
+  complete for VEX and EVEX forms: CT-17's instructions were misread while
+  every check passed.
+- **The SVE levels fail, though nothing leaks.** `macEqual` and both
+  `timingSafeEqual` functions become a loop over the vector length (`cntw`,
+  `incw`, `ld1b {z1.s}, p0/z`), so they branch on a public counter, and
+  ct-asm.js refuses every branch. `nish_aes_schedule` gains a predicated
+  `st1w {z0.s}, p0`, which the model does not follow (`unmodelled`). Reading
+  them would need ct-asm-runtime.js's control flow for the Nish fixtures and
+  an SVE model for both.
+- **`native` cannot be read.** It names whatever CPU builds the program, which
+  no CI run has seen. It passes on the machine that measured it, which proves
+  nothing about any other, so §6's condition rules it out.
+- **No x86-64 level holds AES-NI or PCLMULQDQ.** clang defines neither
+  `__AES__` nor `__PCLMUL__` at `x86-64-v2`, `v3` or `v4` (v3 adds AVX2, BMI2
+  and FMA; v4 adds AVX-512). So the flag never makes S5's branch on
+  `nish_aes_hw` redundant, and gives `std/crypto` nothing. What it buys is
+  auto-vectorisation: spectral's 20%.
+
+To reproduce one cell, build a fixture with `build/nish
+tests/cases/ct_asm_mac.ts -o mac.ll`, compile it with `clang -O2 -S
+-Wno-override-module --target=aarch64-unknown-linux-gnu -march=armv9-a mac.ll
+-o mac.s`, and pass `functionBody` of `macEqual` with its `ctSpecs` spec to
+`ctViolations` (all three exported by `tests/ct-asm.js`). For the runtime, add
+the same flag to `runtimeAsm`'s clang line in `tests/ct-asm-runtime.js` and
+call `runtimeChecks`.
+
+**S2: the recommendation (Q5, open).** Build the flag with one value,
+`--cpu x86-64-v3`, and refuse every other, `native` included. Only `x86-64-v3`
+has met the bar; the bar is per level, and a value with no measurement behind
+it is a promise without evidence. An AArch64 level or `x86-64-v4` comes later,
+each on its own measurement and its own pass of both checkers. The level
+applies to the module and the runtime alike, as §3.4 says. Compiling only the
+module at the level would leave the runtime's kernels at the baseline, but it
+is not exact under the speed profile's LTO, where a baseline runtime function
+inlined into a module function is compiled at the module's level.
+
+What it costs, one pull request:
+
+- `src/compile.ts` parses the flag and hands `-march=x86-64-v3` and
+  `-ffp-contract=off` to `scripts/build.sh` for every unit; the wasm and wasi
+  profiles refuse it; the capability report records the level
+  ([wp35](wp35-capabilities.md)).
+- `tests/run.js`'s two `ct_asm` sections read x86-64 once more, at the level:
+  the fixtures and `runtime-aes.c`. Every later fixture and kernel is read at
+  both, for as long as the flag accepts the level.
+- Driver tests: the flag builds and runs, and an unknown level and `native` are
+  each refused, with a negative test.
+- The rule in LANGUAGE.md, the guide's CLI page, and CT-16 in
+  [ct-verification.md](security/ct-verification.md) narrowed to the levels
+  read.
+- No rolling-freeze cost. `src/` gains a flag and uses no new construct, and
+  the prebuilt compiler stays baseline (§5). The change still runs `node
+  tests/run.js wasi` and `node tests/run.js performance` and regenerates the
+  checked goldens, as every `src/` change does.
+
+It comes after S6, which may give numeric code more than the flag does,
+without a flag.
+
+**S3: what stands in front of it (Q6, open).** §3.2.1 already shows scalar
+Nish reaching the vector code for a float kernel. A four-accumulator dot
+product without bounds checks compiled to the same `<4 x float>` loop a
+one-accumulator `f32x4` kernel would be, 4.2x faster than one accumulator, and
+its C twin ran at 0.99x the speed of SSE2 intrinsics. What stands in the way is
+the bounds check on each offset access, which the range analysis does not
+credit from the test `i + 3 < n`. So S3's numeric half is likely won by S6,
+with no surface. Its byte half is a scan `indexOfAny` cannot express, such as
+`bench/scan.ts`'s depth counting, which S1b's classifier would also reach, in
+the runtime. Against that, S3's surface is large and permanent: six types,
+about a dozen operation families, six checker rules with their negative tests,
+a third `nish:` module in `nish.mjs`, `nish.d.ts`, a layout test, a golden for
+every operation, its guide page, cookbook entry and LANGUAGE.md rule, and a
+breaking change for any later lane rule. About 29 files of `src/` handle
+`nish:unsafe` or `nish:secret` today, a rough measure of where a third module
+reaches. Under the rolling freeze `src/` could implement it but not use it
+before the next release, and it has no use for it (S4 was declined). Each
+`src/` pull request of the series also regenerates the checked goldens and
+must leave the NL9007 ratchet where it was.
+
+So the order recommended is S6, then S3a, then S3 decided on S3a's figures: if
+neither of S3a's kernels clears 1.5x after S6, S3 moves to §9; if only the
+byte kernel does, S3 is weighed against S1b on that kernel.
+
 **S4 is declined for now on its own bar.** The lexer is about 1% of the front
 end, and the front end's three runs about 2% of `scripts/bootstrap.sh
 --verify`, so no change to the lexer, however fast, can make the bootstrap
@@ -1149,6 +1268,17 @@ header shows for one; for the front-end figures, build stage2 with `npm run
 build` against each version and time `src/compile.ts` with the two in the same
 alternation. Revert the spike with `git checkout src/lexer.ts`.
 
+**S6: why it comes first (Q7, open).** It is the cheapest way to more vector
+code that this note has found. It touches no surface, withdraws nothing, and,
+per §3.2.1, the bounds checks it removes are what keep a scalar float kernel
+from the vector loop LLVM would otherwise build. It is WP15's bounds pipeline
+taking one more shape, so it reaches `src/` on the next bootstrap with no
+rolling-freeze cost. Its soundness rests on the same proof that credits
+`i < n` today, extended by a constant, and it needs the negative cases its row
+names. The NL9007 warning grows with it: it speaks today only for an index
+that is a plain local, so an offset access keeps its check without a word
+(§3.2.1).
+
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was
 measured. S2 is independent and can be taken at any point after S0. S3 waits
@@ -1158,7 +1288,7 @@ for S1, because S1's result says whether the byte half of S3 is needed at all.
 
 ## 8. Decisions
 
-The owner took all four on 2026-10-09, each as recommended. The reason
+The owner took the first four on 2026-10-09, each as recommended. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -1169,6 +1299,14 @@ builds anything else.
 | Q2 | The default target | baseline; a newer level (`x86-64-v2`); `native` | **Baseline.** Wider code is chosen at run time in the runtime, or by an opt-in flag. |
 | Q3 | Integer lanes in (b) | wrap, named so; trap, as scalars do | **Wrap, named so.** A trapping lane costs a mask reduction per operation, and wrapping by name keeps the reading class A. |
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |
+
+Three more are open, recommended in §7 and not yet decided:
+
+| # | Question | Options | Recommended |
+| --- | --- | --- | --- |
+| Q5 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **`x86-64-v3` only, for the module and the runtime alike, after S6.** It is the one level that met the bar. Both constant-time checkers already pass at it. `native` can never be read, and the SVE levels fail today. |
+| Q6 | S3, `nish:simd` | S6, then S3a, then decide; build S3 now; decline it now | **S6, then S3a, then decide.** Scalar Nish already reaches the vector loop for a float kernel once the bounds checks go. The byte half overlaps S1b. The surface is large and permanent. |
+| Q7 | S6, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Build it ahead of both.** It has no surface and no freeze cost, and is likely the largest gain of the three for numeric code. |
 
 ---
 
