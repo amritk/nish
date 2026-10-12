@@ -1,0 +1,23 @@
+# bench/json-compare's serde_json comparator. Cargo reads a manifest only as
+# Cargo.toml, a name the repository's kebab-case rule refuses, so run.mjs
+# copies this file, cargo.lock and main.rs into build/json-compare/serde/ as
+# Cargo.toml, Cargo.lock and main.rs, and builds there with --locked.
+[package]
+name = "serde-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "serde-bench"
+path = "main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+# float_roundtrip parses every double correctly rounded; without it a double
+# may be an ulp off and the checksum would not agree.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[profile.release]
+codegen-units = 1
+lto = true

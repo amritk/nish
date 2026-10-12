@@ -66,6 +66,12 @@ import {
   sitsOnChange,
   verdict,
 } from "../scripts/arrow-verify.mjs"
+import {
+  DEFAULT_ROUNDS,
+  canonical as jsonCompareCanonical,
+  roundOrder,
+  roundsFor,
+} from "../bench/json-compare/rounds.mjs"
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
@@ -14162,6 +14168,153 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
         `wrapping has panic_index: ${wrapIr.includes("nish_panic_index")}, default has: ${stripHeader(ir).includes("nish_panic_index")}`
       )
     }
+  }
+}
+
+// ---- bench/json-compare -------------------------------------------------------------
+// The JSON comparison against simdjson, yyjson, RapidJSON, serde_json and Go
+// needs a network and four toolchains, so it never runs here. Its Nish program
+// does: built by the compiler under test and run on the committed sample, each
+// workload must print the checksum every comparator printed for the same
+// arguments (bench/json-compare/sample.expected). The serialize bytes are also
+// held to Node's own JSON.stringify of the same values.
+if (!only || "json-compare".includes(only) || "bench".includes(only)) {
+  // The order a round runs its implementations in, over the rounds run.mjs
+  // runs by default: each case's count rounded up to a multiple of 2n, over
+  // which every implementation takes every position equally often and Nish
+  // and its copy take turns going first. Without the rounding, 9 rounds of
+  // typed-reuse's two put Nish first in 5; reversing every other round
+  // instead of every other block of n undid the rotation outright.
+  // The copy sits where run.mjs's withCopy puts it: halfway down the others.
+  for (const [n, copyAt] of [
+    [2, 1],
+    [5, 2],
+    [7, 3],
+  ]) {
+    const rounds = roundsFor(n, DEFAULT_ROUNDS)
+    const impls = Array.from({ length: n }, (_, k) => k)
+    const counts = impls.map(() => new Array(n).fill(0))
+    let nishFirst = 0
+    for (let round = 0; round < rounds; round++) {
+      const order = roundOrder(impls, round)
+      order.forEach((impl, position) => {
+        counts[impl][position] += 1
+      })
+      nishFirst += order.indexOf(0) < order.indexOf(copyAt) ? 1 : 0
+    }
+    check(
+      `json-compare: ${n} implementations run ${rounds} rounds by default, each in every position equally often, Nish and its copy taking turns going first`,
+      rounds >= DEFAULT_ROUNDS &&
+        counts.every((row) => row.every((c) => c === rounds / n)) &&
+        nishFirst === rounds / 2,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${rounds} rounds`
+    )
+  }
+  // How two checksum lines compare: tokenize's f64 sum as the double it
+  // spells, whatever its spelling, and each non-finite value as itself.
+  const same = (a, b) => jsonCompareCanonical(a) === jsonCompareCanonical(b)
+  check(
+    "json-compare: checksum lines compare tokenize's sum as a double, %.17g's integral spelling and inf/nan included",
+    same("tokenize 1 2 26602007581164608 3", "tokenize 1 2 26602007581164610 3") &&
+      same("tokenize 1 2 26602007581164608 3", "tokenize 1 2 2.660200758116461e16 3") &&
+      same("tokenize 1 2 -3796593.3266518079 3", "tokenize 1 2 -3796593.326651808 3") &&
+      same("tokenize 1 2 inf 3", "tokenize 1 2 +Inf 3") &&
+      same("tokenize 1 2 -inf 3", "tokenize 1 2 -Inf 3") &&
+      same("tokenize 1 2 nan 3", "tokenize 1 2 NaN 3") &&
+      !same("tokenize 1 2 inf 3", "tokenize 1 2 nan 3") &&
+      !same("tokenize 1 2 inf 3", "tokenize 1 2 -inf 3") &&
+      !same("tokenize 1 2 1.5 3", "tokenize 1 2 1.5 4") &&
+      !same("typed 18446744073709551615 2", "typed 18446744073709551614 2")
+  )
+  const dir = path.join(root, "bench", "json-compare")
+  const exe = path.join(buildDir, "json-compare", "main")
+  if (HAS_CLANG) {
+    const built = spawnSync(
+      NISH,
+      [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe],
+      { cwd: root, encoding: "utf8" }
+    )
+    const sample = path.join(dir, "sample.json")
+    const expected = fs
+      .readFileSync(path.join(dir, "sample.expected"), "utf8")
+      .split("\n")
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => {
+        const [args, want] = l.split(": ")
+        return { args: args.split(" "), want }
+      })
+    for (const { args, want } of expected) {
+      const run =
+        built.status === 0 ? spawnSync(exe, [args[0], sample, args[1], args[2]], { encoding: "utf8" }) : null
+      check(
+        `json-compare: bench/json-compare/main.ts ${args[0]} on sample.json prints the checksum every comparator printed`,
+        run !== null && run.status === 0 && run.stdout.split("\n")[0] === want,
+        run === null ? `${built.stdout}${built.stderr}` : `${run.stdout}${run.stderr}\nexpected ${want}`
+      )
+    }
+    // The fold run.mjs's header gives, over what JSON.stringify writes for the
+    // performances on each of the serialize workload's 7 iterations, so that
+    // the escapes and the non-ASCII in sample.json are held to Node's own.
+    const catalog = { performances: JSON.parse(fs.readFileSync(sample, "utf8")).performances }
+    const mask = 0xffffffffffffffffn
+    let folded = 0n
+    let length = 0
+    for (let r = 0; r < 7; r++) {
+      catalog.performances[r % catalog.performances.length].start += 1
+      const text = Buffer.from(JSON.stringify(catalog))
+      let bytes = 0n
+      for (const b of text) {
+        bytes = (bytes * 31n + BigInt(b)) & mask
+      }
+      folded = (folded * 31n + bytes) & mask
+      length = text.length
+    }
+    const serialize = expected.find((e) => e.args[0] === "serialize")
+    check(
+      "json-compare: the serialize checksum in sample.expected is the fold of JSON.stringify's bytes",
+      serialize !== undefined && serialize.want === `serialize ${folded} ${length}`,
+      `${serialize?.want}\nJSON.stringify: serialize ${folded} ${length}`
+    )
+  } else {
+    skip("json-compare: bench/json-compare/main.ts native run (no clang)")
+  }
+  // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+  // section bench/json-compare/run.mjs --record writes there. The smallest
+  // timed run: fib(20), Nish and C only, one run, into a copy of the file.
+  if (HAS_CLANG) {
+    const out = path.join(buildDir, "json-compare", "benchmarks.md")
+    const section = "<!-- json-compare:begin -->\n## kept\n<!-- json-compare:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "json-compare: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section json-compare --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- json-compare:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
   }
 }
 
