@@ -4688,10 +4688,19 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert` and
 // `thread_scope_region_set_add` fill a `Map` or a `Set` of their own there,
 // whose methods write the table and nothing of the task's.
+//
+// And the forms that answer a new array, `par_map_new` and `par_from`, and the
+// two capture programs, whose bodies read their function's `const` locals:
+// Node's arrows close over them, and natively each one travels as a parameter,
+// so the same values print both ways.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
   "par_reduce",
+  "par_map_new",
+  "par_from",
+  "par_capture",
+  "par_capture_large",
   "thread_scope_basic",
   "thread_scope_exit_paths",
   "thread_scope_many_arrays",

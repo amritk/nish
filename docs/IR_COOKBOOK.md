@@ -1293,6 +1293,103 @@ attributes #1 = { nounwind willreturn }
 ```
 <!-- cookbook:end par-alloc -->
 
+### `nish/threads`: a new array, and a body that reads its function's locals
+
+`parallelMap` and `parallelFrom` answer a new array: each instance allocates it
+and runs the region `parallelMapInto` runs, over the source for `parallelMap`
+and over the indices for `parallelFrom`. The arrows here read `k` and `b`,
+parameters of `affine`, so each is lifted with them appended to its own
+parameters (`@affine$arrow0(i32 %x, i32 %k, i32 %b)`), and the call passes
+their values after the arguments it wrote. In `threads.ll` every instance
+between the call and the body carries them the same way, as `%cap.0` and
+`%cap.1` after its own parameters, and the region stores them into its context
+after `src` and `dst`, so the chunk trampoline hands them back to the chunk
+loop after the range:
+
+```llvm
+  call void @nish.mapRange$i32$i32$fn.13.affine$arrow0(%struct.nish_array* %src, %struct.nish_array* %dst, i32 0, i32 %12, i32 %cap.0, i32 %cap.1)
+  ; ...
+  %par.ctx = alloca { %struct.nish_array*, %struct.nish_array*, i32, i32 }, align 8
+```
+
+No closure is made: each arrow is a function of its own with a direct call to
+it, and a scalar it reads is a copy (docs/LANGUAGE.md, "A data-parallel arrow
+reads its function's `const` locals"). `tests/link/par_capture`'s goldens hold
+both modules for every form.
+
+<!-- cookbook:begin par-capture -->
+```ts
+import { parallelFrom, parallelMap } from "nish/threads"
+
+export const affine = (xs: i32[], k: i32, b: i32): i32[] => parallelMap(xs, (x) => x * k + b)
+
+export const squares = (n: i32): i32[] => parallelFrom(n, (i) => i * i)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.parallelMap$i32$i32$fn.13.affine$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.parallelFrom$i32$fn.14.squares$arrow0(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
+
+define noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @affine(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs, i32 noundef %k, i32 noundef %b) #0 {
+entry:
+  %0 = call %struct.nish_array* @nish.parallelMap$i32$i32$fn.13.affine$arrow0(%struct.nish_array* %xs, i32 %k, i32 %b)
+  ret %struct.nish_array* %0
+}
+
+define noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @squares(i32 noundef %n) #0 {
+entry:
+  %0 = call %struct.nish_array* @nish.parallelFrom$i32$fn.14.squares$arrow0(i32 %n)
+  ret %struct.nish_array* %0
+}
+
+define hidden noundef i32 @affine$arrow0(i32 noundef %x, i32 noundef %k, i32 noundef %b) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 %k)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %b)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %4
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
+}
+
+define hidden noundef i32 @squares$arrow0(i32 noundef %i) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %i, i32 %i)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end par-capture -->
+
 ### `nish/threads`: a scope of tasks
 
 `using s = scope()` opens a scope and `s.spawn(entry, arg, dst, at)` files a

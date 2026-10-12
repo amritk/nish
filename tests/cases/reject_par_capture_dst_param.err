@@ -1,0 +1,1 @@
+`(x) => ...` reads `t`, and can reach a `i32[]` through `t`

@@ -2375,14 +2375,17 @@ export const main = (): i32 => {
 
 ### Data parallelism: `nish/threads`
 
-`parallelMapInto` and `parallelReduce` run a function over every element of an
-array on as many threads as the machine has and the length is worth
+`parallelMapInto`, `parallelMap`, `parallelFrom` and `parallelReduce` run a
+function over every element of an array, or every index of a new one, on as
+many threads as the machine has and the length is worth
 ([wp29-thread-surface.md](wp29-thread-surface.md) §4.1). They are imported from
 the standard library, and the function is a [function parameter](#function-parameters):
-a top-level function by name, or an arrow written at the call.
+a top-level function by name, or an arrow written at the call — which may read
+the `const` locals of the function it is written in
+([below](#a-data-parallel-arrow-reads-its-functions-const-locals)).
 
 ```typescript
-import { parallelMapInto, parallelReduce } from "nish/threads";
+import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 
 const square = (x: f64): f64 => x * x;
 
@@ -2391,8 +2394,11 @@ export const main = (): i32 => {
   const dst: f64[] = [0.0, 0.0, 0.0];
   parallelMapInto(src, dst, square);                         // dst[i] = square(src[i])
   parallelMapInto(dst, dst, (x) => x + 1.0);                 // in place
+  const k: f64 = 2.0;
+  const scaled = parallelMap(src, (x) => x * k);             // a new array: 2, 4, 6
+  const halves = parallelFrom(3, (i) => toF64(i) / k);       // a new array: 0, 0.5, 1
   const total = parallelReduce(dst, (a, b) => a + b, 0.0);   // 17
-  return toI32(total);
+  return toI32(total + scaled[2] + halves[2]);
 };
 ```
 
@@ -2411,6 +2417,16 @@ export const main = (): i32 => {
   `parallelMapInto: dst has 2 elements and src has 3` and exits 1
   (`tests/link/par_dst_short`). `src` and `dst` may be the same array
   (`tests/link/par_map`).
+- **`parallelMap(src, f)`** answers a new array of `f(src[i])` for every
+  index of `src`, and **`parallelFrom(n, f)`** a new array of `n` elements,
+  `f(i)` at index `i` — `Array.from({ length: n }, (_, i) => f(i))`. Each
+  allocates its result on the calling thread before any element is computed,
+  so nothing but the region can hold it while the threads write it, and then
+  runs the map: `parallelMap` is `parallelMapInto` into that array, and
+  `parallelFrom` the same region over the indices (`tests/link/par_map_new`,
+  `tests/link/par_from`). `parallelFrom(0, f)` answers an empty array. The
+  rules below hold of their `f` as they hold of `parallelMapInto`'s, except
+  the one about `dst`, which nothing else can reach.
 - **A short array is the loop it would have been.** A map is divided only
   once every thread's share carries enough work to pay for starting it
   ([wp20-threads.md](wp20-threads.md) §8e). How many elements that is — the
@@ -2506,7 +2522,9 @@ from the whole-program facts, and each rule is reported there:
   call with the same rule, before `std/threads.ts` is instantiated for it:
   `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
   (`tests/cases/reject_par_reduce_result_type`, and
-  `reject_par_reduce_result_class` for a class).
+  `reject_par_reduce_result_class` for a class). `parallelMap` and
+  `parallelFrom` allocate their result before the region, so theirs is refused
+  there too (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
 - **`dst` is not reachable from an element of `src`.** A function that only
   reads can still read `dst` through its argument while another thread writes
   it, so an array of `dst`'s element type reachable from `T`, through fields,
@@ -2515,6 +2533,78 @@ from the whole-program facts, and each rule is reported there:
   (`tests/cases/reject_par_reaches_dst`). It is judged by type, so such an
   array is refused whether or not it is `dst` at run time. A reduce writes no
   array of its caller's and has no such rule.
+
+#### A data-parallel arrow reads its function's `const` locals
+
+An arrow passed to one of the four forms may read the `const` locals and the
+parameters of the function it is written in. Nothing else captures: an arrow
+given to any other function parameter, or to `spawn`, still reads only its own
+parameters and the module's top-level names (`tests/cases/reject_par_capture_not_parallel`,
+`reject_par_capture_spawn`).
+
+```typescript
+import { parallelMapInto } from "nish/threads";
+
+export const main = (): i32 => {
+  const k: i32 = 3;
+  const table: i32[] = [10, 20, 30, 40];
+  const xs: i32[] = [1, 2, 3, 4];
+  const dst: i32[] = [0, 0, 0, 0];
+  parallelMapInto(xs, dst, (x) => table[x % 4] * k);   // 60 90 120 30
+  return dst[0];
+};
+```
+
+- **Each name the body reads is a parameter of the body.** The checker
+  appends it to the arrow's parameters after the ones it wrote, and the call
+  passes the local's value through every instance on the way to the body and
+  through the region's context with the other arguments, so a scalar is
+  copied and a reference is passed as the pointer it is
+  (`tests/link/par_capture`, and `tests/link/par_capture_large`, whose regions
+  divide). A narrowing in force at the call holds in the body, because a
+  `const` cannot change: `if (w !== null)` around the call lets the body read
+  `w.scale`. No closure is made: the arrow is still a function of its own, with
+  a direct call to it.
+- **A captured reference is read-only.** A store through it — an element, a
+  field, `push`, `pop`, `fill` or `set`, through a second name the body binds
+  to it, or through an object or an array of the body's own that holds it — is
+  a store into memory the caller owns, and is refused as any shared write is
+  (`reject_par_capture_element_write`, `_field_write`, `_push`, `_alias`,
+  `_alias_object`, `_alias_literal`, `_nested_array`, `_param_write`, and
+  `_reduce_write` and `_into_write` for the other forms). So is handing it to a
+  function or a method that writes it (`_helper`, `_method`). Assigning to the
+  name itself is
+  `` The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one ``
+  (`reject_par_capture_assign`, and `reject_par_capture_update` for a `k++`
+  after a read).
+- **A `let` is not captured**, since it could change between the call and a
+  thread's read of it:
+  `` The arrow reads `m`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call ``
+  (`reject_par_capture_let`).
+- **Only an arrow written directly in a function's body captures.** An arrow
+  inside another arrow reads nothing from outside itself, neither the
+  function's locals nor the outer arrow's parameters:
+  `` The arrow reads `k` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing ``
+  (`reject_par_capture_nested_arrow`, `reject_par_capture_nested_param`).
+- **`this` is not captured**, nor a field through it; bind what the body needs
+  to a `const` first:
+  `` The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, but not `this` or a field through it; bind what it needs to a `const` before the call (`const k = this.k`) ``
+  (`reject_par_capture_this`).
+- **Some values are never captured**: a `Mutex`, its guard, a `Channel` or a
+  scope, which are shared only by their own block's rules, a `Result`, a value
+  that may be absent, a `Secret`, or anything that reaches one of them:
+  `` The arrow reads `m`, which is `Mutex<i32>`, and a data-parallel body cannot capture it: a scope, a lock, a guard or a channel is shared only by the rules of its own block ``
+  (`reject_par_capture_mutex`, `_guard`, `_channel`, `_scope`, `_result`).
+- **`dst` is not reachable from a capture either.** A captured array of `dst`'s
+  element type, or a captured value that reaches one, could be `dst`, which
+  other threads are writing while the body reads it:
+  `` `(x) => ...` reads `dst`, and can reach a `i32[]` through `dst`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when both are `const`s bound to arrays of their own, such as a literal or a `new Array` ``
+  (`reject_par_capture_dst`, `_dst_alias`, `_dst_field`, `_dst_param`). A
+  capture is a binding the call can name, so one case is admitted by
+  identity: a captured array that is a `const` bound to an array of its own,
+  beside a `dst` that is a different such `const`, as `table` and `dst` are
+  above. `parallelMap` and `parallelFrom` allocate their own `dst`, which no
+  capture can reach.
 
 ### Scoped tasks: `using s = scope()`
 
@@ -2851,7 +2941,9 @@ breaks one is refused with that rule's own code:
   ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
   return; `reject_mutex_guard_store_field` and `reject_mutex_guard_store_element`
   for a store; `reject_mutex_guard_for_of` for a walk). An arrow cannot capture
-  a guard any more than any other local (`reject_mutex_guard_capture`). A scalar read through the guard is a value like any other, `.length`
+  a guard (`reject_mutex_guard_capture`), and an arrow passed to a
+  data-parallel form, which may read its function's `const` locals, may not
+  read a guard among them (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
   of an array it reaches included. When `T` is itself a scalar, `g.value` is
   read and stored directly — `g.value = g.value + 1` on a `Mutex<i32>` — and
   the store reaches the `Mutex` under Node as natively, because the guard is

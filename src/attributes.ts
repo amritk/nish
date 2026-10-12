@@ -129,7 +129,7 @@ import {
   isChannelSend,
   isGuardedAccess,
   isLockMethod,
-  isParallelEntry,
+  isRegionEntry,
   isSpawnEntry,
   parallelBodyOf,
   parallelRoleOf,
@@ -3269,7 +3269,7 @@ const collectFacts = (
   // call lowers to in `callees`, and because this has to hold in round 1:
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
-  if (isParallelEntry(sig)) {
+  if (isRegionEntry(sig)) {
     markParallelEntry(facts, "nish_parallel_range")
   }
   if (isSpawnEntry(sig)) {

@@ -43,7 +43,18 @@ import {
   typedArraySpelling,
 } from "./arrays"
 import { StringMap, StringSet } from "./map"
-import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
+import {
+  captureTypeMessage,
+  capturesOf,
+  isParallelEntry,
+  isSpawnTemplate,
+  letCaptureMessage,
+  nestedCaptureMessage,
+  parallelRole,
+  recordParallelCall,
+  reduceElementMessage,
+  thisCaptureMessage,
+} from "./parallel"
 import {
   isSecretPayload,
   isSecretTemplate,
@@ -118,6 +129,10 @@ import {
   MAP_RESERVE,
   MAP_SAME_KEY,
   MAP_STORED_KEY,
+  PAR_FROM,
+  PAR_MAP,
+  PAR_MAP_NEW,
+  PAR_REDUCE,
   ROLE_FUNCTION,
   STRUCT_CLASS,
   StructInfo,
@@ -1154,6 +1169,15 @@ const instantiateHere = (
   site: RequestSite
 ): FunctionSig | null => {
   adoptArgumentLayouts(ctx, args, site)
+  // WP29: an arrow's captures are parameters of the instance too, so their
+  // layouts are the answering module's business as a type argument's are.
+  const captured: i32[] = []
+  for (const fn of functions) {
+    for (const slot of capturesOf(fn)) {
+      captured.push(slot.type())
+    }
+  }
+  adoptArgumentLayouts(ctx, captured, site)
   // WP21 S1: inside the package that declares the template, which since G7 is
   // not necessarily the package that asked. `qualifySymbols` runs at the end of
   // pass 1 and instantiations are appended during pass 2, so an instantiation
@@ -1474,7 +1498,12 @@ export const checkGenericCall = (
   // WP29 P1: whether the body may run on several threads at once is a
   // question about the whole program, so it is asked once the fixpoint has an
   // answer (`Compilation.checkParallel`); the call is where it will be told.
-  recordParallelCall(ctx.program, expr, sig)
+  // `parallelMap`'s own call of `parallelMapInto` is the user's call, already
+  // judged where it was written.
+  const caller = ctx.current
+  if (caller === null || !isParallelEntry(caller)) {
+    recordParallelCall(ctx.program, expr, sig)
+  }
   // `nish:secret`: an `expose` is judged once the facts are in (`Compilation.checkSecrets`).
   const role = secretRoleOf(sig)
   if (role === SECRET_EXPOSE || role === SECRET_EXPOSE_WITH) {
@@ -1671,6 +1700,17 @@ const functionTypeText = (table: TypeTable, names: string[], types: i32[], retur
   return `(${parts.join(", ")}) => ${table.typeName(returnType)}`
 }
 
+/** The parameter names a call of `fn` writes: an arrow's own, without the captures appended after them. */
+const writtenNames = (fn: FunctionSig): string[] => {
+  const out: string[] = []
+  let i = 0
+  while (i < fn.writtenArity() && i < fn.paramNames.length) {
+    out.push(fn.paramNames[i])
+    i = i + 1
+  }
+  return out
+}
+
 /**
  * The refusal for a function argument whose signature is not its parameter's
  * function type, `wanted` spelled as the caller has it: as written while a
@@ -1685,7 +1725,7 @@ const mismatchMessage = (
   wanted: string
 ): string =>
   `Argument ${index + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
-  `\`${functionTypeText(table, fn.paramNames, fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
+  `\`${functionTypeText(table, writtenNames(fn), fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
   `\`${wanted}\`; a function argument must have exactly its parameter's type`
 
 /**
@@ -1779,14 +1819,14 @@ const resolveFunctionArgument = (
     return null
   }
   const wanted = fnType.children[0].children
-  if (fn.paramTypes.length !== wanted.length) {
+  if (fn.writtenArity() !== wanted.length) {
     // Said now, in the words of the exact-type rule, rather than as a type
     // parameter the callee failed to bind.
     refuseOnce(ctx, arg, mismatchMessage(ctx.table, template, index, fn, param, template.home.textOf(fnType)))
     return null
   }
   let k = 0
-  while (k < wanted.length && k < fn.paramTypes.length) {
+  while (k < wanted.length && k < fn.writtenArity()) {
     unifyAnnotation(ctx, wanted[k].children[1], fn.paramTypes[k], names, bindings)
     k = k + 1
   }
@@ -1896,7 +1936,9 @@ const liftArrowArgument = (
     )
     return null
   }
-  const fn = liftArrow(ctx, arrow, resolved, returnType, scope)
+  const role = parallelRole(template)
+  const capture = role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, capture)
   if (fn === null) {
     return null
   }
@@ -1927,7 +1969,8 @@ const arrowDisplayName = (arrow: Node): string => {
  * inside an instantiation's body shares that instantiation's tables for the
  * passes after this one. It sees its parameters and the module's top-level
  * names and nothing else: a name of the function around it is a capture, and
- * is refused as one (`capturesOuter`).
+ * is refused as one (`capturesOuter`) — unless `capture` says the arrow is
+ * passed to a data-parallel form, which may read a `const` (`captureOuter`).
  *
  * The symbol is the enclosing function's and a counter, behind a `$`, which is
  * unique in the module because the enclosing symbol is. `returnType` is -1 when
@@ -1938,7 +1981,8 @@ const liftArrow = (
   arrow: Node,
   types: i32[],
   returnType: i32,
-  outer: Scope
+  outer: Scope,
+  capture: boolean
 ): FunctionSig | null => {
   // Checked twice in one body (a caller that re-checks an argument): the arrow
   // is lifted once, and the call node's table slot for it says which.
@@ -1994,6 +2038,10 @@ const liftArrow = (
   const savedFunctions = ctx.functionBindings
   ctx.arrowOuterScopes.push(outer)
   ctx.arrowOuterFunctions.push(savedFunctions)
+  ctx.arrowFns.push(fn)
+  ctx.arrowScopes.push(scope)
+  ctx.arrowCaptures.push(capture)
+  fn.captureHost = enclosing
   ctx.functionBindings = new FunctionBindings()
   ctx.current = fn
   ctx.errored = false
@@ -2008,6 +2056,9 @@ const liftArrow = (
   ctx.functionBindings = savedFunctions
   ctx.arrowOuterScopes.pop()
   ctx.arrowOuterFunctions.pop()
+  ctx.arrowFns.pop()
+  ctx.arrowScopes.pop()
+  ctx.arrowCaptures.pop()
   if (fn.poisoned) {
     // The arrow's own diagnostic stands for the call around it.
     ctx.errored = true
@@ -2038,6 +2089,66 @@ export const arrowElsewhereMessage = (): string =>
 export const capturedMessage = (name: string): string =>
   `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow argument is lifted into a ` +
   "function of its own and sees only its parameters and the module's top-level names, so it can capture nothing"
+
+/**
+ * WP29: `expr` names `name` in a function an arrow argument is written inside
+ * (`capturesOuter` has said so). An arrow passed to a data-parallel form reads
+ * a `const` local or a parameter of the function it is written directly in:
+ * the local becomes a parameter of the arrow, declared in its parameter scope
+ * so that every later read of the name finds it, and appended to its
+ * signature after the parameters it wrote, with the outer local remembered in
+ * `captures` for the call to pass. Anything else is refused, with the reason.
+ * Answers the parameter, or `null` once it has refused.
+ */
+export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local | null => {
+  const depth = ctx.arrowFns.length
+  if (depth === 0 || depth > ctx.arrowScopes.length || depth > ctx.arrowCaptures.length) {
+    refuseOnce(ctx, expr, capturedMessage(name))
+    return null
+  }
+  if (!ctx.arrowCaptures[depth - 1]) {
+    refuseOnce(ctx, expr, capturedMessage(name))
+    return null
+  }
+  if (depth > 1 || ctx.arrowOuterScopes.length !== 1) {
+    refuseOnce(ctx, expr, nestedCaptureMessage(name))
+    return null
+  }
+  const outer = ctx.arrowOuterScopes[0].lookup(name)
+  if (outer === null) {
+    // A compile-time function parameter of the function around the arrow.
+    refuseOnce(ctx, expr, capturedMessage(name))
+    return null
+  }
+  if (name === "this") {
+    refuseOnce(ctx, expr, thisCaptureMessage())
+    return null
+  }
+  if (outer.mutable) {
+    refuseOnce(ctx, expr, letCaptureMessage(name))
+    return null
+  }
+  // A `const` cannot change, so a narrowing in force at the call holds for
+  // as long as the body runs: `if (p !== null)` around the call is enough.
+  const type = ctx.arrowOuterScopes[0].typeOf(outer)
+  const why = captureTypeMessage(ctx.program, ctx.table, name, type)
+  if (why.length > 0) {
+    refuseOnce(ctx, expr, why)
+    return null
+  }
+  const fn = ctx.arrowFns[depth - 1]
+  const inner = new Local(name, type, false, STORAGE_PARAM)
+  inner.origin = outer.origin
+  inner.typedArray = outer.typedArray
+  if (!ctx.arrowScopes[depth - 1].declare(inner)) {
+    refuseOnce(ctx, expr, capturedMessage(name))
+    return null
+  }
+  fn.paramNames.push(name)
+  fn.paramTypes.push(type)
+  fn.captures.push(outer)
+  return inner
+}
 
 /**
  * Refuse `fn` against its parameter's function type once every type parameter
@@ -2098,7 +2209,9 @@ const matchFunctionArguments = (
       if (returnType === T_ERROR) {
         return false
       }
-      let same = fn.paramTypes.length === types.length
+      // WP29: an arrow's captures follow the parameters it wrote, and are no
+      // part of the function type it is matched against.
+      let same = fn.writtenArity() === types.length
       let j = 0
       while (same && j < types.length && j < fn.paramTypes.length) {
         const got = fn.paramTypes[j]

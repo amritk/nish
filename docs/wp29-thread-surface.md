@@ -115,6 +115,23 @@ const total = parallelReduce(src, (a, b) => a + b, 0);
   arena is thread-local.
 - **`parallelReduce` takes an identity and blocks deterministically** (§11), so
   its answer is the same bits on any core count.
+- **`parallelMap` and `parallelFrom` answer a new array.** Each allocates its
+  result in the parent before the region and runs the map: `parallelMap` is
+  `parallelMapInto` into that array, and `parallelFrom` the same region over
+  the indices, through a chunk loop of its own (`fromRange`). They are the
+  Rayon one-liners `xs.par_iter().map(f).collect()` and
+  `(0..n).into_par_iter().map(f).collect()`.
+- **An arrow passed to a P1 form reads its function's `const` locals.** Each
+  name it reads is appended to the arrow's parameters; every instance between
+  the call and the body carries the value as a parameter of its own, and the
+  region packs it into the context the runtime already passes. A scalar is
+  copied, and a reference is read-only because a store through it is a shared
+  write. A `let`, `this`, a nested arrow's read from outside itself, a lock, a
+  guard, a channel, a scope and a `Result` are refused, and so is a capture
+  that could be `dst` unless both are `const`s bound to arrays of their own.
+  This is not closures: no arrow is a value, and only these four forms'
+  arrows capture (docs/LANGUAGE.md, "A data-parallel arrow reads its
+  function's `const` locals").
 
 ### 4.2 Stage P2 — the scope, for heterogeneous work
 

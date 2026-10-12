@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 617
+export const RULE_COUNT: i32 = 623
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -69,6 +69,8 @@ const diagnosticRules = (): string[] => [
   "NL2394",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
+  "` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing",
+  "NL2493",
   ": a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer",
   "NL2477",
   ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join",
@@ -77,6 +79,8 @@ const diagnosticRules = (): string[] => [
   "NL2393",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",
   "NL2444",
+  "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when both are `const`s bound to arrays of their own, such as a literal or a `new Array`",
+  "NL2497",
   ": a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned",
   "NL2479",
   ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope",
@@ -85,12 +89,16 @@ const diagnosticRules = (): string[] => [
   "NL2470",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join",
   "NL2472",
+  "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, but not `this` or a field through it; bind what it needs to a `const` before the call (`const k = this.k`)",
+  "NL2494",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
   "NL3031",
   "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end",
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
   "NL2481",
+  "`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call",
+  "NL2492",
   "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body",
   "NL2484",
   "` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined",
@@ -199,6 +207,8 @@ const diagnosticRules = (): string[] => [
   "NL2373",
   "` runs may reach no I/O, no clock, no entropy, no C, and no `panic` or exit whose message or status is computed, so that what it returns is all that leaves",
   "NL2448",
+  "`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one",
+  "NL2495",
   "` hands it — returns it, stores it or passes it where it is kept — and the key would outlive the `Secret` unwiped; return a value computed from it instead",
   "NL2449",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
@@ -689,6 +699,8 @@ const diagnosticRules = (): string[] => [
   "NL2082",
   "` is not part of the standard library (it has: ",
   "NL3011",
+  "`, and a data-parallel body cannot capture it: ",
+  "NL2496",
   "`, which the capability policy does not grant (",
   "NL2459",
   " values; build it with `[]` and `push` instead",

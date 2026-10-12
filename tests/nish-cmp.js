@@ -613,6 +613,31 @@ const QPACK_NEW = [
 
 const DECLARED = [
   {
+    program: "tests/link/par_map_new/main.ts",
+    changelog: "parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` or `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, or passes an arrow that reads a local of its function, which it refuses",
+  },
+  {
+    program: "tests/link/par_from/main.ts",
+    changelog: "parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` or `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, or passes an arrow that reads a local of its function, which it refuses",
+  },
+  {
+    program: "tests/link/par_capture/main.ts",
+    changelog: "parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` or `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, or passes an arrow that reads a local of its function, which it refuses",
+  },
+  {
+    program: "tests/link/par_capture_large/main.ts",
+    changelog: "parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` or `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, or passes an arrow that reads a local of its function, which it refuses",
+  },
+  {
+    program: "docs/cookbook/par-capture.ts",
+    changelog: "parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new cookbook entry: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have",
+  },
+  {
     program: "tests/cases/math_clz32.ts",
     changelog: "Add `Math.clz32`, the leading zero bits of a 32-bit integer",
     why: "a new program: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",

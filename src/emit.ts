@@ -114,7 +114,7 @@ import {
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
-import { isChannelSend, isLockMethod } from "./parallel"
+import { CaptureSlot, capturesOf, isChannelSend, isLockMethod } from "./parallel"
 import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -222,6 +222,9 @@ export class LoopTarget {
     return this.markBuf.length > 0
   }
 }
+
+/** The name of an instance's parameter for its capture `k` (WP29): no source name has a dot. */
+const captureParamName = (k: i32): string => `cap.${k}`
 
 export class Emitter {
   program: CheckedProgram
@@ -459,6 +462,18 @@ export class Emitter {
       params.push(new IRParam(name, this.llvmAbi(type, isPrivate), attrs))
       i = i + 1
     }
+    // WP29: the captures of the arrows an instance was given, which it passes
+    // on to the arrow or to the next instance (`capturesOf`). No fact is
+    // collected about a parameter the source never names, so none is claimed.
+    let captured = 0
+    for (const type of this.captureParamTypes(sig, isPrivate)) {
+      const attrs: string[] = []
+      if (optimize) {
+        attrs.push("noundef")
+      }
+      params.push(new IRParam(captureParamName(captured), type, attrs))
+      captured = captured + 1
+    }
     this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, isPrivate))
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
@@ -620,6 +635,11 @@ export class Emitter {
       argTypes.push(this.typeOf(arg))
     }
     if (!marksTailCall(this.table, this.current, callee, argTypes, this.facts)) {
+      return false
+    }
+    // WP29: a captured value may live in this frame or its arena scope, which
+    // a tail call gives up before the callee reads it.
+    if (capturesOf(callee).length > 0) {
       return false
     }
     // WP29 P3: a lock is given back after the value, and a tail call would
@@ -870,6 +890,9 @@ export class Emitter {
       }
       params.push(parts.join(" "))
       i = i + 1
+    }
+    for (const type of this.captureParamTypes(sig, false)) {
+      params.push(optimize ? `${type} noundef` : type)
     }
     const ret: string[] = []
     if (optimize) {
@@ -1413,6 +1436,15 @@ export class Emitter {
       operandValues.push(value)
       i = i + 1
     }
+    // WP29: the values of the arrow's captures, after everything written.
+    const captures = capturesOf(sig)
+    for (const slot of captures) {
+      const type = this.llvmAbi(slot.type(), calleePrivate)
+      const value = this.captureValue(slot)
+      operands.push(`${type} ${value}`)
+      operandTypes.push(type)
+      operandValues.push(value)
+    }
     // WP32: `hashKey` and `sameKey` are lowered in place, per key type.
     if (mapIntrinsicOf(sig) !== MAP_NONE) {
       return emitMapIntrinsic(this, sig, operandValues)
@@ -1426,7 +1458,7 @@ export class Emitter {
     // WP29 P1: inside a `parallelMapInto` or `parallelReduce` instance, the
     // call to the chunk loop is the one that runs on several threads.
     if (isParallelRegionCall(this.currentSig, sig)) {
-      emitParallelRegion(this, sig, operandTypes, operandValues)
+      emitParallelRegion(this, sig, operandTypes, operandValues, captures.length)
       return "void"
     }
     // WP6: this call is the whole of a `return` and the proof in escape.ts
@@ -1533,6 +1565,56 @@ export class Emitter {
   }
 
   /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
+  /**
+   * WP29: the LLVM types of the parameters `sig` carries for the captures of
+   * the arrows it was given, after its own. Empty for an arrow, whose
+   * captures are parameters of its signature already, and for every function
+   * that was given no capturing arrow.
+   */
+  captureParamTypes(sig: FunctionSig, isPrivate: boolean): string[] {
+    const out: string[] = []
+    if (sig.lifted) {
+      return out
+    }
+    for (const slot of capturesOf(sig)) {
+      out.push(this.llvmAbi(slot.type(), isPrivate))
+    }
+    return out
+  }
+
+  /**
+   * WP29: the value of one capture at a call this function makes: the local
+   * itself where the arrow was written, and the parameter this instance
+   * carries for it anywhere else on the way to the body. Any other caller is
+   * a broken invariant, since only the forms the arrow was given pass it on.
+   */
+  captureValue(slot: CaptureSlot): string {
+    const caller = this.currentSig
+    const arrow = slot.arrow
+    const host = arrow.captureHost
+    if (caller !== null && host !== null && host === caller && slot.index < arrow.captures.length) {
+      const local = arrow.captures[slot.index]
+      if (local.storage === STORAGE_PARAM) {
+        return paramValue(local.name)
+      }
+      const ty = this.llvm(local.type)
+      return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`)
+    }
+    if (caller !== null && !caller.lifted) {
+      const own = capturesOf(caller)
+      let k = 0
+      while (k < own.length) {
+        if (own[k].arrow === arrow && own[k].index === slot.index) {
+          return paramValue(captureParamName(k))
+        }
+        k = k + 1
+      }
+    }
+    process.exit(
+      internalErrorFor(`emitter: no value for capture ${slot.index} of \`${arrow.name}\``, this.opts.json)
+    )
+  }
+
   paramObject(name: string): string {
     let i = 0
     while (i < this.paramObjectNames.length) {

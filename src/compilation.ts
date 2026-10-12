@@ -146,6 +146,7 @@ import {
   allocationWarning,
   arenaMessage,
   escapeMessage,
+  captureReachesDstMessage,
   parallelBodyOf,
   reachesDstMessage,
   reduceMessage,
@@ -1664,6 +1665,7 @@ export class Compilation {
         const messages: string[] = []
         messages.push(resultMessage(this.table, sig, fn, result))
         messages.push(reachesDstMessage(this.table, program, sig, fn))
+        messages.push(captureReachesDstMessage(this.table, program, sig, fn, call.node))
         messages.push(sharedWriteMessage(sig, fn, facts))
         messages.push(bodyLockMessageFor(sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))

@@ -25,8 +25,15 @@ import { LANGUAGE } from "./branding"
 import { Edit } from "./diagnostics"
 import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
-import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics"
+import {
+  arrowElsewhereMessage,
+  captureOuter,
+  capturedMessage,
+  checkGenericCall,
+  refuseOnce,
+} from "./generics"
 import { CheckContext } from "./context"
+import { captureWriteMessage, thisCaptureMessage } from "./parallel"
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays"
 import {
   checkBuiltinCall,
@@ -523,8 +530,12 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   // WP29: inside an arrow argument, a name of the function around it — which
   // would shadow a module constant there — is a capture the arrow cannot make.
   if (ctx.capturesOuter(expr.text)) {
-    refuseOnce(ctx, expr, capturedMessage(expr.text))
-    return T_ERROR
+    const captured = captureOuter(ctx, expr, expr.text)
+    if (captured === null) {
+      return T_ERROR
+    }
+    ctx.program.nodeLocals[expr.id] = captured
+    return captured.type
   }
   // WP29: a compile-time function parameter names a callee, not a value.
   if (ctx.functionBindings.get(expr.text) !== null) {
@@ -562,10 +573,43 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``)
 }
 
+/** WP29: whether `local` is a capture the arrow being checked has already made (`captureOuter`). */
+const isCapture = (ctx: CheckContext, local: Local | null): boolean => {
+  const fn = ctx.current
+  if (fn === null || local === null || !fn.lifted || local.storage !== STORAGE_PARAM) {
+    return false
+  }
+  let k = fn.writtenArity()
+  while (k < fn.paramNames.length) {
+    if (fn.paramNames[k] === local.name) {
+      return true
+    }
+    k = k + 1
+  }
+  return false
+}
+
+/**
+ * WP29: an assignment, inside an arrow argument, to a name of the function the
+ * arrow is written in. An arrow passed to a data-parallel form reads such a
+ * name as a capture and is told it cannot write one, and any other arrow is
+ * told it captures nothing.
+ */
+const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
+  const depth = ctx.arrowCaptures.length
+  const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
+  refuseOnce(ctx, target, parallel ? captureWriteMessage(target.text) : capturedMessage(target.text))
+  return T_ERROR
+}
+
 const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const self = scope.lookup("this")
   if (self === null && ctx.capturesOuter("this")) {
-    refuseOnce(ctx, expr, capturedMessage("this")) // WP29: an arrow argument has no `this`
+    // WP29: an arrow argument has no `this`, and one passed to a
+    // data-parallel form is told what it may read instead.
+    const depth = ctx.arrowCaptures.length
+    const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
+    refuseOnce(ctx, expr, parallel ? thisCaptureMessage() : capturedMessage("this"))
     return T_ERROR
   }
   if (self === null) {
@@ -656,6 +700,9 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   }
   if (target.kind === N_IDENT) {
     const local = scope.lookup(target.text)
+    if ((local === null && ctx.capturesOuter(target.text)) || isCapture(ctx, local)) {
+      return refuseOuterWrite(ctx, target)
+    }
     if (local === null) {
       if (ctx.program.constant(target.text) !== null) {
         return ctx.errorType(target, `Cannot assign to \`${target.text}\` because it is a module constant`)
@@ -1883,6 +1930,9 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     return ctx.errorType(target, "Only simple variables can be assigned")
   }
   const local = scope.lookup(target.text)
+  if ((local === null && ctx.capturesOuter(target.text)) || isCapture(ctx, local)) {
+    return refuseOuterWrite(ctx, target)
+  }
   if (local === null) {
     if (ctx.program.constant(target.text) !== null) {
       return ctx.errorType(target, `Cannot assign to \`${target.text}\` because it is a module constant`)
@@ -2163,11 +2213,10 @@ const checkDirectCall = (
   scope: Scope
 ): i32 => {
   const args = expr.children[1]
-  if (args.children.length !== sig.paramTypes.length) {
-    return ctx.errorType(
-      expr,
-      `\`${shown}\` expects ${sig.paramTypes.length} argument(s), got ${args.children.length}`
-    )
+  // WP29: an arrow's captures are parameters the call does not write.
+  const arity = sig.writtenArity()
+  if (args.children.length !== arity) {
+    return ctx.errorType(expr, `\`${shown}\` expects ${arity} argument(s), got ${args.children.length}`)
   }
   // The first mismatch is reported after the loop, because only the first is
   // ever reported (`ctx.error`), and spelling the types inside the loop would
@@ -2175,7 +2224,7 @@ const checkDirectCall = (
   let bad = -1
   let badType = T_ERROR
   let i = 0
-  while (i < args.children.length && i < sig.paramTypes.length) {
+  while (i < args.children.length && i < arity) {
     const want = sig.paramTypes[i]
     const got = checkExpression(ctx, args.children[i], scope, want)
     if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, want)) {
