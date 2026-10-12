@@ -1,5 +1,5 @@
-// Typed JSON options are `static readonly`: a `static json` that could be
-// assigned is refused (NL2492).
+// Typed JSON options are `static readonly`: a `static json` without
+// `readonly` is an ordinary field to the parser, and needs a type.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 

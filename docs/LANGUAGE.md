@@ -6441,7 +6441,7 @@ export const main = (): i32 => {
 
   | Misuse | Code | Case |
   | --- | --- | --- |
-  | `static json` without `readonly`, with a type annotation, or on a generic class | NL2492 | `json_reject_options_mutable`, `json_reject_options_annotated`, `json_reject_options_generic` |
+  | `static json` without `readonly` but with a type, `static readonly json` with a type annotation, or on a generic class | NL2492 | `json_reject_options_mutable_typed`, `json_reject_options_annotated`, `json_reject_options_generic` |
   | options, `rename`, a key or an `optional` entry not written as the literal it must be: a module constant, an array for the object, a string for `optional`'s array | NL2493 | `json_reject_options_alias`, `json_reject_options_alias_whole`, `json_reject_options_not_object`, `json_reject_options_optional_not_array` |
   | an option other than `rename` and `optional` | NL2494 | `json_reject_options_unknown` |
   | a name that is not one of the class's fields | NL2495 | `json_reject_options_misspelt_rename`, `json_reject_options_misspelt_optional` |
@@ -6453,7 +6453,14 @@ export const main = (): i32 => {
   anywhere (NL1061, NL1041; `reject_json_options_spread`,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a
-  duplicate member (`reject_json_options_twice`). Under Node the literal is a
+  duplicate member (`reject_json_options_twice`). Only `static readonly json`
+  may leave out its type: written `static json = { ... }`, or as an instance
+  field, it is an ordinary field to the parser and needs one
+  (`a type annotation is required`, `json_reject_options_mutable`,
+  `json_reject_options_instance`), and an instance field called `json` with a
+  type is an ordinary field, read and written under its own name
+  (`tests/link/std_json_typed/options.ts`, "instance json: an ordinary field
+  decodes"). Under Node the literal is a
   static property of the class that nothing reads.
 - **A `JsonNumber` is a number's text.** `JsonNumber`, from `nish/json-typed`,
   holds a number as the bytes it was written in, so a field of it decodes and

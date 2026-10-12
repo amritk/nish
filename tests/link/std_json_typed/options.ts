@@ -71,6 +71,12 @@ export class DefaultsHolder {
   }
 }
 
+/** An instance field called `json` is an ordinary field, read and written under its own name. */
+export class Envelope {
+  json: string = "";
+  n: i32 = 0;
+}
+
 /** Two fields swap keys: each name is the other's key, and neither is its own. */
 export class Swapped {
   static readonly json = { rename: { a: "b", b: "a" } };
@@ -128,6 +134,14 @@ const jtRenames = (t: Suite): void => {
   t.eqI32("rename: swapped keys decode", jtDecode(`{"b":1,"a":"x"}`, s, new JsonLimits(), false).failed, 0);
   t.eqStr("rename: swapped keys reach the other field", `${s.a} ${s.b}`, "1 x");
   t.eqStr("rename: and encode back swapped", jtEncode(s, 64), `{"b":1,"a":"x"}`);
+};
+
+const jtInstanceJson = (t: Suite): void => {
+  const e = new Envelope();
+  t.eqI32("instance json: an ordinary field decodes", jtDecode(`{"json":"x","n":1}`, e, new JsonLimits(), false).failed, 0);
+  t.eqStr("instance json: and encodes under its own name", jtEncode(e, 64), `{"json":"x","n":1}`);
+  const missing = jtDecode(`{"n":1}`, new Envelope(), new JsonLimits(), false);
+  t.eqI32("instance json: and is required", missing.failed, JSON_DECODE_MISSING);
 };
 
 const jtReached = (t: Suite): void => {
@@ -275,6 +289,7 @@ const jtRenamed = (t: Suite): void => {
 
 export const jtOptionsChecks = (t: Suite): void => {
   jtRenames(t);
+  jtInstanceJson(t);
   jtReached(t);
   jtOptional(t);
   jtNumbers(t);

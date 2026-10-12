@@ -3,7 +3,7 @@ import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
 class User {
-  static json = { rename: { id: "user_id" } };
+  static readonly json: string = "x";
   id: i32 = 0;
 }
 
