@@ -22,7 +22,7 @@ import {
 } from "../../../std/json-tokenizer";
 import { messageInto } from "../../../docs/cookbook/json-tokenizer";
 import { Suite } from "../../../std/testing";
-import { jtBytes, jtCodeName, jtHex, jtTokens, jtTokensOf, jtVerdict, jtVerdictOf } from "./common";
+import { jtBytes, jtCodeName, jtHex, jtTokens, jtTokensOf, jtVerdict, jtVerdictOf, jtWord } from "./common";
 
 /** Limits of `depth`, `stringBytes`, `numberBytes` and `totalBytes`. */
 const jtLimits = (depth: i32, stringBytes: i32, numberBytes: i32, totalBytes: i32): JsonLimits => {
@@ -639,14 +639,171 @@ const cookbook = (t: Suite): void => {
   t.eqI32("cookbook: ...and failed says how", tok.failed, -2);
 };
 
+/**
+ * Every token of `bytes[off, off + len)`, read in place under `limits`, as
+ * words: a key's or a string's decoded bytes in hex, anything else as
+ * `jtWord` spells it; then the verdict.
+ */
+const jtTokensIn = (bytes: u8[], off: i32, len: i32, limits: JsonLimits): string => {
+  const t = new JsonTokenizer(bytes, off, len, limits);
+  const scratch = new Array<u8>(toI32(bytes.length));
+  const words: string[] = [];
+  let steps: i32 = 0;
+  let k: i32 = t.next();
+  while (k > 0 && steps <= len + 2) {
+    if (k === JSON_TOK_KEY || k === JSON_TOK_STRING) {
+      words.push(`${k === JSON_TOK_KEY ? "k" : "s"}:${jtHex(scratch, t.stringInto(scratch, 0))}`);
+    } else {
+      words.push(jtWord(t, k, scratch, false));
+    }
+    steps += 1;
+    k = t.next();
+  }
+  words.push(k === JSON_TOK_END ? "END" : `${jtCodeName(k)}@${t.errorAt}`);
+  return words.join(" ");
+};
+
+/** `jtTokensIn` over the bytes of `text`, from 0, under the default limits. */
+const jtScan = (text: string, len: i32): string => jtTokensIn(jtBytes(text), 0, len, new JsonLimits());
+
+/**
+ * The runs the scanners step over in one loop: a string's plain bytes, the
+ * blanks between tokens, and a number's digits. A run is bounded by the
+ * window and, in a string, by the length limit, so each check ends one on
+ * such an edge with a byte past it that would change the answer if it were
+ * read: a closing quote, a closer, another digit.
+ */
+const scans = (t: Suite): void => {
+  // Strings.
+  t.eqStr("scan: a run of plain bytes the window cuts short is truncated, not closed by the quote past it", jtScan('"abcdefgh"', 5), "TRUNCATED@5");
+  t.eqStr("scan: a string closed on the window's last byte", jtScan('"abcdefgh"]', 10), "s:6162636465666768 END");
+  t.eqStr("scan: a run stops at the string limit", jtTokensIn(jtBytes('"abcdefgh"'), 0, 10, jtLimits(1, 4, 1, 100)), "STRING_LIMIT@5");
+  t.eqStr("scan: a run that ends one byte under the string limit", jtTokensIn(jtBytes('"abcdefgh"'), 0, 10, jtLimits(1, 7, 1, 100)), "STRING_LIMIT@8");
+  t.eqStr("scan: a run exactly as long as the string limit", jtTokensIn(jtBytes('"abcdefgh"'), 0, 10, jtLimits(1, 8, 1, 100)), "s:6162636465666768 END");
+  const long = jtRuns(34, 1, 97, 1000, 34);
+  t.eqStr("scan: a run of 1,000 plain bytes fits a limit of 1,000", jtVerdictOf(long, jtLimits(1, 1000, 1, 2000)), "END");
+  t.eqStr("scan: ...and is refused at its last byte by a limit of 999", jtVerdictOf(long, jtLimits(1, 999, 1, 2000)), "STRING_LIMIT@1000");
+  t.eqStr("scan: space and DEL, the plain bytes' edges, are plain", jtTokensIn([34, 32, 127, 34], 0, 4, new JsonLimits()), "s:207f END");
+  t.eqStr("scan: 0x1F after a run is CONTROL where it stands", jtVerdictOf([34, 97, 98, 31, 34], new JsonLimits()), "CONTROL@3");
+  t.eqStr("scan: 0x80 after a run is UTF8 where it stands", jtVerdictOf([34, 97, 98, 128, 34], new JsonLimits()), "UTF8@3");
+  t.eqStr(
+    "scan: raw two-, three- and four-byte UTF-8 between runs",
+    jtScan('"ab é cd € ef 😀 gh"', 25),
+    "s:616220c3a920636420e282ac20656620f09f9880206768 END"
+  );
+  t.eqStr(
+    "scan: escapes of two-, three- and four-byte characters between runs",
+    jtScan('"ab\\u00e9cd\\u20acef\\ud83d\\ude00gh"', 34),
+    "s:6162c3a96364e282ac6566f09f98806768 END"
+  );
+  const escaped = jtAt('["ab\\u00e9cd\\u20acef\\ud83d\\ude00gh"]', JSON_TOK_STRING);
+  if (escaped !== null) {
+    t.eqI32("scan: stringLength of those escapes between runs", escaped.stringLength(), 17);
+    t.ok("scan: keyEquals of those escapes' UTF-8", escaped.keyEquals("abécd€ef😀gh"));
+  }
+  t.eqStr("scan: a two-byte character closed on the window's last byte", jtScan('"abé"x', 6), "s:6162c3a9 END");
+  t.eqStr("scan: a two-byte character and no closing quote in the window", jtScan('"abé"', 5), "TRUNCATED@5");
+  t.eqStr("scan: a two-byte character the window cuts after its lead", jtScan('"abé"', 4), "TRUNCATED@3");
+  t.eqStr("scan: a three-byte character the window cuts after its second byte", jtScan('"a€"', 4), "TRUNCATED@2");
+  t.eqStr("scan: a four-byte character closed on the window's last byte", jtScan('"a😀"]', 7), "s:61f09f9880 END");
+  t.eqStr("scan: a four-byte character the window cuts after its third byte", jtScan('"a😀"', 5), "TRUNCATED@2");
+
+  // Blanks.
+  t.eqStr("scan: blanks the window cuts short are truncated, not closed by the closer past them", jtScan("[1   ]", 5), "[ n:1 TRUNCATED@5");
+  t.eqStr("scan: blanks that run on past the window are truncated at its end", jtScan("[1      ]", 4), "[ n:1 TRUNCATED@4");
+  t.eqStr("scan: blanks up to the window's last byte end a top-level value", jtScan("1   2", 4), "n:1 END");
+  t.eqStr("scan: ...and the value past them is trailing in a wider window", jtScan("1   2", 5), "n:1 TRAILING@4");
+  t.eqStr("scan: a run of all four blanks", jtScan(" \t\n\r[ \t\n\r] \t\n\r", 14), "[ ] END");
+
+  // Digits.
+  t.eqStr("scan: an integer that ends on the window's last byte", jtScan("12345678", 4), "n:1234 END");
+  t.eqStr("scan: a fraction that ends on the window's last byte", jtScan("1.25999", 4), "n:1.25 END");
+  t.eqStr("scan: an exponent that ends on the window's last byte", jtScan("1e225", 4), "n:1e+22 END");
+  t.eqStr("scan: parseFloat reads the token alone, not the digit past the window", jtScan("1e230", 4), "n:1e+23 END");
+  // A blank after the exponent is the byte that, read as a digit, would make it -6.
+  t.eqStr("scan: an exponent's digits stop at the token's end", jtScan("1e1 ", 4), "n:10 END");
+  t.eqStr("scan: parseFloat of 16 significant digits that end on the window's last byte", jtScan("0.30000000000000004", 18), "n:0.3 END");
+  t.eqStr("scan: ...and of 17, one byte wider", jtScan("0.30000000000000004", 19), "n:0.30000000000000004 END");
+  t.eqStr("scan: the number limit inside an integer's run", jtTokensIn(jtBytes("123456"), 0, 6, jtLimits(1, 1, 4, 100)), "NUMBER_LIMIT@4");
+  t.eqStr("scan: the number limit inside a fraction's run", jtTokensIn(jtBytes("1.2345"), 0, 6, jtLimits(1, 1, 4, 100)), "NUMBER_LIMIT@4");
+  t.eqStr("scan: a number exactly as long as the number limit", jtTokensIn(jtBytes("1.2345"), 0, 6, jtLimits(1, 1, 6, 100)), "n:1.2345 END");
+  const cut = new JsonTokenizer(jtBytes("12345678"), 0, 4, new JsonLimits());
+  if (cut.next() === JSON_TOK_NUMBER) {
+    t.eqI64("scan: numberI64 of an integer the window cuts", cut.numberI64(), toI64(1234));
+    t.eqStr("scan: numberU64 of an integer the window cuts", `${cut.numberU64()}`, "1234");
+  } else {
+    t.fail("scan: a number token from a cut window", "none");
+  }
+};
+
+/** `numberU64`: every edge of the u64 range, and every number that is not one. */
+const unsigned = (t: Suite): void => {
+  const texts = [
+    "0",
+    "1",
+    "9999999999999999999",
+    "10000000000000000000",
+    "18446744073709551615",
+    "18446744073709551616",
+    "18446744073709551625",
+    "19999999999999999999",
+    "28446744073709551615",
+    "99999999999999999999",
+    "100000000000000000000",
+    "-0",
+    "-1",
+    "1.0",
+    "1e2",
+  ];
+  const fits = [true, true, true, true, true, false, false, false, false, false, false, false, false, false, false];
+  const values = [
+    "0",
+    "1",
+    "9999999999999999999",
+    "10000000000000000000",
+    "18446744073709551615",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+  ];
+  let i: i32 = 0;
+  while (i < toI32(texts.length) && i < toI32(fits.length) && i < toI32(values.length)) {
+    const text = texts[i];
+    const fit: boolean = fits[i];
+    const want = values[i];
+    const n = jtAt(text, JSON_TOK_NUMBER);
+    if (n === null) {
+      t.fail(`a number token for ${text}`, "none");
+    } else {
+      t.eqBool(`isU64(${text})`, n.isU64(), fit);
+      t.eqStr(`numberU64(${text})`, `${n.numberU64()}`, want);
+    }
+    i += 1;
+  }
+  const str = jtAt('"1"', JSON_TOK_STRING);
+  if (str !== null) {
+    t.ok("isU64 is false on a string token", !str.isU64());
+    t.eqStr("numberU64 is 0 on a string token", `${str.numberU64()}`, "0");
+  }
+};
+
 /** Every unit check. */
 export const jtUnits = (t: Suite): void => {
   tokenKinds(t);
   errors(t);
   strings(t);
   numbers(t);
+  unsigned(t);
   limits(t);
   windows(t);
+  scans(t);
   stickyAndReset(t);
   skipping(t);
   duplicates(t);
