@@ -280,7 +280,7 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
     // The words after the class's name are NL2492's.
     ctx.error(
       decl,
-      `\`static\` member \`${JSON_OPTIONS}\` of class \`${info.name}\` is written \`static readonly json = { ... }\`, ` +
+      `\`static\` member \`${JSON_OPTIONS}\` of class \`${ctx.table.typeName(info.type)}\` is written \`static readonly json = { ... }\`, ` +
         "with no type annotation, in a class that is not generic: it holds the class's typed JSON options and is not a field"
     )
     return

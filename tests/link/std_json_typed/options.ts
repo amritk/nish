@@ -38,6 +38,39 @@ export class Account {
   active: boolean = true;
 }
 
+/** A class with options reached each way a class is: nested, `| null`, as an array's element and as a map's value. */
+export class Holder {
+  one: Swapped;
+  maybe: Swapped | null = null;
+  many: Swapped[];
+  byName: Map<string, Swapped>;
+
+  constructor() {
+    this.one = new Swapped();
+    this.many = [];
+    this.byName = new Map<string, Swapped>();
+  }
+}
+
+/** Optional fields reached nested, as an array's element and as a map's value. */
+export class Defaults {
+  static readonly json = { optional: ["n", "s"] };
+  n: i32 = 9;
+  s: string = "d";
+}
+
+export class DefaultsHolder {
+  inner: Defaults;
+  list: Defaults[];
+  map: Map<string, Defaults>;
+
+  constructor() {
+    this.inner = new Defaults();
+    this.list = [];
+    this.map = new Map<string, Defaults>();
+  }
+}
+
 /** Two fields swap keys: each name is the other's key, and neither is its own. */
 export class Swapped {
   static readonly json = { rename: { a: "b", b: "a" } };
@@ -95,6 +128,25 @@ const jtRenames = (t: Suite): void => {
   t.eqI32("rename: swapped keys decode", jtDecode(`{"b":1,"a":"x"}`, s, new JsonLimits(), false).failed, 0);
   t.eqStr("rename: swapped keys reach the other field", `${s.a} ${s.b}`, "1 x");
   t.eqStr("rename: and encode back swapped", jtEncode(s, 64), `{"b":1,"a":"x"}`);
+};
+
+const jtReached = (t: Suite): void => {
+  const nested = `{"one":{"b":1,"a":"p"},"maybe":{"b":2,"a":"q"},"many":[{"b":3,"a":"r"}],"byName":{"k":{"b":4,"a":"s"}}}`;
+  const h = new Holder();
+  t.eqI32("reached: renames hold nested, | null, in an array and in a map", jtDecode(nested, h, new JsonLimits(), false).failed, 0);
+  t.eqStr("reached: and encode back under the same keys", jtEncode(h, 256), nested);
+  const own = jtDecode(`{"one":{"b":1,"a":"p"},"maybe":null,"many":[{"a":3,"b":"r"}],"byName":{}}`, new Holder(), new JsonLimits(), false);
+  t.eqI32("reached: an element's own field names are its keys swapped: code", own.failed, JSON_DECODE_TYPE);
+  t.eqI32("reached: an element's own field names are its keys swapped: errorAt", own.errorAt, 49);
+
+  const dh = new DefaultsHolder();
+  const bare = `{"inner":{},"list":[{},{"n":1}],"map":{"m":{"s":"x"}}}`;
+  t.eqI32("reached: optional keys left out nested, in an array and in a map", jtDecode(bare, dh, new JsonLimits(), false).failed, 0);
+  t.eqStr(
+    "reached: each set to its initializer",
+    jtEncode(dh, 256),
+    `{"inner":{"n":9,"s":"d"},"list":[{"n":9,"s":"d"},{"n":1,"s":"d"}],"map":{"m":{"n":9,"s":"x"}}}`
+  );
 };
 
 const jtOptional = (t: Suite): void => {
@@ -223,6 +275,7 @@ const jtRenamed = (t: Suite): void => {
 
 export const jtOptionsChecks = (t: Suite): void => {
   jtRenames(t);
+  jtReached(t);
   jtOptional(t);
   jtNumbers(t);
   jtRenamed(t);

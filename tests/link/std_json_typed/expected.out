@@ -238,6 +238,12 @@ PASS  rename: a missing required wire name: code
 PASS  rename: swapped keys decode
 PASS  rename: swapped keys reach the other field
 PASS  rename: and encode back swapped
+PASS  reached: renames hold nested, | null, in an array and in a map
+PASS  reached: and encode back under the same keys
+PASS  reached: an element's own field names are its keys swapped: code
+PASS  reached: an element's own field names are its keys swapped: errorAt
+PASS  reached: optional keys left out nested, in an array and in a map
+PASS  reached: each set to its initializer
 PASS  optional: missing keys are no error
 PASS  optional: a fresh object keeps every initializer
 PASS  optional: the full input into the same object
@@ -279,4 +285,4 @@ PASS  number: 1,000 decodes into one Reading succeed
 PASS  number: Arena.used() is flat over them
 PASS  renamed: decodes
 PASS  renamed: encodes, tries at its initializer
-std_json_typed: 280 passed, 0 failed, 0 skipped
+std_json_typed: 286 passed, 0 failed, 0 skipped
