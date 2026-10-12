@@ -18704,8 +18704,13 @@ declare void @nish_channel_send(i64* noundef nonnull, i64 noundef) #3
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #3
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
+declare i32 @nish_aes_hw() #8
+declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
+declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
+declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
+declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #8 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #9 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -18742,6 +18747,7 @@ attributes #4 = { nounwind willreturn memory(argmem: read) }
 attributes #5 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
 attributes #6 = { noreturn nounwind }
 attributes #7 = { nounwind noreturn cold }
-attributes #8 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #8 = { nounwind willreturn memory(inaccessiblemem: readwrite) }
+attributes #9 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end runtime-prelude -->
