@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1016 programs, 98912 dump lines.
+# 1016 programs, 98944 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -80641,24 +80641,33 @@ function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSki
   local 311:9 n: i32 (const)
   local 312:7 j: i32 (let)
   callee 313:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
+function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish.jsonTokIsPlain
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 324:9 n: i32 (const)
+  local 325:7 j: i32 (let)
+  callee 326:32 jsonTokIsPlain -> @nish.jsonTokIsPlain
 function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
   calls: nish.jsonTokIsDigit
   stackSites=0 stackLocals=0
-  callee 321:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 334:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokHex4(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokHex4
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end
   calls: nish.jsonTokByteAt nish.jsonTokHexDigit nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 339:7 value: i32 (let)
-  local 340:7 k: i32 (let)
-  local 342:11 b: i32 (const)
-  callee 342:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 346:11 digit: i32 (const)
-  callee 346:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
+  local 352:7 value: i32 (let)
+  local 353:7 k: i32 (let)
+  local 355:11 b: i32 (const)
+  callee 355:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 359:11 digit: i32 (const)
+  callee 359:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
 function jsonTokInRange(b: i32, low: i32, high: i32): boolean -> @nish.jsonTokInRange
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -80668,21 +80677,21 @@ function jsonTokUtf8Length(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokUt
   calls: nish.jsonTokByteAt nish.jsonTokInRange nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0 nish.jsonTokByteAt#0 nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 369:9 lead: i32 (const)
-  callee 369:21 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 370:9 second: i32 (const)
-  callee 370:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 371:7 low: i32 (let)
-  local 372:7 high: i32 (let)
-  local 373:7 length: i32 (let)
-  callee 374:7 jsonTokInRange -> @nish.jsonTokInRange
-  callee 376:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 383:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 393:8 jsonTokInRange -> @nish.jsonTokInRange
-  local 396:7 k: i32 (let)
-  local 398:11 next: i32 (const)
-  callee 398:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 399:10 jsonTokInRange -> @nish.jsonTokInRange
+  local 382:9 lead: i32 (const)
+  callee 382:21 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 383:9 second: i32 (const)
+  callee 383:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 384:7 low: i32 (let)
+  local 385:7 high: i32 (let)
+  local 386:7 length: i32 (let)
+  callee 387:7 jsonTokInRange -> @nish.jsonTokInRange
+  callee 389:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 396:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 406:8 jsonTokInRange -> @nish.jsonTokInRange
+  local 409:7 k: i32 (let)
+  local 411:11 next: i32 (const)
+  callee 411:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 412:10 jsonTokInRange -> @nish.jsonTokInRange
 function jsonTokUtf8Width(cp: i32): i32 -> @nish.jsonTokUtf8Width
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -80691,8 +80700,8 @@ function jsonTokUtf8Byte(cp: i32, width: i32, k: i32): i32 -> @nish.jsonTokUtf8B
   escaping: cp
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 423:9 shift: i32 (const)
-  local 424:9 bits: i32 (const)
+  local 436:9 shift: i32 (const)
+  local 437:9 bits: i32 (const)
 function jsonTokShortEscape(b: i32): i32 -> @nish.jsonTokShortEscape
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
@@ -80703,7 +80712,7 @@ function jsonTokEscapeLength(src: u8[], at: i32, end: i32, cp: i32): i32 -> @nis
   calls: nish.jsonTokByteAt
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  callee 467:10 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 480:10 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len: i32, limits: JsonLimits): void -> @nish.JsonTokenizer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.reset
@@ -80713,84 +80722,84 @@ function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   pointer limits: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 539:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 552:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
 function JsonTokenizer.reset(this: JsonTokenizer, src: u8[], off: i32, len: i32): void -> @nish.JsonTokenizer.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 548:5
+  sharedWrite: 561:5
   escaping: off src
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   pointer src: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 563:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 570:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 576:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 583:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.fail(this: JsonTokenizer, code: i32, at: i32): i32 -> @nish.JsonTokenizer.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 577:7
+  sharedWrite: 590:7
   escaping: at code
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.next(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 595:11
+  sharedWrite: 608:11
   calls: nish.JsonTokenizer.close nish.JsonTokenizer.fail nish.JsonTokenizer.key nish.JsonTokenizer.top nish.JsonTokenizer.value nish.jsonTokByteAt nish.jsonTokSkipBlank nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.top#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0
   stackSites=0 stackLocals=0
-  local 588:11 src: u8[] (const)
-  local 589:11 end: i32 (const)
-  local 590:11 at: i32 (const)
-  callee 590:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  local 591:11 b: i32 (const)
-  callee 591:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 599:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 602:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 602:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 604:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 607:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 609:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 612:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 614:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  local 617:17 after: i32 (const)
-  callee 617:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 618:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 619:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 621:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 624:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 627:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 629:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 631:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 601:11 src: u8[] (const)
+  local 602:11 end: i32 (const)
+  local 603:11 at: i32 (const)
+  callee 603:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  local 604:11 b: i32 (const)
+  callee 604:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 612:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 615:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 615:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 617:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 620:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 622:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 625:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 627:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 630:17 after: i32 (const)
+  callee 630:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 631:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 632:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 634:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 637:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 640:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 642:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 644:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
 function JsonTokenizer.top(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.top [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 637:11 d: i32 (const)
+  local 650:11 d: i32 (const)
 function JsonTokenizer.emit(this: JsonTokenizer, k: i32, start: i32, stop: i32): i32 -> @nish.JsonTokenizer.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 646:5
+  sharedWrite: 659:5
   escaping: k start stop
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 667:5
+  sharedWrite: 680:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.top nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.top#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  callee 664:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 665:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 668:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 677:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 678:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 681:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.open(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.open [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 677:5
+  sharedWrite: 690:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 673:11 d: i32 (const)
-  callee 675:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 679:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 686:11 d: i32 (const)
+  callee 688:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 692:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.key [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -80798,10 +80807,10 @@ function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonToken
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.string nish.jsonTokByteAt
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 684:11 b: i32 (const)
-  callee 684:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 686:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 688:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 697:11 b: i32 (const)
+  callee 697:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 699:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 701:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.value [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -80809,19 +80818,19 @@ function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTok
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.literal nish.JsonTokenizer.number nish.JsonTokenizer.open nish.JsonTokenizer.string nish.jsonTokByteAt nish.jsonTokIsDigit
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.number#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 693:11 src: u8[] (const)
-  local 694:11 end: i32 (const)
-  local 695:11 b: i32 (const)
-  callee 695:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 697:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 699:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 700:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
-  callee 704:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 706:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 708:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 710:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 712:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 714:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 706:11 src: u8[] (const)
+  local 707:11 end: i32 (const)
+  local 708:11 b: i32 (const)
+  callee 708:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 710:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 712:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 713:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
+  callee 717:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 719:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 721:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 723:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 725:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 727:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i32): i32 -> @nish.JsonTokenizer.literal [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.emit
@@ -80829,44 +80838,44 @@ function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i3
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.emit#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 720:11 n: i32 (const)
-  local 721:9 matched: i32 (let)
-  callee 724:7 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 729:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
-  callee 731:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 733:11 n: i32 (const)
+  local 734:9 matched: i32 (let)
+  callee 737:7 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 742:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 744:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.number [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 787:5
+  sharedWrite: 800:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokSkipDigits nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 746:11 src: u8[] (const)
-  local 747:11 end: i32 (const)
-  local 748:9 i: i32 (let)
-  callee 749:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 752:11 first: i32 (const)
-  callee 752:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 756:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 758:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  local 760:9 integral: boolean (let)
-  callee 761:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 764:13 digit: i32 (const)
-  callee 764:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 765:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 766:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 768:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  local 770:11 e: i32 (const)
-  callee 770:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 774:13 sign: i32 (const)
-  callee 774:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 778:13 digit: i32 (const)
-  callee 778:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 779:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 780:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 782:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 785:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 788:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 759:11 src: u8[] (const)
+  local 760:11 end: i32 (const)
+  local 761:9 i: i32 (let)
+  callee 762:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 765:11 first: i32 (const)
+  callee 765:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 769:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 771:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local 773:9 integral: boolean (let)
+  callee 774:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 777:13 digit: i32 (const)
+  callee 777:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 778:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 779:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 781:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  local 783:11 e: i32 (const)
+  callee 783:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 787:13 sign: i32 (const)
+  callee 787:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 791:13 digit: i32 (const)
+  callee 791:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 792:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 793:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 795:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 798:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 801:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i: i32): i32 -> @nish.JsonTokenizer.numberRefused [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -80874,38 +80883,37 @@ function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i:
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  callee 794:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 796:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 807:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 809:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nish.JsonTokenizer.string [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 862:5
+  sharedWrite: 870:5
   escaping: at k
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokIsPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokSkipPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 806:11 src: u8[] (const)
-  local 807:11 end: i32 (const)
-  local 808:11 n: i32 (const)
-  local 811:11 room: i32 (const)
-  local 812:11 limit: i32 (const)
-  local 813:9 i: i32 (let)
-  local 814:9 decoded: i32 (let)
-  local 821:15 run: i32 (const)
-  callee 822:38 jsonTokIsPlain -> @nish.jsonTokIsPlain
-  local 827:13 b: i32 (const)
-  callee 827:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 832:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 835:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 838:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 841:15 cp: i32 (const)
-  callee 841:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  callee 845:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  callee 846:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
-  local 851:15 width: i32 (const)
-  callee 851:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
-  callee 853:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 860:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 863:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 819:11 src: u8[] (const)
+  local 820:11 end: i32 (const)
+  local 823:11 room: i32 (const)
+  local 824:11 limit: i32 (const)
+  local 825:9 i: i32 (let)
+  local 826:9 decoded: i32 (let)
+  local 832:13 run: i32 (const)
+  callee 833:11 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
+  local 835:13 b: i32 (const)
+  callee 835:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 840:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 843:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 846:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 849:15 cp: i32 (const)
+  callee 849:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  callee 853:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  callee 854:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 859:15 width: i32 (const)
+  callee 859:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
+  callee 861:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 868:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 871:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.escapeCodePoint [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -80913,203 +80921,203 @@ function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @ni
   calls: nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokHex4 nish.jsonTokShortEscape nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 872:11 src: u8[] (const)
-  local 873:11 end: i32 (const)
-  local 874:11 letter: i32 (const)
-  callee 874:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 876:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 879:13 short: i32 (const)
-  callee 879:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
-  callee 880:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 882:11 unit: i32 (const)
-  callee 882:23 jsonTokHex4 -> @nish.jsonTokHex4
+  local 880:11 src: u8[] (const)
+  local 881:11 end: i32 (const)
+  local 882:11 letter: i32 (const)
+  callee 882:25 jsonTokByteAt -> @nish.jsonTokByteAt
   callee 884:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 890:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 892:11 slash: i32 (const)
-  callee 892:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 893:11 u: i32 (const)
-  callee 893:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 896:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 899:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 901:11 low: i32 (const)
-  callee 901:22 jsonTokHex4 -> @nish.jsonTokHex4
-  callee 903:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 906:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 887:13 short: i32 (const)
+  callee 887:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
+  callee 888:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 890:11 unit: i32 (const)
+  callee 890:23 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 892:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 898:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 900:11 slash: i32 (const)
+  callee 900:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 901:11 u: i32 (const)
+  callee 901:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 904:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 907:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 909:11 low: i32 (const)
+  callee 909:22 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 911:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 914:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.isText(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isText [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 -> @nish.JsonTokenizer.stringInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 939:11
+  sharedWrite: 947:11
   escaping: at
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 924:11 n: i32 (const)
-  callee 925:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 928:11 src: u8[] (const)
-  local 929:11 end: i32 (const)
-  local 930:9 i: i32 (let)
-  local 931:9 o: i32 (let)
-  local 936:15 srcLength: i32 (const)
-  local 937:15 outLength: i32 (const)
-  local 947:13 b: i32 (const)
-  callee 947:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 956:13 cp: i32 (const)
-  callee 956:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 957:13 width: i32 (const)
-  callee 957:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 958:11 k: i32 (let)
-  callee 961:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 966:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 932:11 n: i32 (const)
+  callee 933:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 936:11 src: u8[] (const)
+  local 937:11 end: i32 (const)
+  local 938:9 i: i32 (let)
+  local 939:9 o: i32 (let)
+  local 944:15 srcLength: i32 (const)
+  local 945:15 outLength: i32 (const)
+  local 955:13 b: i32 (const)
+  callee 955:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 964:13 cp: i32 (const)
+  callee 964:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 965:13 width: i32 (const)
+  callee 965:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 966:11 k: i32 (let)
+  callee 969:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 974:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.isText
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.isText#0
   stackSites=0 stackLocals=0
-  callee 973:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  callee 981:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
 function JsonTokenizer.keyEquals(this: JsonTokenizer, name: string): boolean -> @nish.JsonTokenizer.keyEquals [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.escapeCodePoint
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   stackSites=0 stackLocals=0
-  local 987:11 n: i32 (const)
-  callee 988:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 991:11 src: u8[] (const)
-  local 992:11 end: i32 (const)
-  local 993:9 i: i32 (let)
-  local 994:9 o: i32 (let)
-  callee 999:13 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1007:13 b: i32 (const)
-  callee 1007:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1016:13 cp: i32 (const)
-  callee 1016:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 1017:13 width: i32 (const)
-  callee 1017:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 1018:11 k: i32 (let)
-  callee 1020:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 1026:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 995:11 n: i32 (const)
+  callee 996:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 999:11 src: u8[] (const)
+  local 1000:11 end: i32 (const)
+  local 1001:9 i: i32 (let)
+  local 1002:9 o: i32 (let)
+  callee 1007:13 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1015:13 b: i32 (const)
+  callee 1015:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1024:13 cp: i32 (const)
+  callee 1024:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 1025:13 width: i32 (const)
+  callee 1025:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 1026:11 k: i32 (let)
+  callee 1028:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 1034:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.isInteger(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isInteger [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.integerScan
   calls: nish.JsonTokenizer.integerScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.integerScan#0
   stackSites=0 stackLocals=0
-  callee 1037:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
+  callee 1045:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
 function JsonTokenizer.numberI64(this: JsonTokenizer): i64 -> @nish.JsonTokenizer.numberI64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isInteger
   calls: nish.JsonTokenizer.isInteger nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isInteger#0
   stackSites=0 stackLocals=0
-  callee 1046:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
-  local 1049:11 src: u8[] (const)
-  local 1050:11 negated: i64 (const)
-  callee 1051:12 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1054:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  local 1057:11 src: u8[] (const)
+  local 1058:11 negated: i64 (const)
+  callee 1059:12 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.integerScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.integerScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1084:5
+  sharedWrite: 1092:5
   calls: nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1061:11 src: u8[] (const)
-  local 1062:11 end: i32 (const)
-  local 1063:11 negative: boolean (const)
-  callee 1063:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1067:11 min: i64 (const)
-  local 1068:11 ten: i64 (const)
-  local 1069:11 bound: i64 (const)
-  local 1070:9 acc: i64 (let)
-  local 1071:9 i: i32 (let)
-  local 1072:11 n: i32 (const)
-  local 1077:13 digit: i64 (const)
+  local 1069:11 src: u8[] (const)
+  local 1070:11 end: i32 (const)
+  local 1071:11 negative: boolean (const)
+  callee 1071:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1075:11 min: i64 (const)
+  local 1076:11 ten: i64 (const)
+  local 1077:11 bound: i64 (const)
+  local 1078:9 acc: i64 (let)
+  local 1079:9 i: i32 (let)
+  local 1080:11 n: i32 (const)
+  local 1085:13 digit: i64 (const)
 function JsonTokenizer.isU64(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.unsignedScan
   calls: nish.JsonTokenizer.unsignedScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.unsignedScan#0
   stackSites=0 stackLocals=0
-  callee 1095:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
+  callee 1103:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
 function JsonTokenizer.numberU64(this: JsonTokenizer): u64 -> @nish.JsonTokenizer.numberU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isU64
   calls: nish.JsonTokenizer.isU64
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isU64#0
   stackSites=0 stackLocals=0
-  callee 1103:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
+  callee 1111:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
 function JsonTokenizer.unsignedScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.unsignedScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1147:5
+  sharedWrite: 1158:5
   calls: nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1115:11 src: u8[] (const)
-  local 1116:11 end: i32 (const)
-  local 1117:11 n: i32 (const)
-  local 1118:9 i: i32 (let)
-  local 1119:11 digits: i32 (const)
-  local 1123:11 lead: i32 (const)
-  local 1131:11 ten: u64 (const)
-  local 1132:9 acc: u64 (let)
-  local 1139:13 million: u64 (const)
-  local 1140:13 tail: u64 (const)
-  local 1144:13 billion: u64 (const)
+  local 1123:11 src: u8[] (const)
+  local 1124:11 end: i32 (const)
+  local 1125:11 n: i32 (const)
+  local 1126:9 i: i32 (let)
+  local 1127:11 digits: i32 (const)
+  local 1134:11 wide: boolean (const)
+  local 1142:11 ten: u64 (const)
+  local 1143:9 acc: u64 (let)
+  local 1150:13 million: u64 (const)
+  local 1151:13 tail: u64 (const)
+  local 1155:13 billion: u64 (const)
 function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
   stackSites=0 stackLocals=0
-  local 1161:11 src: u8[] (const)
-  local 1162:11 start: i32 (const)
-  local 1163:11 end: i32 (const)
-  local 1164:11 negative: boolean (const)
-  callee 1164:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1166:11 ten: f64 (const)
-  local 1167:9 mantissa: f64 (let)
-  local 1168:9 digits: i32 (let)
-  local 1169:9 scale: i32 (let)
-  local 1170:9 afterDot: boolean (let)
-  local 1171:9 i: i32 (let)
-  callee 1173:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1178:13 b: i32 (const)
-  callee 1181:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 1192:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1202:13 sign: i32 (const)
-  callee 1202:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1203:13 minus: boolean (const)
-  local 1207:11 exponent: i32 (let)
-  callee 1213:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1217:9 value: f64 (let)
-  callee 1220:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1222:13 power: f64 (const)
-  callee 1222:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  local 1172:11 src: u8[] (const)
+  local 1173:11 start: i32 (const)
+  local 1174:11 end: i32 (const)
+  local 1175:11 negative: boolean (const)
+  callee 1175:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1177:11 ten: f64 (const)
+  local 1178:9 mantissa: f64 (let)
+  local 1179:9 digits: i32 (let)
+  local 1180:9 scale: i32 (let)
+  local 1181:9 afterDot: boolean (let)
+  local 1182:9 i: i32 (let)
+  callee 1184:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1189:13 b: i32 (const)
+  callee 1192:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 1203:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1213:13 sign: i32 (const)
+  callee 1213:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1214:13 minus: boolean (const)
+  local 1218:11 exponent: i32 (let)
+  callee 1224:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1228:9 value: f64 (let)
+  callee 1231:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1233:13 power: f64 (const)
+  callee 1233:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1240:11 src: u8[] (const)
-  local 1241:11 start: i32 (const)
-  local 1242:11 end: i32 (const)
+  local 1251:11 src: u8[] (const)
+  local 1252:11 start: i32 (const)
+  local 1253:11 end: i32 (const)
 function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonTokenizer.next nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.next#0 nish.JsonTokenizer.next#0
   stackSites=0 stackLocals=0
-  local 1260:9 k: i32 (let)
-  callee 1262:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  local 1267:11 target: i32 (const)
-  callee 1269:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1271:9 k: i32 (let)
+  callee 1273:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1278:11 target: i32 (const)
+  callee 1280:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 1277:9 ten: f64 (const)
-  local 1278:7 p: f64 (let)
-  local 1279:7 k: i32 (let)
+  local 1288:9 ten: f64 (const)
+  local 1289:7 p: f64 (let)
+  local 1290:7 k: i32 (let)
 program docs/cookbook/json-typed.ts
 module docs/cookbook/json-typed.ts (entry)
 import JsonWriter from "nish/json" -> struct JsonWriter
@@ -82430,24 +82438,33 @@ function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSki
   local 311:9 n: i32 (const)
   local 312:7 j: i32 (let)
   callee 313:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
+function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish.jsonTokIsPlain
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 324:9 n: i32 (const)
+  local 325:7 j: i32 (let)
+  callee 326:32 jsonTokIsPlain -> @nish.jsonTokIsPlain
 function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
   calls: nish.jsonTokIsDigit
   stackSites=0 stackLocals=0
-  callee 321:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 334:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokHex4(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokHex4
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end
   calls: nish.jsonTokByteAt nish.jsonTokHexDigit nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 339:7 value: i32 (let)
-  local 340:7 k: i32 (let)
-  local 342:11 b: i32 (const)
-  callee 342:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 346:11 digit: i32 (const)
-  callee 346:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
+  local 352:7 value: i32 (let)
+  local 353:7 k: i32 (let)
+  local 355:11 b: i32 (const)
+  callee 355:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 359:11 digit: i32 (const)
+  callee 359:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
 function jsonTokInRange(b: i32, low: i32, high: i32): boolean -> @nish.jsonTokInRange
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -82457,21 +82474,21 @@ function jsonTokUtf8Length(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokUt
   calls: nish.jsonTokByteAt nish.jsonTokInRange nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0 nish.jsonTokByteAt#0 nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 369:9 lead: i32 (const)
-  callee 369:21 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 370:9 second: i32 (const)
-  callee 370:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 371:7 low: i32 (let)
-  local 372:7 high: i32 (let)
-  local 373:7 length: i32 (let)
-  callee 374:7 jsonTokInRange -> @nish.jsonTokInRange
-  callee 376:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 383:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 393:8 jsonTokInRange -> @nish.jsonTokInRange
-  local 396:7 k: i32 (let)
-  local 398:11 next: i32 (const)
-  callee 398:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 399:10 jsonTokInRange -> @nish.jsonTokInRange
+  local 382:9 lead: i32 (const)
+  callee 382:21 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 383:9 second: i32 (const)
+  callee 383:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 384:7 low: i32 (let)
+  local 385:7 high: i32 (let)
+  local 386:7 length: i32 (let)
+  callee 387:7 jsonTokInRange -> @nish.jsonTokInRange
+  callee 389:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 396:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 406:8 jsonTokInRange -> @nish.jsonTokInRange
+  local 409:7 k: i32 (let)
+  local 411:11 next: i32 (const)
+  callee 411:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 412:10 jsonTokInRange -> @nish.jsonTokInRange
 function jsonTokUtf8Width(cp: i32): i32 -> @nish.jsonTokUtf8Width
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -82480,8 +82497,8 @@ function jsonTokUtf8Byte(cp: i32, width: i32, k: i32): i32 -> @nish.jsonTokUtf8B
   escaping: cp
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 423:9 shift: i32 (const)
-  local 424:9 bits: i32 (const)
+  local 436:9 shift: i32 (const)
+  local 437:9 bits: i32 (const)
 function jsonTokShortEscape(b: i32): i32 -> @nish.jsonTokShortEscape
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
@@ -82492,7 +82509,7 @@ function jsonTokEscapeLength(src: u8[], at: i32, end: i32, cp: i32): i32 -> @nis
   calls: nish.jsonTokByteAt
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  callee 467:10 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 480:10 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len: i32, limits: JsonLimits): void -> @nish.JsonTokenizer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.reset
@@ -82502,84 +82519,84 @@ function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   pointer limits: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 539:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 552:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
 function JsonTokenizer.reset(this: JsonTokenizer, src: u8[], off: i32, len: i32): void -> @nish.JsonTokenizer.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 548:5
+  sharedWrite: 561:5
   escaping: off src
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   pointer src: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 563:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 570:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 576:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 583:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.fail(this: JsonTokenizer, code: i32, at: i32): i32 -> @nish.JsonTokenizer.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 577:7
+  sharedWrite: 590:7
   escaping: at code
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.next(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 595:11
+  sharedWrite: 608:11
   calls: nish.JsonTokenizer.close nish.JsonTokenizer.fail nish.JsonTokenizer.key nish.JsonTokenizer.top nish.JsonTokenizer.value nish.jsonTokByteAt nish.jsonTokSkipBlank nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.top#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0
   stackSites=0 stackLocals=0
-  local 588:11 src: u8[] (const)
-  local 589:11 end: i32 (const)
-  local 590:11 at: i32 (const)
-  callee 590:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  local 591:11 b: i32 (const)
-  callee 591:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 599:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 602:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 602:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 604:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 607:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 609:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 612:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 614:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  local 617:17 after: i32 (const)
-  callee 617:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 618:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 619:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 621:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 624:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 627:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 629:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 631:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 601:11 src: u8[] (const)
+  local 602:11 end: i32 (const)
+  local 603:11 at: i32 (const)
+  callee 603:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  local 604:11 b: i32 (const)
+  callee 604:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 612:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 615:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 615:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 617:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 620:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 622:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 625:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 627:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 630:17 after: i32 (const)
+  callee 630:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 631:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 632:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 634:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 637:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 640:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 642:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 644:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
 function JsonTokenizer.top(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.top [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 637:11 d: i32 (const)
+  local 650:11 d: i32 (const)
 function JsonTokenizer.emit(this: JsonTokenizer, k: i32, start: i32, stop: i32): i32 -> @nish.JsonTokenizer.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 646:5
+  sharedWrite: 659:5
   escaping: k start stop
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 667:5
+  sharedWrite: 680:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.top nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.top#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  callee 664:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 665:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 668:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 677:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 678:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 681:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.open(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.open [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 677:5
+  sharedWrite: 690:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 673:11 d: i32 (const)
-  callee 675:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 679:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 686:11 d: i32 (const)
+  callee 688:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 692:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.key [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -82587,10 +82604,10 @@ function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonToken
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.string nish.jsonTokByteAt
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 684:11 b: i32 (const)
-  callee 684:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 686:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 688:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 697:11 b: i32 (const)
+  callee 697:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 699:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 701:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.value [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -82598,19 +82615,19 @@ function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTok
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.literal nish.JsonTokenizer.number nish.JsonTokenizer.open nish.JsonTokenizer.string nish.jsonTokByteAt nish.jsonTokIsDigit
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.number#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 693:11 src: u8[] (const)
-  local 694:11 end: i32 (const)
-  local 695:11 b: i32 (const)
-  callee 695:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 697:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 699:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 700:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
-  callee 704:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 706:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 708:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 710:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 712:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 714:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 706:11 src: u8[] (const)
+  local 707:11 end: i32 (const)
+  local 708:11 b: i32 (const)
+  callee 708:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 710:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 712:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 713:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
+  callee 717:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 719:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 721:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 723:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 725:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 727:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i32): i32 -> @nish.JsonTokenizer.literal [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.emit
@@ -82618,44 +82635,44 @@ function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i3
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.emit#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 720:11 n: i32 (const)
-  local 721:9 matched: i32 (let)
-  callee 724:7 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 729:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
-  callee 731:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 733:11 n: i32 (const)
+  local 734:9 matched: i32 (let)
+  callee 737:7 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 742:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 744:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.number [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 787:5
+  sharedWrite: 800:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokSkipDigits nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 746:11 src: u8[] (const)
-  local 747:11 end: i32 (const)
-  local 748:9 i: i32 (let)
-  callee 749:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 752:11 first: i32 (const)
-  callee 752:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 756:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 758:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  local 760:9 integral: boolean (let)
-  callee 761:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 764:13 digit: i32 (const)
-  callee 764:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 765:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 766:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 768:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  local 770:11 e: i32 (const)
-  callee 770:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 774:13 sign: i32 (const)
-  callee 774:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 778:13 digit: i32 (const)
-  callee 778:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 779:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 780:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 782:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 785:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 788:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 759:11 src: u8[] (const)
+  local 760:11 end: i32 (const)
+  local 761:9 i: i32 (let)
+  callee 762:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 765:11 first: i32 (const)
+  callee 765:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 769:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 771:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local 773:9 integral: boolean (let)
+  callee 774:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 777:13 digit: i32 (const)
+  callee 777:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 778:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 779:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 781:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  local 783:11 e: i32 (const)
+  callee 783:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 787:13 sign: i32 (const)
+  callee 787:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 791:13 digit: i32 (const)
+  callee 791:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 792:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 793:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 795:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 798:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 801:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i: i32): i32 -> @nish.JsonTokenizer.numberRefused [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -82663,38 +82680,37 @@ function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i:
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  callee 794:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 796:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 807:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 809:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nish.JsonTokenizer.string [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 862:5
+  sharedWrite: 870:5
   escaping: at k
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokIsPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokSkipPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 806:11 src: u8[] (const)
-  local 807:11 end: i32 (const)
-  local 808:11 n: i32 (const)
-  local 811:11 room: i32 (const)
-  local 812:11 limit: i32 (const)
-  local 813:9 i: i32 (let)
-  local 814:9 decoded: i32 (let)
-  local 821:15 run: i32 (const)
-  callee 822:38 jsonTokIsPlain -> @nish.jsonTokIsPlain
-  local 827:13 b: i32 (const)
-  callee 827:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 832:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 835:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 838:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 841:15 cp: i32 (const)
-  callee 841:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  callee 845:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  callee 846:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
-  local 851:15 width: i32 (const)
-  callee 851:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
-  callee 853:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 860:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 863:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 819:11 src: u8[] (const)
+  local 820:11 end: i32 (const)
+  local 823:11 room: i32 (const)
+  local 824:11 limit: i32 (const)
+  local 825:9 i: i32 (let)
+  local 826:9 decoded: i32 (let)
+  local 832:13 run: i32 (const)
+  callee 833:11 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
+  local 835:13 b: i32 (const)
+  callee 835:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 840:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 843:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 846:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 849:15 cp: i32 (const)
+  callee 849:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  callee 853:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  callee 854:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 859:15 width: i32 (const)
+  callee 859:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
+  callee 861:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 868:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 871:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.escapeCodePoint [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -82702,203 +82718,203 @@ function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @ni
   calls: nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokHex4 nish.jsonTokShortEscape nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 872:11 src: u8[] (const)
-  local 873:11 end: i32 (const)
-  local 874:11 letter: i32 (const)
-  callee 874:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 876:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 879:13 short: i32 (const)
-  callee 879:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
-  callee 880:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 882:11 unit: i32 (const)
-  callee 882:23 jsonTokHex4 -> @nish.jsonTokHex4
+  local 880:11 src: u8[] (const)
+  local 881:11 end: i32 (const)
+  local 882:11 letter: i32 (const)
+  callee 882:25 jsonTokByteAt -> @nish.jsonTokByteAt
   callee 884:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 890:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 892:11 slash: i32 (const)
-  callee 892:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 893:11 u: i32 (const)
-  callee 893:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 896:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 899:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 901:11 low: i32 (const)
-  callee 901:22 jsonTokHex4 -> @nish.jsonTokHex4
-  callee 903:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 906:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 887:13 short: i32 (const)
+  callee 887:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
+  callee 888:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 890:11 unit: i32 (const)
+  callee 890:23 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 892:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 898:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 900:11 slash: i32 (const)
+  callee 900:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 901:11 u: i32 (const)
+  callee 901:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 904:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 907:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 909:11 low: i32 (const)
+  callee 909:22 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 911:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 914:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.isText(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isText [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 -> @nish.JsonTokenizer.stringInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 939:11
+  sharedWrite: 947:11
   escaping: at
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 924:11 n: i32 (const)
-  callee 925:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 928:11 src: u8[] (const)
-  local 929:11 end: i32 (const)
-  local 930:9 i: i32 (let)
-  local 931:9 o: i32 (let)
-  local 936:15 srcLength: i32 (const)
-  local 937:15 outLength: i32 (const)
-  local 947:13 b: i32 (const)
-  callee 947:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 956:13 cp: i32 (const)
-  callee 956:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 957:13 width: i32 (const)
-  callee 957:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 958:11 k: i32 (let)
-  callee 961:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 966:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 932:11 n: i32 (const)
+  callee 933:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 936:11 src: u8[] (const)
+  local 937:11 end: i32 (const)
+  local 938:9 i: i32 (let)
+  local 939:9 o: i32 (let)
+  local 944:15 srcLength: i32 (const)
+  local 945:15 outLength: i32 (const)
+  local 955:13 b: i32 (const)
+  callee 955:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 964:13 cp: i32 (const)
+  callee 964:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 965:13 width: i32 (const)
+  callee 965:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 966:11 k: i32 (let)
+  callee 969:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 974:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.isText
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.isText#0
   stackSites=0 stackLocals=0
-  callee 973:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  callee 981:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
 function JsonTokenizer.keyEquals(this: JsonTokenizer, name: string): boolean -> @nish.JsonTokenizer.keyEquals [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.escapeCodePoint
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   stackSites=0 stackLocals=0
-  local 987:11 n: i32 (const)
-  callee 988:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 991:11 src: u8[] (const)
-  local 992:11 end: i32 (const)
-  local 993:9 i: i32 (let)
-  local 994:9 o: i32 (let)
-  callee 999:13 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1007:13 b: i32 (const)
-  callee 1007:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1016:13 cp: i32 (const)
-  callee 1016:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 1017:13 width: i32 (const)
-  callee 1017:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 1018:11 k: i32 (let)
-  callee 1020:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 1026:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 995:11 n: i32 (const)
+  callee 996:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 999:11 src: u8[] (const)
+  local 1000:11 end: i32 (const)
+  local 1001:9 i: i32 (let)
+  local 1002:9 o: i32 (let)
+  callee 1007:13 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1015:13 b: i32 (const)
+  callee 1015:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1024:13 cp: i32 (const)
+  callee 1024:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 1025:13 width: i32 (const)
+  callee 1025:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 1026:11 k: i32 (let)
+  callee 1028:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 1034:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.isInteger(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isInteger [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.integerScan
   calls: nish.JsonTokenizer.integerScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.integerScan#0
   stackSites=0 stackLocals=0
-  callee 1037:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
+  callee 1045:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
 function JsonTokenizer.numberI64(this: JsonTokenizer): i64 -> @nish.JsonTokenizer.numberI64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isInteger
   calls: nish.JsonTokenizer.isInteger nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isInteger#0
   stackSites=0 stackLocals=0
-  callee 1046:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
-  local 1049:11 src: u8[] (const)
-  local 1050:11 negated: i64 (const)
-  callee 1051:12 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1054:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  local 1057:11 src: u8[] (const)
+  local 1058:11 negated: i64 (const)
+  callee 1059:12 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.integerScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.integerScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1084:5
+  sharedWrite: 1092:5
   calls: nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1061:11 src: u8[] (const)
-  local 1062:11 end: i32 (const)
-  local 1063:11 negative: boolean (const)
-  callee 1063:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1067:11 min: i64 (const)
-  local 1068:11 ten: i64 (const)
-  local 1069:11 bound: i64 (const)
-  local 1070:9 acc: i64 (let)
-  local 1071:9 i: i32 (let)
-  local 1072:11 n: i32 (const)
-  local 1077:13 digit: i64 (const)
+  local 1069:11 src: u8[] (const)
+  local 1070:11 end: i32 (const)
+  local 1071:11 negative: boolean (const)
+  callee 1071:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1075:11 min: i64 (const)
+  local 1076:11 ten: i64 (const)
+  local 1077:11 bound: i64 (const)
+  local 1078:9 acc: i64 (let)
+  local 1079:9 i: i32 (let)
+  local 1080:11 n: i32 (const)
+  local 1085:13 digit: i64 (const)
 function JsonTokenizer.isU64(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.unsignedScan
   calls: nish.JsonTokenizer.unsignedScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.unsignedScan#0
   stackSites=0 stackLocals=0
-  callee 1095:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
+  callee 1103:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
 function JsonTokenizer.numberU64(this: JsonTokenizer): u64 -> @nish.JsonTokenizer.numberU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isU64
   calls: nish.JsonTokenizer.isU64
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isU64#0
   stackSites=0 stackLocals=0
-  callee 1103:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
+  callee 1111:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
 function JsonTokenizer.unsignedScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.unsignedScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1147:5
+  sharedWrite: 1158:5
   calls: nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1115:11 src: u8[] (const)
-  local 1116:11 end: i32 (const)
-  local 1117:11 n: i32 (const)
-  local 1118:9 i: i32 (let)
-  local 1119:11 digits: i32 (const)
-  local 1123:11 lead: i32 (const)
-  local 1131:11 ten: u64 (const)
-  local 1132:9 acc: u64 (let)
-  local 1139:13 million: u64 (const)
-  local 1140:13 tail: u64 (const)
-  local 1144:13 billion: u64 (const)
+  local 1123:11 src: u8[] (const)
+  local 1124:11 end: i32 (const)
+  local 1125:11 n: i32 (const)
+  local 1126:9 i: i32 (let)
+  local 1127:11 digits: i32 (const)
+  local 1134:11 wide: boolean (const)
+  local 1142:11 ten: u64 (const)
+  local 1143:9 acc: u64 (let)
+  local 1150:13 million: u64 (const)
+  local 1151:13 tail: u64 (const)
+  local 1155:13 billion: u64 (const)
 function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
   stackSites=0 stackLocals=0
-  local 1161:11 src: u8[] (const)
-  local 1162:11 start: i32 (const)
-  local 1163:11 end: i32 (const)
-  local 1164:11 negative: boolean (const)
-  callee 1164:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1166:11 ten: f64 (const)
-  local 1167:9 mantissa: f64 (let)
-  local 1168:9 digits: i32 (let)
-  local 1169:9 scale: i32 (let)
-  local 1170:9 afterDot: boolean (let)
-  local 1171:9 i: i32 (let)
-  callee 1173:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1178:13 b: i32 (const)
-  callee 1181:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 1192:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1202:13 sign: i32 (const)
-  callee 1202:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1203:13 minus: boolean (const)
-  local 1207:11 exponent: i32 (let)
-  callee 1213:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1217:9 value: f64 (let)
-  callee 1220:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1222:13 power: f64 (const)
-  callee 1222:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  local 1172:11 src: u8[] (const)
+  local 1173:11 start: i32 (const)
+  local 1174:11 end: i32 (const)
+  local 1175:11 negative: boolean (const)
+  callee 1175:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1177:11 ten: f64 (const)
+  local 1178:9 mantissa: f64 (let)
+  local 1179:9 digits: i32 (let)
+  local 1180:9 scale: i32 (let)
+  local 1181:9 afterDot: boolean (let)
+  local 1182:9 i: i32 (let)
+  callee 1184:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1189:13 b: i32 (const)
+  callee 1192:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 1203:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1213:13 sign: i32 (const)
+  callee 1213:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1214:13 minus: boolean (const)
+  local 1218:11 exponent: i32 (let)
+  callee 1224:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1228:9 value: f64 (let)
+  callee 1231:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1233:13 power: f64 (const)
+  callee 1233:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1240:11 src: u8[] (const)
-  local 1241:11 start: i32 (const)
-  local 1242:11 end: i32 (const)
+  local 1251:11 src: u8[] (const)
+  local 1252:11 start: i32 (const)
+  local 1253:11 end: i32 (const)
 function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonTokenizer.next nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.next#0 nish.JsonTokenizer.next#0
   stackSites=0 stackLocals=0
-  local 1260:9 k: i32 (let)
-  callee 1262:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  local 1267:11 target: i32 (const)
-  callee 1269:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1271:9 k: i32 (let)
+  callee 1273:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1278:11 target: i32 (const)
+  callee 1280:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 1277:9 ten: f64 (const)
-  local 1278:7 p: f64 (let)
-  local 1279:7 k: i32 (let)
+  local 1288:9 ten: f64 (const)
+  local 1289:7 p: f64 (let)
+  local 1290:7 k: i32 (let)
 program docs/cookbook/json-writer.ts
 module docs/cookbook/json-writer.ts (entry)
 import JsonWriter from "nish/json" -> struct JsonWriter
@@ -89442,24 +89458,33 @@ function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSki
   local 311:9 n: i32 (const)
   local 312:7 j: i32 (let)
   callee 313:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
+function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish.jsonTokIsPlain
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 324:9 n: i32 (const)
+  local 325:7 j: i32 (let)
+  callee 326:32 jsonTokIsPlain -> @nish.jsonTokIsPlain
 function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
   calls: nish.jsonTokIsDigit
   stackSites=0 stackLocals=0
-  callee 321:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 334:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokHex4(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokHex4
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end
   calls: nish.jsonTokByteAt nish.jsonTokHexDigit nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 339:7 value: i32 (let)
-  local 340:7 k: i32 (let)
-  local 342:11 b: i32 (const)
-  callee 342:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 346:11 digit: i32 (const)
-  callee 346:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
+  local 352:7 value: i32 (let)
+  local 353:7 k: i32 (let)
+  local 355:11 b: i32 (const)
+  callee 355:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 359:11 digit: i32 (const)
+  callee 359:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
 function jsonTokInRange(b: i32, low: i32, high: i32): boolean -> @nish.jsonTokInRange
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -89469,21 +89494,21 @@ function jsonTokUtf8Length(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokUt
   calls: nish.jsonTokByteAt nish.jsonTokInRange nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0 nish.jsonTokByteAt#0 nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 369:9 lead: i32 (const)
-  callee 369:21 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 370:9 second: i32 (const)
-  callee 370:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 371:7 low: i32 (let)
-  local 372:7 high: i32 (let)
-  local 373:7 length: i32 (let)
-  callee 374:7 jsonTokInRange -> @nish.jsonTokInRange
-  callee 376:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 383:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 393:8 jsonTokInRange -> @nish.jsonTokInRange
-  local 396:7 k: i32 (let)
-  local 398:11 next: i32 (const)
-  callee 398:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 399:10 jsonTokInRange -> @nish.jsonTokInRange
+  local 382:9 lead: i32 (const)
+  callee 382:21 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 383:9 second: i32 (const)
+  callee 383:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 384:7 low: i32 (let)
+  local 385:7 high: i32 (let)
+  local 386:7 length: i32 (let)
+  callee 387:7 jsonTokInRange -> @nish.jsonTokInRange
+  callee 389:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 396:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 406:8 jsonTokInRange -> @nish.jsonTokInRange
+  local 409:7 k: i32 (let)
+  local 411:11 next: i32 (const)
+  callee 411:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 412:10 jsonTokInRange -> @nish.jsonTokInRange
 function jsonTokUtf8Width(cp: i32): i32 -> @nish.jsonTokUtf8Width
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -89492,8 +89517,8 @@ function jsonTokUtf8Byte(cp: i32, width: i32, k: i32): i32 -> @nish.jsonTokUtf8B
   escaping: cp
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 423:9 shift: i32 (const)
-  local 424:9 bits: i32 (const)
+  local 436:9 shift: i32 (const)
+  local 437:9 bits: i32 (const)
 function jsonTokShortEscape(b: i32): i32 -> @nish.jsonTokShortEscape
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
@@ -89504,7 +89529,7 @@ function jsonTokEscapeLength(src: u8[], at: i32, end: i32, cp: i32): i32 -> @nis
   calls: nish.jsonTokByteAt
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  callee 467:10 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 480:10 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len: i32, limits: JsonLimits): void -> @nish.JsonTokenizer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.reset
@@ -89514,84 +89539,84 @@ function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   pointer limits: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 539:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 552:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
 function JsonTokenizer.reset(this: JsonTokenizer, src: u8[], off: i32, len: i32): void -> @nish.JsonTokenizer.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 548:5
+  sharedWrite: 561:5
   escaping: off src
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   pointer src: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 563:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 570:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 576:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 583:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.fail(this: JsonTokenizer, code: i32, at: i32): i32 -> @nish.JsonTokenizer.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 577:7
+  sharedWrite: 590:7
   escaping: at code
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.next(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 595:11
+  sharedWrite: 608:11
   calls: nish.JsonTokenizer.close nish.JsonTokenizer.fail nish.JsonTokenizer.key nish.JsonTokenizer.top nish.JsonTokenizer.value nish.jsonTokByteAt nish.jsonTokSkipBlank nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.top#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0
   stackSites=0 stackLocals=0
-  local 588:11 src: u8[] (const)
-  local 589:11 end: i32 (const)
-  local 590:11 at: i32 (const)
-  callee 590:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  local 591:11 b: i32 (const)
-  callee 591:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 599:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 602:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 602:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 604:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 607:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 609:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 612:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 614:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  local 617:17 after: i32 (const)
-  callee 617:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 618:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 619:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 621:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 624:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 627:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 629:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 631:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 601:11 src: u8[] (const)
+  local 602:11 end: i32 (const)
+  local 603:11 at: i32 (const)
+  callee 603:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  local 604:11 b: i32 (const)
+  callee 604:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 612:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 615:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 615:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 617:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 620:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 622:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 625:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 627:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 630:17 after: i32 (const)
+  callee 630:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 631:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 632:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 634:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 637:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 640:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 642:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 644:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
 function JsonTokenizer.top(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.top [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 637:11 d: i32 (const)
+  local 650:11 d: i32 (const)
 function JsonTokenizer.emit(this: JsonTokenizer, k: i32, start: i32, stop: i32): i32 -> @nish.JsonTokenizer.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 646:5
+  sharedWrite: 659:5
   escaping: k start stop
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 667:5
+  sharedWrite: 680:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.top nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.top#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  callee 664:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 665:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 668:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 677:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 678:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 681:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.open(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.open [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 677:5
+  sharedWrite: 690:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 673:11 d: i32 (const)
-  callee 675:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 679:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 686:11 d: i32 (const)
+  callee 688:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 692:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.key [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -89599,10 +89624,10 @@ function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonToken
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.string nish.jsonTokByteAt
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 684:11 b: i32 (const)
-  callee 684:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 686:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 688:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 697:11 b: i32 (const)
+  callee 697:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 699:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 701:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.value [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -89610,19 +89635,19 @@ function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTok
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.literal nish.JsonTokenizer.number nish.JsonTokenizer.open nish.JsonTokenizer.string nish.jsonTokByteAt nish.jsonTokIsDigit
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.number#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 693:11 src: u8[] (const)
-  local 694:11 end: i32 (const)
-  local 695:11 b: i32 (const)
-  callee 695:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 697:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 699:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 700:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
-  callee 704:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 706:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 708:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 710:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 712:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 714:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 706:11 src: u8[] (const)
+  local 707:11 end: i32 (const)
+  local 708:11 b: i32 (const)
+  callee 708:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 710:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 712:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 713:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
+  callee 717:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 719:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 721:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 723:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 725:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 727:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i32): i32 -> @nish.JsonTokenizer.literal [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.emit
@@ -89630,44 +89655,44 @@ function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i3
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.emit#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 720:11 n: i32 (const)
-  local 721:9 matched: i32 (let)
-  callee 724:7 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 729:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
-  callee 731:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 733:11 n: i32 (const)
+  local 734:9 matched: i32 (let)
+  callee 737:7 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 742:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 744:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.number [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 787:5
+  sharedWrite: 800:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokSkipDigits nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 746:11 src: u8[] (const)
-  local 747:11 end: i32 (const)
-  local 748:9 i: i32 (let)
-  callee 749:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 752:11 first: i32 (const)
-  callee 752:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 756:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 758:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  local 760:9 integral: boolean (let)
-  callee 761:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 764:13 digit: i32 (const)
-  callee 764:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 765:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 766:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 768:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  local 770:11 e: i32 (const)
-  callee 770:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 774:13 sign: i32 (const)
-  callee 774:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 778:13 digit: i32 (const)
-  callee 778:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 779:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 780:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 782:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 785:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 788:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 759:11 src: u8[] (const)
+  local 760:11 end: i32 (const)
+  local 761:9 i: i32 (let)
+  callee 762:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 765:11 first: i32 (const)
+  callee 765:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 769:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 771:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local 773:9 integral: boolean (let)
+  callee 774:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 777:13 digit: i32 (const)
+  callee 777:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 778:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 779:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 781:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  local 783:11 e: i32 (const)
+  callee 783:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 787:13 sign: i32 (const)
+  callee 787:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 791:13 digit: i32 (const)
+  callee 791:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 792:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 793:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 795:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 798:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 801:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i: i32): i32 -> @nish.JsonTokenizer.numberRefused [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -89675,38 +89700,37 @@ function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i:
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  callee 794:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 796:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 807:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 809:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nish.JsonTokenizer.string [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 862:5
+  sharedWrite: 870:5
   escaping: at k
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokIsPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokSkipPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 806:11 src: u8[] (const)
-  local 807:11 end: i32 (const)
-  local 808:11 n: i32 (const)
-  local 811:11 room: i32 (const)
-  local 812:11 limit: i32 (const)
-  local 813:9 i: i32 (let)
-  local 814:9 decoded: i32 (let)
-  local 821:15 run: i32 (const)
-  callee 822:38 jsonTokIsPlain -> @nish.jsonTokIsPlain
-  local 827:13 b: i32 (const)
-  callee 827:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 832:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 835:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 838:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 841:15 cp: i32 (const)
-  callee 841:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  callee 845:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  callee 846:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
-  local 851:15 width: i32 (const)
-  callee 851:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
-  callee 853:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 860:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 863:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 819:11 src: u8[] (const)
+  local 820:11 end: i32 (const)
+  local 823:11 room: i32 (const)
+  local 824:11 limit: i32 (const)
+  local 825:9 i: i32 (let)
+  local 826:9 decoded: i32 (let)
+  local 832:13 run: i32 (const)
+  callee 833:11 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
+  local 835:13 b: i32 (const)
+  callee 835:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 840:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 843:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 846:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 849:15 cp: i32 (const)
+  callee 849:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  callee 853:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  callee 854:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 859:15 width: i32 (const)
+  callee 859:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
+  callee 861:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 868:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 871:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.escapeCodePoint [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -89714,203 +89738,203 @@ function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @ni
   calls: nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokHex4 nish.jsonTokShortEscape nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 872:11 src: u8[] (const)
-  local 873:11 end: i32 (const)
-  local 874:11 letter: i32 (const)
-  callee 874:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 876:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 879:13 short: i32 (const)
-  callee 879:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
-  callee 880:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 882:11 unit: i32 (const)
-  callee 882:23 jsonTokHex4 -> @nish.jsonTokHex4
+  local 880:11 src: u8[] (const)
+  local 881:11 end: i32 (const)
+  local 882:11 letter: i32 (const)
+  callee 882:25 jsonTokByteAt -> @nish.jsonTokByteAt
   callee 884:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 890:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 892:11 slash: i32 (const)
-  callee 892:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 893:11 u: i32 (const)
-  callee 893:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 896:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 899:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 901:11 low: i32 (const)
-  callee 901:22 jsonTokHex4 -> @nish.jsonTokHex4
-  callee 903:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 906:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 887:13 short: i32 (const)
+  callee 887:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
+  callee 888:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 890:11 unit: i32 (const)
+  callee 890:23 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 892:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 898:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 900:11 slash: i32 (const)
+  callee 900:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 901:11 u: i32 (const)
+  callee 901:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 904:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 907:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 909:11 low: i32 (const)
+  callee 909:22 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 911:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 914:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.isText(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isText [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 -> @nish.JsonTokenizer.stringInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 939:11
+  sharedWrite: 947:11
   escaping: at
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 924:11 n: i32 (const)
-  callee 925:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 928:11 src: u8[] (const)
-  local 929:11 end: i32 (const)
-  local 930:9 i: i32 (let)
-  local 931:9 o: i32 (let)
-  local 936:15 srcLength: i32 (const)
-  local 937:15 outLength: i32 (const)
-  local 947:13 b: i32 (const)
-  callee 947:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 956:13 cp: i32 (const)
-  callee 956:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 957:13 width: i32 (const)
-  callee 957:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 958:11 k: i32 (let)
-  callee 961:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 966:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 932:11 n: i32 (const)
+  callee 933:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 936:11 src: u8[] (const)
+  local 937:11 end: i32 (const)
+  local 938:9 i: i32 (let)
+  local 939:9 o: i32 (let)
+  local 944:15 srcLength: i32 (const)
+  local 945:15 outLength: i32 (const)
+  local 955:13 b: i32 (const)
+  callee 955:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 964:13 cp: i32 (const)
+  callee 964:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 965:13 width: i32 (const)
+  callee 965:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 966:11 k: i32 (let)
+  callee 969:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 974:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.isText
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.isText#0
   stackSites=0 stackLocals=0
-  callee 973:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  callee 981:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
 function JsonTokenizer.keyEquals(this: JsonTokenizer, name: string): boolean -> @nish.JsonTokenizer.keyEquals [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.escapeCodePoint
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   stackSites=0 stackLocals=0
-  local 987:11 n: i32 (const)
-  callee 988:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 991:11 src: u8[] (const)
-  local 992:11 end: i32 (const)
-  local 993:9 i: i32 (let)
-  local 994:9 o: i32 (let)
-  callee 999:13 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1007:13 b: i32 (const)
-  callee 1007:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1016:13 cp: i32 (const)
-  callee 1016:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 1017:13 width: i32 (const)
-  callee 1017:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 1018:11 k: i32 (let)
-  callee 1020:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 1026:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 995:11 n: i32 (const)
+  callee 996:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 999:11 src: u8[] (const)
+  local 1000:11 end: i32 (const)
+  local 1001:9 i: i32 (let)
+  local 1002:9 o: i32 (let)
+  callee 1007:13 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1015:13 b: i32 (const)
+  callee 1015:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1024:13 cp: i32 (const)
+  callee 1024:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 1025:13 width: i32 (const)
+  callee 1025:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 1026:11 k: i32 (let)
+  callee 1028:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 1034:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.isInteger(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isInteger [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.integerScan
   calls: nish.JsonTokenizer.integerScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.integerScan#0
   stackSites=0 stackLocals=0
-  callee 1037:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
+  callee 1045:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
 function JsonTokenizer.numberI64(this: JsonTokenizer): i64 -> @nish.JsonTokenizer.numberI64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isInteger
   calls: nish.JsonTokenizer.isInteger nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isInteger#0
   stackSites=0 stackLocals=0
-  callee 1046:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
-  local 1049:11 src: u8[] (const)
-  local 1050:11 negated: i64 (const)
-  callee 1051:12 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1054:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  local 1057:11 src: u8[] (const)
+  local 1058:11 negated: i64 (const)
+  callee 1059:12 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.integerScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.integerScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1084:5
+  sharedWrite: 1092:5
   calls: nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1061:11 src: u8[] (const)
-  local 1062:11 end: i32 (const)
-  local 1063:11 negative: boolean (const)
-  callee 1063:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1067:11 min: i64 (const)
-  local 1068:11 ten: i64 (const)
-  local 1069:11 bound: i64 (const)
-  local 1070:9 acc: i64 (let)
-  local 1071:9 i: i32 (let)
-  local 1072:11 n: i32 (const)
-  local 1077:13 digit: i64 (const)
+  local 1069:11 src: u8[] (const)
+  local 1070:11 end: i32 (const)
+  local 1071:11 negative: boolean (const)
+  callee 1071:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1075:11 min: i64 (const)
+  local 1076:11 ten: i64 (const)
+  local 1077:11 bound: i64 (const)
+  local 1078:9 acc: i64 (let)
+  local 1079:9 i: i32 (let)
+  local 1080:11 n: i32 (const)
+  local 1085:13 digit: i64 (const)
 function JsonTokenizer.isU64(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.unsignedScan
   calls: nish.JsonTokenizer.unsignedScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.unsignedScan#0
   stackSites=0 stackLocals=0
-  callee 1095:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
+  callee 1103:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
 function JsonTokenizer.numberU64(this: JsonTokenizer): u64 -> @nish.JsonTokenizer.numberU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isU64
   calls: nish.JsonTokenizer.isU64
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isU64#0
   stackSites=0 stackLocals=0
-  callee 1103:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
+  callee 1111:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
 function JsonTokenizer.unsignedScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.unsignedScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1147:5
+  sharedWrite: 1158:5
   calls: nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1115:11 src: u8[] (const)
-  local 1116:11 end: i32 (const)
-  local 1117:11 n: i32 (const)
-  local 1118:9 i: i32 (let)
-  local 1119:11 digits: i32 (const)
-  local 1123:11 lead: i32 (const)
-  local 1131:11 ten: u64 (const)
-  local 1132:9 acc: u64 (let)
-  local 1139:13 million: u64 (const)
-  local 1140:13 tail: u64 (const)
-  local 1144:13 billion: u64 (const)
+  local 1123:11 src: u8[] (const)
+  local 1124:11 end: i32 (const)
+  local 1125:11 n: i32 (const)
+  local 1126:9 i: i32 (let)
+  local 1127:11 digits: i32 (const)
+  local 1134:11 wide: boolean (const)
+  local 1142:11 ten: u64 (const)
+  local 1143:9 acc: u64 (let)
+  local 1150:13 million: u64 (const)
+  local 1151:13 tail: u64 (const)
+  local 1155:13 billion: u64 (const)
 function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
   stackSites=0 stackLocals=0
-  local 1161:11 src: u8[] (const)
-  local 1162:11 start: i32 (const)
-  local 1163:11 end: i32 (const)
-  local 1164:11 negative: boolean (const)
-  callee 1164:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1166:11 ten: f64 (const)
-  local 1167:9 mantissa: f64 (let)
-  local 1168:9 digits: i32 (let)
-  local 1169:9 scale: i32 (let)
-  local 1170:9 afterDot: boolean (let)
-  local 1171:9 i: i32 (let)
-  callee 1173:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1178:13 b: i32 (const)
-  callee 1181:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 1192:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1202:13 sign: i32 (const)
-  callee 1202:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1203:13 minus: boolean (const)
-  local 1207:11 exponent: i32 (let)
-  callee 1213:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1217:9 value: f64 (let)
-  callee 1220:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1222:13 power: f64 (const)
-  callee 1222:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  local 1172:11 src: u8[] (const)
+  local 1173:11 start: i32 (const)
+  local 1174:11 end: i32 (const)
+  local 1175:11 negative: boolean (const)
+  callee 1175:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1177:11 ten: f64 (const)
+  local 1178:9 mantissa: f64 (let)
+  local 1179:9 digits: i32 (let)
+  local 1180:9 scale: i32 (let)
+  local 1181:9 afterDot: boolean (let)
+  local 1182:9 i: i32 (let)
+  callee 1184:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1189:13 b: i32 (const)
+  callee 1192:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 1203:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1213:13 sign: i32 (const)
+  callee 1213:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1214:13 minus: boolean (const)
+  local 1218:11 exponent: i32 (let)
+  callee 1224:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1228:9 value: f64 (let)
+  callee 1231:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1233:13 power: f64 (const)
+  callee 1233:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1240:11 src: u8[] (const)
-  local 1241:11 start: i32 (const)
-  local 1242:11 end: i32 (const)
+  local 1251:11 src: u8[] (const)
+  local 1252:11 start: i32 (const)
+  local 1253:11 end: i32 (const)
 function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonTokenizer.next nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.next#0 nish.JsonTokenizer.next#0
   stackSites=0 stackLocals=0
-  local 1260:9 k: i32 (let)
-  callee 1262:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  local 1267:11 target: i32 (const)
-  callee 1269:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1271:9 k: i32 (let)
+  callee 1273:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1278:11 target: i32 (const)
+  callee 1280:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 1277:9 ten: f64 (const)
-  local 1278:7 p: f64 (let)
-  local 1279:7 k: i32 (let)
+  local 1288:9 ten: f64 (const)
+  local 1289:7 p: f64 (let)
+  local 1290:7 k: i32 (let)
 module std/json-typed.ts [package nish]
 import JsonWriter from "nish/json" -> struct JsonWriter
 import JSON_TOK_ARRAY_BEGIN from "nish/json-tokenizer" -> const JSON_TOK_ARRAY_BEGIN
@@ -90706,24 +90730,33 @@ function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSki
   local 311:9 n: i32 (const)
   local 312:7 j: i32 (let)
   callee 313:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
+function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish.jsonTokIsPlain
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 324:9 n: i32 (const)
+  local 325:7 j: i32 (let)
+  callee 326:32 jsonTokIsPlain -> @nish.jsonTokIsPlain
 function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
   calls: nish.jsonTokIsDigit
   stackSites=0 stackLocals=0
-  callee 321:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 334:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokHex4(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokHex4
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end
   calls: nish.jsonTokByteAt nish.jsonTokHexDigit nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 339:7 value: i32 (let)
-  local 340:7 k: i32 (let)
-  local 342:11 b: i32 (const)
-  callee 342:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 346:11 digit: i32 (const)
-  callee 346:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
+  local 352:7 value: i32 (let)
+  local 353:7 k: i32 (let)
+  local 355:11 b: i32 (const)
+  callee 355:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 359:11 digit: i32 (const)
+  callee 359:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
 function jsonTokInRange(b: i32, low: i32, high: i32): boolean -> @nish.jsonTokInRange
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -90733,21 +90766,21 @@ function jsonTokUtf8Length(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokUt
   calls: nish.jsonTokByteAt nish.jsonTokInRange nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0 nish.jsonTokByteAt#0 nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  local 369:9 lead: i32 (const)
-  callee 369:21 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 370:9 second: i32 (const)
-  callee 370:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 371:7 low: i32 (let)
-  local 372:7 high: i32 (let)
-  local 373:7 length: i32 (let)
-  callee 374:7 jsonTokInRange -> @nish.jsonTokInRange
-  callee 376:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 383:14 jsonTokInRange -> @nish.jsonTokInRange
-  callee 393:8 jsonTokInRange -> @nish.jsonTokInRange
-  local 396:7 k: i32 (let)
-  local 398:11 next: i32 (const)
-  callee 398:23 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 399:10 jsonTokInRange -> @nish.jsonTokInRange
+  local 382:9 lead: i32 (const)
+  callee 382:21 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 383:9 second: i32 (const)
+  callee 383:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 384:7 low: i32 (let)
+  local 385:7 high: i32 (let)
+  local 386:7 length: i32 (let)
+  callee 387:7 jsonTokInRange -> @nish.jsonTokInRange
+  callee 389:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 396:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 406:8 jsonTokInRange -> @nish.jsonTokInRange
+  local 409:7 k: i32 (let)
+  local 411:11 next: i32 (const)
+  callee 411:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 412:10 jsonTokInRange -> @nish.jsonTokInRange
 function jsonTokUtf8Width(cp: i32): i32 -> @nish.jsonTokUtf8Width
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -90756,8 +90789,8 @@ function jsonTokUtf8Byte(cp: i32, width: i32, k: i32): i32 -> @nish.jsonTokUtf8B
   escaping: cp
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 423:9 shift: i32 (const)
-  local 424:9 bits: i32 (const)
+  local 436:9 shift: i32 (const)
+  local 437:9 bits: i32 (const)
 function jsonTokShortEscape(b: i32): i32 -> @nish.jsonTokShortEscape
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
@@ -90768,7 +90801,7 @@ function jsonTokEscapeLength(src: u8[], at: i32, end: i32, cp: i32): i32 -> @nis
   calls: nish.jsonTokByteAt
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
   stackSites=0 stackLocals=0
-  callee 467:10 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 480:10 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len: i32, limits: JsonLimits): void -> @nish.JsonTokenizer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.reset
@@ -90778,84 +90811,84 @@ function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   pointer limits: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 539:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 552:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
 function JsonTokenizer.reset(this: JsonTokenizer, src: u8[], off: i32, len: i32): void -> @nish.JsonTokenizer.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 548:5
+  sharedWrite: 561:5
   escaping: off src
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   pointer src: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 563:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 570:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 576:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 583:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.fail(this: JsonTokenizer, code: i32, at: i32): i32 -> @nish.JsonTokenizer.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 577:7
+  sharedWrite: 590:7
   escaping: at code
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.next(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 595:11
+  sharedWrite: 608:11
   calls: nish.JsonTokenizer.close nish.JsonTokenizer.fail nish.JsonTokenizer.key nish.JsonTokenizer.top nish.JsonTokenizer.value nish.jsonTokByteAt nish.jsonTokSkipBlank nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.top#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0
   stackSites=0 stackLocals=0
-  local 588:11 src: u8[] (const)
-  local 589:11 end: i32 (const)
-  local 590:11 at: i32 (const)
-  callee 590:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  local 591:11 b: i32 (const)
-  callee 591:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 599:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 602:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 602:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 604:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 607:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 609:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 612:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 614:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  local 617:17 after: i32 (const)
-  callee 617:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
-  callee 618:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 619:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
-  callee 621:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
-  callee 624:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 627:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
-  callee 629:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 631:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 601:11 src: u8[] (const)
+  local 602:11 end: i32 (const)
+  local 603:11 at: i32 (const)
+  callee 603:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  local 604:11 b: i32 (const)
+  callee 604:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 612:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 615:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 615:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 617:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 620:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 622:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 625:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 627:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 630:17 after: i32 (const)
+  callee 630:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 631:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 632:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 634:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 637:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 640:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 642:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 644:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
 function JsonTokenizer.top(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.top [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 637:11 d: i32 (const)
+  local 650:11 d: i32 (const)
 function JsonTokenizer.emit(this: JsonTokenizer, k: i32, start: i32, stop: i32): i32 -> @nish.JsonTokenizer.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 646:5
+  sharedWrite: 659:5
   escaping: k start stop
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 667:5
+  sharedWrite: 680:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.top nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.top#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  callee 664:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
-  callee 665:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 668:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 677:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 678:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 681:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.open(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.open [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 677:5
+  sharedWrite: 690:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 673:11 d: i32 (const)
-  callee 675:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 679:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 686:11 d: i32 (const)
+  callee 688:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 692:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.key [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -90863,10 +90896,10 @@ function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonToken
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.string nish.jsonTokByteAt
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 684:11 b: i32 (const)
-  callee 684:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 686:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 688:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 697:11 b: i32 (const)
+  callee 697:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 699:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 701:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.value [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.string
@@ -90874,19 +90907,19 @@ function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTok
   calls: nish.JsonTokenizer.fail nish.JsonTokenizer.literal nish.JsonTokenizer.number nish.JsonTokenizer.open nish.JsonTokenizer.string nish.jsonTokByteAt nish.jsonTokIsDigit
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.number#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 693:11 src: u8[] (const)
-  local 694:11 end: i32 (const)
-  local 695:11 b: i32 (const)
-  callee 695:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 697:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
-  callee 699:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 700:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
-  callee 704:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 706:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
-  callee 708:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 710:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 712:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
-  callee 714:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 706:11 src: u8[] (const)
+  local 707:11 end: i32 (const)
+  local 708:11 b: i32 (const)
+  callee 708:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 710:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 712:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 713:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
+  callee 717:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 719:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 721:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 723:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 725:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 727:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i32): i32 -> @nish.JsonTokenizer.literal [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.emit
@@ -90894,44 +90927,44 @@ function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i3
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.emit#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 720:11 n: i32 (const)
-  local 721:9 matched: i32 (let)
-  callee 724:7 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 729:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
-  callee 731:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 733:11 n: i32 (const)
+  local 734:9 matched: i32 (let)
+  callee 737:7 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 742:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 744:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.number [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 787:5
+  sharedWrite: 800:5
   escaping: at
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokSkipDigits nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 746:11 src: u8[] (const)
-  local 747:11 end: i32 (const)
-  local 748:9 i: i32 (let)
-  callee 749:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 752:11 first: i32 (const)
-  callee 752:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 756:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 758:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  local 760:9 integral: boolean (let)
-  callee 761:9 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 764:13 digit: i32 (const)
-  callee 764:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 765:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 766:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 768:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  local 770:11 e: i32 (const)
-  callee 770:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 774:13 sign: i32 (const)
-  callee 774:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 778:13 digit: i32 (const)
-  callee 778:26 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 779:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 780:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  callee 782:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
-  callee 785:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 788:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 759:11 src: u8[] (const)
+  local 760:11 end: i32 (const)
+  local 761:9 i: i32 (let)
+  callee 762:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 765:11 first: i32 (const)
+  callee 765:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 769:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 771:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local 773:9 integral: boolean (let)
+  callee 774:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 777:13 digit: i32 (const)
+  callee 777:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 778:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 779:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 781:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  local 783:11 e: i32 (const)
+  callee 783:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 787:13 sign: i32 (const)
+  callee 787:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 791:13 digit: i32 (const)
+  callee 791:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 792:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 793:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 795:11 jsonTokSkipDigits -> @nish.jsonTokSkipDigits
+  callee 798:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 801:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i: i32): i32 -> @nish.JsonTokenizer.numberRefused [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -90939,38 +90972,37 @@ function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i:
   calls: nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  callee 794:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 796:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 807:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 809:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nish.JsonTokenizer.string [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 862:5
+  sharedWrite: 870:5
   escaping: at k
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokIsPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokSkipPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local 806:11 src: u8[] (const)
-  local 807:11 end: i32 (const)
-  local 808:11 n: i32 (const)
-  local 811:11 room: i32 (const)
-  local 812:11 limit: i32 (const)
-  local 813:9 i: i32 (let)
-  local 814:9 decoded: i32 (let)
-  local 821:15 run: i32 (const)
-  callee 822:38 jsonTokIsPlain -> @nish.jsonTokIsPlain
-  local 827:13 b: i32 (const)
-  callee 827:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 832:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 835:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 838:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 841:15 cp: i32 (const)
-  callee 841:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  callee 845:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  callee 846:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
-  local 851:15 width: i32 (const)
-  callee 851:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
-  callee 853:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 860:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 863:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  local 819:11 src: u8[] (const)
+  local 820:11 end: i32 (const)
+  local 823:11 room: i32 (const)
+  local 824:11 limit: i32 (const)
+  local 825:9 i: i32 (let)
+  local 826:9 decoded: i32 (let)
+  local 832:13 run: i32 (const)
+  callee 833:11 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
+  local 835:13 b: i32 (const)
+  callee 835:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 840:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 843:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 846:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 849:15 cp: i32 (const)
+  callee 849:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  callee 853:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  callee 854:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 859:15 width: i32 (const)
+  callee 859:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
+  callee 861:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 868:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 871:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
 function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.escapeCodePoint [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.fail
@@ -90978,203 +91010,203 @@ function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @ni
   calls: nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokHex4 nish.jsonTokShortEscape nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
   stackSites=0 stackLocals=0
-  local 872:11 src: u8[] (const)
-  local 873:11 end: i32 (const)
-  local 874:11 letter: i32 (const)
-  callee 874:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 876:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 879:13 short: i32 (const)
-  callee 879:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
-  callee 880:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 882:11 unit: i32 (const)
-  callee 882:23 jsonTokHex4 -> @nish.jsonTokHex4
+  local 880:11 src: u8[] (const)
+  local 881:11 end: i32 (const)
+  local 882:11 letter: i32 (const)
+  callee 882:25 jsonTokByteAt -> @nish.jsonTokByteAt
   callee 884:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 890:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 892:11 slash: i32 (const)
-  callee 892:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 893:11 u: i32 (const)
-  callee 893:20 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee 896:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 899:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  local 901:11 low: i32 (const)
-  callee 901:22 jsonTokHex4 -> @nish.jsonTokHex4
-  callee 903:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
-  callee 906:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 887:13 short: i32 (const)
+  callee 887:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
+  callee 888:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 890:11 unit: i32 (const)
+  callee 890:23 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 892:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 898:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 900:11 slash: i32 (const)
+  callee 900:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 901:11 u: i32 (const)
+  callee 901:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 904:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 907:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 909:11 low: i32 (const)
+  callee 909:22 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 911:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 914:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
 function JsonTokenizer.isText(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isText [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 -> @nish.JsonTokenizer.stringInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 939:11
+  sharedWrite: 947:11
   escaping: at
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 924:11 n: i32 (const)
-  callee 925:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 928:11 src: u8[] (const)
-  local 929:11 end: i32 (const)
-  local 930:9 i: i32 (let)
-  local 931:9 o: i32 (let)
-  local 936:15 srcLength: i32 (const)
-  local 937:15 outLength: i32 (const)
-  local 947:13 b: i32 (const)
-  callee 947:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 956:13 cp: i32 (const)
-  callee 956:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 957:13 width: i32 (const)
-  callee 957:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 958:11 k: i32 (let)
-  callee 961:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 966:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 932:11 n: i32 (const)
+  callee 933:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 936:11 src: u8[] (const)
+  local 937:11 end: i32 (const)
+  local 938:9 i: i32 (let)
+  local 939:9 o: i32 (let)
+  local 944:15 srcLength: i32 (const)
+  local 945:15 outLength: i32 (const)
+  local 955:13 b: i32 (const)
+  callee 955:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 964:13 cp: i32 (const)
+  callee 964:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 965:13 width: i32 (const)
+  callee 965:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 966:11 k: i32 (let)
+  callee 969:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 974:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.isText
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.isText#0
   stackSites=0 stackLocals=0
-  callee 973:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  callee 981:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
 function JsonTokenizer.keyEquals(this: JsonTokenizer, name: string): boolean -> @nish.JsonTokenizer.keyEquals [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.escapeCodePoint
   calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   stackSites=0 stackLocals=0
-  local 987:11 n: i32 (const)
-  callee 988:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local 991:11 src: u8[] (const)
-  local 992:11 end: i32 (const)
-  local 993:9 i: i32 (let)
-  local 994:9 o: i32 (let)
-  callee 999:13 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1007:13 b: i32 (const)
-  callee 1007:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1016:13 cp: i32 (const)
-  callee 1016:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local 1017:13 width: i32 (const)
-  callee 1017:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local 1018:11 k: i32 (let)
-  callee 1020:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee 1026:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 995:11 n: i32 (const)
+  callee 996:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 999:11 src: u8[] (const)
+  local 1000:11 end: i32 (const)
+  local 1001:9 i: i32 (let)
+  local 1002:9 o: i32 (let)
+  callee 1007:13 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1015:13 b: i32 (const)
+  callee 1015:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1024:13 cp: i32 (const)
+  callee 1024:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 1025:13 width: i32 (const)
+  callee 1025:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 1026:11 k: i32 (let)
+  callee 1028:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 1034:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.isInteger(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isInteger [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.integerScan
   calls: nish.JsonTokenizer.integerScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.integerScan#0
   stackSites=0 stackLocals=0
-  callee 1037:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
+  callee 1045:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
 function JsonTokenizer.numberI64(this: JsonTokenizer): i64 -> @nish.JsonTokenizer.numberI64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isInteger
   calls: nish.JsonTokenizer.isInteger nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isInteger#0
   stackSites=0 stackLocals=0
-  callee 1046:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
-  local 1049:11 src: u8[] (const)
-  local 1050:11 negated: i64 (const)
-  callee 1051:12 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1054:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  local 1057:11 src: u8[] (const)
+  local 1058:11 negated: i64 (const)
+  callee 1059:12 jsonTokByteAt -> @nish.jsonTokByteAt
 function JsonTokenizer.integerScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.integerScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1084:5
+  sharedWrite: 1092:5
   calls: nish.jsonTokByteAt nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1061:11 src: u8[] (const)
-  local 1062:11 end: i32 (const)
-  local 1063:11 negative: boolean (const)
-  callee 1063:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1067:11 min: i64 (const)
-  local 1068:11 ten: i64 (const)
-  local 1069:11 bound: i64 (const)
-  local 1070:9 acc: i64 (let)
-  local 1071:9 i: i32 (let)
-  local 1072:11 n: i32 (const)
-  local 1077:13 digit: i64 (const)
+  local 1069:11 src: u8[] (const)
+  local 1070:11 end: i32 (const)
+  local 1071:11 negative: boolean (const)
+  callee 1071:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1075:11 min: i64 (const)
+  local 1076:11 ten: i64 (const)
+  local 1077:11 bound: i64 (const)
+  local 1078:9 acc: i64 (let)
+  local 1079:9 i: i32 (let)
+  local 1080:11 n: i32 (const)
+  local 1085:13 digit: i64 (const)
 function JsonTokenizer.isU64(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.unsignedScan
   calls: nish.JsonTokenizer.unsignedScan
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.unsignedScan#0
   stackSites=0 stackLocals=0
-  callee 1095:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
+  callee 1103:62 JsonTokenizer.unsignedScan -> @nish.JsonTokenizer.unsignedScan
 function JsonTokenizer.numberU64(this: JsonTokenizer): u64 -> @nish.JsonTokenizer.numberU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.isU64
   calls: nish.JsonTokenizer.isU64
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isU64#0
   stackSites=0 stackLocals=0
-  callee 1103:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
+  callee 1111:12 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
 function JsonTokenizer.unsignedScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.unsignedScan [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1147:5
+  sharedWrite: 1158:5
   calls: nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1115:11 src: u8[] (const)
-  local 1116:11 end: i32 (const)
-  local 1117:11 n: i32 (const)
-  local 1118:9 i: i32 (let)
-  local 1119:11 digits: i32 (const)
-  local 1123:11 lead: i32 (const)
-  local 1131:11 ten: u64 (const)
-  local 1132:9 acc: u64 (let)
-  local 1139:13 million: u64 (const)
-  local 1140:13 tail: u64 (const)
-  local 1144:13 billion: u64 (const)
+  local 1123:11 src: u8[] (const)
+  local 1124:11 end: i32 (const)
+  local 1125:11 n: i32 (const)
+  local 1126:9 i: i32 (let)
+  local 1127:11 digits: i32 (const)
+  local 1134:11 wide: boolean (const)
+  local 1142:11 ten: u64 (const)
+  local 1143:9 acc: u64 (let)
+  local 1150:13 million: u64 (const)
+  local 1151:13 tail: u64 (const)
+  local 1155:13 billion: u64 (const)
 function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
   stackSites=0 stackLocals=0
-  local 1161:11 src: u8[] (const)
-  local 1162:11 start: i32 (const)
-  local 1163:11 end: i32 (const)
-  local 1164:11 negative: boolean (const)
-  callee 1164:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1166:11 ten: f64 (const)
-  local 1167:9 mantissa: f64 (let)
-  local 1168:9 digits: i32 (let)
-  local 1169:9 scale: i32 (let)
-  local 1170:9 afterDot: boolean (let)
-  local 1171:9 i: i32 (let)
-  callee 1173:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1178:13 b: i32 (const)
-  callee 1181:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee 1192:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1202:13 sign: i32 (const)
-  callee 1202:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local 1203:13 minus: boolean (const)
-  local 1207:11 exponent: i32 (let)
-  callee 1213:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1217:9 value: f64 (let)
-  callee 1220:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local 1222:13 power: f64 (const)
-  callee 1222:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  local 1172:11 src: u8[] (const)
+  local 1173:11 start: i32 (const)
+  local 1174:11 end: i32 (const)
+  local 1175:11 negative: boolean (const)
+  callee 1175:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1177:11 ten: f64 (const)
+  local 1178:9 mantissa: f64 (let)
+  local 1179:9 digits: i32 (let)
+  local 1180:9 scale: i32 (let)
+  local 1181:9 afterDot: boolean (let)
+  local 1182:9 i: i32 (let)
+  callee 1184:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1189:13 b: i32 (const)
+  callee 1192:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 1203:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1213:13 sign: i32 (const)
+  callee 1213:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1214:13 minus: boolean (const)
+  local 1218:11 exponent: i32 (let)
+  callee 1224:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1228:9 value: f64 (let)
+  callee 1231:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1233:13 power: f64 (const)
+  callee 1233:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1240:11 src: u8[] (const)
-  local 1241:11 start: i32 (const)
-  local 1242:11 end: i32 (const)
+  local 1251:11 src: u8[] (const)
+  local 1252:11 start: i32 (const)
+  local 1253:11 end: i32 (const)
 function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonTokenizer.next nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.next#0 nish.JsonTokenizer.next#0
   stackSites=0 stackLocals=0
-  local 1260:9 k: i32 (let)
-  callee 1262:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  local 1267:11 target: i32 (const)
-  callee 1269:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1271:9 k: i32 (let)
+  callee 1273:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1278:11 target: i32 (const)
+  callee 1280:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 1277:9 ten: f64 (const)
-  local 1278:7 p: f64 (let)
-  local 1279:7 k: i32 (let)
+  local 1288:9 ten: f64 (const)
+  local 1289:7 p: f64 (let)
+  local 1290:7 k: i32 (let)
 program bench/json-writer/main.ts
 module bench/json-writer/main.ts (entry)
 import JsonWriter from "nish/json" -> struct JsonWriter

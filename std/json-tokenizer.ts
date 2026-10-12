@@ -316,6 +316,19 @@ const jsonTokSkipDigits = (src: u8[], i: i32, end: i32): i32 => {
   return j
 }
 
+/** The first index at or after `i` that is not a plain string byte, or `limit`, read as `jsonTokSkipBlank` reads its run. */
+const jsonTokSkipPlain = (src: u8[], i: i32, limit: i32): i32 => {
+  if (i < 0) {
+    return i
+  }
+  const n: i32 = toI32(src.length)
+  let j: i32 = i
+  while (j < limit && j < n && jsonTokIsPlain(toI32(src[j]))) {
+    j += 1
+  }
+  return j
+}
+
 /** The value of one hex digit, or `-1`. */
 const jsonTokHexDigit = (b: i32): i32 => {
   if (jsonTokIsDigit(b)) {
@@ -805,7 +818,6 @@ export class JsonTokenizer {
   string(at: i32, k: i32): i32 {
     const src: u8[] = this.src
     const end: i32 = this.end
-    const n: i32 = toI32(src.length)
     // Where the string would pass its limit, or `end` when it cannot pass it
     // before the window ends, which also keeps the sum from overflowing.
     const room: i32 = end - at - 1
@@ -813,17 +825,13 @@ export class JsonTokenizer {
     let i: i32 = at + 1
     let decoded: i32 = 0
     while (true) {
-      // A run of plain bytes is stepped over in one loop that reads `src`
-      // directly. Each byte of it is one the checks below would pass with
-      // `decoded += 1; i += 1`, and the run stops short of `limit`, so the
-      // first byte it leaves is judged by those checks exactly as before.
-      if (i >= 0) {
-        const run: i32 = i
-        while (i < limit && i < n && jsonTokIsPlain(toI32(src[i]))) {
-          i += 1
-        }
-        decoded += i - run
-      }
+      // A run of plain bytes is stepped over in one loop. Each byte of it is
+      // one the checks below would pass with `decoded += 1; i += 1`, and the
+      // run stops short of `limit`, so the first byte it leaves is judged by
+      // those checks exactly as before.
+      const run: i32 = i
+      i = jsonTokSkipPlain(src, i, limit)
+      decoded += i - run
       const b: i32 = jsonTokByteAt(src, i, end)
       if (b === JSON_TOK_QUOTE) {
         break
@@ -1120,11 +1128,14 @@ export class JsonTokenizer {
     if (i < 0 || end > n || digits < 1 || digits > 20 || i >= n) {
       return false
     }
-    const lead: i32 = toI32(src[i])
-    if (lead === JSON_TOK_MINUS || (digits === 20 && lead !== JSON_TOK_DIGIT_1)) {
+    if (toI32(src[i]) === JSON_TOK_MINUS) {
       return false
     }
-    if (digits === 20) {
+    const wide: boolean = digits === 20
+    if (wide) {
+      if (toI32(src[i]) !== JSON_TOK_DIGIT_1) {
+        return false
+      }
       i += 1
     }
     // Every `u64` here comes from `toU64`, a BigInt under Node, as `integerScan`'s `i64`s do.
@@ -1134,7 +1145,7 @@ export class JsonTokenizer {
       acc = acc * ten + toU64(toI32(src[i]) - JSON_TOK_DIGIT_0)
       i += 1
     }
-    if (digits === 20) {
+    if (wide) {
       // 8446744073709551615 and 10^19, built from parts that fit an `i32`.
       const million: u64 = toU64(1000000)
       const tail: u64 = (toU64(8446744) * million + toU64(73709)) * million + toU64(551615)

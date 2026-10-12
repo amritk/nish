@@ -651,11 +651,7 @@ const jtTokensIn = (bytes: u8[], off: i32, len: i32, limits: JsonLimits): string
   let steps: i32 = 0;
   let k: i32 = t.next();
   while (k > 0 && steps <= len + 2) {
-    if (k === JSON_TOK_KEY || k === JSON_TOK_STRING) {
-      words.push(`${k === JSON_TOK_KEY ? "k" : "s"}:${jtHex(scratch, t.stringInto(scratch, 0))}`);
-    } else {
-      words.push(jtWord(t, k, scratch, false));
-    }
+    words.push(jtWord(t, k, scratch, k === JSON_TOK_KEY || k === JSON_TOK_STRING));
     steps += 1;
     k = t.next();
   }
@@ -756,28 +752,11 @@ const unsigned = (t: Suite): void => {
     "1e2",
   ];
   const fits = [true, true, true, true, true, false, false, false, false, false, false, false, false, false, false];
-  const values = [
-    "0",
-    "1",
-    "9999999999999999999",
-    "10000000000000000000",
-    "18446744073709551615",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-    "0",
-  ];
   let i: i32 = 0;
-  while (i < toI32(texts.length) && i < toI32(fits.length) && i < toI32(values.length)) {
+  while (i < toI32(texts.length) && i < toI32(fits.length)) {
     const text = texts[i];
     const fit: boolean = fits[i];
-    const want = values[i];
+    const want = fit ? text : "0";
     const n = jtAt(text, JSON_TOK_NUMBER);
     if (n === null) {
       t.fail(`a number token for ${text}`, "none");
