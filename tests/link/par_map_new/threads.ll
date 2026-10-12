@@ -262,7 +262,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 699050
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -276,7 +276,7 @@ par.region:
   store %struct.nish_array* %dst, %struct.nish_array** %15
   %16 = bitcast { %struct.nish_array*, %struct.nish_array* }* %par.ctx to i8*
   %17 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 699050)
   br label %par.done
 
 par.done:
@@ -321,7 +321,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 466033
+  %13 = icmp sle i32 %12, 233016
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -335,7 +335,7 @@ par.region:
   store %struct.nish_array* %dst, %struct.nish_array** %15
   %16 = bitcast { %struct.nish_array*, %struct.nish_array* }* %par.ctx to i8*
   %17 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$f64$fn.16.nish_main$arrow0$chunk, i8* %16, i64 %17, i64 466033)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$f64$fn.16.nish_main$arrow0$chunk, i8* %16, i64 %17, i64 233016)
   br label %par.done
 
 par.done:
@@ -380,7 +380,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 699050
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -394,7 +394,7 @@ par.region:
   store %struct.nish_array* %dst, %struct.nish_array** %15
   %16 = bitcast { %struct.nish_array*, %struct.nish_array* }* %par.ctx to i8*
   %17 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow1$chunk, i8* %16, i64 %17, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow1$chunk, i8* %16, i64 %17, i64 699050)
   br label %par.done
 
 par.done:

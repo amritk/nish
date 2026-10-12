@@ -272,7 +272,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 599186
+  %13 = icmp sle i32 %12, 299593
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -290,7 +290,7 @@ par.region:
   store i32 %cap.1, i32* %17
   %18 = bitcast { %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }* %par.ctx to i8*
   %19 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow1$chunk, i8* %18, i64 %19, i64 599186)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow1$chunk, i8* %18, i64 %19, i64 299593)
   br label %par.done
 
 par.done:
@@ -343,7 +343,7 @@ len.ok:
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
   %12 = load i64, i64* %11, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %13 = trunc i64 %12 to i32
-  %14 = icmp sle i32 %13, 419430
+  %14 = icmp sle i32 %13, 209715
   br i1 %14, label %par.seq, label %par.region
 
 par.seq:
@@ -359,7 +359,7 @@ par.region:
   store i32 %cap.1, i32* %17
   %18 = bitcast { %struct.nish_array*, i8*, i32 }* %par.ctx to i8*
   %19 = sext i32 %13 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelFrom$i32$fn.16.nish_main$arrow2$chunk, i8* %18, i64 %19, i64 419430)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelFrom$i32$fn.16.nish_main$arrow2$chunk, i8* %18, i64 %19, i64 209715)
   br label %par.done
 
 par.done:
@@ -547,7 +547,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 699050
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -563,7 +563,7 @@ par.region:
   store i32 %cap.0, i32* %16
   %17 = bitcast { %struct.nish_array*, %struct.nish_array*, i32 }* %par.ctx to i8*
   %18 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.15.scaledBy$arrow0$chunk, i8* %17, i64 %18, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.15.scaledBy$arrow0$chunk, i8* %17, i64 %18, i64 699050)
   br label %par.done
 
 par.done:
@@ -610,7 +610,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 1048576
+  %13 = icmp sle i32 %12, 524288
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -626,7 +626,7 @@ par.region:
   store %struct.Weights* %cap.0, %struct.Weights** %16
   %17 = bitcast { %struct.nish_array*, %struct.nish_array*, %struct.Weights* }* %par.ctx to i8*
   %18 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.15.weighted$arrow0$chunk, i8* %17, i64 %18, i64 1048576)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.15.weighted$arrow0$chunk, i8* %17, i64 %18, i64 524288)
   br label %par.done
 
 par.done:
@@ -675,7 +675,7 @@ if.then:
 
 if.end:
   %12 = load i32, i32* %n.addr, align 4
-  %13 = icmp sle i32 %12, 838860
+  %13 = icmp sle i32 %12, 419430
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -693,7 +693,7 @@ par.region:
   store i32 %cap.1, i32* %17
   %18 = bitcast { %struct.nish_array*, %struct.nish_array*, i32, i32 }* %par.ctx to i8*
   %19 = sext i32 %12 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0$chunk, i8* %18, i64 %19, i64 838860)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0$chunk, i8* %18, i64 %19, i64 419430)
   br label %par.done
 
 par.done:
