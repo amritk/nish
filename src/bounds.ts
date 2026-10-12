@@ -2087,8 +2087,11 @@ const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]
 // and returns it, starts `xs` with sixteen elements, as `new Array<T>(16)`
 // written in place would. The callee's body is read as a tree, not walked:
 // it may be a body this module has not checked yet, or one in another module,
-// so nothing here reads a side table of the callee's. That is why the rule is
-// narrow enough to read off the tree alone:
+// so nothing here reads a side table of the callee's. `freshReturnOf` in
+// `src/inline-arrays.ts` asks the inline layout's version of the question
+// with the tables, which it can because it runs once every body is checked;
+// this walk runs as each body is, before a helper further down the file has
+// any. That is why the rule is narrow enough to read off the tree alone:
 //
 // - the callee is a plain function, not generic and not lifted from an arrow,
 //   called directly; a method is left out, as `summaryOfCall` leaves it out;
