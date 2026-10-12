@@ -4755,6 +4755,14 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     if (!edgeWrites(facts, edge)) {
       continue
     }
+    // WP29: an object this call made itself (`ROOT_OWN`) is memory no caller,
+    // thread or task can see while the call runs, as a private array is. What
+    // the callee writes of it is `callWrites`'s above, which counts the write
+    // only where the object may hold memory a parameter reaches, or anything
+    // (`DirtMark`): `const r = new Rng(seed); r.nextI32()` writes nothing shared.
+    if (edge.path.kind === ROOT_OWN) {
+      continue
+    }
     const pointer: PointerParamFacts | null = edge.param.length > 0 ? f.pointerParam(edge.param) : null
     if (pointer === null) {
       if (markPastWrite(f)) {

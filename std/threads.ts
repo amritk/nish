@@ -242,6 +242,31 @@ const runTask = <A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void =>
   storeResult(dst, at, entry(arg))
 
 /**
+ * One task with no destination: `entry(arg)`, whose answer, if it has one,
+ * nothing stores — the checker holds such an entry to `void`. Natively the
+ * compiler files this call as a task as it files `runTask`'s, with no store
+ * at the join; nothing under Node reaches it (see `spawn`).
+ */
+const runWith = <A, R>(entry: (arg: A) => R, arg: A): void => {
+  entry(arg)
+}
+
+/** `runWith` for an entry of no parameters, such as `() => work(xs)`, whose captures are its arguments. */
+const runThunk = <R>(entry: () => R): void => {
+  entry()
+}
+
+/**
+ * Whether a call of `spawn` wrote a destination slot. Natively every call
+ * that reaches `spawn` did, so this is always true there: the compiler gives
+ * `s.spawn(entry, arg)` and `s.spawn(() => ...)` the methods written for
+ * them below, `spawnWith` and `spawnThunk`. Under Node the source runs as
+ * it is written and every form reaches `spawn`, where a slot the call left
+ * out is `undefined`, which is neither below zero nor at or above it.
+ */
+const slotWritten = (at: i32): boolean => at < 0 || at >= 0
+
+/**
  * A scope of tasks, joined when the block that declares it ends
  * (docs/wp29-thread-surface.md §4.2). It is only ever made by `scope()` in a
  * `using` declaration, and only ever used as the receiver of `spawn`
@@ -260,10 +285,34 @@ export class ThreadScope {
    * again when its answer is stored.
    */
   spawn<A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void {
+    if (!slotWritten(at)) {
+      // Under Node only: `s.spawn(entry, arg)` or `s.spawn(() => ...)`, run
+      // at the spawn with nothing to store (`slotWritten`).
+      entry(arg)
+      return
+    }
     if (at < 0 || at >= toI32(dst.length)) {
       slotOutOfRange(at, toI32(dst.length))
     }
     runTask(entry, arg, dst, at)
+  }
+
+  /**
+   * `s.spawn(entry, arg)` as the compiler reads it: run `entry(arg)` on a
+   * thread of its own when the scope closes, and store nothing. `entry`
+   * answers `void`. Only the compiler names this method (see `slotWritten`).
+   */
+  spawnWith<A, R>(entry: (arg: A) => R, arg: A): void {
+    runWith(entry, arg)
+  }
+
+  /**
+   * `s.spawn(() => work(xs))` as the compiler reads it: run the arrow, whose
+   * captured `const` locals are its arguments, on a thread of its own when the
+   * scope closes, and store nothing. Only the compiler names this method.
+   */
+  spawnThunk<R>(entry: () => R): void {
+    runThunk(entry)
   }
 
   /**

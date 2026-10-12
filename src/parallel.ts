@@ -101,7 +101,6 @@ import {
   CheckedProgram,
   FieldInfo,
   FunctionSig,
-  Instantiation,
   PAR_CHUNK,
   PAR_FROM,
   PAR_MAP,
@@ -122,7 +121,7 @@ import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, TypeTable } from "./types"
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
 const THREAD_SCOPE: string = "ThreadScope"
@@ -176,15 +175,78 @@ const isThreadsModule = (program: CheckedProgram): boolean =>
 export const isThreadsSource = (program: CheckedProgram): boolean =>
   program.source.path === threadsModuleName()
 
-/** Whether `template` is `ThreadScope.spawn` from `nish/threads` (WP29 P2). */
+/**
+ * The methods of `ThreadScope` a `spawn` statement calls: `spawn` itself, with
+ * a destination, and the two the compiler gives the forms without one
+ * (`spawnFormFor`), which the source never names.
+ */
+const isSpawnMethodName = (name: string): boolean =>
+  name === "spawn" || name === SPAWN_WITH || name === SPAWN_THUNK
+
+/** `ThreadScope`'s method for `s.spawn(entry, arg)`, whose task stores nothing. */
+const SPAWN_WITH: string = "spawnWith"
+
+/** `ThreadScope`'s method for `s.spawn(() => ...)`, whose task takes no argument and stores nothing. */
+const SPAWN_THUNK: string = "spawnThunk"
+
+/** Whether `template` is one of `ThreadScope`'s spawn methods from `nish/threads` (WP29 P2). */
 export const isSpawnTemplate = (template: TemplateInfo): boolean => {
   const owner = template.owner
   return (
     owner !== null &&
     owner.name === THREAD_SCOPE &&
-    template.decl.children[0].text === "spawn" &&
+    isSpawnMethodName(template.decl.children[0].text) &&
     isThreadsModule(template.home.program)
   )
+}
+
+/**
+ * The `ThreadScope` method a `spawn` written with `count` arguments calls: the
+ * four-argument form is `spawn` itself, `s.spawn(entry, arg)` is `spawnWith`
+ * and `s.spawn(() => ...)` is `spawnThunk` (docs/LANGUAGE.md, "Scoped tasks").
+ * TypeScript would spell the three as overloads; the language has none, so
+ * the checker picks the method by the count, and under Node, where every form
+ * reaches `spawn`, that method's body tells them apart (`slotWritten` in
+ * `std/threads.ts`). Any other count is `spawn`'s, whose arity refuses it.
+ */
+export const spawnFormFor = (template: TemplateInfo, count: i32): string => {
+  if (!isSpawnTemplate(template) || template.decl.children[0].text !== "spawn") {
+    return ""
+  }
+  if (count === 2) {
+    return SPAWN_WITH
+  }
+  return count === 1 ? SPAWN_THUNK : ""
+}
+
+/** Whether `template` is `spawnWith` or `spawnThunk`, whose task stores nothing. */
+export const isVoidSpawnTemplate = (template: TemplateInfo): boolean => {
+  const name = template.decl.children[0].text
+  return isSpawnTemplate(template) && (name === SPAWN_WITH || name === SPAWN_THUNK)
+}
+
+/** Whether `sig` is a spawn whose task stores nothing: an instance of `spawnWith` or `spawnThunk`. */
+export const isVoidSpawn = (sig: FunctionSig): boolean => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (template === null || instance === null || instance.parallel !== PAR_SPAWN) {
+    return false
+  }
+  const name = template.decl.children[0].text
+  return name === SPAWN_WITH || name === SPAWN_THUNK
+}
+
+/**
+ * The type of the argument a spawn instance hands its task, or -1 for
+ * `spawnThunk`, whose task takes none: its first type argument is the answer.
+ */
+export const taskArgTypeOf = (sig: FunctionSig): i32 => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (instance === null || template === null || instance.typeArgs.length === 0) {
+    return -1
+  }
+  return template.decl.children[0].text === SPAWN_THUNK ? -1 : instance.typeArgs[0]
 }
 
 /** The `PAR_*` role of an instantiation of `template`. */
@@ -195,7 +257,11 @@ export const parallelRole = (template: TemplateInfo): i32 => {
   if (template.owner !== null || !isThreadsModule(template.home.program)) {
     return PAR_NONE
   }
-  if (template.sourceName === "runTask") {
+  if (
+    template.sourceName === "runTask" ||
+    template.sourceName === "runWith" ||
+    template.sourceName === "runThunk"
+  ) {
     return PAR_TASK
   }
   const name = template.sourceName
@@ -746,6 +812,23 @@ export const thisCaptureMessage = (): string =>
   "it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call " +
   "(`const self = this`, `const k = this.k`)"
 
+/** The refusal for a `let` a task's arrow reads. */
+export const taskLetCaptureMessage = (name: string): string =>
+  `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a task's arrow may read only a ` +
+  "`const` or a parameter of that function, which is handed to the task when it is spawned as its argument is " +
+  "and cannot change before it runs; bind the value to a `const` before the `spawn`"
+
+/** The refusal for `this` in a task's arrow. */
+export const taskThisCaptureMessage = (): string =>
+  "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is " +
+  "written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` " +
+  "(`const self = this`, `const k = this.k`)"
+
+/** The refusal for an assignment to a name a task's arrow captures. */
+export const taskCaptureWriteMessage = (name: string): string =>
+  `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a task reads a captured ` +
+  "value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument"
+
 /** The refusal for an assignment to a captured name. */
 export const captureWriteMessage = (name: string): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a data-parallel body ` +
@@ -760,8 +843,19 @@ const isThreadsLayout = (info: StructInfo): boolean => {
   return info.origin.path === threadsModuleName() && info.name === THREAD_SCOPE
 }
 
-/** Why a value of `type` may not be captured, or "" when it may; `seen` stops a recursive class. */
-const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, seen: StringSet): string => {
+/**
+ * Why a value of `type` may not be captured, or "" when it may; `seen` stops a
+ * recursive class. A scope's `task` may capture a `Mutex`, as it may be handed
+ * one as its argument, and R7 and R8 hold of it as of an argument; a guard, a
+ * channel and a scope it may not, since each is shared only by its own rules.
+ */
+const captureObstacle = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  seen: StringSet,
+  task: boolean
+): string => {
   if (table.isMaybe(type)) {
     return "a value that may be absent is read through the test that found it, which the body cannot repeat"
   }
@@ -773,7 +867,7 @@ const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, s
     return "a `Result` is read through the test that narrowed it; bind the value it holds to a `const` instead"
   }
   if (kind === K_NULLABLE || kind === K_ARRAY) {
-    return captureObstacle(program, table, table.refOf(type), seen)
+    return captureObstacle(program, table, table.refOf(type), seen, task)
   }
   if (kind !== K_STRUCT) {
     return ""
@@ -787,11 +881,20 @@ const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, s
   if (info === null) {
     return "its layout is not known here"
   }
+  if (task && isThreadsClass(info, MUTEX)) {
+    return "" // the lock's data is reached only through its guard, by the task that takes it
+  }
+  if (task && isThreadsLayout(info)) {
+    return (
+      "a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a " +
+      "channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders"
+    )
+  }
   if (isThreadsLayout(info)) {
     return "a scope, a lock, a guard or a channel is shared only by the rules of its own block"
   }
   for (const field of info.fields) {
-    const inner = captureObstacle(program, table, field.type, seen)
+    const inner = captureObstacle(program, table, field.type, seen, task)
     if (inner.length > 0) {
       return inner
     }
@@ -804,11 +907,15 @@ export const captureTypeMessage = (
   program: CheckedProgram,
   table: TypeTable,
   name: string,
-  type: i32
+  type: i32,
+  task: boolean
 ): string => {
-  const why = captureObstacle(program, table, type, new StringSet())
+  const why = captureObstacle(program, table, type, new StringSet(), task)
   if (why.length === 0) {
     return ""
+  }
+  if (task) {
+    return `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a task cannot capture it: ${why}`
   }
   return (
     `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a data-parallel body cannot capture it: ` +
@@ -1063,20 +1170,27 @@ const usingPlaceMessage = (): string =>
   "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, " +
   "and a single-statement body is not a block"
 
-/** The task given to `spawn` is an arrow. */
-export const taskArrowMessage = (): string =>
-  "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a " +
-  "unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread " +
-  "(declare the arrow as a `const` of the module and pass its name)"
+/** A task with no destination whose entry answers something, which nothing would store. */
+export const voidTaskResultMessage = (table: TypeTable, fn: FunctionSig): string => {
+  if (fn.returnType === T_VOID) {
+    return ""
+  }
+  const shown = fn.lifted ? "The arrow" : `\`${fn.sourceName}\``
+  return (
+    `${shown} answers \`${table.typeName(fn.returnType)}\`, and a \`spawn\` without a destination stores nothing: ` +
+    "a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope " +
+    "joins, so make the task answer `void` or give it a destination"
+  )
+}
 
 /** The argument of a task is a `Result` the ABI passes as its parts. */
 export const taskArgumentMessage = (table: TypeTable, sig: FunctionSig): string => {
-  const instance = sig.instance
-  if (instance === null || instance.typeArgs.length === 0 || !table.resultByValue(instance.typeArgs[0])) {
+  const arg = taskArgTypeOf(sig)
+  if (arg < 0 || !table.resultByValue(arg)) {
     return ""
   }
   return (
-    `The argument of \`spawn\` is \`${table.typeName(instance.typeArgs[0])}\`, which a task cannot be handed: ` +
+    `The argument of \`spawn\` is \`${table.typeName(arg)}\`, which a task cannot be handed: ` +
     "a `Result` is passed as its parts rather than as one value, so hand the task the value it holds"
   )
 }
@@ -1414,6 +1528,18 @@ const handOnRoot = (program: CheckedProgram, arg: Node, uses: VariableUses): voi
   }
 }
 
+/** Every local an arrow task captures, handed on: the task holds each one until its scope joins. */
+const handOnCaptures = (program: CheckedProgram, arrow: Node, uses: VariableUses): void => {
+  const reads: Node[] = []
+  capturedReads(program, arrow, reads)
+  for (const read of reads) {
+    const local = sourceLocal(program.nodeLocals[read.id])
+    if (local !== null) {
+      uses.handedOn[uses.add(local)] = true
+    }
+  }
+}
+
 /**
  * Record what `node` does with the variables it names. A use of a variable
  * keeps it unhanded only as the base of an index or a member, as the iterable
@@ -1454,6 +1580,10 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
       const local: Local | null = k === 2 ? namedLocal(program, arg) : null
       if (local !== null) {
         uses.destination[uses.add(local)] = true
+      } else if (arg.kind === N_ARROW) {
+        // An arrow task reads what it captures when the scope joins, as a task
+        // reads its argument, so each one is handed on however the arrow uses it.
+        handOnCaptures(program, arg, uses)
       } else {
         collectUses(program, arg, node.children[1], uses)
         handOnRoot(program, arg, uses)
@@ -1480,14 +1610,23 @@ class RegionState {
   locals: Local[]
   name: string
   destinations: Local[]
-  /** WP29 P3: the argument type of every task of the scope, which is what R7 asks a lock about. */
+  /**
+   * WP29 P3: the argument type of every task of the scope, and of every
+   * `const` an arrow task captures, which is what R7 asks a lock about.
+   */
   taskArgs: i32[]
+  /** Parallel to `taskArgs`: how R7 names each, `arg` or the captured local's name. */
+  taskArgRoots: string[]
+  /** Whether a task of the scope can have been filed by now, with a destination or without one. */
+  started: boolean
 
   constructor(locals: Local[], name: string) {
     this.locals = locals
     this.name = name
     this.destinations = []
     this.taskArgs = []
+    this.taskArgRoots = []
+    this.started = false
   }
 
   owns(local: Local | null): boolean {
@@ -1498,7 +1637,9 @@ class RegionState {
     return local !== null && this.destinations.indexOf(local) >= 0
   }
 
+  /** A `spawn` on the scope has been passed: its destination, if it has one, is `local`. */
   addDestination(local: Local | null): void {
+    this.started = true
     if (local !== null && this.destinations.indexOf(local) < 0) {
       this.destinations.push(local)
     }
@@ -1506,7 +1647,7 @@ class RegionState {
 
   /** Whether a task can have been filed by now: the first `spawn`, or one in a loop around this. */
   live(): boolean {
-    return this.destinations.length > 0
+    return this.started
   }
 }
 
@@ -1543,9 +1684,15 @@ const collectTaskArgs = (program: CheckedProgram, node: Node, state: RegionState
   }
   const callee = spawnCallee(program, node)
   if (callee !== null && state.owns(spawnReceiver(program, node))) {
-    const instance = callee.instance
-    if (instance !== null && instance.typeArgs.length > 0) {
-      state.taskArgs.push(instance.typeArgs[0])
+    // An arrow's captures reach the task as its argument does.
+    const arg = taskArgTypeOf(callee)
+    if (arg >= 0) {
+      state.taskArgs.push(arg)
+      state.taskArgRoots.push("arg")
+    }
+    for (const slot of capturesOf(callee)) {
+      state.taskArgs.push(slot.type())
+      state.taskArgRoots.push(slot.arrow.captures[slot.index].name)
     }
   }
   for (const child of node.children) {
@@ -2071,6 +2218,11 @@ const regionLockMessage = (state: RegionState, what: string, path: string): stri
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
   "so the parent locks what they share only before the statement that holds the first `spawn` or after the join"
 
+const taskCaptureMutexMessage = (table: TypeTable, name: string, type: i32, path: string): string =>
+  `The task's arrow reads \`${name}\`, which is \`${table.typeName(type)}\` and reaches a \`Mutex\` through ` +
+  `\`${path}\`: a captured value is the task's argument, and a \`Mutex\` reaches a task as an argument or as a ` +
+  "field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer"
+
 const taskMutexMessage = (table: TypeTable, type: i32, path: string): string =>
   `The argument of \`spawn\` is \`${table.typeName(type)}\`, which reaches a \`Mutex\` through \`${path}\`: ` +
   "a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so " +
@@ -2241,29 +2393,44 @@ const mutexInside = (table: TypeTable, program: CheckedProgram, type: i32, root:
  * the class it is, and no `Mutex`'s data holds another. The refusal, or "".
  */
 export const taskMutexMessageFor = (table: TypeTable, program: CheckedProgram, sig: FunctionSig): string => {
-  const instance = sig.instance
-  if (instance === null || instance.typeArgs.length === 0) {
-    return ""
-  }
-  const arg = instance.typeArgs[0]
-  const info = classLayoutOf(program, table, arg)
-  let path = ""
-  if (info === null) {
-    path = mutexPath(table, program, arg, -1, "arg", new StringSet())
-  } else if (isThreadsClass(info, MUTEX)) {
-    path = mutexInside(table, program, arg, "arg")
-  } else {
-    let k = 0
-    while (k < info.fields.length && path.length === 0) {
-      const field = info.fields[k]
-      const root = `arg.${field.name}`
-      path = isMutexType(program, table, field.type)
-        ? mutexInside(table, program, field.type, root)
-        : mutexPath(table, program, field.type, -1, root, new StringSet())
-      k = k + 1
+  const arg = taskArgTypeOf(sig)
+  if (arg >= 0) {
+    const path = taskMutexPath(table, program, arg, "arg")
+    if (path.length > 0) {
+      return taskMutexMessage(table, arg, path)
     }
   }
-  return path.length === 0 ? "" : taskMutexMessage(table, arg, path)
+  // An arrow's captures are the task's arguments too, each held to the same rule.
+  for (const slot of capturesOf(sig)) {
+    const name = slot.arrow.captures[slot.index].name
+    const path = taskMutexPath(table, program, slot.type(), name)
+    if (path.length > 0) {
+      return taskCaptureMutexMessage(table, name, slot.type(), path)
+    }
+  }
+  return ""
+}
+
+/** R8's path from a task's input of `type`, named `root`, to a `Mutex` deeper than it allows, or "". */
+const taskMutexPath = (table: TypeTable, program: CheckedProgram, type: i32, root: string): string => {
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return mutexPath(table, program, type, -1, root, new StringSet())
+  }
+  if (isThreadsClass(info, MUTEX)) {
+    return mutexInside(table, program, type, root)
+  }
+  let path = ""
+  let k = 0
+  while (k < info.fields.length && path.length === 0) {
+    const field = info.fields[k]
+    const at = `${root}.${field.name}`
+    path = isMutexType(program, table, field.type)
+      ? mutexInside(table, program, field.type, at)
+      : mutexPath(table, program, field.type, -1, at, new StringSet())
+    k = k + 1
+  }
+  return path
 }
 
 /** Whether `node`, at `at` under the first `depth` of `parents`, is a store's target: `x = v`, `x += v`, `x++`. */
@@ -2510,8 +2677,10 @@ const regionLockMessageFor = (
   } else if (!takesLock(facts, callee)) {
     return ""
   }
-  for (const arg of state.taskArgs) {
-    const path = mutexPath(table, program, arg, want, "arg", new StringSet())
+  let k = 0
+  while (k < state.taskArgs.length && k < state.taskArgRoots.length) {
+    const path = mutexPath(table, program, state.taskArgs[k], want, state.taskArgRoots[k], new StringSet())
+    k = k + 1
     if (path.length > 0) {
       return regionLockMessage(state, what, path)
     }
@@ -3702,12 +3871,8 @@ const holdsChannelDeep = (program: CheckedProgram, table: TypeTable, type: i32):
  */
 const handsNullableChannel = (program: CheckedProgram, table: TypeTable, spawn: Node): boolean => {
   const callee = spawnCallee(program, spawn)
-  const instance: Instantiation | null = callee === null ? null : callee.instance
-  if (instance === null || instance.typeArgs.length === 0) {
-    return false
-  }
-  const arg = instance.typeArgs[0]
-  if (table.isNullable(arg)) {
+  const arg = callee === null ? -1 : taskArgTypeOf(callee)
+  if (arg >= 0 && table.isNullable(arg)) {
     const inner = table.stripNull(arg)
     return isChannelType(program, table, inner) || holdsChannelField(program, table, inner, false)
   }
@@ -3753,10 +3918,10 @@ const recordSenders = (
     }
     const instance = callee.instance
     const entry = parallelBodyOf(callee)
-    if (instance === null || entry === null || instance.typeArgs.length === 0) {
+    const arg = taskArgTypeOf(callee)
+    if (instance === null || entry === null || arg < 0) {
       continue
     }
-    const arg = instance.typeArgs[0]
     const paths: string[] = []
     if (isChannelType(program, table, arg)) {
       paths.push("")
