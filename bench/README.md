@@ -152,9 +152,11 @@ the benchmark tunes away:
   `sched_yield`, a system call per look, and the Nish run spends 0.6 to 0.8 s
   of system time against Go's 0.02 to 0.04 s: Go's `sync.Mutex` spins and
   parks the goroutine in user space. Rust's futex lock lands between the two.
-- `par-nbody` and `par-compute` lose on the median and not on the minimum,
-  by less than run-to-run variation on this machine: a second run of the
-  same commit read par-nbody's median as 1.06x where the table reads 1.23x.
+- `par-nbody` and `par-compute` are within 1.10x of Rayon, and how close
+  moves from run to run by more than the band inside one run: three runs on
+  2026-10-12 read par-nbody's median as 1.06x, 1.23x and 1.01x of Rayon's,
+  and par-compute's as 1.12x, 1.08x and 1.08x. Read a median past 1.10x on
+  those two as this machine's noise until a quieter one says otherwise.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
