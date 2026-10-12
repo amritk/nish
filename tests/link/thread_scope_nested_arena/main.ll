@@ -48,7 +48,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @digits(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+define hidden noundef i32 @digits$(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
   %n.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4

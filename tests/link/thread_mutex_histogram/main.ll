@@ -89,7 +89,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @binShard(%struct.Shard* noundef nonnull readonly align 8 dereferenceable(16) nocapture %s) #1 {
+define hidden noundef i32 @binShard$(%struct.Shard* noundef nonnull readonly align 8 dereferenceable(16) nocapture %s) #1 {
 entry:
   %x.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8

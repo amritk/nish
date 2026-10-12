@@ -1,0 +1,11 @@
+define hidden noundef i32 @close$(
+define hidden noundef i32 @exit$(
+define hidden noundef i32 @free$(
+define hidden noundef i32 @read$(
+define hidden noundef i32 @strlen$(
+define hidden noundef i32 @write$(
+declare noundef i32 @close$(
+declare noundef i32 @exit$(
+declare noundef i32 @free$(
+declare noundef i32 @read$(
+declare noundef i32 @write$(

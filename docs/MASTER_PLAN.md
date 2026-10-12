@@ -172,7 +172,7 @@ table with each message and the idiom to write instead.
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | **Decided:** arena + escape-analysed `alloca` (WP6), with `using a = arena()` as the explicit bracket (#420). Reference counting is not built. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
-| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level | **Decided ([wp38](wp38-simd.md) §8): kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics.** The first kernel and `indexOfAny` are built; the opt-in CPU level met its bar on a re-measurement and is unbuilt, recommended with `x86-64-v3` only (§7, Q5, open). |
+| SIMD surface | runtime kernels behind `std` functions / a `nish:simd` module of 128-bit vector types / target intrinsics / auto-vectorisation with an opt-in CPU level | **Decided ([wp38](wp38-simd.md) §8): kernels first, chosen at run time; the default target stays the baseline CPU; `nish:simd` only once it clears a measured bar; no target intrinsics.** The first kernel and `indexOfAny` are built; the opt-in CPU level met its bar on a re-measurement and is unbuilt, recommended with `x86-64-v3` only (§7, Q7, open). |
 
 ## 4. What exists today
 
@@ -252,7 +252,7 @@ is its plan. [README.md](README.md) indexes them.
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | proposed; no note yet | — |
-| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S3a and S6 proposed | [wp38](wp38-simd.md) |
+| 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors), S3a and S7 proposed | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 
 A package's plan said where its work would be done, which for everything up
@@ -453,12 +453,12 @@ major. Whether it happens at all is still wp22 §10's open question.
   level (S2) missed its bar on S0's figures, then met it once the noise was
   measured; it is unbuilt until the owner decides it is worth its cost, and is
   recommended with one value, `x86-64-v3`, which both constant-time checkers
-  already read cleanly (§7, Q5).
+  already read cleanly (§7, Q7).
   The lexer on `indexOfAny` (S4) is declined for now: the lexer is about 1% of
   the front end, too little to make `bootstrap --verify` measurably faster
   (§7). A `nish:simd` module of 128-bit vector types (S3) is unbuilt, and is
-  recommended to wait for S6, crediting an offset index from the test that
-  bounds it, and S3a, its bar kernels measured without a surface (§7, Q6, Q7). Every
+  recommended to wait for S7, crediting an offset index from the test that
+  bounds it, and S3a, its bar kernels measured without a surface (§7, Q8, Q9). Every
   stage adds a function, a flag or a module and withdraws nothing, so it fits
   a minor.
 
