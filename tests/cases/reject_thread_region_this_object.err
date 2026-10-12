@@ -1,0 +1,2 @@
+reject_thread_region_this_object.ts:65:5
+`build` writes memory a task of `s` may read, before the scope joins
