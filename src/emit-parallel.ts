@@ -1,12 +1,15 @@
-// WP29 P1: a `parallelMapInto` or `parallelReduce` instance, lowered onto the
-// partitioner (docs/wp29-thread-surface.md §4.1, runtime/runtime-parallel.c).
+// WP29 P1: a `parallelMapInto`, `parallelFrom` or `parallelReduce` instance,
+// lowered onto the partitioner (docs/wp29-thread-surface.md §4.1,
+// runtime/runtime-parallel.c).
 //
 // The instance is emitted from its own body, as any instantiation is, so the
 // length check and its panic, the reduce's block count and the in-order
 // combine are `std/threads.ts`'s code and not this file's. One call is
 // different: the one to the chunk loop that walks the whole range —
-// `mapRange(src, dst, f, 0, n)` in a map, `reduceBlocks(src, f, identity,
-// partials, 0, blocks)` in a reduce. It becomes a region:
+// `mapRange(src, dst, f, 0, n)` in a map, `fromRange(dst, f, 0, n)` in a
+// `parallelFrom`, `reduceBlocks(src, f, identity, partials, 0, blocks)` in a
+// reduce. It becomes a region (a body's captures, which the chunk loop takes
+// after the range, travel in the context after the other arguments):
 //
 //   %par.ctx = alloca { <every argument but the range> }   ; in the entry block
 //   br i1 (<hi> <= <grain>), label %par.seq, label %par.region
@@ -37,15 +40,17 @@ import { IRFunction, IRParam, paramValue } from "./ir"
 import { loadLocal } from "./emit-ops"
 import { isArenaCall, unwrapParens } from "./emit-util"
 import { Node } from "./nodes"
+import { isLockCall, isRegionEntry, mapGrain, parallelBodyOf, parallelRoleOf, taskStoreOf } from "./parallel"
 import {
-  isLockCall,
-  isParallelEntry,
-  mapGrain,
-  parallelBodyOf,
-  parallelRoleOf,
-  taskStoreOf,
-} from "./parallel"
-import { FieldInfo, FunctionSig, PAR_CHUNK, PAR_MAP, PAR_SPAWN, PAR_TASK, StructInfo } from "./program"
+  FieldInfo,
+  FunctionSig,
+  PAR_CHUNK,
+  PAR_FROM,
+  PAR_MAP,
+  PAR_SPAWN,
+  PAR_TASK,
+  StructInfo,
+} from "./program"
 
 /**
  * The grain the region in `caller` is divided at: for a map, the one its body
@@ -61,51 +66,66 @@ import { FieldInfo, FunctionSig, PAR_CHUNK, PAR_MAP, PAR_SPAWN, PAR_TASK, Struct
  */
 const regionGrain = (caller: FunctionSig): i32 => {
   const body = parallelBodyOf(caller)
-  return body === null || parallelRoleOf(caller) !== PAR_MAP ? 1 : mapGrain(body)
+  const role = parallelRoleOf(caller)
+  return body === null || (role !== PAR_MAP && role !== PAR_FROM) ? 1 : mapGrain(body)
 }
 
 /** Whether the call from `caller` to `callee` is the one that becomes a region. */
 export const isParallelRegionCall = (caller: FunctionSig | null, callee: FunctionSig): boolean =>
-  caller !== null && isParallelEntry(caller) && parallelRoleOf(callee) === PAR_CHUNK
+  caller !== null && isRegionEntry(caller) && parallelRoleOf(callee) === PAR_CHUNK
 
 /**
  * The region in place of `chunk(args..., 0, hi)`: `types` and `values` are the
- * lowered arguments, the range last. The start is always the literal `0` —
- * `std/threads.ts` writes it, and a region covers `[0, len)` — so anything else
- * is a broken invariant, not a program to compile.
+ * lowered arguments, the range and then the `captured` values of the body's
+ * captures last (`capturesOf`). The start is always the literal `0` —
+ * `std/threads.ts` writes it, and a region covers `[0, len)` — so anything
+ * else is a broken invariant, not a program to compile. The captures travel in
+ * the context after the written arguments, and the trampoline hands them back
+ * after the range, where the chunk loop takes them.
  */
 export const emitParallelRegion = (
   emitter: Emitter,
   chunk: FunctionSig,
   types: string[],
-  values: string[]
+  values: string[],
+  captured: i32
 ): void => {
   const caller = emitter.currentSig
   if (caller === null) {
     process.exit(internalErrorFor(`emitter: \`${chunk.name}\` called outside a function`, emitter.opts.json))
   }
   const count = types.length
+  const range = count - captured
   if (
-    count < 2 ||
+    captured < 0 ||
+    range < 2 ||
     values.length !== count ||
-    values[count - 2] !== "0" ||
-    types[count - 2] !== "i32" ||
-    types[count - 1] !== "i32"
+    values[range - 2] !== "0" ||
+    types[range - 2] !== "i32" ||
+    types[range - 1] !== "i32"
   ) {
     process.exit(
       internalErrorFor(`emitter: \`${chunk.name}\` is not a chunk loop over [0, n)`, emitter.opts.json)
     )
   }
+  // Every argument but the range, in order: the written ones, then the captures.
   const fieldTypes: string[] = []
+  const fieldValues: string[] = []
   let i = 0
-  while (i < count - 2 && i < types.length) {
-    fieldTypes.push(types[i])
+  while (i < types.length && i < values.length) {
+    // Both read before either push, which ends the length facts.
+    const type = types[i]
+    const value = values[i]
+    if (i < range - 2 || i >= range) {
+      fieldTypes.push(type)
+      fieldValues.push(value)
+    }
     i = i + 1
   }
   const ctxType = `{ ${fieldTypes.join(", ")} }`
   const fn = emitter.fn
   const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0)
-  const hi = values[count - 1]
+  const hi = values[range - 1]
   const grain = regionGrain(caller)
   // A range the partitioner would not divide is the chunk loop over all of it
   // on this thread, which is what `nish_parallel_range` would run too; called
@@ -127,10 +147,10 @@ export const emitParallelRegion = (
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(regionBlock)
   i = 0
-  while (i < fieldTypes.length && i < values.length) {
+  while (i < fieldTypes.length && i < fieldValues.length) {
     // Read before the call below, which ends the length facts.
     const type = fieldTypes[i]
-    const value = values[i]
+    const value = fieldValues[i]
     const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${slot}, i32 0, i32 ${i}`)
     fn.emit(`store ${type} ${value}, ${type}* ${at}`)
     i = i + 1
@@ -143,13 +163,14 @@ export const emitParallelRegion = (
   )
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(doneBlock)
-  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes))
+  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured))
 }
 
 /**
  * `void <name>(i64 lo, i64 hi, i8* ctx)`, the `nish_par_body` the partitioner
  * calls once per chunk: the arguments back out of the context, and the chunk
- * loop over `[lo, hi)`. The range fits an `i32` because it is inside
+ * loop over `[lo, hi)`, with the `captured` values the context ends with
+ * passed after the range. The range fits an `i32` because it is inside
  * `[0, len)` of an array whose length does.
  */
 const chunkTrampoline = (
@@ -157,7 +178,8 @@ const chunkTrampoline = (
   name: string,
   chunk: FunctionSig,
   ctxType: string,
-  fieldTypes: string[]
+  fieldTypes: string[],
+  captured: i32
 ): IRFunction => {
   const optimize = emitter.opts.optimizeAttributes
   const attrs: string[] = []
@@ -179,18 +201,27 @@ const chunkTrampoline = (
   }
   const typed = fn.emitValue(`bitcast i8* %ctx to ${ctxType}*`)
   const operands: string[] = []
+  const tail: string[] = []
+  const written = fieldTypes.length - captured
   let i = 0
   while (i < fieldTypes.length) {
     const type = fieldTypes[i]
     const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${typed}, i32 0, i32 ${i}`)
     const value = fn.emitValue(`load ${type}, ${type}* ${at}`)
-    operands.push(`${type} ${value}`)
+    if (i < written) {
+      operands.push(`${type} ${value}`)
+    } else {
+      tail.push(`${type} ${value}`)
+    }
     i = i + 1
   }
   const lo = fn.emitValue("trunc i64 %lo to i32")
   const hi = fn.emitValue("trunc i64 %hi to i32")
   operands.push(`i32 ${lo}`)
   operands.push(`i32 ${hi}`)
+  for (const operand of tail) {
+    operands.push(operand)
+  }
   fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
   fn.emit("ret void")
   return fn

@@ -695,7 +695,7 @@ new array or record, or a local that is the only name for its value. A second
 name made before the move would read the key outside the `Secret`, and zeros
 once it is wiped, so the compiler refuses it and says where it was made:
 
-```ts nish:err NL2500
+```ts nish:err NL2506
 import { Secret, secret, wipe } from "nish:secret";
 
 export const main = (): i32 => {

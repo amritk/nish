@@ -1,0 +1,1 @@
+and a data-parallel body cannot capture it: a value that may be absent is read through the test that found it

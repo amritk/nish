@@ -165,7 +165,11 @@ export const portabilityFindings = (
 /**
  * One node and everything under it. An arrow argument is skipped because it
  * is a function of its own, lifted into `program.functions` and walked there;
- * walking it here as well would report each of its sites twice.
+ * walking it here as well would report each of its sites twice. What an arrow
+ * handed to a data-parallel form reads of this body's `const` locals (WP29) is
+ * still this body's: the rows that follow a local through its reads
+ * (`src/portability-strings.ts`, `src/portability-records.ts`) count each
+ * captured read as a read of the local, where the call runs the arrow.
  */
 const walkPortability = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
   if (node.kind === N_ARROW) {

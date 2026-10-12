@@ -83,6 +83,7 @@ export const isValueReceiver = (ctx: CheckContext, receiver: Node, scope: Scope)
   // a namespace called `argv`.
   return (
     scope.lookup(receiver.text) !== null ||
+    ctx.capturesOuter(receiver.text) ||
     ctx.program.constant(receiver.text) !== null ||
     ctx.program.builtinImport(receiver.text) !== null
   )

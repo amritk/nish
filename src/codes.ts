@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 626
+export const RULE_COUNT: i32 = 632
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -67,12 +67,18 @@ const diagnosticRules = (): string[] => [
   "NL2463",
   ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read",
   "NL2394",
+  "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter",
+  "NL2505",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
+  "` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing",
+  "NL2501",
   ": a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer",
   "NL2477",
   ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join",
   "NL2480",
+  "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
+  "NL2502",
   "` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called",
   "NL2393",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",
@@ -93,6 +99,8 @@ const diagnosticRules = (): string[] => [
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
   "NL2481",
+  "`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call",
+  "NL2500",
   "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body",
   "NL2484",
   "` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined",
@@ -168,7 +176,7 @@ const diagnosticRules = (): string[] => [
   ", outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope",
   "NL2458",
   ". That reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value (`secret([1, 2, 3])`, a `new`, or a call that makes one) or a copy: ",
-  "NL2500",
+  "NL2506",
   "` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock",
   "NL2464",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",
@@ -203,6 +211,8 @@ const diagnosticRules = (): string[] => [
   "NL2373",
   "` runs may reach no I/O, no clock, no entropy, no C, and no `panic` or exit whose message or status is computed, so that what it returns is all that leaves",
   "NL2448",
+  "`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one",
+  "NL2503",
   "` hands it — returns it, stores it or passes it where it is kept — and the key would outlive the `Secret` unwiped; return a value computed from it instead",
   "NL2449",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
@@ -707,6 +717,8 @@ const diagnosticRules = (): string[] => [
   "NL2082",
   "` is not part of the standard library (it has: ",
   "NL3011",
+  "`, and a data-parallel body cannot capture it: ",
+  "NL2504",
   "`, which the capability policy does not grant (",
   "NL2459",
   " values; build it with `[]` and `push` instead",
