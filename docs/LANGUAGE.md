@@ -2415,20 +2415,48 @@ export const main = (): i32 => {
   (`tests/link/par_dst_short`). `src` and `dst` may be the same array
   (`tests/link/par_map`).
 - **A short array is the loop it would have been.** A map is divided only
-  once every thread's share carries enough work to pay for starting it
-  ([wp20-threads.md](wp20-threads.md) §8e). How many elements that is — the
-  *grain* — is sized per call from a static estimate of what `f` costs: 2^22
-  over the estimate, which counts one per operation, 32 per allocation, 4 per
-  call, and a loop's body as many times as its literal bound says or 64 times
-  when the bound is not a literal. So `(x) => x * x` is divided past 1,398,101
-  elements (`tests/link/par_map`), `(x * 31 + 7) % 1000` past 524,288
-  (`tests/link/par_map_large`), and a body with a loop far sooner. Up to the
-  grain the map calls its loop directly on the calling thread, where it
-  inlines; there is no thread start-up and no indirect call. The estimate
-  counts a call as a call and not as the callee's body, so a body that hides
-  its work behind a call is divided too little rather than too much. There is
-  no knob for the grain, or for the thread count
+  once every thread's share carries enough work to pay for handing it to
+  another thread ([wp20-threads.md](wp20-threads.md) §8e). How many elements
+  that is — the *grain* — is sized per call from a static estimate of what
+  `f` costs: 2^21 over the estimate, which counts one per operation, 32 per
+  allocation, 4 per call, and a loop's body as many times as its literal
+  bound says or 64 times when the bound is not a literal. A map longer than
+  the grain is divided into `ceil(length / grain)` chunks, at most one per
+  core, so the first division is two chunks of half the grain: 2^20 units
+  each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
+  beat its loop by 1.31x on the minimum and 1.19x on the median, more than
+  any difference between the loop and a byte-identical copy of it (at most
+  3.3% and 9.1%); at two chunks of 2^19 units the minimum won by 1.16x and
+  the median by only 1.04x, within that 9.1%
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §8a). So a body estimated
+  at 3, such as `(x) => x + 1` or `(x) => x * x`, is divided past 699,050
+  elements (`tests/link/par_map`), `(x * 31 + 7) % 1000` past 262,144
+  (`tests/link/par_map_large`), a body with a loop far sooner, and a cheaper
+  body later: `(x) => x`, estimated at 1, past 2,097,152. Up to the grain the
+  map calls its loop directly on the calling thread, where it inlines; there
+  is no hand-off and no indirect call. The estimate counts a call as a call
+  and not as the callee's body, so a body that hides its work behind a call
+  is divided too little rather than too much. There is no knob for the grain
   ([wp29-thread-surface.md](wp29-thread-surface.md) §9).
+- **The threads are a pool, as many as the cores the process may use.** The
+  first region or scope join that divides starts one worker per core but the
+  caller's, which is the last of them, and at most 63 workers; they park
+  between calls ([wp20-threads.md](wp20-threads.md) §8e). The core count is
+  the smallest of the CPUs online, the process's affinity mask (`taskset`, a
+  container's cpuset) and the cgroup v2 `cpu.max` quota rounded up, so a
+  program in a container limited to two cores divides two ways, not as many
+  as the host has. **`NISH_NUM_THREADS`**, when it is set to a positive
+  number, lowers that count and never raises it: `NISH_NUM_THREADS=1` runs
+  every region and every scope's tasks on the calling thread, in spawn order,
+  and anything that is not a positive number is ignored. It is read once, by
+  the first region or join that asks, and it decides only how the work is
+  divided: a map's answer and a reduce's bits are the same at any count
+  (`tests/run.js` runs every `tests/link/thread_*` and `par_*` program under
+  `NISH_NUM_THREADS=1` and `=2` and requires the output it gave without). A
+  Node addon (`--emit-napi`) keeps a thread per chunk or task for each call
+  instead of a pool, because Node can unload it and a parked worker would
+  outlive its code, and on WASI every region and task runs on the one thread
+  there is.
 - **`parallelReduce(src, f, identity)` is deterministic.** `src` is split into
   `min(64, ceil(n / 2^20))` blocks, each block is folded from `identity`, and
   the block results are combined left to right. `std/threads.ts` does the same
@@ -2626,9 +2654,33 @@ export const main = (): i32 => {
     `getOrInsert`'s from `nish/map` — so each is a store into the table, as a
     `push` is (`reject_thread_region_map_value_param`, `_map_fused_value_param`,
     `_map_own_subpath`, `_map_route_subpath`, `_map_route_value_param`,
-    `_set_own_subpath`). The iterable of a `for...of` is only read, and a
-    store through its loop variable is a store into the container
-    (`_walk_array_store`, `_walk_set_store`). An object literal
+    `_set_own_subpath`), and its methods write only the table's own storage,
+    never what it holds. What a container gives back is its element: what
+    `get` or `getOrInsert` answers, and the `const` variable of a `for...of`
+    over an array, a `Set`, or a `Map`'s `keys()` or `values()`, is memory
+    below that container, so a write through it counts against what was
+    stored into the container, and a store through it is a store into the
+    container (`_readback_get`, `_readback_get_or_insert`,
+    `_readback_nested`, `_readback_store_alias`, `_table_param_store`,
+    `_walk_array_param`, `_walk_array_twice`, `_walk_values`, `_walk_keys`,
+    `_walk_set_param`, `_walk_array_store`, `_walk_set_store`). So a call
+    that answers a table or what one holds — `getOrInsert(m, …)`, `m.set(…)`,
+    `s.add(…)` — is a value rooted at that table, and escapes it wherever a
+    name would (`reject_thread_region_call_escape_<position>_<form>`, with
+    positions `push`, `field`, `index`, `array` and `object`, forms `goi`,
+    `set_chain` and `add_chain`, and `_ternary_goi`, `_nullish_get`,
+    `_let_init_goi`, `_let_assign_goi`, `_table_arg_set_chain`). Only a call
+    that keeps what it is handed stores it — `set` its key and value, `add`
+    its element, `getOrInsert` its key and default — so a lookup, `has`,
+    `get` or `delete`, keeps nothing (`reject_thread_region_table_key_set`,
+    `_table_key_get_or_insert`); and a number, a string or a `boolean` read
+    back through `| undefined`, as `m.get(k) ?? 0`, names no memory. A
+    lookup in an argument's table, `has` or `get`, reads it and writes
+    nothing (`tests/link/thread_scope_region_param_lookup`). A `?:`
+    or a `??` stored somewhere may be either of its sides. Two values may
+    be anything where they are written through: an `x ?? y`, and the
+    variable of a walk of anything else —
+    a `Channel`'s messages are another task's. An object literal
     whose property is an argument's memory carries it however it is written
     (`reject_thread_region_literal_object_param`, `_shorthand_param`,
     `_array_object_param`, `_field_object_param`, `_push_object_param`,
@@ -2653,7 +2705,13 @@ export const main = (): i32 => {
     (`thread_scope_region_own_handoff`). So a `Map` or a `Set` a function
     makes and fills itself writes nothing of the task's
     (`thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert`,
-    `thread_scope_region_set_add`). A task argument read out of a
+    `thread_scope_region_set_add`), and so does one that walks, memoises
+    or indexes a table of its own, or writes through what it reads back out
+    of a container of fresh objects it made
+    (`thread_scope_region_own_tables`, `thread_scope_region_read_back`). A
+    map handed to `set` as a named `const` escapes, as any own object handed
+    to a table does, so a write into it counts against every argument: build
+    a nested table from what `get` reads back instead. A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the
@@ -6250,6 +6308,11 @@ export const main = (): i32 => {
   data does (`tests/link/std_json_typed`, whose `main.ll` is the golden of the
   code written for a one-field class and `tag.ll` of the code for a `u64`, an
   enum and arrays of each; [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
+  Because the encoding is calls of the writer's methods, it is written in the
+  writer's modes: a writer set with `setIndent(2)` encodes what
+  `JSON.stringify(v, null, 2)` writes, and a `setStrict(true)` writer fails a
+  NaN or infinite `f64` field with `JSON_WRITE_NON_FINITE`
+  (`tests/link/std_json_writer`).
 - **A key is sent to its field by its length, then by one byte.** The code
   written for a class switches on the key's length in bytes, so a key is
   compared only with the names of that length. Where several names share a

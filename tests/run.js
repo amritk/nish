@@ -4688,6 +4688,10 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert` and
 // `thread_scope_region_set_add` fill a `Map` or a `Set` of their own there,
 // whose methods write the table and nothing of the task's.
+// `thread_scope_region_own_tables` walks, memoises and indexes tables of its
+// own, and `thread_scope_region_read_back` writes through what it reads back
+// out of its own containers, each a fresh object it made.
+// `thread_scope_region_param_lookup` looks a key up in its argument's table.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4699,6 +4703,7 @@ for (const name of [
   "thread_mutex_counter",
   "thread_mutex_exit_paths",
   "thread_mutex_histogram",
+  "thread_mutex_contended",
   "thread_mutex_scalar",
   "thread_mutex_using_mixed",
   "thread_channel_pipeline",
@@ -4713,6 +4718,9 @@ for (const name of [
   "thread_scope_region_map_set",
   "thread_scope_region_map_get_or_insert",
   "thread_scope_region_set_add",
+  "thread_scope_region_own_tables",
+  "thread_scope_region_read_back",
+  "thread_scope_region_param_lookup",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -5132,7 +5140,7 @@ if (!only || "std_text_index_of_any".includes(only)) {
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
 // `JSON.stringify`. `tests/link/std_json_writer/node.ts` writes each of these
-// values, one line apiece and in this order, and is ASCII and i64-free, so its
+// values, one line apiece and in this order, and is ASCII, so its
 // answer does not depend on how a string or an integer is read: built natively
 // and run under `runtime/nish.mjs`, both must print `JSON.stringify` of every
 // value, computed here rather than read from a golden.
@@ -5164,12 +5172,86 @@ const JSON_WRITER_NODE_VALUES = [
   { 'k"\n': "v" },
   'a\t"\x01',
 ]
+// The indented half: `node.ts` writes these values through `setIndent(n)` for
+// each `n` here and then `setIndentTab()`, and the answer is
+// `JSON.stringify(v, null, n)`, whose clamping of 11 to 10 and of 0 and -3 to
+// the minified text the writer copies. The last run is `setIndent(0)` again,
+// back to the minified text.
+const JSON_WRITER_NODE_PRETTY = [
+  {
+    message: "Hello",
+    empty: {},
+    none: [],
+    list: [1, [2, []], { a: null }],
+    deep: { b: { c: [true, false] } },
+    s: "x\ny",
+    f: 1.5,
+    n: [4294967295, -12345, Number.NaN, Number.POSITIVE_INFINITY],
+  },
+  [[{}]],
+  {},
+  [],
+  "top",
+  -7,
+]
+const JSON_WRITER_NODE_INDENTS = [2, 4, 1, 3, 5, 6, 7, 8, 9, 10, 11, 0, -3, "\t", 0]
+// Strict mode has no `JSON.stringify` twin, so these lines are the rule as
+// `std/json.ts` states it: a finite f64 as ever, each non-finite one
+// `JSON_WRITE_NON_FINITE` (-8) with nothing written past what came before it
+// (nothing at the top level, `[1` in an array, `{"x":` in an object), and
+// NaN `null` again once strict is off.
+const JSON_WRITER_NODE_STRICT = [
+  "[1.5,0]",
+  "written 0",
+  "failed -8",
+  "written 2",
+  "failed -8",
+  "written 5",
+  "failed -8",
+  "null",
+]
+// `w.i64` at 0, -1 and both ends of the range. Spelled out, because
+// `JSON.stringify` of a number past 2^53 rounds it; what is pinned is that
+// the i64 arithmetic runs under Node at all, where an i64 is a BigInt and a
+// bare number literal mixed into it throws.
+const JSON_WRITER_NODE_I64 = ["[0,-1,-9223372036854775808,9223372036854775807]"]
+// The kind stack: `node.ts` opens n containers, an array at each depth
+// d with d % 3 === 1 and an object with the key "k" at every other, holding
+// 1 at the bottom, so the kinds differ across the stack's 32-bit boundary.
+// Then the wrong closer after every number of closes (0 when none went
+// wrong), one opener past the limit (`JSON_WRITE_TOO_DEEP`, -4), a key
+// straight after a reset of 64 open levels (`JSON_WRITE_VALUE_EXPECTED`, -2),
+// and a whole text after that reset.
+const jsonWriterMixed = (n) => {
+  let v = 1
+  for (let d = n - 1; d >= 0; d--) {
+    v = d % 3 === 1 ? [v] : { k: v }
+  }
+  return v
+}
+const JSON_WRITER_NODE_STACK = [
+  ...[31, 32, 33, 63, 64].map((n) => JSON.stringify(jsonWriterMixed(n))),
+  "every depth 0",
+  "past the limit -4",
+  "a key after the reset -2",
+  JSON.stringify({ a: [1] }),
+]
 if (!only || "std_json_writer".includes(only)) {
   const entry = path.join(linkDir, "std_json_writer", "node.ts")
-  const want = JSON_WRITER_NODE_VALUES.map((v) => `${JSON.stringify(v)}\n`).join("")
+  const want = [
+    ...JSON_WRITER_NODE_VALUES.map((v) => JSON.stringify(v)),
+    ...JSON_WRITER_NODE_INDENTS.flatMap((n) =>
+      JSON_WRITER_NODE_PRETTY.map((v) => JSON.stringify(v, null, n))
+    ),
+    ...JSON_WRITER_NODE_STRICT,
+    ...JSON_WRITER_NODE_I64,
+    ...JSON_WRITER_NODE_STACK,
+  ]
+    .map((line) => `${line}\n`)
+    .join("")
   const run = runUnderPrelude(entry, [])
   check(
-    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values`,
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines, the i64 edges and the kind stack`,
     run.status === 0 && run.stdout === want,
     `--- JSON.stringify\n${want}--- node\n${shown(run)}`
   )
@@ -14477,6 +14559,62 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         text.split("<!-- json-compare:begin -->").length === 2 &&
         !text.includes("stale table"),
       r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+
+    // `--only par` is the other way to write the report: it replaces the
+    // data-parallel table alone and keeps every other section byte for byte,
+    // the marked one included (bench/README.md). The five kernels run at sizes
+    // that take milliseconds, so what is checked is the splice, not a timing.
+    // A subset of the kernels writes nothing and says so.
+    const parOut = path.join(buildDir, "json-compare", "benchmarks-par.md")
+    const parHeading = "## Data parallelism (ms, min / median)"
+    const parBefore = [
+      "# Benchmarks\n\nheader kept\n",
+      "## Wall time (ms, min / median)\n\nwall table kept\n",
+      `${parHeading}\n\nstale par table\n`,
+      `## Checksums\n\nchecksums kept\n\n${section}\n`,
+    ]
+    fs.writeFileSync(parOut, parBefore.join("\n"))
+    const parArgs = [
+      path.join(root, "bench", "run.mjs"),
+      "--compiler",
+      path.relative(root, NISH),
+      "--n",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2",
+      "--runs",
+      "1",
+      "--warmup",
+      "0",
+      "--out",
+      parOut,
+    ]
+    const parRun = spawnSync("node", [...parArgs.slice(0, 3), "--only", "par", ...parArgs.slice(3)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const parText = parRun.status === 0 ? fs.readFileSync(parOut, "utf8") : ""
+    const parSection = parText.slice(parText.indexOf(parHeading), parText.indexOf("## Checksums"))
+    check(
+      "bench: `--only par` rewrites only the data-parallel table of the report and keeps every other section, json-compare's included",
+      parText.startsWith(`${parBefore[0]}\n${parBefore[1]}\n`) &&
+        parText.endsWith(`\n${parBefore[3]}`) &&
+        parText.split("<!-- json-compare:begin -->").length === 2 &&
+        !parText.includes("stale par table") &&
+        parSection.includes("| par-regions |") &&
+        parSection.includes("`node bench/run.mjs --only par`"),
+      parRun.status === 0 ? parText : `${parRun.stdout}${parRun.stderr}`
+    )
+    const parSpliced = parText
+    const subset = spawnSync("node", [...parArgs.slice(0, 3), "--only", "par-short", ...parArgs.slice(3)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "bench: `--only par-short`, a subset of the data-parallel kernels, leaves the report as it was and says so",
+      subset.status === 0 &&
+        fs.readFileSync(parOut, "utf8") === parSpliced &&
+        subset.stdout.includes("unchanged"),
+      `${subset.stdout}${subset.stderr}`
     )
   }
 }

@@ -24,7 +24,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
-| [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
+| [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
@@ -167,6 +167,60 @@ buffer or a call out of order — a value where a key belongs, say — does not
 panic: it sets a negative `JSON_WRITE_*` code in `w.failed`, and every later
 call does nothing, so you write the whole value and check once at the end.
 `jsonStringifyString(s)` answers one string as a JSON string literal.
+
+The writer has two modes, both off until you ask for them. Each is a
+setting of the writer rather than of one text: `reset` keeps it, so you set
+it once, and it stays until you set it again.
+
+- `w.setIndent(n)` writes what `JSON.stringify(v, null, n)` writes: one
+  member or element a line, a space after each colon, and an empty `{}` or
+  `[]` left on one line. `n` is clamped to 10, and 0 or a negative `n` is the
+  minified text, the default. `w.setIndentTab()` indents with a tab. A `raw`
+  fragment goes in as it is and is not re-indented.
+- `w.setStrict(true)` makes NaN and the infinities an error,
+  `JSON_WRITE_NON_FINITE` (-8), with nothing written, where the default writes
+  `null` as `JSON.stringify` does. A misuse before it, such as a value where a
+  key is due, keeps its own code.
+
+```ts nish:ok
+import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";
+
+export const main = (): i32 => {
+  const out = new Array<u8>(256);
+  const w = new JsonWriter(out, 0);
+  w.setIndent(2);
+  w.beginObject();
+  w.key("tags");
+  w.beginArray();
+  w.string("a");
+  w.endArray();
+  w.key("none");
+  w.beginObject();
+  w.endObject();
+  w.endObject();
+  console.log(w.text());
+  w.setIndent(0);
+  w.setStrict(true);
+  w.reset(out, 0);
+  w.f64(toF64(0) / toF64(0));
+  console.log(`${w.failed === JSON_WRITE_NON_FINITE}`);
+  return 0;
+};
+```
+
+```console
+$ nish run pretty.ts
+{
+  "tags": [
+    "a"
+  ],
+  "none": {}
+}
+true
+```
+
+`jsonEncode` from `nish/json-typed` writes through the writer you give it, so
+an indented or strict writer encodes a class indented or strictly too.
 
 ## `nish/json-tokenizer`
 
@@ -316,7 +370,9 @@ them, exactly as `JSON.stringify` would.
 A `u64` keeps every digit up to 2^64 - 1, which a JavaScript number cannot,
 and a negative number is a range error for it. An enum is read and written as
 its number: a number that is not one of its members' values is a type error,
-and the field keeps the member it held. A `Map<string, V>` is a JSON object
+and the field keeps the member it held. An enum whose members are strings is
+not something the language has, so it cannot be a field either; use a
+`string` field and check its value yourself. A `Map<string, V>` is a JSON object
 whose keys you do not know in advance: decoding empties the map and fills it
 in the order the keys arrive, a key given twice is an error, and encoding
 writes the entries in the map's order.
