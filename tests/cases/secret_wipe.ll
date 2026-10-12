@@ -68,7 +68,7 @@ entry:
   ret %struct.nish_array* %1
 }
 
-define hidden noundef i32 @sum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
+define hidden noundef i32 @sum$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -118,7 +118,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @wipedSum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
+define hidden noundef i32 @wipedSum$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
 entry:
   %copy.addr = alloca %struct.nish_array*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -173,7 +173,7 @@ set.ok:
   %28 = load %struct.nish_array*, %struct.nish_array** %copy.addr, align 8
   call void @nish.wipe$arr.u8(%struct.nish_array* %28)
   %29 = load %struct.nish_array*, %struct.nish_array** %copy.addr, align 8
-  %30 = call i32 @sum(%struct.nish_array* %29)
+  %30 = call i32 @sum$(%struct.nish_array* %29)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 %30
 }
@@ -257,7 +257,7 @@ define internal noundef i32 @nish.expose$arr.u8$i32$fn.3.sum(%struct.Secret$arr.
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
-  %2 = call i32 @sum(%struct.nish_array* %1)
+  %2 = call i32 @sum$(%struct.nish_array* %1)
   ret i32 %2
 }
 
@@ -273,7 +273,7 @@ define internal noundef i32 @nish.expose$arr.u8$i32$fn.8.wipedSum(%struct.Secret
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
-  %2 = call i32 @wipedSum(%struct.nish_array* %1)
+  %2 = call i32 @wipedSum$(%struct.nish_array* %1)
   ret i32 %2
 }
 

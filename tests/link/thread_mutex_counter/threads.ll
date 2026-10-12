@@ -13,7 +13,7 @@
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" elements\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
-declare noundef i32 @addMany(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
+declare noundef i32 @addMany$(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
@@ -161,7 +161,7 @@ entry:
   %0 = bitcast i8* %p to { %struct.Job*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Job*, %struct.nish_array*, i32, i32 }, { %struct.Job*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Job*, %struct.Job** %1
-  %3 = call i32 @addMany(%struct.Job* %2)
+  %3 = call i32 @addMany$(%struct.Job* %2)
   %4 = getelementptr inbounds { %struct.Job*, %struct.nish_array*, i32, i32 }, { %struct.Job*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
   store i32 %3, i32* %4
   ret void
@@ -219,7 +219,7 @@ if.end:
 
 define internal void @nish.runTask$$Job$i32$fn.7.addMany(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
-  %0 = call i32 @addMany(%struct.Job* %arg)
+  %0 = call i32 @addMany$(%struct.Job* %arg)
   call void @nish.storeResult$i32(%struct.nish_array* %dst, i32 %at, i32 %0)
   ret void
 }

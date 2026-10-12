@@ -70,7 +70,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @read(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h) #1 {
+define hidden noundef i32 @read$(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
   %1 = load %struct.Map$str$i32*, %struct.Map$str$i32** %0, align 8, !tbaa !4

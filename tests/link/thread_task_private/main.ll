@@ -52,7 +52,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @sieve(i32 noundef %n) #0 {
+define hidden noundef i32 @sieve$(i32 noundef %n) #0 {
 entry:
   %marks.addr = alloca %struct.nish_array*, align 8
   %fill.at = alloca i64, align 8
@@ -253,7 +253,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @total(i32 noundef %n) #0 {
+define hidden noundef i32 @total$(i32 noundef %n) #0 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %t.addr = alloca i32, align 4
@@ -329,7 +329,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @evens(i32 noundef %n) #1 {
+define hidden noundef i32 @evens$(i32 noundef %n) #1 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -399,7 +399,7 @@ for.end:
   ret i32 %26
 }
 
-define hidden noundef i32 @digitSum(i32 noundef %x) #0 {
+define hidden noundef i32 @digitSum$(i32 noundef %x) #0 {
 entry:
   %ds.addr = alloca %struct.nish_array*, align 8
   %fill.at = alloca i64, align 8

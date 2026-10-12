@@ -1820,7 +1820,10 @@ class Point {
   `reject_cls_ctor_static`) — the word is still a legal member *name*, and
   `static?: i32` is an optional field called `static`
   (`reject_cls_field_named_static`), and on an interface field too, where the
-  message says which kind it is (`reject_cls_static_interface`) — `readonly` on
+  message says which kind it is (`reject_cls_static_interface`), with one
+  exception: a class's typed JSON options, `static readonly json = { ... }`,
+  which is not a field and is written without a type ([Typed
+  JSON](#typed-json-nishjson-typed)) — `readonly` on
   a method or the constructor, which has no storage to be read-only
   (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`),
   getters/setters
@@ -2369,7 +2372,12 @@ export const main = (): i32 => {
   (WP18 G7), so it may call a private function, or an arrow, of the module that
   asked. That callee is `hidden` rather than `internal` — in the final link,
   exported from nothing — and the template's module `declare`s it with the
-  attributes of its `define` (`tests/link/fnarg_private`). The interop sidecars
+  attributes of its `define` (`tests/link/fnarg_private`). A hidden symbol is
+  still global in the executable, so one the program's own package declared,
+  which carries no prefix, ends with a `$` (`@square$`): C cannot spell it,
+  so a task called `read`, `write` or `free` is never the definition the
+  runtime's calls into the C library reach
+  (`tests/link/thread_scope_libc_named_tasks`, #610). The interop sidecars
   describe no instantiation that was given a function, and no lifted arrow:
   neither has a name a host could call.
 
@@ -6320,18 +6328,33 @@ export const main = (): i32 => {
   over the input and a sticky error, and the encoder is the
   [`JsonWriter`](../std/json.ts) the call is given. The code written for a
   class is straight-line calls of their methods, one per field: for decoding,
-  a loop over the object's keys that compares each key with the field names
+  a loop over the object's keys that sends each key to the field it names
   and reads the value with the method of the field's type; for encoding,
   `w.key(name)` and the value's method per field, in declaration order. A
-  nested class, an array's element class and a `| null` field's class each
-  get the same code of their own, so it recurses as the data does
-  (`tests/link/std_json_typed`, whose `main.ll` is the golden of the code
-  written for a one-field class;
-  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)). Because the encoding is calls
-  of the writer's methods, it is written in the writer's modes: a writer set
-  with `setIndent(2)` encodes what `JSON.stringify(v, null, 2)` writes, and a
-  `setStrict(true)` writer fails a NaN or infinite `f64` field with
-  `JSON_WRITE_NON_FINITE` (`tests/link/std_json_writer`).
+  nested class, an array's element class, a `| null` field's class and a
+  `Map`'s values each get the same code of their own, so it recurses as the
+  data does (`tests/link/std_json_typed`, whose `main.ll` is the golden of the
+  code written for a one-field class and `tag.ll` of the code for a `u64`, an
+  enum and arrays of each; [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
+  Because the encoding is calls of the writer's methods, it is written in the
+  writer's modes: a writer set with `setIndent(2)` encodes what
+  `JSON.stringify(v, null, 2)` writes, and a `setStrict(true)` writer fails a
+  NaN or infinite `f64` field with `JSON_WRITE_NON_FINITE`
+  (`tests/link/std_json_writer`).
+- **A key is sent to its field by its length, then by one byte.** The code
+  written for a class of three or more fields switches on the key's length in
+  bytes, so a key is compared only with the names of that length. Where three
+  or more names share a length, it switches once more, on the key's byte at
+  the one position where those names differ most, and calls `keyIs` for each
+  name that has that byte there, in declaration order; a byte none of them has
+  is an unknown key at once. One or two names, of a class or of one length,
+  are compared in turn with `keyIs`, which is no more calls. A key with an escape has no byte to switch on there, and is compared
+  with every name of its length, so `"\u0069d"` is the field `id`
+  (`tests/link/std_json_typed`, "wide: every key escaped"). A key is
+  therefore compared with the names of its length that share its byte at that
+  position, usually one, rather than with every name in turn, and a field
+  name that is not ASCII is dispatched by its UTF-8 bytes like any other
+  ("names: escaped field names decode").
 - **What a field may be.** `T` is a declared class, and every field of every
   class the call reaches is one of these; anything else is refused at the
   call's argument, naming the class and the field:
@@ -6339,24 +6362,43 @@ export const main = (): i32 => {
   | Field type | JSON | Decoded with | Encoded with |
   | --- | --- | --- | --- |
   | `i32`, `u32`, `i64` | an integer written without a fraction or an exponent, in the type's range | `d.i32()`, `d.u32()`, `d.i64()` | `w.i32`, `w.u32`, `w.i64` |
+  | `u64` | an integer written in digits alone, with no sign, fraction or exponent, up to 2^64 - 1 | `d.u64()`, through the tokenizer's `numberU64` | `jsonEncodeU64` |
+  | a numeric `enum` `E` | the number of one of `E`'s members | `d.i32()`, then a `switch` over the members' values | `w.i32` |
   | `f64` (and `number` under `--number-mode f64`) | any number; past the double range an infinity, which the writer writes as `null` | `d.f64()` | `w.f64` |
   | `boolean` | `true`, `false` | `d.boolean()` | `w.boolean` |
   | `string`, `string \| null` | a string, and `null` for the second | `d.string(cur)` | `w.string`, `jsonEncodeStringOrNull` |
   | a declared class `C`, `C \| null` | an object, and `null` for the second | `C`'s own decoding, into the object the field holds | `C`'s own encoding |
-  | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s encoding per element |
+  | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s or `E`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s or `E`'s encoding per element |
+  | `Map<string, V>`, `Map<string, V> \| null`, for any `V` in this table, `\| null` or not, a `Map` included | an object whose keys are the map's, each value a `V`, and `null` for the second | the object's keys in order, each value decoded as a `V` and `set` | the map's entries in its order, each value encoded as a `V` |
+  | `JsonNumber` from `nish/json-typed`, alone, `\| null`, in an array or as a `Map`'s value | any number, kept as the text it is written in | `d.number(n)`, which copies the number's bytes into `n` | `jsonEncodeNumber`, which writes them back |
 
   `` `jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null` ``
   (NL2485, `tests/cases/json_reject_field_type`; two classes down through an
   array's element, `json_reject_nested_field`; in a `| null` field's class,
-  `json_reject_nullable_field`; `i32[][]`, `json_reject_nested_array`; a
-  `Map`, `json_reject_generic_field`). A value that is not a declared class is
+  `json_reject_nullable_field`; in a class a `Map` holds,
+  `json_reject_map_value_class`; `i32[][]`, `json_reject_nested_array`, and
+  `Level[][]`, `json_reject_enum_nested_array`; a generic class of the
+  program's own, `json_reject_generic_field`). The message goes on to name the
+  kinds added since: `` a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
+  A JSON object's keys are strings, so a `Map` keyed by anything else is
+  refused, an enum included (`json_reject_map_key`, `json_reject_map_key_enum`),
+  and so is a map whose values typed JSON cannot write, at any depth
+  (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
+  array of maps are refused as well (`json_reject_set_field`,
+  `json_reject_map_array`). An enum whose members are strings, or a mix of
+  strings and numbers, is not one the language declares at all
+  (NL1043, `json_reject_enum_string`, `json_reject_enum_mixed`), and a
+  `const enum` is refused where it is declared (NL2285,
+  `json_reject_const_enum`). A value that is not a declared class is
   `` `jsonEncode`'s value is `Point`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version ``
   (NL2486, `json_reject_interface`, `json_reject_not_class`). An interface is
   a record stored inline wherever it is held, and decoding into one is left
   for a later version. A call inside a generic function is checked for each
   class an instantiation binds (`json_reject_through_generic`).
 - **Decoding is strict, and every outcome is a code.** The keys are the field
-  names, byte for byte. Every field is required, each key may appear once, and
+  names, byte for byte, or the names the class's options give them. Every
+  field is required unless its class's options make it optional, each key may
+  appear once, and
   a key that names no field is an error unless `d.ignoreUnknown` is set, when
   the key's value is stepped over, checked but not kept. The first error sets
   `d.failed` and `d.errorAt`, the byte offset of the token it was found at,
@@ -6365,11 +6407,12 @@ export const main = (): i32 => {
 
   | Outcome | Code | `errorAt` |
   | --- | --- | --- |
-  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object | `JSON_DECODE_TYPE` (-20) | the value |
-  | a number its field cannot hold: a fraction or an exponent for an integer, or out of range | `JSON_DECODE_RANGE` (-21) | the number |
+  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for an enum | `JSON_DECODE_TYPE` (-20) | the value |
+  | a number its field cannot hold: a fraction or an exponent for an integer, or out of range, a negative number (`-0` included) for a `u64` | `JSON_DECODE_RANGE` (-21) | the number |
   | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
-  | a key given twice | `JSON_DECODE_DUPLICATE` (-23) | the second |
+  | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
   | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
+  | more keys, over every `Map` field of the decoding, than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
@@ -6382,7 +6425,121 @@ export const main = (): i32 => {
   reaches each row at each depth, the limits included). A duplicate of a key
   `ignoreUnknown` steps over is not detected, because its value is never
   read. After an error every field of `out` holds a value of its type, some
-  decoded and some as they were.
+  decoded and some as they were: an enum field or element never holds a
+  number that is no member's, because such a number is not stored.
+- **An enum is its number.** A numeric enum is read with `d.i32()`, so a
+  number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
+  an integer that is not the value of one of its members is
+  `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
+  too. Two members of one value are one number (`tests/link/std_json_typed`,
+  "enum: two members of one value both read 1"). It is written as `w.i32` of
+  its value, as `JSON.stringify` writes a TypeScript numeric enum.
+- **A `u64` is exact to 2^64 - 1.** It is read through the tokenizer's
+  `numberU64`, so `18446744073709551615` decodes and `18446744073709551616`,
+  `-1`, `-0` and `1.5` are `JSON_DECODE_RANGE`. It is written as its digits,
+  which `JSON.stringify` cannot do for a number past 2^53: `tests/run.js`
+  holds `round-trip-kinds.txt` to `JSON.stringify(JSON.parse(line))` with each
+  integer past 2^53 kept as its own digits (`JSON.rawJSON`).
+- **A class's options are one `static readonly json` literal.** A class
+  gives a field another key on the wire, and lets a key be left out, in an
+  object literal written in the class, which the compiler reads when it writes
+  the class's code:
+
+  ```typescript
+  class Account {
+    static readonly json = { rename: { userId: "user_id" }, optional: ["tags"] };
+    userId: i32 = 0;
+    tags: string[] | null = null;
+  }
+  ```
+
+  `rename` maps a field to its key, a string literal of any bytes, so
+  `{"user_id":7}` is decoded into `userId` and `userId` is encoded as
+  `"user_id"`; the field's own name is then a key no field has. The key is
+  dispatched by its length and bytes like any other, escapes and non-ASCII
+  included (`tests/link/std_json_typed/options.ts`, "rename: escaped wire
+  names decode"). `optional` lists fields whose key may be missing: a missing
+  one sets the field to its initializer, on a fresh object and on one decoded
+  into again, so a reused object does not keep what an earlier input gave it
+  ("optional: sets the missing fields back to their initializers"), and
+  allocates nothing to do it. Every other missing key is still
+  `JSON_DECODE_MISSING`, and an optional key that is given is read like any
+  other: once, and of its field's type. The member is not a field: it has no
+  slot, the class's layout is what it would be without it, the program
+  cannot read it, and a class without it is decoded exactly as before. It is
+  the one `static` member a class may declare, and its options are checked
+  where the class is declared, whether or not any call decodes the class,
+  each misuse with its own code:
+
+  | Misuse | Code | Case |
+  | --- | --- | --- |
+  | `static json` without `readonly` but with a type, `static readonly json` with a type annotation, or on a generic class | NL2492 | `json_reject_options_mutable_typed`, `json_reject_options_annotated`, `json_reject_options_generic`, and on a generic class nothing instantiates, `json_reject_options_generic_unused` |
+  | options, `rename`, a key or an `optional` entry not written as the literal it must be: a module constant, an array for the object, a string for `optional`'s array | NL2493 | `json_reject_options_alias`, `json_reject_options_alias_whole`, `json_reject_options_not_object`, `json_reject_options_optional_not_array` |
+  | an option other than `rename` and `optional` | NL2494 | `json_reject_options_unknown` |
+  | a name that is not one of the class's fields | NL2495 | `json_reject_options_misspelt_rename`, `json_reject_options_misspelt_optional` |
+  | a rename to a value that is not a string | NL2496 | `json_reject_options_rename_number` |
+  | two fields with one key, a rename to another field's own name included, or a field renamed or made optional twice | NL2497 | `json_reject_options_wire_collides`, `json_reject_options_wire_twice`, `json_reject_options_optional_twice` |
+  | an optional field with no initializer | NL2498 | `json_reject_options_no_initializer` |
+  | a rename to a key that is not valid UTF-8, a lone surrogate such as `"\ud800"` included, which no input could give | NL2499 | `json_reject_options_surrogate` |
+
+  A spread or a computed key in the literal is refused by Phase 0 as it is
+  anywhere (NL1061, NL1041; `reject_json_options_spread`,
+  `json_reject_options_computed`), a subclass by `extends`
+  (`json_reject_options_subclass`), and a second `static readonly json` is a
+  duplicate member (`reject_json_options_twice`). The options are not a
+  value: `User.json` names a class where a value is due, and is refused as
+  any class name there is (`json_reject_options_read`). Only `static readonly json`
+  may leave out its type: written `static json = { ... }`, or as an instance
+  field, it is an ordinary field to the parser and needs one
+  (`a type annotation is required`, `json_reject_options_mutable`,
+  `json_reject_options_instance`), and an instance field called `json` with a
+  type is an ordinary field, read and written under its own name
+  (`tests/link/std_json_typed/options.ts`, "instance json: an ordinary field
+  decodes"). The options are not a member, so a field or a method called
+  `json` may come before or after them, as in TypeScript, whose statics have
+  a namespace of their own ("order: a json field before the options
+  decodes", "order: a json method before the options decodes"). Under Node the literal is a
+  static property of the class that nothing reads.
+- **A `JsonNumber` is a number's text.** `JsonNumber`, from `nish/json-typed`,
+  holds a number as the bytes it was written in, so a field of it decodes and
+  encodes any number byte for byte: an integer wider than a `u64`, a fraction
+  with more digits than an `f64` holds, `1E+400` and `-0` alike
+  (`tests/run.js` holds each line of `round-trip-options.txt` to
+  `JSON.stringify(JSON.parse(line))` with every number kept as its source).
+  It is read as a number whole, not as an object, so anything but a number is
+  `JSON_DECODE_TYPE`, and its length is bounded by `JsonLimits.maxNumberBytes`
+  like any number's. Decoding into one reuses its bytes, so `Arena.used()`
+  stays flat over decodes into one object. It reads its text as
+  `nish/json-value` reads a number: `text()`, `isI64()` and `i64()`,
+  `isU64()` and `u64()`, and `f64()`, the nearest double; `setText(t)` sets it
+  when `t` is one JSON number and answers whether it was. A new one holds
+  `0`. Its methods run under Node, and `tests/run.js` holds them to the
+  native lines (`readers.ts`).
+- **A `Map<string, V>` is an object.** Decoding empties the map the field
+  holds once the object opens, then reads each key as a new string and its
+  value as a `V`, made fresh for the key (a zero, `""`, the enum's first member,
+  `null`, or a new object, array or map, which a `Map`'s value class is made
+  with `new C()` for, so its constructor takes no parameters, NL2488,
+  `json_reject_map_value_constructor`), and `set`s it, so the map's entries
+  are the input's, in the input's order. A key the object gave already is
+  `JSON_DECODE_DUPLICATE` before its value is read, whether it is spelled
+  the same way or through an escape (docs/security/json.md, JSON-3). Encoding
+  writes the entries in the map's own order, which is insertion order. That
+  differs from a JavaScript object in one case: a key that reads as an array
+  index (`"1"`) keeps its place, where `JSON.parse` would move it first
+  ("map: a key like an index keeps the input's order"). Unlike the rest of a
+  decode, a map's entries are made anew each time, so decoding into a map
+  allocates its keys and values. A value whose read fails is not `set`, so a
+  map never holds a value the input did not give ("map: and the map holds
+  only the entry read before it"). The maps of one decoding take at most
+  `d.maxMapKeys` keys between them, 4,096 unless set, the keys of a map inside
+  another map included, and the key past it is `JSON_DECODE_MAP_LIMIT` before
+  it is read ("map limit: one key past it: code", "map limit: 820 small maps,
+  4,100 keys, are refused"); `d.reset` starts the count again. At `0` or below
+  no map may take a key, and `{}` is the one map value accepted. The global
+  `Map` hashes a string with no seed, so a body can choose keys that all
+  collide, and this limit is what bounds the probes all the maps of one
+  decoding cost together (docs/security/json.md, JSON-13).
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps

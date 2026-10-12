@@ -46,7 +46,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @label(i32 noundef %x) #0 {
+define hidden noundef i32 @label$(i32 noundef %x) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()

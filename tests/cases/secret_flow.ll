@@ -104,7 +104,7 @@ for.end:
   ret %struct.nish_array* %25
 }
 
-define hidden noundef i32 @length(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
+define hidden noundef i32 @length$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %k, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -112,7 +112,7 @@ entry:
   ret i32 %2
 }
 
-define hidden noundef i32 @total(%struct.Pair* noundef nonnull readonly align 4 dereferenceable(8) nocapture %p) #1 {
+define hidden noundef i32 @total$(%struct.Pair* noundef nonnull readonly align 4 dereferenceable(8) nocapture %p) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Pair, %struct.Pair* %p, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -336,7 +336,7 @@ define internal noundef i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$a
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
-  %2 = call i32 @length(%struct.nish_array* %1)
+  %2 = call i32 @length$(%struct.nish_array* %1)
   ret i32 %2
 }
 
@@ -364,7 +364,7 @@ define internal noundef i32 @nish.expose$$Pair$u32$fn.5.total(%struct.Secret$$Pa
 entry:
   %0 = getelementptr inbounds %struct.Secret$$Pair, %struct.Secret$$Pair* %s, i32 0, i32 0
   %1 = load %struct.Pair*, %struct.Pair** %0, align 8, !tbaa !19
-  %2 = call i32 @total(%struct.Pair* %1)
+  %2 = call i32 @total$(%struct.Pair* %1)
   ret i32 %2
 }
 

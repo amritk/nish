@@ -42,7 +42,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i8 @step(i8 noundef %acc, i8 noundef %x) #0 {
+define hidden noundef i8 @step$(i8 noundef %acc, i8 noundef %x) #0 {
 entry:
   %0 = mul i8 %acc, 2
   %1 = add i8 %0, %x

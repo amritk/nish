@@ -9,7 +9,7 @@
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" elements\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
-declare noundef double @square(double noundef) #0
+declare noundef double @square$(double noundef) #0
 declare noundef double @nish_main$arrow0(i32 noundef) #0
 declare noundef double @nish_main$arrow1(double noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
@@ -339,7 +339,7 @@ for.body:
   %19 = bitcast i8* %3 to double*
   %20 = getelementptr inbounds double, double* %19, i64 %18
   %21 = load double, double* %20, align 8, !alias.scope !9, !noalias !8, !tbaa !16
-  %22 = call double @square(double %21)
+  %22 = call double @square$(double %21)
   store double %22, double* %y.addr, align 8
   %23 = load i32, i32* %i.addr, align 4
   %24 = trunc i64 %5 to i32

@@ -11,7 +11,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noundef i32 @add(i32 noundef, i32 noundef) #1
+declare noundef i32 @add$(i32 noundef, i32 noundef) #1
 declare noundef i32 @nish_main$arrow0(i32 noundef, i32 noundef) #1
 declare noundef double @nish_main$arrow1(double noundef, double noundef) #0
 declare noundef double @nish_main$arrow2(double noundef, double noundef) #0
@@ -242,7 +242,7 @@ for.body:
   %44 = bitcast i8* %37 to i32*
   %45 = getelementptr inbounds i32, i32* %44, i64 %43
   %46 = load i32, i32* %45, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %47 = call i32 @add(i32 %41, i32 %46)
+  %47 = call i32 @add$(i32 %41, i32 %46)
   store i32 %47, i32* %acc.addr, align 4
   br label %for.inc
 
@@ -1261,7 +1261,7 @@ for.body:
   %16 = bitcast i8* %3 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 %15
   %18 = load i32, i32* %17, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %19 = call i32 @add(i32 %13, i32 %18)
+  %19 = call i32 @add$(i32 %13, i32 %18)
   store i32 %19, i32* %acc.addr, align 4
   br label %for.inc
 
