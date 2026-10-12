@@ -102,6 +102,13 @@ limit is caught after the loop ("STRING_LIMIT: a multi-byte character that
 steps past the limit"). The limit is clamped to the window before it is added
 to an offset, so `maxStringBytes` of 2^31 − 1 cannot overflow.
 
+**Whole bodies** (`:527`, `reset`, at `03a2bee`): a window longer than
+`maxTotalBytes` (16 MiB by default) is refused with `JSON_TOK_ERR_TOTAL_LIMIT`
+before a byte of it is read, at the offset where the limit ends, so a body is
+bounded before it is scanned at all ("TOTAL_LIMIT: three bytes fit a total of
+3", "TOTAL_LIMIT: four are refused before anything is read", "TOTAL_LIMIT:
+even a malformed window is refused for its size").
+
 **Invalid UTF-8** (`:329`, `jsonTokUtf8Length`): RFC 3629 §4's table row by
 row, the second byte's range set by the lead, which refuses overlong forms,
 surrogates, code points past U+10FFFF and stray or missing continuation bytes
