@@ -6556,7 +6556,12 @@ if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_ra
 // check: a helper that pops its array, hands it to a function, or stores it;
 // a second return that is shorter; a store whose call rebinds the receiver;
 // and a size whose name the body declares again, shadowing a module constant
-// or a parameter — each panics when run. A size the call does not fix, a size
+// or a parameter — each panics when run. `arr_bounds_returned_through` hands
+// the array to a callee that keeps its length, through a chain and a
+// recursion, and its negatives panic where the callee returns the array,
+// hands it on to one that pops, pops inside a recursion, stores it, or is a
+// function parameter, and where an answer drawn on a recursion's assumption
+// would have been remembered (`_through_memo`). A size the call does not fix, a size
 // the body computes, a generic helper, an arrow in the body, a method and a
 // `let` receiver are pinned by their counts.
 if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds_returned")) {
@@ -6571,6 +6576,13 @@ if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds
     ["arr_bounds_returned_rebind", "nish_main", 1],
     ["arr_bounds_returned_shadow", "nish_main", 1],
     ["arr_bounds_returned_shadow_param", "nish_main", 1],
+    ["arr_bounds_returned_through", "ends", 0],
+    ["arr_bounds_returned_through_return", "nish_main", 1],
+    ["arr_bounds_returned_through_deep", "nish_main", 1],
+    ["arr_bounds_returned_through_cycle", "nish_main", 1],
+    ["arr_bounds_returned_through_store", "nish_main", 1],
+    ["arr_bounds_returned_through_param", "nish_main", 1],
+    ["arr_bounds_returned_through_memo", "nish_main", 1],
     ["arr_bounds_returned_kept", "unknownSize", 1],
     ["arr_bounds_returned_kept", "computedSize", 1],
     ["arr_bounds_returned_kept", "shadowedSize", 1],
@@ -6599,6 +6611,12 @@ if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds
       ["arr_bounds_returned_rebind", "a call that rebinds the receiver", "", "5 >= 0"],
       ["arr_bounds_returned_shadow", "a local that shadows the size's constant", "", "7 >= 2"],
       ["arr_bounds_returned_shadow_param", "a local that shadows the size's parameter", "", "7 >= 1"],
+      ["arr_bounds_returned_through_return", "a callee that returns its array", "", "3 >= 3"],
+      ["arr_bounds_returned_through_deep", "a callee that hands its array to one that pops", "", "3 >= 3"],
+      ["arr_bounds_returned_through_cycle", "a recursion that pops on the way", "", "3 >= 3"],
+      ["arr_bounds_returned_through_store", "a callee that stores its array", "", "3 >= 3"],
+      ["arr_bounds_returned_through_param", "a call of a function parameter", "", "3 >= 3"],
+      ["arr_bounds_returned_through_memo", "an answer drawn on a recursion's assumption", "2", "3 >= 2"],
     ]) {
       const ll = path.join(buildDir, `${name}.ll`)
       if (!fs.existsSync(ll)) {
@@ -6617,6 +6635,28 @@ if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds
       )
     }
   }
+}
+
+// A helper in another module gives no length when it hands its array to a
+// function: a call in its body is resolved only in the caller's own module
+// (`passesKeepingLength`), so `tests/link/arr_bounds_returned_import`'s
+// `main` keeps its one check. The link loop runs it and checks its output.
+if (!only || "arr_bounds_returned_import".includes(only) || only.startsWith("arr_bounds_returned")) {
+  const dir = path.join(buildDir, "arr_bounds_returned_import")
+  fs.rmSync(dir, { recursive: true, force: true })
+  const r = spawnSync(
+    NISH,
+    [path.join("tests", "link", "arr_bounds_returned_import", "main.ts"), "--link", path.join(dir, "exe")],
+    { cwd: root, encoding: "utf8", env: { ...process.env, CC: "true" } }
+  )
+  const ll = path.join(dir, "exe.modules", "main.ll")
+  const ir = r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+  const got = ir === "" ? -1 : panicCount(ir, "nish_main")
+  check(
+    "arr_bounds_returned_import: a helper from another module that hands its array on keeps the caller's check",
+    got === 1,
+    ir === "" ? `exit ${r.status}\n${r.stderr}` : `found ${got}`
+  )
 }
 
 // The rule's reason for being: AWFY Queens fills its four boards with
