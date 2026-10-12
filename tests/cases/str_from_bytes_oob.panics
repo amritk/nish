@@ -1,0 +1,10 @@
+{"functions":[
+{"name":"cut","symbol":"cut","module":"tests/cases/str_from_bytes_oob.ts","line":7,"panics":[{"kind":"slice","line":9,"column":16,"proven":false},{"kind":"oom","line":9,"column":16,"allowed":true}]},
+{"name":"pastEnd","symbol":"pastEnd","module":"tests/cases/str_from_bytes_oob.ts","line":12,"panics":[{"kind":"call","line":12,"column":35,"callee":"cut","via":"slice"}]},
+{"name":"reversed","symbol":"reversed","module":"tests/cases/str_from_bytes_oob.ts","line":14,"panics":[{"kind":"call","line":14,"column":36,"callee":"cut","via":"slice"}]},
+{"name":"negative","symbol":"negative","module":"tests/cases/str_from_bytes_oob.ts","line":16,"panics":[{"kind":"call","line":16,"column":36,"callee":"cut","via":"slice"}]},
+{"name":"negativeEnd","symbol":"negativeEnd","module":"tests/cases/str_from_bytes_oob.ts","line":18,"panics":[{"kind":"call","line":18,"column":39,"callee":"cut","via":"slice"}]},
+{"name":"wideEnd","symbol":"wideEnd","module":"tests/cases/str_from_bytes_oob.ts","line":20,"panics":[{"kind":"slice","line":23,"column":16,"proven":false},{"kind":"oom","line":23,"column":16,"allowed":true}]},
+{"name":"wideStart","symbol":"wideStart","module":"tests/cases/str_from_bytes_oob.ts","line":26,"panics":[{"kind":"slice","line":29,"column":16,"proven":false},{"kind":"oom","line":29,"column":16,"allowed":true}]},
+{"name":"test","symbol":"test","module":"tests/cases/str_from_bytes_oob.ts","line":32,"panics":[{"kind":"call","line":32,"column":32,"callee":"cut","via":"slice"}]}
+]}

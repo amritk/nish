@@ -837,6 +837,9 @@ export const storeHeaderField = (
 
 export const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64")
 
+/** The array's element buffer, `data`, in the header alias domain as `loadLength` is. */
+export const loadData = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 2, "i8*")
+
 /**
  * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`. For
  * an inline record the slot type is the struct itself, so this *is* the
