@@ -12,7 +12,7 @@ with its own scope, anchors and findings.
 **Anchors.** Every `file:line` below is at `4411ea9`, the module's head in this
 change, on top of `main` at `ce9d394`, except where a paragraph names another
 commit: the bulk scans and `numberU64` (#597's tokenizer-scan stage) are
-anchored at `2d9a369f`.
+anchored at `2d9a369f`. The typed layer's section states its own anchors.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
 token stream `JSON.parse` gives it, numbers bit for bit, and every one of its
@@ -22,7 +22,8 @@ one verdict, alone, after a `reset` and inside a window padded with bytes that
 would change the verdict if a read strayed. Every limit has its own code, and
 each is checked before the work it bounds. A reused tokenizer keeps the arena
 flat. One finding is open, one is accepted, and JSON-3 is fixed by the typed
-layer, all Low.
+layer, all Low; the typed layer's own findings follow in its section, JSON-13
+(Medium) mitigated and open.
 
 ## Scope
 
@@ -216,24 +217,27 @@ The checks in `tests/run.js` that hold the above:
 whose code the compiler writes at each call from the class's fields, over the
 tokenizer above and `JsonWriter`.
 
-**Anchors.** Every `file:line` in this section is at `d6373ec1` on
-`feature/json-complete/typed`, after `main` at `035aba5` was merged into it and the tokenizer at `4fdc9d7`.
+**Anchors.** Every `file:line` in this section is at `7bfa0973` on
+`feature/json-parity/typed-kinds` (#622), with `main` at `b515c1b9` merged into it.
+The rows and paragraphs first written at `d6373ec1` (#573) are re-anchored there.
 
 **Result.** Every key of every object the code reads is matched against the
 fields of its class: an unknown key, a key given twice and a field not given
 are each refused with their own sticky code, at every depth, and no value is
 taken as a type it is not. The recursion is the data's, so the tokenizer's
 depth limit bounds it, and an encoding of an object that holds itself stops at
-the writer's depth limit. Nothing an input holds panics. Four findings are
-accepted, all Low.
+the writer's depth limit. Nothing an input holds panics. Five findings are
+accepted, all Low, and JSON-13 (Medium), the map keys a body can make
+collide, is mitigated by a limit on the keys of one decoding and open for a
+seeded hash.
 
 ### Scope
 
 | File | What |
 | --- | --- |
-| `std/json-typed.ts` | `JsonDecoder`: `take`, `beginObject`, `nextField`, `keyIs`, `unknownField`, `duplicateField`, `missingField`, `finish`, `takeNull`, `beginArray`, `nextElement`, `integer` and the scalar readers, `string`, the array readers; the encoding helpers |
+| `std/json-typed.ts` | `JsonDecoder`: `take`, `beginObject`, `nextField`, `keyIs`, `keyLength`, `keyByte`, `key`, `text`, `mapRoom`, `unknownField`, `duplicateField`, `missingField`, `finish`, `takeNull`, `beginArray`, `nextElement`, `integer` and the scalar readers, `string`, the array readers; the encoding helpers |
 | `src/json-typed.ts` | `jsonFieldOf`, `jsonClasses`, `jsonRefusal`: which classes a call reaches and what it refuses |
-| `src/emit-json.ts` | the code written per class: `emitJsonDecodeBody`, `emitJsonDecodeArrayBody`, `emitJsonStopIfFailed` |
+| `src/emit-json.ts` | the code written per class: `emitJsonDecodeBody` and the key dispatch (`emitJsonDispatch`), `emitJsonDecodeArrayBody`, `emitJsonEnumCheck`, `emitJsonDecodeMapBody`, `emitJsonEncodeMapBody`, `emitJsonStopIfFailed` |
 | `src/attributes.ts`, `src/inline-arrays.ts` | `markJsonRoute`, the facts every call is given; `spoilJsonRoutes`, which keeps the arrays the code reaches out of the inline layout |
 
 ### Threat model
@@ -249,14 +253,17 @@ chooses the class, the limits and `ignoreUnknown`.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| JSON-4 | Low | `std/json-typed.ts:193` (`unknownField`) | With `ignoreUnknown` set, a key that names no field is stepped over without being remembered, so a duplicate of such a key is not refused. Its value is checked by the tokenizer and never read, so no reading of it can differ between two components of this program. | **Accepted.** Remembering every unknown key would cost an allocation per key; a program that forwards the raw body to another parser leaves `ignoreUnknown` off. |
-| JSON-5 | Low | `src/emit-json.ts:454` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
-| JSON-6 | Low | `std/json-typed.ts:344` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
-| JSON-7 | Low | `src/emit-json.ts:275` (`emitJsonDecodeBody`), `:532` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
+| JSON-4 | Low | `std/json-typed.ts:295` (`unknownField`) | With `ignoreUnknown` set, a key that names no field is stepped over without being remembered, so a duplicate of such a key is not refused. Its value is checked by the tokenizer and never read, so no reading of it can differ between two components of this program. | **Accepted.** Remembering every unknown key would cost an allocation per key; a program that forwards the raw body to another parser leaves `ignoreUnknown` off. |
+| JSON-5 | Low | `src/emit-json.ts:1018` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
+| JSON-6 | Low | `std/json-typed.ts:467` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
+| JSON-7 | Low | `src/emit-json.ts:753` (`emitJsonDecodeBody`), `:1237` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
+| JSON-12 | Low | `src/emit-json.ts:1158` (`emitJsonDecodeMapBody`) | A `Map` field is emptied and filled anew on every decode, so its keys are new strings and its values new objects, arrays or maps each time: a server decoding a stream of bodies into one object grows the arena by the entries it keeps, bounded by the bodies' size under `maxTotalBytes`, as JSON-6's strings are. | **Accepted.** Reusing an entry would need its key found before the entry is kept or dropped, and would keep the old order where the input gives a new one; docs/LANGUAGE.md ("Typed JSON") says a map's entries are made anew. |
+| JSON-13 | Medium | `src/emit-json.ts:1158` (`emitJsonDecodeMapBody`), `std/json-typed.ts:255` (`mapRoom`); the hash in `std/collections.ts` and `src/emit-map.ts` | A `Map<string, V>` field takes its keys from the body, and the global `Map` hashes a string with unseeded FNV-1a and probes linearly, so a body can choose keys that all land on one probe chain and make each insert walk every key before it. Measured in review at `a336c929`, before any limit: a 278 KB body of 20,000 colliding keys decoded in 657 ms, against 2.4 ms for 20,000 ordinary keys (274x). | **Mitigated; open for the real fix.** The maps of one decoding take at most `maxMapKeys` keys between them, 4,096 unless the program sets it, counted when a map makes room for a key, the keys of a map inside another included; the next is refused with `JSON_DECODE_MAP_LIMIT` before it is read (`mapRoom`), and `reset` starts the count again. With a total of N keys over maps of k₁, k₂, … keys, the probes cost at most the sum of kᵢ²/2, which is at most N²/2, so the whole decoding is bounded whatever the keys and however many maps hold them. The fix is a seeded string hash in `src/emit-map.ts` and `std/collections.ts`, outside the typed layer; until it lands, a program that raises `maxMapKeys` raises this bound with it. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
-`JSON_DECODE_DUPLICATE` at `std/json-typed.ts:208`, before the second value is
-read.
+`JSON_DECODE_DUPLICATE` at `std/json-typed.ts:310`, before the second value is
+read, and so is a duplicate key of a `Map` field, compared once decoded, so an
+escape does not hide one (`src/emit-json.ts:1158`, `emitJsonDecodeMapBody`).
 
 ### Properties verified
 
@@ -266,7 +273,7 @@ Each is pinned by a line of `tests/link/std_json_typed`'s `expected.out`
 **Duplicate keys** are refused for a field at the top, in an array's element
 and with `ignoreUnknown` on: "a duplicate key: code", "nested: a duplicate key
 in an element", "ignoreUnknown: a duplicate field is still refused". The
-code written per class keeps one flag per field (`src/emit-json.ts:275`).
+code written per class keeps one flag per field (`src/emit-json.ts:753`).
 
 **Unknown fields** are refused by default at the key's byte ("an unknown key:
 code", "an unknown key: errorAt", "nested: an unknown key in an element"),
@@ -283,33 +290,86 @@ read").
 an element", "nested: a missing key in a | null object").
 
 **Type confusion.** Each value is read by the reader of its field's type,
-which refuses every other token (`std/json-typed.ts:145`, `take`): a string
+which refuses every other token (`std/json-typed.ts:169`, `take`): a string
 for an integer, an array for a scalar or a class, an object for an array, a
 number for a string, `null` for a field that is not `| null`, and a top-level
 value that is not an object ("a string for an i32: code" through "null at the
 top: code", "nested: an element that is not an object", "nested: an object
 where the array is", "nested: null for an array that is not | null"). An
 integer field takes only an integer written without a fraction or an exponent,
-in its range (`std/json-typed.ts:277`): "a fraction for an i32", "an exponent
+in its range (`std/json-typed.ts:379`): "a fraction for an i32", "an exponent
 for an i32", "2^31 for an i32", "-2^31 - 1 for an i32", "-1 for a u32", "2^32
 for a u32", "2^63 for an i64", "-2^63 - 1 for an i64". `null` inside an array
 is a type error too ("null in an array of i32: code", "null in an array of
 objects: code", "null in an array of strings: code"). Which field types may be read at all is the compiler's rule, held at
-the call over every class the call reaches (`src/json-typed.ts:197`), with a
+the call over every class the call reaches (`src/json-typed.ts:344`), with a
 negative case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_nested_field`, `json_reject_nullable_field`,
 `json_reject_nested_array`, `json_reject_generic_field`,
-`json_reject_enum_field`, `json_reject_readonly_array`,
+`json_reject_enum_nested_array`, `json_reject_map_key`,
+`json_reject_map_key_enum`, `json_reject_map_value`,
+`json_reject_map_value_nested`, `json_reject_map_value_class`,
+`json_reject_map_array`, `json_reject_set_field`, `json_reject_readonly_array`,
+`json_reject_readonly_enum_array`, `json_reject_map_value_readonly_array`,
 `json_reject_nullable_elements`, `json_reject_interface`,
 `json_reject_not_class` and `json_reject_through_generic`. A `readonly` field
 is refused for decoding (`json_reject_readonly`), and so is a class the
 decoder makes whose constructor takes parameters
-(`json_reject_constructor`, `json_reject_constructor_nullable`).
+(`json_reject_constructor`, `json_reject_constructor_nullable`), a class a
+`Map` holds included (`json_reject_map_value_readonly`,
+`json_reject_map_value_constructor`). An enum the language does not declare
+never reaches the rule (`json_reject_enum_string`, `json_reject_enum_mixed`,
+`json_reject_const_enum`), and neither does `Level | null`, which the checker
+refuses as a field and as a map's value (NL2010, `json_reject_enum_nullable`,
+`json_reject_map_value_enum_nullable`).
+
+**The kinds after the first.** A `u64` is read through
+the tokenizer's `numberU64`, so it is exact to 2^64 - 1 and every number past
+it, below 0 (`-0` included) or with a fraction or an exponent is
+`JSON_DECODE_RANGE` ("u64: 2^64: code" through "u64: an exponent: code"); it
+is written as its digits from an array the call's own arena scope gives back
+("u64: Arena.used() is flat over 1,000 encodes past 2^63"). An enum's number
+is stored only when it is a member's value, so no enum field or element holds
+a value its type cannot ("enum: 1 names no member: code", "enum: and the field
+keeps the member it held", "enum array: the members before it are kept"). A
+`Map`'s duplicate key is refused raw and through an escape ("map: a duplicate
+key: code", "map: a duplicate key through an escape: code", "map: é and \u00e9
+are one key"), and its non-ASCII keys of two, three and four bytes are one key
+each way ("map: escaped non-ASCII keys decode"). `tests/run.js` holds
+`round-trip-kinds.txt`, decoded and encoded natively, to
+`JSON.stringify(JSON.parse(line))` with each integer past 2^53 kept exact
+(`check("link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact")`).
+
+**A decoding's map keys are bounded** (JSON-13): a key past `maxMapKeys`,
+counted over every map of the decoding, is `JSON_DECODE_MAP_LIMIT` at its own
+byte ("map limit: one key past it: code", "map limit: one key past it:
+errorAt", "map limit: a map of maps counts every key of every map", "map
+limit: and one fewer refuses it", "map limit: 819 small maps, 4,095 keys,
+decode", "map limit: 820 small maps, 4,100 keys, are refused", "map limit:
+reset clears the count", "map limit: 4,096 keys by default", "map limit: and
+not 4,097"); at `0` and below a map takes no key and `{}` still decodes ("map
+limit: 0 refuses a map's first key", "map limit: -1 still takes {}"); and
+`mapRoom` answers the same under Node (`check("link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines")`).
+An enum read that fails stores and pushes nothing, so a failed `5.5`, `2^31`
+or `"x"` does not leave the member `0` behind ("enum: and the field keeps
+High, not Low, after 5.5", "enum array: nothing is pushed for 5.5"), and a
+map value whose read fails is not set ("map: and the map holds only the entry
+read before it", "map: and nothing is set for it").
+
+**Key dispatch.** A key is sent to a field by its decoded length, then by one
+raw byte where names of that length differ, and `keyIs` compares the whole key
+before a field is read, so a key that shares a field's length and bytes but
+not its name is still unknown ("names: a key of a name's length and first
+bytes: code", "wide: a key of a field's length and first byte"). A key with an
+escape answers `-1` for its byte and is compared with every name of its length
+(`keyByte` in `std/json-typed.ts`), so an escape cannot route a key past its
+field or into another ("wide: every key escaped", "names: escaped field names
+decode", "names: a duplicate through an escape: code").
 
 **Depth.** The decoding recurses only into a container the tokenizer has
 opened, so `maxDepth` bounds it: "limits: depth", and "limits: a depth bomb"
 over 1,000 nested objects. An encoding stops at the writer's first failure
-(`src/emit-json.ts:532`), so an object that holds itself ends at the writer's
+(`src/emit-json.ts:1237`), so an object that holds itself ends at the writer's
 depth limit instead of the stack: "encode: an object that holds itself ends at
 the writer's depth", "encode: and through an array".
 
@@ -324,7 +384,7 @@ answers the value the field held or its type's zero.
 
 **What the code may do is what its callers are told.** A decoding is given
 facts that say it writes through both arguments, keeps them, allocates and
-lets the allocation escape (`src/attributes.ts:2547`), so no caller's arena
+lets the allocation escape (`src/attributes.ts:3591`), so no caller's arena
 scope, loop pass or `using a = arena()` block reclaims what a decode stored
 (`tests/cases/json_reject_arena_block`, NL2424). An encoding hands the
 writer to the writer's methods and the helpers, whose own facts the
@@ -345,6 +405,7 @@ strings keep only the strings").
 - `link/${name}: exits with ${wantCode} and stdout matches expected.out`, for
   `std_json_typed`: every line quoted in this section.
 - `link/std_json_typed: each of the ${lines.length} lines decoded and encoded natively is JSON.stringify(JSON.parse(line))`
+- `link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact`
 - `link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)`
 - `link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines`
   and `link/std_json_typed: readers.ts built natively prints the same lines`:

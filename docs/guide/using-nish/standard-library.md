@@ -306,9 +306,10 @@ Its security record is [docs/security/json.md](../../security/json.md).
 `jsonDecode(d, out)` reads one JSON object into an object of a class you
 declare, and `jsonEncode(w, value)` writes one back. There is nothing to
 register and no schema to write: the compiler writes the code from the class's
-fields at each call. A field can be an `i32`, `u32`, `i64`, `f64`, `boolean`,
-`string`, another class, an array of any of those, or a `string`, a class or an
-array with `| null`.
+fields at each call. A field can be an `i32`, `u32`, `i64`, `u64`, `f64`,
+`boolean`, `string`, a numeric `enum`, another class, an array of any of those,
+a `Map` with `string` keys whose values are any of those, or a `string`, a
+class, an array or a map with `| null`.
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
@@ -372,6 +373,67 @@ the decoder has to create — an array element past the end of the array, or a
 `| null` field that was `null` — is made with `new C()`, so its constructor
 takes no parameters. Encoding writes the fields in the order the class declares
 them, exactly as `JSON.stringify` would.
+
+A `u64` keeps every digit up to 2^64 - 1, which a JavaScript number cannot,
+and a negative number is a range error for it. An enum is read and written as
+its number: a number that is not one of its members' values is a type error,
+and the field keeps the member it held. An enum whose members are strings is
+not something the language has, so it cannot be a field either; use a
+`string` field and check its value yourself. A `Map<string, V>` is a JSON object
+whose keys you do not know in advance: decoding empties the map and fills it
+in the order the keys arrive, a key given twice is an error, and encoding
+writes the entries in the map's order.
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
+
+enum Level {
+  Low = 0,
+  High = 9,
+}
+
+class Inventory {
+  serial: u64 = 0;
+  level: Level;
+  stock: Map<string, i32>;
+
+  constructor() {
+    this.level = Level.Low;
+    this.stock = new Map<string, i32>();
+  }
+}
+
+const bytesOf = (text: string): u8[] => {
+  const out = new Array<u8>(toI32(text.length));
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(text.length); i += 1) {
+    out[i] = toU8(text.charCodeAt(i));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const body = bytesOf(`{"serial":18446744073709551615,"level":9,"stock":{"apples":3,"pears":0}}`);
+  const inv = new Inventory();
+  const code = jsonDecode(new JsonDecoder(body, 0, toI32(body.length), new JsonLimits()), inv);
+  const w = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(w, inv);
+  console.log(w.text()); // the same text back
+  console.log(`${inv.stock.get("apples") ?? 0}`); // 3
+  return code;
+};
+```
+
+In a class of three or more fields, a key is matched to a field by its length
+first and then, where three or more field names share that length, by its
+byte at one position, before the whole key is compared, so a key is usually
+compared with one name rather than with each in turn. All the maps of one
+decode take at most `d.maxMapKeys` keys between them, 4,096 unless you set it;
+a body with more is refused with `JSON_DECODE_MAP_LIMIT` rather than left to
+slow the maps down, and `d.reset` starts the count again. Set it to `0` (or
+below) and no map may take a key at all: `{}` is then the only map value
+accepted.
 
 Both calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in

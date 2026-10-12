@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Pages.counts`, which is `Map<string, i32>[]`

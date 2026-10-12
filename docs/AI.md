@@ -1741,13 +1741,20 @@ export const main = (): i32 => {
 
 `jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
 value)` writes one; the compiler writes the code at each call from the class's
-fields. A field is `i32`, `u32`, `i64`, `f64`, `boolean`, `string`, a class, an
-array of one of those, or a `string`, class or array `| null`; anything else is
-refused at the call (NL2485), and so is a value that is not a class (NL2486).
-Decoding is strict: every field required, each key once, an unknown key an
-error unless `d.ignoreUnknown`, and every outcome a sticky negative code in
-`d.failed`, never a panic. A class the decoder makes (an array's element, a
-`| null` field's object) has a constructor with no parameters (NL2488).
+fields. A field is `i32`, `u32`, `i64`, `u64`, `f64`, `boolean`, `string`, a
+numeric enum, a class, an array of one of those, a `Map<string, V>` of any of
+those, or a `string`, class, array or map `| null`; anything else is refused at
+the call (NL2485), a `Map` with non-`string` keys and a `Set` included, and so
+is a value that is not a class (NL2486). Decoding is strict: every field
+required, each key once, an unknown key an error unless `d.ignoreUnknown`, and
+every outcome a sticky negative code in `d.failed`, never a panic. An enum is
+its number, and a number that is no member's value is `JSON_DECODE_TYPE`; a
+`u64` is exact to 2^64 - 1, and negative is `JSON_DECODE_RANGE`; a map is
+emptied and filled in the input's key order, a repeated key an error, and
+more keys over all the maps of one decode than `d.maxMapKeys` (4,096 unless
+set) `JSON_DECODE_MAP_LIMIT`. A class
+the decoder makes (an array's element, a `| null` field's object, a map's
+value) has a constructor with no parameters (NL2488).
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
@@ -1784,6 +1791,24 @@ class Reading {
 export const main = (): i32 => {
   const w = new JsonWriter(new Array<u8>(16), 0);
   jsonEncode(w, new Reading());
+  return w.failed;
+};
+```
+
+```ts nish:err NL2485
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+class Index {
+  byId: Map<i32, string>;               // a JSON object's keys are strings
+  constructor() {
+    this.byId = new Map<i32, string>();
+  }
+}
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, new Index());
   return w.failed;
 };
 ```

@@ -30,32 +30,9 @@ import {
 } from "nish/json-typed";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
+import { jtBenchWide, jtBenchXy, jtKindsChecks, jtKindsRoundTripFile } from "./kinds.ts";
 import { Chain, Lists, Match, Player, Scalars, Team } from "./models.ts";
-
-/** The bytes of `s`, as the decoder reads them. */
-const jtBytes = (s: string): u8[] => {
-  const out = new Array<u8>(toI32(s.length));
-  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(s.length); i += 1) {
-    out[i] = toU8(s.charCodeAt(i));
-  }
-  return out;
-};
-
-/** A decoder over `text`, after decoding it into `out`; its `failed` and `errorAt` are the answer. */
-const jtDecode = <T>(text: string, out: T, limits: JsonLimits, ignoreUnknown: boolean): JsonDecoder => {
-  const src = jtBytes(text);
-  const d = new JsonDecoder(src, 0, toI32(src.length), limits);
-  d.ignoreUnknown = ignoreUnknown;
-  jsonDecode(d, out);
-  return d;
-};
-
-/** `value` encoded, or `error <code>` when the writer failed. */
-const jtEncode = <T>(value: T, size: i32): string => {
-  const w = new JsonWriter(new Array<u8>(size), 0);
-  jsonEncode(w, value);
-  return w.failed === 0 ? w.text() : `error ${w.failed}`;
-};
+import { jtBytes, jtDecode, jtEncode } from "./support.ts";
 
 /** Decode `text` into a fresh `Team` and check the code. */
 const jtNested = (t: Suite, name: string, text: string, code: i32): void => {
@@ -368,6 +345,7 @@ export const jtChecks = (): i32 => {
   jtEncodings(t);
   jtEncodeInArena(t);
   jtNestedPaths(t);
+  jtKindsChecks(t);
   return t.done();
 };
 
@@ -376,7 +354,7 @@ export const jtChecks = (): i32 => {
  * encoded back, one line apiece, or `error <code>`. `tests/run.js` holds the
  * lines to `JSON.stringify(JSON.parse(line))`.
  */
-export const jtRoundTripFile = (path: string): i32 => {
+const jtRoundTripFile = (path: string): i32 => {
   for (const line of splitLines(readFileSync(path))) {
     if (line.length === 0) {
       continue;
@@ -386,6 +364,33 @@ export const jtRoundTripFile = (path: string): i32 => {
     console.log(d.failed === 0 ? jtEncode(m, 65536) : `error ${d.failed}`);
   }
   return 0;
+};
+
+/**
+ * The program's modes, other than the suite: `--round-trip <file>`,
+ * `--round-trip-kinds <file>`, `--bench <n>`, `--bench-wide <n>` and
+ * `--bench-xy <n>`, each
+ * answering its exit code, and `-1` when `argv` names none of them.
+ */
+export const jtModes = (argv: string[]): i32 => {
+  if (argv.length < 3) {
+    return -1;
+  }
+  const mode = argv[1];
+  const arg = argv[2];
+  if (mode === "--round-trip") {
+    return jtRoundTripFile(arg);
+  }
+  if (mode === "--round-trip-kinds") {
+    return jtKindsRoundTripFile(arg);
+  }
+  if (mode === "--bench") {
+    return jtBench(toI32(parseInt(arg)));
+  }
+  if (mode === "--bench-xy") {
+    return jtBenchXy(toI32(parseInt(arg)));
+  }
+  return mode === "--bench-wide" ? jtBenchWide(toI32(parseInt(arg))) : -1;
 };
 
 class BenchHello {
@@ -399,7 +404,7 @@ class BenchHello {
  * time, so the decode cannot be hoisted, and every decoded string is folded
  * into the checksum, so it cannot be dropped.
  */
-export const jtBench = (n: i32): i32 => {
+const jtBench = (n: i32): i32 => {
   const src = jtBytes(`{"message":"Hello, World! 000000"}`);
   const d = new JsonDecoder(src, 0, toI32(src.length), new JsonLimits());
   const h = new BenchHello();

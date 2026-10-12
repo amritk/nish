@@ -5320,11 +5320,50 @@ if (!only || "std_json_typed".includes(only)) {
   } else {
     skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
   }
+  // The same for `round-trip-kinds.txt` decoded into a `Kinds`: `u64`, enums
+  // and maps. `JSON.parse` reads an integer past 2^53 as the nearest double,
+  // which is not the `u64` the line holds, so each of those is kept as its
+  // own digits (`JSON.rawJSON` of its source); every other value is
+  // `JSON.parse`'s. A map's keys are in the input's order, and no line has a
+  // key that looks like an array index, which a JavaScript object would put
+  // first (docs/LANGUAGE.md, "Typed JSON").
+  const kindsInputs = path.join(dir, "round-trip-kinds.txt")
+  const kindsLines = fs
+    .readFileSync(kindsInputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  check(
+    "link/std_json_typed: round-trip-kinds.txt is ASCII",
+    kindsLines.every((l) => /^[\x20-\x7e]*$/.test(l)),
+    kindsLines.join("\n")
+  )
+  const exact = (line) =>
+    JSON.stringify(
+      JSON.parse(line, (_key, value, context) =>
+        typeof value === "number" && /^-?\d+$/.test(context.source) && !Number.isSafeInteger(value)
+          ? JSON.rawJSON(context.source)
+          : value
+      )
+    )
+  const kindsWant = kindsLines.map((l) => `${exact(l)}\n`).join("")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip-kinds", kindsInputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact`,
+      native.status === 0 && native.stdout === kindsWant,
+      `--- JSON.stringify(JSON.parse(line))\n${kindsWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip(
+      "skipped: link/std_json_typed: no native program to hold the kinds against JSON.parse and JSON.stringify"
+    )
+  }
   // What `jsonDecode` calls does run under Node: `readers.ts` drives the
   // decoder's readers directly, at both ends of each integer range, and both
   // runs must print these lines: every reader once, and each integer reader
-  // at both ends of its range. An `i64` is a BigInt there, so a reader that
-  // mixed one with a number throws.
+  // at both ends of its range, the key readers the written dispatch and a
+  // map's decoding call, and the `u64` encoders. An `i64` and a `u64` are
+  // BigInts there, so a reader that mixed one with a number throws.
   const readerLines = [
     "i32 2147483647 -2147483648",
     "u32 4294967295 0",
@@ -5355,6 +5394,20 @@ if (!only || "std_json_typed".includes(only)) {
     "unescaped 4 679",
     "raw 5 662",
     "window [edge] 0",
+    "u64 0 18446744073709551615 9223372036854775808",
+    "u64Array 2 1 18446744073709551615",
+    "u64ArrayOrNull null true",
+    "u64ArrayOrNull present 1 0",
+    "u64 [18446744073709551616] -21 at 1",
+    "u64 [-1] -21 at 1",
+    "u64 [-0] -21 at 1",
+    "u64 [1.5] -21 at 1",
+    'u64 ["1"] -20 at 1',
+    "key ab 2 97 98 -1 -1",
+    "key escaped 9 1571 9 -1",
+    "text 9 1571 0",
+    "encoded [0,18446744073709551615,9223372036854775808,[1,18446744073709551615],null,[7]] 0",
+    "mapRoom true true false 2 -25 at 1",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")

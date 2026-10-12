@@ -111,4 +111,151 @@ PASS  null in an array of strings: code
 PASS  null in an array of strings: errorAt
 PASS  ignoreUnknown: keys stepped over in an element and in a | null object
 PASS  ignoreUnknown: every key after a skipped one is still read
-std_json_typed: 112 passed, 0 failed, 0 skipped
+PASS  tag: decodes
+PASS  tag: encodes back to the same text
+PASS  kinds: decodes
+PASS  kinds: encodes back to the same text
+PASS  u64: 2^64 - 1 is read exactly
+PASS  u64: an array of five
+PASS  u64: 2^64: code
+PASS  u64: 2^64: errorAt
+PASS  u64: 21 digits: code
+PASS  u64: 21 digits: errorAt
+PASS  u64: -1: code
+PASS  u64: -1: errorAt
+PASS  u64: -0: code
+PASS  u64: -0: errorAt
+PASS  u64: a fraction: code
+PASS  u64: a fraction: errorAt
+PASS  u64: an exponent: code
+PASS  u64: an exponent: errorAt
+PASS  u64: a string: code
+PASS  u64: a string: errorAt
+PASS  u64: null in an array of u64: code
+PASS  u64: null in an array of u64: errorAt
+PASS  u64: 2^64 in an array of u64: code
+PASS  u64: 2^64 in an array of u64: errorAt
+PASS  u64: a | null array decodes into its null
+PASS  u64: and encodes
+PASS  u64: 1,000 encodes write the same length
+PASS  u64: Arena.used() is flat over 1,000 encodes past 2^63
+PASS  enum: 9 is High
+PASS  enum: -1 is Minus
+PASS  enum: an array of members
+PASS  enum: two members of one value both read 1
+PASS  enum: 1 is Plus, which is Positive
+PASS  enum: 1 names no member: code
+PASS  enum: 1 names no member: errorAt
+PASS  enum: and the field keeps the member it held
+PASS  enum: a member's name is not its value: code
+PASS  enum: a member's name is not its value: errorAt
+PASS  enum: 2^31: code
+PASS  enum: 2^31: errorAt
+PASS  enum: a fraction: code
+PASS  enum: a fraction: errorAt
+PASS  enum: null: code
+PASS  enum: null: errorAt
+PASS  enum: -2 names no member of Sign: code
+PASS  enum: -2 names no member of Sign: errorAt
+PASS  enum: a failed read of 5.5 fails
+PASS  enum: and the field keeps High, not Low, after 5.5
+PASS  enum array: nothing is pushed for 5.5
+PASS  enum: a failed read of 2147483648 fails
+PASS  enum: and the field keeps High, not Low, after 2147483648
+PASS  enum array: nothing is pushed for 2147483648
+PASS  enum: a failed read of "x" fails
+PASS  enum: and the field keeps High, not Low, after "x"
+PASS  enum array: nothing is pushed for "x"
+PASS  enum array: 4 names no member: code
+PASS  enum array: 4 names no member: errorAt
+PASS  enum array: the members before it are kept
+PASS  enum array: a | null array decodes into its null
+PASS  enum array: and encodes
+PASS  enum array: a non-member in a | null array: code
+PASS  enum array: a non-member in a | null array: errorAt
+PASS  enum array: and back to null
+PASS  enum array: a shorter array decodes into the array the field holds
+PASS  map: counts holds two
+PASS  map: a class value is an object of its own
+PASS  map: a | null value holds null
+PASS  map: no keys
+PASS  map: no keys: empty
+PASS  map: one key
+PASS  map: 200 keys decode
+PASS  map: 200 keys encode in the input's order
+PASS  map: a key like an index keeps the input's order
+PASS  map: a duplicate key: code
+PASS  map: a duplicate key: errorAt
+PASS  map: a duplicate key through an escape: code
+PASS  map: a duplicate key through an escape: errorAt
+PASS  map: non-ASCII keys decode
+PASS  map: non-ASCII keys encode as their bytes
+PASS  map: escaped non-ASCII keys decode
+PASS  map: and are the same keys
+PASS  map: é, €, 😀 are 2, 3 and 4 bytes
+PASS  map: é and \u00e9 are one key
+PASS  map: an array for a map: code
+PASS  map: an array for a map: errorAt
+PASS  map: null for a map that is not | null: code
+PASS  map: null for a map that is not | null: errorAt
+PASS  map: a string for an i32 value: code
+PASS  map: a string for an i32 value: errorAt
+PASS  map: a fraction for an i32 value: code
+PASS  map: a fraction for an i32 value: errorAt
+PASS  map: a missing field in a class value: code
+PASS  map: a missing field in a class value: errorAt
+PASS  map: a number that names no member in a map of maps: code
+PASS  map: a number that names no member in a map of maps: errorAt
+PASS  map: a second decode leaves only its own entries
+PASS  map: a | null map decodes into its null
+PASS  map: and back to null
+PASS  map: arrays of enums, | null objects and arrays, a | null map
+PASS  map: and encode
+PASS  map: a map through an alias
+PASS  map: a string for an i32 value fails
+PASS  map: and the map holds only the entry read before it
+PASS  map: a number that names no member of a map's enum
+PASS  map: and nothing is set for it
+PASS  map limit: as many keys as the limit
+PASS  map limit: one key past it: code
+PASS  map limit: one key past it: errorAt
+PASS  map limit: a map of maps counts every key of every map
+PASS  map limit: and one fewer refuses it
+PASS  map limit: at the last key
+PASS  map limit: reset clears the count
+PASS  map limit: 819 small maps, 4,095 keys, decode
+PASS  map limit: 820 small maps, 4,100 keys, are refused
+PASS  map limit: maps in array elements share it
+PASS  map limit: and are refused past it
+PASS  map limit: at the second element's second key
+PASS  map limit: a | null map shares it
+PASS  map limit: and a | null map is refused past it
+PASS  map limit: at its second key
+PASS  map limit: 0 refuses a map's first key
+PASS  map limit: 0 still takes {}
+PASS  map limit: -1 refuses a map's first key
+PASS  map limit: -1 still takes {}
+PASS  map limit: 4,096 keys by default
+PASS  map limit: and not 4,097
+PASS  map: a window ending on the closing brace
+PASS  map: and what it decoded
+PASS  names: non-ASCII field names decode
+PASS  names: and encode
+PASS  names: escaped field names decode
+PASS  names: to the same fields
+PASS  names: a key of a name's length and first bytes: code
+PASS  names: a key of a name's length and first bytes: errorAt
+PASS  names: a key of a name's length and another third byte: code
+PASS  names: a key of a name's length and another third byte: errorAt
+PASS  names: a duplicate through an escape: code
+PASS  names: a duplicate through an escape: errorAt
+PASS  wide: decodes in any order
+PASS  wide: encodes in declaration order
+PASS  wide: every key escaped
+PASS  wide: to the same fields
+PASS  wide: a key of a field's length and first byte
+PASS  wide: a key of a length no field has
+PASS  wide: an empty key
+PASS  wide: a duplicate
+PASS  wide: a missing field
+std_json_typed: 259 passed, 0 failed, 0 skipped

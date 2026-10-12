@@ -4,8 +4,14 @@
 // runs this natively and under `runtime/nish.mjs` and holds both to the same
 // lines. An `i64` is a BigInt under Node, so a reader that mixed one with a
 // number would throw here.
+import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
-import { JsonDecoder } from "nish/json-typed";
+import {
+  JsonDecoder,
+  jsonEncodeU64,
+  jsonEncodeU64Array,
+  jsonEncodeU64ArrayOrNull,
+} from "nish/json-typed";
 
 const bytesOf = (text: string): u8[] => {
   const out = new Array<u8>(toI32(text.length));
@@ -125,6 +131,60 @@ export const main = (): i32 => {
   const framed = bytesOf(`xx"edge"yy`);
   const w = new JsonDecoder(framed, 2, 6, new JsonLimits());
   console.log(`window [${w.string("")}] ${w.failed}`);
+
+  // `u64` at both ends and past them; a `u64` is a BigInt under Node.
+  const n = opened(`[0,18446744073709551615,9223372036854775808,[1,18446744073709551615],null,[7]]`);
+  const n0 = n.u64();
+  n.nextElement();
+  const n1 = n.u64();
+  n.nextElement();
+  const n2 = n.u64();
+  console.log(`u64 ${n0} ${n1} ${n2}`);
+  n.nextElement();
+  const ux: u64[] = [];
+  const n3 = n.u64Array(ux);
+  console.log(`u64Array ${n3.length} ${n3[0]} ${n3[1]}`);
+  n.nextElement();
+  const n4 = n.u64ArrayOrNull(null);
+  console.log(`u64ArrayOrNull null ${n4 === null}`);
+  n.nextElement();
+  const n5 = n.u64ArrayOrNull(null);
+  console.log(`u64ArrayOrNull present ${n5 !== null ? n5.length : -1} ${n.failed}`);
+  for (const bad of ["[18446744073709551616]", "[-1]", "[-0]", "[1.5]", `["1"]`]) {
+    const b = opened(bad);
+    b.u64();
+    console.log(`u64 ${bad} ${b.failed} at ${b.errorAt}`);
+  }
+
+  // The current key: its length, a byte of it, and the key itself, raw and
+  // through escapes of two, three and four bytes.
+  const keys = bytesOf(`{"ab":1,"\\u00e9\\u20ac\\ud83d\\ude00":2}`);
+  const k = new JsonDecoder(keys, 0, toI32(keys.length), new JsonLimits());
+  k.beginObject();
+  k.nextField();
+  console.log(`key ${k.key()} ${k.keyLength()} ${k.keyByte(0)} ${k.keyByte(1)} ${k.keyByte(2)} ${k.keyByte(-1)}`);
+  k.i32();
+  k.nextField();
+  console.log(`key escaped ${codes(k.key())} ${k.keyLength()} ${k.keyByte(0)}`);
+  console.log(`text ${codes(k.text())} ${k.failed}`);
+
+  // The `u64` encoders, every value through the one digit loop: 0, 2^64 - 1
+  // and 2^63, alone and in arrays. Then `mapRoom` at either side of a limit.
+  const out = new JsonWriter(new Array<u8>(256), 0);
+  out.beginArray();
+  jsonEncodeU64(out, n0);
+  jsonEncodeU64(out, n1);
+  jsonEncodeU64(out, n2);
+  jsonEncodeU64Array(out, n3);
+  jsonEncodeU64ArrayOrNull(out, null);
+  jsonEncodeU64ArrayOrNull(out, n5);
+  out.endArray();
+  console.log(`encoded ${out.text()} ${out.failed}`);
+  const room = new JsonDecoder(keys, 0, toI32(keys.length), new JsonLimits());
+  room.maxMapKeys = 2;
+  room.beginObject();
+  room.nextField();
+  console.log(`mapRoom ${room.mapRoom()} ${room.mapRoom()} ${room.mapRoom()} ${room.mapKeys} ${room.failed} at ${room.errorAt}`);
   return 0;
 };
 
