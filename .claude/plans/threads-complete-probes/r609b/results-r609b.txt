@@ -1,0 +1,631 @@
+# PR #609 round 2 probe, head 40a6546 (build/nish, stage2) vs main 36c62e9; native default / NISH_NUM_THREADS=1 / =2 vs Node
+# runner: ../probe609.sh; rerun driver: rerun.sh; comparator: cmp.py; raw per-program outputs in out/
+#
+# == PR link tests (head) ==
+#   tests/link/par_capture: ACCEPTED, native/t1/t2/node identical and equal to expected.out
+#   tests/link/par_capture_large: ACCEPTED, native/t1/t2/node identical and equal to expected.out
+#   tests/link/par_map_new: ACCEPTED, native/t1/t2/node identical and equal to expected.out
+#   tests/link/par_from: ACCEPTED, native/t1/t2/node identical and equal to expected.out
+#
+# == --warn-portability (head; main gives the same counts on the direct forms) ==
+#   s1b direct  : NL8003 at 5:11 (p copied into ps, later ps[0].v = 5)      | s1a captured : NO warning   (both: native 1, Node 5)
+#   s1d direct  : NL8003 at 5:11 (p copied into ps, later p.v = 5)          | s1c captured : NO warning   (both: native 1, Node 5)
+#   s10f direct : NL8003 at 4:20 (p copied into literal [p])                | s10e captured: NO warning   (both: native 15, Node 55)
+#   s10c direct : NL8001 at 4:15 (indexOf byte offset compared with 2)      | s10d captured: NO warning   (both: native 0, Node 1)
+#   s10a direct : no warning (offset printed after arithmetic)              | s10b captured: no warning   (both: native 3, Node 2) -- consistent
+#   s9 captured string charCodeAt: no warning (no over-warning); s9b direct: one performance note only
+#
+# == Task 1: the 161 round-1 programs (+ zz_newarray) rerun on head and main; r1 = round-1 verdict ==
+#    (q06c_from_max run natively only: 2147483647 1 at default, t1, t2; Node skipped as in round 1)
+r609_a01_holder_dst                           r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2248               
+r609_a02_helper_same                          r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_a03_cond_alias                           r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_a04_param_both                           r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_a05_dst_field                            r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2248               
+r609_a06_fresh_then_field                     r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_a07_module_const_dst                     r1=REFUSED NL2026               head=REFUSED NL2026               main=REFUSED NL2026               
+r609_a08_module_const_direct                  r1=REFUSED NL2026               head=REFUSED NL2026               main=REFUSED NL2026               
+r609_a09_typed_copy_ctor                      r1=REFUSED NL2171               head=REFUSED NL2171               main=REFUSED NL2171,NL2335        
+r609_a10_two_fresh_ok                         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_a11_src_is_capture_dst_same              r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_a12_shadow_dst                           r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_a13_map_reaches_dst                      r1=REFUSED NL2345,NL2497        head=REFUSED NL2345,NL2497        main=REFUSED NL2244               
+r609_a14_loop_const_fresh                     r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_c01_mixed_large                          r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c02_many_captures                        r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c03_generic_helper                       r1=REFUSED NL2071               head=REFUSED NL2071               main=REFUSED NL2376               
+r609_c04_forward_arrow                        r1=REFUSED NL2335               head=REFUSED NL2335               main=REFUSED NL2376               
+r609_c05_same_arrow_twice                     r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c06_nested_forms                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_c07_reduce_capture                       r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c08_recursion                            r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c09_costly_body_split                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c10_nullable_narrowed_large              r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c11_result_escape_churn                  r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c12_method_param_capture                 r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c13_inplace_capture                      r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_c14_cttime_fn_param                      r1=REFUSED NL2335               head=REFUSED NL2335               main=REFUSED NL2376               
+r609_c15_capture_used_as_index_and_src        r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c16_bool_result_capture                  r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c17_oob_capture                          r1=ACCEPTED DIFFER              head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609_c18_oob_capture_proved_outer             r1=ACCEPTED DIFFER              head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609_c19_inline_array_const_index             r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c20_inline_array_large                   r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c21_field_narrowing                      r1=REFUSED NL2187               head=REFUSED NL2187               main=REFUSED NL2376               
+r609_c22_tdz_capture                          r1=ACCEPTED DIFFER              head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609_c23_tdz_direct                           r1=ACCEPTED DIFFER              head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609_c24_ctor_capture                         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c25_generic_capture_fixed                r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c26_capture_named_like_module_fn         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_c27_capture_in_template_and_cond         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e01_empty_map_capture                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e02_from_small_n                         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e03_from_negative                        r1=ACCEPTED DIFFER              head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609_e04_string_result                        r1=REFUSED NL2348               head=REFUSED NL2348               main=REFUSED NL2376               
+r609_e05_class_result                         r1=REFUSED NL2348               head=REFUSED NL2348               main=REFUSED NL2376               
+r609_e06_result_is_fresh                      r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e07_grain_boundary                       r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e08_class_src_capture                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e09_map_src_captured                     r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e10_from_n_capture                       r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_e11_mapinto_dst_short                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_e12_u8_result                            r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q01_scope_dst_map                        r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2376               
+r609_q01b_scope_dst_indexof                   r1=ACCEPTED DIFFER              head=REFUSED NL2394               main=REFUSED NL2376               CHANGED-since-r1
+r609_q01c_scope_dst_forof                     r1=ACCEPTED DIFFER              head=REFUSED NL2394               main=REFUSED NL2376               CHANGED-since-r1
+r609_q01d_scope_dst_from_index                r1=ACCEPTED DIFFER              head=REFUSED NL2394               main=REFUSED NL2376               CHANGED-since-r1
+r609_q01e_scope_dst_mapinto                   r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2335               
+r609_q01f_scope_dst_reduce                    r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2335               
+r609_q01g_scope_task_writes_param             r1=REFUSED NL2471               head=REFUSED NL2471               main=REFUSED NL2376               
+r609_q01h_scope_dst_from_param_fn             r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2376               
+r609_q02_stale_elem_capture                   r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q02b_stale_elem_direct                   r1=ACCEPTED same                head=ACCEPTED same                main=ACCEPTED same                
+r609_q02c_stale_elem_capture_churn            r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q02d_stale_record_capture                r1=ACCEPTED DIFFER              head=REFUSED NL2290               main=REFUSED NL2376               CHANGED-since-r1
+r609_q02e_stale_record_direct                 r1=REFUSED NL2290               head=REFUSED NL2290               main=REFUSED NL2290               
+r609_q02f_stale_record_churn                  r1=ACCEPTED DIFFER              head=REFUSED NL2290               main=REFUSED NL2376               CHANGED-since-r1
+r609_q02g_stale_pop_capture                   r1=ACCEPTED DIFFER              head=REFUSED NL2290               main=REFUSED NL2376               CHANGED-since-r1
+r609_q02h_stale_forof_capture                 r1=ACCEPTED DIFFER              head=REFUSED NL2290               main=REFUSED NL2376               CHANGED-since-r1
+r609_q02i_stale_record_mapinto_main           r1=ACCEPTED DIFFER              head=REFUSED NL2290               main=REFUSED NL2248               CHANGED-since-r1
+r609_q02j_stale_record_helper_push            r1=ACCEPTED DIFFER              head=REFUSED NL2290               main=REFUSED NL2376               CHANGED-since-r1
+r609_q03_arena_capture                        r1=REFUSED NL2424               head=REFUSED NL2417,NL2424        main=REFUSED NL2376               CHANGED-since-r1
+r609_q03b_arena_capture_plain                 r1=REFUSED NL2039               head=REFUSED NL2039               main=REFUSED NL2039               
+r609_q04_generic_fresh_dst                    r1=REFUSED NL2497               head=ACCEPTED same                main=REFUSED NL2335               CHANGED-since-r1
+r609_q04b_nongeneric_fresh_dst                r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_q05_divided_reduce_types                 r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q05b_reduce_capture_in_combiner          r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q05c_i64_reduce_identity                 r1=REFUSED NL2350               head=REFUSED NL2350               main=REFUSED NL2376               
+r609_q06_from_zero_capture                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q06b_from_neg_capture                    r1=ACCEPTED DIFFER              head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609_q07_nested_nocapture                     r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_q08a_capture_map                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_q08b_capture_set                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_q08c_capture_secret                      r1=REFUSED NL2185,NL2496        head=REFUSED NL2185,NL2496        main=REFUSED NL2376               
+r609_q08d_capture_maybe                       r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_q08e_capture_map_size                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q09_param_array_fresh_dst                r1=REFUSED NL2497               head=ACCEPTED same                main=REFUSED NL2335               CHANGED-since-r1
+r609_q10_generic_two_types                    r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_q11_secret_moved_capture                 r1=REFUSED NL0002               head=REFUSED NL2445               main=REFUSED NL2376               CHANGED-since-r1
+r609_q11b_secret_moved_direct                 r1=REFUSED NL2440,NL2445        head=REFUSED NL2440,NL2445        main=REFUSED NL2440,NL2445        
+r609_q11c_secret_moved_after_wipe             r1=REFUSED NL0002               head=REFUSED NL2445               main=REFUSED NL2376               CHANGED-since-r1
+r609_q11d_secret_nothreads                    r1=REFUSED(other)               head=REFUSED NL0002               main=REFUSED NL0002               CHANGED-since-r1
+r609_q11e_secret_threads_nocapture            r1=REFUSED(other)               head=REFUSED NL0002               main=REFUSED NL0002               CHANGED-since-r1
+r609_r01_let_nested_block                     r1=REFUSED NL2492               head=REFUSED NL2492               main=REFUSED NL2376               
+r609_r02_shadow_let_inner                     r1=REFUSED NL2492               head=REFUSED NL2492               main=REFUSED NL2376               
+r609_r03_shadow_const_inner                   r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_r04_for_let                              r1=REFUSED NL2492               head=REFUSED NL2492               main=REFUSED NL2376               
+r609_r05_for_of_const                         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_r06_outer_arrow_param                    r1=REFUSED NL2493               head=REFUSED NL2493               main=REFUSED NL2376               
+r609_r07_arrow_in_nonparallel                 r1=REFUSED NL2335               head=REFUSED NL2335               main=REFUSED NL2376               
+r609_r08_this_field_indirect                  r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_r09_this_method_call                     r1=REFUSED NL2494               head=REFUSED NL2494               main=REFUSED NL2376               
+r609_r10_write_param_capture                  r1=REFUSED NL2495               head=REFUSED NL2495               main=REFUSED NL2376               
+r609_r11_write_capture_ref_rebind             r1=REFUSED NL2495               head=REFUSED NL2495               main=REFUSED NL2376               
+r609_r12_mutex_in_object                      r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r13_mutex_in_array                       r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r14_mutex_in_map                         r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r15_guard_direct                         r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r16_guard_value_const                    r1=REFUSED NL2467,NL2470        head=REFUSED NL2467,NL2470        main=REFUSED NL2376               
+r609_r17_channel_in_map                       r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r18_scope_captured                       r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r19_result_in_array                      r1=REFUSED NL2496               head=REFUSED NL2496               main=REFUSED NL2376               
+r609_r20_result_narrowed                      r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_r21_dst_capture_nullable                 r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_r22_dst_param_reach                      r1=REFUSED NL2497               head=REFUSED NL2497               main=REFUSED NL2335               
+r609_r23_let_via_closure_helper               r1=REFUSED NL2492               head=REFUSED NL2492               main=REFUSED NL2376               
+r609_r24_tdz_shadow_in_body                   r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_r25_tdz_same_name                        r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_r26_tdz_same_block                       r1=REFUSED NL2195,NL2495        head=REFUSED NL2195,NL2495        main=REFUSED NL2376               
+r609_s01_scope_dst_read                       r1=ACCEPTED DIFFER              head=REFUSED NL2394               main=REFUSED NL2376               CHANGED-since-r1
+r609_s02_scope_dst_read_map                   r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2376               
+r609_s03_scope_dst_read_return                r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2335               
+r609_s04_scope_arg_read                       r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_s05_task_arg_captured                    r1=REFUSED NL2471               head=REFUSED NL2471               main=REFUSED NL2376               
+r609_s06_scope_dst_direct_read                r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2394               
+r609_s07_scope_dst_from_large                 r1=ACCEPTED DIFFER              head=REFUSED NL2394               main=REFUSED NL2376               CHANGED-since-r1
+r609_s08_scope_parallelmap_nocapture          r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2376               
+r609_s09_scope_reduce_nocapture               r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2394               
+r609_s10_scope_mapinto_nocapture              r1=REFUSED NL2394               head=REFUSED NL2394               main=REFUSED NL2394               
+r609_u01_scale_k                              r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u02_lookup_table                         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u03_config_object                        r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u04_string_read                          r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u05_squares                              r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u06_threshold_mask                       r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u07_poly                                 r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u08_grid_index                           r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u09_names_length                         r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u10_narrowed_config                      r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2376               
+r609_u11_mapinto_into_own_buffer              r1=ACCEPTED same                head=ACCEPTED same                main=REFUSED NL2335               
+r609_u12_map_lookup                           r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_u13_param_table_mapinto                  r1=REFUSED NL2497               head=ACCEPTED same                main=REFUSED NL2335               CHANGED-since-r1
+r609_w01_method_field                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w02_helper_elem                          r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w03_nested_field                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w04_push_helper                          r1=REFUSED NL2345,NL2352        head=REFUSED NL2345,NL2352        main=REFUSED NL2376               
+r609_w05_map_set_helper                       r1=REFUSED NL2345,NL2352        head=REFUSED NL2345,NL2352        main=REFUSED NL2376               
+r609_w06_items_field                          r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w07_param_alias                          r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w08_local_alias_in_body                  r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w09_compound_scalar                      r1=REFUSED NL2495               head=REFUSED NL2495               main=REFUSED NL2376               
+r609_w10_incr_scalar                          r1=REFUSED NL2495               head=REFUSED NL2495               main=REFUSED NL2376               
+r609_w11_field_compound                       r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w12_elem_incr                            r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w13_sort_captured                        r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w14_reduce_write                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2335               
+r609_w15_method_on_param_obj                  r1=REFUSED NL2345,NL2497        head=REFUSED NL2345,NL2497        main=REFUSED NL2244               
+r609_w16_pop_captured                         r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w17_ctor_writes_capture                  r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+r609_w18_typed_capture_write                  r1=REFUSED NL2345               head=REFUSED NL2345               main=REFUSED NL2376               
+zz_newarray                                   r1=-                            head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              CHANGED-since-r1 MISMATCH-head
+#
+# == Task 2: round-2 programs (r2/p), verdict on head and main ==
+r609b_a01_param_reassign                      head=REFUSED NL2179               main=REFUSED NL2179,NL2335        
+r609b_a02_param_field_holds_dst               head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_a03_param_field_const                   head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_a04_helper_returns_dst                  head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_a05_push_into_param_arrays              head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_a06_push_into_param_arrays_elem         head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_a07_ternary_param_or_dst                head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_a08_param_obj_built_earlier             head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_a09_param_holder_fresh_dst_inside       head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_a10_param_lut_legit_large               head=ACCEPTED same                main=REFUSED NL2335               
+r609b_a11_param_is_dst_param                  head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_a12_fresh_capture_param_dst             head=ACCEPTED same                main=REFUSED NL2335               
+r609b_a13_generic_param_fresh_dst             head=ACCEPTED same                main=REFUSED NL2335               
+r609b_a14_generic_dst_T                       head=ACCEPTED same                main=REFUSED NL2335               
+r609b_a15_recursive_param_is_outer_dst        head=ACCEPTED same                main=REFUSED NL2335               
+r609b_b01_self_out_dst                        head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_b02_self_method_writes_this             head=REFUSED NL2345               main=REFUSED NL2376               
+r609b_b03_self_has_mutex                      head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_b04_self_has_channel                    head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_b05_self_alias_s2                       head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_b06_self_method_reads_out               head=REFUSED NL2497               main=REFUSED NL2244               
+r609b_b07_self_out_alias_const                head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_b08_self_dst_via_const_read_self        head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_b09_self_fresh_dst_legit                head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_b10_self_map_field                      head=ACCEPTED same                main=REFUSED NL2376               
+r609b_b11_self_in_ctor                        head=ACCEPTED same                main=REFUSED NL2376               
+r609b_b12_self_reduce_dst_field               head=ACCEPTED same                main=REFUSED NL2376               
+r609b_b13_this_field_const_fresh_dst          head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_b14_this_field_stored_dst               head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_c01_splice_capture                      head=REFUSED NL2249               main=REFUSED NL2376               
+r609b_c01d_splice_direct                      head=REFUSED NL2249               main=REFUSED NL2249               
+r609b_c02_length_assign_capture               head=REFUSED NL2002               main=REFUSED NL2376               
+r609b_c02d_length_assign_direct               head=REFUSED NL2002               main=REFUSED NL2002               
+r609b_c03_shift_capture                       head=REFUSED NL2249               main=REFUSED NL2376               
+r609b_c03d_shift_direct                       head=REFUSED NL2249               main=REFUSED NL2249               
+r609b_c04_pop_in_helper_capture               head=REFUSED NL2290               main=REFUSED NL2376               
+r609b_c04d_pop_in_helper_direct               head=REFUSED NL2290               main=REFUSED NL2290               
+r609b_c05_loop_push_capture                   head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c05b_loop_ref_outside_capture           head=REFUSED NL2290               main=REFUSED NL2376               
+r609b_c05bd_loop_ref_outside_direct           head=REFUSED NL2290               main=REFUSED NL2290               
+r609b_c06_arena_result_escapes                head=REFUSED NL2418               main=REFUSED NL2376               
+r609b_c06d_arena_result_escapes_direct        head=REFUSED NL2418               main=REFUSED NL2418               
+r609b_c07_arena_captured_legit                head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c08_narrow_and_capture                  head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c08b_narrow_wrong_arm                   head=REFUSED NL2187               main=REFUSED NL2376               
+r609b_c08c_narrow_or                          head=REFUSED NL2187               main=REFUSED NL2376               
+r609b_c08d_narrow_after_return                head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c08e_narrow_in_else                     head=REFUSED NL2187               main=REFUSED NL2376               
+r609b_c09_return_capture_churn                head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c10_loop_pass_fresh_capture             head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c11_index_proven_other_array            head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_c11d_index_proven_other_array_direct    head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_c12_const_index_proven_loop             head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_c13_mapinto_index_from_other            head=ACCEPTED DIFFER              main=REFUSED NL2335               MISMATCH-head
+r609b_c14_inline_mutated_then_captured        head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c15_inline_record_capture               head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c16_secret_alias_before_move_capture    head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c16d_secret_alias_before_move_direct    head=ACCEPTED same                main=ACCEPTED same                
+r609b_c16e_secret_alias_after_wipe_direct     head=ACCEPTED same                main=ACCEPTED same                
+r609b_c16f_secret_alias_after_wipe_capture    head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c17_secret_moved_in_branch_capture      head=REFUSED NL2445               main=REFUSED NL2376               
+r609b_c17d_secret_moved_in_branch_direct      head=REFUSED NL2445               main=REFUSED NL2445               
+r609b_c18_secret_moved_loop_capture           head=REFUSED NL2445               main=REFUSED NL2376               
+r609b_c18d_secret_moved_loop_direct           head=REFUSED NL2445               main=REFUSED NL2445               
+r609b_c19_guard_out_of_scope                  head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c20_forof_elem_capture_push_after       head=ACCEPTED same                main=REFUSED NL2376               
+r609b_c21_guard_captured_after_block          head=REFUSED NL2470               main=REFUSED NL2376               
+r609b_d01_parallel_before_first_spawn         head=ACCEPTED same                main=REFUSED NL2376               
+r609b_d02_loop_later_spawn_capture            head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d02b_loop_spawn_at_k1_capture           head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d02d_loop_later_spawn_direct            head=REFUSED NL2394               main=REFUSED NL2394               
+r609b_d03_alias_before_scope_capture          head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d03d_alias_before_scope_direct          head=REFUSED NL2394               main=REFUSED NL2394               
+r609b_d04_field_of_captured_object            head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d04b_field_object_literal               head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d05_loop_parallelmap                    head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d06_loop_parallelmapinto                head=REFUSED NL2394               main=REFUSED NL2335               
+r609b_d07_loop_parallelreduce                 head=REFUSED NL2394               main=REFUSED NL2335               
+r609b_d08_spawn_in_if_then_parallel           head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d09_parallel_in_nested_block            head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d10_while_loop_spawn_capture            head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d11_spawn_inner_loop_scope_outer        head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d12_scope_in_loop_parallel_before_spawn_legit head=ACCEPTED same                main=REFUSED NL2376               
+r609b_d13_return_in_scope_block               head=ACCEPTED same                main=REFUSED NL2376               
+r609b_d14_spawn_arg_reads_capture             head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d15_if_condition_capture                head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d16_nested_scope_capture                head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d17_after_inner_scope_legit             head=ACCEPTED same                main=REFUSED NL2376               
+r609b_d18_ternary_arm_capture                 head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d19_switch_case_capture                 head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d20_loop_continue                       head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_d21_parallel_then_break_spawn           head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_e01_generic_scope_dst_capture           head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_e02_generic_stale_record_capture        head=REFUSED NL2290               main=REFUSED NL2376               
+r609b_e03_generic_secret_moved_capture        head=REFUSED NL2445               main=REFUSED NL2376               
+r609b_e04_tailcall_from_capture               head=ACCEPTED same                main=REFUSED NL2376               
+r609b_e05_tailcall_from_capture_string        head=ACCEPTED same                main=REFUSED NL2376               
+r609b_e06_arrow_concise_tail_body             head=ACCEPTED same                main=REFUSED NL2376               
+r609b_e07_generic_two_fresh_dst               head=ACCEPTED same                main=REFUSED NL2335               
+r609b_e08_generic_dst_is_capture              head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_e09_generic_dst_self_capture            head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_e10_generic_fresh_T_both                head=ACCEPTED same                main=REFUSED NL2335               
+r609b_e11_generic_param_T_is_dst_caller       head=ACCEPTED same                main=REFUSED NL2335               
+r609b_o01_chain_parallel_result_fresh_dst     head=REFUSED NL2497               main=REFUSED NL2376               
+r609b_o02_config_object_lut_fresh_dst         head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_o03_mapped_then_mapinto_fresh           head=REFUSED NL2497               main=REFUSED NL2376               
+r609b_o04_capture_channel_direct              head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_s10a_utf8_offset_direct                 head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_s10b_utf8_offset_capture                head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_s10c_utf8_offset_literal_direct         head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_s10d_utf8_offset_literal_capture        head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_s10e_record_copy_forof_capture          head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_s10f_record_copy_literal_direct         head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_s1a_portab_capture                      head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_s1b_portab_direct                       head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_s1c_portab_mirror_capture               head=ACCEPTED DIFFER              main=REFUSED NL2376               MISMATCH-head
+r609b_s1d_portab_mirror_direct                head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_s2_acc_self_out                         head=REFUSED NL2497               main=REFUSED NL2248               
+r609b_s3_class_field_mutex                    head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_s3b_class_field_mutex_locks             head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_s4_forof_const_capture                  head=ACCEPTED same                main=REFUSED NL2376               
+r609b_s5_map_of_mutex                         head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_s5b_map_of_mutex_class                  head=REFUSED NL2496               main=REFUSED NL2376               
+r609b_s6_map_loop                             head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_s6_map_straight                         head=REFUSED NL2394               main=REFUSED NL2376               
+r609b_s6_mapinto_loop                         head=REFUSED NL2394               main=REFUSED NL2335               
+r609b_s6_mapinto_straight                     head=REFUSED NL2394               main=REFUSED NL2335               
+r609b_s6_reduce_loop                          head=REFUSED NL2394               main=REFUSED NL2335               
+r609b_s6_reduce_straight                      head=REFUSED NL2394               main=REFUSED NL2335               
+r609b_s7_generic_same_dst_capture             head=REFUSED NL2022               main=REFUSED NL2022,NL2335        
+r609b_s7b_generic_same_dst_capture_f64_only   head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_s7c_generic_same_dst_capture_f64_string head=REFUSED NL2348,NL2497        main=REFUSED NL2335               
+r609b_s7d_generic_same_dst_capture_f64_single head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_s8a_alias_e_of_d                        head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_s8b_alias_dst_is_alias                  head=REFUSED NL2497               main=REFUSED NL2335               
+r609b_s9_captured_string_charcode             head=ACCEPTED same                main=REFUSED NL2376               
+r609b_s9b_string_charcode_direct              head=ACCEPTED same                main=ACCEPTED same                
+r609b_z01_oob_direct                          head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_z02_oob_direct_param                    head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_z03_newarray_negative                   head=ACCEPTED DIFFER              main=ACCEPTED DIFFER              MISMATCH-head
+r609b_z04_param_assign                        head=REFUSED NL2179               main=REFUSED NL2179               
+r609b_z05_generic_dup_diag_main               head=REFUSED NL2290               main=REFUSED NL2290               
+#
+# == Full head lines, round-2 programs ==
+r609b_a01_param_reassign | REFUSED (exit 1) | NL2179 7:3 Cannot assign to `t` because it is a parameter;
+r609b_a02_param_field_holds_dst | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `p`, and can reach a `i32[]` through `p.arr`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609b_a03_param_field_const | REFUSED (exit 1) | NL2497 10:3 `(x) => ...` reads `t`, and can reach a `i32[]` through `t`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_a04_helper_returns_dst | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `t`, and can reach a `i32[]` through `t`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_a05_push_into_param_arrays | REFUSED (exit 1) | NL2497 8:3 `(x) => ...` reads `ts`, and can reach a `i32[]` through `ts[i]`, which could be the array `parallelMapInto` is writing: another thread would be writing it whil;
+r609b_a06_push_into_param_arrays_elem | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `t`, and can reach a `i32[]` through `t`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_a07_ternary_param_or_dst | REFUSED (exit 1) | NL2497 8:3 `(x) => ...` reads `u`, and can reach a `i32[]` through `u`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_a08_param_obj_built_earlier | REFUSED (exit 1) | NL2497 4:3 `(x) => ...` reads `p`, and can reach a `i32[]` through `p.arr`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609b_a09_param_holder_fresh_dst_inside | REFUSED (exit 1) | NL2497 10:3 `(x) => ...` reads `q`, and can reach a `i32[]` through `q.arr`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609b_a10_param_lut_legit_large | ACCEPTED | native: 607813 exit=0  | t1: 607813 exit=0  | t2: 607813 exit=0  | node: 607813 exit=0  | same
+r609b_a11_param_is_dst_param | REFUSED (exit 1) | NL2497 3:3 `(x) => ...` reads `t`, and can reach a `i32[]` through `t`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_a12_fresh_capture_param_dst | ACCEPTED | native: 999949 exit=0  | t1: 999949 exit=0  | t2: 999949 exit=0  | node: 999949 exit=0  | same
+r609b_a13_generic_param_fresh_dst | ACCEPTED | native: 999976 999967 exit=0  | t1: 999976 999967 exit=0  | t2: 999976 999967 exit=0  | node: 999976 999967 exit=0  | same
+r609b_a14_generic_dst_T | ACCEPTED | native: 3 3.5 exit=0  | t1: 3 3.5 exit=0  | t2: 3 3.5 exit=0  | node: 3 3.5 exit=0  | same
+r609b_a15_recursive_param_is_outer_dst | ACCEPTED | native: 999997 exit=0  | t1: 999997 exit=0  | t2: 999997 exit=0  | node: 999997 exit=0  | same
+r609b_b01_self_out_dst | REFUSED (exit 1) | NL2497 9:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.out`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_b02_self_method_writes_this | REFUSED (exit 1) | NL2345 7:16 `(x) => ...` writes memory its caller can see through `S.bump`, and `parallelMap` runs it on several threads at once: a parallel body may read what its caller o;
+r609b_b03_self_has_mutex | REFUSED (exit 1) | NL2496 9:43 The arrow reads `self`, which is `S`, and a data-parallel body cannot capture it;
+r609b_b04_self_has_channel | REFUSED (exit 1) | NL2496 8:43 The arrow reads `self`, which is `S`, and a data-parallel body cannot capture it;
+r609b_b05_self_alias_s2 | REFUSED (exit 1) | NL2497 10:5 `(x) => ...` reads `s2`, and can reach a `i32[]` through `s2.out`, which could be the array `parallelMapInto` is writing: another thread would be writing it whi;
+r609b_b06_self_method_reads_out | REFUSED (exit 1) | NL2497 9:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.out`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_b07_self_out_alias_const | REFUSED (exit 1) | NL2497 10:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.out`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_b08_self_dst_via_const_read_self | REFUSED (exit 1) | NL2497 9:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.out`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_b09_self_fresh_dst_legit | REFUSED (exit 1) | NL2497 9:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.tab`, which could be the array `parallelMapInto` is writing: another thread would be writing it;NL2497 17:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.tab`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_b10_self_map_field | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 3 exit=0  | same
+r609b_b11_self_in_ctor | ACCEPTED | native: 12 exit=0  | t1: 12 exit=0  | t2: 12 exit=0  | node: 12 exit=0  | same
+r609b_b12_self_reduce_dst_field | ACCEPTED | native: 999991 exit=0  | t1: 999991 exit=0  | t2: 999991 exit=0  | node: 999991 exit=0  | same
+r609b_b13_this_field_const_fresh_dst | REFUSED (exit 1) | NL2497 8:5 `(x) => ...` reads `tab`, and can reach a `i32[]` through `tab`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609b_b14_this_field_stored_dst | REFUSED (exit 1) | NL2497 11:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.tab`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_c01_splice_capture | REFUSED (exit 1) | NL2249 6:6 Unknown method `splice` on P[] (supported: push, pop, indexOf, join, set, fill);
+r609b_c01d_splice_direct | REFUSED (exit 1) | NL2249 5:6 Unknown method `splice` on P[] (supported: push, pop, indexOf, join, set, fill);
+r609b_c02_length_assign_capture | REFUSED (exit 1) | NL2002 6:3 Cannot assign to `length` of P[] (array length is read-only; use `push`);
+r609b_c02d_length_assign_direct | REFUSED (exit 1) | NL2002 5:3 Cannot assign to `length` of P[] (array length is read-only; use `push`);
+r609b_c03_shift_capture | REFUSED (exit 1) | NL2249 6:6 Unknown method `shift` on P[] (supported: push, pop, indexOf, join, set, fill);NL2249 7:6 Unknown method `unshift` on P[] (supported: push, pop, indexOf, join, set, fill);
+r609b_c03d_shift_direct | REFUSED (exit 1) | NL2249 5:6 Unknown method `shift` on P[] (supported: push, pop, indexOf, join, set, fill);NL2249 6:6 Unknown method `unshift` on P[] (supported: push, pop, indexOf, join, set, fill);
+r609b_c04_pop_in_helper_capture | REFUSED (exit 1) | NL2290 8:33 `last` refers to an element of `ps`, and `churn(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609b_c04d_pop_in_helper_direct | REFUSED (exit 1) | NL2290 7:10 `last` refers to an element of `ps`, and `churn(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609b_c05_loop_push_capture | ACCEPTED | native: 40 exit=0  | t1: 40 exit=0  | t2: 40 exit=0  | node: 40 exit=0  | same
+r609b_c05b_loop_ref_outside_capture | REFUSED (exit 1) | NL2290 8:36 `first` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609b_c05bd_loop_ref_outside_direct | REFUSED (exit 1) | NL2290 7:13 `first` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609b_c06_arena_result_escapes | REFUSED (exit 1) | NL2418 7:5 `parallelFrom(10, (i) => t[i % 3])` may be allocated inside the `using arena()` block at 5:5 and is assigned to `r`, which is declared outside the block: the bl;
+r609b_c06d_arena_result_escapes_direct | REFUSED (exit 1) | NL2418 8:5 `u` may be allocated inside the `using arena()` block at 4:5 and is assigned to `r`, which is declared outside the block: the block releases what it allocated w;
+r609b_c07_arena_captured_legit | ACCEPTED | native: 3970042 exit=0  | t1: 3970042 exit=0  | t2: 3970042 exit=0  | node: 3970042 exit=0  | same
+r609b_c08_narrow_and_capture | ACCEPTED | native: true exit=0  | t1: true exit=0  | t2: true exit=0  | node: true exit=0  | same
+r609b_c08b_narrow_wrong_arm | REFUSED (exit 1) | NL2187 7:51 Cannot read property `v` of `P | null`; check for null first: `if (p !== null) { ... }` narrows `P | null` to `P`;
+r609b_c08c_narrow_or | REFUSED (exit 1) | NL2187 7:53 Cannot read property `v` of `P | null`; check for null first: `if (p !== null) { ... }` narrows `P | null` to `P`;
+r609b_c08d_narrow_after_return | ACCEPTED | native: 6 -1 exit=0  | t1: 6 -1 exit=0  | t2: 6 -1 exit=0  | node: 6 -1 exit=0  | same
+r609b_c08e_narrow_in_else | REFUSED (exit 1) | NL2187 11:34 Cannot read property `v` of `P | null`; check for null first: `if (p !== null) { ... }` narrows `P | null` to `P`;
+r609b_c09_return_capture_churn | ACCEPTED | native: 991006 2000 exit=0  | t1: 991006 2000 exit=0  | t2: 991006 2000 exit=0  | node: 991006 2000 exit=0  | same
+r609b_c10_loop_pass_fresh_capture | ACCEPTED | native: 995359 exit=0  | t1: 995359 exit=0  | t2: 995359 exit=0  | node: 995359 exit=0  | same
+r609b_c11_index_proven_other_array | ACCEPTED | native: index out of range: 8 >= 8 exit=1  | t1: index out of range: 8 >= 8 exit=1  | t2: index out of range: 8 >= 8 exit=1  | node: undefined exit=0  | DIFFER
+r609b_c11d_index_proven_other_array_direct | ACCEPTED | native: index out of range: 8 >= 8 exit=1  | t1: index out of range: 8 >= 8 exit=1  | t2: index out of range: 8 >= 8 exit=1  | node: undefined exit=0  | DIFFER
+r609b_c12_const_index_proven_loop | ACCEPTED | native: index out of range: 8 >= 8 exit=1  | t1: index out of range: 8 >= 8 exit=1  | t2: index out of range: 8 >= 8 exit=1  | node: NaN exit=0  | DIFFER
+r609b_c13_mapinto_index_from_other | ACCEPTED | native: index out of range: 9 >= 9 exit=1  | t1: index out of range: 9 >= 9 exit=1  | t2: index out of range: 9 >= 9 exit=1  | node: undefined exit=0  | DIFFER
+r609b_c14_inline_mutated_then_captured | ACCEPTED | native: 999697 51 exit=0  | t1: 999697 51 exit=0  | t2: 999697 51 exit=0  | node: 999697 51 exit=0  | same
+r609b_c15_inline_record_capture | ACCEPTED | native: 499601 exit=0  | t1: 499601 exit=0  | t2: 499601 exit=0  | node: 499601 exit=0  | same
+r609b_c16_secret_alias_before_move_capture | ACCEPTED | native: 3 1 exit=0  | t1: 3 1 exit=0  | t2: 3 1 exit=0  | node: 3 1 exit=0  | same
+r609b_c16d_secret_alias_before_move_direct | ACCEPTED | native: 3 1 exit=0  | t1: 3 1 exit=0  | t2: 3 1 exit=0  | node: 3 1 exit=0  | same
+r609b_c16e_secret_alias_after_wipe_direct | ACCEPTED | native: 0 1 exit=0  | t1: 0 1 exit=0  | t2: 0 1 exit=0  | node: 0 1 exit=0  | same
+r609b_c16f_secret_alias_after_wipe_capture | ACCEPTED | native: 0 1 exit=0  | t1: 0 1 exit=0  | t2: 0 1 exit=0  | node: 0 1 exit=0  | same
+r609b_c17_secret_moved_in_branch_capture | REFUSED (exit 1) | NL2445 12:43 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609b_c17d_secret_moved_in_branch_direct | REFUSED (exit 1) | NL2445 11:20 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609b_c18_secret_moved_loop_capture | REFUSED (exit 1) | NL2445 8:42 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;NL2445 10:40 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609b_c18d_secret_moved_loop_direct | REFUSED (exit 1) | NL2445 7:19 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;NL2445 9:40 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609b_c19_guard_out_of_scope | ACCEPTED | native: 15 exit=0  | t1: 15 exit=0  | t2: 15 exit=0  | node: 15 exit=0  | same
+r609b_c20_forof_elem_capture_push_after | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 3 exit=0  | same
+r609b_c21_guard_captured_after_block | REFUSED (exit 1) | NL2470 9:16 `parallelMap` is reached while `g` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` ;
+r609b_d01_parallel_before_first_spawn | ACCEPTED | native: 2 42 exit=0  | t1: 2 42 exit=0  | t2: 2 42 exit=0  | node: 2 42 exit=0  | same
+r609b_d02_loop_later_spawn_capture | REFUSED (exit 1) | NL2394 8:41 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d02b_loop_spawn_at_k1_capture | REFUSED (exit 1) | NL2394 11:41 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d02d_loop_later_spawn_direct | REFUSED (exit 1) | NL2394 8:17 This reads `done`, a destination of a task of `s`, before the scope joins;NL2394 8:27 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d03_alias_before_scope_capture | REFUSED (exit 1) | NL2394 8:23 The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a d;
+r609b_d03d_alias_before_scope_direct | REFUSED (exit 1) | NL2394 8:23 The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a d;
+r609b_d04_field_of_captured_object | REFUSED (exit 1) | NL2394 9:23 The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a d;
+r609b_d04b_field_object_literal | REFUSED (exit 1) | NL2394 9:23 The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a d;
+r609b_d05_loop_parallelmap | REFUSED (exit 1) | NL2394 9:18 `parallelMap<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_d06_loop_parallelmapinto | REFUSED (exit 1) | NL2394 10:7 `parallelMapInto<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_d07_loop_parallelreduce | REFUSED (exit 1) | NL2394 9:17 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_d08_spawn_in_if_then_parallel | REFUSED (exit 1) | NL2394 11:32 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d09_parallel_in_nested_block | REFUSED (exit 1) | NL2394 9:41 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d10_while_loop_spawn_capture | REFUSED (exit 1) | NL2394 9:41 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d11_spawn_inner_loop_scope_outer | REFUSED (exit 1) | NL2394 8:41 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d12_scope_in_loop_parallel_before_spawn_legit | ACCEPTED | native: 141 exit=0  | t1: 141 exit=0  | t2: 141 exit=0  | node: 141 exit=0  | same
+r609b_d13_return_in_scope_block | ACCEPTED | native: 44 exit=0  | t1: 44 exit=0  | t2: 44 exit=0  | node: 44 exit=0  | same
+r609b_d14_spawn_arg_reads_capture | REFUSED (exit 1) | NL2394 8:42 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d15_if_condition_capture | REFUSED (exit 1) | NL2394 8:32 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d16_nested_scope_capture | REFUSED (exit 1) | NL2394 11:7 A task of another scope, whose join stores its answer, writes memory a task of `s` may read, before the scope joins;NL2394 13:39 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d17_after_inner_scope_legit | ACCEPTED | native: 6 2 exit=0  | t1: 6 2 exit=0  | t2: 6 2 exit=0  | node: 6 2 exit=0  | same
+r609b_d18_ternary_arm_capture | REFUSED (exit 1) | NL2394 9:36 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d19_switch_case_capture | REFUSED (exit 1) | NL2394 11:36 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d20_loop_continue | REFUSED (exit 1) | NL2394 13:38 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_d21_parallel_then_break_spawn | REFUSED (exit 1) | NL2394 10:38 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_e01_generic_scope_dst_capture | REFUSED (exit 1) | NL2394 9:32 This reads `done`, a destination of a task of `s`, before the scope joins;NL2394 9:32 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609b_e02_generic_stale_record_capture | REFUSED (exit 1) | NL2290 8:33 `last` refers to an element of `ps`, and `ps.pop()` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;NL2290 8:33 `last` refers to an element of `ps`, and `ps.pop()` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609b_e03_generic_secret_moved_capture | REFUSED (exit 1) | NL2445 7:43 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;NL2445 7:43 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609b_e04_tailcall_from_capture | ACCEPTED | native: 495497 1 1000 exit=0  | t1: 495497 1 1000 exit=0  | t2: 495497 1 1000 exit=0  | node: 495497 1 1000 exit=0  | same
+r609b_e05_tailcall_from_capture_string | ACCEPTED | native: 999556 46 48 exit=0  | t1: 999556 46 48 exit=0  | t2: 999556 46 48 exit=0  | node: 999556 46 48 exit=0  | same
+r609b_e06_arrow_concise_tail_body | ACCEPTED | native: 495512 exit=0  | t1: 495512 exit=0  | t2: 495512 exit=0  | node: 495512 exit=0  | same
+r609b_e07_generic_two_fresh_dst | ACCEPTED | native: 999976 999967 exit=0  | t1: 999976 999967 exit=0  | t2: 999976 999967 exit=0  | node: 999976 999967 exit=0  | same
+r609b_e08_generic_dst_is_capture | REFUSED (exit 1) | NL2497 8:3 `(x) => ...` reads `t`, and can reach a `i32[]` through `t`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;NL2497 8:3 `(x) => ...` reads `t`, and can reach a `i32[]` through `t`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_e09_generic_dst_self_capture | REFUSED (exit 1) | NL2497 7:3 `(x) => ...` reads `d`, and can reach a `i32[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;NL2497 7:3 `(x) => ...` reads `d`, and can reach a `i32[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_e10_generic_fresh_T_both | ACCEPTED | native: 7 2.5 exit=0  | t1: 7 2.5 exit=0  | t2: 7 2.5 exit=0  | node: 7 2.5 exit=0  | same
+r609b_e11_generic_param_T_is_dst_caller | ACCEPTED | native: 3000000 exit=0  | t1: 3000000 exit=0  | t2: 3000000 exit=0  | node: 3000000 exit=0  | same
+r609b_o01_chain_parallel_result_fresh_dst | REFUSED (exit 1) | NL2497 8:3 `(x) => ...` reads `a`, and can reach a `i32[]` through `a`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_o02_config_object_lut_fresh_dst | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `cfg`, and can reach a `i32[]` through `cfg.lut`, which could be the array `parallelMapInto` is writing: another thread would be writing it w;
+r609b_o03_mapped_then_mapinto_fresh | REFUSED (exit 1) | NL2497 8:3 `(x) => ...` reads `weights`, and can reach a `i32[]` through `weights`, which could be the array `parallelMapInto` is writing: another thread would be writing ;
+r609b_o04_capture_channel_direct | REFUSED (exit 1) | NL2496 4:49 The arrow reads `c`, which is `Channel<i32>`, and a data-parallel body cannot capture it;
+r609b_s10a_utf8_offset_direct | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 2 exit=0  | DIFFER
+r609b_s10b_utf8_offset_capture | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 2 exit=0  | DIFFER
+r609b_s10c_utf8_offset_literal_direct | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+r609b_s10d_utf8_offset_literal_capture | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+r609b_s10e_record_copy_forof_capture | ACCEPTED | native: 15 exit=0  | t1: 15 exit=0  | t2: 15 exit=0  | node: 55 exit=0  | DIFFER
+r609b_s10f_record_copy_literal_direct | ACCEPTED | native: 15 exit=0  | t1: 15 exit=0  | t2: 15 exit=0  | node: 55 exit=0  | DIFFER
+r609b_s1a_portab_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609b_s1b_portab_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609b_s1c_portab_mirror_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609b_s1d_portab_mirror_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609b_s2_acc_self_out | REFUSED (exit 1) | NL2497 7:5 `(x) => ...` reads `self`, and can reach a `i32[]` through `self.out`, which could be the array `parallelMapInto` is writing: another thread would be writing it;
+r609b_s3_class_field_mutex | REFUSED (exit 1) | NL2496 13:39 The arrow reads `self`, which is `Holder`, and a data-parallel body cannot capture it;
+r609b_s3b_class_field_mutex_locks | REFUSED (exit 1) | NL2496 17:39 The arrow reads `self`, which is `Holder`, and a data-parallel body cannot capture it;
+r609b_s4_forof_const_capture | ACCEPTED | native: k=1 997006 999 k=3 991012 2997 k=7 979024 6993 967036 exit=0  | t1: k=1 997006 999 k=3 991012 2997 k=7 979024 6993 967036 exit=0  | t2: k=1 997006 999 k=3 991012 2997 k=7 979024 6993 967036 exit=0  | node: k=1 997006 999 k=3 991012 2997 k=7 979024 6993 967036 exit=0  | same
+r609b_s5_map_of_mutex | REFUSED (exit 1) | NL2496 6:15 The arrow reads `ms`, which is `Map<i32, Mutex<i32>>`, and a data-parallel body cannot capture it;
+r609b_s5b_map_of_mutex_class | REFUSED (exit 1) | NL2496 6:48 The arrow reads `ms`, which is `Map<i32, Mutex<Counter>>`, and a data-parallel body cannot capture it;
+r609b_s6_map_loop | REFUSED (exit 1) | NL2394 9:17 `parallelMap<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_s6_map_straight | REFUSED (exit 1) | NL2394 9:15 `parallelMap<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_s6_mapinto_loop | REFUSED (exit 1) | NL2394 9:36 `parallelMapInto<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_s6_mapinto_straight | REFUSED (exit 1) | NL2394 9:34 `parallelMapInto<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_s6_reduce_loop | REFUSED (exit 1) | NL2394 9:17 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_s6_reduce_straight | REFUSED (exit 1) | NL2394 9:15 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609b_s7_generic_same_dst_capture | REFUSED (exit 1) | NL2022 3:13 `new Array<string>(n)` would zero-fill with null string values; build it with `[]` and `push` instead;
+r609b_s7b_generic_same_dst_capture_f64_only | REFUSED (exit 1) | NL2497 5:3 `(x) => ...` reads `d`, and can reach a `f64[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;NL2497 5:3 `(x) => ...` reads `d`, and can reach a `i32[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_s7c_generic_same_dst_capture_f64_string | REFUSED (exit 1) | NL2497 5:3 `(x) => ...` reads `d`, and can reach a `f64[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;NL2348 5:3 `(x) => ...` answers `string`, and `parallelMapInto` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anyth;NL2497 5:3 `(x) => ...` reads `d`, and can reach a `string[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while ;
+r609b_s7d_generic_same_dst_capture_f64_single | REFUSED (exit 1) | NL2497 5:3 `(x) => ...` reads `d`, and can reach a `f64[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_s8a_alias_e_of_d | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `e`, and can reach a `i32[]` through `e`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_s8b_alias_dst_is_alias | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `d`, and can reach a `i32[]` through `d`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609b_s9_captured_string_charcode | ACCEPTED | native: 110 104 exit=0  | t1: 110 104 exit=0  | t2: 110 104 exit=0  | node: 110 104 exit=0  | same
+r609b_s9b_string_charcode_direct | ACCEPTED | native: 110 104 exit=0  | t1: 110 104 exit=0  | t2: 110 104 exit=0  | node: 110 104 exit=0  | same
+r609b_z01_oob_direct | ACCEPTED | native: index out of range: 10 >= 10 exit=1  | t1: index out of range: 10 >= 10 exit=1  | t2: index out of range: 10 >= 10 exit=1  | node: undefined exit=0  | DIFFER
+r609b_z02_oob_direct_param | ACCEPTED | native: index out of range: 10 >= 10 exit=1  | t1: index out of range: 10 >= 10 exit=1  | t2: index out of range: 10 >= 10 exit=1  | node: undefined exit=0  | DIFFER
+r609b_z03_newarray_negative | ACCEPTED | native: array length out of range exit=1  | t1: array length out of range exit=1  | t2: array length out of range exit=1  | node: file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/r2/p/r609b_z03_newarray_negative.ts:3   const a = new Array     (neg());             ^  RangeError: Invalid array length     at Module.main (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/r2/p/r609b_z03_newarray_negative.ts:3:13)     at file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/[eval1]:1:157  Node.js v22.22.0 exit=1  | DIFFER
+r609b_z04_param_assign | REFUSED (exit 1) | NL2179 2:3 Cannot assign to `t` because it is a parameter;
+r609b_z05_generic_dup_diag_main | REFUSED (exit 1) | NL2290 7:10 `last` refers to an element of `ps`, and `ps.pop()` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;NL2290 7:10 `last` refers to an element of `ps`, and `ps.pop()` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+#
+# == Full head lines, round-1 programs (rerun) ==
+r609_a01_holder_dst | REFUSED (exit 1) | NL2497 14:3 `(x) => ...` reads `o`, and can reach a `i32[]` through `o.arr`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609_a02_helper_same | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `alias`, and can reach a `i32[]` through `alias`, which could be the array `parallelMapInto` is writing: another thread would be writing it w;
+r609_a03_cond_alias | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `alias`, and can reach a `i32[]` through `alias`, which could be the array `parallelMapInto` is writing: another thread would be writing it w;
+r609_a04_param_both | REFUSED (exit 1) | NL2497 3:3 `(x) => ...` reads `xs`, and can reach a `i32[]` through `xs`, which could be the array `parallelMapInto` is writing: another thread would be writing it while t;
+r609_a05_dst_field | REFUSED (exit 1) | NL2497 13:3 `(x) => ...` reads `o`, and can reach a `i32[]` through `o.arr`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609_a06_fresh_then_field | REFUSED (exit 1) | NL2497 14:3 `(x) => ...` reads `q`, and can reach a `i32[]` through `q`, which could be the array `parallelMapInto` is writing: another thread would be writing it while thi;
+r609_a07_module_const_dst | REFUSED (exit 1) | NL2026 2:10 Module constant `G` must be a number, boolean, or string, not i32[]; there is no top-level code to build anything else;
+r609_a08_module_const_direct | REFUSED (exit 1) | NL2026 2:10 Module constant `G` must be a number, boolean, or string, not i32[]; there is no top-level code to build anything else;
+r609_a09_typed_copy_ctor | REFUSED (exit 1) | NL2171 7:32 Array length must be a number, got i32[];
+r609_a10_two_fresh_ok | ACCEPTED | native: 20999983 exit=0  | t1: 20999983 exit=0  | t2: 20999983 exit=0  | node: 20999983 exit=0  | same
+r609_a11_src_is_capture_dst_same | ACCEPTED | native: 3000000 exit=0  | t1: 3000000 exit=0  | t2: 3000000 exit=0  | node: 3000000 exit=0  | same
+r609_a12_shadow_dst | REFUSED (exit 1) | NL2497 10:5 `(x) => ...` reads `dst`, and can reach a `i32[]` through `dst`, which could be the array `parallelMapInto` is writing: another thread would be writing it while;
+r609_a13_map_reaches_dst | REFUSED (exit 1) | NL2497 9:3 `(x) => ...` reads `m`, and can reach a `i32[]` through `m.entryValues[i]`, which could be the array `parallelMapInto` is writing: another thread would be writi;NL2345 9:3 `(x) => ...` writes memory its caller can see through `Map<string, i32[]>.probe`, and `parallelMapInto` runs it on several threads at once: a parallel body may ;
+r609_a14_loop_const_fresh | ACCEPTED | native: 6000000 exit=0  | t1: 6000000 exit=0  | t2: 6000000 exit=0  | node: 6000000 exit=0  | same
+r609_c01_mixed_large | ACCEPTED | native: 551.25 1125103499999.25 105.75 0 exit=0  | t1: 551.25 1125103499999.25 105.75 0 exit=0  | t2: 551.25 1125103499999.25 105.75 0 exit=0  | node: 551.25 1125103499999.25 105.75 0 exit=0  | same
+r609_c02_many_captures | ACCEPTED | native: 805 3000000 exit=0  | t1: 805 3000000 exit=0  | t2: 805 3000000 exit=0  | node: 805 3000000 exit=0  | same
+r609_c03_generic_helper | REFUSED (exit 1) | NL2071 5:25 Non-integer literal `2.5` in i32 number mode (use --number-mode f64);
+r609_c04_forward_arrow | REFUSED (exit 1) | NL2335 5:40 The arrow reads `k`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the;
+r609_c05_same_arrow_twice | ACCEPTED | native: 215634 612 614 exit=0  | t1: 215634 612 614 exit=0  | t2: 215634 612 614 exit=0  | node: 215634 612 614 exit=0  | same
+r609_c06_nested_forms | REFUSED (exit 1) | NL2345 11:16 `(r) => ...` writes memory its caller can see through `rowSum`, and `parallelMap` runs it on several threads at once: a parallel body may read what its caller o;
+r609_c07_reduce_capture | ACCEPTED | native: 1498500.0000000002 1000002 exit=0  | t1: 1498500.0000000002 1000002 exit=0  | t2: 1498500.0000000002 1000002 exit=0  | node: 1498500.0000000002 1000002 exit=0  | same
+r609_c08_recursion | ACCEPTED | native: 397873 exit=0  | t1: 397873 exit=0  | t2: 397873 exit=0  | node: 397873 exit=0  | same
+r609_c09_costly_body_split | ACCEPTED | native: 58700 311966 840707 exit=0  | t1: 58700 311966 840707 exit=0  | t2: 58700 311966 840707 exit=0  | node: 58700 311966 840707 exit=0  | same
+r609_c10_nullable_narrowed_large | ACCEPTED | native: 222750000 -1 exit=0  | t1: 222750000 -1 exit=0  | t2: 222750000 -1 exit=0  | node: 222750000 -1 exit=0  | same
+r609_c11_result_escape_churn | ACCEPTED | native: 11999996 20 45 48 19900 exit=0  | t1: 11999996 20 45 48 19900 exit=0  | t2: 11999996 20 45 48 19900 exit=0  | node: 11999996 20 45 48 19900 exit=0  | same
+r609_c12_method_param_capture | ACCEPTED | native: 999814 exit=0  | t1: 999814 exit=0  | t2: 999814 exit=0  | node: 999814 exit=0  | same
+r609_c13_inplace_capture | ACCEPTED | native: 495452 exit=0  | t1: 495452 exit=0  | t2: 495452 exit=0  | node: 495452 exit=0  | same
+r609_c14_cttime_fn_param | REFUSED (exit 1) | NL2335 3:88 The arrow reads `f`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the;
+r609_c15_capture_used_as_index_and_src | ACCEPTED | native: 495506 exit=0  | t1: 495506 exit=0  | t2: 495506 exit=0  | node: 495506 exit=0  | same
+r609_c16_bool_result_capture | ACCEPTED | native: 1234567 exit=0  | t1: 1234567 exit=0  | t2: 1234567 exit=0  | node: 1234567 exit=0  | same
+r609_c17_oob_capture | ACCEPTED | native: index out of range: 10 >= 10 exit=1  | t1: index out of range: 10 >= 10 exit=1  | t2: index out of range: 10 >= 10 exit=1  | node: undefined exit=0  | DIFFER
+r609_c18_oob_capture_proved_outer | ACCEPTED | native: index out of range: 10 >= 10 exit=1  | t1: index out of range: 10 >= 10 exit=1  | t2: index out of range: 10 >= 10 exit=1  | node: undefined exit=0  | DIFFER
+r609_c19_inline_array_const_index | ACCEPTED | native: 44 26 exit=0  | t1: 44 26 exit=0  | t2: 44 26 exit=0  | node: 44 26 exit=0  | same
+r609_c20_inline_array_large | ACCEPTED | native: 1507500000 11 0.5 exit=0  | t1: 1507500000 11 0.5 exit=0  | t2: 1507500000 11 0.5 exit=0  | node: 1507500000 11 0.5 exit=0  | same
+r609_c21_field_narrowing | REFUSED (exit 1) | NL2187 12:58 Cannot read property `v` of `In | null`; only a local is narrowed, not a field or element, so bind it first: `const inner = c.inner; if (inner !== null) { ... };
+r609_c22_tdz_capture | ACCEPTED | native: 2 5 exit=0  | t1: 2 5 exit=0  | t2: 2 5 exit=0  | node: file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_c22_tdz_capture.ts:4   const ys = parallelFrom(3, (i) => i * k);                                         ^  ReferenceError: Cannot access 'k' before initialization     at file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_c22_tdz_capture.ts:4:41     at fromRange (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/std/threads.ts:199:15)     at parallelFrom (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/sc
+r609_c23_tdz_direct | ACCEPTED | native: 2 5 exit=0  | t1: 2 5 exit=0  | t2: 2 5 exit=0  | node: file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_c23_tdz_direct.ts:3   const a = 2 * k;             ^  ReferenceError: Cannot access 'k' before initialization     at Module.main (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_c23_tdz_direct.ts:3:13)     at file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/[eval1]:1:146  Node.js v22.22.0 exit=1  | DIFFER
+r609_c24_ctor_capture | ACCEPTED | native: 12 exit=0  | t1: 12 exit=0  | t2: 12 exit=0  | node: 12 exit=0  | same
+r609_c25_generic_capture_fixed | ACCEPTED | native: 3000000 7 2.5 true exit=0  | t1: 3000000 7 2.5 true exit=0  | t2: 3000000 7 2.5 true exit=0  | node: 3000000 7 2.5 true exit=0  | same
+r609_c26_capture_named_like_module_fn | ACCEPTED | native: 19 6 10 exit=0  | t1: 19 6 10 exit=0  | t2: 19 6 10 exit=0  | node: 19 6 10 exit=0  | same
+r609_c27_capture_in_template_and_cond | ACCEPTED | native: 9 6 5 4 exit=0  | t1: 9 6 5 4 exit=0  | t2: 9 6 5 4 exit=0  | node: 9 6 5 4 exit=0  | same
+r609_e01_empty_map_capture | ACCEPTED | native: 0 0 exit=0  | t1: 0 0 exit=0  | t2: 0 0 exit=0  | node: 0 0 exit=0  | same
+r609_e02_from_small_n | ACCEPTED | native: 0 1 9 exit=0  | t1: 0 1 9 exit=0  | t2: 0 1 9 exit=0  | node: 0 1 9 exit=0  | same
+r609_e03_from_negative | ACCEPTED | native: array length out of range exit=1  | t1: array length out of range exit=1  | t2: array length out of range exit=1  | node: file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/std/threads.ts:212   const dst = new Array   (n)               ^  RangeError: Invalid array length     at parallelFrom (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/std/threads.ts:212:15)     at Module.main (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_e03_from_negative.ts:4:13)     at file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811
+r609_e04_string_result | REFUSED (exit 1) | NL2348 3:13 `(i) => ...` answers `string`, and `parallelFrom` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything;
+r609_e05_class_result | REFUSED (exit 1) | NL2348 7:13 `mk` answers `P`, and `parallelMap` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would po;
+r609_e06_result_is_fresh | ACCEPTED | native: 1 3 100 4 5 99 5 exit=0  | t1: 1 3 100 4 5 99 5 exit=0  | t2: 1 3 100 4 5 99 5 exit=0  | node: 1 3 100 4 5 99 5 exit=0  | same
+r609_e07_grain_boundary | ACCEPTED | native: 158021 158371 158728 334249 334956 335670 681747 exit=0  | t1: 158021 158371 158728 334249 334956 335670 681747 exit=0  | t2: 158021 158371 158728 334249 334956 335670 681747 exit=0  | node: 158021 158371 158728 334249 334956 335670 681747 exit=0  | same
+r609_e08_class_src_capture | ACCEPTED | native: 994558 exit=0  | t1: 994558 exit=0  | t2: 994558 exit=0  | node: 994558 exit=0  | same
+r609_e09_map_src_captured | ACCEPTED | native: 498560 5 exit=0  | t1: 498560 5 exit=0  | t2: 498560 5 exit=0  | node: 498560 5 exit=0  | same
+r609_e10_from_n_capture | ACCEPTED | native: 2500000 2500000 1 exit=0  | t1: 2500000 2500000 1 exit=0  | t2: 2500000 2500000 1 exit=0  | node: 2500000 2500000 1 exit=0  | same
+r609_e11_mapinto_dst_short | ACCEPTED | native: parallelMapInto: dst has 1 elements and src has 3 exit=1  | t1: parallelMapInto: dst has 1 elements and src has 3 exit=1  | t2: parallelMapInto: dst has 1 elements and src has 3 exit=1  | node: parallelMapInto: dst has 1 elements and src has 3 exit=1  | same
+r609_e12_u8_result | ACCEPTED | native: 499079 exit=0  | t1: 499079 exit=0  | t2: 499079 exit=0  | node: 499079 exit=0  | same
+r609_q01_scope_dst_map | REFUSED (exit 1) | NL2394 5:63 `parallelMap<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_q01b_scope_dst_indexof | REFUSED (exit 1) | NL2394 5:86 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609_q01c_scope_dst_forof | REFUSED (exit 1) | NL2394 10:23 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609_q01d_scope_dst_from_index | REFUSED (exit 1) | NL2394 5:86 This reads `done`, a destination of a task of `s`, before the scope joins;
+r609_q01e_scope_dst_mapinto | REFUSED (exit 1) | NL2394 5:52 `parallelMapInto<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_q01f_scope_dst_reduce | REFUSED (exit 1) | NL2394 5:62 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_q01g_scope_task_writes_param | REFUSED (exit 1) | NL2471 12:24 `work` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_q01g_scope_task_writes_param.ts:;
+r609_q01h_scope_dst_from_param_fn | REFUSED (exit 1) | NL2394 6:42 The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a d;
+r609_q02_stale_elem_capture | ACCEPTED | native: 10 exit=0  | t1: 10 exit=0  | t2: 10 exit=0  | node: 10 exit=0  | same
+r609_q02b_stale_elem_direct | ACCEPTED | native: 10 exit=0  | t1: 10 exit=0  | t2: 10 exit=0  | node: 10 exit=0  | same
+r609_q02c_stale_elem_capture_churn | ACCEPTED | native: 9003 exit=0  | t1: 9003 exit=0  | t2: 9003 exit=0  | node: 9003 exit=0  | same
+r609_q02d_stale_record_capture | REFUSED (exit 1) | NL2290 10:33 `first` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q02e_stale_record_direct | REFUSED (exit 1) | NL2290 9:10 `first` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q02f_stale_record_churn | REFUSED (exit 1) | NL2290 11:33 `first` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q02g_stale_pop_capture | REFUSED (exit 1) | NL2290 10:33 `last` refers to an element of `ps`, and `ps.pop()` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q02h_stale_forof_capture | REFUSED (exit 1) | NL2290 11:36 `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q02i_stale_record_mapinto_main | REFUSED (exit 1) | NL2290 11:35 `first` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q02j_stale_record_helper_push | REFUSED (exit 1) | NL2290 13:33 `first` refers to an element of `ps`, and `grow(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it;
+r609_q03_arena_capture | REFUSED (exit 1) | NL2424 7:16 `parallelMap<i32, i32, (x) => ...>` is called inside the `using arena()` block at 6:5 and stores an allocation into memory, where this analysis stops following ;NL2417 7:40 `a` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release ;NL2417 7:46 `a` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release ;
+r609_q03b_arena_capture_plain | REFUSED (exit 1) | NL2039 2:17 Unsupported type reference `Disposable` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64A;
+r609_q04_generic_fresh_dst | ACCEPTED | native: 9 exit=0  | t1: 9 exit=0  | t2: 9 exit=0  | node: 9 exit=0  | same
+r609_q04b_nongeneric_fresh_dst | ACCEPTED | native: 9 exit=0  | t1: 9 exit=0  | t2: 9 exit=0  | node: 9 exit=0  | same
+r609_q05_divided_reduce_types | ACCEPTED | native: 1510125000 758062500 4557375000 1501875000 175125000 999000 1057087500 530643750 3190162500 1050787500 122587500 699300 1415 707.5 4695 9905 1865 0 exit=0  | t1: 1510125000 758062500 4557375000 1501875000 175125000 999000 1057087500 530643750 3190162500 1050787500 122587500 699300 1415 707.5 4695 9905 1865 0 exit=0  | t2: 1510125000 758062500 4557375000 1501875000 175125000 999000 1057087500 530643750 3190162500 1050787500 122587500 699300 1415 707.5 4695 9905 1865 0 exit=0  | node: 1510125000 758062500 4557375000 1501875000 175125000 999000 1057087500 530643750 3190162500 1050787500 122587500 699300 1415 707.5 4695 9905 1865 0 exit=0  | sam
+r609_q05b_reduce_capture_in_combiner | ACCEPTED | native: 562125000 531941 exit=0  | t1: 562125000 531941 exit=0  | t2: 562125000 531941 exit=0  | node: 562125000 531941 exit=0  | same
+r609_q05c_i64_reduce_identity | REFUSED (exit 1) | NL2350 5:13 `parallelReduce` folds every block from its identity, and the identity of `+` is `0`, not `toI64(0)`: any other value would be counted once per block;
+r609_q06_from_zero_capture | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 0 exit=0  | same
+r609_q06b_from_neg_capture | ACCEPTED | native: array length out of range exit=1  | t1: array length out of range exit=1  | t2: array length out of range exit=1  | node: file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/std/threads.ts:212   const dst = new Array   (n)               ^  RangeError: Invalid array length     at parallelFrom (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/head/std/threads.ts:212:15)     at Module.main (file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_q06b_from_neg_capture.ts:5:13)     at file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-6
+r609_q07_nested_nocapture | REFUSED (exit 1) | NL2345 4:14 `(x) => ...` writes memory its caller can see through `parallelMap<i32, i32, (y) => ...>`, and `parallelMap` runs it on several threads at once: a parallel body;
+r609_q08a_capture_map | REFUSED (exit 1) | NL2345 5:14 `(i) => ...` writes memory its caller can see through `Map<string, i32>.has`, and `parallelFrom` runs it on several threads at once: a parallel body may read wh;
+r609_q08b_capture_set | REFUSED (exit 1) | NL2345 5:14 `(i) => ...` writes memory its caller can see through `Set<i32>.has`, and `parallelFrom` runs it on several threads at once: a parallel body may read what its c;
+r609_q08c_capture_secret | REFUSED (exit 1) | NL2185 4:29 Cannot initialize Secret<u8[]> variable `key` with Secret<i32[]>;NL2496 5:38 The arrow reads `key`, which is `Secret<u8[]>`, and a data-parallel body cannot capture it: a `Secret` is read only inside `expose`;
+r609_q08d_capture_maybe | REFUSED (exit 1) | NL2496 6:38 The arrow reads `v`, which is `i32 | undefined`, and a data-parallel body cannot capture it: a value that may be absent is read through the test that found it, ;
+r609_q08e_capture_map_size | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 3 exit=0  | same
+r609_q09_param_array_fresh_dst | ACCEPTED | native: 14 exit=0  | t1: 14 exit=0  | t2: 14 exit=0  | node: 14 exit=0  | same
+r609_q10_generic_two_types | ACCEPTED | native: 13 23 13 23 exit=0  | t1: 13 23 13 23 exit=0  | t2: 13 23 13 23 exit=0  | node: 13 23 13 23 exit=0  | same
+r609_q11_secret_moved_capture | REFUSED (exit 1) | NL2445 6:43 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609_q11b_secret_moved_direct | REFUSED (exit 1) | NL2445 5:19 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;NL2440 8:3 `key` holds a `Secret<u8[]>` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so ;
+r609_q11c_secret_moved_after_wipe | REFUSED (exit 1) | NL2445 8:43 `raw` was moved into a `Secret` by `secret(raw)` and cannot be read again: the plain array would be key material outside the `Secret`'s rules;
+r609_q11d_secret_nothreads | REFUSED (exit 3) | wrote /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/out-head/r609_q11d_secret_nothreads.d/r609_q11d_secret_nothreads.ll;/tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/out-head/r609_q11d_secret_nothreads.d/r609_q11d_secret_nothreads.ll:110:54: error: base element of getelementptr must be s;110 |   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %this, i32 0, i32 0;|                                                      ^;1 error generated.;error: a module did not compile;NL0002 0:0 --link: build/../scripts/build.sh failed (exit 1); the IR is in /tmp/claude-0/
+r609_q11e_secret_threads_nocapture | REFUSED (exit 3) | wrote /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/out-head/r609_q11e_secret_threads_nocapture.d/r609_q11e_secret_threads_nocapture.ll;wrote /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/out-head/r609_q11e_secret_threads_nocapture.d/threads.ll;/tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/out-head/r609_q11e_secret_threads_nocapture.d/r609_q11e_secret_threads_nocapture.ll:181:54: error: base element of getelem;181 |   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %this, i32 0, i32 0;|                               
+r609_r01_let_nested_block | REFUSED (exit 1) | NL2492 6:47 The arrow reads `m`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thre;
+r609_r02_shadow_let_inner | REFUSED (exit 1) | NL2492 7:47 The arrow reads `m`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thre;
+r609_r03_shadow_const_inner | ACCEPTED | native: 10 exit=0  | t1: 10 exit=0  | t2: 10 exit=0  | node: 10 exit=0  | same
+r609_r04_for_let | REFUSED (exit 1) | NL2492 5:47 The arrow reads `i`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thre;
+r609_r05_for_of_const | ACCEPTED | native: 12 exit=0  | t1: 12 exit=0  | t2: 12 exit=0  | node: 12 exit=0  | same
+r609_r06_outer_arrow_param | REFUSED (exit 1) | NL2493 4:64 The arrow reads `x` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `p;
+r609_r07_arrow_in_nonparallel | REFUSED (exit 1) | NL2335 5:61 The arrow reads `k`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the;
+r609_r08_this_field_indirect | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 4 exit=0  | same
+r609_r09_this_method_call | REFUSED (exit 1) | NL2494 8:39 The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, but not `this` or a field through ;
+r609_r10_write_param_capture | REFUSED (exit 1) | NL2495 4:5 The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread ;
+r609_r11_write_capture_ref_rebind | REFUSED (exit 1) | NL2495 5:5 The arrow assigns to `t`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread ;
+r609_r12_mutex_in_object | REFUSED (exit 1) | NL2496 14:45 The arrow reads `h`, which is `Hold`, and a data-parallel body cannot capture it;
+r609_r13_mutex_in_array | REFUSED (exit 1) | NL2496 7:45 The arrow reads `ms`, which is `Mutex<Counter>[]`, and a data-parallel body cannot capture it;
+r609_r14_mutex_in_map | REFUSED (exit 1) | NL2496 8:45 The arrow reads `ms`, which is `Map<string, Mutex<Counter>>`, and a data-parallel body cannot capture it;
+r609_r15_guard_direct | REFUSED (exit 1) | NL2496 8:45 The arrow reads `g`, which is `MutexGuard<Counter>`, and a data-parallel body cannot capture it;
+r609_r16_guard_value_const | REFUSED (exit 1) | NL2467 8:13 This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean` or a;NL2470 9:14 `parallelMap` is reached while `g` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` ;
+r609_r17_channel_in_map | REFUSED (exit 1) | NL2496 6:21 The arrow reads `cs`, which is `Map<string, Channel<i32>>`, and a data-parallel body cannot capture it;
+r609_r18_scope_captured | REFUSED (exit 1) | NL2496 4:47 The arrow reads `s`, which is `ThreadScope`, and a data-parallel body cannot capture it;
+r609_r19_result_in_array | REFUSED (exit 1) | NL2496 4:45 The arrow reads `rs`, which is `Result<i32, string>[]`, and a data-parallel body cannot capture it: a `Result` is read through the test that narrowed it; bind t;
+r609_r20_result_narrowed | ACCEPTED | native: 5 exit=0  | t1: 5 exit=0  | t2: 5 exit=0  | node: 5 exit=0  | same
+r609_r21_dst_capture_nullable | REFUSED (exit 1) | NL2497 5:3 `(x) => ...` reads `alias`, and can reach a `i32[]` through `alias`, which could be the array `parallelMapInto` is writing: another thread would be writing it w;
+r609_r22_dst_param_reach | REFUSED (exit 1) | NL2497 3:3 `(x) => ...` reads `other`, and can reach a `i32[]` through `other`, which could be the array `parallelMapInto` is writing: another thread would be writing it w;
+r609_r23_let_via_closure_helper | REFUSED (exit 1) | NL2492 6:15 The arrow reads `n`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thre;
+r609_r24_tdz_shadow_in_body | ACCEPTED | native: 8 exit=0  | t1: 8 exit=0  | t2: 8 exit=0  | node: 8 exit=0  | same
+r609_r25_tdz_same_name | ACCEPTED | native: 8 exit=0  | t1: 8 exit=0  | t2: 8 exit=0  | node: 8 exit=0  | same
+r609_r26_tdz_same_block | REFUSED (exit 1) | NL2195 6:9 Duplicate declaration of `k`;NL2495 7:5 The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread ;
+r609_s01_scope_dst_read | REFUSED (exit 1) | NL2394 8:39 This reads `sums`, a destination of a task of `s`, before the scope joins;
+r609_s02_scope_dst_read_map | REFUSED (exit 1) | NL2394 10:16 `parallelMap<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_s03_scope_dst_read_return | REFUSED (exit 1) | NL2394 8:17 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;NL2394 9:14 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_s04_scope_arg_read | ACCEPTED | native: 2 5 exit=0  | t1: 2 5 exit=0  | t2: 2 5 exit=0  | node: 2 5 exit=0  | same
+r609_s05_task_arg_captured | REFUSED (exit 1) | NL2471 17:5 `fill` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_s05_task_arg_captured.ts:9:3, an;
+r609_s06_scope_dst_direct_read | REFUSED (exit 1) | NL2394 8:15 This reads `sums`, a destination of a task of `s`, before the scope joins;
+r609_s07_scope_dst_from_large | REFUSED (exit 1) | NL2394 9:46 This reads `sums`, a destination of a task of `s`, before the scope joins;
+r609_s08_scope_parallelmap_nocapture | REFUSED (exit 1) | NL2394 9:16 `parallelMap<i32, i32, (x) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_s09_scope_reduce_nocapture | REFUSED (exit 1) | NL2394 9:19 `parallelReduce<i32, (a, b) => ...>` writes memory a task of `s` may read, before the scope joins;
+r609_s10_scope_mapinto_nocapture | REFUSED (exit 1) | NL2394 11:5 `parallelMapInto<i32, i32, dbl>` writes memory a task of `s` may read, before the scope joins;
+r609_u01_scale_k | ACCEPTED | native: 2.5 5 7.5 exit=0  | t1: 2.5 5 7.5 exit=0  | t2: 2.5 5 7.5 exit=0  | node: 2.5 5 7.5 exit=0  | same
+r609_u02_lookup_table | ACCEPTED | native: 0 40 250 0 exit=0  | t1: 0 40 250 0 exit=0  | t2: 0 40 250 0 exit=0  | node: 0 40 250 0 exit=0  | same
+r609_u03_config_object | ACCEPTED | native: 0 3 10 7 exit=0  | t1: 0 3 10 7 exit=0  | t2: 0 3 10 7 exit=0  | node: 0 3 10 7 exit=0  | same
+r609_u04_string_read | ACCEPTED | native: 21 1365 exit=0  | t1: 21 1365 exit=0  | t2: 21 1365 exit=0  | node: 21 1365 exit=0  | same
+r609_u05_squares | ACCEPTED | native: 998001 332833500 exit=0  | t1: 998001 332833500 exit=0  | t2: 998001 332833500 exit=0  | node: 998001 332833500 exit=0  | same
+r609_u06_threshold_mask | ACCEPTED | native: false true true false exit=0  | t1: false true true false exit=0  | t2: false true true false exit=0  | node: false true true false exit=0  | same
+r609_u07_poly | ACCEPTED | native: 1 -0.5 -1 1 exit=0  | t1: 1 -0.5 -1 1 exit=0  | t2: 1 -0.5 -1 1 exit=0  | node: 1 -0.5 -1 1 exit=0  | same
+r609_u08_grid_index | ACCEPTED | native: 12 0 11 32 exit=0  | t1: 12 0 11 32 exit=0  | t2: 12 0 11 32 exit=0  | node: 12 0 11 32 exit=0  | same
+r609_u09_names_length | ACCEPTED | native: 3 5 3 exit=0  | t1: 3 5 3 exit=0  | t2: 3 5 3 exit=0  | node: 3 5 3 exit=0  | same
+r609_u10_narrowed_config | ACCEPTED | native: 101 102 1 2 exit=0  | t1: 101 102 1 2 exit=0  | t2: 101 102 1 2 exit=0  | node: 101 102 1 2 exit=0  | same
+r609_u11_mapinto_into_own_buffer | ACCEPTED | native: 20.1 40.1 60.1 exit=0  | t1: 20.1 40.1 60.1 exit=0  | t2: 20.1 40.1 60.1 exit=0  | node: 20.1 40.1 60.1 exit=0  | same
+r609_u12_map_lookup | REFUSED (exit 1) | NL2345 8:17 `(i) => ...` writes memory its caller can see through `Map<string, i32>.probe`, and `parallelMap` runs it on several threads at once: a parallel body may read w;
+r609_u13_param_table_mapinto | ACCEPTED | native: 7 9 8 exit=0  | t1: 7 9 8 exit=0  | t2: 7 9 8 exit=0  | node: 7 9 8 exit=0  | same
+r609_w01_method_field | REFUSED (exit 1) | NL2345 12:14 `(x) => ...` writes memory its caller can see through `Counter.bump`, and `parallelMap` runs it on several threads at once: a parallel body may read what its ca;
+r609_w02_helper_elem | REFUSED (exit 1) | NL2345 8:14 `(x) => ...` writes memory its caller can see through `setAt`, and `parallelMap` runs it on several threads at once: a parallel body may read what its caller ow;
+r609_w03_nested_field | REFUSED (exit 1) | NL2345 17:14 `(x) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w03_nested_field.ts:18:5, ;
+r609_w04_push_helper | REFUSED (exit 1) | NL2345 8:14 `(x) => ...` writes memory its caller can see through `add`, and `parallelMap` runs it on several threads at once: a parallel body may read what its caller owns;NL2352 8:14 `(x) => ...` allocates and stores the allocation into memory, and `parallelMap` releases what a body allocates after every element: a parallel body may allocate;
+r609_w05_map_set_helper | REFUSED (exit 1) | NL2345 8:14 `(x) => ...` writes memory its caller can see through `put`, and `parallelMap` runs it on several threads at once: a parallel body may read what its caller owns;NL2352 8:14 `(x) => ...` allocates and stores the allocation into memory, and `parallelMap` releases what a body allocates after every element: a parallel body may allocate;
+r609_w06_items_field | REFUSED (exit 1) | NL2345 15:14 `(x) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w06_items_field.ts:17:5, a;
+r609_w07_param_alias | REFUSED (exit 1) | NL2345 5:14 `(x) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w07_param_alias.ts:6:5, an;
+r609_w08_local_alias_in_body | REFUSED (exit 1) | NL2345 5:14 `(x) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w08_local_alias_in_body.ts;
+r609_w09_compound_scalar | REFUSED (exit 1) | NL2495 5:5 The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread ;
+r609_w10_incr_scalar | REFUSED (exit 1) | NL2495 5:5 The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread ;
+r609_w11_field_compound | REFUSED (exit 1) | NL2345 8:14 `(x) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w11_field_compound.ts:9:5,;
+r609_w12_elem_incr | REFUSED (exit 1) | NL2345 4:14 `(i) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w12_elem_incr.ts:5:5, and ;
+r609_w13_sort_captured | REFUSED (exit 1) | NL2345 5:14 `(i) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w13_sort_captured.ts:6:5, ;
+r609_w14_reduce_write | REFUSED (exit 1) | NL2345 9:17 `(a, b) => ...` writes memory its caller can see through `bump`, and `parallelReduce` runs it on several threads at once: a parallel body may read what its call;
+r609_w15_method_on_param_obj | REFUSED (exit 1) | NL2497 13:3 `(x) => ...` reads `acc`, and can reach a `i32[]` through `acc.v`, which could be the array `parallelMapInto` is writing: another thread would be writing it whi;NL2345 13:3 `(x) => ...` writes memory its caller can see through `Acc.add`, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its cal;
+r609_w16_pop_captured | REFUSED (exit 1) | NL2345 4:14 `(i) => ...` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/p/r609_w16_pop_captured.ts:5:15, ;
+r609_w17_ctor_writes_capture | REFUSED (exit 1) | NL2345 11:14 `(i) => ...` writes memory its caller can see through `Box.constructor`, and `parallelFrom` runs it on several threads at once: a parallel body may read what it;
+r609_w18_typed_capture_write | REFUSED (exit 1) | NL2345 7:14 `(i) => ...` writes memory its caller can see through `poke`, and `parallelFrom` runs it on several threads at once: a parallel body may read what its caller ow;
+zz_newarray | ACCEPTED | native: 0 1 exit=0  | t1: 0 1 exit=0  | t2: 0 1 exit=0  | node: undefined NaN exit=0  | DIFFER
