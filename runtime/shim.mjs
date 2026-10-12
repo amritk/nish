@@ -357,7 +357,9 @@ export function fromBytes(bytes, start, end) {
   const from = toIndex(start);
   const to = toIndex(end);
   if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
-  return Buffer.from(bytes.slice(from, to)).toString("latin1");
+  const out = Buffer.allocUnsafe(to - from);
+  for (let i = from; i < to; i++) out[i - from] = bytes[i];
+  return out.toString("latin1");
 }
 
 /** `console.log(x)`: `String(x)` (no `n` suffix for i64) plus a newline, written synchronously. */

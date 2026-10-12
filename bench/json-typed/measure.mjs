@@ -17,17 +17,15 @@ import { compilerFrom } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const program = "tests/link/std_json_typed/main.ts"
-const take = (argv, name) => {
-  const at = argv.indexOf(name)
-  if (at < 0 || at + 1 >= argv.length) {
-    return { value: null, rest: argv }
-  }
-  return { value: argv[at + 1], rest: [...argv.slice(0, at), ...argv.slice(at + 2)] }
+const after = compilerFrom(process.argv.slice(2))
+const rest = after.rest
+const flag = (name, fallback) => {
+  const at = rest.indexOf(name)
+  return at >= 0 && at + 1 < rest.length ? rest[at + 1] : fallback
 }
-const before = take(process.argv.slice(2), "--before")
-const after = compilerFrom(before.rest)
-const rounds = Number(take(after.rest, "--rounds").value ?? "9")
-const decodes = take(after.rest, "--decodes").value ?? "2000000"
+const rounds = Number(flag("--rounds", "9"))
+const decodes = flag("--decodes", "2000000")
+const before = flag("--before", null)
 
 const outDir = path.join(root, "build", "bench-json-typed")
 fs.rmSync(outDir, { recursive: true, force: true })
@@ -44,8 +42,8 @@ const apps = { app: build(after.cmd, after.prefix, "app") }
 apps.copy = path.join(outDir, "app", "app-copy")
 fs.copyFileSync(apps.app, apps.copy)
 fs.chmodSync(apps.copy, 0o755)
-if (before.value !== null) {
-  const base = compilerFrom(["--compiler", before.value])
+if (before !== null) {
+  const base = compilerFrom(["--compiler", before])
   apps.before = build(base.cmd, base.prefix, "before")
 }
 const names = Object.keys(apps)
@@ -85,7 +83,7 @@ let report =
   `${rounds} interleaved rounds of ${decodes} decodes, checksum ${[...checksums].join(", ")}\n` +
   `${names.map(line).join("\n")}\n` +
   `noise band (app against its byte-identical copy): min ${pct(min(times.app), min(times.copy))}, median ${pct(median(times.app), median(times.copy))}\n`
-if (before.value !== null) {
+if (before !== null) {
   const speed = (f) => (f(times.before) / f(times.app)).toFixed(2)
   report += `before / app: ${speed(min)}x (min), ${speed(median)}x (median)\n`
 }

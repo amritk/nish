@@ -16,6 +16,7 @@
 import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
+import { checkIndexArgument } from "./members"
 import {
   isNetBufferLetter,
   isNetExport,
@@ -477,13 +478,7 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
   }
   if (member === "fromCharCode") {
     if (checkBuiltinArity(ctx, call, "String.fromCharCode", args, 1)) {
-      const got = checkExpression(ctx, args.children[0], scope, ctx.numberType())
-      if (got !== T_ERROR && !isNumeric(got)) {
-        ctx.error(
-          args.children[0],
-          `\`String.fromCharCode\` expects a number index, got ${ctx.table.typeName(got)}`
-        )
-      }
+      checkIndexArgument(ctx, args.children[0], scope, "String.fromCharCode")
     }
     return T_STRING
   }
@@ -501,31 +496,18 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
  * `fromCharCode`'s is, and the range is checked when it runs.
  */
 const checkFromBytes = (ctx: CheckContext, call: Node, args: Node, scope: Scope): i32 => {
-  const name = "String.fromBytes"
-  if (!checkBuiltinArity(ctx, call, name, args, 3)) {
+  if (!checkBuiltinArity(ctx, call, "String.fromBytes", args, 3)) {
     return T_STRING
   }
-  const want = ctx.table.arrayOf(T_U8)
   const bytes = args.children[0]
-  const got = checkExpression(ctx, bytes, scope, want)
-  const readonlyBytes = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === T_U8
-  if (got !== T_ERROR && got !== want && !readonlyBytes) {
-    ctx.error(
-      bytes,
-      `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`
-    )
+  const got = checkExpression(ctx, bytes, scope, ctx.table.arrayOf(T_U8))
+  const want = ctx.table.readonlyArrayOf(T_U8)
+  if (got !== T_ERROR && !ctx.table.assignable(got, want)) {
+    ctx.error(bytes, `\`String.fromBytes\` expects an argument of type u8[], got ${ctx.table.typeName(got)}`)
   }
-  checkFromBytesEnd(ctx, args.children[1], scope)
-  checkFromBytesEnd(ctx, args.children[2], scope)
+  checkIndexArgument(ctx, args.children[1], scope, "String.fromBytes")
+  checkIndexArgument(ctx, args.children[2], scope, "String.fromBytes")
   return T_STRING
-}
-
-/** One end of `String.fromBytes`'s range: a number, as `fromCharCode`'s argument is. */
-const checkFromBytesEnd = (ctx: CheckContext, end: Node, scope: Scope): void => {
-  const type = checkExpression(ctx, end, scope, ctx.numberType())
-  if (type !== T_ERROR && !isNumeric(type)) {
-    ctx.error(end, `\`String.fromBytes\` expects a number index, got ${ctx.table.typeName(type)}`)
-  }
 }
 
 const checkConsole = (
