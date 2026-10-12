@@ -100,6 +100,13 @@ export const JSON_DECODE_UNKNOWN: i32 = -22
 export const JSON_DECODE_DUPLICATE: i32 = -23
 /** An object that ended without one of the class's fields; `errorAt` is its closing brace. */
 export const JSON_DECODE_MISSING: i32 = -24
+/**
+ * A `Map` field's object with more keys than `maxMapKeys`; `errorAt` is the
+ * first key past the limit. The global `Map` hashes a string with no seed, so
+ * a body can choose keys that all collide, and the limit bounds what one
+ * map's probes cost (docs/security/json.md, JSON-9).
+ */
+export const JSON_DECODE_MAP_LIMIT: i32 = -25
 
 /** What a program running under Node is told, where the compiler would have written the code. */
 const JSON_TYPED_ERASED: string =
@@ -213,6 +220,8 @@ export class JsonDecoder {
   failed: i32 = 0
   /** The byte offset in the input of the token the error was found at; `-1` until one. */
   errorAt: i32 = -1
+  /** The most keys one `Map` field's object may give, 4,096 unless set; past it, `JSON_DECODE_MAP_LIMIT`. */
+  maxMapKeys: i32 = 4096
   /** Step over a key that names no field instead of failing with `JSON_DECODE_UNKNOWN`. */
   ignoreUnknown: boolean = false
   /**
@@ -226,7 +235,7 @@ export class JsonDecoder {
     this.tok = new JsonTokenizer(src, off, len, limits)
   }
 
-  /** Starts over on `src[off, off + len)`, keeping the limits and `ignoreUnknown`, and clearing any error. */
+  /** Starts over on `src[off, off + len)`, keeping the limits, `ignoreUnknown` and `maxMapKeys`, and clearing any error. */
   reset(src: u8[], off: i32, len: i32): void {
     this.tok.reset(src, off, len)
     this.failed = JSON_DECODE_OK
@@ -324,6 +333,18 @@ export class JsonDecoder {
       return -1
     }
     return toI32(src[i])
+  }
+
+  /**
+   * Whether a map that already holds `count` keys may take another, the
+   * current one; `JSON_DECODE_MAP_LIMIT` at the key when it may not.
+   */
+  mapRoom(count: i32): boolean {
+    if (count < this.maxMapKeys) {
+      return true
+    }
+    this.fail(JSON_DECODE_MAP_LIMIT, this.tok.tokStart)
+    return false
   }
 
   /** The current key, decoded, as a new string: a `Map` field's key. `""` when the current token is not a key. */

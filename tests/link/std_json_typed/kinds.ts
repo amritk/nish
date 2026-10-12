@@ -7,6 +7,7 @@ import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import {
   JSON_DECODE_DUPLICATE,
+  JSON_DECODE_MAP_LIMIT,
   JSON_DECODE_MISSING,
   JSON_DECODE_OK,
   JSON_DECODE_RANGE,
@@ -134,6 +135,20 @@ const jtEnums = (t: Suite): void => {
   jtKindsError(t, "enum: null", "level", "null", JSON_DECODE_TYPE, 0);
   jtKindsError(t, "enum: -2 names no member of Sign", "sign", "-2", JSON_DECODE_TYPE, 0);
 
+  // A read that fails stores nothing, though its `0` is a member's value
+  // (`Level.Low`): the field keeps the member it held, and an array pushes
+  // nothing for the element.
+  for (const bad of ["5.5", "2147483648", `"x"`]) {
+    const keep = new Kinds();
+    keep.level = Level.High;
+    const r = jtDecode(jtKindsWith("level", bad), keep, new JsonLimits(), false);
+    t.ok(`enum: a failed read of ${bad} fails`, r.failed === JSON_DECODE_RANGE || r.failed === JSON_DECODE_TYPE);
+    t.ok(`enum: and the field keeps High, not Low, after ${bad}`, keep.level === Level.High);
+    const list = new Kinds();
+    jtDecode(jtKindsWith("levels", `[9,${bad}]`), list, new JsonLimits(), false);
+    t.ok(`enum array: nothing is pushed for ${bad}`, list.levels.length === 1 && list.levels[0] === Level.High);
+  }
+
   // An array of enums: a non-member element is a type error, and nothing is
   // kept for it, so every element the array holds is a member.
   const arr = new Kinds();
@@ -242,6 +257,33 @@ const jtMaps = (t: Suite): void => {
   const b = new MapShapes();
   t.eqI32("map: a number that names no member of a map's enum", jtDecode(bare, b, new JsonLimits(), false).failed, JSON_DECODE_TYPE);
   t.ok("map: the entry holds a member", (b.signs.get("m") ?? Sign.Zero) === Sign.Minus);
+
+  // A map's keys are bounded by the decoder's `maxMapKeys`, 4,096 unless set,
+  // each map on its own: the key past the limit is refused before it is
+  // read, with its own code at its own byte.
+  const limited = jtBytes(jtKindsWith("counts", `{"a":1,"b":2,"c":3}`));
+  const ld = new JsonDecoder(limited, 0, toI32(limited.length), new JsonLimits());
+  ld.maxMapKeys = 3;
+  t.eqI32("map limit: as many keys as the limit", jsonDecode(ld, new Kinds()), JSON_DECODE_OK);
+  const over = jtKindsWith("counts", `{"a":1,"b":2,"c":3,"d":4}`);
+  const overBytes = jtBytes(over);
+  const od = new JsonDecoder(overBytes, 0, toI32(overBytes.length), new JsonLimits());
+  od.maxMapKeys = 3;
+  t.eqI32("map limit: one key past it: code", jsonDecode(od, new Kinds()), JSON_DECODE_MAP_LIMIT);
+  t.eqI32("map limit: one key past it: errorAt", od.errorAt, jtValueAt("counts", `{"a":1,"b":2,"c":3,"d":4}`) + 19);
+  const nested = jtBytes(jtKindsWith("groups", `{"a":{"x":0,"y":5,"z":9},"b":{"x":0},"c":{}}`));
+  const nd = new JsonDecoder(nested, 0, toI32(nested.length), new JsonLimits());
+  nd.maxMapKeys = 3;
+  t.eqI32("map limit: each map of a map of maps has its own", jsonDecode(nd, new Kinds()), JSON_DECODE_OK);
+  const keys: string[] = [];
+  for (let i: i32 = 0; i < 4096; i += 1) {
+    keys.push(`"k${i}":${i % 7}`);
+  }
+  const atLimit = jtKindsWith("counts", `{${keys.join(",")}}`);
+  t.eqI32("map limit: 4,096 keys by default", jtDecode(atLimit, new Kinds(), new JsonLimits(), false).failed, JSON_DECODE_OK);
+  keys.push(`"k4096":0`);
+  const pastLimit = jtKindsWith("counts", `{${keys.join(",")}}`);
+  t.eqI32("map limit: and not 4,097", jtDecode(pastLimit, new Kinds(), new JsonLimits(), false).failed, JSON_DECODE_MAP_LIMIT);
 
   // The whole object in a window that ends on its closing brace, with bytes
   // the window leaves out on both sides.

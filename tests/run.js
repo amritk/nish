@@ -5443,6 +5443,7 @@ if (!only || "std_json_typed".includes(only)) {
     "key escaped 9 1571 9 -1",
     "text 9 1571 0",
     "encoded [0,18446744073709551615,9223372036854775808,[1,18446744073709551615],null,[7]] 0",
+    "mapRoom true false -25 at 1",
     "number new 0 true 0 true 0",
     "number 123456789012345678901234567890 false false true",
     "number -0 true 0 false",

@@ -848,22 +848,38 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
 }
 
 /**
- * A number read for an enum, sent to `member` when it is the value of one of
- * the enum's members and to `other` when not: one `switch`, whose labels are
- * the members' values.
+ * A number read for an enum, sent to `failed` when the read failed (its `0`
+ * is no reading at all, though it may be a member's value), to `member` when
+ * it is the value of one of the enum's members and to `other` when not: one
+ * load of the decoder's `failed`, then one `switch`, whose labels are the
+ * members' values.
  */
 const emitJsonEnumCheck = (
   emitter: Emitter,
+  part: JsonPart,
   f: JsonField,
   read: string,
   member: string,
-  other: string
+  other: string,
+  failed: string
 ): void => {
+  const fn = emitter.fn
+  const code = part.receiver.field("failed")
+  if (code === null) {
+    jsonFail(emitter, `\`${part.receiver.name}\` has no \`failed\``)
+    return
+  }
+  const ok = fn.emitValue(
+    `icmp eq ${emitter.llvm(code.type)} ${loadField(emitter, part.receiver, "%r", code)}, 0`
+  )
+  const check = fn.newBlock("json.read")
+  jsonBranch(emitter, ok, check.label, failed)
+  fn.placeBlock(check)
   const labels: string[] = []
   for (const v of jsonEnumValues(emitter, f)) {
     labels.push(`i32 ${v}, label %${member}`)
   }
-  emitter.fn.emit(`switch i32 ${read}, label %${other} [ ${labels.join(" ")} ]`)
+  fn.emit(`switch i32 ${read}, label %${other} [ ${labels.join(" ")} ]`)
 }
 
 /**
@@ -882,7 +898,7 @@ const emitJsonDecodeValue = (emitter: Emitter, part: JsonPart, f: JsonField, pla
     const member = fn.newBlock("json.member")
     const other = fn.newBlock("json.other")
     const join = fn.newBlock("json.stored")
-    emitJsonEnumCheck(emitter, f, read, member.label, other.label)
+    emitJsonEnumCheck(emitter, part, f, read, member.label, other.label, join.label)
     fn.placeBlock(member)
     jsonStore(emitter, place, read)
     fn.emit(`br label %${join.label}`)
@@ -1107,7 +1123,7 @@ const emitJsonDecodeEnumArrayBody = (emitter: Emitter, part: JsonPart, f: JsonFi
 
   fn.placeBlock(element)
   const read = jsonCallMethod(emitter, part.receiver, "i32", "%r", [])
-  emitJsonEnumCheck(emitter, f, read, member.label, other.label)
+  emitJsonEnumCheck(emitter, part, f, read, member.label, other.label, loop.label)
   fn.placeBlock(member)
   emitPushValue(emitter, "%v", f.enumType, read)
   fn.emit(`br label %${loop.label}`)
@@ -1151,7 +1167,9 @@ const emitJsonFresh = (emitter: Emitter, part: JsonPart, f: JsonField): string =
 /**
  * A map, decoded into the map `%v`: emptied once the input's object opens,
  * then each key read as a string and its value decoded into a slot of its
- * own and `set`, so the map's entries are in the input's order. A key the
+ * own and `set`, so the map's entries are in the input's order. A key past
+ * the decoder's `maxMapKeys` is `JSON_DECODE_MAP_LIMIT` before it is read,
+ * which bounds what a body of colliding keys costs the map's probes. A key the
  * object gave already is `JSON_DECODE_DUPLICATE` before its value is read,
  * as a field's is (docs/security/json.md, JSON-3).
  */
@@ -1161,7 +1179,10 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
   const value = jsonPartValue(emitter, part)
   const valueType = emitter.llvm(value.type)
   const slot = fn.emitAlloca("value", valueType, emitter.align(value.type))
+  const count = fn.emitAlloca("count", "i32", 4)
+  fn.emit(`store i32 0, i32* ${count}, align 4`)
   const loop = fn.newBlock("json.loop")
+  const room = fn.newBlock("json.room")
   const entry = fn.newBlock("json.entry")
   const fresh = fn.newBlock("json.fresh")
   const duplicate = fn.newBlock("json.duplicate")
@@ -1175,7 +1196,13 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
 
   fn.placeBlock(loop)
   const more = jsonCallMethod(emitter, part.receiver, "nextField", "%r", [])
-  jsonBranch(emitter, more, entry.label, done.label)
+  jsonBranch(emitter, more, room.label, done.label)
+
+  // The limit is asked before the key is made: a refused key costs nothing.
+  fn.placeBlock(room)
+  const held = fn.emitValue(`load i32, i32* ${count}, align 4`)
+  const allowed = jsonCallMethod(emitter, part.receiver, "mapRoom", "%r", [`i32 ${held}`])
+  jsonBranch(emitter, allowed, entry.label, loop.label)
 
   fn.placeBlock(entry)
   const key = jsonCallMethod(emitter, part.receiver, "key", "%r", [])
@@ -1188,6 +1215,7 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
   emitJsonDecodeValue(emitter, part, value, place)
   const decoded = jsonLoad(emitter, place)
   jsonCallMethod(emitter, map, "set", "%v", [`i8* ${key}`, `${valueType} ${decoded}`])
+  fn.emit(`store i32 ${fn.emitValue(`add i32 ${held}, 1`)}, i32* ${count}, align 4`)
   fn.emit(`br label %${loop.label}`)
 
   fn.placeBlock(duplicate)

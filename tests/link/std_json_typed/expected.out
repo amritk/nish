@@ -157,6 +157,15 @@ PASS  enum: null: code
 PASS  enum: null: errorAt
 PASS  enum: -2 names no member of Sign: code
 PASS  enum: -2 names no member of Sign: errorAt
+PASS  enum: a failed read of 5.5 fails
+PASS  enum: and the field keeps High, not Low, after 5.5
+PASS  enum array: nothing is pushed for 5.5
+PASS  enum: a failed read of 2147483648 fails
+PASS  enum: and the field keeps High, not Low, after 2147483648
+PASS  enum array: nothing is pushed for 2147483648
+PASS  enum: a failed read of "x" fails
+PASS  enum: and the field keeps High, not Low, after "x"
+PASS  enum array: nothing is pushed for "x"
 PASS  enum array: 4 names no member: code
 PASS  enum array: 4 names no member: errorAt
 PASS  enum array: the members before it are kept
@@ -204,6 +213,12 @@ PASS  map: arrays of enums, | null objects and arrays, a | null map
 PASS  map: and encode
 PASS  map: a number that names no member of a map's enum
 PASS  map: the entry holds a member
+PASS  map limit: as many keys as the limit
+PASS  map limit: one key past it: code
+PASS  map limit: one key past it: errorAt
+PASS  map limit: each map of a map of maps has its own
+PASS  map limit: 4,096 keys by default
+PASS  map limit: and not 4,097
 PASS  map: a window ending on the closing brace
 PASS  map: and what it decoded
 PASS  names: non-ASCII field names decode
@@ -294,4 +309,4 @@ PASS  number: 1,000 decodes into one Reading succeed
 PASS  number: Arena.used() is flat over them
 PASS  renamed: decodes
 PASS  renamed: encodes, tries at its initializer
-std_json_typed: 295 passed, 0 failed, 0 skipped
+std_json_typed: 310 passed, 0 failed, 0 skipped
