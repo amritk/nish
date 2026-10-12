@@ -1,0 +1,5 @@
+`String.fromBytes` expects an argument of type u8[], got u16[]
+`String.fromBytes` expects an argument of type u8[], got i32[]
+`String.fromBytes` expects an argument of type u8[], got readonly i32[]
+`String.fromBytes` expects an argument of type u8[], got u8[] | null
+`String.fromBytes` expects an argument of type u8[], got string

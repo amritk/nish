@@ -282,13 +282,20 @@ export const isStringMethodCall = (program: CheckedProgram, call: Node): boolean
   return program.nodeTypes[receiver.id] === T_STRING
 }
 
-/** `call` allocates a string: `s.substring(...)`, `s.slice(...)` or `String.fromCharCode(c)`. */
+/**
+ * `call` allocates a string: `s.substring(...)`, `s.slice(...)`,
+ * `String.fromCharCode(c)` or `String.fromBytes(bytes, start, end)`.
+ */
 export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean => {
   if (call.kind !== N_CALL) {
     return false
   }
   const callee = call.children[0]
-  if (dottedName(callee) === "String.fromCharCode" && !receiverIsValue(program, callee.children[0])) {
+  const dotted = dottedName(callee)
+  if (
+    (dotted === "String.fromCharCode" || dotted === "String.fromBytes") &&
+    !receiverIsValue(program, callee.children[0])
+  ) {
     return true
   }
   if (!isStringMethodCall(program, call)) {

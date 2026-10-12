@@ -5253,6 +5253,15 @@ if (!only || "std_json_typed".includes(only)) {
     "i32ArrayOrNull null true",
     "i32ArrayOrNull present 1",
     "failed 0",
+    "string escaped 4 65 9",
+    "string empty []",
+    'stringArray escaped 2 p"q r',
+    "failed 0",
+    "unescaped 2 364",
+    "unescaped 3 528",
+    "unescaped 4 679",
+    "raw 5 662",
+    "window [edge] 0",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")
@@ -5288,6 +5297,60 @@ if (!only || "std_json_typed".includes(only)) {
       ),
     shown(run)
   )
+}
+
+// `String.fromBytes` under `runtime/nish.mjs`: each byte is one UTF-16 unit,
+// as `String.fromCharCode` makes it, so ASCII agrees with the native run
+// (`tests/cases/str_from_bytes.out`) and the two bytes of "é" print as the two
+// units "Ã©", the divergence docs/LANGUAGE.md records for both. A range
+// outside the array panics with `s.slice`'s message and exit 1, as natively.
+if (!only || "str_from_bytes".includes(only)) {
+  const run = runUnderPrelude(path.join(casesDir, "str_from_bytes.ts"), [])
+  const want = "hello\nÃ©\n[] 0\n8\nhe\n"
+  check(
+    "str_from_bytes: under Node, one UTF-16 unit per byte, the native output where the bytes are ASCII",
+    run.status === 0 && run.stdout === want,
+    `--- want\n${want}--- node\n${shown(run)}`
+  )
+  const ways = runUnderPrelude(path.join(casesDir, "str_from_bytes_ways.ts"), [])
+  const waysWant = fs.readFileSync(path.join(casesDir, "str_from_bytes_ways.out"), "utf8")
+  check(
+    "str_from_bytes: under Node, every way in and every index type prints the native output",
+    ways.status === 0 && ways.stdout === waysWant,
+    `--- want\n${waysWant}--- node\n${shown(ways)}`
+  )
+  // Each range `tests/cases/str_from_bytes_oob.c` runs natively, and one past
+  // the end, held to the native message: a `u32` above 2^31, an `i64` (a
+  // BigInt under Node) and a ranged integer reach the same check.
+  const dir = path.join(buildDir, "str_from_bytes_node")
+  fs.mkdirSync(dir, { recursive: true })
+  const ranges = [
+    ["past", "const s = 1; const e = 3;", "[1, 3) of length 2"],
+    ["reversed", "const s = 2; const e = 1;", "[2, 1) of length 2"],
+    ["negative", "const s = -1; const e = 1;", "[-1, 1) of length 2"],
+    ["negative_end", "const s = -2; const e = -1;", "[-2, -1) of length 2"],
+    ["wide_end", "const s = 0; const e: u32 = 3000000000;", "[0, 3000000000) of length 2"],
+    ["i64_start", "const s: i64 = toI64(-5); const e = 1;", "[-5, 1) of length 2"],
+    ["ranged_end", "const s = 0; const e: integer<0, 9> = 9;", "[0, 9) of length 2"],
+  ]
+  for (const [name, ends, range] of ranges) {
+    const entry = path.join(dir, `${name}.ts`)
+    fs.writeFileSync(
+      entry,
+      "export const main = (): number => {\n" +
+        "  const bytes: u8[] = [97, 98];\n" +
+        `  ${ends}\n` +
+        "  console.log(String.fromBytes(bytes, s, e));\n" +
+        "  return 0;\n" +
+        "};\n"
+    )
+    const oob = runUnderPrelude(entry, [])
+    check(
+      `str_from_bytes: under Node, the range ${name} exits 1 with \`slice out of range: ${range}\``,
+      oob.status === 1 && oob.stdout === "" && oob.stderr === `slice out of range: ${range}\n`,
+      shown(oob)
+    )
+  }
 }
 
 // The JSON conformance stage: nish/json-tokenizer and JsonWriter together.

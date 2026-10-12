@@ -10765,6 +10765,97 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end str-slice -->
 
+### Bytes into a string
+
+`String.fromBytes(bytes, start, end)` is `s.slice` asked of a `u8[]`: the same
+range test, `0 <= start <= end <= bytes.length`, two `icmp ule` against a cold
+`nish_panic_slice` block, and then one `nish_str_new` that copies the range out
+of the array's data. That is the whole lowering, with no runtime function of
+its own: the length is the header's first field and the data pointer its
+third, both read after all three arguments and both in the header alias
+domain. It replaces a loop of
+`String.fromCharCode` and a `join`, which allocated a one-byte string per byte
+and then copied every byte again into the joined string: here a string of `n`
+bytes costs one allocation and one copy of `n` bytes, whatever `n` is.
+
+<!-- cookbook:begin str-from-bytes -->
+```ts
+const text = (bytes: u8[], start: number, end: number): string => String.fromBytes(bytes, start, end)
+
+const head = (bytes: readonly u8[]): string => String.fromBytes(bytes, 0, 2)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define internal noundef nonnull align 8 i8* @text(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes, i32 noundef %start, i32 noundef %end) #0 {
+entry:
+  %0 = sext i32 %start to i64
+  %1 = sext i32 %end to i64
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = icmp ule i64 %0, %1
+  %5 = icmp ule i64 %1, %3
+  %6 = and i1 %4, %5
+  br i1 %6, label %bytes.ok, label %bytes.fail
+
+bytes.fail:
+  call void @nish_panic_slice(i64 %0, i64 %1, i64 %3)
+  unreachable
+
+bytes.ok:
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = getelementptr inbounds i8, i8* %8, i64 %0
+  %10 = sub i64 %1, %0
+  %11 = call i8* @nish_str_new(i8* %9, i64 %10)
+  ret i8* %11
+}
+
+define internal noundef nonnull align 8 i8* @head(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = icmp ule i64 0, 2
+  %3 = icmp ule i64 2, %1
+  %4 = and i1 %2, %3
+  br i1 %4, label %bytes.ok, label %bytes.fail
+
+bytes.fail:
+  call void @nish_panic_slice(i64 0, i64 2, i64 %1)
+  unreachable
+
+bytes.ok:
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = getelementptr inbounds i8, i8* %6, i64 0
+  %8 = sub i64 2, 0
+  %9 = call i8* @nish_str_new(i8* %7, i64 %8)
+  ret i8* %9
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+```
+<!-- cookbook:end str-from-bytes -->
+
 ### Searching from an offset
 
 `s.indexOf(sub, from)` is one call to `nish_str_index_of_from` and allocates
