@@ -96,7 +96,7 @@ Thread support must be pay-for-what-you-use, as `nish_spawn` is.
 not call, and a program that never spawns must link the same binary it did
 before. That is an acceptance test. The live `.text*` ceilings are in
 [wp7-runtime.md](wp7-runtime.md) §"Runtime additions and budget" and
-`tests/run.js`.
+`tests/runtime-budgets.js`.
 
 ### 3.6 Every rule lands twice
 
