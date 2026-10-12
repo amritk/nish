@@ -142,6 +142,7 @@ import {
   inlineElementStruct,
   JSON_DECODE,
   JSON_NONE,
+  MAP_GET_OR_INSERT,
   PAR_MAP,
   ROLE_CONSTRUCTOR,
   StructInfo,
@@ -171,7 +172,14 @@ import {
   T_VOID,
   TypeTable,
 } from "./types"
-import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map"
+import {
+  fusedCalleesOf,
+  isMapRoute,
+  mapIntrinsicOf,
+  routeCalleesOf,
+  valueReaderOf,
+  walkMethodsOf,
+} from "./emit-map"
 import { isCollectionStruct } from "./generics"
 import {
   builtinPanicKind,
@@ -2110,6 +2118,24 @@ class FactCollector {
     this.facts.dirt.push(mark)
   }
 
+  /**
+   * Whether a value of `type` holds no memory: a number, a ranged integer, a
+   * `boolean`, an enum or a string, or any of them through `| null` or the
+   * `| undefined` a `get` answers. A type the checker did not record may hold
+   * anything.
+   */
+  isPlainValue(type: i32): boolean {
+    if (type < 0) {
+      return true // no recorded type: not an expression a value can be read from
+    }
+    const table = this.table
+    let t = table.stripNull(type)
+    if (table.isMaybe(t)) {
+      t = table.stripNull(table.refOf(t))
+    }
+    return t === T_STRING || table.isRanged(t) || isScalarArgument(table, t)
+  }
+
   /** What `value` may be (`ValueDesc`). */
   valueOf(value: Node): ValueDesc {
     const desc = new ValueDesc()
@@ -2122,7 +2148,7 @@ class FactCollector {
     const table = this.table
     const v = unwrapParens(value)
     const type = program.nodeTypes[v.id]
-    if (type >= 0 && (type === T_STRING || isScalarArgument(table, table.stripNull(type)))) {
+    if (type >= 0 && this.isPlainValue(type)) {
       return
     }
     if (v.kind === N_NULL) {
@@ -2145,6 +2171,17 @@ class FactCollector {
       for (const element of v.children) {
         this.describe(element, desc)
       }
+      return
+    }
+    // Either arm of a `?:`, either side of a `??`: what one of them may be.
+    if (v.kind === N_CONDITIONAL) {
+      this.describe(v.children[1], desc)
+      this.describe(v.children[2], desc)
+      return
+    }
+    if (v.kind === N_BINARY && v.text === "??") {
+      this.describe(v.children[0], desc)
+      this.describe(v.children[1], desc)
       return
     }
     if (v.kind === N_OBJECT) {
@@ -2229,8 +2266,7 @@ class FactCollector {
     if (parent !== null && parent.kind === N_VAR_DECL && parent.children[0] === at) {
       return // the name a declaration binds
     }
-    const type = program.nodeTypes[node.id]
-    if (type < 0 || type === T_STRING || isScalarArgument(this.table, this.table.stripNull(type))) {
+    if (this.isPlainValue(program.nodeTypes[node.id])) {
       return
     }
     if (node.kind === N_THIS && !this.facts.freshThis) {
@@ -2293,7 +2329,7 @@ class FactCollector {
         return true
       }
       const receiver = tableReceiver(program, call)
-      return receiver !== null && receiver === at
+      return (receiver !== null && receiver === at) || !keepsArguments(program, call)
     }
     return false
   }
@@ -2595,6 +2631,9 @@ class FactCollector {
    * `push` is (`noteSlotStore`).
    */
   noteTableStores(call: Node, receiver: Node | null): void {
+    if (!keepsArguments(this.unit.program, call)) {
+      return // a lookup: `has`, `get`, `delete` keep nothing they are handed
+    }
     const table = receiver === null ? new MemPath(ROOT_UNKNOWN, "", "") : this.pathOf(receiver)
     const slot = new MemPath(table.kind, table.name, `${table.steps}[]`)
     for (const arg of call.children[1].children) {
@@ -4466,6 +4505,28 @@ const tableReceiver = (program: CheckedProgram, call: Node): Node | null => {
   const sig = program.nodeCallees[call.id]
   const args = call.children[1].children
   return sig !== null && isMapRoute(sig) && args.length > 0 ? args[0] : null
+}
+
+/**
+ * Whether a table call keeps what it is handed: a `Map`'s `set` its key and
+ * value, a `Set`'s `add` its element, and `getOrInsert` from `nish/map` its
+ * key and default. A lookup — `has`, `get`, `delete` — keeps nothing.
+ */
+const keepsArguments = (program: CheckedProgram, call: Node): boolean => {
+  const callee = program.nodeCallees[call.id]
+  if (callee === null) {
+    return true
+  }
+  if (isMapRoute(callee)) {
+    return mapIntrinsicOf(callee) === MAP_GET_OR_INSERT
+  }
+  const owner = callee.owner
+  if (owner === null || !isCollectionStruct(owner)) {
+    return true
+  }
+  const set = owner.method("set")
+  const add = owner.method("add")
+  return (set !== null && set === callee) || (add !== null && add === callee)
 }
 
 /** The table a walk of `iterable` reads: the receiver of `m.keys()` or `m.values()`, or `iterable` itself. */

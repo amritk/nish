@@ -2,13 +2,15 @@
 %struct.Mid = type { %struct.Leaf* }
 %struct.Item = type { i8*, i32 }
 %struct.Holder = type { %struct.Leaf*, %struct.nish_array* }
+%struct.Reg = type { %struct.Map$str$i32* }
 %struct.Map$i32$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
-%struct.ThreadScope = type { i32 }
 %struct.Map$str$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
+%struct.ThreadScope = type { i32 }
 %struct.Map$str$$Leaf = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.Map$str$$Item = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.Set$$Leaf = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.Map$$Leaf$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
+%struct.Map$$Leaf$$Leaf = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -670,6 +672,197 @@ ovf.fail:
   unreachable
 }
 
+define internal void @Reg.constructor(%struct.Reg* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) %c) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Reg, %struct.Reg* %this, i32 0, i32 0
+  store %struct.Map$str$i32* %c, %struct.Map$str$i32** %0, align 8, !tbaa !40
+  ret void
+}
+
+define internal noundef i32 @work9(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(16) nocapture %h) #1 {
+entry:
+  %counts.addr = alloca %struct.Map$str$i32*, align 8
+  %r.addr = alloca %struct.Reg*, align 8
+  %Reg.obj = alloca %struct.Reg, align 8
+  %0 = call i8* @nish_alloc_struct(i64 56)
+  %1 = bitcast i8* %0 to %struct.Map$str$i32*
+  call void @nish.Map$str$i32.constructor(%struct.Map$str$i32* %1)
+  store %struct.Map$str$i32* %1, %struct.Map$str$i32** %counts.addr, align 8
+  %2 = load %struct.Map$str$i32*, %struct.Map$str$i32** %counts.addr, align 8
+  %3 = call i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %4 = icmp sge i64 %3, 0
+  br i1 %4, label %nullish.value, label %nullish.default
+
+nullish.value:
+  %5 = trunc i64 %3 to i32
+  %6 = call i32 @nish.Map$str$i32.valueAt(%struct.Map$str$i32* %2, i32 %5)
+  br label %nullish.end
+
+nullish.default:
+  br label %nullish.end
+
+nullish.end:
+  %7 = phi i32 [ %6, %nullish.value ], [ 0, %nullish.default ]
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 1)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  br i1 %4, label %set.found, label %set.insert
+
+set.found:
+  %11 = trunc i64 %3 to i32
+  call void @nish.Map$str$i32.setValueAt(%struct.Map$str$i32* %2, i32 %11, i32 %9)
+  br label %set.end
+
+set.insert:
+  call void @nish.Map$str$i32.insertAt(%struct.Map$str$i32* %2, i64 %3, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i32 %9)
+  br label %set.end
+
+set.end:
+  %12 = load %struct.Map$str$i32*, %struct.Map$str$i32** %counts.addr, align 8
+  call void @Reg.constructor(%struct.Reg* %Reg.obj, %struct.Map$str$i32* %12)
+  store %struct.Reg* %Reg.obj, %struct.Reg** %r.addr, align 8
+  %13 = load %struct.Reg*, %struct.Reg** %r.addr, align 8
+  %14 = getelementptr inbounds %struct.Reg, %struct.Reg* %13, i32 0, i32 0
+  %15 = load %struct.Map$str$i32*, %struct.Map$str$i32** %14, align 8, !tbaa !40
+  %16 = call %struct.Map$str$i32* @nish.Map$str$i32.set(%struct.Map$str$i32* %15, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*), i32 2)
+  %17 = load %struct.Reg*, %struct.Reg** %r.addr, align 8
+  %18 = getelementptr inbounds %struct.Reg, %struct.Reg* %17, i32 0, i32 0
+  %19 = load %struct.Map$str$i32*, %struct.Map$str$i32** %18, align 8, !tbaa !40
+  %20 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %19, i32 0, i32 0
+  %21 = load i32, i32* %20, align 4, !tbaa !42
+  %22 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %23 = load %struct.Leaf*, %struct.Leaf** %22, align 8, !tbaa !12
+  %24 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %23, i32 0, i32 0
+  %25 = load i32, i32* %24, align 4, !tbaa !4
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 %25)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %27
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @work10(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(16) nocapture %h) #1 {
+entry:
+  %seen.addr = alloca %struct.Map$$Leaf$$Leaf*, align 8
+  %t.addr = alloca i32, align 4
+  %v.addr = alloca %struct.Leaf*, align 8
+  %walk.idx = alloca i32, align 4
+  %0 = call i8* @nish_alloc_struct(i64 56)
+  %1 = bitcast i8* %0 to %struct.Map$$Leaf$$Leaf*
+  call void @nish.Map$$Leaf$$Leaf.constructor(%struct.Map$$Leaf$$Leaf* %1)
+  store %struct.Map$$Leaf$$Leaf* %1, %struct.Map$$Leaf$$Leaf** %seen.addr, align 8
+  %2 = load %struct.Map$$Leaf$$Leaf*, %struct.Map$$Leaf$$Leaf** %seen.addr, align 8
+  %3 = call i8* @nish_alloc_struct(i64 4)
+  %4 = bitcast i8* %3 to %struct.Leaf*
+  %5 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %4, i32 0, i32 0
+  store i32 0, i32* %5, align 4, !tbaa !4
+  %6 = call i8* @nish_alloc_struct(i64 4)
+  %7 = bitcast i8* %6 to %struct.Leaf*
+  %8 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %7, i32 0, i32 0
+  store i32 0, i32* %8, align 4, !tbaa !4
+  %9 = call %struct.Map$$Leaf$$Leaf* @nish.Map$$Leaf$$Leaf.set(%struct.Map$$Leaf$$Leaf* %2, %struct.Leaf* %4, %struct.Leaf* %7)
+  %10 = load %struct.Map$$Leaf$$Leaf*, %struct.Map$$Leaf$$Leaf** %seen.addr, align 8
+  %11 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %12 = load %struct.Leaf*, %struct.Leaf** %11, align 8, !tbaa !12
+  %13 = call i1 @nish.Map$$Leaf$$Leaf.has(%struct.Map$$Leaf$$Leaf* %10, %struct.Leaf* %12)
+  br i1 %13, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %14 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  store i32 %14, i32* %t.addr, align 4
+  %15 = load %struct.Map$$Leaf$$Leaf*, %struct.Map$$Leaf$$Leaf** %seen.addr, align 8
+  %16 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %17 = load %struct.Leaf*, %struct.Leaf** %16, align 8, !tbaa !12
+  %18 = call i1 @nish.Map$$Leaf$$Leaf.delete(%struct.Map$$Leaf$$Leaf* %15, %struct.Leaf* %17)
+  %19 = load %struct.Map$$Leaf$$Leaf*, %struct.Map$$Leaf$$Leaf** %seen.addr, align 8
+  %20 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %21 = load %struct.Leaf*, %struct.Leaf** %20, align 8, !tbaa !12
+  %22 = call i64 @nish.Map$$Leaf$$Leaf.probe(%struct.Map$$Leaf$$Leaf* %19, %struct.Leaf* %21)
+  %23 = icmp sge i64 %22, 0
+  br i1 %23, label %get.found, label %get.end
+
+get.found:
+  %24 = trunc i64 %22 to i32
+  %25 = call %struct.Leaf* @nish.Map$$Leaf$$Leaf.valueAt(%struct.Map$$Leaf$$Leaf* %19, i32 %24)
+  br label %get.end
+
+get.end:
+  %26 = phi %struct.Leaf* [ %25, %get.found ], [ null, %cond.end ]
+  br i1 %23, label %if.then, label %if.end
+
+if.then:
+  %27 = load i32, i32* %t.addr, align 4
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 1)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %29, i32* %t.addr, align 4
+  br label %if.end
+
+if.end:
+  %31 = load %struct.Map$$Leaf$$Leaf*, %struct.Map$$Leaf$$Leaf** %seen.addr, align 8
+  call void @nish.Map$$Leaf$$Leaf.walkOpen(%struct.Map$$Leaf$$Leaf* %31)
+  %32 = call i32 @nish.Map$$Leaf$$Leaf.walkNext(%struct.Map$$Leaf$$Leaf* %31, i32 0)
+  store i32 %32, i32* %walk.idx, align 4
+  br label %walk.cond
+
+walk.cond:
+  %33 = load i32, i32* %walk.idx, align 4
+  %34 = icmp sge i32 %33, 0
+  br i1 %34, label %walk.body, label %walk.end
+
+walk.body:
+  %35 = call %struct.Leaf* @nish.Map$$Leaf$$Leaf.valueAt(%struct.Map$$Leaf$$Leaf* %31, i32 %33)
+  store %struct.Leaf* %35, %struct.Leaf** %v.addr, align 8
+  %36 = load %struct.Leaf*, %struct.Leaf** %v.addr, align 8
+  %37 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %36, i32 0, i32 0
+  store i32 1, i32* %37, align 4, !tbaa !4
+  %38 = load i32, i32* %t.addr, align 4
+  %39 = load %struct.Leaf*, %struct.Leaf** %v.addr, align 8
+  %40 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %39, i32 0, i32 0
+  %41 = load i32, i32* %40, align 4, !tbaa !4
+  %42 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %38, i32 %41)
+  %43 = extractvalue { i32, i1 } %42, 0
+  %44 = extractvalue { i32, i1 } %42, 1
+  br i1 %44, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %43, i32* %t.addr, align 4
+  br label %walk.inc
+
+walk.inc:
+  %45 = add i32 %33, 1
+  %46 = call i32 @nish.Map$$Leaf$$Leaf.walkNext(%struct.Map$$Leaf$$Leaf* %31, i32 %45)
+  store i32 %46, i32* %walk.idx, align 4
+  br label %walk.cond
+
+walk.end:
+  call void @nish.Map$$Leaf$$Leaf.walkClose(%struct.Map$$Leaf$$Leaf* %31)
+  %47 = load i32, i32* %t.addr, align 4
+  ret i32 %47
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
 define noundef i32 @nish_main() #1 {
 entry:
   %h.addr = alloca %struct.Holder*, align 8
@@ -778,37 +971,57 @@ ovf.ok.5:
 
 ovf.ok.6:
   store i32 %60, i32* %r.addr, align 4
+  %62 = load i32, i32* %r.addr, align 4
+  %63 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %64 = call i32 @work9(%struct.Holder* %63)
+  %65 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %62, i32 %64)
+  %66 = extractvalue { i32, i1 } %65, 0
+  %67 = extractvalue { i32, i1 } %65, 1
+  br i1 %67, label %ovf.fail, label %ovf.ok.7
+
+ovf.ok.7:
+  store i32 %66, i32* %r.addr, align 4
+  %68 = load i32, i32* %r.addr, align 4
+  %69 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %70 = call i32 @work10(%struct.Holder* %69)
+  %71 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %68, i32 %70)
+  %72 = extractvalue { i32, i1 } %71, 0
+  %73 = extractvalue { i32, i1 } %71, 1
+  br i1 %73, label %ovf.fail, label %ovf.ok.8
+
+ovf.ok.8:
+  store i32 %72, i32* %r.addr, align 4
   call void @nish_scope_join(i8* %12)
-  %62 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
-  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %62, i64 0, i32 0
-  %64 = load i64, i64* %63, align 8, !alias.scope !16, !noalias !17, !tbaa !21
-  %65 = icmp ult i64 0, %64
-  br i1 %65, label %bounds.ok, label %bounds.fail
+  %74 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
+  %75 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %74, i64 0, i32 0
+  %76 = load i64, i64* %75, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %77 = icmp ult i64 0, %76
+  br i1 %77, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %64)
+  call void @nish_panic_index(i64 0, i64 %76)
   unreachable
 
 bounds.ok:
-  %66 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %62, i64 0, i32 2
-  %67 = load i8*, i8** %66, align 8, !alias.scope !16, !noalias !17, !tbaa !23
-  %68 = bitcast i8* %67 to i32*
-  %69 = getelementptr inbounds i32, i32* %68, i64 0
-  %70 = load i32, i32* %69, align 4, !alias.scope !17, !noalias !16, !tbaa !28
-  %71 = call i8* @nish_str_from_i32(i32 %70)
-  %72 = call i8* @nish_str_concat(i8* %71, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  %73 = load i32, i32* %r.addr, align 4
-  %74 = call i8* @nish_str_from_i32(i32 %73)
-  %75 = call i8* @nish_str_concat(i8* %72, i8* %74)
-  %76 = call i8* @nish_str_concat(i8* %75, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  %77 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
-  %78 = getelementptr inbounds %struct.Holder, %struct.Holder* %77, i32 0, i32 0
-  %79 = load %struct.Leaf*, %struct.Leaf** %78, align 8, !tbaa !12
-  %80 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %79, i32 0, i32 0
-  %81 = load i32, i32* %80, align 4, !tbaa !4
-  %82 = call i8* @nish_str_from_i32(i32 %81)
-  %83 = call i8* @nish_str_concat(i8* %76, i8* %82)
-  call void @nish_print(i8* %83)
+  %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %74, i64 0, i32 2
+  %79 = load i8*, i8** %78, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %80 = bitcast i8* %79 to i32*
+  %81 = getelementptr inbounds i32, i32* %80, i64 0
+  %82 = load i32, i32* %81, align 4, !alias.scope !17, !noalias !16, !tbaa !28
+  %83 = call i8* @nish_str_from_i32(i32 %82)
+  %84 = call i8* @nish_str_concat(i8* %83, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %85 = load i32, i32* %r.addr, align 4
+  %86 = call i8* @nish_str_from_i32(i32 %85)
+  %87 = call i8* @nish_str_concat(i8* %84, i8* %86)
+  %88 = call i8* @nish_str_concat(i8* %87, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %89 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %90 = getelementptr inbounds %struct.Holder, %struct.Holder* %89, i32 0, i32 0
+  %91 = load %struct.Leaf*, %struct.Leaf** %90, align 8, !tbaa !12
+  %92 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %91, i32 0, i32 0
+  %93 = load i32, i32* %92, align 4, !tbaa !4
+  %94 = call i8* @nish_str_from_i32(i32 %93)
+  %95 = call i8* @nish_str_concat(i8* %88, i8* %94)
+  call void @nish_print(i8* %95)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 
@@ -1146,6 +1359,72 @@ for.end:
   ret void
 }
 
+define internal void @nish.killEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes, i64 noundef %found) #0 {
+entry:
+  %at.addr = alloca i32, align 4
+  %bucket.addr = alloca i32, align 4
+  %0 = trunc i64 %found to i32
+  store i32 %0, i32* %at.addr, align 4
+  %1 = ashr i64 %found, 32
+  %2 = trunc i64 %1 to i32
+  store i32 %2, i32* %bucket.addr, align 4
+  %3 = load i32, i32* %bucket.addr, align 4
+  %4 = icmp sge i32 %3, 0
+  br i1 %4, label %land.rhs, label %land.end
+
+land.rhs:
+  %5 = load i32, i32* %bucket.addr, align 4
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
+  %7 = load i64, i64* %6, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %8 = trunc i64 %7 to i32
+  %9 = icmp slt i32 %5, %8
+  br label %land.end
+
+land.end:
+  %10 = phi i1 [ false, %entry ], [ %9, %land.rhs ]
+  br i1 %10, label %if.then, label %if.end
+
+if.then:
+  %11 = load i32, i32* %bucket.addr, align 4
+  %12 = sext i32 %11 to i64
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %15 = bitcast i8* %14 to i32*
+  %16 = getelementptr inbounds i32, i32* %15, i64 %12
+  store i32 16777216, i32* %16, align 4, !alias.scope !17, !noalias !16, !tbaa !28
+  br label %if.end
+
+if.end:
+  %17 = load i32, i32* %at.addr, align 4
+  %18 = icmp sge i32 %17, 0
+  br i1 %18, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %19 = load i32, i32* %at.addr, align 4
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
+  %21 = load i64, i64* %20, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %22 = trunc i64 %21 to i32
+  %23 = icmp slt i32 %19, %22
+  br label %land.end.1
+
+land.end.1:
+  %24 = phi i1 [ false, %if.end ], [ %23, %land.rhs.1 ]
+  br i1 %24, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %25 = load i32, i32* %at.addr, align 4
+  %26 = sext i32 %25 to i64
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
+  %28 = load i8*, i8** %27, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %29 = bitcast i8* %28 to i32*
+  %30 = getelementptr inbounds i32, i32* %29, i64 %26
+  store i32 0, i32* %30, align 4, !alias.scope !17, !noalias !16, !tbaa !28
+  br label %if.end.1
+
+if.end.1:
+  ret void
+}
+
 define internal void @nish.clearSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots) #1 {
 entry:
   %i.addr = alloca i32, align 4
@@ -1286,11 +1565,11 @@ entry:
   %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !30
   %1 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 2
-  store i32 7, i32* %1, align 4, !tbaa !39
+  store i32 7, i32* %1, align 4, !tbaa !43
   %2 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 3
-  store i32 0, i32* %2, align 4, !tbaa !40
+  store i32 0, i32* %2, align 4, !tbaa !44
   %3 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  store i32 0, i32* %3, align 4, !tbaa !41
+  store i32 0, i32* %3, align 4, !tbaa !45
   %4 = sext i32 8 to i64
   %5 = icmp ule i64 %4, 2147483647
   br i1 %5, label %len.ok, label %len.fail
@@ -1313,7 +1592,7 @@ len.ok:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
   store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %13 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 1
-  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !42
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !46
   %14 = call i8* @nish_alloc_struct(i64 24)
   %15 = bitcast i8* %14 to %struct.nish_array*
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
@@ -1323,7 +1602,7 @@ len.ok:
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %19 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !43
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !47
   %20 = call i8* @nish_alloc_struct(i64 24)
   %21 = bitcast i8* %20 to %struct.nish_array*
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -1333,7 +1612,7 @@ len.ok:
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %25 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !44
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !48
   %26 = call i8* @nish_alloc_struct(i64 24)
   %27 = bitcast i8* %26 to %struct.nish_array*
   %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
@@ -1343,20 +1622,20 @@ len.ok:
   %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
   store i8* null, i8** %30, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %31 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !45
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !49
   ret void
 }
 
 define internal noundef i64 @nish.Map$i32$i32.probe(%struct.Map$i32$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !42
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !46
   %2 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 2
-  %3 = load i32, i32* %2, align 4, !tbaa !39
+  %3 = load i32, i32* %2, align 4, !tbaa !43
   %4 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !45
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !49
   %6 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !43
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !47
   %8 = call i64 @nish.probeTable$i32(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i32 %key)
   ret i64 %8
 }
@@ -1388,7 +1667,7 @@ if.end:
 define internal void @nish.Map$i32$i32.walkOpen(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  %1 = load i32, i32* %0, align 4, !tbaa !41
+  %1 = load i32, i32* %0, align 4, !tbaa !45
   %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
   %3 = extractvalue { i32, i1 } %2, 0
   %4 = extractvalue { i32, i1 } %2, 1
@@ -1396,7 +1675,7 @@ entry:
 
 ovf.ok:
   %5 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  store i32 %3, i32* %5, align 4, !tbaa !41
+  store i32 %3, i32* %5, align 4, !tbaa !45
   ret void
 
 ovf.fail:
@@ -1407,7 +1686,7 @@ ovf.fail:
 define internal noundef i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %from) #3 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !45
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !49
   %2 = call i32 @nish.nextLive(%struct.nish_array* %1, i32 %from)
   ret i32 %2
 }
@@ -1415,7 +1694,7 @@ entry:
 define internal void @nish.Map$i32$i32.walkClose(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  %1 = load i32, i32* %0, align 4, !tbaa !41
+  %1 = load i32, i32* %0, align 4, !tbaa !45
   %2 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %1, i32 1)
   %3 = extractvalue { i32, i1 } %2, 0
   %4 = extractvalue { i32, i1 } %2, 1
@@ -1423,7 +1702,7 @@ entry:
 
 ovf.ok:
   %5 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  store i32 %3, i32* %5, align 4, !tbaa !41
+  store i32 %3, i32* %5, align 4, !tbaa !45
   ret void
 
 ovf.fail:
@@ -1438,7 +1717,7 @@ entry:
 
 lor.rhs:
   %1 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !43
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !47
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -1456,7 +1735,7 @@ if.then:
 
 if.end:
   %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !43
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !47
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -1473,7 +1752,7 @@ entry:
 
 lor.rhs:
   %1 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !44
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !48
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -1491,7 +1770,7 @@ if.then:
 
 if.end:
   %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !44
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !48
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -1508,7 +1787,7 @@ entry:
 
 land.rhs:
   %1 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !44
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !48
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -1521,7 +1800,7 @@ land.end:
 
 if.then:
   %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !44
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !48
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -1550,7 +1829,7 @@ entry:
   %5 = trunc i64 %4 to i32
   store i32 %5, i32* %h.addr, align 4
   %6 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !43
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !47
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %10 = trunc i64 %9 to i32
@@ -1559,13 +1838,13 @@ entry:
 
 if.then:
   %12 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !40
+  %13 = load i32, i32* %12, align 4, !tbaa !44
   %14 = icmp sge i32 %13, 16777215
   br i1 %14, label %lor.end, label %lor.rhs
 
 lor.rhs:
   %15 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  %16 = load i32, i32* %15, align 4, !tbaa !41
+  %16 = load i32, i32* %15, align 4, !tbaa !45
   %17 = icmp sgt i32 %16, 0
   br label %lor.end
 
@@ -1585,7 +1864,7 @@ if.end.1:
 
 if.end:
   %19 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !43
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !47
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
@@ -1607,7 +1886,7 @@ push.store:
   store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %31 = trunc i64 %30 to i32
   %32 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !44
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !48
   %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
   %35 = load i64, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
@@ -1629,7 +1908,7 @@ push.store.1:
   store i64 %43, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %44 = trunc i64 %43 to i32
   %45 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !45
+  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !49
   %47 = load i32, i32* %h.addr, align 4
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
   %49 = load i64, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
@@ -1652,7 +1931,7 @@ push.store.2:
   store i64 %57, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %58 = trunc i64 %57 to i32
   %59 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 3
-  %60 = load i32, i32* %59, align 4, !tbaa !40
+  %60 = load i32, i32* %59, align 4, !tbaa !44
   %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
   %62 = extractvalue { i32, i1 } %61, 0
   %63 = extractvalue { i32, i1 } %61, 1
@@ -1660,7 +1939,7 @@ push.store.2:
 
 ovf.ok:
   %64 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 3
-  store i32 %62, i32* %64, align 4, !tbaa !40
+  store i32 %62, i32* %64, align 4, !tbaa !44
   %65 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 0
   %66 = load i32, i32* %65, align 4, !tbaa !30
   %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
@@ -1672,7 +1951,7 @@ ovf.ok.1:
   %70 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 0
   store i32 %68, i32* %70, align 4, !tbaa !30
   %71 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !43
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !47
   %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
   %74 = load i64, i64* %73, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %75 = trunc i64 %74 to i32
@@ -1685,7 +1964,7 @@ ovf.ok.1:
 
 ovf.ok.2:
   %80 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 1
-  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !42
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !46
   %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
   %83 = load i64, i64* %82, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %84 = trunc i64 %83 to i32
@@ -1704,9 +1983,9 @@ if.then.2:
 
 if.else:
   %89 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 1
-  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !42
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !46
   %91 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 2
-  %92 = load i32, i32* %91, align 4, !tbaa !39
+  %92 = load i32, i32* %91, align 4, !tbaa !43
   %93 = load i32, i32* %bucket.addr, align 4
   %94 = load i32, i32* %h.addr, align 4
   %95 = load i32, i32* %used.addr, align 4
@@ -1728,17 +2007,17 @@ entry:
   %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
   %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !43
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !47
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
   %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %4 = trunc i64 %3 to i32
   store i32 %4, i32* %used.addr, align 4
   %5 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
-  %6 = load i32, i32* %5, align 4, !tbaa !41
+  %6 = load i32, i32* %5, align 4, !tbaa !45
   %7 = icmp sgt i32 %6, 0
   store i1 %7, i1* %walking.addr, align 1
   %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !42
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !46
   %10 = load i1, i1* %walking.addr, align 1
   br i1 %10, label %cond.true, label %cond.false
 
@@ -1748,7 +2027,7 @@ cond.true:
 
 cond.false:
   %12 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !40
+  %13 = load i32, i32* %12, align 4, !tbaa !44
   br label %cond.end
 
 cond.end:
@@ -1762,7 +2041,7 @@ cond.end:
 
 land.rhs:
   %19 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 3
-  %20 = load i32, i32* %19, align 4, !tbaa !40
+  %20 = load i32, i32* %19, align 4, !tbaa !44
   %21 = load i32, i32* %used.addr, align 4
   %22 = icmp slt i32 %20, %21
   br label %land.end
@@ -1773,34 +2052,34 @@ land.end:
 
 if.then:
   %24 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
-  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !43
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !47
   %26 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !45
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !49
   call void @nish.compactEntries$i32(%struct.nish_array* %25, %struct.nish_array* %27)
   %28 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
-  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !44
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !48
   %30 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !45
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !49
   call void @nish.compactEntries$i32(%struct.nish_array* %29, %struct.nish_array* %31)
   %32 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !45
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !49
   call void @nish.compactHashes(%struct.nish_array* %33)
   br label %if.end
 
 if.end:
   %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %35 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 1
-  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !42
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !46
   %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
   %38 = load i64, i64* %37, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %39 = trunc i64 %38 to i32
   %40 = sub nsw i32 %39, 1
   %41 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 2
-  store i32 %40, i32* %41, align 4, !tbaa !39
+  store i32 %40, i32* %41, align 4, !tbaa !43
   %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %43 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
-  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !45
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !49
   call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44)
   ret void
 }
@@ -1808,13 +2087,13 @@ if.end:
 define internal void @nish.Map$str$i32.constructor(%struct.Map$str$i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0
-  store i32 0, i32* %0, align 4, !tbaa !47
+  store i32 0, i32* %0, align 4, !tbaa !42
   %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2
-  store i32 7, i32* %1, align 4, !tbaa !48
+  store i32 7, i32* %1, align 4, !tbaa !50
   %2 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3
-  store i32 0, i32* %2, align 4, !tbaa !49
+  store i32 0, i32* %2, align 4, !tbaa !51
   %3 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  store i32 0, i32* %3, align 4, !tbaa !50
+  store i32 0, i32* %3, align 4, !tbaa !52
   %4 = sext i32 8 to i64
   %5 = icmp ule i64 %4, 2147483647
   br i1 %5, label %len.ok, label %len.fail
@@ -1837,7 +2116,7 @@ len.ok:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
   store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %13 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1
-  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !51
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !53
   %14 = call i8* @nish_alloc_struct(i64 24)
   %15 = bitcast i8* %14 to %struct.nish_array*
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
@@ -1847,7 +2126,7 @@ len.ok:
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %19 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !52
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !54
   %20 = call i8* @nish_alloc_struct(i64 24)
   %21 = bitcast i8* %20 to %struct.nish_array*
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -1857,7 +2136,7 @@ len.ok:
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %25 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !53
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !55
   %26 = call i8* @nish_alloc_struct(i64 24)
   %27 = bitcast i8* %26 to %struct.nish_array*
   %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
@@ -1867,20 +2146,20 @@ len.ok:
   %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
   store i8* null, i8** %30, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %31 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !54
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !56
   ret void
 }
 
 define internal noundef i64 @nish.Map$str$i32.probe(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i8* noundef nonnull noalias readonly align 8 %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !51
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !53
   %2 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2
-  %3 = load i32, i32* %2, align 4, !tbaa !48
+  %3 = load i32, i32* %2, align 4, !tbaa !50
   %4 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !54
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !56
   %6 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !52
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !54
   %8 = call i64 @nish.probeTable$str(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i8* %key)
   ret i64 %8
 }
@@ -1912,7 +2191,7 @@ if.end:
 define internal void @nish.Map$str$i32.walkOpen(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  %1 = load i32, i32* %0, align 4, !tbaa !50
+  %1 = load i32, i32* %0, align 4, !tbaa !52
   %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
   %3 = extractvalue { i32, i1 } %2, 0
   %4 = extractvalue { i32, i1 } %2, 1
@@ -1920,7 +2199,7 @@ entry:
 
 ovf.ok:
   %5 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  store i32 %3, i32* %5, align 4, !tbaa !50
+  store i32 %3, i32* %5, align 4, !tbaa !52
   ret void
 
 ovf.fail:
@@ -1931,7 +2210,7 @@ ovf.fail:
 define internal noundef i32 @nish.Map$str$i32.walkNext(%struct.Map$str$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %from) #3 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !54
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !56
   %2 = call i32 @nish.nextLive(%struct.nish_array* %1, i32 %from)
   ret i32 %2
 }
@@ -1939,7 +2218,7 @@ entry:
 define internal void @nish.Map$str$i32.walkClose(%struct.Map$str$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  %1 = load i32, i32* %0, align 4, !tbaa !50
+  %1 = load i32, i32* %0, align 4, !tbaa !52
   %2 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %1, i32 1)
   %3 = extractvalue { i32, i1 } %2, 0
   %4 = extractvalue { i32, i1 } %2, 1
@@ -1947,7 +2226,7 @@ entry:
 
 ovf.ok:
   %5 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  store i32 %3, i32* %5, align 4, !tbaa !50
+  store i32 %3, i32* %5, align 4, !tbaa !52
   ret void
 
 ovf.fail:
@@ -1962,7 +2241,7 @@ entry:
 
 lor.rhs:
   %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !53
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !55
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -1980,7 +2259,7 @@ if.then:
 
 if.end:
   %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !53
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !55
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -1997,7 +2276,7 @@ entry:
 
 land.rhs:
   %1 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !53
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !55
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -2010,7 +2289,7 @@ land.end:
 
 if.then:
   %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !53
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !55
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -2039,7 +2318,7 @@ entry:
   %5 = trunc i64 %4 to i32
   store i32 %5, i32* %h.addr, align 4
   %6 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !52
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !54
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %10 = trunc i64 %9 to i32
@@ -2048,13 +2327,13 @@ entry:
 
 if.then:
   %12 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !49
+  %13 = load i32, i32* %12, align 4, !tbaa !51
   %14 = icmp sge i32 %13, 16777215
   br i1 %14, label %lor.end, label %lor.rhs
 
 lor.rhs:
   %15 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  %16 = load i32, i32* %15, align 4, !tbaa !50
+  %16 = load i32, i32* %15, align 4, !tbaa !52
   %17 = icmp sgt i32 %16, 0
   br label %lor.end
 
@@ -2074,7 +2353,7 @@ if.end.1:
 
 if.end:
   %19 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !52
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !54
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
@@ -2096,7 +2375,7 @@ push.store:
   store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %31 = trunc i64 %30 to i32
   %32 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !53
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !55
   %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
   %35 = load i64, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
@@ -2118,7 +2397,7 @@ push.store.1:
   store i64 %43, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %44 = trunc i64 %43 to i32
   %45 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !54
+  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !56
   %47 = load i32, i32* %h.addr, align 4
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
   %49 = load i64, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
@@ -2141,7 +2420,7 @@ push.store.2:
   store i64 %57, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %58 = trunc i64 %57 to i32
   %59 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3
-  %60 = load i32, i32* %59, align 4, !tbaa !49
+  %60 = load i32, i32* %59, align 4, !tbaa !51
   %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
   %62 = extractvalue { i32, i1 } %61, 0
   %63 = extractvalue { i32, i1 } %61, 1
@@ -2149,9 +2428,9 @@ push.store.2:
 
 ovf.ok:
   %64 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3
-  store i32 %62, i32* %64, align 4, !tbaa !49
+  store i32 %62, i32* %64, align 4, !tbaa !51
   %65 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0
-  %66 = load i32, i32* %65, align 4, !tbaa !47
+  %66 = load i32, i32* %65, align 4, !tbaa !42
   %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
   %68 = extractvalue { i32, i1 } %67, 0
   %69 = extractvalue { i32, i1 } %67, 1
@@ -2159,9 +2438,9 @@ ovf.ok:
 
 ovf.ok.1:
   %70 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0
-  store i32 %68, i32* %70, align 4, !tbaa !47
+  store i32 %68, i32* %70, align 4, !tbaa !42
   %71 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !52
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !54
   %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
   %74 = load i64, i64* %73, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %75 = trunc i64 %74 to i32
@@ -2174,7 +2453,7 @@ ovf.ok.1:
 
 ovf.ok.2:
   %80 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1
-  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !51
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !53
   %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
   %83 = load i64, i64* %82, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %84 = trunc i64 %83 to i32
@@ -2193,9 +2472,9 @@ if.then.2:
 
 if.else:
   %89 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1
-  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !51
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !53
   %91 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2
-  %92 = load i32, i32* %91, align 4, !tbaa !48
+  %92 = load i32, i32* %91, align 4, !tbaa !50
   %93 = load i32, i32* %bucket.addr, align 4
   %94 = load i32, i32* %h.addr, align 4
   %95 = load i32, i32* %used.addr, align 4
@@ -2217,17 +2496,17 @@ entry:
   %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !52
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !54
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
   %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %4 = trunc i64 %3 to i32
   store i32 %4, i32* %used.addr, align 4
   %5 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7
-  %6 = load i32, i32* %5, align 4, !tbaa !50
+  %6 = load i32, i32* %5, align 4, !tbaa !52
   %7 = icmp sgt i32 %6, 0
   store i1 %7, i1* %walking.addr, align 1
   %8 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !51
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !53
   %10 = load i1, i1* %walking.addr, align 1
   br i1 %10, label %cond.true, label %cond.false
 
@@ -2237,7 +2516,7 @@ cond.true:
 
 cond.false:
   %12 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !49
+  %13 = load i32, i32* %12, align 4, !tbaa !51
   br label %cond.end
 
 cond.end:
@@ -2251,7 +2530,7 @@ cond.end:
 
 land.rhs:
   %19 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 3
-  %20 = load i32, i32* %19, align 4, !tbaa !49
+  %20 = load i32, i32* %19, align 4, !tbaa !51
   %21 = load i32, i32* %used.addr, align 4
   %22 = icmp slt i32 %20, %21
   br label %land.end
@@ -2262,34 +2541,34 @@ land.end:
 
 if.then:
   %24 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4
-  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !52
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !54
   %26 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !54
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !56
   call void @nish.compactEntries$str(%struct.nish_array* %25, %struct.nish_array* %27)
   %28 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5
-  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !53
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !55
   %30 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !54
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !56
   call void @nish.compactEntries$i32(%struct.nish_array* %29, %struct.nish_array* %31)
   %32 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !54
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !56
   call void @nish.compactHashes(%struct.nish_array* %33)
   br label %if.end
 
 if.end:
   %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %35 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1
-  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !51
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !53
   %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
   %38 = load i64, i64* %37, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %39 = trunc i64 %38 to i32
   %40 = sub nsw i32 %39, 1
   %41 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 2
-  store i32 %40, i32* %41, align 4, !tbaa !48
+  store i32 %40, i32* %41, align 4, !tbaa !50
   %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %43 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6
-  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !54
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !56
   call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44)
   ret void
 }
@@ -2299,11 +2578,11 @@ entry:
   %0 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !32
   %1 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 2
-  store i32 7, i32* %1, align 4, !tbaa !55
+  store i32 7, i32* %1, align 4, !tbaa !57
   %2 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 3
-  store i32 0, i32* %2, align 4, !tbaa !56
+  store i32 0, i32* %2, align 4, !tbaa !58
   %3 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 7
-  store i32 0, i32* %3, align 4, !tbaa !57
+  store i32 0, i32* %3, align 4, !tbaa !59
   %4 = sext i32 8 to i64
   %5 = icmp ule i64 %4, 2147483647
   br i1 %5, label %len.ok, label %len.fail
@@ -2326,7 +2605,7 @@ len.ok:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
   store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %13 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 1
-  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !58
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !60
   %14 = call i8* @nish_alloc_struct(i64 24)
   %15 = bitcast i8* %14 to %struct.nish_array*
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
@@ -2336,7 +2615,7 @@ len.ok:
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %19 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !59
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !61
   %20 = call i8* @nish_alloc_struct(i64 24)
   %21 = bitcast i8* %20 to %struct.nish_array*
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -2346,7 +2625,7 @@ len.ok:
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %25 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 5
-  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !60
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !62
   %26 = call i8* @nish_alloc_struct(i64 24)
   %27 = bitcast i8* %26 to %struct.nish_array*
   %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
@@ -2356,20 +2635,20 @@ len.ok:
   %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
   store i8* null, i8** %30, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %31 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !61
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !63
   ret void
 }
 
 define internal noundef i64 @nish.Map$str$$Leaf.probe(%struct.Map$str$$Leaf* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i8* noundef nonnull noalias readonly align 8 %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !58
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !60
   %2 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 2
-  %3 = load i32, i32* %2, align 4, !tbaa !55
+  %3 = load i32, i32* %2, align 4, !tbaa !57
   %4 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !61
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !63
   %6 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !59
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !61
   %8 = call i64 @nish.probeTable$str(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i8* %key)
   ret i64 %8
 }
@@ -2412,7 +2691,7 @@ entry:
 
 land.rhs:
   %1 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !60
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !62
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -2425,7 +2704,7 @@ land.end:
 
 if.then:
   %8 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !60
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !62
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -2454,7 +2733,7 @@ entry:
   %5 = trunc i64 %4 to i32
   store i32 %5, i32* %h.addr, align 4
   %6 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !59
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !61
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %10 = trunc i64 %9 to i32
@@ -2463,13 +2742,13 @@ entry:
 
 if.then:
   %12 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !56
+  %13 = load i32, i32* %12, align 4, !tbaa !58
   %14 = icmp sge i32 %13, 16777215
   br i1 %14, label %lor.end, label %lor.rhs
 
 lor.rhs:
   %15 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 7
-  %16 = load i32, i32* %15, align 4, !tbaa !57
+  %16 = load i32, i32* %15, align 4, !tbaa !59
   %17 = icmp sgt i32 %16, 0
   br label %lor.end
 
@@ -2489,7 +2768,7 @@ if.end.1:
 
 if.end:
   %19 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !59
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !61
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
@@ -2511,7 +2790,7 @@ push.store:
   store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %31 = trunc i64 %30 to i32
   %32 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 5
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !60
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !62
   %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
   %35 = load i64, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
@@ -2533,7 +2812,7 @@ push.store.1:
   store i64 %43, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %44 = trunc i64 %43 to i32
   %45 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !61
+  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !63
   %47 = load i32, i32* %h.addr, align 4
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
   %49 = load i64, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
@@ -2556,7 +2835,7 @@ push.store.2:
   store i64 %57, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %58 = trunc i64 %57 to i32
   %59 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 3
-  %60 = load i32, i32* %59, align 4, !tbaa !56
+  %60 = load i32, i32* %59, align 4, !tbaa !58
   %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
   %62 = extractvalue { i32, i1 } %61, 0
   %63 = extractvalue { i32, i1 } %61, 1
@@ -2564,7 +2843,7 @@ push.store.2:
 
 ovf.ok:
   %64 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 3
-  store i32 %62, i32* %64, align 4, !tbaa !56
+  store i32 %62, i32* %64, align 4, !tbaa !58
   %65 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 0
   %66 = load i32, i32* %65, align 4, !tbaa !32
   %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
@@ -2576,7 +2855,7 @@ ovf.ok.1:
   %70 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 0
   store i32 %68, i32* %70, align 4, !tbaa !32
   %71 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !59
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !61
   %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
   %74 = load i64, i64* %73, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %75 = trunc i64 %74 to i32
@@ -2589,7 +2868,7 @@ ovf.ok.1:
 
 ovf.ok.2:
   %80 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 1
-  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !58
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !60
   %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
   %83 = load i64, i64* %82, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %84 = trunc i64 %83 to i32
@@ -2608,9 +2887,9 @@ if.then.2:
 
 if.else:
   %89 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 1
-  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !58
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !60
   %91 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 2
-  %92 = load i32, i32* %91, align 4, !tbaa !55
+  %92 = load i32, i32* %91, align 4, !tbaa !57
   %93 = load i32, i32* %bucket.addr, align 4
   %94 = load i32, i32* %h.addr, align 4
   %95 = load i32, i32* %used.addr, align 4
@@ -2632,17 +2911,17 @@ entry:
   %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
   %0 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !59
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !61
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
   %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %4 = trunc i64 %3 to i32
   store i32 %4, i32* %used.addr, align 4
   %5 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 7
-  %6 = load i32, i32* %5, align 4, !tbaa !57
+  %6 = load i32, i32* %5, align 4, !tbaa !59
   %7 = icmp sgt i32 %6, 0
   store i1 %7, i1* %walking.addr, align 1
   %8 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !58
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !60
   %10 = load i1, i1* %walking.addr, align 1
   br i1 %10, label %cond.true, label %cond.false
 
@@ -2652,7 +2931,7 @@ cond.true:
 
 cond.false:
   %12 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !56
+  %13 = load i32, i32* %12, align 4, !tbaa !58
   br label %cond.end
 
 cond.end:
@@ -2666,7 +2945,7 @@ cond.end:
 
 land.rhs:
   %19 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 3
-  %20 = load i32, i32* %19, align 4, !tbaa !56
+  %20 = load i32, i32* %19, align 4, !tbaa !58
   %21 = load i32, i32* %used.addr, align 4
   %22 = icmp slt i32 %20, %21
   br label %land.end
@@ -2677,34 +2956,34 @@ land.end:
 
 if.then:
   %24 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 4
-  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !59
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !61
   %26 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !61
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !63
   call void @nish.compactEntries$str(%struct.nish_array* %25, %struct.nish_array* %27)
   %28 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 5
-  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !60
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !62
   %30 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !61
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !63
   call void @nish.compactEntries$$Leaf(%struct.nish_array* %29, %struct.nish_array* %31)
   %32 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !61
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !63
   call void @nish.compactHashes(%struct.nish_array* %33)
   br label %if.end
 
 if.end:
   %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %35 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 1
-  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !58
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !60
   %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
   %38 = load i64, i64* %37, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %39 = trunc i64 %38 to i32
   %40 = sub nsw i32 %39, 1
   %41 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 2
-  store i32 %40, i32* %41, align 4, !tbaa !55
+  store i32 %40, i32* %41, align 4, !tbaa !57
   %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %43 = getelementptr inbounds %struct.Map$str$$Leaf, %struct.Map$str$$Leaf* %this, i32 0, i32 6
-  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !61
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !63
   call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44)
   ret void
 }
@@ -2714,11 +2993,11 @@ entry:
   %0 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !34
   %1 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 2
-  store i32 7, i32* %1, align 4, !tbaa !62
+  store i32 7, i32* %1, align 4, !tbaa !64
   %2 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 3
-  store i32 0, i32* %2, align 4, !tbaa !63
+  store i32 0, i32* %2, align 4, !tbaa !65
   %3 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 7
-  store i32 0, i32* %3, align 4, !tbaa !64
+  store i32 0, i32* %3, align 4, !tbaa !66
   %4 = sext i32 8 to i64
   %5 = icmp ule i64 %4, 2147483647
   br i1 %5, label %len.ok, label %len.fail
@@ -2741,7 +3020,7 @@ len.ok:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
   store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %13 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 1
-  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !65
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !67
   %14 = call i8* @nish_alloc_struct(i64 24)
   %15 = bitcast i8* %14 to %struct.nish_array*
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
@@ -2751,7 +3030,7 @@ len.ok:
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %19 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !66
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !68
   %20 = call i8* @nish_alloc_struct(i64 24)
   %21 = bitcast i8* %20 to %struct.nish_array*
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -2761,7 +3040,7 @@ len.ok:
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %25 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 5
-  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !67
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !69
   %26 = call i8* @nish_alloc_struct(i64 24)
   %27 = bitcast i8* %26 to %struct.nish_array*
   %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
@@ -2771,20 +3050,20 @@ len.ok:
   %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
   store i8* null, i8** %30, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %31 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !68
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !70
   ret void
 }
 
 define internal noundef i64 @nish.Map$str$$Item.probe(%struct.Map$str$$Item* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i8* noundef nonnull noalias readonly align 8 %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !65
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !67
   %2 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 2
-  %3 = load i32, i32* %2, align 4, !tbaa !62
+  %3 = load i32, i32* %2, align 4, !tbaa !64
   %4 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !68
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !70
   %6 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !66
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !68
   %8 = call i64 @nish.probeTable$str(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, i8* %key)
   ret i64 %8
 }
@@ -2820,7 +3099,7 @@ entry:
 
 land.rhs:
   %1 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !67
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !69
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -2833,7 +3112,7 @@ land.end:
 
 if.then:
   %8 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !67
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !69
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -2862,7 +3141,7 @@ entry:
   %5 = trunc i64 %4 to i32
   store i32 %5, i32* %h.addr, align 4
   %6 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !66
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !68
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %10 = trunc i64 %9 to i32
@@ -2871,13 +3150,13 @@ entry:
 
 if.then:
   %12 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !63
+  %13 = load i32, i32* %12, align 4, !tbaa !65
   %14 = icmp sge i32 %13, 16777215
   br i1 %14, label %lor.end, label %lor.rhs
 
 lor.rhs:
   %15 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 7
-  %16 = load i32, i32* %15, align 4, !tbaa !64
+  %16 = load i32, i32* %15, align 4, !tbaa !66
   %17 = icmp sgt i32 %16, 0
   br label %lor.end
 
@@ -2897,7 +3176,7 @@ if.end.1:
 
 if.end:
   %19 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !66
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !68
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
@@ -2919,7 +3198,7 @@ push.store:
   store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %31 = trunc i64 %30 to i32
   %32 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 5
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !67
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !69
   %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
   %35 = load i64, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
@@ -2941,7 +3220,7 @@ push.store.1:
   store i64 %43, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %44 = trunc i64 %43 to i32
   %45 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !68
+  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !70
   %47 = load i32, i32* %h.addr, align 4
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
   %49 = load i64, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
@@ -2964,7 +3243,7 @@ push.store.2:
   store i64 %57, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %58 = trunc i64 %57 to i32
   %59 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 3
-  %60 = load i32, i32* %59, align 4, !tbaa !63
+  %60 = load i32, i32* %59, align 4, !tbaa !65
   %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
   %62 = extractvalue { i32, i1 } %61, 0
   %63 = extractvalue { i32, i1 } %61, 1
@@ -2972,7 +3251,7 @@ push.store.2:
 
 ovf.ok:
   %64 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 3
-  store i32 %62, i32* %64, align 4, !tbaa !63
+  store i32 %62, i32* %64, align 4, !tbaa !65
   %65 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 0
   %66 = load i32, i32* %65, align 4, !tbaa !34
   %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
@@ -2984,7 +3263,7 @@ ovf.ok.1:
   %70 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 0
   store i32 %68, i32* %70, align 4, !tbaa !34
   %71 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !66
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !68
   %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
   %74 = load i64, i64* %73, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %75 = trunc i64 %74 to i32
@@ -2997,7 +3276,7 @@ ovf.ok.1:
 
 ovf.ok.2:
   %80 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 1
-  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !65
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !67
   %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
   %83 = load i64, i64* %82, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %84 = trunc i64 %83 to i32
@@ -3016,9 +3295,9 @@ if.then.2:
 
 if.else:
   %89 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 1
-  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !65
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !67
   %91 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 2
-  %92 = load i32, i32* %91, align 4, !tbaa !62
+  %92 = load i32, i32* %91, align 4, !tbaa !64
   %93 = load i32, i32* %bucket.addr, align 4
   %94 = load i32, i32* %h.addr, align 4
   %95 = load i32, i32* %used.addr, align 4
@@ -3040,17 +3319,17 @@ entry:
   %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
   %0 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !66
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !68
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
   %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %4 = trunc i64 %3 to i32
   store i32 %4, i32* %used.addr, align 4
   %5 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 7
-  %6 = load i32, i32* %5, align 4, !tbaa !64
+  %6 = load i32, i32* %5, align 4, !tbaa !66
   %7 = icmp sgt i32 %6, 0
   store i1 %7, i1* %walking.addr, align 1
   %8 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !65
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !67
   %10 = load i1, i1* %walking.addr, align 1
   br i1 %10, label %cond.true, label %cond.false
 
@@ -3060,7 +3339,7 @@ cond.true:
 
 cond.false:
   %12 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !63
+  %13 = load i32, i32* %12, align 4, !tbaa !65
   br label %cond.end
 
 cond.end:
@@ -3074,7 +3353,7 @@ cond.end:
 
 land.rhs:
   %19 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 3
-  %20 = load i32, i32* %19, align 4, !tbaa !63
+  %20 = load i32, i32* %19, align 4, !tbaa !65
   %21 = load i32, i32* %used.addr, align 4
   %22 = icmp slt i32 %20, %21
   br label %land.end
@@ -3085,34 +3364,34 @@ land.end:
 
 if.then:
   %24 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 4
-  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !66
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !68
   %26 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !68
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !70
   call void @nish.compactEntries$str(%struct.nish_array* %25, %struct.nish_array* %27)
   %28 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 5
-  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !67
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !69
   %30 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !68
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !70
   call void @nish.compactEntries$$Item(%struct.nish_array* %29, %struct.nish_array* %31)
   %32 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !68
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !70
   call void @nish.compactHashes(%struct.nish_array* %33)
   br label %if.end
 
 if.end:
   %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %35 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 1
-  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !65
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !67
   %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
   %38 = load i64, i64* %37, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %39 = trunc i64 %38 to i32
   %40 = sub nsw i32 %39, 1
   %41 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 2
-  store i32 %40, i32* %41, align 4, !tbaa !62
+  store i32 %40, i32* %41, align 4, !tbaa !64
   %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %43 = getelementptr inbounds %struct.Map$str$$Item, %struct.Map$str$$Item* %this, i32 0, i32 6
-  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !68
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !70
   call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44)
   ret void
 }
@@ -3122,11 +3401,11 @@ entry:
   %0 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !36
   %1 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 2
-  store i32 7, i32* %1, align 4, !tbaa !69
+  store i32 7, i32* %1, align 4, !tbaa !71
   %2 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 3
-  store i32 0, i32* %2, align 4, !tbaa !70
+  store i32 0, i32* %2, align 4, !tbaa !72
   %3 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 6
-  store i32 0, i32* %3, align 4, !tbaa !71
+  store i32 0, i32* %3, align 4, !tbaa !73
   %4 = sext i32 8 to i64
   %5 = icmp ule i64 %4, 2147483647
   br i1 %5, label %len.ok, label %len.fail
@@ -3149,7 +3428,7 @@ len.ok:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
   store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %13 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 1
-  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !72
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !74
   %14 = call i8* @nish_alloc_struct(i64 24)
   %15 = bitcast i8* %14 to %struct.nish_array*
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
@@ -3159,7 +3438,7 @@ len.ok:
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %19 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !73
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !75
   %20 = call i8* @nish_alloc_struct(i64 24)
   %21 = bitcast i8* %20 to %struct.nish_array*
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -3169,20 +3448,20 @@ len.ok:
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %25 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 5
-  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !74
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !76
   ret void
 }
 
 define internal noundef i64 @nish.Set$$Leaf.probe(%struct.Set$$Leaf* noundef nonnull readonly align 8 dereferenceable(48) nocapture %this, %struct.Leaf* noundef nonnull readonly align 8 dereferenceable(4) nocapture %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !72
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !74
   %2 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 2
-  %3 = load i32, i32* %2, align 4, !tbaa !69
+  %3 = load i32, i32* %2, align 4, !tbaa !71
   %4 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 5
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !74
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !76
   %6 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !73
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !75
   %8 = call i64 @nish.probeTable$$Leaf(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, %struct.Leaf* %key)
   ret i64 %8
 }
@@ -3221,7 +3500,7 @@ entry:
   %5 = trunc i64 %4 to i32
   store i32 %5, i32* %h.addr, align 4
   %6 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !73
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !75
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %10 = trunc i64 %9 to i32
@@ -3230,13 +3509,13 @@ entry:
 
 if.then:
   %12 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !70
+  %13 = load i32, i32* %12, align 4, !tbaa !72
   %14 = icmp sge i32 %13, 16777215
   br i1 %14, label %lor.end, label %lor.rhs
 
 lor.rhs:
   %15 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 6
-  %16 = load i32, i32* %15, align 4, !tbaa !71
+  %16 = load i32, i32* %15, align 4, !tbaa !73
   %17 = icmp sgt i32 %16, 0
   br label %lor.end
 
@@ -3256,7 +3535,7 @@ if.end.1:
 
 if.end:
   %19 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !73
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !75
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
@@ -3278,7 +3557,7 @@ push.store:
   store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %31 = trunc i64 %30 to i32
   %32 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 5
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !74
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !76
   %34 = load i32, i32* %h.addr, align 4
   %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
   %36 = load i64, i64* %35, align 8, !alias.scope !16, !noalias !17, !tbaa !21
@@ -3301,7 +3580,7 @@ push.store.1:
   store i64 %44, i64* %35, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %45 = trunc i64 %44 to i32
   %46 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 3
-  %47 = load i32, i32* %46, align 4, !tbaa !70
+  %47 = load i32, i32* %46, align 4, !tbaa !72
   %48 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %47, i32 1)
   %49 = extractvalue { i32, i1 } %48, 0
   %50 = extractvalue { i32, i1 } %48, 1
@@ -3309,7 +3588,7 @@ push.store.1:
 
 ovf.ok:
   %51 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 3
-  store i32 %49, i32* %51, align 4, !tbaa !70
+  store i32 %49, i32* %51, align 4, !tbaa !72
   %52 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 0
   %53 = load i32, i32* %52, align 4, !tbaa !36
   %54 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %53, i32 1)
@@ -3321,7 +3600,7 @@ ovf.ok.1:
   %57 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 0
   store i32 %55, i32* %57, align 4, !tbaa !36
   %58 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  %59 = load %struct.nish_array*, %struct.nish_array** %58, align 8, !tbaa !73
+  %59 = load %struct.nish_array*, %struct.nish_array** %58, align 8, !tbaa !75
   %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
   %61 = load i64, i64* %60, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %62 = trunc i64 %61 to i32
@@ -3334,7 +3613,7 @@ ovf.ok.1:
 
 ovf.ok.2:
   %67 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 1
-  %68 = load %struct.nish_array*, %struct.nish_array** %67, align 8, !tbaa !72
+  %68 = load %struct.nish_array*, %struct.nish_array** %67, align 8, !tbaa !74
   %69 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %68, i64 0, i32 0
   %70 = load i64, i64* %69, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %71 = trunc i64 %70 to i32
@@ -3353,9 +3632,9 @@ if.then.2:
 
 if.else:
   %76 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 1
-  %77 = load %struct.nish_array*, %struct.nish_array** %76, align 8, !tbaa !72
+  %77 = load %struct.nish_array*, %struct.nish_array** %76, align 8, !tbaa !74
   %78 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 2
-  %79 = load i32, i32* %78, align 4, !tbaa !69
+  %79 = load i32, i32* %78, align 4, !tbaa !71
   %80 = load i32, i32* %bucket.addr, align 4
   %81 = load i32, i32* %h.addr, align 4
   %82 = load i32, i32* %used.addr, align 4
@@ -3377,17 +3656,17 @@ entry:
   %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
   %0 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !73
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !75
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
   %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %4 = trunc i64 %3 to i32
   store i32 %4, i32* %used.addr, align 4
   %5 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 6
-  %6 = load i32, i32* %5, align 4, !tbaa !71
+  %6 = load i32, i32* %5, align 4, !tbaa !73
   %7 = icmp sgt i32 %6, 0
   store i1 %7, i1* %walking.addr, align 1
   %8 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !72
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !74
   %10 = load i1, i1* %walking.addr, align 1
   br i1 %10, label %cond.true, label %cond.false
 
@@ -3397,7 +3676,7 @@ cond.true:
 
 cond.false:
   %12 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !70
+  %13 = load i32, i32* %12, align 4, !tbaa !72
   br label %cond.end
 
 cond.end:
@@ -3411,7 +3690,7 @@ cond.end:
 
 land.rhs:
   %19 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 3
-  %20 = load i32, i32* %19, align 4, !tbaa !70
+  %20 = load i32, i32* %19, align 4, !tbaa !72
   %21 = load i32, i32* %used.addr, align 4
   %22 = icmp slt i32 %20, %21
   br label %land.end
@@ -3422,29 +3701,29 @@ land.end:
 
 if.then:
   %24 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 4
-  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !73
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !75
   %26 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 5
-  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !74
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !76
   call void @nish.compactEntries$$Leaf(%struct.nish_array* %25, %struct.nish_array* %27)
   %28 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 5
-  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !74
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !76
   call void @nish.compactHashes(%struct.nish_array* %29)
   br label %if.end
 
 if.end:
   %30 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %31 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 1
-  store %struct.nish_array* %30, %struct.nish_array** %31, align 8, !tbaa !72
+  store %struct.nish_array* %30, %struct.nish_array** %31, align 8, !tbaa !74
   %32 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %32, i64 0, i32 0
   %34 = load i64, i64* %33, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %35 = trunc i64 %34 to i32
   %36 = sub nsw i32 %35, 1
   %37 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 2
-  store i32 %36, i32* %37, align 4, !tbaa !69
+  store i32 %36, i32* %37, align 4, !tbaa !71
   %38 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %39 = getelementptr inbounds %struct.Set$$Leaf, %struct.Set$$Leaf* %this, i32 0, i32 5
-  %40 = load %struct.nish_array*, %struct.nish_array** %39, align 8, !tbaa !74
+  %40 = load %struct.nish_array*, %struct.nish_array** %39, align 8, !tbaa !76
   call void @nish.refile(%struct.nish_array* %38, %struct.nish_array* %40)
   ret void
 }
@@ -3454,11 +3733,11 @@ entry:
   %0 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !38
   %1 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 2
-  store i32 7, i32* %1, align 4, !tbaa !75
+  store i32 7, i32* %1, align 4, !tbaa !77
   %2 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 3
-  store i32 0, i32* %2, align 4, !tbaa !76
+  store i32 0, i32* %2, align 4, !tbaa !78
   %3 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 7
-  store i32 0, i32* %3, align 4, !tbaa !77
+  store i32 0, i32* %3, align 4, !tbaa !79
   %4 = sext i32 8 to i64
   %5 = icmp ule i64 %4, 2147483647
   br i1 %5, label %len.ok, label %len.fail
@@ -3481,7 +3760,7 @@ len.ok:
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
   store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %13 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 1
-  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !78
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !80
   %14 = call i8* @nish_alloc_struct(i64 24)
   %15 = bitcast i8* %14 to %struct.nish_array*
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
@@ -3491,7 +3770,7 @@ len.ok:
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %19 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !79
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !81
   %20 = call i8* @nish_alloc_struct(i64 24)
   %21 = bitcast i8* %20 to %struct.nish_array*
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
@@ -3501,7 +3780,7 @@ len.ok:
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
   store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %25 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !80
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !82
   %26 = call i8* @nish_alloc_struct(i64 24)
   %27 = bitcast i8* %26 to %struct.nish_array*
   %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
@@ -3511,20 +3790,20 @@ len.ok:
   %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
   store i8* null, i8** %30, align 8, !alias.scope !16, !noalias !17, !tbaa !23
   %31 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !81
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !83
   ret void
 }
 
 define internal noundef i64 @nish.Map$$Leaf$i32.probe(%struct.Map$$Leaf$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, %struct.Leaf* noundef nonnull readonly align 8 dereferenceable(4) nocapture %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 1
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !78
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !80
   %2 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 2
-  %3 = load i32, i32* %2, align 4, !tbaa !75
+  %3 = load i32, i32* %2, align 4, !tbaa !77
   %4 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !81
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !83
   %6 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !79
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !81
   %8 = call i64 @nish.probeTable$$Leaf(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, %struct.Leaf* %key)
   ret i64 %8
 }
@@ -3560,7 +3839,7 @@ entry:
 
 lor.rhs:
   %1 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !80
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !82
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -3578,7 +3857,7 @@ if.then:
 
 if.end:
   %8 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !80
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !82
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -3595,7 +3874,7 @@ entry:
 
 land.rhs:
   %1 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !80
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !82
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
   %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %5 = trunc i64 %4 to i32
@@ -3608,7 +3887,7 @@ land.end:
 
 if.then:
   %8 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !80
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !82
   %10 = sext i32 %index to i64
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
@@ -3637,7 +3916,7 @@ entry:
   %5 = trunc i64 %4 to i32
   store i32 %5, i32* %h.addr, align 4
   %6 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !79
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !81
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %10 = trunc i64 %9 to i32
@@ -3646,13 +3925,13 @@ entry:
 
 if.then:
   %12 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !76
+  %13 = load i32, i32* %12, align 4, !tbaa !78
   %14 = icmp sge i32 %13, 16777215
   br i1 %14, label %lor.end, label %lor.rhs
 
 lor.rhs:
   %15 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 7
-  %16 = load i32, i32* %15, align 4, !tbaa !77
+  %16 = load i32, i32* %15, align 4, !tbaa !79
   %17 = icmp sgt i32 %16, 0
   br label %lor.end
 
@@ -3672,7 +3951,7 @@ if.end.1:
 
 if.end:
   %19 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !79
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !81
   %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
@@ -3694,7 +3973,7 @@ push.store:
   store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %31 = trunc i64 %30 to i32
   %32 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !80
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !82
   %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
   %35 = load i64, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
@@ -3716,7 +3995,7 @@ push.store.1:
   store i64 %43, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %44 = trunc i64 %43 to i32
   %45 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !81
+  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !83
   %47 = load i32, i32* %h.addr, align 4
   %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
   %49 = load i64, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
@@ -3739,7 +4018,7 @@ push.store.2:
   store i64 %57, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %58 = trunc i64 %57 to i32
   %59 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 3
-  %60 = load i32, i32* %59, align 4, !tbaa !76
+  %60 = load i32, i32* %59, align 4, !tbaa !78
   %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
   %62 = extractvalue { i32, i1 } %61, 0
   %63 = extractvalue { i32, i1 } %61, 1
@@ -3747,7 +4026,7 @@ push.store.2:
 
 ovf.ok:
   %64 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 3
-  store i32 %62, i32* %64, align 4, !tbaa !76
+  store i32 %62, i32* %64, align 4, !tbaa !78
   %65 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 0
   %66 = load i32, i32* %65, align 4, !tbaa !38
   %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
@@ -3759,7 +4038,7 @@ ovf.ok.1:
   %70 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 0
   store i32 %68, i32* %70, align 4, !tbaa !38
   %71 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !79
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !81
   %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
   %74 = load i64, i64* %73, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %75 = trunc i64 %74 to i32
@@ -3772,7 +4051,7 @@ ovf.ok.1:
 
 ovf.ok.2:
   %80 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 1
-  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !78
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !80
   %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
   %83 = load i64, i64* %82, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %84 = trunc i64 %83 to i32
@@ -3791,9 +4070,9 @@ if.then.2:
 
 if.else:
   %89 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 1
-  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !78
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !80
   %91 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 2
-  %92 = load i32, i32* %91, align 4, !tbaa !75
+  %92 = load i32, i32* %91, align 4, !tbaa !77
   %93 = load i32, i32* %bucket.addr, align 4
   %94 = load i32, i32* %h.addr, align 4
   %95 = load i32, i32* %used.addr, align 4
@@ -3815,17 +4094,17 @@ entry:
   %walking.addr = alloca i1, align 1
   %slots.addr = alloca %struct.nish_array*, align 8
   %0 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !79
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !81
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
   %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %4 = trunc i64 %3 to i32
   store i32 %4, i32* %used.addr, align 4
   %5 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 7
-  %6 = load i32, i32* %5, align 4, !tbaa !77
+  %6 = load i32, i32* %5, align 4, !tbaa !79
   %7 = icmp sgt i32 %6, 0
   store i1 %7, i1* %walking.addr, align 1
   %8 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 1
-  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !78
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !80
   %10 = load i1, i1* %walking.addr, align 1
   br i1 %10, label %cond.true, label %cond.false
 
@@ -3835,7 +4114,7 @@ cond.true:
 
 cond.false:
   %12 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 3
-  %13 = load i32, i32* %12, align 4, !tbaa !76
+  %13 = load i32, i32* %12, align 4, !tbaa !78
   br label %cond.end
 
 cond.end:
@@ -3849,7 +4128,7 @@ cond.end:
 
 land.rhs:
   %19 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 3
-  %20 = load i32, i32* %19, align 4, !tbaa !76
+  %20 = load i32, i32* %19, align 4, !tbaa !78
   %21 = load i32, i32* %used.addr, align 4
   %22 = icmp slt i32 %20, %21
   br label %land.end
@@ -3860,34 +4139,576 @@ land.end:
 
 if.then:
   %24 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 4
-  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !79
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !81
   %26 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !81
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !83
   call void @nish.compactEntries$$Leaf(%struct.nish_array* %25, %struct.nish_array* %27)
   %28 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 5
-  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !80
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !82
   %30 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !81
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !83
   call void @nish.compactEntries$i32(%struct.nish_array* %29, %struct.nish_array* %31)
   %32 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !81
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !83
   call void @nish.compactHashes(%struct.nish_array* %33)
   br label %if.end
 
 if.end:
   %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %35 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 1
-  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !78
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !80
   %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
   %38 = load i64, i64* %37, align 8, !alias.scope !16, !noalias !17, !tbaa !21
   %39 = trunc i64 %38 to i32
   %40 = sub nsw i32 %39, 1
   %41 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 2
-  store i32 %40, i32* %41, align 4, !tbaa !75
+  store i32 %40, i32* %41, align 4, !tbaa !77
   %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %43 = getelementptr inbounds %struct.Map$$Leaf$i32, %struct.Map$$Leaf$i32* %this, i32 0, i32 6
-  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !81
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !83
+  call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44)
+  ret void
+}
+
+define internal void @nish.Map$$Leaf$$Leaf.constructor(%struct.Map$$Leaf$$Leaf* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 0
+  store i32 0, i32* %0, align 4, !tbaa !85
+  %1 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 2
+  store i32 7, i32* %1, align 4, !tbaa !86
+  %2 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  store i32 0, i32* %2, align 4, !tbaa !87
+  %3 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  store i32 0, i32* %3, align 4, !tbaa !88
+  %4 = sext i32 8 to i64
+  %5 = icmp ule i64 %4, 2147483647
+  br i1 %5, label %len.ok, label %len.fail
+
+len.fail:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+len.ok:
+  %6 = call i8* @nish_alloc_struct(i64 24)
+  %7 = bitcast i8* %6 to %struct.nish_array*
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
+  store i64 %4, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 1
+  store i64 %4, i64* %9, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %10 = mul i64 %4, 4
+  %11 = call i8* @nish_alloc_struct(i64 %10)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %11, i8 0, i64 %10, i1 false), !alias.scope !17, !noalias !16
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
+  store i8* %11, i8** %12, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %13 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !89
+  %14 = call i8* @nish_alloc_struct(i64 24)
+  %15 = bitcast i8* %14 to %struct.nish_array*
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
+  store i64 0, i64* %16, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 1
+  store i64 0, i64* %17, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
+  store i8* null, i8** %18, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %19 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !90
+  %20 = call i8* @nish_alloc_struct(i64 24)
+  %21 = bitcast i8* %20 to %struct.nish_array*
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
+  store i64 0, i64* %22, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 1
+  store i64 0, i64* %23, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
+  store i8* null, i8** %24, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %25 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !91
+  %26 = call i8* @nish_alloc_struct(i64 24)
+  %27 = bitcast i8* %26 to %struct.nish_array*
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
+  store i64 0, i64* %28, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 1
+  store i64 0, i64* %29, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
+  store i8* null, i8** %30, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %31 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !92
+  ret void
+}
+
+define internal noundef i64 @nish.Map$$Leaf$$Leaf.probe(%struct.Map$$Leaf$$Leaf* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, %struct.Leaf* noundef nonnull readonly align 8 dereferenceable(4) nocapture %key) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !89
+  %2 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 2
+  %3 = load i32, i32* %2, align 4, !tbaa !86
+  %4 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !92
+  %6 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !90
+  %8 = call i64 @nish.probeTable$$Leaf(%struct.nish_array* %1, i32 %3, %struct.nish_array* %5, %struct.nish_array* %7, %struct.Leaf* %key)
+  ret i64 %8
+}
+
+define internal noundef zeroext i1 @nish.Map$$Leaf$$Leaf.has(%struct.Map$$Leaf$$Leaf* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, %struct.Leaf* noundef nonnull readonly align 8 dereferenceable(4) nocapture %key) #1 {
+entry:
+  %0 = call i64 @nish.Map$$Leaf$$Leaf.probe(%struct.Map$$Leaf$$Leaf* %this, %struct.Leaf* %key)
+  %1 = icmp sge i64 %0, 0
+  ret i1 %1
+}
+
+define internal noundef nonnull align 8 dereferenceable(56) %struct.Map$$Leaf$$Leaf* @nish.Map$$Leaf$$Leaf.set(%struct.Map$$Leaf$$Leaf* noundef nonnull align 8 dereferenceable(56) %this, %struct.Leaf* noundef nonnull align 8 dereferenceable(4) %key, %struct.Leaf* noundef nonnull align 8 dereferenceable(4) %value) #1 {
+entry:
+  %found.addr = alloca i64, align 8
+  %0 = call i64 @nish.Map$$Leaf$$Leaf.probe(%struct.Map$$Leaf$$Leaf* %this, %struct.Leaf* %key)
+  store i64 %0, i64* %found.addr, align 8
+  %1 = load i64, i64* %found.addr, align 8
+  %2 = icmp sge i64 %1, 0
+  br i1 %2, label %if.then, label %if.else
+
+if.then:
+  %3 = load i64, i64* %found.addr, align 8
+  %4 = trunc i64 %3 to i32
+  call void @nish.Map$$Leaf$$Leaf.setValueAt(%struct.Map$$Leaf$$Leaf* %this, i32 %4, %struct.Leaf* %value)
+  br label %if.end
+
+if.else:
+  %5 = load i64, i64* %found.addr, align 8
+  call void @nish.Map$$Leaf$$Leaf.insertAt(%struct.Map$$Leaf$$Leaf* %this, i64 %5, %struct.Leaf* %key, %struct.Leaf* %value)
+  br label %if.end
+
+if.end:
+  ret %struct.Map$$Leaf$$Leaf* %this
+}
+
+define internal noundef zeroext i1 @nish.Map$$Leaf$$Leaf.delete(%struct.Map$$Leaf$$Leaf* noundef nonnull align 8 dereferenceable(56) nocapture %this, %struct.Leaf* noundef nonnull readonly align 8 dereferenceable(4) nocapture %key) #1 {
+entry:
+  %found.addr = alloca i64, align 8
+  %0 = call i64 @nish.Map$$Leaf$$Leaf.probe(%struct.Map$$Leaf$$Leaf* %this, %struct.Leaf* %key)
+  store i64 %0, i64* %found.addr, align 8
+  %1 = load i64, i64* %found.addr, align 8
+  %2 = icmp slt i64 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  ret i1 false
+
+if.end:
+  %3 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  %4 = load %struct.nish_array*, %struct.nish_array** %3, align 8, !tbaa !89
+  %5 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %6 = load %struct.nish_array*, %struct.nish_array** %5, align 8, !tbaa !92
+  %7 = load i64, i64* %found.addr, align 8
+  call void @nish.killEntry(%struct.nish_array* %4, %struct.nish_array* %6, i64 %7)
+  %8 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  %9 = load i32, i32* %8, align 4, !tbaa !87
+  %10 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %9, i32 1)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %13 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  store i32 %11, i32* %13, align 4, !tbaa !87
+  %14 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 0
+  %15 = load i32, i32* %14, align 4, !tbaa !85
+  %16 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %15, i32 1)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %19 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 0
+  store i32 %17, i32* %19, align 4, !tbaa !85
+  ret i1 true
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal void @nish.Map$$Leaf$$Leaf.walkOpen(%struct.Map$$Leaf$$Leaf* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  %1 = load i32, i32* %0, align 4, !tbaa !88
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  store i32 %3, i32* %5, align 4, !tbaa !88
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @nish.Map$$Leaf$$Leaf.walkNext(%struct.Map$$Leaf$$Leaf* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %from) #3 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !92
+  %2 = call i32 @nish.nextLive(%struct.nish_array* %1, i32 %from)
+  ret i32 %2
+}
+
+define internal void @nish.Map$$Leaf$$Leaf.walkClose(%struct.Map$$Leaf$$Leaf* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  %1 = load i32, i32* %0, align 4, !tbaa !88
+  %2 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  store i32 %3, i32* %5, align 4, !tbaa !88
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal noundef nonnull align 8 dereferenceable(4) %struct.Leaf* @nish.Map$$Leaf$$Leaf.valueAt(%struct.Map$$Leaf$$Leaf* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #1 {
+entry:
+  %0 = icmp slt i32 %index, 0
+  br i1 %0, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !91
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %5 = trunc i64 %4 to i32
+  %6 = icmp sge i32 %index, %5
+  br label %lor.end
+
+lor.end:
+  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ]
+  br i1 %7, label %if.then, label %if.end
+
+if.then:
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.4 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+if.end:
+  %8 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !91
+  %10 = sext i32 %index to i64
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %13 = bitcast i8* %12 to %struct.Leaf**
+  %14 = getelementptr inbounds %struct.Leaf*, %struct.Leaf** %13, i64 %10
+  %15 = load %struct.Leaf*, %struct.Leaf** %14, align 8, !alias.scope !17, !noalias !16, !tbaa !25
+  ret %struct.Leaf* %15
+}
+
+define internal void @nish.Map$$Leaf$$Leaf.setValueAt(%struct.Map$$Leaf$$Leaf* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, %struct.Leaf* noundef nonnull align 8 dereferenceable(4) %value) #0 {
+entry:
+  %0 = icmp sge i32 %index, 0
+  br i1 %0, label %land.rhs, label %land.end
+
+land.rhs:
+  %1 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !91
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %5 = trunc i64 %4 to i32
+  %6 = icmp slt i32 %index, %5
+  br label %land.end
+
+land.end:
+  %7 = phi i1 [ false, %entry ], [ %6, %land.rhs ]
+  br i1 %7, label %if.then, label %if.end
+
+if.then:
+  %8 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !91
+  %10 = sext i32 %index to i64
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %13 = bitcast i8* %12 to %struct.Leaf**
+  %14 = getelementptr inbounds %struct.Leaf*, %struct.Leaf** %13, i64 %10
+  store %struct.Leaf* %value, %struct.Leaf** %14, align 8, !alias.scope !17, !noalias !16, !tbaa !25
+  br label %if.end
+
+if.end:
+  ret void
+}
+
+define internal void @nish.Map$$Leaf$$Leaf.insertAt(%struct.Map$$Leaf$$Leaf* noundef nonnull align 8 dereferenceable(56) nocapture %this, i64 noundef %absent, %struct.Leaf* noundef nonnull align 8 dereferenceable(4) %key, %struct.Leaf* noundef nonnull align 8 dereferenceable(4) %value) #1 {
+entry:
+  %packed.addr = alloca i64, align 8
+  %bucket.addr = alloca i32, align 4
+  %h.addr = alloca i32, align 4
+  %used.addr = alloca i32, align 4
+  %0 = sub nsw i64 -1, %absent
+  store i64 %0, i64* %packed.addr, align 8
+  %1 = load i64, i64* %packed.addr, align 8
+  %2 = ashr i64 %1, 32
+  %3 = trunc i64 %2 to i32
+  store i32 %3, i32* %bucket.addr, align 4
+  %4 = load i64, i64* %packed.addr, align 8
+  %5 = trunc i64 %4 to i32
+  store i32 %5, i32* %h.addr, align 4
+  %6 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !90
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
+  %9 = load i64, i64* %8, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %10 = trunc i64 %9 to i32
+  %11 = icmp sge i32 %10, 16777215
+  br i1 %11, label %if.then, label %if.end
+
+if.then:
+  %12 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  %13 = load i32, i32* %12, align 4, !tbaa !87
+  %14 = icmp sge i32 %13, 16777215
+  br i1 %14, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %15 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  %16 = load i32, i32* %15, align 4, !tbaa !88
+  %17 = icmp sgt i32 %16, 0
+  br label %lor.end
+
+lor.end:
+  %18 = phi i1 [ true, %if.then ], [ %17, %lor.rhs ]
+  br i1 %18, label %if.then.1, label %if.end.1
+
+if.then.1:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+if.end.1:
+  call void @nish.Map$$Leaf$$Leaf.rebuild(%struct.Map$$Leaf$$Leaf* %this)
+  store i32 -1, i32* %bucket.addr, align 4
+  br label %if.end
+
+if.end:
+  %19 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !90
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
+  %22 = load i64, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1
+  %24 = load i64, i64* %23, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %25 = icmp eq i64 %22, %24
+  br i1 %25, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %20, i64 8)
+  br label %push.store
+
+push.store:
+  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2
+  %27 = load i8*, i8** %26, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %28 = bitcast i8* %27 to %struct.Leaf**
+  %29 = getelementptr inbounds %struct.Leaf*, %struct.Leaf** %28, i64 %22
+  store %struct.Leaf* %key, %struct.Leaf** %29, align 8, !alias.scope !17, !noalias !16, !tbaa !25
+  %30 = add i64 %22, 1
+  store i64 %30, i64* %21, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %31 = trunc i64 %30 to i32
+  %32 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !91
+  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
+  %35 = load i64, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 1
+  %37 = load i64, i64* %36, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %38 = icmp eq i64 %35, %37
+  br i1 %38, label %push.grow.1, label %push.store.1
+
+push.grow.1:
+  call void @nish_array_grow(%struct.nish_array* %33, i64 8)
+  br label %push.store.1
+
+push.store.1:
+  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
+  %40 = load i8*, i8** %39, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %41 = bitcast i8* %40 to %struct.Leaf**
+  %42 = getelementptr inbounds %struct.Leaf*, %struct.Leaf** %41, i64 %35
+  store %struct.Leaf* %value, %struct.Leaf** %42, align 8, !alias.scope !17, !noalias !16, !tbaa !25
+  %43 = add i64 %35, 1
+  store i64 %43, i64* %34, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %44 = trunc i64 %43 to i32
+  %45 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %46 = load %struct.nish_array*, %struct.nish_array** %45, align 8, !tbaa !92
+  %47 = load i32, i32* %h.addr, align 4
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
+  %49 = load i64, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 1
+  %51 = load i64, i64* %50, align 8, !alias.scope !16, !noalias !17, !tbaa !22
+  %52 = icmp eq i64 %49, %51
+  br i1 %52, label %push.grow.2, label %push.store.2
+
+push.grow.2:
+  call void @nish_array_grow(%struct.nish_array* %46, i64 4)
+  br label %push.store.2
+
+push.store.2:
+  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 2
+  %54 = load i8*, i8** %53, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %55 = bitcast i8* %54 to i32*
+  %56 = getelementptr inbounds i32, i32* %55, i64 %49
+  store i32 %47, i32* %56, align 4, !alias.scope !17, !noalias !16, !tbaa !28
+  %57 = add i64 %49, 1
+  store i64 %57, i64* %48, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %58 = trunc i64 %57 to i32
+  %59 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  %60 = load i32, i32* %59, align 4, !tbaa !87
+  %61 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %60, i32 1)
+  %62 = extractvalue { i32, i1 } %61, 0
+  %63 = extractvalue { i32, i1 } %61, 1
+  br i1 %63, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %64 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  store i32 %62, i32* %64, align 4, !tbaa !87
+  %65 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 0
+  %66 = load i32, i32* %65, align 4, !tbaa !85
+  %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %66, i32 1)
+  %68 = extractvalue { i32, i1 } %67, 0
+  %69 = extractvalue { i32, i1 } %67, 1
+  br i1 %69, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %70 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 0
+  store i32 %68, i32* %70, align 4, !tbaa !85
+  %71 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  %72 = load %struct.nish_array*, %struct.nish_array** %71, align 8, !tbaa !90
+  %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
+  %74 = load i64, i64* %73, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %75 = trunc i64 %74 to i32
+  store i32 %75, i32* %used.addr, align 4
+  %76 = load i32, i32* %used.addr, align 4
+  %77 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %76, i32 4)
+  %78 = extractvalue { i32, i1 } %77, 0
+  %79 = extractvalue { i32, i1 } %77, 1
+  br i1 %79, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %80 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  %81 = load %struct.nish_array*, %struct.nish_array** %80, align 8, !tbaa !89
+  %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
+  %83 = load i64, i64* %82, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %84 = trunc i64 %83 to i32
+  %85 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %84, i32 3)
+  %86 = extractvalue { i32, i1 } %85, 0
+  %87 = extractvalue { i32, i1 } %85, 1
+  br i1 %87, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %88 = icmp sgt i32 %78, %86
+  br i1 %88, label %if.then.2, label %if.else
+
+if.then.2:
+  call void @nish.Map$$Leaf$$Leaf.rebuild(%struct.Map$$Leaf$$Leaf* %this)
+  br label %if.end.2
+
+if.else:
+  %89 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  %90 = load %struct.nish_array*, %struct.nish_array** %89, align 8, !tbaa !89
+  %91 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 2
+  %92 = load i32, i32* %91, align 4, !tbaa !86
+  %93 = load i32, i32* %bucket.addr, align 4
+  %94 = load i32, i32* %h.addr, align 4
+  %95 = load i32, i32* %used.addr, align 4
+  call void @nish.fileAppended(%struct.nish_array* %90, i32 %92, i32 %93, i32 %94, i32 %95)
+  br label %if.end.2
+
+if.end.2:
+  ret void
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %push.store.2 ], [ 0, %ovf.ok ], [ 2, %ovf.ok.1 ], [ 2, %ovf.ok.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
+}
+
+define internal void @nish.Map$$Leaf$$Leaf.rebuild(%struct.Map$$Leaf$$Leaf* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
+entry:
+  %used.addr = alloca i32, align 4
+  %walking.addr = alloca i1, align 1
+  %slots.addr = alloca %struct.nish_array*, align 8
+  %0 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !90
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %4 = trunc i64 %3 to i32
+  store i32 %4, i32* %used.addr, align 4
+  %5 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 7
+  %6 = load i32, i32* %5, align 4, !tbaa !88
+  %7 = icmp sgt i32 %6, 0
+  store i1 %7, i1* %walking.addr, align 1
+  %8 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !89
+  %10 = load i1, i1* %walking.addr, align 1
+  br i1 %10, label %cond.true, label %cond.false
+
+cond.true:
+  %11 = load i32, i32* %used.addr, align 4
+  br label %cond.end
+
+cond.false:
+  %12 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  %13 = load i32, i32* %12, align 4, !tbaa !87
+  br label %cond.end
+
+cond.end:
+  %14 = phi i32 [ %11, %cond.true ], [ %13, %cond.false ]
+  %15 = load i32, i32* %used.addr, align 4
+  %16 = call %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* %9, i32 %14, i32 %15)
+  store %struct.nish_array* %16, %struct.nish_array** %slots.addr, align 8
+  %17 = load i1, i1* %walking.addr, align 1
+  %18 = xor i1 %17, true
+  br i1 %18, label %land.rhs, label %land.end
+
+land.rhs:
+  %19 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 3
+  %20 = load i32, i32* %19, align 4, !tbaa !87
+  %21 = load i32, i32* %used.addr, align 4
+  %22 = icmp slt i32 %20, %21
+  br label %land.end
+
+land.end:
+  %23 = phi i1 [ false, %cond.end ], [ %22, %land.rhs ]
+  br i1 %23, label %if.then, label %if.end
+
+if.then:
+  %24 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 4
+  %25 = load %struct.nish_array*, %struct.nish_array** %24, align 8, !tbaa !90
+  %26 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %27 = load %struct.nish_array*, %struct.nish_array** %26, align 8, !tbaa !92
+  call void @nish.compactEntries$$Leaf(%struct.nish_array* %25, %struct.nish_array* %27)
+  %28 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 5
+  %29 = load %struct.nish_array*, %struct.nish_array** %28, align 8, !tbaa !91
+  %30 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %31 = load %struct.nish_array*, %struct.nish_array** %30, align 8, !tbaa !92
+  call void @nish.compactEntries$$Leaf(%struct.nish_array* %29, %struct.nish_array* %31)
+  %32 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !92
+  call void @nish.compactHashes(%struct.nish_array* %33)
+  br label %if.end
+
+if.end:
+  %34 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %35 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 1
+  store %struct.nish_array* %34, %struct.nish_array** %35, align 8, !tbaa !89
+  %36 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %36, i64 0, i32 0
+  %38 = load i64, i64* %37, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %39 = trunc i64 %38 to i32
+  %40 = sub nsw i32 %39, 1
+  %41 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 2
+  store i32 %40, i32* %41, align 4, !tbaa !86
+  %42 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
+  %43 = getelementptr inbounds %struct.Map$$Leaf$$Leaf, %struct.Map$$Leaf$$Leaf* %this, i32 0, i32 6
+  %44 = load %struct.nish_array*, %struct.nish_array** %43, align 8, !tbaa !92
   call void @nish.refile(%struct.nish_array* %42, %struct.nish_array* %44)
   ret void
 }
@@ -4998,46 +5819,57 @@ attributes #8 = { alwaysinline nounwind willreturn allocsize(0) }
 !36 = !{!35, !2, i64 0}
 !37 = !{!"Map$$Leaf$i32", !2, i64 0, !5, i64 8, !2, i64 16, !2, i64 20, !5, i64 24, !5, i64 32, !5, i64 40, !2, i64 48}
 !38 = !{!37, !2, i64 0}
-!39 = !{!29, !2, i64 16}
-!40 = !{!29, !2, i64 20}
-!41 = !{!29, !2, i64 48}
-!42 = !{!29, !5, i64 8}
-!43 = !{!29, !5, i64 24}
-!44 = !{!29, !5, i64 32}
-!45 = !{!29, !5, i64 40}
-!46 = !{!"Map$str$i32", !2, i64 0, !5, i64 8, !2, i64 16, !2, i64 20, !5, i64 24, !5, i64 32, !5, i64 40, !2, i64 48}
-!47 = !{!46, !2, i64 0}
-!48 = !{!46, !2, i64 16}
-!49 = !{!46, !2, i64 20}
-!50 = !{!46, !2, i64 48}
-!51 = !{!46, !5, i64 8}
-!52 = !{!46, !5, i64 24}
-!53 = !{!46, !5, i64 32}
-!54 = !{!46, !5, i64 40}
-!55 = !{!31, !2, i64 16}
-!56 = !{!31, !2, i64 20}
-!57 = !{!31, !2, i64 48}
-!58 = !{!31, !5, i64 8}
-!59 = !{!31, !5, i64 24}
-!60 = !{!31, !5, i64 32}
-!61 = !{!31, !5, i64 40}
-!62 = !{!33, !2, i64 16}
-!63 = !{!33, !2, i64 20}
-!64 = !{!33, !2, i64 48}
-!65 = !{!33, !5, i64 8}
-!66 = !{!33, !5, i64 24}
-!67 = !{!33, !5, i64 32}
-!68 = !{!33, !5, i64 40}
-!69 = !{!35, !2, i64 16}
-!70 = !{!35, !2, i64 20}
-!71 = !{!35, !2, i64 40}
-!72 = !{!35, !5, i64 8}
-!73 = !{!35, !5, i64 24}
-!74 = !{!35, !5, i64 32}
-!75 = !{!37, !2, i64 16}
-!76 = !{!37, !2, i64 20}
-!77 = !{!37, !2, i64 48}
-!78 = !{!37, !5, i64 8}
-!79 = !{!37, !5, i64 24}
-!80 = !{!37, !5, i64 32}
-!81 = !{!37, !5, i64 40}
+!39 = !{!"Reg", !5, i64 0}
+!40 = !{!39, !5, i64 0}
+!41 = !{!"Map$str$i32", !2, i64 0, !5, i64 8, !2, i64 16, !2, i64 20, !5, i64 24, !5, i64 32, !5, i64 40, !2, i64 48}
+!42 = !{!41, !2, i64 0}
+!43 = !{!29, !2, i64 16}
+!44 = !{!29, !2, i64 20}
+!45 = !{!29, !2, i64 48}
+!46 = !{!29, !5, i64 8}
+!47 = !{!29, !5, i64 24}
+!48 = !{!29, !5, i64 32}
+!49 = !{!29, !5, i64 40}
+!50 = !{!41, !2, i64 16}
+!51 = !{!41, !2, i64 20}
+!52 = !{!41, !2, i64 48}
+!53 = !{!41, !5, i64 8}
+!54 = !{!41, !5, i64 24}
+!55 = !{!41, !5, i64 32}
+!56 = !{!41, !5, i64 40}
+!57 = !{!31, !2, i64 16}
+!58 = !{!31, !2, i64 20}
+!59 = !{!31, !2, i64 48}
+!60 = !{!31, !5, i64 8}
+!61 = !{!31, !5, i64 24}
+!62 = !{!31, !5, i64 32}
+!63 = !{!31, !5, i64 40}
+!64 = !{!33, !2, i64 16}
+!65 = !{!33, !2, i64 20}
+!66 = !{!33, !2, i64 48}
+!67 = !{!33, !5, i64 8}
+!68 = !{!33, !5, i64 24}
+!69 = !{!33, !5, i64 32}
+!70 = !{!33, !5, i64 40}
+!71 = !{!35, !2, i64 16}
+!72 = !{!35, !2, i64 20}
+!73 = !{!35, !2, i64 40}
+!74 = !{!35, !5, i64 8}
+!75 = !{!35, !5, i64 24}
+!76 = !{!35, !5, i64 32}
+!77 = !{!37, !2, i64 16}
+!78 = !{!37, !2, i64 20}
+!79 = !{!37, !2, i64 48}
+!80 = !{!37, !5, i64 8}
+!81 = !{!37, !5, i64 24}
+!82 = !{!37, !5, i64 32}
+!83 = !{!37, !5, i64 40}
+!84 = !{!"Map$$Leaf$$Leaf", !2, i64 0, !5, i64 8, !2, i64 16, !2, i64 20, !5, i64 24, !5, i64 32, !5, i64 40, !2, i64 48}
+!85 = !{!84, !2, i64 0}
+!86 = !{!84, !2, i64 16}
+!87 = !{!84, !2, i64 20}
+!88 = !{!84, !2, i64 48}
+!89 = !{!84, !5, i64 8}
+!90 = !{!84, !5, i64 24}
+!91 = !{!84, !5, i64 32}
+!92 = !{!84, !5, i64 40}

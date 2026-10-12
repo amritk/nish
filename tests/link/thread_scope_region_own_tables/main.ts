@@ -2,7 +2,8 @@
 // `spawn` and its join: a histogram walked by `keys()`, a memo handed down a
 // recursion, a sum over `values()`, an index of the argument's items, and
 // tables that only hold references to the argument's memory or to the
-// function's own objects. Each writes its table and nothing the task reads,
+// function's own objects, a scalar read back through `??`, and lookups that
+// keep nothing they are handed. Each writes its table and nothing the task reads,
 // so native, where the task runs at the join, and Node, where it runs at the
 // spawn, print the same.
 import { scope } from "nish/threads";
@@ -130,6 +131,40 @@ const work8 = (h: Holder): i32 => {
   return m.size;
 };
 
+/** maybe_scalar: a scalar read back through `??` names no memory */
+class Reg {
+  counts: Map<string, i32>;
+
+  constructor(c: Map<string, i32>) {
+    this.counts = c;
+  }
+}
+
+const work9 = (h: Holder): i32 => {
+  const counts = new Map<string, i32>();
+  counts.set("a", (counts.get("a") ?? 0) + 1);
+  const r = new Reg(counts);
+  r.counts.set("b", 2);
+  return r.counts.size + h.leaf.x;
+};
+
+/** lookup_only: `has`, `get` and `delete` keep nothing they are handed */
+const work10 = (h: Holder): i32 => {
+  const seen = new Map<Leaf, Leaf>();
+  seen.set(new Leaf(), new Leaf());
+  let t = seen.has(h.leaf) ? 1 : 0;
+  seen.delete(h.leaf);
+  const g = seen.get(h.leaf);
+  if (g !== undefined) {
+    t = t + 1;
+  }
+  for (const v of seen.values()) {
+    v.x = 1;
+    t = t + v.x;
+  }
+  return t;
+};
+
 export const main = (): i32 => {
   const h = new Holder();
   const done: i32[] = [0];
@@ -145,6 +180,8 @@ export const main = (): i32 => {
     r = r + work6(h);
     r = r + work7(h);
     r = r + work8(h);
+    r = r + work9(h);
+    r = r + work10(h);
   }
   console.log(`${done[0]} ${r} ${h.leaf.x}`);
   return 0;
