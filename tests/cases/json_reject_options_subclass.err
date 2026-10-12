@@ -1,0 +1,1 @@
+`extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `User` and `implements` an interface to convert between them

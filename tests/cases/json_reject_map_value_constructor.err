@@ -1,0 +1,2 @@
+`jsonDecode` makes a `Pet` with `new Pet()`, and its constructor takes 1 parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none
+, and so is a `Map`'s value, one for each key

@@ -1,1 +1,1 @@
-`jsonEncode` cannot handle `Score.points`, which is `u64`
+`jsonEncode` cannot handle `Score.points`, which is `u16`

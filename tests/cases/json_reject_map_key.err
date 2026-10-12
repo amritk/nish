@@ -1,0 +1,2 @@
+`jsonEncode` cannot handle `Index.byId`, which is `Map<i32, string>`
+a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not
