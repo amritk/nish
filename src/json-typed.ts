@@ -570,8 +570,9 @@ export const jsonRouteCallees = (
     }
   }
   const decode = instance.jsonRoute === JSON_DECODE
+  const methods = jsonMapMethods(instance.jsonRoute)
   for (const map of jsonMaps(program, table, root, false)) {
-    for (const name of jsonMapMethods(instance.jsonRoute)) {
+    for (const name of methods) {
       const method = map.method(name)
       if (method !== null) {
         out.push(method)

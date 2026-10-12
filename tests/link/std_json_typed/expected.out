@@ -200,6 +200,10 @@ PASS  map: a number that names no member in a map of maps: errorAt
 PASS  map: a second decode leaves only its own entries
 PASS  map: a | null map decodes into its null
 PASS  map: and back to null
+PASS  map: arrays of enums, | null objects and arrays, a | null map
+PASS  map: and encode
+PASS  map: a number that names no member of a map's enum
+PASS  map: the entry holds a member
 PASS  map: a window ending on the closing brace
 PASS  map: and what it decoded
 PASS  names: non-ASCII field names decode
@@ -221,4 +225,4 @@ PASS  wide: a key of a length no field has
 PASS  wide: an empty key
 PASS  wide: a duplicate
 PASS  wide: a missing field
-std_json_typed: 222 passed, 0 failed, 0 skipped
+std_json_typed: 226 passed, 0 failed, 0 skipped

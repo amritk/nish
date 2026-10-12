@@ -318,10 +318,6 @@ class JsonPlace {
   }
 }
 
-/** The field `field` of the object `object` of class `info`. */
-const jsonFieldPlace = (info: StructInfo, object: string, field: FieldInfo): JsonPlace =>
-  new JsonPlace(info, object, field, "", field.type)
-
 const jsonLoad = (emitter: Emitter, place: JsonPlace): string => {
   const info = place.info
   const field = place.field
@@ -643,7 +639,7 @@ const emitJsonDispatchLength = (
   const values: i32[] = []
   for (const k of candidates) {
     const name = jsonKeyOf(d, k)
-    const b = at < name.length ? toI32(name.charCodeAt(at)) : -1
+    const b = at >= 0 && at < name.length ? toI32(name.charCodeAt(at)) : -1
     if (!jsonHas(values, b)) {
       values.push(b)
     }
@@ -659,15 +655,17 @@ const emitJsonDispatchLength = (
   fn.emit(`switch i32 ${byte}, label %${d.unknown} [ ${labels.join(" ")} ]`)
   let i = 0
   while (i < values.length && i < blocks.length) {
+    // Both read before any call, which ends what the loop's test proved.
     const b = values[i]
+    const block = blocks[i]
     const subset: i32[] = []
     for (const k of candidates) {
       const name = jsonKeyOf(d, k)
-      if (at < name.length && toI32(name.charCodeAt(at)) === b) {
+      if (at >= 0 && at < name.length && toI32(name.charCodeAt(at)) === b) {
         subset.push(k)
       }
     }
-    fn.placeBlock(blocks[i])
+    fn.placeBlock(block)
     emitJsonCompareEach(emitter, part, d, subset)
     i = i + 1
   }
@@ -702,7 +700,9 @@ const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): vo
   fn.emit(`switch i32 ${length}, label %${d.unknown} [ ${labels.join(" ")} ]`)
   let i = 0
   while (i < lengths.length && i < blocks.length) {
+    // Both read before any call, which ends what the loop's test proved.
     const n = lengths[i]
+    const block = blocks[i]
     const candidates: i32[] = []
     k = 0
     while (k < d.fields.length) {
@@ -711,7 +711,7 @@ const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): vo
       }
       k = k + 1
     }
-    fn.placeBlock(blocks[i])
+    fn.placeBlock(block)
     emitJsonDispatchLength(emitter, part, d, candidates, n)
     i = i + 1
   }
@@ -750,6 +750,8 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
   }
   emitJsonDispatch(emitter, part, new JsonDispatch(fields, targets, unknown.label))
 
+  // One place, moved to each field in turn, rather than one made per field.
+  const place = new JsonPlace(info, "%v", null, "", T_I32)
   let k = 0
   while (k < fields.length && k < seen.length && k < blocks.length) {
     // All three read before any call, which ends what the loop's test proved.
@@ -764,7 +766,9 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
     fn.placeBlock(take)
     fn.emit(`store i1 true, i1* ${slot}, align 1`)
     if (field !== null) {
-      emitJsonDecodeValue(emitter, part, f, jsonFieldPlace(info, "%v", field))
+      place.field = field
+      place.type = field.type
+      emitJsonDecodeValue(emitter, part, f, place)
     }
     fn.emit(`br label %${loop.label}`)
     k = k + 1

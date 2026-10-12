@@ -18,7 +18,7 @@ import {
 } from "nish/json-typed";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { Kinds, Level, Names, Sign, Wide } from "./models.ts";
+import { Kinds, Level, MapShapes, Names, Sign, Wide } from "./models.ts";
 import { jtBytes, jtDecode, jtEncode } from "./support.ts";
 import { Tag, tagDecode, tagEncode } from "./tag.ts";
 
@@ -229,6 +229,19 @@ const jtMaps = (t: Suite): void => {
   t.eqStr("map: a | null map decodes into its null", jtEncode(nullable, 1024), withOdds);
   jtDecode(jtKindsWith("odds", "null"), nullable, new JsonLimits(), false);
   t.ok("map: and back to null", nullable.odds === null);
+
+  // The values `Kinds` leaves out. A number that names no member, in a map of
+  // enums, is a type error, and the entry keeps the enum's first member.
+  const shapes =
+    `{"levels":{"k":[0,9],"z":[]},"players":{"n":null,"p":{"name":"P","score":1,"rating":0,"tags":[]}},` +
+    `"lists":{"n":null,"u":[18446744073709551615]},"signs":{"m":-1},"maybe":{"q":{"name":"Q","score":2,"rating":0.5,"tags":["t"]}}}`;
+  const s = new MapShapes();
+  t.eqI32("map: arrays of enums, | null objects and arrays, a | null map", jtDecode(shapes, s, new JsonLimits(), false).failed, JSON_DECODE_OK);
+  t.eqStr("map: and encode", jtEncode(s, 1024), shapes);
+  const bare = `{"levels":{},"players":{},"lists":{},"signs":{"m":2},"maybe":null}`;
+  const b = new MapShapes();
+  t.eqI32("map: a number that names no member of a map's enum", jtDecode(bare, b, new JsonLimits(), false).failed, JSON_DECODE_TYPE);
+  t.ok("map: the entry holds a member", (b.signs.get("m") ?? Sign.Zero) === Sign.Minus);
 
   // The whole object in a window that ends on its closing brace, with bytes
   // the window leaves out on both sides.

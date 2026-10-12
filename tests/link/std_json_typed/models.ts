@@ -166,3 +166,22 @@ export class Wide {
   id: i32 = 0;
   active: boolean = false;
 }
+
+/**
+ * The map values `Kinds` leaves out: an array of enums, a `| null` object and
+ * a `| null` array, and a `| null` map of objects.
+ */
+export class MapShapes {
+  levels: Map<string, Level[]>;
+  players: Map<string, Player | null>;
+  lists: Map<string, u64[] | null>;
+  signs: Map<string, Sign>;
+  maybe: Map<string, Player> | null = null;
+
+  constructor() {
+    this.levels = new Map<string, Level[]>();
+    this.players = new Map<string, Player | null>();
+    this.lists = new Map<string, u64[] | null>();
+    this.signs = new Map<string, Sign>();
+  }
+}
