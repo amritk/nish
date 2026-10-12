@@ -739,6 +739,9 @@ const unsigned = (t: Suite): void => {
     "1",
     "9999999999999999999",
     "10000000000000000000",
+    "9223372036854775807",
+    "10000000000000000001",
+    "18446744073709551614",
     "18446744073709551615",
     "18446744073709551616",
     "18446744073709551625",
@@ -751,7 +754,26 @@ const unsigned = (t: Suite): void => {
     "1.0",
     "1e2",
   ];
-  const fits = [true, true, true, true, true, false, false, false, false, false, false, false, false, false, false];
+  const fits = [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+  ];
   let i: i32 = 0;
   while (i < toI32(texts.length) && i < toI32(fits.length)) {
     const text = texts[i];
@@ -773,6 +795,138 @@ const unsigned = (t: Suite): void => {
   }
 };
 
+/** `"`, then `n` plain `a`s, then `tail`: a string whose run is long before what ends it. */
+const jtLongRun = (n: i32, tail: u8[]): u8[] => {
+  const out: u8[] = [34];
+  let i: i32 = 0;
+  while (i < n) {
+    out.push(97);
+    i += 1;
+  }
+  let k: i32 = 0;
+  while (k < toI32(tail.length)) {
+    out.push(tail[k]);
+    k += 1;
+  }
+  return out;
+};
+
+/**
+ * The verdict over `bytes[0, len)`, and for a string the length it decodes
+ * to and the hex of its last `last` decoded bytes: an exact check that does
+ * not spell out a thousand `a`s.
+ */
+const jtLongVerdict = (bytes: u8[], len: i32, last: i32): string => {
+  const t = new JsonTokenizer(bytes, 0, len, new JsonLimits());
+  const k: i32 = t.next();
+  if (k !== JSON_TOK_STRING) {
+    return k < 0 ? `${jtCodeName(k)}@${t.errorAt}` : `token ${k}`;
+  }
+  const n: i32 = t.stringLength();
+  const out = new Array<u8>(n);
+  t.stringInto(out, 0);
+  const tail = new Array<u8>(last);
+  let i: i32 = 0;
+  while (i < last && n - last + i >= 0 && n - last + i < toI32(out.length) && i < toI32(tail.length)) {
+    tail[i] = out[n - last + i];
+    i += 1;
+  }
+  const end: i32 = t.next();
+  return `${end === JSON_TOK_END ? "END" : `${jtCodeName(end)}@${t.errorAt}`} ${n} ${jtHex(tail, last)}`;
+};
+
+/**
+ * A run of 1,000 plain bytes, then each kind of byte that ends one: a 2-, 3-
+ * and 4-byte character, the control bytes 0x00 and 0x1F, an escape, and a
+ * window that cuts an escape or a character short.
+ */
+const longRuns = (t: Suite): void => {
+  const twoByte = jtLongRun(1000, [195, 169, 34]);
+  t.eqStr("long run: then a two-byte character", jtLongVerdict(twoByte, toI32(twoByte.length), 3), "END 1002 61c3a9");
+  const threeByte = jtLongRun(1000, [226, 130, 172, 34]);
+  t.eqStr("long run: then a three-byte character", jtLongVerdict(threeByte, toI32(threeByte.length), 4), "END 1003 61e282ac");
+  const fourByte = jtLongRun(1000, [240, 159, 152, 128, 34]);
+  t.eqStr("long run: then a four-byte character", jtLongVerdict(fourByte, toI32(fourByte.length), 5), "END 1004 61f09f9880");
+  const nul = jtLongRun(1000, [0, 34]);
+  t.eqStr("long run: then 0x00 is CONTROL where it stands", jtLongVerdict(nul, toI32(nul.length), 0), "CONTROL@1001");
+  const unit = jtLongRun(1000, [31, 34]);
+  t.eqStr("long run: then 0x1F is CONTROL where it stands", jtLongVerdict(unit, toI32(unit.length), 0), "CONTROL@1001");
+  // \n, then b, then \u00e9.
+  const escaped = jtLongRun(1000, [92, 110, 98, 92, 117, 48, 48, 101, 57, 34]);
+  t.eqStr("long run: then escapes", jtLongVerdict(escaped, toI32(escaped.length), 5), "END 1004 610a62c3a9");
+  t.eqStr("long run: then a \\u escape the window cuts after two hex digits", jtLongVerdict(escaped, 1008, 0), "TRUNCATED@1006");
+  t.eqStr("long run: then a backslash on the window's last byte", jtLongVerdict(escaped, 1002, 0), "TRUNCATED@1002");
+  t.eqStr("long run: then a two-byte character the window cuts after its lead", jtLongVerdict(twoByte, 1002, 0), "TRUNCATED@1001");
+  t.eqStr("long run: then a four-byte character the window cuts after its third byte", jtLongVerdict(fourByte, 1004, 0), "TRUNCATED@1001");
+  t.eqStr("long run: then a three-byte character closed past the window", jtLongVerdict(threeByte, 1004, 0), "TRUNCATED@1004");
+};
+
+/**
+ * Every run is bounded by the array's length as well as the window's end, so
+ * a caller that shortens `src` after `next()` read it gets a verdict, not a
+ * read past the array. `pop` keeps the capacity and the bytes in it, so a run
+ * that ignored the length would read on into them and answer differently.
+ */
+const shrunk = (t: Suite): void => {
+  // A blank run: `[1,` and the blanks after it are left of `[1,      2]`.
+  const blanks = jtBytes("[1,      2]");
+  const b = new JsonTokenizer(blanks, 0, toI32(blanks.length), new JsonLimits());
+  b.next();
+  b.next();
+  let cut: i32 = 0;
+  while (cut < 6) {
+    blanks.pop();
+    cut += 1;
+  }
+  t.eqStr("shrunk: a blank run stops at the array's end", `${jtCodeName(b.next())}@${b.errorAt}`, "TRUNCATED@5");
+  // A digit run: `[1234` is left of `[12345678]`.
+  const digits = jtBytes("[12345678]");
+  const d = new JsonTokenizer(digits, 0, toI32(digits.length), new JsonLimits());
+  d.next();
+  cut = 0;
+  while (cut < 5) {
+    digits.pop();
+    cut += 1;
+  }
+  t.eqI32("shrunk: a digit run stops at the array's end", d.next(), JSON_TOK_NUMBER);
+  t.eqI32("shrunk: ...and the number is the digits left", d.tokEnd, 5);
+  // A string run: `["abc` is left of `["abcdefg"]`.
+  const plain = jtBytes('["abcdefg"]');
+  const p = new JsonTokenizer(plain, 0, toI32(plain.length), new JsonLimits());
+  p.next();
+  cut = 0;
+  while (cut < 6) {
+    plain.pop();
+    cut += 1;
+  }
+  t.eqStr("shrunk: a string run stops at the array's end", `${jtCodeName(p.next())}@${p.errorAt}`, "TRUNCATED@5");
+  // The readers of a token already scanned answer their `false` or `0`.
+  const wide = jtBytes("[12345678901234567890]");
+  const w = new JsonTokenizer(wide, 0, toI32(wide.length), new JsonLimits());
+  w.next();
+  w.next();
+  cut = 0;
+  while (cut < 10) {
+    wide.pop();
+    cut += 1;
+  }
+  t.ok("shrunk: isU64 is false once the token is past the array", !w.isU64());
+  t.eqStr("shrunk: numberU64 is 0", `${w.numberU64()}`, "0");
+  t.ok("shrunk: isInteger is false", !w.isInteger());
+  t.eqI64("shrunk: numberF64 is 0, through numberSlow", f64ToBits(w.numberF64()), toI64(0));
+  const text = jtBytes('["abcdefg"]');
+  const s = new JsonTokenizer(text, 0, toI32(text.length), new JsonLimits());
+  s.next();
+  s.next();
+  cut = 0;
+  while (cut < 6) {
+    text.pop();
+    cut += 1;
+  }
+  const into = new Array<u8>(8);
+  t.eqI32("shrunk: stringInto copies only the bytes left", s.stringInto(into, 0), 3);
+};
+
 /** Every unit check. */
 export const jtUnits = (t: Suite): void => {
   tokenKinds(t);
@@ -783,6 +937,8 @@ export const jtUnits = (t: Suite): void => {
   limits(t);
   windows(t);
   scans(t);
+  longRuns(t);
+  shrunk(t);
   stickyAndReset(t);
   skipping(t);
   duplicates(t);

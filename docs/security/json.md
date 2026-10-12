@@ -104,12 +104,16 @@ before 10^19 is added, so the sum never wraps ("isU64(18446744073709551615)",
 "isU64(18446744073709551616)", "isU64(28446744073709551615)",
 "isU64(100000000000000000000)", "isU64(-0)").
 
-**Long strings** (`:769`, `string`): the limit counts raw bytes between the
-quotes and is checked before every byte, so an over-long string is refused
-where it crosses `maxStringBytes`, not where it ends ("STRING_LIMIT: the fourth
-byte is refused where it stands"), and a multi-byte step that jumps past the
-limit is caught after the loop ("STRING_LIMIT: a multi-byte character that
-steps past the limit"). The limit is clamped to the window before it is added
+**Long strings** (at `2d9a369f`: `:818`, `string`; `:320`,
+`jsonTokSkipPlain`): the limit counts raw bytes between the quotes. A run of
+plain bytes is stepped over by `jsonTokSkipPlain`, which stops at the limit,
+and every other byte is checked against it before it is read, so an over-long
+string is refused where it crosses `maxStringBytes`, not where it ends
+("STRING_LIMIT: the fourth byte is refused where it stands", "scan: a run
+stops at the string limit", "scan: ...and is refused at its last byte by a
+limit of 999"), and a multi-byte step that jumps past the limit is caught
+after the loop ("STRING_LIMIT: a multi-byte character that steps past the
+limit"). The limit is clamped to the window before it is added
 to an offset, so `maxStringBytes` of 2^31 − 1 cannot overflow.
 
 **Whole bodies** (`:527`, `reset`, at `03a2bee`): a window longer than
@@ -157,7 +161,15 @@ window's end, so the byte it stops at is judged exactly as before. The
 readers of a token already scanned (`numberF64`, `integerScan`,
 `unsignedScan`, `stringInto`'s copy of a string with no escape) are bounded
 the same way, and `numberSlow` hands `String.fromBytes` the token's own
-range only after checking it lies in the array. "scan: ..." in
+range only after checking it lies in the array. `reset` already keeps the
+window inside the array, so the array bound matters only when the caller
+shortens `src` after `next()` read it; "shrunk: ..." pins that case, with a
+`pop` that leaves the old bytes in the array's capacity, where a read past
+the length would find them: "shrunk: a blank run stops at the array's end",
+"shrunk: a digit run stops at the array's end", "shrunk: a string run stops
+at the array's end", "shrunk: isU64 is false once the token is past the
+array", "shrunk: isInteger is false", "shrunk: numberF64 is 0, through
+numberSlow" and "shrunk: stringInto copies only the bytes left". "scan: ..." in
 `expected.out` ends each run on the window's edge with a byte past it that
 would change the answer if it were read: a quote ("scan: a run of plain
 bytes the window cuts short is truncated, not closed by the quote past it"),
