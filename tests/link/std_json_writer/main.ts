@@ -1009,6 +1009,34 @@ export const main = (): number => {
   kw.reset(stackBuf, 0);
   kw.i32(1);
   t.ok("a reset after a failed text writes a whole value too", kw.complete());
+  // 40 object levels set bits of the stack's second word; a reset must clear
+  // them, or the 33rd array below would read an object's bit and refuse its
+  // closer.
+  kw.reset(stackBuf, 0);
+  for (let d: i32 = 0; d < 40; d += 1) {
+    kw.beginObject();
+    kw.key("k");
+  }
+  kw.reset(stackBuf, 0);
+  for (let d: i32 = 0; d < 33; d += 1) {
+    kw.beginArray();
+  }
+  for (let d: i32 = 0; d < 33; d += 1) {
+    kw.endArray();
+  }
+  const brackets: string[] = [];
+  for (let d: i32 = 0; d < 33; d += 1) {
+    brackets.push("[");
+  }
+  for (let d: i32 = 0; d < 33; d += 1) {
+    brackets.push("]");
+  }
+  t.eqStr(
+    "a reset after 40 object levels clears the stack's second word: 33 arrays open and close after it",
+    kw.text(),
+    brackets.join("")
+  );
+  t.ok("and are complete", kw.complete());
 
   // ---- Strict --------------------------------------------------------------------
   const sw = new JsonWriter(out, 0);
