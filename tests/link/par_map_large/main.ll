@@ -6,7 +6,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare void @nish.parallelMapInto$i32$i32$fn.3.mix(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare void @nish.parallelMapInto$i32$i32$fn.4.mix$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
@@ -45,7 +45,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @mix(i32 noundef %x) #0 {
+define hidden noundef i32 @mix$(i32 noundef %x) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 31)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -155,7 +155,7 @@ len.ok.1:
   store %struct.nish_array* %29, %struct.nish_array** %dst.addr, align 8
   %35 = load %struct.nish_array*, %struct.nish_array** %src.addr, align 8
   %36 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
-  call void @nish.parallelMapInto$i32$i32$fn.3.mix(%struct.nish_array* %35, %struct.nish_array* %36)
+  call void @nish.parallelMapInto$i32$i32$fn.4.mix$(%struct.nish_array* %35, %struct.nish_array* %36)
   store i64 0, i64* %sum.addr, align 8
   store i32 0, i32* %i.addr.1, align 4
   %37 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8

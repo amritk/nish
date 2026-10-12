@@ -6,7 +6,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noundef i8 @nish.parallelReduce$u8$fn.4.step(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i8 noundef) #1
+declare noundef i8 @nish.parallelReduce$u8$fn.5.step$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i8 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #3
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
@@ -43,7 +43,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i8 @step(i8 noundef %acc, i8 noundef %x) #0 {
+define hidden noundef i8 @step$(i8 noundef %acc, i8 noundef %x) #0 {
 entry:
   %0 = mul i8 %acc, 2
   %1 = add i8 %0, %x
@@ -159,7 +159,7 @@ for.inc:
 
 for.end:
   %34 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %35 = call i8 @nish.parallelReduce$u8$fn.4.step(%struct.nish_array* %34, i8 0)
+  %35 = call i8 @nish.parallelReduce$u8$fn.5.step$(%struct.nish_array* %34, i8 0)
   %36 = zext i8 %35 to i64
   %37 = call i8* @nish_str_from_u64(i64 %36)
   %38 = call i8* @nish_str_concat(i8* %37, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))

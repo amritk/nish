@@ -8,7 +8,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noundef i32 @nish.parallelReduce$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare noundef i32 @nish.parallelReduce$i32$fn.4.add$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noundef i32 @nish.parallelReduce$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), double noundef) #0
 declare noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), double noundef) #0
@@ -49,7 +49,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+define hidden noundef i32 @add$(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -239,7 +239,7 @@ entry:
   store i8* null, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %12, %struct.nish_array** %empty.addr, align 8
   %16 = load %struct.nish_array*, %struct.nish_array** %small.addr, align 8
-  %17 = call i32 @nish.parallelReduce$i32$fn.3.add(%struct.nish_array* %16, i32 0)
+  %17 = call i32 @nish.parallelReduce$i32$fn.4.add$(%struct.nish_array* %16, i32 0)
   %18 = call i8* @nish_str_from_i32(i32 %17)
   %19 = call i8* @nish_str_concat(i8* %18, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %20 = load %struct.nish_array*, %struct.nish_array** %small.addr, align 8
@@ -248,7 +248,7 @@ entry:
   %23 = call i8* @nish_str_concat(i8* %19, i8* %22)
   %24 = call i8* @nish_str_concat(i8* %23, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %25 = load %struct.nish_array*, %struct.nish_array** %empty.addr, align 8
-  %26 = call i32 @nish.parallelReduce$i32$fn.3.add(%struct.nish_array* %25, i32 0)
+  %26 = call i32 @nish.parallelReduce$i32$fn.4.add$(%struct.nish_array* %25, i32 0)
   %27 = call i8* @nish_str_from_i32(i32 %26)
   %28 = call i8* @nish_str_concat(i8* %24, i8* %27)
   call void @nish_print(i8* %28)
@@ -393,7 +393,7 @@ for.end:
   %108 = call i8* @nish_str_concat(i8* %101, i8* %107)
   call void @nish_print(i8* %108)
   %109 = load %struct.nish_array*, %struct.nish_array** %ys.addr, align 8
-  %110 = call i32 @nish.parallelReduce$i32$fn.3.add(%struct.nish_array* %109, i32 0)
+  %110 = call i32 @nish.parallelReduce$i32$fn.4.add$(%struct.nish_array* %109, i32 0)
   %111 = call i8* @nish_str_from_i32(i32 %110)
   %112 = call i8* @nish_str_concat(i8* %111, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %113 = load %struct.nish_array*, %struct.nish_array** %ys.addr, align 8

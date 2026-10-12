@@ -1151,7 +1151,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 `parallelMapInto` and `parallelReduce` are templates in `std/threads.ts`, so the
 importing module sees two instantiations called like any other, each with the
-function it was given in its symbol (`@nish.parallelMapInto$f64$f64$fn.6.square`).
+function it was given in its symbol (`@nish.parallelMapInto$f64$f64$fn.7.square$`).
 Importing the module implies `--threads`, so a module that allocates declares
 `@nish_arena` `thread_local`; this one allocates nothing. The parallel part is in `threads.ll`: the instance's body
 is `std/threads.ts`'s own, except that its call to the chunk loop becomes a
@@ -1163,17 +1163,17 @@ otherwise a context block on the stack and a call to the partitioner,
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
-  call void @nish.mapRange$f64$f64$fn.6.square(%struct.nish_array* %src, %struct.nish_array* %dst, i32 0, i32 %12)
+  call void @nish.mapRange$f64$f64$fn.7.square$(%struct.nish_array* %src, %struct.nish_array* %dst, i32 0, i32 %12)
   br label %par.done
 
 par.region:
   ; ... src and dst stored into %par.ctx ...
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 699050)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.7.square$$chunk, i8* %16, i64 %17, i64 699050)
   br label %par.done
 ```
 
 and `@...$chunk(lo, hi, ctx)` loads them back and calls the chunk loop,
-`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 699,050,
+`@nish.mapRange$f64$f64$fn.7.square$`, over `[lo, hi)`. The grain, 699,050,
 is 2^21 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
 parallelism"). A reduce divides its blocks rather than its elements, with a
 grain of one block. The whole of both
@@ -1195,10 +1195,10 @@ export const sumOfSquares = (xs: f64[], scratch: f64[]): f64 => {
 ```llvm
 %struct.nish_array = type { i64, i64, i8* }
 
-declare void @nish.parallelMapInto$f64$f64$fn.6.square(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
+declare void @nish.parallelMapInto$f64$f64$fn.7.square$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
 declare noundef double @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), double noundef) #1
 
-define hidden noundef double @square(double noundef %x) #0 {
+define hidden noundef double @square$(double noundef %x) #0 {
 entry:
   %0 = fmul double %x, %x
   ret double %0
@@ -1206,7 +1206,7 @@ entry:
 
 define noundef double @sumOfSquares(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %scratch) #1 {
 entry:
-  call void @nish.parallelMapInto$f64$f64$fn.6.square(%struct.nish_array* %xs, %struct.nish_array* %scratch)
+  call void @nish.parallelMapInto$f64$f64$fn.7.square$(%struct.nish_array* %xs, %struct.nish_array* %scratch)
   %0 = call double @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0(%struct.nish_array* %scratch, double 0x0000000000000000)
   ret double %0
 }
@@ -1253,13 +1253,13 @@ export const labelAll = (xs: i32[], out: i32[]): void => {
 @.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"small\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"big \00" }, align 8
 
-declare void @nish.parallelMapInto$i32$i32$fn.5.label(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare void @nish.parallelMapInto$i32$i32$fn.6.label$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 
-define hidden noundef i32 @label(i32 noundef %x) #0 {
+define hidden noundef i32 @label$(i32 noundef %x) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -1284,7 +1284,7 @@ if.end:
 
 define void @labelAll(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out) #0 {
 entry:
-  call void @nish.parallelMapInto$i32$i32$fn.5.label(%struct.nish_array* %xs, %struct.nish_array* %out)
+  call void @nish.parallelMapInto$i32$i32$fn.6.label$(%struct.nish_array* %xs, %struct.nish_array* %out)
   ret void
 }
 
@@ -1344,8 +1344,8 @@ export const powers = (n: i32): i32 => {
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$i32$i32$fn.6.square(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare void @nish.ThreadScope.spawn$i32$i32$fn.4.cube(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.7.square$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.5.cube$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
@@ -1379,7 +1379,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @square(i32 noundef %n) #0 {
+define hidden noundef i32 @square$(i32 noundef %n) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %n, i32 %n)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -1394,7 +1394,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @cube(i32 noundef %n) #0 {
+define hidden noundef i32 @cube$(i32 noundef %n) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %n, i32 %n)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -1441,10 +1441,10 @@ entry:
   %11 = bitcast %struct.ThreadScope* %10 to i8*
   %12 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %13 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.6.square(%struct.ThreadScope* %12, i32 %n, %struct.nish_array* %13, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.7.square$(%struct.ThreadScope* %12, i32 %n, %struct.nish_array* %13, i32 0)
   %14 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %15 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.4.cube(%struct.ThreadScope* %14, i32 %n, %struct.nish_array* %15, i32 1)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.5.cube$(%struct.ThreadScope* %14, i32 %n, %struct.nish_array* %15, i32 1)
   call void @nish_scope_join(i8* %11)
   %16 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 0
@@ -1673,7 +1673,7 @@ export const total = (): i32 => {
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Channel$i32* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$$Channel$i32$i32$fn.8.produce$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Channel$i32* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare void @nish.Channel$i32.constructor(%struct.Channel$i32* noundef nonnull noalias align 8 dereferenceable(24) nocapture) #1
 declare void @nish.Channel$i32.send(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
 declare noundef i32 @nish.Channel$i32.take(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture) #0
@@ -1712,7 +1712,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @produce(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture %ch) #0 {
+define hidden noundef i32 @produce$(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture %ch) #0 {
 entry:
   call void @nish.Channel$i32.send(%struct.Channel$i32* %ch, i32 20)
   call void @nish.Channel$i32.send(%struct.Channel$i32* %ch, i32 22)
@@ -1754,7 +1754,7 @@ entry:
   %15 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %16 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
   %17 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8
-  call void @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce(%struct.ThreadScope* %15, %struct.Channel$i32* %16, %struct.nish_array* %17, i32 0)
+  call void @nish.ThreadScope.spawn$$Channel$i32$i32$fn.8.produce$(%struct.ThreadScope* %15, %struct.Channel$i32* %16, %struct.nish_array* %17, i32 0)
   call void @nish_channel_count(i64* %14, i64 -1)
   call void @nish_scope_join(i8* %12)
   store i32 0, i32* %sum.addr, align 4
@@ -17430,7 +17430,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @width(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #0 {
+define hidden noundef i32 @width$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #0 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %k, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -17466,7 +17466,7 @@ len.ok:
   %8 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %3)
   store %struct.Secret$arr.u8* %8, %struct.Secret$arr.u8** %k.addr, align 8
   %9 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
-  %10 = call i32 @nish.expose$arr.u8$i32$fn.5.width(%struct.Secret$arr.u8* %9)
+  %10 = call i32 @nish.expose$arr.u8$i32$fn.6.width$(%struct.Secret$arr.u8* %9)
   store i32 %10, i32* %w.addr, align 4
   %11 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
   call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %11)
@@ -17490,11 +17490,11 @@ entry:
   ret %struct.Secret$arr.u8* %1
 }
 
-define internal noundef i32 @nish.expose$arr.u8$i32$fn.5.width(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #0 {
+define internal noundef i32 @nish.expose$arr.u8$i32$fn.6.width$(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
-  %2 = call i32 @width(%struct.nish_array* %1)
+  %2 = call i32 @width$(%struct.nish_array* %1)
   ret i32 %2
 }
 
