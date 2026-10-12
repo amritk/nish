@@ -54,6 +54,7 @@ import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
+import { isCLibrarySymbol } from "./c-symbols"
 import { emitProgram } from "./emit"
 import { spellHiddenApart } from "./generics"
 import { StringMap, StringSet } from "./map"
@@ -1136,6 +1137,7 @@ export class Compilation {
       unit.checker.closeReachableStructs(declared)
     }
     this.rejectSymbolClashes(clashed)
+    this.rejectCLibrarySymbols()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -2156,6 +2158,46 @@ export class Compilation {
         // Reported, not thrown: every clash is listed.
         const at2 = nameNode(sig)
         this.sink.report(unit.source, at2.start, at2.end, message)
+      }
+    }
+  }
+
+  /**
+   * A function of the program's own package whose symbol is its name and
+   * names a C library function (#618): exported, or any function under
+   * `--no-strict-exports`. The program's own package carries no prefix, so
+   * the definition is global in the executable and the runtime's calls to the
+   * C function would reach it (`src/c-symbols.ts`). Its name is its ABI, so
+   * it is refused rather than renamed, which a hidden function is
+   * (`spellHiddenApart`). A `declare function` is the C function itself, a
+   * method or an instantiation has a `.` or a `$` in its symbol, and another
+   * package's function has its package's prefix.
+   */
+  rejectCLibrarySymbols(): void {
+    for (const unit of this.modules) {
+      if (unit.packageName !== ROOT_PACKAGE) {
+        continue
+      }
+      for (const sig of unit.checker.program.functions) {
+        if (!sig.definedIn(unit.source) || sig.foreign() || sig.owner !== null || sig.instance !== null) {
+          continue
+        }
+        if (!sig.exported && this.opts.strictExports) {
+          continue
+        }
+        if (!isCLibrarySymbol(sig.name)) {
+          continue
+        }
+        const why = sig.exported
+          ? "an exported function of the program's own package keeps its name as its symbol"
+          : "`--no-strict-exports` keeps every function's name as its symbol"
+        const at = nameNode(sig)
+        this.sink.report(
+          unit.source,
+          at.start,
+          at.end,
+          `\`${sig.sourceName}\` is the C library's \`${sig.name}\`: ${why}, so the runtime's own calls to it would reach this function instead; rename it`
+        )
       }
     }
   }

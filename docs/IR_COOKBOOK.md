@@ -18073,7 +18073,7 @@ program inherited can wait
 // can wait.
 import { netRead, netWrite, tcpListen } from "nish:net"
 
-export const listen = (port: i32): i32 => tcpListen("::", port, 128)
+export const listenOn = (port: i32): i32 => tcpListen("::", port, 128)
 
 export const echoOnce = (fd: i32, buf: u8[]): i32 => {
   const n = netRead(fd, buf, 0, buf.length)
@@ -18091,7 +18091,7 @@ declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonn
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #1
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
-define noundef i32 @listen(i32 noundef %port) #0 {
+define noundef i32 @listenOn(i32 noundef %port) #0 {
 entry:
   %0 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i32 %port, i32 128)
   ret i32 %0
@@ -18191,7 +18191,7 @@ reflects the ECN bits it arrived with
 // a blocking socket the program inherited can wait.
 import { udpBind, udpRecvFrom, udpSendTo } from "nish:net"
 
-export const bind = (port: i32): i32 => udpBind("::", port, 2)
+export const bindPort = (port: i32): i32 => udpBind("::", port, 2)
 
 export const echoOnce = (fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 => {
   const n = udpRecvFrom(fd, buf, 0, buf.length, from, meta)
@@ -18210,7 +18210,7 @@ declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
-define noundef i32 @bind(i32 noundef %port) #0 {
+define noundef i32 @bindPort(i32 noundef %port) #0 {
 entry:
   %0 = call i32 @nish_udp_bind(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i32 %port, i32 2)
   ret i32 %0

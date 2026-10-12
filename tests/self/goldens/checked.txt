@@ -79085,7 +79085,7 @@ module docs/cookbook/builtin-net-udp.ts (entry)
 import udpBind from "nish:net" -> builtin udpBind
 import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
 import udpSendTo from "nish:net" -> builtin udpSendTo
-function bind(port: i32): i32 -> @bind [exported]
+function bindPort(port: i32): i32 -> @bindPort [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_bind
   calls: nish_udp_bind
@@ -79104,7 +79104,7 @@ module docs/cookbook/builtin-net.ts (entry)
 import netRead from "nish:net" -> builtin netRead
 import netWrite from "nish:net" -> builtin netWrite
 import tcpListen from "nish:net" -> builtin tcpListen
-function listen(port: i32): i32 -> @listen [exported]
+function listenOn(port: i32): i32 -> @listenOn [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_tcp_listen
   calls: nish_tcp_listen

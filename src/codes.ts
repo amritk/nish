@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 625
+export const RULE_COUNT: i32 = 626
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -449,6 +449,8 @@ const diagnosticRules = (): string[] => [
   "NL2496",
   "Operator `+` requires two operands of the same numeric type or two strings, got ",
   "NL2231",
+  ", so the runtime's own calls to it would reach this function instead; rename it",
+  "NL3037",
   "` cannot be exported: it is a C function this program calls, not one it defines",
   "NL2306",
   "`export default` / `export =` are not supported; use a named `export function`",

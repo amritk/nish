@@ -20033,4 +20033,67 @@ if (fs.existsSync(threadsLl)) {
   )
 }
 
+// #618: `src/c-symbols.ts` lists the C symbols a function of the program's own
+// package may not be named after when its name is its symbol, and the first
+// part of that list is every symbol the runtime leaves undefined. Held here to
+// `llvm-nm -u` of the runtime's objects -- natively, with and without
+// `-DNISH_THREADS`, and for wasm32-wasi when a sysroot is installed -- so a call
+// the runtime gains is a name the list gains, or this fails. `nish_` names are
+// the runtime's own (NL2202 reserves them), and `main` is the program's, which
+// the wasi runtime's `_start` calls and the compiler always emits as the wrapper.
+if (!only || "c-symbols".includes(only)) {
+  const cSymbolsSource = fs.readFileSync(path.join(root, "src", "c-symbols.ts"), "utf8")
+  const listed = new Set([...cSymbolsSource.matchAll(/name === "([^"]+)"/g)].map((m) => m[1]))
+  const exempt = (name) => name.startsWith("nish_") || name === "main"
+  const undefinedIn = (objects) => {
+    const nm = spawnSync("llvm-nm", ["-u", "-j", ...objects], { encoding: "utf8" })
+    return nm.status === 0
+      ? nm.stdout.split("\n").filter((line) => line.length > 0 && !line.endsWith(":"))
+      : null
+  }
+  if (!HAS_CLANG || !has("llvm-nm")) {
+    skip("c-symbols: the runtime's undefined symbols are read with clang and llvm-nm, and one is missing")
+  } else {
+    const builds = [
+      ["the native runtime", runtimeObjects([])],
+      ["the native runtime with -DNISH_THREADS", runtimeObjects(["-DNISH_THREADS=1"])],
+    ]
+    if (WASI_SYSROOT === undefined) {
+      skip(
+        "c-symbols: no WASI sysroot (set WASI_SYSROOT): the wasm32-wasi runtime's undefined symbols are not read"
+      )
+    } else {
+      const dir = path.join(buildDir, "runtime-obj", "c-symbols-wasi")
+      fs.mkdirSync(dir, { recursive: true })
+      const wasi = { objects: [], error: null }
+      for (const src of RUNTIME_C) {
+        const obj = path.join(dir, path.basename(src).replace(/\.c$/, ".o"))
+        const cc = spawnSync(
+          "clang",
+          ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, "-O2", "-c", src, "-o", obj],
+          { cwd: root, encoding: "utf8" }
+        )
+        if (cc.status !== 0) {
+          wasi.error = `could not compile ${src} for wasm32-wasi:\n${cc.stderr}`
+          break
+        }
+        wasi.objects.push(obj)
+      }
+      builds.push(["the wasm32-wasi runtime", wasi])
+    }
+    for (const [label, built] of builds) {
+      const found = built.error === null ? undefinedIn(built.objects) : null
+      const missing =
+        found === null ? [] : [...new Set(found)].filter((name) => !exempt(name) && !listed.has(name))
+      check(
+        `c-symbols: every C symbol ${label} leaves undefined is one src/c-symbols.ts refuses`,
+        found !== null && missing.length === 0,
+        found === null
+          ? (built.error ?? "llvm-nm could not read the objects")
+          : `add to isCLibrarySymbol, with the reason beside it if it is not a plain runtime call: ${missing.sort().join(" ")}`
+      )
+    }
+  }
+}
+
 summarise()

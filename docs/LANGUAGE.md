@@ -1417,6 +1417,28 @@ and their `.ll` goldens are byte-identical files.
   the runtime calls it, and it is never assumed anything about. The rule is
   `hostVisible` in `src/visibility.ts`, and `docs/ARCHITECTURE.md` (the
   call-site ranges row of the attribute soundness rules) is why it is sound.
+- **An exported function is not named after a C library function.** A
+  module of the program's own package has no symbol prefix, so an exported
+  function's symbol is its name, in the entry module and in every other
+  module of the package, and under `--no-strict-exports` every function's
+  is. Named `write`, `read`, `free`, `exit`, `strlen` or another function the
+  runtime calls, it would be the definition the runtime's own calls reach in
+  the linked program (`console.log` printing nothing, a crash at the first
+  file read), so it is
+  `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the runtime's own calls to it would reach this function instead; rename it ``
+  (`tests/cases/reject_export_c_symbol_const`, `reject_export_c_symbol_function`,
+  `tests/link/export_c_symbol_sibling`; with `--no-strict-exports`,
+  `reject_export_c_symbol_no_strict`). The names are the C symbols the runtime
+  leaves undefined, on every platform it builds for, with the libm calls LLVM
+  lowers the program's own arithmetic to and the rest of the C allocator
+  (`src/c-symbols.ts`, which `tests/run.js` holds to `llvm-nm -u` of the
+  runtime). A function nobody exports is `internal` and may have any of these
+  names, as may a method, whose symbol carries its class, and a function of
+  another package, whose symbol carries the package
+  (`tests/link/export_c_symbol_allowed`); a private function another module's
+  instantiation calls takes a `$` at the end of its symbol instead
+  (#610, under [function parameters](#function-parameters)). `main` is the
+  entry's alone (`tests/link/main_in_import`), and emitted as `@nish_main`.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
