@@ -45,8 +45,8 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { CheckedProgram, inlineElementStruct } from "./program"
-import { Local, Scope } from "./symbols"
+import { capturedReads, CheckedProgram, inlineElementStruct } from "./program"
+import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
@@ -1050,7 +1050,9 @@ class RefWalk {
   }
 
   visitIdentifier(node: Node): void {
-    const local = this.program.nodeLocals[node.id]
+    // A data-parallel arrow's capture is read here, as the local it was made
+    // from: the call that runs the body is where the reference is used (WP29).
+    const local = sourceLocal(this.program.nodeLocals[node.id])
     const overwrites = this.overwrites
     if (local === null || (this.reported && overwrites === null)) {
       return
@@ -1215,9 +1217,15 @@ const collectAliased = (
   out: StringSet
 ): void => {
   // An arrow argument's body is a function of its own, walked with its own
-  // tables; what it aliases is its business, not the enclosing body's.
+  // tables; what it aliases is its business, not the enclosing body's —
+  // unless it captures this body's locals (WP29), when a second name it puts
+  // a captured array under is read where the call runs it.
   if (node.kind === N_ARROW) {
-    return
+    const reads: Node[] = []
+    capturedReads(program, node, reads)
+    if (reads.length === 0) {
+      return
+    }
   }
   if (node.kind === N_IDENT || node.kind === N_MEMBER) {
     const elem = inlineArrayElement(program, table, node)

@@ -129,7 +129,7 @@ import {
   isChannelSend,
   isGuardedAccess,
   isLockMethod,
-  isParallelEntry,
+  isRegionEntry,
   isSpawnEntry,
   parallelBodyOf,
   parallelRoleOf,
@@ -156,7 +156,7 @@ import {
   RuntimeFunction,
   RuntimeTable,
 } from "./runtime"
-import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_LOCAL, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { checksOverflow } from "./bounds"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
@@ -1409,7 +1409,8 @@ const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Nod
  */
 const namedInArrow = (program: CheckedProgram, node: Node, local: Local, inside: boolean): boolean => {
   if (inside && node.kind === N_IDENT) {
-    const named = program.nodeLocals[node.id]
+    // A data-parallel arrow's capture names the local it was made from (WP29).
+    const named = sourceLocal(program.nodeLocals[node.id])
     if (named !== null && named === local) {
       return true
     }
@@ -3380,7 +3381,7 @@ const collectFacts = (
   // call lowers to in `callees`, and because this has to hold in round 1:
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
-  if (isParallelEntry(sig)) {
+  if (isRegionEntry(sig)) {
     markParallelEntry(facts, "nish_parallel_range")
   }
   if (isSpawnEntry(sig)) {

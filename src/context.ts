@@ -95,6 +95,16 @@ export class CheckContext {
    */
   arrowOuterScopes: Scope[]
   arrowOuterFunctions: FunctionBindings[]
+  /**
+   * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
+   * parameter scope, and whether it may read its function's `const` locals:
+   * an arrow passed to a data-parallel form may (`captureOuter` in
+   * `src/generics.ts`), and each one it reads becomes a parameter declared in
+   * that scope.
+   */
+  arrowFns: FunctionSig[]
+  arrowScopes: Scope[]
+  arrowCaptures: boolean[]
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   currentInstance: Instantiation | null
   /**
@@ -196,6 +206,9 @@ export class CheckContext {
     this.functionBindings = new FunctionBindings()
     this.arrowOuterScopes = []
     this.arrowOuterFunctions = []
+    this.arrowFns = []
+    this.arrowScopes = []
+    this.arrowCaptures = []
     this.currentInstance = null
     this.currentStructInstance = null
     this.constraintsDeferred = true

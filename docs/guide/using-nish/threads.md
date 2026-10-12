@@ -4,8 +4,8 @@ Nish runs code on several threads without letting two threads race on the
 same memory. It does that by offering a few shapes of parallel work, each
 with rules the compiler checks, instead of raw threads and shared variables:
 
-- **`parallelMapInto` and `parallelReduce`** — one function over every element
-  of an array.
+- **`parallelMapInto`, `parallelMap`, `parallelFrom` and `parallelReduce`** —
+  one function over every element of an array, or every index of a new one.
 - **`scope()`** — a handful of different tasks at once, joined when a block
   ends.
 - **`Mutex<T>`** — one value that a scope's tasks all update.
@@ -81,6 +81,76 @@ export const main = (): i32 => {
   const dst: i32[] = [0, 0, 0];
   parallelMapInto(src, dst, noisy);
   return dst[0];
+};
+```
+
+## A new array: `parallelMap` and `parallelFrom`
+
+`parallelMap(src, f)` answers a new array of `f(src[i])`, and
+`parallelFrom(n, f)` a new array of `n` elements with `f(i)` at index `i`, the
+way `Array.from({ length: n }, (_, i) => f(i))` builds one. Each allocates the
+array before it starts and then runs exactly the map above, under the same
+rules for `f`. There is no `dst` to get wrong.
+
+```ts nish:ok
+import { parallelFrom, parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  const squares = parallelFrom(5, (i) => i * i);       // 0 1 4 9 16
+  const shifted = parallelMap(squares, (x) => x + 1);  // 1 2 5 10 17
+  console.log(`${squares[4]} ${shifted[4]}`); // 16 17
+  return 0;
+};
+```
+
+## Reading the function's constants
+
+An arrow passed to one of these four forms may read the `const` locals and the
+parameters of the function it is written in, which is how a scale, an offset
+or a lookup table reaches the body:
+
+```ts nish:ok
+import { parallelMap } from "nish/threads";
+
+const affine = (xs: i32[], k: i32): i32[] => {
+  const b: i32 = 1;
+  const table: i32[] = [0, 100, 200];
+  return parallelMap(xs, (x) => x * k + b + table[x % 3]);
+};
+
+export const main = (): i32 => {
+  const ys = affine([1, 2, 3], 10);
+  console.log(`${ys[0]} ${ys[1]} ${ys[2]}`); // 111 221 31
+  return 0;
+};
+```
+
+- **What the body reads, it only reads.** Every thread sees the same values, so
+  the body may not assign to one, store into an array or an object it reads
+  this way, or hand one to a function that does. Each of those is refused at
+  the call.
+- **Only a `const` or a parameter.** A `let` could change while the threads
+  read it: bind its value to a `const` first. `this` is not read by that name
+  either; bind it, or the field you need, to a `const` (`const self = this`,
+  `const k = this.k`).
+- **Only the arrow written at the call.** An arrow inside that arrow reads
+  nothing from outside itself, and an arrow given to any other function, or to
+  `spawn`, still reads only its own parameters.
+- **Not `dst`.** In `parallelMapInto`, a body may not read an array that could
+  be the one being written. A `const` table bound to its own array is fine
+  beside a `dst` that is a `const` bound to its own array, as in
+  `const table = [1, 2]` and `const dst = new Array<i32>(n)`.
+
+```ts nish:err NL2503
+import { parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  const total: i32 = 0;
+  const ys = parallelMap([1, 2, 3], (x): i32 => {
+    total = total + x; // every thread would write it at once
+    return x;
+  });
+  return ys[0];
 };
 ```
 

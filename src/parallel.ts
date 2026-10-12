@@ -1,10 +1,12 @@
 // WP29 P1: the rules a data-parallel call is held to, and how `nish/threads`'s
 // templates are recognised (docs/wp29-thread-surface.md §4.1, §7, §11).
 //
-// `std/threads.ts` is ordinary Nish: its two exported templates carry the
+// `std/threads.ts` is ordinary Nish: its exported templates carry the
 // sequential meaning, and the compiler recognises them by module and name and
 // replaces one call inside each instance with a region over
-// `nish_parallel_range` (`src/emit-parallel.ts`). Everything that makes the
+// `nish_parallel_range` (`src/emit-parallel.ts`). `parallelMap` is the one
+// with no region of its own: it allocates its result and calls
+// `parallelMapInto`, and is judged at its call as the other three are. Everything that makes the
 // region safe to run on several threads is judged here, at the user's call,
 // from the whole-program facts — which is why it runs after the fixpoint,
 // from `Compilation.checkParallel`, rather than while the call is checked:
@@ -101,7 +103,9 @@ import {
   FunctionSig,
   Instantiation,
   PAR_CHUNK,
+  PAR_FROM,
   PAR_MAP,
+  PAR_MAP_NEW,
   PAR_NONE,
   PAR_REDUCE,
   PAR_SPAWN,
@@ -112,12 +116,13 @@ import {
   StructInfo,
   StructInstantiation,
   TemplateInfo,
+  capturedReads,
 } from "./program"
 import { isCollectionStruct } from "./generics"
 import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
-import { Local, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
@@ -201,7 +206,13 @@ export const parallelRole = (template: TemplateInfo): i32 => {
   if (name === "parallelReduce") {
     return PAR_REDUCE
   }
-  if (name === "mapRange" || name === "reduceBlocks") {
+  if (name === "parallelMap") {
+    return PAR_MAP_NEW
+  }
+  if (name === "parallelFrom") {
+    return PAR_FROM
+  }
+  if (name === "mapRange" || name === "fromRange" || name === "reduceBlocks") {
     return PAR_CHUNK
   }
   return PAR_NONE
@@ -236,10 +247,24 @@ export const taskStoreOf = (task: FunctionSig): FunctionSig | null => {
 /** Whether `sig` is an instance of `ThreadScope.spawn` (WP29 P2). */
 export const isSpawnEntry = (sig: FunctionSig): boolean => parallelRoleOf(sig) === PAR_SPAWN
 
-/** Whether `sig` is an instance of `parallelMapInto` or `parallelReduce`: one whose region the emitter builds. */
+/**
+ * Whether `sig` is an instance of one of the four data-parallel forms
+ * (`parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`): one
+ * whose call is judged by the rules below.
+ */
 export const isParallelEntry = (sig: FunctionSig): boolean => {
   const role = parallelRoleOf(sig)
-  return role === PAR_MAP || role === PAR_REDUCE
+  return role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
+}
+
+/**
+ * Whether `sig` is an instance whose call to its chunk loop the emitter turns
+ * into a region: every form but `parallelMap`, which reaches its region
+ * through the `parallelMapInto` it calls.
+ */
+export const isRegionEntry = (sig: FunctionSig): boolean => {
+  const role = parallelRoleOf(sig)
+  return role === PAR_MAP || role === PAR_REDUCE || role === PAR_FROM
 }
 
 /**
@@ -259,7 +284,13 @@ export const recordParallelCall = (program: CheckedProgram, node: Node, sig: Fun
       return
     }
   }
-  calls.push(new ParallelCall(node, sig))
+  // `dst` is read now, while the tables of the body that holds the call are
+  // the ones installed: an instantiation of a generic caller has its own.
+  let dst: Local | null = null
+  if (parallelRoleOf(sig) === PAR_MAP && node.kind === N_CALL && node.children[1].children.length > 1) {
+    dst = namedLocal(program, node.children[1].children[1])
+  }
+  calls.push(new ParallelCall(node, sig, dst))
 }
 
 // ---- The rules ---------------------------------------------------------------------------
@@ -275,6 +306,12 @@ const intrinsicName = (sig: FunctionSig): string => {
   const role = parallelRoleOf(sig)
   if (role === PAR_SPAWN) {
     return "spawn"
+  }
+  if (role === PAR_MAP_NEW) {
+    return "parallelMap"
+  }
+  if (role === PAR_FROM) {
+    return "parallelFrom"
   }
   return role === PAR_MAP ? "parallelMapInto" : "parallelReduce"
 }
@@ -411,13 +448,15 @@ export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSi
   resultWording(table, intrinsicName(sig), fn, type)
 
 /**
- * The same rule for a reduce, asked before `template` is instantiated rather
- * than once the fixpoint has run. A reduce's `T` is its element, its identity
- * and its result at once, and the template's body is written for a scalar `T`
- * (`new Array<T>(blocks)` zero-fills its partials), so instantiating it for a
- * string or a class would report errors inside `std/threads.ts` and never
- * reach the call. `functions` and `typeArgs` are the call's, in the
- * template's order: the combining function, and `T`.
+ * The same rule, asked before `template` is instantiated rather than once the
+ * fixpoint has run, for the forms whose template allocates the result type: a
+ * reduce's `T` is its element, its identity and its result at once, and its
+ * body is written for a scalar `T` (`new Array<T>(blocks)` zero-fills its
+ * partials), and `parallelMap` and `parallelFrom` allocate their `U[]` the
+ * same way. Instantiating any of them for a string or a class would report
+ * errors inside `std/threads.ts` and never reach the call. `functions` and
+ * `typeArgs` are the call's, in the template's order: the body, and the type
+ * arguments, whose last is the result type in all three.
  */
 export const reduceElementMessage = (
   table: TypeTable,
@@ -425,10 +464,20 @@ export const reduceElementMessage = (
   functions: FunctionSig[],
   typeArgs: i32[]
 ): string => {
-  if (parallelRole(template) !== PAR_REDUCE || functions.length !== 1 || typeArgs.length !== 1) {
+  const role = parallelRole(template)
+  if (role !== PAR_REDUCE && role !== PAR_MAP_NEW && role !== PAR_FROM) {
     return ""
   }
-  return resultWording(table, "parallelReduce", functions[0], typeArgs[0])
+  if (functions.length !== 1 || typeArgs.length === 0) {
+    return ""
+  }
+  let intrinsic = "parallelMap"
+  if (role === PAR_REDUCE) {
+    intrinsic = "parallelReduce"
+  } else if (role === PAR_FROM) {
+    intrinsic = "parallelFrom"
+  }
+  return resultWording(table, intrinsic, functions[0], typeArgs[typeArgs.length - 1])
 }
 
 /**
@@ -520,7 +569,7 @@ export const reachesDstMessage = (
  * more than a `return`, or an operator on anything but the two parameters.
  */
 const combiningOperator = (fn: FunctionSig): string => {
-  if (!fn.lifted || fn.paramNames.length !== 2) {
+  if (!fn.lifted || fn.writtenArity() !== 2) {
     return ""
   }
   let body = fn.decl.children[3]
@@ -621,6 +670,210 @@ export const reduceMessage = (
     `\`parallelReduce\` folds every block from its identity, and the identity of \`${op}\` is \`${want}\`, not ` +
     `\`${identityText}\`: any other value would be counted once per block`
   )
+}
+
+// ---- Captures ----------------------------------------------------------------------------
+//
+// An arrow passed to one of the four forms may read the `const` locals and the
+// parameters of the function it is written in (docs/LANGUAGE.md, "Data
+// parallelism"). The checker appends each one it reads to the arrow's
+// parameters (`captureOuter` in `src/generics.ts`), so inside the arrow a
+// capture is a parameter like any other, and the rules above hold of it as
+// they hold of the element: a store through it is a shared write, which
+// `sharedWriteMessage` refuses. The value travels from the call to the body as
+// a parameter of every instance between them, which the emitter adds
+// (`capturesOf`), and through the region's context with the other arguments.
+
+/** One value an instance carries for an arrow it was handed: capture `index` of `arrow`. */
+export class CaptureSlot {
+  arrow: FunctionSig
+  index: i32
+
+  constructor(arrow: FunctionSig, index: i32) {
+    this.arrow = arrow
+    this.index = index
+  }
+
+  /** The captured local's type, as the arrow's parameter has it. */
+  type(): i32 {
+    return this.arrow.paramTypes[this.arrow.writtenArity() + this.index]
+  }
+}
+
+const collectCaptures = (sig: FunctionSig, out: CaptureSlot[]): void => {
+  if (sig.lifted) {
+    let k = 0
+    while (k < sig.captures.length) {
+      out.push(new CaptureSlot(sig, k))
+      k = k + 1
+    }
+    return
+  }
+  const instance = sig.instance
+  if (instance === null) {
+    return
+  }
+  for (const fn of instance.functionArgs) {
+    collectCaptures(fn, out)
+  }
+}
+
+/**
+ * Every captured value a call of `sig` passes after its written arguments: an
+ * arrow's own captures, or, for an instance, those of every arrow it was
+ * given, in argument order, and through the instances those were given on.
+ */
+export const capturesOf = (sig: FunctionSig): CaptureSlot[] => {
+  const out: CaptureSlot[] = []
+  collectCaptures(sig, out)
+  return out
+}
+
+/** The refusal for a `let` an arrow reads. */
+export const letCaptureMessage = (name: string): string =>
+  `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a data-parallel body may read only ` +
+  "a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the " +
+  "value to a `const` before the call"
+
+/** The refusal for a name an arrow inside an arrow reads from outside both. */
+export const nestedCaptureMessage = (name: string): string =>
+  `The arrow reads \`${name}\` from outside the arrow it is written in: only an arrow written directly in a ` +
+  "function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read " +
+  "that function's `const` locals, and an arrow inside another arrow captures nothing"
+
+/** The refusal for `this` in an arrow passed to a data-parallel form. */
+export const thisCaptureMessage = (): string =>
+  "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function " +
+  "it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call " +
+  "(`const self = this`, `const k = this.k`)"
+
+/** The refusal for an assignment to a captured name. */
+export const captureWriteMessage = (name: string): string =>
+  `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a data-parallel body ` +
+  "reads a captured value and never writes it, because every thread reads the same one"
+
+/** Whether `info` is a class `nish/threads` declares: a scope, a lock, its guard or a channel. */
+const isThreadsLayout = (info: StructInfo): boolean => {
+  const instance = info.instance
+  if (instance !== null) {
+    return isThreadsModule(instance.template.home.program)
+  }
+  return info.origin.path === threadsModuleName() && info.name === THREAD_SCOPE
+}
+
+/** Why a value of `type` may not be captured, or "" when it may; `seen` stops a recursive class. */
+const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, seen: StringSet): string => {
+  if (table.isMaybe(type)) {
+    return "a value that may be absent is read through the test that found it, which the body cannot repeat"
+  }
+  if (table.isSecret(type)) {
+    return "a `Secret` is read only inside `expose`"
+  }
+  const kind = table.kindOf(type)
+  if (kind === K_RESULT) {
+    return "a `Result` is read through the test that narrowed it; bind the value it holds to a `const` instead"
+  }
+  if (kind === K_NULLABLE || kind === K_ARRAY) {
+    return captureObstacle(program, table, table.refOf(type), seen)
+  }
+  if (kind !== K_STRUCT) {
+    return ""
+  }
+  const name = table.nameOf(type)
+  if (seen.has(name)) {
+    return ""
+  }
+  seen.add(name)
+  const info = program.struct(name)
+  if (info === null) {
+    return "its layout is not known here"
+  }
+  if (isThreadsLayout(info)) {
+    return "a scope, a lock, a guard or a channel is shared only by the rules of its own block"
+  }
+  for (const field of info.fields) {
+    const inner = captureObstacle(program, table, field.type, seen)
+    if (inner.length > 0) {
+      return inner
+    }
+  }
+  return ""
+}
+
+/** The refusal for capturing `name` of `type`, or "" when it may be captured. */
+export const captureTypeMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  name: string,
+  type: i32
+): string => {
+  const why = captureObstacle(program, table, type, new StringSet())
+  if (why.length === 0) {
+    return ""
+  }
+  return (
+    `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a data-parallel body cannot capture it: ` +
+    why
+  )
+}
+
+/** A `const` whose initialiser allocated an array of its own (`Local.fresh`). */
+const isFreshConst = (local: Local): boolean =>
+  local.fresh && !local.mutable && local.storage !== STORAGE_PARAM
+
+/**
+ * Whether the captured array `captured` and `dst` are two arrays: two
+ * different bindings, one of them a `const` that allocated its own array and
+ * the other that or a parameter. A fresh array is memory no binding held
+ * before it was made, a parameter's value was fixed before the function ran,
+ * and neither name can be bound again, so nothing makes them one array.
+ */
+const knownApart = (captured: Local, dst: Local | null): boolean => {
+  if (dst === null || dst === captured) {
+    return false
+  }
+  const capturedParam = captured.storage === STORAGE_PARAM && captured.name !== "this"
+  const dstParam = dst.storage === STORAGE_PARAM && dst.name !== "this"
+  return (isFreshConst(captured) && (isFreshConst(dst) || dstParam)) || (isFreshConst(dst) && capturedParam)
+}
+
+/**
+ * A captured value through which the body could read `dst` while another
+ * thread writes it: the capture's form of `reachesDstMessage`. A capture is a
+ * binding the call can name, so one case is admitted by identity rather than
+ * refused by type: a captured array of `dst`'s type that is a `const` bound to
+ * an array of its own (`Local.fresh`), when `dst` is a different such `const`.
+ * Two fresh arrays are two buffers. Everything else that reaches an array of
+ * `dst`'s element type is refused, naming the path.
+ */
+export const captureReachesDstMessage = (
+  table: TypeTable,
+  program: CheckedProgram,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  dstLocal: Local | null
+): string => {
+  const instance = sig.instance
+  if (instance === null || instance.parallel !== PAR_MAP || instance.typeArgs.length < 2) {
+    return ""
+  }
+  const target = instance.typeArgs[1]
+  for (const captured of fn.captures) {
+    const path = reachingPath(table, program, captured.type, target, captured.name, new StringSet())
+    if (path.length === 0) {
+      continue
+    }
+    if (path === captured.name && knownApart(captured, dstLocal)) {
+      continue
+    }
+    return (
+      `\`${fn.sourceName}\` reads \`${captured.name}\`, and can reach a \`${table.typeName(target)}[]\` through ` +
+      `\`${path}\`, which could be the array \`parallelMapInto\` is writing: another thread would be writing it ` +
+      "while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound " +
+      "to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter"
+    )
+  }
+  return ""
 }
 
 // ---- The grain ---------------------------------------------------------------------------
@@ -939,7 +1192,8 @@ const walkScopes = (
   if (isArenaCall(program, node) && !isUsingInitialiser(at, parents, depth)) {
     out.push(new ScopeFinding(node, arenaNotUsingMessage()))
   }
-  const named: Local | null = node.kind === N_IDENT && !declaresName ? program.nodeLocals[node.id] : null
+  const named: Local | null =
+    node.kind === N_IDENT && !declaresName ? sourceLocal(program.nodeLocals[node.id]) : null
   if (named !== null && arenas.indexOf(named) >= 0) {
     out.push(new ScopeFinding(node, arenaBindingMessage(named.name)))
   }
@@ -1126,7 +1380,8 @@ const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null =>
 /** The local `node` names, when it is an identifier (parenthesised or not); `null` otherwise. */
 const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
   const e = unwrapParens(node)
-  return e.kind === N_IDENT ? program.nodeLocals[e.id] : null
+  // A data-parallel arrow's capture is the local it was made from (WP29).
+  return e.kind === N_IDENT ? sourceLocal(program.nodeLocals[e.id]) : null
 }
 
 /**
@@ -1178,7 +1433,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
     }
   }
   if (node.kind === N_IDENT && parent !== null) {
-    const local = program.nodeLocals[node.id]
+    const local = sourceLocal(program.nodeLocals[node.id])
     if (local !== null) {
       const at = uses.add(local)
       const base =
@@ -1483,7 +1738,12 @@ const walkRegion = (
   out: ScopeFinding[]
 ): void => {
   if (node.kind === N_ARROW) {
-    return // a lifted function of its own; it runs only when called
+    // A lifted function of its own, which runs only when called — but an arrow
+    // given to a data-parallel form runs here, and reads what it captures.
+    if (state.live()) {
+      regionCaptureReads(program, node, state, out)
+    }
+    return
   }
   if (node.kind === N_RETURN) {
     return // every scope joins before a `return` computes its value
@@ -1548,10 +1808,39 @@ const walkRegion = (
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
+    if (node.kind === N_CALL) {
+      // A refused data-parallel call still reads, there, what its arrow captures.
+      for (const arg of node.children[1].children) {
+        if (arg.kind === N_ARROW) {
+          regionCaptureReads(program, arg, state, out)
+        }
+      }
+    }
     return
   }
   for (const child of node.children) {
     walkRegion(program, table, facts, uses, child, state, out)
+  }
+}
+
+/**
+ * WP29: the captures an arrow given to a data-parallel form reads, judged as
+ * reads where the call runs it. Any use of a destination is one: the body may
+ * index it, walk it, or hand it to a call, and it runs before the scope joins.
+ */
+const regionCaptureReads = (
+  program: CheckedProgram,
+  arrow: Node,
+  state: RegionState,
+  out: ScopeFinding[]
+): void => {
+  const reads: Node[] = []
+  capturedReads(program, arrow, reads)
+  for (const read of reads) {
+    if (state.isDestination(sourceLocal(program.nodeLocals[read.id]))) {
+      out.push(new ScopeFinding(read, regionReadMessage(state, read.text)))
+      return
+    }
   }
 }
 
