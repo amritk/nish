@@ -2153,7 +2153,11 @@ class FactCollector {
       at = parent
       parent = this.unit.parents.parentOf(at)
     }
-    if (parent !== null && (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at) {
+    if (
+      parent !== null &&
+      (parent.kind === N_MEMBER || parent.kind === N_INDEX) &&
+      parent.children[0] === at
+    ) {
       return // part of a longer path, `(t).mid` included, which is judged where it ends
     }
     if (parent !== null && parent.kind === N_VAR_DECL && parent.children[0] === at) {
@@ -2206,7 +2210,11 @@ class FactCollector {
     }
     if (parent.kind === N_LIST) {
       const call = this.unit.parents.parentOf(parent)
-      if (call === null || (call.kind !== N_CALL && call.kind !== N_NEW) || program.nodeCallees[call.id] === null) {
+      if (
+        call === null ||
+        (call.kind !== N_CALL && call.kind !== N_NEW) ||
+        program.nodeCallees[call.id] === null
+      ) {
         return false
       }
       // A table call stores what it is handed (`noteTableStores`); only its receiver is followed.
