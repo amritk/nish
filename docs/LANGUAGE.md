@@ -2637,7 +2637,11 @@ export const main = (): i32 => {
   the arrow as at a direct one: a record copied into an array and written
   through one copy (NL8003, `tests/link/port_rec_capture_copy`, and
   `port_rec_capture_quiet` for a read before the write), and a byte offset
-  compared with a count (NL8001, `tests/link/port_str_capture_offset`).
+  compared with a count or answered by the arrow, which stores it in the
+  form's array (NL8001, `tests/link/port_str_capture_offset`,
+  `port_str_capture_result`). A captured name is not a parameter of the
+  arrow to NL8009, which reports it where its function declares it
+  (`tests/link/port_num_capture_wide`).
 - **Some values are never captured**: a `Mutex`, its guard, a `Channel` or a
   scope, which are shared only by their own block's rules, a `Result`, a value
   that may be absent, a `Secret`, or anything that reaches one of them:

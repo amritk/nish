@@ -29,6 +29,7 @@ import { isAsciiText } from "./strings"
 import {
   FLAG_PREFIX,
   N_ARRAY,
+  N_ARROW,
   N_BINARY,
   N_CALL,
   N_CONDITIONAL,
@@ -47,6 +48,8 @@ import {
   Node,
 } from "./nodes"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
+import { parallelRoleOf } from "./parallel"
+import { PAR_REDUCE } from "./program"
 import { Local, sourceLocal } from "./symbols"
 import { isFloat, isNumeric, T_BOOL, T_STRING } from "./types"
 
@@ -361,8 +364,13 @@ const asciiValue = (walk: PortabilityWalk, expr: Node): string | null => {
  * outside fact.
  */
 const followValue = (trail: Trail, value: Node, holder: Local | null): void => {
+  followFrom(trail, value, value, holder)
+}
+
+/** `followValue` with the value already at `from`, an expression it reached. */
+const followFrom = (trail: Trail, value: Node, from: Node, holder: Local | null): void => {
   const walk = trail.walk
-  let at = value
+  let at = from
   let stepped = false
   while (true) {
     if (at === walk.body) {
@@ -374,6 +382,11 @@ const followValue = (trail: Trail, value: Node, holder: Local | null): void => {
     }
     const parent = walk.parents.parentOf(at)
     if (parent === null) {
+      return
+    }
+    if (parent.kind === N_ARROW) {
+      // A concise arrow body inside this one: the value is the arrow's answer.
+      followOutOfArrow(trail, parent, value, holder)
       return
     }
     if (parent.kind === N_PAREN || (parent.kind === N_CONDITIONAL && at !== parent.children[0])) {
@@ -509,7 +522,10 @@ const followIntoPlace = (trail: Trail, parent: Node, at: Node, value: Node, hold
   if (parent.kind === N_TEMPLATE) {
     trail.report(value, holder, "and it is printed into a template")
   } else if (parent.kind === N_RETURN) {
-    if (isEntryMain(trail.walk)) {
+    const arrow = enclosingArrow(trail.walk, parent)
+    if (arrow !== null) {
+      followOutOfArrow(trail, arrow, value, holder)
+    } else if (isEntryMain(trail.walk)) {
       trail.report(value, holder, "and `main` returns it as the exit code")
     }
   } else if (parent.kind === N_ARRAY) {
@@ -518,6 +534,43 @@ const followIntoPlace = (trail: Trail, parent: Node, at: Node, value: Node, hold
     trail.report(value, holder, "and it is stored in a field")
   } else if (parent.kind === N_VAR_DECL && at === parent.children[2]) {
     followLocal(trail, trail.walk.program.nodeLocals[parent.id])
+  }
+}
+
+/**
+ * The arrow below the body being walked that `node` is inside, or `null`. A
+ * value can only be followed into one through a name it captures (WP29), so
+ * it is an arrow handed to a data-parallel form.
+ */
+const enclosingArrow = (walk: PortabilityWalk, node: Node): Node | null => {
+  let at = walk.parents.parentOf(node)
+  while (at !== null && at !== walk.body) {
+    if (at.kind === N_ARROW) {
+      return at
+    }
+    at = walk.parents.parentOf(at)
+  }
+  return null
+}
+
+/**
+ * The value is the answer of `arrow`, a body a data-parallel form runs where
+ * it is called. `parallelReduce` combines the answers into the call's value,
+ * which is followed on from the call; every other form stores each answer in
+ * the array it writes.
+ */
+const followOutOfArrow = (trail: Trail, arrow: Node, value: Node, holder: Local | null): void => {
+  const walk = trail.walk
+  const list = walk.parents.parentOf(arrow)
+  const call: Node | null = list === null ? null : walk.parents.parentOf(list)
+  if (call === null || call.kind !== N_CALL) {
+    return
+  }
+  const sig = walk.program.nodeCallees[call.id]
+  if (sig !== null && parallelRoleOf(sig) === PAR_REDUCE) {
+    followFrom(trail, value, call, holder)
+  } else {
+    trail.report(value, holder, "and it is stored in an array")
   }
 }
 

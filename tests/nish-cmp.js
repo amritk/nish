@@ -648,6 +648,16 @@ const DECLARED = [
     why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin NL8001 at a byte offset read through a capture",
   },
   {
+    program: "tests/link/port_num_capture_wide/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` from `nish/threads`, which the reference compiler's standard library does not have, to pin NL8009 on the written parameters of an arrow that captures",
+  },
+  {
+    program: "tests/link/port_str_capture_result/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, to pin NL8001 on a captured offset an arrow answers with",
+  },
+  {
     program: "docs/cookbook/par-capture.ts",
     changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
     why: "a new cookbook entry: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have",
