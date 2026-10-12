@@ -2285,6 +2285,9 @@ const sizeAtCall = (ctx: CheckContext, sig: FunctionSig, body: Node, size: Node,
       ) {
         return -1
       }
+      if (k >= args.length) {
+        return -1
+      }
       const range = declaredValueRange(ctx, args[k])
       return range !== null && range.lo >= toI64(0) && range.lo < I32_MAX ? toI32(range.lo) : -1
     }
