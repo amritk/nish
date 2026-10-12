@@ -19,7 +19,7 @@ import {
 } from "nish/json-typed";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { Kinds, Level, MapShapes, Names, Sign, Wide, Xy } from "./models.ts";
+import { Bags, Kinds, Level, MapShapes, Names, Sign, Wide, Xy } from "./models.ts";
 import { jtBytes, jtDecode, jtEncode } from "./support.ts";
 import { Tag, tagDecode, tagEncode } from "./tag.ts";
 
@@ -304,6 +304,29 @@ const jtMaps = (t: Suite): void => {
   groups.push(`"g819":{"a":0,"b":5,"c":9,"d":0}`);
   const past = jtKindsWith("groups", `{${groups.join(",")}}`);
   t.eqI32("map limit: 820 small maps, 4,100 keys, are refused", jtDecode(past, new Kinds(), new JsonLimits(), false).failed, JSON_DECODE_MAP_LIMIT);
+  // The count crosses every way a map is reached: maps in the elements of an
+  // array, and a `| null` map beside another map.
+  const bagText = `{"bags":[{"counts":{"a":1,"b":2}},{"counts":{"c":3,"d":4}}]}`;
+  const bagBytes = jtBytes(bagText);
+  const bd = new JsonDecoder(bagBytes, 0, toI32(bagBytes.length), new JsonLimits());
+  bd.maxMapKeys = 4;
+  t.eqI32("map limit: maps in array elements share it", jsonDecode(bd, new Bags()), JSON_DECODE_OK);
+  bd.reset(bagBytes, 0, toI32(bagBytes.length));
+  bd.maxMapKeys = 3;
+  t.eqI32("map limit: and are refused past it", jsonDecode(bd, new Bags()), JSON_DECODE_MAP_LIMIT);
+  t.eqI32("map limit: at the second element's second key", bd.errorAt, toI32(bagText.indexOf(`"d"`)));
+  const withCounts =
+    `{"id":1,"ids":[],"more":null,"levels":[],"ranks":null,"counts":{"a":1,"b":2},` +
+    `"players":{},"notes":{},"lists":{},"groups":{},"odds":{"p":0.5,"q":1},"level":0,"sign":0}`;
+  const oddsBytes = jtBytes(withCounts);
+  const nm = new JsonDecoder(oddsBytes, 0, toI32(oddsBytes.length), new JsonLimits());
+  nm.maxMapKeys = 4;
+  t.eqI32("map limit: a | null map shares it", jsonDecode(nm, new Kinds()), JSON_DECODE_OK);
+  nm.reset(oddsBytes, 0, toI32(oddsBytes.length));
+  nm.maxMapKeys = 3;
+  t.eqI32("map limit: and a | null map is refused past it", jsonDecode(nm, new Kinds()), JSON_DECODE_MAP_LIMIT);
+  t.eqI32("map limit: at its second key", nm.errorAt, toI32(withCounts.indexOf(`"q"`)));
+
   // At `0` or below, no map takes a key, and `{}` is still a map.
   const none = jtBytes(jtKindsWith("counts", `{"a":1}`));
   const emptyMaps = jtBytes(jtKindsWith("counts", "{}"));

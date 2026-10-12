@@ -13,20 +13,22 @@
 // rule (`src/json-typed.ts`), so a value that is none of them here is an
 // internal error.
 //
-// What one class's decoding is, written out for fields `id` and `name`:
+// What one class's decoding is, written out for fields `id`, `name` and `age`:
 //
 //     if (d.beginObject()) {
 //       while (d.nextField()) {
 //         switch (d.keyLength()) {
 //           case 2: if (d.keyIs("id")) goto id; else goto unknown
 //           case 4: if (d.keyIs("name")) goto name; else goto unknown
+//           case 3: if (d.keyIs("age")) goto age; else goto unknown
 //           default: goto unknown
 //         }
 //         id:   if (seen.id) d.duplicateField() else { seen.id = true; out.id = d.i32() }
 //         name: ... out.name = d.string(out.name)
+//         age:  ...
 //         unknown: d.unknownField()
 //       }
-//       if (!seen.id) d.missingField() else if (!seen.name) d.missingField()
+//       if (!seen.id) d.missingField() else if (!seen.name) ... else if (!seen.age) ...
 //     }
 //
 // A field's key is its name, or the one its class's `static readonly json`
@@ -36,12 +38,15 @@
 // `d.number` and of `jsonEncodeNumber` (`emitJsonNumberBody`).
 //
 // The key's length picks the fields it can be, so a key is compared with the
-// name of a field of its own length and no other. When several fields share a
-// length, one byte of the key (`d.keyByte(at)`, at the position where their
-// names differ most) narrows them further before `keyIs` compares the whole
-// key: a byte no name has there is an unknown key at once, and a key with an
-// escape answers `-1`, and is compared with every name of its length instead
-// (`emitJsonDispatch`).
+// name of a field of its own length and no other. When three or more fields
+// share a length, one byte of the key (`d.keyByte(at)`, at the position where
+// their names differ most) narrows them further before `keyIs` compares the
+// whole key: a byte no name has there is an unknown key at once, and a key
+// with an escape answers `-1`, and is compared with every name of its length
+// instead (`emitJsonDispatch`). A class of one or two fields, and one or two
+// names of one length, are compared in turn with `keyIs` and no switch, which
+// is no more calls: `if (d.keyIs("x")) goto x; else if (d.keyIs("y")) goto y;
+// else goto unknown`.
 //
 // The encoding is `w.beginObject()`, `w.key("id")` and `w.i32(v.id)` per field
 // in declaration order, then `w.endObject()`. Every call into the decoder and
