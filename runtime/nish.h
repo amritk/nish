@@ -583,20 +583,24 @@ void nish_scope_join(void *scope);
 
 /* ---- A lock that owns its data (wp29 stage P3), runtime/runtime-parallel.c ----
  *
- * A `Mutex`'s lock is one `int32_t` word inside its guard: 0 free, 1 held. The
- * compiler takes it inline, with an acquire compare-and-swap of 0 to 1, and
- * gives it back inline, with a release store of 0 (src/emit-parallel.ts). Only
- * a swap that finds the word held calls `nish_mutex_wait`, which returns once
- * it has taken the lock itself: it spins briefly, then yields the processor
- * between tries. The word lives in the arena with the rest of the `Mutex`, so
- * there is nothing to create and nothing to destroy.
+ * A `Mutex`'s lock is one `int32_t` word inside its guard: 0 free, 1 held, 2
+ * held with a waiter that may be asleep. The compiler takes it inline, with an
+ * acquire compare-and-swap of 0 to 1, and gives it back inline, with a release
+ * exchange of 0 (src/emit-parallel.ts). Only a swap that finds the word held
+ * calls `nish_mutex_wait`, which returns once it has taken the lock itself: it
+ * spins briefly, then marks the word 2 and sleeps in the kernel (`futex` on
+ * Linux, `__ulock_wait` on Darwin; a yield elsewhere). Only an exchange that
+ * finds the word 2 calls `nish_mutex_wake`, which wakes one sleeper. The word
+ * lives in the arena with the rest of the `Mutex`, so there is nothing to
+ * create and nothing to destroy.
  *
  * The language holds one lock at a time and waits for nothing while it is
  * held (docs/LANGUAGE.md, "A lock that owns its data"), so a holder always
  * gives the word back and a waiter here always returns. Without real threads
- * -- no `-DNISH_THREADS`, or WASI -- nothing else can hold the word, and the
- * first try takes it. */
+ * -- no `-DNISH_THREADS`, or WASI -- nothing else can hold the word, the first
+ * try takes it, and the word never reaches 2. */
 void nish_mutex_wait(int32_t *word);
+void nish_mutex_wake(int32_t *word);
 
 /* ---- A channel of scalars (wp29 stage P3), runtime/runtime-parallel.c ----
  *

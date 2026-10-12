@@ -1159,7 +1159,7 @@ test against the grain, a direct call when the range is within it, and
 otherwise a context block on the stack and a call to the partitioner,
 
 ```llvm
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 349525
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -1168,13 +1168,13 @@ par.seq:
 
 par.region:
   ; ... src and dst stored into %par.ctx ...
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 349525)
   br label %par.done
 ```
 
 and `@...$chunk(lo, hi, ctx)` loads them back and calls the chunk loop,
-`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 1,398,101,
-is 2^22 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
+`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 349,525,
+is 2^20 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
 parallelism"). A reduce divides its blocks rather than its elements, with a
 grain of one block. The whole of both
 modules is `tests/link/par_map`'s golden (docs/LANGUAGE.md, "Data
@@ -1520,15 +1520,18 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ### `nish/threads`: a lock that owns its data
 
 `using g = m.lock()` calls the `Mutex`'s `lock()`, and each exit of the block
-is a release store of 0 into the guard's lock word, `store atomic i32 0, …
-release`: below, after the returned value has been read through the guard,
-since the value may need the lock. The `lock()` instance lives in
+is a release exchange of 0 into the guard's lock word, `atomicrmw xchg …,
+i32 0 release`, followed by a branch that calls `nish_mutex_wake` only when
+the word it took back was 2, held with a waiter that may be asleep: below,
+after the returned value has been read through the guard, since the value may
+need the lock. The `lock()` instance lives in
 `nish/threads`'s own module, and the emitter writes its body in place of the
 source's `return this.guard`. It loads the one guard the `Mutex` holds, takes
 the guard's word with `cmpxchg … i32 0, i32 1 acquire monotonic`, and calls
-`nish_mutex_wait` (which spins briefly, then yields, until it takes the word)
-only when the swap found the word held. The acquire keeps every guarded
-access after the swap and the release every one before the store, which is
+`nish_mutex_wait` (which looks again a few times, then marks the word 2 and
+sleeps in the kernel until it can take it) only when the swap found the word
+held. The acquire keeps every guarded access after the swap and the release
+every one before the exchange, which is
 all a lock has to promise. Nothing is allocated per lock, and nothing is
 destroyed, because the word is a field of the guard the `Mutex` made when it
 was made. That instance, exactly as emitted, is in

@@ -374,13 +374,23 @@ const taskFinish = (
 // lock.wait:                          ; held by another task: wait, and take it
 //   call void @nish_mutex_wait(i32* <guard.word>)
 //
-// and the release is a release store of 0 into the same word, emitted at every
+// and the release is an exchange of 0 into the same word, emitted at every
 // exit of the guard's block — its end, a `break` or `continue` that leaves it,
 // and a `return` or an `orReturn`, after the value is computed (unlike a
 // scope's join, which runs before it), since the value may read through the
-// guard. The acquire keeps every guarded access after the swap, and the
-// release every one before the store, which is the whole of what the lock has
-// to promise; there is nothing to create or destroy, because the word is a
+// guard:
+//
+//   %old = atomicrmw xchg i32* <guard.word>, i32 0 release
+//   %waiters = icmp eq i32 %old, 2      ; held, and a waiter may be asleep
+//   br i1 %waiters, label %unlock.wake, label %unlock.done
+// unlock.wake:
+//   call void @nish_mutex_wake(i32* <guard.word>)
+//
+// A waiter that has spun long enough marks the word 2 and sleeps in the kernel
+// until it changes (runtime/runtime-parallel.c), so the release has to know
+// whether to wake anyone, which a plain store could not tell it. The acquire
+// keeps every guarded access after the swap, and the release every one before
+// the exchange, which is the whole of what the lock has to promise; there is nothing to create or destroy, because the word is a
 // field of the guard and lives where the `Mutex` does.
 
 /** The guard's lock word, as `field` of its layout, or an internal error when the layout lacks it. */
@@ -480,10 +490,28 @@ const scopeSeals = (emitter: Emitter, decl: Node): string[] => {
   return seals
 }
 
+/**
+ * Give the lock word `word` back: exchange it for 0, and wake a sleeper when
+ * the word was 2, held with a waiter (runtime/runtime-parallel.c). The common
+ * case, nobody waiting, is the exchange and a branch not taken.
+ */
+const emitLockRelease = (emitter: Emitter, word: string): void => {
+  const fn = emitter.fn
+  const old = fn.emitValue(`atomicrmw xchg i32* ${word}, i32 0 release`)
+  const waiters = fn.emitValue(`icmp eq i32 ${old}, 2`)
+  const wake = fn.newBlock("unlock.wake")
+  const done = fn.newBlock("unlock.done")
+  fn.emit(`br i1 ${waiters}, label %${wake.label}, label %${done.label}`)
+  fn.placeBlock(wake)
+  fn.emit(`call void ${emitter.useRuntime("nish_mutex_wake")}(i32* ${word})`)
+  fn.emit(`br label %${done.label}`)
+  fn.placeBlock(done)
+}
+
 /** Close open entry `i`: join a scope's tasks, release an arena to its mark, or give a lock back. */
 const closeScope = (emitter: Emitter, i: i32): void => {
   if (emitter.openScopeLocks[i]) {
-    emitter.fn.emit(`store atomic i32 0, i32* ${emitter.openScopes[i]} release, align 4`)
+    emitLockRelease(emitter, emitter.openScopes[i])
   } else if (emitter.openScopeArenas[i]) {
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${emitter.openScopes[i]})`)
   } else {

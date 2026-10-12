@@ -23,6 +23,7 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #0
+declare void @nish_mutex_wake(i32* noundef nonnull) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
@@ -97,17 +98,33 @@ if.then:
   %26 = load %struct.Tally*, %struct.Tally** %25, align 8, !tbaa !5
   %27 = getelementptr inbounds %struct.Tally, %struct.Tally* %26, i32 0, i32 0
   %28 = load i32, i32* %27, align 4, !tbaa !7
-  store atomic i32 0, i32* %4 release, align 4
+  %29 = atomicrmw xchg i32* %4, i32 0 release
+  %30 = icmp eq i32 %29, 2
+  br i1 %30, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %4)
+  br label %unlock.done
+
+unlock.done:
   ret i32 %28
 
 if.end:
-  store atomic i32 0, i32* %4 release, align 4
+  %31 = atomicrmw xchg i32* %4, i32 0 release
+  %32 = icmp eq i32 %31, 2
+  br i1 %32, label %unlock.wake.1, label %unlock.done.1
+
+unlock.wake.1:
+  call void @nish_mutex_wake(i32* %4)
+  br label %unlock.done.1
+
+unlock.done.1:
   br label %for.inc
 
 for.inc:
-  %29 = load i32, i32* %i.addr, align 4
-  %30 = add nsw i32 %29, 1
-  store i32 %30, i32* %i.addr, align 4
+  %33 = load i32, i32* %i.addr, align 4
+  %34 = add nsw i32 %33, 1
+  store i32 %34, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
@@ -142,56 +159,88 @@ for.body:
   br i1 %7, label %if.then, label %if.end
 
 if.then:
-  store atomic i32 0, i32* %4 release, align 4
+  %8 = atomicrmw xchg i32* %4, i32 0 release
+  %9 = icmp eq i32 %8, 2
+  br i1 %9, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %4)
+  br label %unlock.done
+
+unlock.done:
   br label %for.inc
 
 if.end:
-  %8 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
-  %9 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %8, i32 0, i32 0
-  %10 = load %struct.Tally*, %struct.Tally** %9, align 8, !tbaa !5
-  %11 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
-  %12 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %11, i32 0, i32 0
-  %13 = load %struct.Tally*, %struct.Tally** %12, align 8, !tbaa !5
-  %14 = getelementptr inbounds %struct.Tally, %struct.Tally* %13, i32 0, i32 0
-  %15 = load i32, i32* %14, align 4, !tbaa !7
-  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 1)
-  %17 = extractvalue { i32, i1 } %16, 0
-  %18 = extractvalue { i32, i1 } %16, 1
-  br i1 %18, label %ovf.fail, label %ovf.ok
+  %10 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %11 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %10, i32 0, i32 0
+  %12 = load %struct.Tally*, %struct.Tally** %11, align 8, !tbaa !5
+  %13 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %14 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %13, i32 0, i32 0
+  %15 = load %struct.Tally*, %struct.Tally** %14, align 8, !tbaa !5
+  %16 = getelementptr inbounds %struct.Tally, %struct.Tally* %15, i32 0, i32 0
+  %17 = load i32, i32* %16, align 4, !tbaa !7
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 1)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %19 = getelementptr inbounds %struct.Tally, %struct.Tally* %10, i32 0, i32 0
-  store i32 %17, i32* %19, align 4, !tbaa !7
-  %20 = load i32, i32* %i.addr, align 4
-  %21 = icmp eq i32 %20, 6
-  br i1 %21, label %if.then.1, label %if.end.1
+  %21 = getelementptr inbounds %struct.Tally, %struct.Tally* %12, i32 0, i32 0
+  store i32 %19, i32* %21, align 4, !tbaa !7
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = icmp eq i32 %22, 6
+  br i1 %23, label %if.then.1, label %if.end.1
 
 if.then.1:
-  store atomic i32 0, i32* %4 release, align 4
+  %24 = atomicrmw xchg i32* %4, i32 0 release
+  %25 = icmp eq i32 %24, 2
+  br i1 %25, label %unlock.wake.1, label %unlock.done.1
+
+unlock.wake.1:
+  call void @nish_mutex_wake(i32* %4)
+  br label %unlock.done.1
+
+unlock.done.1:
   br label %for.end
 
 if.end.1:
-  store atomic i32 0, i32* %4 release, align 4
+  %26 = atomicrmw xchg i32* %4, i32 0 release
+  %27 = icmp eq i32 %26, 2
+  br i1 %27, label %unlock.wake.2, label %unlock.done.2
+
+unlock.wake.2:
+  call void @nish_mutex_wake(i32* %4)
+  br label %unlock.done.2
+
+unlock.done.2:
   br label %for.inc
 
 for.inc:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = add nsw i32 %22, 1
-  store i32 %23, i32* %i.addr, align 4
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = add nsw i32 %28, 1
+  store i32 %29, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %24 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
-  store %struct.MutexGuard$$Tally* %24, %struct.MutexGuard$$Tally** %g.addr.1, align 8
-  %25 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
-  %26 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %25, i32 0, i32 1
-  %27 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
-  %28 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %27, i32 0, i32 0
-  %29 = load %struct.Tally*, %struct.Tally** %28, align 8, !tbaa !5
-  %30 = getelementptr inbounds %struct.Tally, %struct.Tally* %29, i32 0, i32 0
-  %31 = load i32, i32* %30, align 4, !tbaa !7
-  store atomic i32 0, i32* %26 release, align 4
-  ret i32 %31
+  %30 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
+  store %struct.MutexGuard$$Tally* %30, %struct.MutexGuard$$Tally** %g.addr.1, align 8
+  %31 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
+  %32 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %31, i32 0, i32 1
+  %33 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
+  %34 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %33, i32 0, i32 0
+  %35 = load %struct.Tally*, %struct.Tally** %34, align 8, !tbaa !5
+  %36 = getelementptr inbounds %struct.Tally, %struct.Tally* %35, i32 0, i32 0
+  %37 = load i32, i32* %36, align 4, !tbaa !7
+  %38 = atomicrmw xchg i32* %32, i32 0 release
+  %39 = icmp eq i32 %38, 2
+  br i1 %39, label %unlock.wake.3, label %unlock.done.3
+
+unlock.wake.3:
+  call void @nish_mutex_wake(i32* %32)
+  br label %unlock.done.3
+
+unlock.done.3:
+  ret i32 %37
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -240,20 +289,36 @@ entry:
 ovf.ok:
   %27 = getelementptr inbounds %struct.Tally, %struct.Tally* %14, i32 0, i32 0
   store i32 %25, i32* %27, align 4, !tbaa !7
-  store atomic i32 0, i32* %4 release, align 4
+  %28 = atomicrmw xchg i32* %4, i32 0 release
+  %29 = icmp eq i32 %28, 2
+  br i1 %29, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %4)
+  br label %unlock.done
+
+unlock.done:
   call void @nish_arena_release(i64 %1)
-  %28 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
-  store %struct.MutexGuard$$Tally* %28, %struct.MutexGuard$$Tally** %g.addr.1, align 8
-  %29 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
-  %30 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %29, i32 0, i32 1
+  %30 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
+  store %struct.MutexGuard$$Tally* %30, %struct.MutexGuard$$Tally** %g.addr.1, align 8
   %31 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
-  %32 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %31, i32 0, i32 0
-  %33 = load %struct.Tally*, %struct.Tally** %32, align 8, !tbaa !5
-  %34 = getelementptr inbounds %struct.Tally, %struct.Tally* %33, i32 0, i32 0
-  %35 = load i32, i32* %34, align 4, !tbaa !7
-  store atomic i32 0, i32* %30 release, align 4
+  %32 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %31, i32 0, i32 1
+  %33 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
+  %34 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %33, i32 0, i32 0
+  %35 = load %struct.Tally*, %struct.Tally** %34, align 8, !tbaa !5
+  %36 = getelementptr inbounds %struct.Tally, %struct.Tally* %35, i32 0, i32 0
+  %37 = load i32, i32* %36, align 4, !tbaa !7
+  %38 = atomicrmw xchg i32* %32, i32 0 release
+  %39 = icmp eq i32 %38, 2
+  br i1 %39, label %unlock.wake.1, label %unlock.done.1
+
+unlock.wake.1:
+  call void @nish_mutex_wake(i32* %32)
+  br label %unlock.done.1
+
+unlock.done.1:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %35
+  ret i32 %37
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -412,7 +477,15 @@ entry:
   %68 = load i32, i32* %67, align 4, !tbaa !7
   %69 = call i8* @nish_str_from_i32(i32 %68)
   call void @nish_print(i8* %69)
-  store atomic i32 0, i32* %63 release, align 4
+  %70 = atomicrmw xchg i32* %63, i32 0 release
+  %71 = icmp eq i32 %70, 2
+  br i1 %71, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %63)
+  br label %unlock.done
+
+unlock.done:
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -626,10 +626,11 @@ export const reduceMessage = (
 //
 // A map region is divided into at most one chunk per `grain` elements, so the
 // grain decides whether a map is worth threads at all. A region divided four
-// ways costs about 125 µs of `pthread_create` and join (docs/wp20-threads.md
-// §8e), and it needs about a millisecond of work in each chunk before that is
-// under a tenth of the chunk. How many elements make a millisecond depends on
-// the body, so the grain is that target over an estimate of one element:
+// ways costs about 11 µs on the worker pool (docs/wp20-threads.md §8e), where
+// it cost about 100 µs of `pthread_create` and join before it, and the chunks
+// also pay for the caches they no longer share. How many elements cover that
+// depends on the body, so the grain is a target over an estimate of one
+// element:
 //
 //     grain = REGION_COST / cost(f), which is in [1, REGION_COST]
 //
@@ -647,9 +648,11 @@ export const reduceMessage = (
 /**
  * The work, in estimate units, that one chunk of a map region should carry:
  * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
- * loop it replaces (2^20 lost to it by 12%; 2^22 wins by 1.54x).
+ * loop it replaces. On the worker pool 2^19 only breaks even with the loop and
+ * 2^20 wins by 1.19x; with a thread started per region 2^20 lost by 12% and
+ * 2^22 was needed (docs/wp29-thread-surface.md §8a).
  */
-const REGION_COST: i32 = 4194304
+const REGION_COST: i32 = 1048576
 
 /** One call: the jump, the frame and the return, beyond the arguments. */
 const CALL_COST: i32 = 4

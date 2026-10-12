@@ -24,6 +24,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #1
+declare void @nish_mutex_wake(i32* noundef nonnull) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
@@ -96,19 +97,27 @@ for.body:
 ovf.ok:
   %20 = getelementptr inbounds %struct.Counter, %struct.Counter* %11, i32 0, i32 0
   store i32 %18, i32* %20, align 4, !tbaa !10
-  store atomic i32 0, i32* %8 release, align 4
+  %21 = atomicrmw xchg i32* %8, i32 0 release
+  %22 = icmp eq i32 %21, 2
+  br i1 %22, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %8)
+  br label %unlock.done
+
+unlock.done:
   br label %for.inc
 
 for.inc:
-  %21 = load i32, i32* %k.addr, align 4
-  %22 = add nsw i32 %21, 1
-  store i32 %22, i32* %k.addr, align 4
+  %23 = load i32, i32* %k.addr, align 4
+  %24 = add nsw i32 %23, 1
+  store i32 %24, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %23 = getelementptr inbounds %struct.Job, %struct.Job* %job, i32 0, i32 0
-  %24 = load i32, i32* %23, align 4, !tbaa !5
-  ret i32 %24
+  %25 = getelementptr inbounds %struct.Job, %struct.Job* %job, i32 0, i32 0
+  %26 = load i32, i32* %25, align 4, !tbaa !5
+  ret i32 %26
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -278,7 +287,15 @@ ovf.ok.2:
   %85 = call i8* @nish_str_from_i32(i32 %83)
   %86 = call i8* @nish_str_concat(i8* %39, i8* %85)
   call void @nish_print(i8* %86)
-  store atomic i32 0, i32* %32 release, align 4
+  %87 = atomicrmw xchg i32* %32, i32 0 release
+  %88 = icmp eq i32 %87, 2
+  br i1 %88, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %32)
+  br label %unlock.done
+
+unlock.done:
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

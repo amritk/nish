@@ -29,6 +29,7 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #1
+declare void @nish_mutex_wake(i32* noundef nonnull) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
@@ -109,44 +110,60 @@ for.body:
 ovf.ok:
   %16 = getelementptr inbounds %struct.MutexGuard$i32, %struct.MutexGuard$i32* %9, i32 0, i32 0
   store i32 %14, i32* %16, align 4, !tbaa !12
-  store atomic i32 0, i32* %8 release, align 4
-  %17 = getelementptr inbounds %struct.Job, %struct.Job* %job, i32 0, i32 2
-  %18 = load %struct.Mutex$$Label*, %struct.Mutex$$Label** %17, align 8, !tbaa !10
-  %19 = call %struct.MutexGuard$$Label* @nish.Mutex$$Label.lock(%struct.Mutex$$Label* %18)
-  store %struct.MutexGuard$$Label* %19, %struct.MutexGuard$$Label** %h.addr, align 8
-  %20 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
-  %21 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %20, i32 0, i32 1
+  %17 = atomicrmw xchg i32* %8, i32 0 release
+  %18 = icmp eq i32 %17, 2
+  br i1 %18, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %8)
+  br label %unlock.done
+
+unlock.done:
+  %19 = getelementptr inbounds %struct.Job, %struct.Job* %job, i32 0, i32 2
+  %20 = load %struct.Mutex$$Label*, %struct.Mutex$$Label** %19, align 8, !tbaa !10
+  %21 = call %struct.MutexGuard$$Label* @nish.Mutex$$Label.lock(%struct.Mutex$$Label* %20)
+  store %struct.MutexGuard$$Label* %21, %struct.MutexGuard$$Label** %h.addr, align 8
   %22 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
-  %23 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %22, i32 0, i32 0
-  %24 = load %struct.Label*, %struct.Label** %23, align 8, !tbaa !14
-  %25 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
-  %26 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %25, i32 0, i32 0
-  %27 = load %struct.Label*, %struct.Label** %26, align 8, !tbaa !14
-  %28 = getelementptr inbounds %struct.Label, %struct.Label* %27, i32 0, i32 1
-  %29 = load i32, i32* %28, align 4, !tbaa !6
-  %30 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
-  %31 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %30, i32 0, i32 0
-  %32 = load %struct.Label*, %struct.Label** %31, align 8, !tbaa !14
-  %33 = getelementptr inbounds %struct.Label, %struct.Label* %32, i32 0, i32 0
-  %34 = load i8*, i8** %33, align 8, !tbaa !5
-  %35 = bitcast i8* %34 to i64*
-  %36 = load i64, i64* %35, align 8
-  %37 = trunc i64 %36 to i32
-  %38 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %29, i32 %37)
-  %39 = extractvalue { i32, i1 } %38, 0
-  %40 = extractvalue { i32, i1 } %38, 1
-  br i1 %40, label %ovf.fail, label %ovf.ok.1
+  %23 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %22, i32 0, i32 1
+  %24 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
+  %25 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %24, i32 0, i32 0
+  %26 = load %struct.Label*, %struct.Label** %25, align 8, !tbaa !14
+  %27 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
+  %28 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %27, i32 0, i32 0
+  %29 = load %struct.Label*, %struct.Label** %28, align 8, !tbaa !14
+  %30 = getelementptr inbounds %struct.Label, %struct.Label* %29, i32 0, i32 1
+  %31 = load i32, i32* %30, align 4, !tbaa !6
+  %32 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
+  %33 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %32, i32 0, i32 0
+  %34 = load %struct.Label*, %struct.Label** %33, align 8, !tbaa !14
+  %35 = getelementptr inbounds %struct.Label, %struct.Label* %34, i32 0, i32 0
+  %36 = load i8*, i8** %35, align 8, !tbaa !5
+  %37 = bitcast i8* %36 to i64*
+  %38 = load i64, i64* %37, align 8
+  %39 = trunc i64 %38 to i32
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %39)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %41 = getelementptr inbounds %struct.Label, %struct.Label* %24, i32 0, i32 1
-  store i32 %39, i32* %41, align 4, !tbaa !6
-  store atomic i32 0, i32* %21 release, align 4
+  %43 = getelementptr inbounds %struct.Label, %struct.Label* %26, i32 0, i32 1
+  store i32 %41, i32* %43, align 4, !tbaa !6
+  %44 = atomicrmw xchg i32* %23, i32 0 release
+  %45 = icmp eq i32 %44, 2
+  br i1 %45, label %unlock.wake.1, label %unlock.done.1
+
+unlock.wake.1:
+  call void @nish_mutex_wake(i32* %23)
+  br label %unlock.done.1
+
+unlock.done.1:
   br label %for.inc
 
 for.inc:
-  %42 = load i32, i32* %k.addr, align 4
-  %43 = add nsw i32 %42, 1
-  store i32 %43, i32* %k.addr, align 4
+  %46 = load i32, i32* %k.addr, align 4
+  %47 = add nsw i32 %46, 1
+  store i32 %47, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
@@ -248,35 +265,59 @@ for.end:
 ovf.ok:
   %42 = getelementptr inbounds %struct.MutexGuard$i32, %struct.MutexGuard$i32* %35, i32 0, i32 0
   store i32 %40, i32* %42, align 4, !tbaa !12
-  store atomic i32 0, i32* %34 release, align 4
+  %43 = atomicrmw xchg i32* %34, i32 0 release
+  %44 = icmp eq i32 %43, 2
+  br i1 %44, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %34)
+  br label %unlock.done
+
+unlock.done:
   store i32 0, i32* %total.addr, align 4
-  %43 = load %struct.Mutex$i32*, %struct.Mutex$i32** %count.addr, align 8
-  %44 = call %struct.MutexGuard$i32* @nish.Mutex$i32.lock(%struct.Mutex$i32* %43)
-  store %struct.MutexGuard$i32* %44, %struct.MutexGuard$i32** %g.addr.1, align 8
-  %45 = load %struct.MutexGuard$i32*, %struct.MutexGuard$i32** %g.addr.1, align 8
-  %46 = getelementptr inbounds %struct.MutexGuard$i32, %struct.MutexGuard$i32* %45, i32 0, i32 1
+  %45 = load %struct.Mutex$i32*, %struct.Mutex$i32** %count.addr, align 8
+  %46 = call %struct.MutexGuard$i32* @nish.Mutex$i32.lock(%struct.Mutex$i32* %45)
+  store %struct.MutexGuard$i32* %46, %struct.MutexGuard$i32** %g.addr.1, align 8
   %47 = load %struct.MutexGuard$i32*, %struct.MutexGuard$i32** %g.addr.1, align 8
-  %48 = getelementptr inbounds %struct.MutexGuard$i32, %struct.MutexGuard$i32* %47, i32 0, i32 0
-  %49 = load i32, i32* %48, align 4, !tbaa !12
-  store i32 %49, i32* %total.addr, align 4
-  store atomic i32 0, i32* %46 release, align 4
-  %50 = load %struct.Mutex$$Label*, %struct.Mutex$$Label** %label.addr, align 8
-  %51 = call %struct.MutexGuard$$Label* @nish.Mutex$$Label.lock(%struct.Mutex$$Label* %50)
-  store %struct.MutexGuard$$Label* %51, %struct.MutexGuard$$Label** %h.addr, align 8
-  %52 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
-  %53 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %52, i32 0, i32 1
-  %54 = load i32, i32* %total.addr, align 4
-  %55 = call i8* @nish_str_from_i32(i32 %54)
-  %56 = call i8* @nish_str_concat(i8* %55, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %57 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
-  %58 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %57, i32 0, i32 0
-  %59 = load %struct.Label*, %struct.Label** %58, align 8, !tbaa !14
-  %60 = getelementptr inbounds %struct.Label, %struct.Label* %59, i32 0, i32 1
-  %61 = load i32, i32* %60, align 4, !tbaa !6
-  %62 = call i8* @nish_str_from_i32(i32 %61)
-  %63 = call i8* @nish_str_concat(i8* %56, i8* %62)
-  call void @nish_print(i8* %63)
-  store atomic i32 0, i32* %53 release, align 4
+  %48 = getelementptr inbounds %struct.MutexGuard$i32, %struct.MutexGuard$i32* %47, i32 0, i32 1
+  %49 = load %struct.MutexGuard$i32*, %struct.MutexGuard$i32** %g.addr.1, align 8
+  %50 = getelementptr inbounds %struct.MutexGuard$i32, %struct.MutexGuard$i32* %49, i32 0, i32 0
+  %51 = load i32, i32* %50, align 4, !tbaa !12
+  store i32 %51, i32* %total.addr, align 4
+  %52 = atomicrmw xchg i32* %48, i32 0 release
+  %53 = icmp eq i32 %52, 2
+  br i1 %53, label %unlock.wake.1, label %unlock.done.1
+
+unlock.wake.1:
+  call void @nish_mutex_wake(i32* %48)
+  br label %unlock.done.1
+
+unlock.done.1:
+  %54 = load %struct.Mutex$$Label*, %struct.Mutex$$Label** %label.addr, align 8
+  %55 = call %struct.MutexGuard$$Label* @nish.Mutex$$Label.lock(%struct.Mutex$$Label* %54)
+  store %struct.MutexGuard$$Label* %55, %struct.MutexGuard$$Label** %h.addr, align 8
+  %56 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
+  %57 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %56, i32 0, i32 1
+  %58 = load i32, i32* %total.addr, align 4
+  %59 = call i8* @nish_str_from_i32(i32 %58)
+  %60 = call i8* @nish_str_concat(i8* %59, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %61 = load %struct.MutexGuard$$Label*, %struct.MutexGuard$$Label** %h.addr, align 8
+  %62 = getelementptr inbounds %struct.MutexGuard$$Label, %struct.MutexGuard$$Label* %61, i32 0, i32 0
+  %63 = load %struct.Label*, %struct.Label** %62, align 8, !tbaa !14
+  %64 = getelementptr inbounds %struct.Label, %struct.Label* %63, i32 0, i32 1
+  %65 = load i32, i32* %64, align 4, !tbaa !6
+  %66 = call i8* @nish_str_from_i32(i32 %65)
+  %67 = call i8* @nish_str_concat(i8* %60, i8* %66)
+  call void @nish_print(i8* %67)
+  %68 = atomicrmw xchg i32* %57, i32 0 release
+  %69 = icmp eq i32 %68, 2
+  br i1 %69, label %unlock.wake.2, label %unlock.done.2
+
+unlock.wake.2:
+  call void @nish_mutex_wake(i32* %57)
+  br label %unlock.done.2
+
+unlock.done.2:
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

@@ -451,6 +451,58 @@ to the loop at 262,144 elements. With 2^22 it wins 1.54x at 1,677,722. The
 default of 64 trips is what divides n-body four ways.
 [BENCHMARKS.md](BENCHMARKS.md) carries the current numbers.
 
+**Retuned for the pool: 2^20.** Those numbers were taken when every divided
+region started and joined its own threads, about 100 µs a region. The worker
+pool (wp20 §8e) brought that to about 11 µs, so the same body pays for its
+hand-off at far fewer elements, and the target was measured again the same
+way: `(x) => x * 3 + 1` (estimated cost 5) over `n` elements, `n` exactly two
+chunks of the grain, the map called `2^28 / n` times with one input element
+fed from an output element between calls and the outputs folded into a
+printed checksum. The loop and the map are the same binary, the grain written
+into its IR, and the loop is also timed as a byte-identical copy of the binary
+in the same rounds for the noise band. Eleven interleaved rounds, minimum /
+median in ms, on the four-core Xeon of wp20 §8e with clang 18.1.3:
+
+| target (elements per chunk) | loop | loop, the copy | map, two chunks | speedup (min / median) |
+| --- | ---: | ---: | ---: | ---: |
+| 2^17.3 (32,768) | 232.7 / 238.6 | 220.1 / 254.2 | 274.3 / 315.5 | 0.85x / 0.76x |
+| 2^18.3 (65,536) | 219.8 / 231.0 | 222.0 / 239.6 | 220.3 / 255.6 | 1.00x / 0.90x |
+| 2^19 (104,857) | 220.7 / 230.2 | 223.7 / 235.8 | 226.2 / 236.2 | 0.98x / 0.97x |
+| 2^19.3 (131,072) | 228.1 / 240.5 | 230.3 / 251.6 | 208.9 / 230.5 | 1.09x / 1.04x |
+| **2^20 (209,715)** | 231.5 / 262.4 | 232.1 / 257.4 | 195.0 / 226.0 | **1.19x / 1.16x** |
+| 2^21 (419,430) | 244.2 / 268.8 | 255.4 / 289.2 | 194.6 / 220.6 | 1.25x / 1.22x |
+| 2^22 (838,860), the old target | 255.9 / 276.6 | 256.3 / 274.1 | 184.2 / 200.0 | 1.39x / 1.38x |
+
+The loop against its own copy differs by 1–6% on the minimum, which is the
+noise band. The crossover is between 2^18.3 and 2^19, where the map only
+breaks even, and 2^20 is the first target whose win is outside the band on
+both figures, so `REGION_COST` in `src/parallel.ts` is 2^20: the cheapest body
+is divided past 419,430 elements instead of 1,677,722. The kernel is memory
+bound — the loop vectorises to under a nanosecond an element — which is why
+two chunks win no more than about 1.4x at any size; a body with more work per
+element wins sooner and by more, and its grain is smaller by its estimate.
+
+### 8f. A lock that sleeps
+
+The P3 lock spun on its word and then yielded the processor between tries,
+for ever, so a task waiting on a busy lock kept a core busy. The word now has
+a third value, 2, held with a waiter that may be asleep. A waiter looks again
+64 times with relaxed loads, then exchanges 2 into the word and sleeps in the
+kernel while it stays 2 (`FUTEX_WAIT_PRIVATE` on Linux, `__ulock_wait` on
+Darwin, a yield anywhere else with threads). The release is an exchange of 0
+instead of a store, and calls `nish_mutex_wake` (one `FUTEX_WAKE_PRIVATE`)
+only when the word it took back was 2, so a lock nobody waits on never enters
+the kernel. It is the third mutex of Drepper's "Futexes Are Tricky".
+
+The spin has no `pause`. A first version paused between looks, as the pool's
+spin does, and the contended histogram below took 3.2 s against 1.8 s for the
+lock it replaced: a pause is about 140 cycles here, and 64 of them made a
+waiter late for a word that is free for nanoseconds at a time. Longer spins
+were slower still (256 paused looks 4.6 s, 1,024 6.0 s), and so were yields
+between the looks and the sleep.
+
+LOCK_TABLE
+
 ---
 
 ## 9. Declined, with the rule each one breaks

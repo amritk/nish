@@ -2377,20 +2377,37 @@ export const main = (): i32 => {
   (`tests/link/par_dst_short`). `src` and `dst` may be the same array
   (`tests/link/par_map`).
 - **A short array is the loop it would have been.** A map is divided only
-  once every thread's share carries enough work to pay for starting it
-  ([wp20-threads.md](wp20-threads.md) §8e). How many elements that is — the
-  *grain* — is sized per call from a static estimate of what `f` costs: 2^22
-  over the estimate, which counts one per operation, 32 per allocation, 4 per
-  call, and a loop's body as many times as its literal bound says or 64 times
-  when the bound is not a literal. So `(x) => x * x` is divided past 1,398,101
-  elements (`tests/link/par_map`), `(x * 31 + 7) % 1000` past 524,288
-  (`tests/link/par_map_large`), and a body with a loop far sooner. Up to the
-  grain the map calls its loop directly on the calling thread, where it
-  inlines; there is no thread start-up and no indirect call. The estimate
-  counts a call as a call and not as the callee's body, so a body that hides
-  its work behind a call is divided too little rather than too much. There is
-  no knob for the grain, or for the thread count
+  once every thread's share carries enough work to pay for handing it to
+  another thread ([wp20-threads.md](wp20-threads.md) §8e). How many elements
+  that is — the *grain* — is sized per call from a static estimate of what `f`
+  costs: 2^20 over the estimate, which counts one per operation, 32 per
+  allocation, 4 per call, and a loop's body as many times as its literal bound
+  says or 64 times when the bound is not a literal. 2^20 is the measured
+  crossover on the worker pool: the cheapest body, `(x) => x * 3 + 1`, only
+  breaks even with its loop at two chunks of 2^19 / 5 elements each and beats
+  it by 1.19x at two of 2^20 / 5 = 209,715, outside a noise band of 1–6%
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §8a). So `(x) => x * x` is
+  divided past 349,525 elements (`tests/link/par_map`), `(x * 31 + 7) % 1000`
+  past 131,072 (`tests/link/par_map_large`), and a body with a loop far
+  sooner. Up to the grain the map calls its loop directly on the calling
+  thread, where it inlines; there is no hand-off and no indirect call. The
+  estimate counts a call as a call and not as the callee's body, so a body
+  that hides its work behind a call is divided too little rather than too
+  much. There is no knob for the grain
   ([wp29-thread-surface.md](wp29-thread-surface.md) §9).
+- **The threads are a pool, as many as the cores the process may use.** The
+  first region or scope join that divides starts one worker per core but the
+  caller's, and they park between calls ([wp20-threads.md](wp20-threads.md)
+  §8e). The core count is the smallest of the CPUs online, the process's
+  affinity mask (`taskset`, a container's cpuset) and the cgroup v2 `cpu.max`
+  quota rounded up, so a program in a container limited to two cores divides
+  two ways, not as many as the host has. **`NISH_NUM_THREADS`**, when it is
+  set to a positive number, lowers that count and never raises it:
+  `NISH_NUM_THREADS=1` runs every region and every scope's tasks on the
+  calling thread, in spawn order, and anything that is not a positive number
+  is ignored. It is read once, by the first region or join that asks, and it
+  decides only how the work is divided: a map's answer and a reduce's bits are
+  the same at any count.
 - **`parallelReduce(src, f, identity)` is deterministic.** `src` is split into
   `min(64, ceil(n / 2^20))` blocks, each block is folded from `identity`, and
   the block results are combined left to right. `std/threads.ts` does the same
@@ -2664,11 +2681,21 @@ export const main = (): i32 => {
 ```
 
 - **Natively the lock is one word inside the guard**, taken with an acquire
-  compare-and-swap in `lock()` and given back with a release store, so a lock
-  nobody holds costs one atomic instruction and allocates nothing; a `lock()`
-  that finds the word held calls the runtime's `nish_mutex_wait`, which spins
-  briefly and then yields until it can take it (`tests/link/thread_mutex_counter`,
-  whose `threads.ll` is the lowering, and `tests/link/thread_mutex_histogram`).
+  compare-and-swap in `lock()` and given back with a release exchange, so a
+  lock nobody holds costs one atomic instruction each way, allocates nothing
+  and never enters the kernel. A `lock()` that finds the word held calls the
+  runtime's `nish_mutex_wait`, which looks again a few times and then marks
+  the word as having a waiter and sleeps in the kernel until it is given back
+  (`futex` on Linux, `__ulock_wait` on macOS); a release whose exchange finds
+  that mark calls `nish_mutex_wake`, which wakes one sleeper. A contended lock
+  therefore sleeps rather than spins: eight tasks binning into one guarded
+  histogram on four cores take the same time as with the spinning lock it
+  replaced and about a fifth less processor time
+  (`tests/link/thread_mutex_contended`; the measurement is in
+  [wp29-thread-surface.md](wp29-thread-surface.md) §8f). See
+  `tests/link/thread_mutex_counter`, whose `threads.ll` is the lowering of
+  `lock()` and whose `main.ll` the release, and
+  `tests/link/thread_mutex_histogram`.
   On `wasm32` a scope's tasks run one after another, as they do for every
   scope there, so no lock is ever found held: the same program links for
   `--profile wasi`, its atomics lowered for a module without shared memory,

@@ -4676,6 +4676,7 @@ for (const name of [
   "thread_mutex_counter",
   "thread_mutex_exit_paths",
   "thread_mutex_histogram",
+  "thread_mutex_contended",
   "thread_mutex_scalar",
   "thread_mutex_using_mixed",
   "thread_channel_pipeline",
@@ -4718,8 +4719,9 @@ for (const name of [
 // scope's join, which runs before the value. The link goldens hold the whole
 // IR; this names the order itself, so a golden regenerated with the release
 // moved ahead of the value fails here rather than passing as a new golden.
-// In each function below every `ret` with a value is preceded by the release
-// store, and the value it returns is computed before that store.
+// In each function below every `ret` with a value opens the block the release
+// falls through to, `unlock.done`, and the value it returns is computed before
+// the release's exchange.
 if (!only || "thread_mutex".includes(only)) {
   for (const [name, fn] of [
     ["thread_mutex_or_return", "addOk"],
@@ -4738,10 +4740,14 @@ if (!only || "thread_mutex".includes(only)) {
         return
       }
       rets.push(i)
-      const release = lines[i - 1] ?? ""
-      const computed = lines.slice(0, i - 1).some((l) => l.startsWith(`${ret[1]} = `))
-      if (!/^store atomic i32 0, i32\* %\d+ release, align 4$/.test(release) || !computed) {
-        bad.push(`${line} (preceded by: ${release})`)
+      const label = lines[i - 1] ?? ""
+      let at = i - 1
+      while (at >= 0 && !/^%\d+ = atomicrmw xchg i32\* %\d+, i32 0 release$/.test(lines[at])) {
+        at = at - 1
+      }
+      const computed = lines.slice(0, Math.max(at, 0)).some((l) => l.startsWith(`${ret[1]} = `))
+      if (!/^unlock\.done(\.\d+)?:$/.test(label) || at < 0 || !computed) {
+        bad.push(`${line} (preceded by: ${label})`)
       }
     })
     check(
@@ -8658,6 +8664,10 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840
  * 13 more, inside the same ceiling: `nish_pool_disable`, which a Node addon's shim
  * calls whatever the build, and which does nothing in this one. The pool itself is
  * `-DNISH_THREADS` only.
+ *
+ * The futex lock measured **605 bytes** on 2026-10-12 with clang 18.1.3 on linux-x64,
+ * 5 fewer: the fallback's `nish_mutex_wait` is one compare-and-swap loop now, and its
+ * `nish_mutex_wake` is a bare return, since nothing in this build ever sleeps on a word.
  */
 const RUNTIME_PARALLEL_TEXT_BUDGET = 768
 /**
@@ -8699,6 +8709,12 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * small pieces that route a region and a join through the queue. They are this file's
  * subject, and they took a divided region from ~100 us to ~10 us (docs/wp20-threads.md
  * §8e). A program that never divides a region or joins a scope still pays none of it.
+ *
+ * The futex lock measured **2,745 bytes** on 2026-10-12 with clang 18.1.3 on linux-x64,
+ * 85 more, inside the same ceiling: `nish_mutex_wait` marks a held word as having a
+ * waiter and sleeps on it with `FUTEX_WAIT_PRIVATE` instead of yielding, and
+ * `nish_mutex_wake`, which a release that finds a waiter calls, is one
+ * `FUTEX_WAKE_PRIVATE`.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
 /**
