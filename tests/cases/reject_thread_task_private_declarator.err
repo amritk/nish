@@ -1,0 +1,2 @@
+`twice` writes memory its caller can see at 
+reject_thread_task_private_declarator.ts:10:3, and `spawn`

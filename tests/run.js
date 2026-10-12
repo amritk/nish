@@ -4667,6 +4667,22 @@ if (!only || "par_alloc".includes(only)) {
 // disposal does nothing under Node and `Arena.*` answers zero there, so the
 // lines it prints, each of which ends with how far the arena moved, are the
 // native ones exactly when every exit released.
+//
+// And the two of #564/#567 and the private-write rule: `thread_task_private`,
+// whose tasks and map body fill arrays only they reach, each zeroed with
+// `fill` because `new Array(n)` is holes under Node; and
+// `thread_channel_ctor_reads`, whose channel-holding constructor reads and
+// updates its own fields. Neither writes anything another task can read, so
+// spawn order and join order print the same. `thread_scope_region_fresh_object`
+// writes an object of its own between a spawn and the join, and
+// `thread_scope_region_kept_own` builds objects whose constructors keep what
+// they are handed there, writing nothing of the task's.
+// `thread_scope_region_own_handoff` hands the task's argument to a function
+// that returns a fresh object of its own, and to a method that writes a fresh
+// counter from it: neither keeps the task's memory where a write reaches it.
+// `thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert` and
+// `thread_scope_region_set_add` fill a `Map` or a `Set` of their own there,
+// whose methods write the table and nothing of the task's.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4684,6 +4700,14 @@ for (const name of [
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
   "thread_channel_exit_paths",
+  "thread_task_private",
+  "thread_channel_ctor_reads",
+  "thread_scope_region_fresh_object",
+  "thread_scope_region_kept_own",
+  "thread_scope_region_own_handoff",
+  "thread_scope_region_map_set",
+  "thread_scope_region_map_get_or_insert",
+  "thread_scope_region_set_add",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -4798,12 +4822,15 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // is the scope that closes its channels whether or not its join runs a task,
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
+// `thread_channel_ctor_reads` is the carrier whose constructor reads and
+// updates its own fields (#567).
 for (const name of [
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
   "thread_channel_exit_paths",
   "thread_channel_kinds",
+  "thread_channel_ctor_reads",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
