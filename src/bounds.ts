@@ -136,11 +136,14 @@
 // put on the §8 warning list, because the rewrite such a warning names is the
 // `const xs = h.xs` hoist, and that is advice about a local.
 
+import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import { DiagnosticSink } from "./diagnostics"
 import {
+  FLAG_CONST,
+  FLAG_USING,
   N_ARRAY,
   N_ARROW,
   N_BINARY,
@@ -148,6 +151,7 @@ import {
   N_BREAK,
   N_CALL,
   N_CASE,
+  N_CLASS,
   N_CONDITIONAL,
   N_CONTINUE,
   N_DO,
@@ -155,20 +159,25 @@ import {
   N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
+  N_FUNCTION,
   N_IDENT,
   N_IF,
   N_INDEX,
   N_MEMBER,
   N_NEW,
   N_NUMBER,
+  N_PARAM,
   N_PAREN,
   N_RETURN,
+  N_SPREAD,
   N_STRING,
   N_SWITCH,
   N_THIS,
   N_THROW,
+  N_TRY,
   N_UNARY,
   N_VAR,
+  N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes"
@@ -2047,7 +2056,11 @@ const rangeFacts = (walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact
   }
 }
 
-/** An array of known size starts with that many elements. */
+/**
+ * An array of known size starts with that many elements: a literal, a
+ * `new Array<T>(n)` with a literal `n`, or a helper's fresh array
+ * (`returnedLength`).
+ */
 const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]): Fact[] => {
   if (ctx.table.isArray(v.type) && e.kind === N_ARRAY) {
     out.push(new Fact(FACT_MIN_LENGTH, v, null, e.children.length))
@@ -2059,7 +2072,321 @@ const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]
       out.push(new Fact(FACT_MIN_LENGTH, v, null, size))
     }
   }
+  if (ctx.table.isArray(v.type) && e.kind === N_CALL) {
+    const returned = returnedLength(ctx, e)
+    if (returned >= 0) {
+      out.push(new Fact(FACT_MIN_LENGTH, v, null, returned))
+    }
+  }
   return out
+}
+
+// ---- The length a helper returns ----------------------------------------------
+
+// `const xs = filled(16)`, where `filled` builds `new Array<T>(n)`, fills it
+// and returns it, starts `xs` with sixteen elements, as `new Array<T>(16)`
+// written in place would. The callee's body is read as a tree, not walked:
+// it may be a body this module has not checked yet, or one in another module,
+// so nothing here reads a side table of the callee's. `freshReturnOf` in
+// `src/inline-arrays.ts` asks the inline layout's version of the question
+// with the tables, which it can because it runs once every body is checked;
+// this walk runs as each body is, before a helper further down the file has
+// any. That is why the rule is narrow enough to read off the tree alone:
+//
+// - the callee is a plain function, not generic and not lifted from an arrow,
+//   called directly; a method is left out, as `summaryOfCall` leaves it out;
+// - its body holds no arrow, nested function or class, which could capture
+//   the array or a size and change it later, and no `try`;
+// - every `return` hands back either a fresh array (`new Array<T>(n)`, a
+//   typed-array `new`, or a literal without a spread) or one `const` local
+//   initialised with one, declared once, returned only after its declaration
+//   in its own block;
+// - that local is only ever indexed, read for its `.length` and `push`ed to,
+//   so nothing passes it on, stores it, or shrinks it: its length when
+//   returned is at least the one it was built with;
+// - each size is a literal, a constant of the callee's own module read where
+//   the call is in that module, or a parameter the body never declares again
+//   or writes, whose argument has a declared floor (`declaredValueRange`).
+//
+// The length the call gives is the least over the returns.
+
+/** Whether `n` is the identifier `name`, as written. */
+const isNamed = (n: Node, name: string): boolean => n.kind === N_IDENT && n.text === name
+
+/**
+ * The `return` statements of `body`, into `out`; false when the body holds
+ * something that could outlive a call of it — an arrow, a nested function or
+ * class — or a `try`, whose `finally` runs after a `return`.
+ */
+const gatherReturns = (n: Node, out: Node[]): boolean => {
+  if (n.kind === N_ARROW || n.kind === N_FUNCTION || n.kind === N_CLASS || n.kind === N_TRY) {
+    return false
+  }
+  if (n.kind === N_RETURN) {
+    out.push(n)
+  }
+  for (const child of n.children) {
+    if (!gatherReturns(child, out)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** How many times `body` declares `name`: a `let`, `const`, `for` head or parameter. */
+const declarationsOf = (n: Node, name: string): i32 => {
+  let count = 0
+  if ((n.kind === N_VAR_DECL || n.kind === N_PARAM) && isNamed(n.children[0], name)) {
+    count = count + 1
+  }
+  for (const child of n.children) {
+    count = count + declarationsOf(child, name)
+  }
+  return count
+}
+
+/** Whether anything in `n` assigns `name` or steps it. */
+const writesName = (n: Node, name: string): boolean => {
+  if (n.kind === N_BINARY && isBoundsAssignment(n.text) && isNamed(unwrapBoundsParens(n.children[0]), name)) {
+    return true
+  }
+  if (
+    n.kind === N_UNARY &&
+    (n.text === "++" || n.text === "--") &&
+    isNamed(unwrapBoundsParens(n.children[0]), name)
+  ) {
+    return true
+  }
+  for (const child of n.children) {
+    if (writesName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether every use of the array local `name` in `n` keeps its length at
+ * least what it was built with and the array inside the body: `name[i]`, read
+ * or written, `name.length` read, `name.push(...)`, `return name` and the
+ * declaration itself. Any other use — an argument, a store, a copy, `pop` — is
+ * one this rule does not follow.
+ */
+const usesKeepLength = (n: Node, name: string): boolean => {
+  if (n.kind === N_INDEX && isNamed(n.children[0], name)) {
+    return usesKeepLength(n.children[1], name)
+  }
+  if (n.kind === N_MEMBER && n.text === "length" && isNamed(n.children[0], name)) {
+    return true
+  }
+  if (n.kind === N_BINARY && isBoundsAssignment(n.text)) {
+    const target = unwrapBoundsParens(n.children[0])
+    if (target.kind === N_MEMBER && isNamed(target.children[0], name)) {
+      return false
+    }
+  }
+  if (n.kind === N_UNARY && (n.text === "++" || n.text === "--")) {
+    const target = unwrapBoundsParens(n.children[0])
+    if (target.kind === N_MEMBER && isNamed(target.children[0], name)) {
+      return false
+    }
+  }
+  if (n.kind === N_CALL) {
+    const target = n.children[0]
+    if (target.kind === N_MEMBER && target.text === "push" && isNamed(target.children[0], name)) {
+      return usesKeepLength(n.children[1], name)
+    }
+  }
+  if (n.kind === N_RETURN && n.children.length > 0 && isNamed(n.children[0], name)) {
+    return true
+  }
+  if (n.kind === N_VAR_DECL && isNamed(n.children[0], name)) {
+    return usesKeepLength(n.children[2], name)
+  }
+  if (isNamed(n, name)) {
+    return false
+  }
+  for (const child of n.children) {
+    if (!usesKeepLength(child, name)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** How many statements under `n` are `return name`. */
+const returnsOfName = (n: Node, name: string): i32 => {
+  let count = 0
+  if (n.kind === N_RETURN && n.children.length > 0 && isNamed(unwrapBoundsParens(n.children[0]), name)) {
+    count = 1
+  }
+  for (const child of n.children) {
+    count = count + returnsOfName(child, name)
+  }
+  return count
+}
+
+/**
+ * The initialiser of the one `const` declaring `name` in `body`, when every
+ * `return name` follows that declaration in the block that holds it, so each
+ * one hands back the array the declaration built. `null` otherwise.
+ */
+const soleConstInitialiser = (body: Node, name: string, returns: i32): Node | null => {
+  if (body.kind === N_BLOCK) {
+    const statements = body.children
+    let k = 0
+    while (k < statements.length) {
+      const s = statements[k]
+      if (s.kind === N_VAR && (s.flags & FLAG_CONST) !== 0 && (s.flags & FLAG_USING) === 0) {
+        for (const d of s.children[0].children) {
+          if (isNamed(d.children[0], name)) {
+            let after = 0
+            let j = k + 1
+            while (j < statements.length) {
+              after = after + returnsOfName(statements[j], name)
+              j = j + 1
+            }
+            return after === returns ? d.children[2] : null
+          }
+        }
+      }
+      k = k + 1
+    }
+  }
+  for (const child of body.children) {
+    const found = soleConstInitialiser(child, name, returns)
+    if (found !== null) {
+      return found
+    }
+  }
+  return null
+}
+
+/**
+ * The length a size expression of `sig`'s body gives the array it builds,
+ * read at `call`; -1 when it is not one this rule reads.
+ */
+const sizeAtCall = (ctx: CheckContext, sig: FunctionSig, body: Node, size: Node, call: Node): i32 => {
+  const e = unwrapBoundsParens(size)
+  const n = literalValue(e)
+  if (n >= 0) {
+    return n
+  }
+  if (e.kind !== N_IDENT || declarationsOf(body, e.text) > 0) {
+    return -1
+  }
+  let k = 0
+  while (k < sig.paramNames.length) {
+    if (sig.paramNames[k] === e.text) {
+      const args = call.children[1].children
+      const integer = isInteger(ctx.table.baseOf(sig.paramTypes[k]))
+      if (
+        !integer ||
+        args.length !== sig.paramNames.length ||
+        sig.isCompileTime(k) ||
+        writesName(body, e.text)
+      ) {
+        return -1
+      }
+      if (k >= args.length) {
+        return -1
+      }
+      const range = declaredValueRange(ctx, args[k])
+      return range !== null && range.lo >= toI64(0) && range.lo < I32_MAX ? toI32(range.lo) : -1
+    }
+    k = k + 1
+  }
+  // Not declared in the body and not a parameter, so a name of the callee's
+  // module: read it in that module only, where `constant` sees the same scope.
+  const home = sig.origin
+  if (home === null || home !== ctx.source) {
+    return -1
+  }
+  const constant = ctx.program.constant(e.text)
+  if (constant === null || !constant.folded || !isInteger(constant.type)) {
+    return -1
+  }
+  return constant.intValue >= toI64(0) && constant.intValue < I32_MAX ? toI32(constant.intValue) : -1
+}
+
+/** The length of the fresh array `value`, written in `sig`'s body, has at `call`; -1 when it is not one. */
+const builtLength = (ctx: CheckContext, sig: FunctionSig, body: Node, value: Node, call: Node): i32 => {
+  const e = unwrapBoundsParens(value)
+  if (e.kind === N_ARRAY) {
+    for (const element of e.children) {
+      if (element.kind === N_SPREAD) {
+        return -1
+      }
+    }
+    return e.children.length
+  }
+  if (e.kind !== N_NEW || e.children[0].kind !== N_IDENT || e.children[2].children.length !== 1) {
+    return -1
+  }
+  const name = e.children[0].text
+  if (name !== "Array" && typedArrayElement(name) < 0) {
+    return -1
+  }
+  return sizeAtCall(ctx, sig, body, e.children[2].children[0], call)
+}
+
+/**
+ * The length the array `value` returns has at least, when it is a call of a
+ * helper that builds a fresh array and returns it untouched but for its
+ * elements and `push` (the rule above); -1 for every other value.
+ */
+const returnedLength = (ctx: CheckContext, value: Node): i32 => {
+  const call = unwrapBoundsParens(value)
+  if (call.kind !== N_CALL || !ctx.table.isArray(ctx.program.nodeTypes[call.id])) {
+    return -1
+  }
+  const sig = ctx.program.nodeCallees[call.id]
+  if (sig === null || sig.role !== ROLE_FUNCTION || sig.instance !== null || sig.lifted) {
+    return -1
+  }
+  const body = sig.body()
+  if (body === null || body.kind !== N_BLOCK) {
+    return -1
+  }
+  const returns: Node[] = []
+  if (!gatherReturns(body, returns) || returns.length === 0) {
+    return -1
+  }
+  let least = -1
+  let name = ""
+  for (const r of returns) {
+    if (r.children.length === 0) {
+      return -1
+    }
+    const returned = unwrapBoundsParens(r.children[0])
+    if (returned.kind === N_IDENT) {
+      if (name !== "" && returned.text !== name) {
+        return -1
+      }
+      name = returned.text
+      continue
+    }
+    const n = builtLength(ctx, sig, body, returned, call)
+    if (n < 0) {
+      return -1
+    }
+    least = least < 0 || n < least ? n : least
+  }
+  if (name === "") {
+    return least
+  }
+  if (declarationsOf(body, name) !== 1 || !usesKeepLength(body, name)) {
+    return -1
+  }
+  const init = soleConstInitialiser(body, name, returnsOfName(body, name))
+  if (init === null) {
+    return -1
+  }
+  const n = builtLength(ctx, sig, body, init, call)
+  if (n < 0) {
+    return -1
+  }
+  return least < 0 || n < least ? n : least
 }
 
 // ---- The walk ---------------------------------------------------------------------
@@ -3244,6 +3571,29 @@ const freshLength = (walk: BoundsWalk, value: Node): i32 => {
   return quiet ? e.children.length : -1
 }
 
+/**
+ * The length `recv.f = value` leaves `recv.f` with: a fresh array's
+ * (`freshLength`), or what a helper's call returns (`returnedLength`) when the
+ * receiver is `this` or a `const` local. A call may store anywhere it can
+ * reach, so the path is one link off a root no call can rebind: what the
+ * receiver named before the call is what it names at the store. -1 for every
+ * other value.
+ */
+const storedLength = (walk: BoundsWalk, target: Node, value: Node): i32 => {
+  const fresh = freshLength(walk, value)
+  if (fresh >= 0) {
+    return fresh
+  }
+  const receiver = unwrapBoundsParens(target.children[0])
+  if (receiver.kind !== N_THIS) {
+    const root = localOf(walk.ctx.program, receiver)
+    if (root === null || root.mutable) {
+      return -1
+    }
+  }
+  return returnedLength(walk.ctx, value)
+}
+
 /** Assignments and the short-circuit operators; every other binary is left then right. */
 const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   const ctx = walk.ctx
@@ -3333,9 +3683,10 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     forgetPathsThrough(walk, state, target.text)
     // `this.v = new Array<i32>(6)` leaves the path naming an array of six,
     // which is what a later `this.v[5]` — or a callee handed `this` — needs.
-    // The size is a literal and the value has no effects of its own, so
-    // nothing between reading the receiver and the store can rebind the root.
-    const size = op === "=" ? freshLength(walk, right) : -1
+    // A literal size with no effects of its own cannot rebind the root between
+    // reading the receiver and the store; a helper's call is taken only where
+    // nothing can (`storedLength`).
+    const size = op === "=" ? storedLength(walk, target, right) : -1
     if (size >= 0) {
       const holder = pathHolder(walk, target)
       if (holder !== null) {
