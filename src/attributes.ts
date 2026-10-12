@@ -211,6 +211,8 @@ export class PointerParamFacts {
   writesReach: boolean
   /** The part of `writesReach` deeper than the pointer's own slots: through a field, an element or an alias. */
   writesDeep: boolean
+  /** A constructor's: memory the parameter reaches is stored into what `this` reaches (fixpoint). */
+  keptInThis: boolean
   /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
   passedToCallees: string[]
   passedToIndices: i32[]
@@ -223,6 +225,7 @@ export class PointerParamFacts {
     this.captured = false
     this.writesReach = false
     this.writesDeep = false
+    this.keptInThis = false
     this.passedToCallees = []
     this.passedToIndices = []
   }
@@ -330,42 +333,100 @@ export class PrivateArray {
   }
 }
 
-/** A pointer parameter memory is reached from, and whether the path goes past its own slots. */
-export class ReachRoot {
-  name: string
-  deep: boolean
+/** What a `MemPath` starts at. */
+const ROOT_NONE: i32 = 0 // a number, a `boolean` or a string: nothing a store can reach
+const ROOT_PARAM: i32 = 1 // a pointer parameter (`this` in a method)
+const ROOT_OWN: i32 = 2 // an object this call made: a fresh `const`, or `this` in a constructor
+const ROOT_UNKNOWN: i32 = 3 // anything at all
 
-  constructor(name: string, deep: boolean) {
+/**
+ * WP29: where the memory an expression names lives, for
+ * `PointerParamFacts.writesReach`: a root and the fields and elements below
+ * it, as `.f` and `[]` steps (`FactCollector.pathOf`). A `const` is followed
+ * into its initialiser; a call's result, a `let`, a loop variable, a `?:` are
+ * `ROOT_UNKNOWN`.
+ */
+export class MemPath {
+  /** The parameter's name for `ROOT_PARAM`, the object's key (`FactCollector.ownKeyOf`) for `ROOT_OWN`. */
+  name: string
+  steps: string
+  kind: i32
+
+  constructor(kind: i32, name: string, steps: string) {
     this.name = name
-    this.deep = deep
+    this.steps = steps
+    this.kind = kind
   }
 }
 
 /**
- * Where the memory an expression names may come from, for
- * `PointerParamFacts.writesReach`: the pointer parameters it is reached from
- * (`roots`), the function's own fresh allocation named as it is (`fresh`),
- * a field of an object a constructor made (`news`), or anything at all
- * (`all`) when the path leaves what the analysis follows — a call's result, a
- * `let`, a loop variable, or a field of an array or object literal, which may
- * hold a parameter's memory.
+ * What a stored value may be (`FactCollector.valueOf`): memory of the
+ * parameters in `params`, of the objects in `owns`, anything (`unknown`), or
+ * objects made by the constructors in `ctors`. With all four empty it is a
+ * number, a string, `null` or a fresh allocation of such values: clean.
  */
-export class Reach {
-  roots: ReachRoot[]
-  /**
-   * The constructors of the fresh objects the path goes into a field of: the
-   * function's own memory unless a constructor kept a parameter's memory in
-   * `this` (`FunctionFacts.thisAliased`), which the fixpoint asks.
-   */
-  news: string[]
-  fresh: boolean
-  all: boolean
+export class ValueDesc {
+  params: string[]
+  owns: string[]
+  ctors: string[]
+  unknown: boolean
 
   constructor() {
-    this.roots = []
-    this.news = []
-    this.fresh = false
-    this.all = false
+    this.params = []
+    this.owns = []
+    this.ctors = []
+    this.unknown = false
+  }
+}
+
+/** Why a `DirtMark` exists, and so what makes the fixpoint set `active`. */
+const DIRT_STORE: i32 = 0 // a value stored into the slot: active while the value is not clean
+const DIRT_INIT: i32 = 1 // `const o = new C(...)`: active when `C` keeps an argument that is not clean
+const DIRT_ESCAPE: i32 = 2 // the object used as a value the analysis does not follow: active from the start
+const DIRT_CALL: i32 = 3 // the object handed to a call: active once the callee writes what it is handed
+
+/**
+ * Memory below an object of this call's own (`ROOT_OWN`) that may be memory
+ * a parameter reaches, or anything (`unknown`): the slot `steps` itself
+ * (`below` false), or everything strictly below `steps` (`below` true). Every
+ * mark is made when the body is walked; the fixpoint only sets `active` and
+ * `unknown`, so it allocates nothing however many passes it takes.
+ */
+export class DirtMark {
+  root: string
+  steps: string
+  params: string[]
+  /** For `DIRT_STORE`, the value; for `DIRT_INIT`, the constructor in `ctor` and one value per argument. */
+  value: ValueDesc | null
+  args: ValueDesc[]
+  ctor: string
+  kind: i32
+  below: boolean
+  active: boolean
+  unknown: boolean
+
+  constructor(kind: i32, root: string, steps: string, below: boolean) {
+    this.root = root
+    this.steps = steps
+    this.params = []
+    this.value = null
+    this.args = []
+    this.ctor = ""
+    this.kind = kind
+    this.below = below
+    this.active = kind === DIRT_ESCAPE
+    this.unknown = kind === DIRT_ESCAPE || kind === DIRT_CALL
+  }
+}
+
+/** A `const` of this function and the path its name resolves to, cached (`FactCollector.pathOf`). */
+class LocalPath {
+  local: Local
+  path: MemPath
+
+  constructor(local: Local, path: MemPath) {
+    this.local = local
+    this.path = path
   }
 }
 
@@ -380,15 +441,25 @@ export class ArgEdge {
   callee: string
   param: string
   owner: PrivateArray | null
-  /** Where the argument's memory may come from (`Reach`); a private array's is `fresh`. */
-  reach: Reach
+  /** Where the argument's memory lives (`MemPath`). */
+  path: MemPath
+  /** For an argument that is an object of the caller's own, what a callee that writes or keeps it makes of it (`DIRT_CALL`). */
+  dirt: DirtMark | null
+  /**
+   * The caller's own object a `new` that is handed this argument initialises
+   * (`const b = new C(w)`), or "": a constructor that keeps the argument puts
+   * it inside that object, which is only as clean as the object is.
+   */
+  heldBy: string
   index: i32
 
-  constructor(callee: string, index: i32, param: string, owner: PrivateArray | null, reach: Reach) {
+  constructor(callee: string, index: i32, param: string, owner: PrivateArray | null, path: MemPath) {
     this.callee = callee
     this.param = param
     this.owner = owner
-    this.reach = reach
+    this.path = path
+    this.dirt = null
+    this.heldBy = ""
     this.index = index
   }
 
@@ -482,24 +553,22 @@ export class FunctionFacts {
    * receiver reaches (`composeArguments`).
    */
   wholeReaches: ArgEdge[]
+  /** Every slot this body writes, as a path (`MemPath`): what `composeArguments` turns into `writesReach`. */
+  memWrites: MemPath[]
   /**
-   * The reaches of this body's own stores that go into a field of an object a
-   * constructor made (`Reach.news`): the fixpoint marks every parameter for
-   * each one whose constructor turns out to keep a parameter's memory.
+   * The objects this call made, by key (`FactCollector.ownKeyOf`), and the
+   * names it has resolved (`LocalPath`).
    */
-  deferredReaches: Reach[]
+  ownLocals: Local[]
+  localPaths: LocalPath[]
+  /** What may hold memory a parameter reaches below this call's own objects (`DirtMark`). */
+  dirt: DirtMark[]
   /**
-   * A constructor that keeps memory a parameter may reach in `this`: it
-   * stores into what `this` reaches a value that is not fresh, hands `this`
-   * to a call, or stores an object whose own constructor is one (`thisNews`,
-   * fixpoint). Such a `this` is fresh no longer: a write past its own slots
-   * may land in an argument's memory, so it marks every pointer parameter
-   * (`composeArguments`), and a `new` of the class is not the caller's own
-   * memory below its fields (`Reach.news`).
+   * A constructor that keeps in `this` memory it cannot name the parameter
+   * of: `this` handed to a call, used as a value, or a value of unknown origin
+   * stored into it (fixpoint). A `new` of the class then may hold anything.
    */
-  thisAliased: boolean
-  /** The constructors of the objects this constructor stores into what `this` reaches. */
-  thisNews: string[]
+  keepsUnknown: boolean
   /**
    * The user callees reached other than through a call whose arguments are
    * composed: a fused lookup, a walk's methods, a routed map instance. Their
@@ -696,9 +765,11 @@ export class FunctionFacts {
     this.writesPastParams = false
     this.argEdges = []
     this.wholeReaches = []
-    this.deferredReaches = []
-    this.thisAliased = false
-    this.thisNews = []
+    this.memWrites = []
+    this.ownLocals = []
+    this.localPaths = []
+    this.dirt = []
+    this.keepsUnknown = false
     this.wholeCallees = new StringSet()
     this.privateArrays = []
     this.writesOutput = false
@@ -1769,11 +1840,7 @@ class FactCollector {
       }
       return
     }
-    const reach = this.reachOf(e, 0)
-    markReach(this.facts, reach, false)
-    if (reach.news.length > 0) {
-      this.facts.deferredReaches.push(reach)
-    }
+    this.facts.memWrites.push(this.pathOf(e))
     const pointer = this.pointerParamOf(e)
     if (pointer === null) {
       this.notePastWrite(node)
@@ -1783,140 +1850,154 @@ class FactCollector {
     this.noteSharedWrite(node)
   }
 
-  /**
-   * Where the memory `expr` names may come from (`Reach`), `hops` fields or
-   * elements below where the walk started: each member or index on the way
-   * down to a name is one more. A pointer parameter is a root, deep past
-   * `hops` 0. A `const` is followed into its initialiser, unless that is a
-   * fresh allocation: the function's own memory when named as it is, and
-   * anything at all below that, because a field of a fresh object may hold a
-   * parameter's memory. Any other name or expression may be anything.
-   */
-  reachOf(expr: Node, hops: i32): Reach {
-    const out = new Reach()
-    this.followReach(expr, hops, out, 0)
-    return out
+  /** Where the memory `expr` names lives (`MemPath`). */
+  pathOf(expr: Node): MemPath {
+    return this.pathFrom(expr, 0)
   }
 
-  followReach(expr: Node, hops: i32, out: Reach, depth: i32): void {
-    let e = expr
-    let below = hops
-    while (e.kind === N_PAREN || e.kind === N_MEMBER || e.kind === N_INDEX) {
-      if (e.kind !== N_PAREN) {
-        below = below + 1
-      }
-      e = e.children[0]
+  pathFrom(e: Node, depth: i32): MemPath {
+    if (e.kind === N_PAREN) {
+      return this.pathFrom(e.children[0], depth)
     }
-    if (e.kind !== N_THIS && e.kind !== N_IDENT) {
-      out.all = true
-      return
+    if (e.kind === N_MEMBER) {
+      const base = this.pathFrom(e.children[0], depth)
+      return new MemPath(base.kind, base.name, `${base.steps}.${e.text}`)
+    }
+    if (e.kind === N_INDEX) {
+      const base = this.pathFrom(e.children[0], depth)
+      return new MemPath(base.kind, base.name, `${base.steps}[]`)
+    }
+    if (e.kind === N_THIS) {
+      if (this.facts.freshThis) {
+        return new MemPath(ROOT_OWN, "this", "")
+      }
+      return this.pointerParamOf(e) === null
+        ? new MemPath(ROOT_NONE, "", "")
+        : new MemPath(ROOT_PARAM, "this", "")
+    }
+    if (e.kind !== N_IDENT) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
     }
     const pointer = this.pointerParamOf(e)
     if (pointer !== null) {
-      out.roots.push(new ReachRoot(pointer.name, below > 0))
-      return
+      return new MemPath(ROOT_PARAM, pointer.name, "")
     }
     const local: Local | null = this.unit.program.nodeLocals[e.id]
-    if (local !== null && local.storage === STORAGE_PARAM) {
-      return // a number, a `boolean` or a string: nothing to write
+    if (local === null) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
+    }
+    if (local.storage === STORAGE_PARAM) {
+      return new MemPath(ROOT_NONE, "", "") // a number, a `boolean` or a string
+    }
+    for (const seen of this.facts.localPaths) {
+      if (seen.local === local) {
+        return seen.path
+      }
+    }
+    const path = this.resolveLocal(local, depth)
+    this.facts.localPaths.push(new LocalPath(local, path))
+    return path
+  }
+
+  /**
+   * A `const` bound to a fresh object or array is an object of this call's
+   * own (`ownKeyOf`); a `const` bound to anything else is what it is bound
+   * to; a `let`, a loop variable or a name with no initialiser may be
+   * anything.
+   */
+  resolveLocal(local: Local, depth: i32): MemPath {
+    const key = this.ownKeyOf(local)
+    if (key.length > 0) {
+      return new MemPath(ROOT_OWN, key, "")
     }
     const body = this.sig.body()
     const decl: Node | null =
-      local === null || local.mutable || body === null ? null : declarationIn(this.unit.program, body, local)
-    const init: Node | null = decl === null ? null : unwrapParens(decl.children[2])
-    if (init === null) {
-      out.all = true
-    } else if (init.kind === N_NEW || init.kind === N_ARRAY || init.kind === N_OBJECT) {
-      if (below === 0) {
-        out.fresh = true
-      } else {
-        this.followFresh(init, out)
-      }
-    } else if (depth < 8) {
-      this.followReach(init, below, out, depth + 1)
-    } else {
-      out.all = true
+      local.mutable || body === null || depth >= 8 ? null : declarationIn(this.unit.program, body, local)
+    if (decl === null || decl.children[2].kind === N_EMPTY) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
     }
+    return this.pathFrom(decl.children[2], depth + 1)
   }
 
   /**
-   * A path that goes into a field or an element of `init`, a fresh
-   * allocation: a class's object is the function's own memory there unless
-   * its constructor keeps a parameter's memory (`Reach.news`); an array or an
-   * object literal may hold anything.
+   * The key of the object `local` names when it is a `const` bound to a fresh
+   * allocation (`new`, an array or an object literal), registering it and
+   * what its initialiser stores (`DIRT_INIT`, `DIRT_STORE`); "" otherwise.
    */
-  followFresh(init: Node, out: Reach): void {
+  ownKeyOf(local: Local): string {
+    const at = this.facts.ownLocals.indexOf(local)
+    if (at >= 0) {
+      return `o${at}`
+    }
+    const body = this.sig.body()
+    const decl: Node | null =
+      local.mutable || body === null ? null : declarationIn(this.unit.program, body, local)
+    const init: Node | null = decl === null ? null : unwrapParens(decl.children[2])
+    if (init === null || (init.kind !== N_NEW && init.kind !== N_ARRAY && init.kind !== N_OBJECT)) {
+      return ""
+    }
+    const key = `o${this.facts.ownLocals.length}`
+    this.facts.ownLocals.push(local)
+    this.noteFreshInit(key, init)
+    return key
+  }
+
+  /** What `init`, the fresh allocation an object of this call's own was made by, put in it. */
+  noteFreshInit(key: string, init: Node): void {
     const program = this.unit.program
     const type = program.nodeTypes[init.id]
-    if (init.kind !== N_NEW || type < 0 || !this.table.isStruct(type)) {
-      out.all = true
+    if (init.kind === N_ARRAY) {
+      for (const element of init.children) {
+        this.noteStore(key, "[]", element)
+      }
       return
+    }
+    if (init.kind === N_OBJECT) {
+      for (const property of init.children) {
+        if (property.children.length > 1) {
+          this.noteStore(key, `.${property.children[0].text}`, property.children[1])
+        }
+      }
+      return
+    }
+    if (type < 0 || !this.table.isStruct(type)) {
+      return // `new Array(n)`: nothing but zeros and nulls
     }
     const ctor = constructorOf(program, this.table, intrinsicType(program, init))
-    if (ctor !== null) {
-      out.news.push(ctor.name)
+    const mark = new DirtMark(DIRT_INIT, key, "", true)
+    mark.ctor = ctor === null ? "" : ctor.name
+    for (const arg of init.children[2].children) {
+      const value = this.valueOf(arg)
+      mark.args.push(value)
+      for (const name of value.params) {
+        mark.params.push(name)
+      }
     }
+    this.facts.dirt.push(mark)
   }
 
-  /**
-   * In a constructor, what `node` does to `FunctionFacts.thisAliased`: a store
-   * into what `this` reaches of a value that is not fresh, a `push` of one
-   * onto an array `this` reaches, or `this` handed to a call as an argument or
-   * a receiver.
-   */
-  noteThisStore(node: Node): void {
-    if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
-      if (this.reachesThis(node.children[0])) {
-        this.noteThisValue(node.children[1], 0)
-      }
+  /** `value` stored into the slot `steps` of the object `key`: a `DIRT_STORE` unless it is plainly clean. */
+  noteStore(key: string, steps: string, value: Node): void {
+    const desc = this.valueOf(value)
+    if (desc.params.length === 0 && desc.owns.length === 0 && desc.ctors.length === 0 && !desc.unknown) {
       return
     }
-    if (node.kind === N_THIS) {
-      const above = this.unit.parents.parentOf(node)
-      const call: Node | null = above === null ? null : this.unit.parents.parentOf(above)
-      const handed = above !== null && above.kind === N_LIST
-      const receiver =
-        above !== null &&
-        above.kind === N_MEMBER &&
-        call !== null &&
-        call.kind === N_CALL &&
-        call.children[0] === above
-      if (handed || receiver) {
-        this.facts.thisAliased = true
-      }
-      return
+    const mark = new DirtMark(DIRT_STORE, key, steps, false)
+    mark.value = desc
+    for (const name of desc.params) {
+      mark.params.push(name)
     }
-    const method = arrayMethodName(this.unit.program, this.table, node)
-    const receiver = methodReceiver(node)
-    if (method === "push" && receiver !== null && this.reachesThis(receiver)) {
-      for (const arg of node.children[1].children) {
-        this.noteThisValue(arg, 0)
-      }
-    }
+    this.facts.dirt.push(mark)
   }
 
-  /** Whether the memory `target` names is reached from `this`. */
-  reachesThis(target: Node): boolean {
-    const reach = this.reachOf(target, 0)
-    if (reach.all) {
-      return true
-    }
-    for (const root of reach.roots) {
-      if (root.name === "this") {
-        return true
-      }
-    }
-    return false
+  /** What `value` may be (`ValueDesc`). */
+  valueOf(value: Node): ValueDesc {
+    const desc = new ValueDesc()
+    this.describe(value, desc)
+    return desc
   }
 
-  /**
-   * `value`, stored into what `this` reaches: a number, a `boolean`, an enum,
-   * a string, `null`, `new Array(n)`, a literal of such values, or a `const`
-   * bound to one leaves `this` fresh; a class's `new` does unless its own
-   * constructor keeps a parameter's memory (`thisNews`); anything else may be
-   * memory an argument reaches.
-   */
-  noteThisValue(value: Node, depth: i32): void {
+  describe(value: Node, desc: ValueDesc): void {
     const program = this.unit.program
     const table = this.table
     const v = unwrapParens(value)
@@ -1933,37 +2014,126 @@ class FactCollector {
     if (v.kind === N_NEW && type >= 0 && table.isStruct(type)) {
       const ctor = constructorOf(program, table, intrinsicType(program, v))
       if (ctor !== null) {
-        this.facts.thisNews.push(ctor.name)
+        desc.ctors.push(ctor.name)
       }
       for (const arg of v.children[2].children) {
-        this.noteThisValue(arg, depth)
+        this.describe(arg, desc)
       }
       return
     }
     if (v.kind === N_ARRAY) {
       for (const element of v.children) {
-        this.noteThisValue(element, depth)
+        this.describe(element, desc)
       }
       return
     }
     if (v.kind === N_OBJECT) {
       for (const property of v.children) {
-        const last = property.children.length > 0 ? property.children[property.children.length - 1] : property
-        this.noteThisValue(last, depth)
+        if (property.children.length > 1) {
+          this.describe(property.children[1], desc)
+        }
       }
       return
     }
-    const local: Local | null = v.kind === N_IDENT ? program.nodeLocals[v.id] : null
-    const body = this.sig.body()
-    const decl: Node | null =
-      local === null || local.mutable || local.storage === STORAGE_PARAM || body === null || depth >= 8
-        ? null
-        : declarationIn(program, body, local)
-    if (decl !== null) {
-      this.noteThisValue(decl.children[2], depth + 1)
+    const path = this.pathOf(v)
+    if (path.kind === ROOT_PARAM) {
+      desc.params.push(path.name)
+    } else if (path.kind === ROOT_OWN) {
+      desc.owns.push(path.name)
+    } else if (path.kind === ROOT_UNKNOWN) {
+      desc.unknown = true
+    }
+  }
+
+  /**
+   * A store `node` makes into an object of this call's own: an assignment to
+   * a field or an element, or a `push` or `fill` onto an array one reaches.
+   */
+  noteOwnStore(node: Node): void {
+    if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+      const target = unwrapParens(node.children[0])
+      if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+        const slot = this.pathOf(target)
+        if (slot.kind === ROOT_OWN) {
+          this.noteStore(slot.name, slot.steps, node.children[1])
+        }
+      }
       return
     }
-    this.facts.thisAliased = true
+    const method = arrayMethodName(this.unit.program, this.table, node)
+    const receiver = methodReceiver(node)
+    if ((method === "push" || method === "fill") && receiver !== null) {
+      const array = this.pathOf(receiver)
+      if (array.kind === ROOT_OWN) {
+        for (const arg of node.children[1].children) {
+          this.noteStore(array.name, `${array.steps}[]`, arg)
+        }
+      }
+    }
+  }
+
+  /**
+   * A name for an object of this call's own, used as a value the analysis
+   * does not follow — stored, returned, an element of a literal, an arm of a
+   * `?:` — so whatever holds it now may put anything in it: everything below
+   * it may be anything (`DIRT_ESCAPE`). The base of a field or an element, a
+   * `const`'s initialiser (followed by `pathOf`), the iterable of a
+   * `for...of`, and an argument (`DIRT_CALL`, composed with the callee) are
+   * the uses it follows.
+   */
+  noteEscape(node: Node): void {
+    if (node.kind !== N_THIS && node.kind !== N_IDENT) {
+      return
+    }
+    if (node.kind === N_THIS && !this.facts.freshThis) {
+      return
+    }
+    if (node.kind === N_IDENT) {
+      const local: Local | null = this.unit.program.nodeLocals[node.id]
+      if (local === null || local.storage === STORAGE_PARAM) {
+        return
+      }
+      const declares = this.unit.parents.parentOf(node)
+      if (declares !== null && declares.kind === N_VAR_DECL && declares.children[0] === node) {
+        return
+      }
+    }
+    const path = this.pathOf(node)
+    if (path.kind !== ROOT_OWN) {
+      return
+    }
+    let at = node
+    let parent = this.unit.parents.parentOf(at)
+    while (parent !== null && parent.kind === N_PAREN) {
+      at = parent
+      parent = this.unit.parents.parentOf(at)
+    }
+    if (parent === null) {
+      return
+    }
+    if ((parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at) {
+      return
+    }
+    if (parent.kind === N_FOR_OF && parent.children[1] === at) {
+      return
+    }
+    if (parent.kind === N_VAR_DECL && parent.children[2] === at) {
+      const bound: Local | null = this.unit.program.nodeLocals[parent.id]
+      if (bound !== null && !bound.mutable) {
+        return
+      }
+    }
+    if (parent.kind === N_LIST) {
+      const call = this.unit.parents.parentOf(parent)
+      if (
+        call !== null &&
+        (call.kind === N_CALL || call.kind === N_NEW) &&
+        this.unit.program.nodeCallees[call.id] !== null
+      ) {
+        return
+      }
+    }
+    this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
   }
 
   /** The private array `e` names (`FunctionFacts.privateArrays`), or null. */
@@ -2027,6 +2197,7 @@ class FactCollector {
     const refs: Node[] = []
     collectRefs(program, body, local, refs)
     const handed: ParamUse[] = []
+    const sites: Node[] = []
     for (const ref of refs) {
       const found = classifyUse(this.unit, table, ref)
       if (found.kind === USE_ESCAPE || (found.kind === USE_ARGUMENT && found.callee === null)) {
@@ -2034,16 +2205,50 @@ class FactCollector {
       }
       if (found.kind === USE_ARGUMENT) {
         handed.push(found)
+        sites.push(ref)
       }
     }
     const owned = new PrivateArray(local)
     this.facts.privateArrays.push(owned)
+    const key = this.ownKeyOf(local)
     for (const found of handed) {
       const callee = found.callee
       if (callee !== null) {
-        const own = new Reach()
-        own.fresh = true
-        this.facts.argEdges.push(new ArgEdge(callee.name, found.index, "", owned, own))
+        const path = key.length > 0 ? new MemPath(ROOT_OWN, key, "") : new MemPath(ROOT_UNKNOWN, "", "")
+        const edge = this.ownEdge(new ArgEdge(callee.name, found.index, "", owned, path))
+        this.facts.argEdges.push(edge)
+      }
+    }
+    // A private array handed to a `new` that initialises an object of this
+    // call's own is held by that object (`ArgEdge.heldBy`), as any argument is.
+    for (const ref of sites) {
+      const call = this.callAround(ref)
+      if (call !== null && call.kind === N_NEW) {
+        this.holdArray(key, this.heldByOf(call))
+      }
+    }
+  }
+
+  /** The call or `new` `ref` is an argument of, through parentheses and the arms of a `?:`, or null. */
+  callAround(ref: Node): Node | null {
+    let at: Node | null = this.unit.parents.parentOf(ref)
+    while (at !== null && (at.kind === N_PAREN || at.kind === N_CONDITIONAL)) {
+      at = this.unit.parents.parentOf(at)
+    }
+    if (at === null || at.kind !== N_LIST) {
+      return null
+    }
+    return this.unit.parents.parentOf(at)
+  }
+
+  /** Mark the private array `key`'s edges as held by the object `holder` (`ArgEdge.heldBy`). */
+  holdArray(key: string, holder: string): void {
+    if (key.length === 0 || holder.length === 0) {
+      return
+    }
+    for (const edge of this.facts.argEdges) {
+      if (edge.owner !== null && edge.path.kind === ROOT_OWN && edge.path.name === key) {
+        edge.heldBy = holder
       }
     }
   }
@@ -2058,7 +2263,14 @@ class FactCollector {
    */
   noteArguments(call: Node, callee: FunctionSig): void {
     if (call.kind === N_NEW) {
+      const first = this.facts.argEdges.length
       this.noteArgumentList(callee, call.children[2].children, 1)
+      const holder = this.heldByOf(call)
+      let i = first
+      while (i < this.facts.argEdges.length) {
+        this.facts.argEdges[i].heldBy = holder
+        i = i + 1
+      }
       return
     }
     const receiver = methodReceiver(call)
@@ -2066,6 +2278,21 @@ class FactCollector {
       this.noteArgument(callee, receiver, 0)
     }
     this.noteArgumentList(callee, call.children[1].children, callee.owner !== null ? 1 : 0)
+  }
+
+  /** The key of the object of this call's own a `new` initialises, when it is a `const`'s initialiser (`ArgEdge.heldBy`), or "". */
+  heldByOf(call: Node): string {
+    let at = call
+    let parent = this.unit.parents.parentOf(at)
+    while (parent !== null && parent.kind === N_PAREN) {
+      at = parent
+      parent = this.unit.parents.parentOf(at)
+    }
+    if (parent === null || parent.kind !== N_VAR_DECL || parent.children[2] !== at) {
+      return ""
+    }
+    const local: Local | null = this.unit.program.nodeLocals[parent.id]
+    return local === null ? "" : this.ownKeyOf(local)
   }
 
   noteArgumentList(callee: FunctionSig, args: Node[], offset: i32): void {
@@ -2083,7 +2310,7 @@ class FactCollector {
     }
     const pointer = this.pointerParamOf(e)
     const name = pointer === null ? "" : pointer.name
-    this.facts.argEdges.push(new ArgEdge(callee.name, index, name, null, this.reachOf(e, 0)))
+    this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, this.pathOf(e))))
   }
 
   visit(node: Node): void {
@@ -2153,9 +2380,8 @@ class FactCollector {
       this.noteUse(param, node)
     }
     this.collectStringFacts(node)
-    if (this.facts.freshThis) {
-      this.noteThisStore(node)
-    }
+    this.noteOwnStore(node)
+    this.noteEscape(node)
     this.collectClassFacts(node)
     this.collectResultFacts(node)
     this.collectArrayFacts(node)
@@ -2188,11 +2414,18 @@ class FactCollector {
 
   /** The receiver of a call to `callee`, taken whole: what it may write is anything `receiver` reaches (`FunctionFacts.wholeReaches`). */
   noteWholeReach(callee: string, receiver: Node | null): void {
-    const reach = receiver === null ? new Reach() : this.reachOf(receiver, 0)
-    if (receiver === null) {
-      reach.all = true
+    const path = receiver === null ? new MemPath(ROOT_UNKNOWN, "", "") : this.pathOf(receiver)
+    this.facts.wholeReaches.push(this.ownEdge(new ArgEdge(callee, -1, "", null, path)))
+  }
+
+  /** `edge`, with the `DIRT_CALL` mark an argument of this call's own gets, which the fixpoint sets when the callee writes it. */
+  ownEdge(edge: ArgEdge): ArgEdge {
+    if (edge.path.kind === ROOT_OWN) {
+      const mark = new DirtMark(DIRT_CALL, edge.path.name, edge.path.steps, true)
+      this.facts.dirt.push(mark)
+      edge.dirt = mark
     }
-    this.facts.wholeReaches.push(new ArgEdge(callee, -1, "", null, reach))
+    return edge
   }
 
   /** `addUserCallee` for a call whose arguments are recorded (`noteArguments`), so the callee's writes through them are composed with what each argument is. */
@@ -3530,6 +3763,9 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
       if (composeArguments(facts, f)) {
         changed = true
       }
+      if (settleKeeps(f)) {
+        changed = true
+      }
       // A pointer-returning callee that allocates makes its result an allocation of this function.
       for (const site of f.callSites) {
         const callee = facts.get(site.callee)
@@ -3850,53 +4086,171 @@ const keepsArgument = (g: FunctionFacts | null, index: i32): boolean => {
   return target === null || target.captured
 }
 
-/**
- * Mark what `reach` names as written in `f`, `deep` when the write goes past
- * the slots of what it names (`PointerParamFacts.writesReach`); answers whether
- * anything moved. A fresh allocation named as it is is `f`'s own memory, and
- * is marked only by a deep write, which may land in a parameter's memory one
- * of its fields holds.
- */
-const markReach = (f: FunctionFacts, reach: Reach, deep: boolean): boolean => {
+/** Mark the parameter `name` as written in `f` (`PointerParamFacts.writesReach`), `deep` past its own slots; answers whether that moved anything. */
+const markParam = (f: FunctionFacts, name: string, deep: boolean): boolean => {
+  const pp = f.pointerParam(name)
+  if (pp === null) {
+    return false
+  }
   let changed = false
-  const everything = reach.all || (reach.fresh && deep)
+  if (!pp.writesReach) {
+    pp.writesReach = true
+    changed = true
+  }
+  if (deep && !pp.writesDeep) {
+    pp.writesDeep = true
+    changed = true
+  }
+  return changed
+}
+
+/** Mark every pointer parameter of `f` as written, past its own slots: a write that may land anywhere. */
+const markAll = (f: FunctionFacts): boolean => {
+  let changed = false
   for (const pp of f.pointerParams) {
-    let hit = everything
-    let below = everything
-    for (const root of reach.roots) {
-      if (root.name === pp.name) {
-        hit = true
-        below = below || root.deep || deep
-      }
-    }
-    if (hit && !pp.writesReach) {
-      pp.writesReach = true
-      changed = true
-    }
-    if (below && !pp.writesDeep) {
-      pp.writesDeep = true
+    if (markParam(f, pp.name, true)) {
       changed = true
     }
   }
   return changed
 }
 
-/** A `Reach` of anything at all. */
-const everything = (): Reach => {
-  const reach = new Reach()
-  reach.all = true
-  return reach
+/**
+ * Whether `steps` starts with `prefix`, at a step boundary: equal, or followed
+ * by the next `.f` or `[]`. `strict` asks for a step more. Compares codes, so
+ * a fixpoint pass allocates nothing.
+ */
+const stepsUnder = (prefix: string, steps: string, strict: boolean): boolean => {
+  if (steps.length < prefix.length) {
+    return false
+  }
+  let i = 0
+  while (i < prefix.length) {
+    if (prefix.charCodeAt(i) !== steps.charCodeAt(i)) {
+      return false
+    }
+    i = i + 1
+  }
+  if (steps.length === prefix.length) {
+    return !strict
+  }
+  const next = steps.charCodeAt(prefix.length)
+  return next === 46 || next === 91 // `.` or `[`
 }
 
-/** Whether a constructor among `ctors` keeps a parameter's memory in `this`, or is unknown. */
-const anyAliased = (facts: FactsTable, ctors: string[]): boolean => {
-  for (const name of ctors) {
-    const g = facts.get(name)
-    if (g === null || g.thisAliased) {
+/**
+ * A write into the object at `steps` below the object `root` of `f`'s own,
+ * and below it too when `below`: mark what the active `DirtMark`s over it say
+ * the memory may be. Memory no mark covers is `f`'s own, and marks nothing.
+ */
+const markForeign = (f: FunctionFacts, root: string, steps: string, below: boolean): boolean => {
+  let changed = false
+  for (const d of f.dirt) {
+    if (!d.active || d.root !== root) {
+      continue
+    }
+    const over = stepsUnder(d.steps, steps, d.below)
+    const under = below && stepsUnder(steps, d.steps, false)
+    if (!over && !under) {
+      continue
+    }
+    if (d.unknown) {
+      if (markAll(f)) {
+        changed = true
+      }
+      continue
+    }
+    for (const name of d.params) {
+      if (markParam(f, name, true)) {
+        changed = true
+      }
+    }
+  }
+  return changed
+}
+
+/** A write into what `path` names, `deep` past its own slots, made by `f` or by a callee it hands `path` to. */
+const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
+  if (path.kind === ROOT_PARAM) {
+    return markParam(f, path.name, deep || path.steps.length > 0)
+  }
+  if (path.kind === ROOT_UNKNOWN) {
+    return markAll(f)
+  }
+  if (path.kind === ROOT_OWN) {
+    return markForeign(f, path.name, path.steps, deep)
+  }
+  return false
+}
+
+/** Whether `f` has an active `DirtMark` on its object `key`. */
+const isDirty = (f: FunctionFacts, key: string): boolean => {
+  for (const d of f.dirt) {
+    if (d.active && d.root === key) {
       return true
     }
   }
   return false
+}
+
+/** Whether a constructor named in `ctors` may keep anything, or is unknown. */
+const keepsAnything = (facts: FactsTable, ctors: string[]): boolean => {
+  for (const name of ctors) {
+    const g = facts.get(name)
+    if (g === null || g.keepsUnknown) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `value`, as `f` sees it now, may be memory of unknown origin: an object of `f`'s own that is dirty, or a constructor that keeps anything. */
+const valueUnknown = (facts: FactsTable, f: FunctionFacts, value: ValueDesc): boolean => {
+  if (value.unknown || keepsAnything(facts, value.ctors)) {
+    return true
+  }
+  for (const key of value.owns) {
+    if (isDirty(f, key)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Set `d`'s `active` and `unknown` from what `f`'s callees and objects now say (`DirtMark`); answers whether anything moved. */
+const settleDirt = (facts: FactsTable, f: FunctionFacts, d: DirtMark): boolean => {
+  let active = d.active
+  let unknown = d.unknown
+  const value = d.value
+  if (d.kind === DIRT_STORE && value !== null) {
+    unknown = unknown || valueUnknown(facts, f, value)
+    active = active || unknown || value.params.length > 0
+  } else if (d.kind === DIRT_INIT) {
+    const g = facts.get(d.ctor)
+    if (g === null || g.keepsUnknown) {
+      active = true
+      unknown = true
+    } else {
+      let i = 0
+      for (const arg of d.args) {
+        i = i + 1 // the constructor's parameter 0 is `this`
+        const kept = g.pointerParamAt(i)
+        if (kept !== null && kept.keptInThis) {
+          const vague = valueUnknown(facts, f, arg)
+          if (vague || arg.params.length > 0) {
+            active = true
+          }
+          unknown = unknown || vague
+        }
+      }
+    }
+  }
+  if (active === d.active && unknown === d.unknown) {
+    return false
+  }
+  d.active = active
+  d.unknown = unknown
+  return true
 }
 
 /** Mark `f` as writing shared memory past its parameters; answers whether that moved anything. */
@@ -3914,6 +4268,79 @@ const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
   !edge.isPrivate() && writesArgument(facts.get(edge.callee), edge.index)
 
 /**
+ * A callee writes what `edge` hands it, `deep` past its slots: the caller
+ * writes what the argument names, and an argument of the caller's own may
+ * hold anything from then on (`DIRT_CALL`).
+ */
+const callWrites = (f: FunctionFacts, edge: ArgEdge, deep: boolean): boolean => {
+  let changed = false
+  const mark = edge.dirt
+  if (mark !== null && !mark.active) {
+    mark.active = true
+    changed = true
+  }
+  if (markPath(f, edge.path, deep)) {
+    changed = true
+  }
+  return changed
+}
+
+/**
+ * An object of the caller's own handed to a callee that keeps it: whatever
+ * now holds it may put anything in it (`DIRT_CALL`). A function keeps what it
+ * captures; a constructor what it stores into `this` (`keptInThis`), and when
+ * that `new` initialises an object of the caller's own (`heldBy`), the
+ * argument is only as clean as that object, so it is marked once the object
+ * is dirty. Answers whether the mark moved.
+ */
+const keepsOwn = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): boolean => {
+  const mark = edge.dirt
+  if (mark === null || mark.active) {
+    return false
+  }
+  const g = facts.get(edge.callee)
+  const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
+  let keeps = g === null || target === null
+  if (g !== null && target !== null) {
+    keeps = g.freshThis ? g.keepsUnknown || target.keptInThis : target.captured
+  }
+  if (!keeps || (edge.heldBy.length > 0 && !isDirty(f, edge.heldBy))) {
+    return false
+  }
+  mark.active = true
+  return true
+}
+
+/**
+ * A constructor's summary from its active marks on `this`: each parameter
+ * whose memory is stored into what `this` reaches (`keptInThis`), and whether
+ * something of unknown origin is (`keepsUnknown`).
+ */
+const settleKeeps = (f: FunctionFacts): boolean => {
+  if (!f.freshThis) {
+    return false
+  }
+  let changed = false
+  for (const d of f.dirt) {
+    if (!d.active || d.root !== "this") {
+      continue
+    }
+    if (d.unknown && !f.keepsUnknown) {
+      f.keepsUnknown = true
+      changed = true
+    }
+    for (const name of d.params) {
+      const pp = f.pointerParam(name)
+      if (pp !== null && !pp.keptInThis) {
+        pp.keptInThis = true
+        changed = true
+      }
+    }
+  }
+  return changed
+}
+
+/**
  * One function's arguments against what its callees now say they do
  * (`FunctionFacts.argEdges`); answers whether anything about it moved. A
  * private array a callee may keep is shared from then on: its first store
@@ -3924,30 +4351,24 @@ const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
  */
 const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   let changed = false
-  // One `Reach` of anything, made once: the loops below would leave one per pass behind.
-  const all = everything()
-  if (!f.thisAliased && anyAliased(facts, f.thisNews)) {
-    f.thisAliased = true
-    changed = true
+  for (const d of f.dirt) {
+    if (settleDirt(facts, f, d)) {
+      changed = true
+    }
   }
-  // A `this` that may hold an argument's memory: a write past its own slots
-  // may land in what any parameter reaches.
-  const self: PointerParamFacts | null = f.thisAliased ? f.pointerParam("this") : null
-  if (self !== null && self.writesDeep && markReach(f, all, true)) {
-    changed = true
-  }
-  for (const reach of f.deferredReaches) {
-    if (anyAliased(facts, reach.news) && markReach(f, all, true)) {
+  for (const path of f.memWrites) {
+    if (markPath(f, path, false)) {
       changed = true
     }
   }
   for (const edge of f.wholeReaches) {
     const g = facts.get(edge.callee)
-    const writes = g === null || g.sharedWrite
-    if (writes && markReach(f, edge.reach, true)) {
+    if ((g === null || g.sharedWrite) && callWrites(f, edge, true)) {
       changed = true
     }
-    if (writes && anyAliased(facts, edge.reach.news) && markReach(f, all, true)) {
+  }
+  for (const edge of f.argEdges) {
+    if (keepsOwn(facts, f, edge)) {
       changed = true
     }
   }
@@ -3956,11 +4377,7 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     const g = facts.get(edge.callee)
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     const reached = g === null || (target !== null && target.writesReach && g.sharedWrite)
-    const deep = target === null || target.writesDeep
-    if (reached && markReach(f, edge.reach, deep)) {
-      changed = true
-    }
-    if (reached && deep && anyAliased(facts, edge.reach.news) && markReach(f, all, true)) {
+    if (reached && callWrites(f, edge, target === null || target.writesDeep)) {
       changed = true
     }
     const owner = edge.owner

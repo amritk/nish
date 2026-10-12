@@ -2542,17 +2542,27 @@ export const main = (): i32 => {
     `_new_element`, `_new_helper`, `_new_method`, `_call_deep`,
     `_call_element`, `_call_alias`, `_call_loop`). Its stores into
     the fresh object itself are not counted, so `new Point(3, 4)` is fine
-    there (`tests/link/thread_task_private`), until the constructor keeps
-    memory an argument reaches in a field of `this` (`this.inner = h.inner`,
-    an element of the argument's array, what a helper hands back, or `this`
-    handed to a method): from then on a write past `this`'s own slots counts
-    as a write to every argument (`reject_thread_region_new_alias_field`,
-    `_alias_push`, `_alias_element`, `_alias_const`, `_alias_helper`,
-    `_alias_method`, `_alias_item`). The same holds for any function: a write
-    into a field of an object it built is its own unless that object's
-    constructor keeps an argument's memory (`reject_thread_region_call_wrap`;
-    `tests/link/thread_scope_region_fresh_object` writes its own `new Grid()`
-    inside the block). A task argument read out of a
+    there (`tests/link/thread_task_private`). An object a function or a
+    constructor made itself is its own memory, and a write into it counts
+    against nothing, until memory an argument reaches may have got into it:
+    stored into a field or an element at any depth, pushed, put there by a
+    method or a function it was handed to, kept by its constructor from an
+    argument, or the object itself (or a constructor's `this`) used as a value
+    the checker does not follow — stored elsewhere, an element of a literal,
+    an arm of a `?:`. A write below such a slot counts against the arguments
+    whose memory may be there, or against all of them when that cannot be
+    told (`reject_thread_region_new_alias_field`, `_alias_push`,
+    `_alias_element`, `_alias_const`, `_alias_helper`, `_alias_method`,
+    `_alias_item`, `_call_wrap`, `_fresh_field`, `_fresh_method_bind`,
+    `_fresh_attach`, `_fresh_push`, `_fresh_element`, `_fresh_array_field`,
+    `_fresh_nested`, `_fresh_bump_method`, `_fresh_const`, `_fresh_ctor_field`,
+    `_fresh_literal`, `_fresh_escape`, `_fresh_held`, `_fresh_held_temp`,
+    `_fresh_captured`, `_this_local`, `_this_ternary`,
+    `_this_literal`, `_this_object`). A constructor that keeps what it is
+    handed keeps it per argument, so one that keeps the caller's own array, or
+    pushes an argument's object onto an array it made, writes nothing of the
+    task's (`tests/link/thread_scope_region_fresh_object`,
+    `thread_scope_region_kept_own`). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the

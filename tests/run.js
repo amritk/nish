@@ -4663,7 +4663,9 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_channel_ctor_reads`, whose channel-holding constructor reads and
 // updates its own fields. Neither writes anything another task can read, so
 // spawn order and join order print the same. `thread_scope_region_fresh_object`
-// writes an object of its own between a spawn and the join.
+// writes an object of its own between a spawn and the join, and
+// `thread_scope_region_kept_own` builds objects whose constructors keep what
+// they are handed there, writing nothing of the task's.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4684,6 +4686,7 @@ for (const name of [
   "thread_task_private",
   "thread_channel_ctor_reads",
   "thread_scope_region_fresh_object",
+  "thread_scope_region_kept_own",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
