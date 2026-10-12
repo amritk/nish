@@ -3,14 +3,15 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is six translation units and is named as one: an input
+# The C runtime is seven translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
 # threads, <dir>/runtime-host.c, the wall clock, entropy, file times and
-# signals, <dir>/runtime-net.c, the sockets of `nish:net`, and
-# <dir>/runtime-simd.c, the byte searches that read a vector at a time. Each of
-# those files says why they are compiled and measured apart.
+# signals, <dir>/runtime-net.c, the sockets of `nish:net`,
+# <dir>/runtime-simd.c, the byte searches that read a vector at a time, and
+# <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions. Each of those
+# files says why they are compiled and measured apart.
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
@@ -59,7 +60,7 @@
 #
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
-#   --runtime-objects <dir>  compile the runtime.c input and its five siblings,
+#   --runtime-objects <dir>  compile the runtime.c input and its six siblings, 
 #                            one $CC -c each and all at once, into
 #                            <dir>/<unit>.o with the profile's compile flags,
 #                            and link nothing. speed and size store LTO bitcode,
@@ -112,11 +113,13 @@ if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is six translation units, and a caller names one: whoever passes
+# The runtime is seven translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
-# <dir>/runtime-host.c, <dir>/runtime-net.c and <dir>/runtime-simd.c compiled
-# beside it, on every profile, wasi included: runtime-simd.c takes its scalar
-# path there unless the build adds -msimd128. They were one file until the
+# <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c and
+# <dir>/runtime-aes.c compiled beside it, on every profile, wasi included:
+# runtime-simd.c takes its scalar path there unless the build adds -msimd128,
+# and runtime-aes.c compiles to an answer of 0 and stubs that nothing calls,
+# because the compiler emits no call to its kernels for wasm32. They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
 # half followed for the same reason (each file's header comment says why), and
 # a link line is where those splits
@@ -126,7 +129,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c runtime-simd.c"
+halves="runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -342,6 +345,23 @@ case "$profile" in
     if [ ! -x "$wasm_ld" ]; then
       echo "error: the wasm profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
       exit 2
+    fi
+    # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
+    # AES kernels behind `nish_aes_hw` (src/kernels.ts). runtime-aes.c's wasm32 build
+    # answers 0 there, so the bitsliced code runs, and it is added only for such IR:
+    # every other module links the bytes it always did.
+    # A caller that names runtime-aes.c itself is left alone, as `halves` leaves it:
+    # one object named twice is a duplicate-symbol error.
+    aes_named=0
+    aes_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-aes.c|runtime-aes.c) aes_named=1 ;;
+        *.ll) if grep -q '@nish_aes_hw(' "$i"; then aes_wanted=1; fi ;;
+      esac
+    done
+    if [ "$aes_wanted" = 1 ] && [ "$aes_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
