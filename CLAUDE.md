@@ -118,8 +118,11 @@ the frozen rewrites` fails (#548).
 
 **A new runtime unit is paired in `scripts/build.sh` and `src/run-cache.ts` in
 one commit.** It goes into `build.sh`'s `halves` and `run-cache.ts`'s
-`runtimeUnits()` together: either one alone makes `build.sh --runtime-from`
-exit 2 on every cached `nish --link` and `nish run`. #594 added
+`runtimeUnits()` together. In `halves` alone, the cache entry lacks the
+unit's object, so `build.sh --runtime-from` exits 2 on every cached `nish
+--link` and `nish run`. In `runtimeUnits()` alone, moving the objects into the
+entry fails, the entry never gets its key, and the runtime cache is silently
+off. #594 added
 `runtime/runtime-aes.c` and left the pairing to #598, which landed both in
 one commit.
 
