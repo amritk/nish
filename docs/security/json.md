@@ -320,7 +320,7 @@ strings keep only the strings").
 tree of `JsonValue` handles over the tokenizer above, and writes one back
 through `JsonWriter`'s `stringBytes` and `keyBytes`.
 
-**Anchors.** Every `file:line` in this section is at `@ANCHOR@` on
+**Anchors.** Every `file:line` in this section is at `e7041617` on
 `feature/json-parity/json-value`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files parses and is written
@@ -353,11 +353,11 @@ duplicate policy, and what it builds.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| JSON-8 | Low | `std/json-value.ts:@FINDKEY@` (`findKey`) | `get` and `set` find a key by scanning the object's members, so a program that calls `get` once per member of an object the peer sized does work quadratic in that size. The parse itself never scans: its duplicate check sorts. | **Accepted.** It is in the module header and the guide, which say to walk a large object once with `keyAt` and `at`; an index per object would cost every parse an allocation the reuse rule is there to avoid. |
-| JSON-9 | Low | `std/json-value.ts:@APPEND@` (`append`) | A built container that outgrows its slots moves them to the end of the slot arrays and leaves the old ones unused until `clear` or the next `parse`, so building alternately into many containers holds up to about twice the slots it uses. Parsing does not do this: each container's members are placed once, at its close. | **Accepted.** What a program builds is the program's; the waste is bounded by a constant factor and released by `clear`. |
+| JSON-8 | Low | `std/json-value.ts:600` (`findKey`) | `get` and `set` find a key by scanning the object's members, so a program that calls `get` once per member of an object the peer sized does work quadratic in that size. The parse itself never scans: its duplicate check sorts. | **Accepted.** It is in the module header and the guide, which say to walk a large object once with `keyAt` and `at`; an index per object would cost every parse an allocation the reuse rule is there to avoid. |
+| JSON-9 | Low | `std/json-value.ts:866` (`append`) | A built container that outgrows its slots moves them to the end of the slot arrays and leaves the old ones unused until `clear` or the next `parse`, so building alternately into many containers holds up to about twice the slots it uses. Parsing does not do this: each container's members are placed once, at its close. | **Accepted.** What a program builds is the program's; the waste is bounded by a constant factor and released by `clear`. |
 
 The tree closes JSON-3 for its callers: a repeated key is
-`JSON_VALUE_ERR_DUPLICATE` at `std/json-value.ts:@DUPKEYS@`, with `errorAt` at
+`JSON_VALUE_ERR_DUPLICATE` at `std/json-value.ts:419`, with `errorAt` at
 the first key that repeats an earlier one, unless the program sets
 `duplicates` to `JSON_VALUE_DUPLICATE_LAST`, which is `JSON.parse`'s reading.
 
@@ -395,16 +395,16 @@ each ("numbers: i64 max" through "numbers: u64 max + 1 is neither, and keeps
 its text"), with `u64` read without wrapping under Node too.
 
 **Handles.** A handle outside the document, from before a `clear` or a failed
-parse, reads as no value in every reader (`std/json-value.ts:@KIND@`, `kind`;
+parse, reads as no value in every reader (`std/json-value.ts:545`, `kind`;
 "readers: kind of -1 is NONE", "clear: every handle names nothing", "errors: a
 failed parse leaves no value", "reuse: a third, smaller body names only its own
 values").
 
 **Depth and termination.** The parse keeps its own stack of open containers,
 so the tokenizer's depth limit bounds the work and nothing recurses
-(`std/json-value.ts:@PARSE@`). A value is in at most one container, and adding
+(`std/json-value.ts:256`). A value is in at most one container, and adding
 one already in a container, a container to itself, or a container to anything
-inside it is `JSON_VALUE_ERR_ATTACHED` (`std/json-value.ts:@ADOPT@`;
+inside it is `JSON_VALUE_ERR_ATTACHED` (`std/json-value.ts:843`;
 "builders: push of an array into itself", "builders: push of the root into its
 own grandchild", "builders: set of an object on itself"), so a tree is finite.
 `write` recurses one level per container and stops at the writer's first
@@ -412,7 +412,7 @@ failure, so a parsed tree deeper than the writer allows ends at
 `JSON_WRITE_TOO_DEEP` ("write: past the writer's depth is JSON_WRITE_TOO_DEEP").
 
 **The sort is n log n.** An object of more than eight members is checked by a
-bottom-up merge sort of its keys (`std/json-value.ts:@SORT@`), so no choice of
+bottom-up merge sort of its keys (`std/json-value.ts:448`), so no choice of
 keys makes the check quadratic, as a hash table's collisions could.
 
 **The arena.** Values read back whole after `churn()` has reused whatever a
@@ -427,7 +427,7 @@ document's bytes exactly as `key` and `string` escape a string of them
 and stringBytes as key and string write it"; `tests/link/std_json_writer`,
 "bytes: every byte value, minified, as string and key write it" and the lines
 after it). A window outside its array is `JSON_WRITE_BAD_WINDOW` before
-anything is written (`std/json.ts:@KEYBYTES@`, `:@STRINGBYTES@`; "bytes: a
+anything is written (`std/json.ts:1098`, `:1137`; "bytes: a
 negative offset" through "bytes: keyBytes refuses a negative offset").
 
 ### Tests
