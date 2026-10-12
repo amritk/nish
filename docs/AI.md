@@ -897,8 +897,8 @@ export const main = (): i32 => {
   operator; a named function is trusted.
 - A short array runs on the calling thread at the cost of the loop, so there
   is no reason to guard a call by size. How short is sized from what `f`
-  costs: a cheap body is divided only past about a million elements, one with
-  a loop far sooner.
+  costs: a body estimated at 3, such as `(x) => x + 1`, is divided only past
+  about 700,000 elements, a cheaper one later, one with a loop far sooner.
 - **An arrow given to one of the four reads the function's `const` locals
   and parameters**, the one exception to "an arrow captures nothing":
   `const k = 3; parallelMap(xs, (x) => x * k)`. Each is read-only in the body
