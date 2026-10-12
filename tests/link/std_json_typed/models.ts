@@ -45,6 +45,16 @@ export class Match {
   }
 }
 
+/** An array of scalars, and an array of objects that may be `null`. */
+export class Lists {
+  xs: i32[];
+  members: Player[] | null = null;
+
+  constructor() {
+    this.xs = [];
+  }
+}
+
 /** One of each scalar, for the range and type checks. */
 export class Scalars {
   a: i32 = 0;

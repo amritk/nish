@@ -5180,6 +5180,46 @@ if (!only || "std_json_typed".includes(only)) {
   } else {
     skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
   }
+  // What `jsonDecode` calls does run under Node: `readers.ts` drives the
+  // decoder's readers directly, at both ends of each integer range, and both
+  // runs must print these lines. An `i64` is a BigInt there, so a reader that
+  // mixed one with a number throws.
+  const readerLines = [
+    "i32 2147483647 -2147483648",
+    "u32 4294967295 0",
+    "i64 9223372036854775807 -9223372036854775808",
+    "string abc",
+    "i32Array 2 1 -2",
+    "i64Array 2 -9223372036854775808 9223372036854775807",
+    "failed 0",
+    "i32 below its range -21 at 1",
+    "i64 below its range -21 at 1",
+  ]
+  const readersWant = readerLines.map((l) => `${l}\n`).join("")
+  const readers = path.join(dir, "readers.ts")
+  const underNode = runUnderPrelude(readers, [])
+  check(
+    "link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines",
+    underNode.status === 0 && underNode.stdout === readersWant,
+    `--- want\n${readersWant}--- node\n${shown(underNode)}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "link", "std_json_typed_readers")
+    fs.rmSync(outDir, { recursive: true, force: true })
+    const app = path.join(outDir, "app")
+    const built = spawnSync(NISH, [readers, "-o", `${outDir}${path.sep}`, "--link", app], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_typed: readers.ts built natively prints the same lines",
+      native.status === 0 && native.stdout === readersWant,
+      `--- want\n${readersWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no clang, so readers.ts is not built natively")
+  }
   const run = runUnderPrelude(path.join(dir, "node.ts"), [])
   check(
     "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",

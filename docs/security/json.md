@@ -1,4 +1,4 @@
-# Security record: JSON — the tokenizer
+# Security record: JSON — the tokenizer and the typed layer
 
 The record of WP34 N11's second stage: `nish/json-tokenizer`
 (`std/json-tokenizer.ts`), the validating tokenizer a server runs over a body
@@ -6,7 +6,8 @@ it took from a peer. It says what the tokenizer refuses and with which code,
 what it caps and where the cap is set, what it allocates, and the test that
 pins each property. It is written with the code rather than after an audit, so
 that the audit of the JSON layer starts from evidence. The typed layer that
-decodes into a class (#573) will extend this record.
+decodes into a class (#573) is the last section, [The typed layer](#the-typed-layer),
+with its own scope, anchors and findings.
 
 **Anchors.** Every `file:line` below is at `4411ea9`, the module's head in this
 change, on top of `main` at `ce9d394`.
@@ -18,7 +19,8 @@ outside the window is read: 20,000 seeded mutants of the corpus each end with
 one verdict, alone, after a `reset` and inside a window padded with bytes that
 would change the verdict if a read strayed. Every limit has its own code, and
 each is checked before the work it bounds. A reused tokenizer keeps the arena
-flat. Two findings are open and one is accepted, all Low.
+flat. One finding is open, one is accepted, and JSON-3 is fixed by the typed
+layer, all Low.
 
 ## Scope
 
@@ -48,7 +50,7 @@ answered with `JSON_TOK_ERR_WINDOW` rather than a panic.
 | --- | --- | --- | --- | --- |
 | JSON-1 | Low | `std/json-tokenizer.ts:933` (`keyEquals`), `:875` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
 | JSON-2 | Low | `std/json-tokenizer.ts:255` (`JSON_TOK_END_CEILING`), `:505` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. The guard's other arm, that `off + len` is not added before `off <= src.length - len` has proven it fits, is pinned by "WINDOW: an offset and a length of 2^31 - 1, refused without overflow" and "WINDOW: a length of 2^31 - 1 from 0": with a naive `off + len > src.length` the first panics with `attempt to add with overflow`. The ceiling arm itself is not reached by any test: a window passes the first test only inside its array, so ending past 2,147,483,583 takes an array of at least that many bytes. The language allows such a `u8[]` (`NISH_ARRAY_MAX` in `runtime/runtime.c` is 2^31 − 1 elements), but it is 2 GiB of memory on the host that runs the suite, which is the reason, not a limit of the language. | **Open.** The ceiling is one compare in `reset`; a test of it would allocate 2 GiB. |
-| JSON-3 | Low | `std/json-tokenizer.ts:542` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Open, by design.** The tokenizer reports what is there; refusing duplicates is the typed layer's rule (#573, which rejects them). A program reading tokens itself decides, and is told so in the module header. |
+| JSON-3 | Low | `std/json-tokenizer.ts:542` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Fixed by the typed layer** (#573). The tokenizer still reports what is there, and a program reading tokens itself decides, as its module header says. `jsonDecode` refuses a duplicate of a field with `JSON_DECODE_DUPLICATE` before the second value is read, at every depth (`std/json-typed.ts`, `duplicateField`; [The typed layer](#the-typed-layer); "a duplicate key: code" and "nested: a duplicate key in an element" in `tests/link/std_json_typed`). |
 
 ## Properties verified
 
@@ -221,7 +223,11 @@ code written per class keeps one flag per field (`src/emit-json.ts:275`).
 code", "an unknown key: errorAt", "nested: an unknown key in an element"),
 and with `ignoreUnknown` stepped over whole, nested containers included, and
 still checked ("ignoreUnknown: unknown keys and their values are stepped
-over", "ignoreUnknown: what is stepped over is still checked").
+over", "ignoreUnknown: what is stepped over is still checked"), inside an
+array's element and a `| null` field's object too, with every key after a
+skipped one still read ("ignoreUnknown: keys stepped over in an element and in
+a | null object", "ignoreUnknown: every key after a skipped one is still
+read").
 
 **Missing fields** are refused at the object's closing brace, at every depth
 ("a missing key: errorAt", "an empty object: code", "nested: a missing key in
@@ -236,8 +242,10 @@ top: code", "nested: an element that is not an object", "nested: an object
 where the array is", "nested: null for an array that is not | null"). An
 integer field takes only an integer written without a fraction or an exponent,
 in its range (`std/json-typed.ts:272`): "a fraction for an i32", "an exponent
-for an i32", "2^31 for an i32", "-1 for a u32", "2^32 for a u32", "2^63 for
-an i64". Which field types may be read at all is the compiler's rule, held at
+for an i32", "2^31 for an i32", "-2^31 - 1 for an i32", "-1 for a u32", "2^32
+for a u32", "2^63 for an i64", "-2^63 - 1 for an i64". `null` inside an array
+is a type error too ("null in an array of i32: code", "null in an array of
+objects: code", "null in an array of strings: code"). Which field types may be read at all is the compiler's rule, held at
 the call over every class the call reaches (`src/json-typed.ts:201`), with a
 negative case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_nested_field`, `json_reject_nullable_field`,
@@ -285,6 +293,10 @@ strings keep only the strings").
   `std_json_typed`: every line quoted in this section.
 - `link/std_json_typed: each of the ${lines.length} lines decoded and encoded natively is JSON.stringify(JSON.parse(line))`
 - `link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)`
+- `link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines`
+  and `link/std_json_typed: readers.ts built natively prints the same lines`:
+  each integer reader at both ends of its range, under Node too, where an
+  `i64` is a BigInt.
 - `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
   each `tests/cases/json_reject_*` case named above.
 - `performance gate: ${source} compiles with no performance warning (--number-mode ${mode})`,

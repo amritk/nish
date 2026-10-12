@@ -268,23 +268,28 @@ export class JsonDecoder {
     return true
   }
 
-  /** The next value as an integer from `lo` to `hi`, or `0` with an error. */
-  integer(lo: i64, hi: i64): i64 {
+  /**
+   * The next value as an integer, from `lo` to `hi` when `bounded`, or `0`
+   * with an error. Every `i64` it answers is the tokenizer's or made with
+   * `toI64`, so that under Node, where an `i64` is a BigInt, what a caller
+   * computes with it never mixes a BigInt with a number.
+   */
+  integer(lo: i64, hi: i64, bounded: boolean): i64 {
     const k: i32 = this.take()
     if (k !== JSON_TOK_NUMBER) {
       if (k >= 0) {
         this.wrongType()
       }
-      return 0
+      return toI64(0)
     }
     if (!this.tok.isInteger()) {
       this.fail(JSON_DECODE_RANGE, this.tok.tokStart)
-      return 0
+      return toI64(0)
     }
     const v: i64 = this.tok.numberI64()
-    if (v < lo || v > hi) {
+    if (bounded && (v < lo || v > hi)) {
       this.fail(JSON_DECODE_RANGE, this.tok.tokStart)
-      return 0
+      return toI64(0)
     }
     return v
   }
@@ -292,20 +297,19 @@ export class JsonDecoder {
   i32(): i32 {
     const lo: i64 = -2147483648
     const hi: i64 = 2147483647
-    return toI32(this.integer(lo, hi))
+    return toI32(this.integer(lo, hi, true))
   }
 
+  /** The bounds are compared and never computed with, so under Node a number beside a BigInt is fine. */
   u32(): u32 {
     const lo: i64 = 0
     const hi: i64 = 4294967295
-    return toU32(this.integer(lo, hi))
+    return toU32(this.integer(lo, hi, true))
   }
 
-  /** Any integer `isInteger` accepts fits an `i64`, so the range is the type's. */
+  /** Any integer `isInteger` accepts fits an `i64`, so there is no range to check. */
   i64(): i64 {
-    const one: i64 = 1
-    const lo: i64 = one << toI64(63)
-    return this.integer(lo, -(lo + one))
+    return this.integer(toI64(0), toI64(0), false)
   }
 
   f64(): f64 {

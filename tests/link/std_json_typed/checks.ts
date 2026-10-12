@@ -30,7 +30,7 @@ import {
 } from "nish/json-typed";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { Chain, Match, Player, Scalars, Team } from "./models.ts";
+import { Chain, Lists, Match, Player, Scalars, Team } from "./models.ts";
 
 /** The bytes of `s`, as the decoder reads them. */
 const jtBytes = (s: string): u8[] => {
@@ -176,6 +176,8 @@ const jtErrors = (t: Suite): void => {
   jtScalarError(t, "a fraction for an i32", `{"a":1.5,"b":2,"c":3,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 5);
   jtScalarError(t, "an exponent for an i32", `{"a":1e2,"b":2,"c":3,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 5);
   jtScalarError(t, "2^31 for an i32", `{"a":2147483648,"b":2,"c":3,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 5);
+  jtScalarError(t, "-2^31 - 1 for an i32", `{"a":-2147483649,"b":2,"c":3,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 5);
+  jtScalarError(t, "-2^63 - 1 for an i64", `{"a":1,"b":2,"c":-9223372036854775809,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 17);
   jtScalarError(t, "-1 for a u32", `{"a":1,"b":-1,"c":3,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 11);
   jtScalarError(t, "2^32 for a u32", `{"a":1,"b":4294967296,"c":3,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 11);
   jtScalarError(t, "2^63 for an i64", `{"a":1,"b":2,"c":9223372036854775808,"d":4,"e":true,"f":"x"}`, JSON_DECODE_RANGE, 17);
@@ -303,6 +305,59 @@ const jtEncodeInArena = (t: Suite): void => {
   t.eqI32("encode: inside a using arena() block, every pass writes the same text", same, 3);
 };
 
+/** Decode `text` into a fresh `Lists` and check the code and the byte. */
+const jtListsError = (t: Suite, name: string, text: string, code: i32, at: i32): void => {
+  const d = jtDecode(text, new Lists(), new JsonLimits(), false);
+  t.eqI32(`${name}: code`, d.failed, code);
+  t.eqI32(`${name}: errorAt`, d.errorAt, at);
+};
+
+/**
+ * The paths a flat class does not reach: an array of objects that may be
+ * `null`, `null` inside an array, and keys `ignoreUnknown` steps over inside
+ * an array's element and inside a `| null` field's object, with the values
+ * after each one held.
+ */
+const jtNestedPaths = (t: Suite): void => {
+  const l = new Lists();
+  const absent = `{"xs":[1],"members":null}`;
+  t.eqI32("| null array of objects: null decodes", jtDecode(absent, l, new JsonLimits(), false).failed, JSON_DECODE_OK);
+  t.eqStr("| null array of objects: null encodes", jtEncode(l, 256), absent);
+  const present = `{"xs":[],"members":[{"name":"a","score":1,"rating":0.5,"tags":["t"]},{"name":"b","score":2,"rating":0,"tags":[]}]}`;
+  t.eqI32("| null array of objects: an array decodes into the null field", jtDecode(present, l, new JsonLimits(), false).failed, JSON_DECODE_OK);
+  t.eqStr("| null array of objects: and encodes", jtEncode(l, 512), present);
+  const one = `{"xs":[3],"members":[{"name":"c","score":3,"rating":1,"tags":[]}]}`;
+  t.eqI32("| null array of objects: a shorter array decodes into the array it holds", jtDecode(one, l, new JsonLimits(), false).failed, JSON_DECODE_OK);
+  t.eqStr("| null array of objects: what is left is the shorter one", jtEncode(l, 512), one);
+  t.eqI32("| null array of objects: and back to null", jtDecode(absent, l, new JsonLimits(), false).failed, JSON_DECODE_OK);
+  t.eqStr("| null array of objects: null again", jtEncode(l, 256), absent);
+
+  jtListsError(t, "null in an array of i32", `{"xs":[1,null],"members":null}`, JSON_DECODE_TYPE, 9);
+  jtListsError(t, "null in an array of objects", `{"xs":[],"members":[null]}`, JSON_DECODE_TYPE, 20);
+  jtListsError(
+    t,
+    "null in an array of strings",
+    `{"xs":[],"members":[{"name":"a","score":1,"rating":0,"tags":[null]}]}`,
+    JSON_DECODE_TYPE,
+    61
+  );
+
+  const team = new Team();
+  const d = jtDecode(
+    `{"id":5,"players":[{"zz":[1,{"q":2}],"name":"p","score":7,"yy":null,"rating":2,"tags":["k"]}],` +
+      `"captain":{"name":"c","xx":{},"score":8,"rating":3,"tags":[],"ww":"tail"}}`,
+    team,
+    new JsonLimits(),
+    true
+  );
+  t.eqI32("ignoreUnknown: keys stepped over in an element and in a | null object", d.failed, JSON_DECODE_OK);
+  t.eqStr(
+    "ignoreUnknown: every key after a skipped one is still read",
+    jtEncode(team, 512),
+    `{"id":5,"players":[{"name":"p","score":7,"rating":2,"tags":["k"]}],"captain":{"name":"c","score":8,"rating":3,"tags":[]}}`
+  );
+};
+
 /** The suite. */
 export const jtChecks = (): i32 => {
   const t = new Suite("std_json_typed");
@@ -312,6 +367,7 @@ export const jtChecks = (): i32 => {
   jtLimits(t);
   jtEncodings(t);
   jtEncodeInArena(t);
+  jtNestedPaths(t);
   return t.done();
 };
 

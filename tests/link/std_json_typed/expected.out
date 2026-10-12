@@ -27,6 +27,10 @@ PASS  an exponent for an i32: code
 PASS  an exponent for an i32: errorAt
 PASS  2^31 for an i32: code
 PASS  2^31 for an i32: errorAt
+PASS  -2^31 - 1 for an i32: code
+PASS  -2^31 - 1 for an i32: errorAt
+PASS  -2^63 - 1 for an i64: code
+PASS  -2^63 - 1 for an i64: errorAt
 PASS  -1 for a u32: code
 PASS  -1 for a u32: errorAt
 PASS  2^32 for a u32: code
@@ -91,4 +95,20 @@ PASS  encode: an object that holds itself ends at the writer's depth
 PASS  encode: and through an array
 PASS  encode: a new Match
 PASS  encode: inside a using arena() block, every pass writes the same text
-std_json_typed: 92 passed, 0 failed, 0 skipped
+PASS  | null array of objects: null decodes
+PASS  | null array of objects: null encodes
+PASS  | null array of objects: an array decodes into the null field
+PASS  | null array of objects: and encodes
+PASS  | null array of objects: a shorter array decodes into the array it holds
+PASS  | null array of objects: what is left is the shorter one
+PASS  | null array of objects: and back to null
+PASS  | null array of objects: null again
+PASS  null in an array of i32: code
+PASS  null in an array of i32: errorAt
+PASS  null in an array of objects: code
+PASS  null in an array of objects: errorAt
+PASS  null in an array of strings: code
+PASS  null in an array of strings: errorAt
+PASS  ignoreUnknown: keys stepped over in an element and in a | null object
+PASS  ignoreUnknown: every key after a skipped one is still read
+std_json_typed: 112 passed, 0 failed, 0 skipped

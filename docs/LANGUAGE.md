@@ -6126,7 +6126,9 @@ export const main = (): i32 => {
   (`tests/run.js`, "under Node, jsonDecode panics"). The translation is the
   code the compiler writes, written as TypeScript for each class: a function
   per class of the same calls into `JsonDecoder` and `JsonWriter`, which
-  everything else in the module already runs under Node. A program that
+  everything else in the module already runs under Node: `tests/run.js` runs
+  the decoder's readers there and natively and holds both to the same lines
+  (`tests/link/std_json_typed/readers.ts`). A program that
   imports `std/json-typed.ts` by path rather than as `nish/json-typed` is
   compiled as written and gets those bodies natively too.
 
