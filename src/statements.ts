@@ -82,6 +82,7 @@ import {
   N_WHILE,
   Node,
 } from "./nodes"
+import { JSON_OPTIONS, jsonOptionsShapeMessage } from "./json-typed"
 import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
@@ -748,7 +749,17 @@ const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
   const name = owner.children[0].text
   const kind = owner.kind === N_CLASS ? "class" : "interface"
   for (const member of members.children) {
-    if (member.kind === N_BLOCK) {
+    if (
+      member.kind === N_FIELD &&
+      owner.kind === N_CLASS &&
+      (member.flags & FLAG_STATIC) !== 0 &&
+      member.children[0].text === JSON_OPTIONS &&
+      owner.children[typeParameterSlot(owner)].children.length > 0
+    ) {
+      // A template's members are collected only once it is instantiated, so
+      // typed JSON's options on one are refused here, instantiated or not.
+      ctx.error(member, jsonOptionsShapeMessage(name))
+    } else if (member.kind === N_BLOCK) {
       // Named by TypeScript's `SyntaxKind`, as stage0 named every member it had no rule for.
       ctx.error(member, `Unsupported class member in \`${name}\`: ClassStaticBlockDeclaration`)
     } else if (member.kind === N_INDEX_SIGNATURE) {

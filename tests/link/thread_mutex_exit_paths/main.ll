@@ -260,7 +260,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @work(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %m) #0 {
+define hidden noundef i32 @work$(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %m) #0 {
 entry:
   %last.addr = alloca i32, align 4
   %pass.addr = alloca i32, align 4

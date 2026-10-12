@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 618
+export const RULE_COUNT: i32 = 626
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -81,6 +81,8 @@ const diagnosticRules = (): string[] => [
   "NL2479",
   ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope",
   "NL2476",
+  " is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals",
+  "NL2493",
   ": inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held",
   "NL2470",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join",
@@ -166,7 +168,7 @@ const diagnosticRules = (): string[] => [
   ", outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope",
   "NL2458",
   ". That reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value (`secret([1, 2, 3])`, a `new`, or a call that makes one) or a copy: ",
-  "NL2498",
+  "NL2500",
   "` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock",
   "NL2464",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",
@@ -223,6 +225,8 @@ const diagnosticRules = (): string[] => [
   "NL2488",
   "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
   "NL3028",
+  "` optional, and the field has no initializer: a missing optional key sets its field to the field's initializer, so an optional field declares one",
+  "NL2498",
   "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block",
   "NL2390",
   "`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of ",
@@ -265,6 +269,8 @@ const diagnosticRules = (): string[] => [
   "NL2426",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
+  "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
+  "NL2499",
   "` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: ",
   "NL2457",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
@@ -285,6 +291,8 @@ const diagnosticRules = (): string[] => [
   "NL2345",
   "Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)",
   "NL2276",
+  "with no type annotation, in a class that is not generic: it holds the class's typed JSON options and is not a field",
+  "NL2492",
   "` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in ",
   "NL2337",
   "finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more",
@@ -337,6 +345,8 @@ const diagnosticRules = (): string[] => [
   "NL3029",
   "; if (r.isErr()) { ... }`), propagate it with `.orReturn()`, or end on it with `.expect(message)`",
   "NL2025",
+  ": each field is renamed and made optional at most once, and no two fields share a key on the wire",
+  "NL2497",
   "`: a sender's arena is freed when its scope joins, so anything else would point into freed memory",
   "NL2475",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
@@ -437,6 +447,8 @@ const diagnosticRules = (): string[] => [
   "NL3012",
   "` is not supported; a module has no top-level code, so only `const` is available",
   "NL2084",
+  "` to a value that is not a string: a field's key on the wire is a string literal",
+  "NL2496",
   "Operator `+` requires two operands of the same numeric type or two strings, got ",
   "NL2231",
   "` cannot be exported: it is a C function this program calls, not one it defines",
@@ -455,6 +467,8 @@ const diagnosticRules = (): string[] => [
   "NL2342",
   "` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got ",
   "NL2455",
+  "`: an option names one of the class's own fields, spelled as it is declared",
+  "NL2495",
   "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
   "NL2135",
   "`parallelReduce` folds every block from its identity, and the identity of `",
@@ -643,6 +657,8 @@ const diagnosticRules = (): string[] => [
   "NL3034",
   "`: an unconstrained type parameter has no members; ",
   "NL2329",
+  "`: typed JSON's options are `rename` and `optional`",
+  "NL2494",
   "`Number` expects a string, number, or boolean, got ",
   "NL2146",
   "`readonly` is only permitted on an array type, got ",

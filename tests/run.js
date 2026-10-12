@@ -4693,6 +4693,9 @@ if (!only || "par_alloc".includes(only)) {
 // own, and `thread_scope_region_read_back` writes through what it reads back
 // out of its own containers, each a fresh object it made.
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
+// `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
+// `free`, and its map body `close`: each task stores only its own answer, so
+// spawn order and join order print the same.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4722,6 +4725,7 @@ for (const name of [
   "thread_scope_region_own_tables",
   "thread_scope_region_read_back",
   "thread_scope_region_param_lookup",
+  "thread_scope_libc_named_tasks",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -5320,11 +5324,86 @@ if (!only || "std_json_typed".includes(only)) {
   } else {
     skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
   }
+  // The same for `round-trip-kinds.txt` decoded into a `Kinds`: `u64`, enums
+  // and maps. `JSON.parse` reads an integer past 2^53 as the nearest double,
+  // which is not the `u64` the line holds, so each of those is kept as its
+  // own digits (`JSON.rawJSON` of its source); every other value is
+  // `JSON.parse`'s. A map's keys are in the input's order, and no line has a
+  // key that looks like an array index, which a JavaScript object would put
+  // first (docs/LANGUAGE.md, "Typed JSON").
+  const kindsInputs = path.join(dir, "round-trip-kinds.txt")
+  const kindsLines = fs
+    .readFileSync(kindsInputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  check(
+    "link/std_json_typed: round-trip-kinds.txt is ASCII",
+    kindsLines.every((l) => /^[\x20-\x7e]*$/.test(l)),
+    kindsLines.join("\n")
+  )
+  const exact = (line) =>
+    JSON.stringify(
+      JSON.parse(line, (_key, value, context) =>
+        typeof value === "number" && /^-?\d+$/.test(context.source) && !Number.isSafeInteger(value)
+          ? JSON.rawJSON(context.source)
+          : value
+      )
+    )
+  const kindsWant = kindsLines.map((l) => `${exact(l)}\n`).join("")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip-kinds", kindsInputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact`,
+      native.status === 0 && native.stdout === kindsWant,
+      `--- JSON.stringify(JSON.parse(line))\n${kindsWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip(
+      "skipped: link/std_json_typed: no native program to hold the kinds against JSON.parse and JSON.stringify"
+    )
+  }
+  // The same for `round-trip-options.txt` decoded into a `Reading`, whose
+  // numbers are `JsonNumber`s: every number comes back as its source text, so
+  // each is kept as `JSON.rawJSON` of its source, wide or long or not. The
+  // fields come back in declaration order and the optional `backup` as `null`
+  // where a line leaves it out; a line that is not a `Reading` is
+  // `JSON_DECODE_TYPE`.
+  const optionsInputs = path.join(dir, "round-trip-options.txt")
+  const optionsLines = fs
+    .readFileSync(optionsInputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  const isNumber = (v) => typeof v === "object" && v !== null && JSON.isRawJSON(v)
+  const reading = (line) => {
+    const o = JSON.parse(line, (_key, value, context) =>
+      typeof value === "number" ? JSON.rawJSON(context.source) : value
+    )
+    const backup = o.backup ?? null
+    const ok =
+      isNumber(o.value) &&
+      (backup === null || isNumber(backup)) &&
+      Array.isArray(o.series) &&
+      o.series.every(isNumber) &&
+      Object.values(o.named).every(isNumber)
+    return ok ? JSON.stringify({ value: o.value, backup, series: o.series, named: o.named }) : "error -20"
+  }
+  const optionsWant = optionsLines.map((l) => `${reading(l)}\n`).join("")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip-options", optionsInputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${optionsLines.length} lines of JsonNumber fields decoded and encoded natively keeps every number's source text`,
+      native.status === 0 && native.stdout === optionsWant,
+      `--- JSON.stringify(JSON.parse(line)), numbers as their source\n${optionsWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no native program to hold JsonNumber fields against JSON.parse")
+  }
   // What `jsonDecode` calls does run under Node: `readers.ts` drives the
   // decoder's readers directly, at both ends of each integer range, and both
   // runs must print these lines: every reader once, and each integer reader
-  // at both ends of its range. An `i64` is a BigInt there, so a reader that
-  // mixed one with a number throws.
+  // at both ends of its range, the key readers the written dispatch and a
+  // map's decoding call, and the `u64` encoders. An `i64` and a `u64` are
+  // BigInts there, so a reader that mixed one with a number throws.
   const readerLines = [
     "i32 2147483647 -2147483648",
     "u32 4294967295 0",
@@ -5355,6 +5434,30 @@ if (!only || "std_json_typed".includes(only)) {
     "unescaped 4 679",
     "raw 5 662",
     "window [edge] 0",
+    "u64 0 18446744073709551615 9223372036854775808",
+    "u64Array 2 1 18446744073709551615",
+    "u64ArrayOrNull null true",
+    "u64ArrayOrNull present 1 0",
+    "u64 [18446744073709551616] -21 at 1",
+    "u64 [-1] -21 at 1",
+    "u64 [-0] -21 at 1",
+    "u64 [1.5] -21 at 1",
+    'u64 ["1"] -20 at 1',
+    "key ab 2 97 98 -1 -1",
+    "key escaped 9 1571 9 -1",
+    "text 9 1571 0",
+    "encoded [0,18446744073709551615,9223372036854775808,[1,18446744073709551615],null,[7]] 0",
+    "mapRoom true true false 2 -25 at 1",
+    "number new 0 true 0 true 0",
+    "number 123456789012345678901234567890 false false true",
+    "number -0 true 0 false",
+    "number 18446744073709551615 false true 18446744073709551615",
+    "number -9223372036854775808 true -9223372036854775808 false 0",
+    "number 2.5e-3 false true",
+    "number a string -20 at 84, keeps 2.5e-3",
+    "number shorter 7 1 0",
+    "setText true:1e5 false:1e5 false:1e5 false:1e5 false:1e5 false:1e5 false:1e5 true:-1.5E-7",
+    "number encoded [-1.5E-7,-123456789012345678901234567890.000000000000000000001e-99999] 0",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")
