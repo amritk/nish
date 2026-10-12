@@ -1198,7 +1198,7 @@ export const sumOfSquares = (xs: f64[], scratch: f64[]): f64 => {
 declare void @nish.parallelMapInto$f64$f64$fn.6.square(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
 declare noundef double @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), double noundef) #1
 
-define hidden noundef double @square(double noundef %x) #0 {
+define hidden noundef double @square$(double noundef %x) #0 {
 entry:
   %0 = fmul double %x, %x
   ret double %0
@@ -1259,7 +1259,7 @@ declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 
-define hidden noundef i32 @label(i32 noundef %x) #0 {
+define hidden noundef i32 @label$(i32 noundef %x) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -1476,7 +1476,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @square(i32 noundef %n) #0 {
+define hidden noundef i32 @square$(i32 noundef %n) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %n, i32 %n)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -1491,7 +1491,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @cube(i32 noundef %n) #0 {
+define hidden noundef i32 @cube$(i32 noundef %n) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %n, i32 %n)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -1809,7 +1809,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @produce(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture %ch) #0 {
+define hidden noundef i32 @produce$(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture %ch) #0 {
 entry:
   call void @nish.Channel$i32.send(%struct.Channel$i32* %ch, i32 20)
   call void @nish.Channel$i32.send(%struct.Channel$i32* %ch, i32 22)
@@ -17974,7 +17974,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @width(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #0 {
+define hidden noundef i32 @width$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #0 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %k, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -18038,7 +18038,7 @@ define internal noundef i32 @nish.expose$arr.u8$i32$fn.5.width(%struct.Secret$ar
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
-  %2 = call i32 @width(%struct.nish_array* %1)
+  %2 = call i32 @width$(%struct.nish_array* %1)
   ret i32 %2
 }
 

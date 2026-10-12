@@ -38,7 +38,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef double @square(double noundef %x) #0 {
+define hidden noundef double @square$(double noundef %x) #0 {
 entry:
   %0 = fmul double %x, %x
   ret double %0

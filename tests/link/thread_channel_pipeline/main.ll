@@ -61,7 +61,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @produce(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture %p) #1 {
+define hidden noundef i32 @produce$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture %p) #1 {
 entry:
   %i.addr = alloca i32, align 4
   store i32 1, i32* %i.addr, align 4
@@ -102,7 +102,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @consume(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture %p) #1 {
+define hidden noundef i32 @consume$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture %p) #1 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4

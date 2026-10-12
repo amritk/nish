@@ -12,7 +12,7 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noundef i32 @nish_main$arrow0(i32 noundef) #1
-declare noundef i64 @cube(i32 noundef) #1
+declare noundef i64 @cube$(i32 noundef) #1
 declare noundef i32 @nish_main$arrow1(i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
@@ -411,7 +411,7 @@ land.end:
 
 for.body:
   %13 = load i32, i32* %i.addr, align 4
-  %14 = call i64 @cube(i32 %13)
+  %14 = call i64 @cube$(i32 %13)
   store i64 %14, i64* %y.addr, align 8
   %15 = load i32, i32* %i.addr, align 4
   %16 = trunc i64 %1 to i32

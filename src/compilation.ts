@@ -55,6 +55,7 @@ import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
 import { emitProgram } from "./emit"
+import { spellHiddenApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -1180,6 +1181,13 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // #610: every body is checked, so a hidden function's diagnostics are
+    // reported and its instantiations keyed; it takes its link symbol now.
+    const checked: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      checked.push(unit.checker.program)
+    }
+    spellHiddenApart(checked)
     // WP15 §2.4: what every call site proves for its callee's parameters. It
     // needs every body checked, instantiations included, and the attribute
     // analysis below reads the proofs it adds.

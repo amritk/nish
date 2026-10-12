@@ -17,7 +17,7 @@ declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64) #1
 
-define hidden noundef i64 @cube(i32 noundef %i) #0 {
+define hidden noundef i64 @cube$(i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = sext i32 %i to i64

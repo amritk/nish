@@ -1,5 +1,5 @@
 {"functions":[
-{"name":"double","symbol":"double","module":"tests/link/panics_parallel_length/main.ts","line":8,"panics":[{"kind":"overflow","line":8,"column":33,"proven":false}]},
+{"name":"double","symbol":"double$","module":"tests/link/panics_parallel_length/main.ts","line":8,"panics":[{"kind":"overflow","line":8,"column":33,"proven":false}]},
 {"name":"doubleAll","symbol":"doubleAll","module":"tests/link/panics_parallel_length/main.ts","line":10,"panics":[{"kind":"parallel-length","line":11,"column":3,"proven":false,"callee":"parallelMapInto<i32, i32, double>"}]},
 {"name":"main","symbol":"nish_main","module":"tests/link/panics_parallel_length/main.ts","line":14,"panics":[{"kind":"oom","line":15,"column":22,"allowed":true},{"kind":"oom","line":16,"column":22,"allowed":true},{"kind":"call","line":17,"column":3,"callee":"doubleAll","via":"panic"},{"kind":"oom","line":18,"column":15,"allowed":true},{"kind":"overflow","line":18,"column":18,"proven":false},{"kind":"overflow","line":18,"column":18,"proven":false},{"kind":"index","line":18,"column":18,"proven":false},{"kind":"index","line":18,"column":27,"proven":false},{"kind":"index","line":18,"column":36,"proven":false}]},
 {"name":"reduceBlockCount","symbol":"nish.reduceBlockCount","module":"std/threads.ts","line":97,"panics":[]},

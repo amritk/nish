@@ -4736,6 +4736,10 @@ if (!only || "par_alloc".includes(only)) {
 // two capture programs, whose bodies read their function's `const` locals:
 // Node's arrows close over them, and natively each one travels as a parameter,
 // so the same values print both ways.
+//
+// `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
+// `free`, and its map body `close`: each task stores only its own answer, so
+// spawn order and join order print the same.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4769,6 +4773,7 @@ for (const name of [
   "thread_scope_region_own_tables",
   "thread_scope_region_read_back",
   "thread_scope_region_param_lookup",
+  "thread_scope_libc_named_tasks",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
