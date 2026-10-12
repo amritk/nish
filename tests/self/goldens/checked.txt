@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 976 programs, 92334 dump lines.
+# 978 programs, 93701 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -57461,280 +57461,280 @@ function AesKey.constructor(this: AesKey, rounds: i32, roundKeys: u64[]): void -
 function aesLanes(pattern: u64): u64 -> @nish.aesLanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 112:9 two: u64 (const)
+  local 122:9 two: u64 (const)
 function aesBytes(pattern: u64): u64 -> @nish.aesBytes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 117:41 aesLanes -> @nish.aesLanes
+  callee 127:41 aesLanes -> @nish.aesLanes
 function aesSwapBits(q: u64[], i: i32, j: i32, mask: u64, shift: u64): void -> @nish.aesSwapBits
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 125:3
+  sharedWrite: 135:3
   escaping: i j
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 124:9 t: u64 (const)
+  local 134:9 t: u64 (const)
 function aesTranspose(q: u64[]): void -> @nish.aesTranspose
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesSwapBits
   calls: nish.aesBytes nish.aesSwapBits
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0
   stackSites=0 stackLocals=0
-  local 137:9 m1: u64 (const)
-  callee 137:19 aesBytes -> @nish.aesBytes
-  local 138:9 m2: u64 (const)
-  callee 138:19 aesBytes -> @nish.aesBytes
-  local 139:9 m4: u64 (const)
-  callee 139:19 aesBytes -> @nish.aesBytes
-  callee 140:3 aesSwapBits -> @nish.aesSwapBits
-  callee 141:3 aesSwapBits -> @nish.aesSwapBits
-  callee 142:3 aesSwapBits -> @nish.aesSwapBits
-  callee 143:3 aesSwapBits -> @nish.aesSwapBits
-  callee 144:3 aesSwapBits -> @nish.aesSwapBits
-  callee 145:3 aesSwapBits -> @nish.aesSwapBits
-  callee 146:3 aesSwapBits -> @nish.aesSwapBits
-  callee 147:3 aesSwapBits -> @nish.aesSwapBits
-  callee 148:3 aesSwapBits -> @nish.aesSwapBits
-  callee 149:3 aesSwapBits -> @nish.aesSwapBits
+  local 147:9 m1: u64 (const)
+  callee 147:19 aesBytes -> @nish.aesBytes
+  local 148:9 m2: u64 (const)
+  callee 148:19 aesBytes -> @nish.aesBytes
+  local 149:9 m4: u64 (const)
+  callee 149:19 aesBytes -> @nish.aesBytes
   callee 150:3 aesSwapBits -> @nish.aesSwapBits
   callee 151:3 aesSwapBits -> @nish.aesSwapBits
+  callee 152:3 aesSwapBits -> @nish.aesSwapBits
+  callee 153:3 aesSwapBits -> @nish.aesSwapBits
+  callee 154:3 aesSwapBits -> @nish.aesSwapBits
+  callee 155:3 aesSwapBits -> @nish.aesSwapBits
+  callee 156:3 aesSwapBits -> @nish.aesSwapBits
+  callee 157:3 aesSwapBits -> @nish.aesSwapBits
+  callee 158:3 aesSwapBits -> @nish.aesSwapBits
+  callee 159:3 aesSwapBits -> @nish.aesSwapBits
+  callee 160:3 aesSwapBits -> @nish.aesSwapBits
+  callee 161:3 aesSwapBits -> @nish.aesSwapBits
 function aesPack(q: u64[], buf: u8[]): void -> @nish.aesPack
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 166:5
+  sharedWrite: 176:5
   calls: nish.aesTranspose
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesTranspose#0
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 165:12 i: i32 (let)
-  local 168:12 k: i32 (let)
-  local 169:11 low: u64 (const)
-  local 170:11 high: u64 (const)
-  local 171:14 c: i32 (let)
-  callee 176:3 aesTranspose -> @nish.aesTranspose
+  local 175:12 i: i32 (let)
+  local 178:12 k: i32 (let)
+  local 179:11 low: u64 (const)
+  local 180:11 high: u64 (const)
+  local 181:14 c: i32 (let)
+  callee 186:3 aesTranspose -> @nish.aesTranspose
 function aesUnpack(buf: u8[], q: u64[]): void -> @nish.aesUnpack
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 190:7
+  sharedWrite: 200:7
   calls: nish.aesTranspose
   pointer buf: size=0 writesThrough=true captured=false
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesTranspose#0
   stackSites=0 stackLocals=0
-  callee 184:3 aesTranspose -> @nish.aesTranspose
-  local 186:12 k: i32 (let)
-  local 187:11 low: u64 (const)
-  local 188:11 high: u64 (const)
-  local 189:14 c: i32 (let)
+  callee 194:3 aesTranspose -> @nish.aesTranspose
+  local 196:12 k: i32 (let)
+  local 197:11 low: u64 (const)
+  local 198:11 high: u64 (const)
+  local 199:14 c: i32 (let)
 function aesSbox(q: u64[]): void -> @nish.aesSbox
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 337:3
+  sharedWrite: 347:3
   calls: nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 205:9 x0: u64 (const)
-  local 206:9 x1: u64 (const)
-  local 207:9 x2: u64 (const)
-  local 208:9 x3: u64 (const)
-  local 209:9 x4: u64 (const)
-  local 210:9 x5: u64 (const)
-  local 211:9 x6: u64 (const)
-  local 212:9 x7: u64 (const)
-  local 215:9 y14: u64 (const)
-  local 216:9 y13: u64 (const)
-  local 217:9 y9: u64 (const)
-  local 218:9 y8: u64 (const)
-  local 219:9 t0: u64 (const)
-  local 220:9 y1: u64 (const)
-  local 221:9 y4: u64 (const)
-  local 222:9 y12: u64 (const)
-  local 223:9 y2: u64 (const)
-  local 224:9 y5: u64 (const)
-  local 225:9 y3: u64 (const)
-  local 226:9 t1: u64 (const)
-  local 227:9 y15: u64 (const)
-  local 228:9 y20: u64 (const)
-  local 229:9 y6: u64 (const)
-  local 230:9 y10: u64 (const)
-  local 231:9 y11: u64 (const)
-  local 232:9 y7: u64 (const)
-  local 233:9 y17: u64 (const)
-  local 234:9 y19: u64 (const)
-  local 235:9 y16: u64 (const)
-  local 236:9 y21: u64 (const)
-  local 237:9 y18: u64 (const)
-  local 240:9 t2: u64 (const)
-  local 241:9 t3: u64 (const)
-  local 242:9 t4: u64 (const)
-  local 243:9 t5: u64 (const)
-  local 244:9 t6: u64 (const)
-  local 245:9 t7: u64 (const)
-  local 246:9 t8: u64 (const)
-  local 247:9 t9: u64 (const)
-  local 248:9 t10: u64 (const)
-  local 249:9 t11: u64 (const)
-  local 250:9 t12: u64 (const)
-  local 251:9 t13: u64 (const)
-  local 252:9 t14: u64 (const)
-  local 253:9 t15: u64 (const)
-  local 254:9 t16: u64 (const)
-  local 255:9 t17: u64 (const)
-  local 256:9 t18: u64 (const)
-  local 257:9 t19: u64 (const)
-  local 258:9 t20: u64 (const)
-  local 259:9 t21: u64 (const)
-  local 260:9 t22: u64 (const)
-  local 261:9 t23: u64 (const)
-  local 262:9 t24: u64 (const)
-  local 264:9 t25: u64 (const)
-  local 265:9 t26: u64 (const)
-  local 266:9 t27: u64 (const)
-  local 267:9 t28: u64 (const)
-  local 268:9 t29: u64 (const)
-  local 269:9 t30: u64 (const)
-  local 270:9 t31: u64 (const)
-  local 271:9 t32: u64 (const)
-  local 272:9 t33: u64 (const)
-  local 273:9 t34: u64 (const)
-  local 274:9 t35: u64 (const)
-  local 275:9 t36: u64 (const)
-  local 276:9 t37: u64 (const)
-  local 277:9 t38: u64 (const)
-  local 278:9 t39: u64 (const)
-  local 279:9 t40: u64 (const)
-  local 281:9 t41: u64 (const)
-  local 282:9 t42: u64 (const)
-  local 283:9 t43: u64 (const)
-  local 284:9 t44: u64 (const)
-  local 285:9 t45: u64 (const)
-  local 286:9 z0: u64 (const)
-  local 287:9 z1: u64 (const)
-  local 288:9 z2: u64 (const)
-  local 289:9 z3: u64 (const)
-  local 290:9 z4: u64 (const)
-  local 291:9 z5: u64 (const)
-  local 292:9 z6: u64 (const)
-  local 293:9 z7: u64 (const)
-  local 294:9 z8: u64 (const)
-  local 295:9 z9: u64 (const)
-  local 296:9 z10: u64 (const)
-  local 297:9 z11: u64 (const)
-  local 298:9 z12: u64 (const)
-  local 299:9 z13: u64 (const)
-  local 300:9 z14: u64 (const)
-  local 301:9 z15: u64 (const)
-  local 302:9 z16: u64 (const)
-  local 303:9 z17: u64 (const)
-  local 306:9 t46: u64 (const)
-  local 307:9 t47: u64 (const)
-  local 308:9 t48: u64 (const)
-  local 309:9 t49: u64 (const)
-  local 310:9 t50: u64 (const)
-  local 311:9 t51: u64 (const)
-  local 312:9 t52: u64 (const)
-  local 313:9 t53: u64 (const)
-  local 314:9 t54: u64 (const)
-  local 315:9 t55: u64 (const)
-  local 316:9 t56: u64 (const)
-  local 317:9 t57: u64 (const)
-  local 318:9 t58: u64 (const)
-  local 319:9 t59: u64 (const)
-  local 320:9 t60: u64 (const)
-  local 321:9 t61: u64 (const)
-  local 322:9 t62: u64 (const)
-  local 323:9 t63: u64 (const)
-  local 324:9 t64: u64 (const)
-  local 325:9 t65: u64 (const)
-  local 326:9 t66: u64 (const)
-  local 327:9 s0: u64 (const)
-  local 328:9 s6: u64 (const)
-  local 329:9 s7: u64 (const)
-  local 330:9 t67: u64 (const)
-  local 331:9 s3: u64 (const)
-  local 332:9 s4: u64 (const)
-  local 333:9 s5: u64 (const)
-  local 334:9 s1: u64 (const)
-  local 335:9 s2: u64 (const)
+  local 215:9 x0: u64 (const)
+  local 216:9 x1: u64 (const)
+  local 217:9 x2: u64 (const)
+  local 218:9 x3: u64 (const)
+  local 219:9 x4: u64 (const)
+  local 220:9 x5: u64 (const)
+  local 221:9 x6: u64 (const)
+  local 222:9 x7: u64 (const)
+  local 225:9 y14: u64 (const)
+  local 226:9 y13: u64 (const)
+  local 227:9 y9: u64 (const)
+  local 228:9 y8: u64 (const)
+  local 229:9 t0: u64 (const)
+  local 230:9 y1: u64 (const)
+  local 231:9 y4: u64 (const)
+  local 232:9 y12: u64 (const)
+  local 233:9 y2: u64 (const)
+  local 234:9 y5: u64 (const)
+  local 235:9 y3: u64 (const)
+  local 236:9 t1: u64 (const)
+  local 237:9 y15: u64 (const)
+  local 238:9 y20: u64 (const)
+  local 239:9 y6: u64 (const)
+  local 240:9 y10: u64 (const)
+  local 241:9 y11: u64 (const)
+  local 242:9 y7: u64 (const)
+  local 243:9 y17: u64 (const)
+  local 244:9 y19: u64 (const)
+  local 245:9 y16: u64 (const)
+  local 246:9 y21: u64 (const)
+  local 247:9 y18: u64 (const)
+  local 250:9 t2: u64 (const)
+  local 251:9 t3: u64 (const)
+  local 252:9 t4: u64 (const)
+  local 253:9 t5: u64 (const)
+  local 254:9 t6: u64 (const)
+  local 255:9 t7: u64 (const)
+  local 256:9 t8: u64 (const)
+  local 257:9 t9: u64 (const)
+  local 258:9 t10: u64 (const)
+  local 259:9 t11: u64 (const)
+  local 260:9 t12: u64 (const)
+  local 261:9 t13: u64 (const)
+  local 262:9 t14: u64 (const)
+  local 263:9 t15: u64 (const)
+  local 264:9 t16: u64 (const)
+  local 265:9 t17: u64 (const)
+  local 266:9 t18: u64 (const)
+  local 267:9 t19: u64 (const)
+  local 268:9 t20: u64 (const)
+  local 269:9 t21: u64 (const)
+  local 270:9 t22: u64 (const)
+  local 271:9 t23: u64 (const)
+  local 272:9 t24: u64 (const)
+  local 274:9 t25: u64 (const)
+  local 275:9 t26: u64 (const)
+  local 276:9 t27: u64 (const)
+  local 277:9 t28: u64 (const)
+  local 278:9 t29: u64 (const)
+  local 279:9 t30: u64 (const)
+  local 280:9 t31: u64 (const)
+  local 281:9 t32: u64 (const)
+  local 282:9 t33: u64 (const)
+  local 283:9 t34: u64 (const)
+  local 284:9 t35: u64 (const)
+  local 285:9 t36: u64 (const)
+  local 286:9 t37: u64 (const)
+  local 287:9 t38: u64 (const)
+  local 288:9 t39: u64 (const)
+  local 289:9 t40: u64 (const)
+  local 291:9 t41: u64 (const)
+  local 292:9 t42: u64 (const)
+  local 293:9 t43: u64 (const)
+  local 294:9 t44: u64 (const)
+  local 295:9 t45: u64 (const)
+  local 296:9 z0: u64 (const)
+  local 297:9 z1: u64 (const)
+  local 298:9 z2: u64 (const)
+  local 299:9 z3: u64 (const)
+  local 300:9 z4: u64 (const)
+  local 301:9 z5: u64 (const)
+  local 302:9 z6: u64 (const)
+  local 303:9 z7: u64 (const)
+  local 304:9 z8: u64 (const)
+  local 305:9 z9: u64 (const)
+  local 306:9 z10: u64 (const)
+  local 307:9 z11: u64 (const)
+  local 308:9 z12: u64 (const)
+  local 309:9 z13: u64 (const)
+  local 310:9 z14: u64 (const)
+  local 311:9 z15: u64 (const)
+  local 312:9 z16: u64 (const)
+  local 313:9 z17: u64 (const)
+  local 316:9 t46: u64 (const)
+  local 317:9 t47: u64 (const)
+  local 318:9 t48: u64 (const)
+  local 319:9 t49: u64 (const)
+  local 320:9 t50: u64 (const)
+  local 321:9 t51: u64 (const)
+  local 322:9 t52: u64 (const)
+  local 323:9 t53: u64 (const)
+  local 324:9 t54: u64 (const)
+  local 325:9 t55: u64 (const)
+  local 326:9 t56: u64 (const)
+  local 327:9 t57: u64 (const)
+  local 328:9 t58: u64 (const)
+  local 329:9 t59: u64 (const)
+  local 330:9 t60: u64 (const)
+  local 331:9 t61: u64 (const)
+  local 332:9 t62: u64 (const)
+  local 333:9 t63: u64 (const)
+  local 334:9 t64: u64 (const)
+  local 335:9 t65: u64 (const)
+  local 336:9 t66: u64 (const)
+  local 337:9 s0: u64 (const)
+  local 338:9 s6: u64 (const)
+  local 339:9 s7: u64 (const)
+  local 340:9 t67: u64 (const)
+  local 341:9 s3: u64 (const)
+  local 342:9 s4: u64 (const)
+  local 343:9 s5: u64 (const)
+  local 344:9 s1: u64 (const)
+  local 345:9 s2: u64 (const)
 function aesShiftPlane(x: u64): u64 -> @nish.aesShiftPlane
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 352:8 aesLanes -> @nish.aesLanes
-  callee 353:22 aesLanes -> @nish.aesLanes
-  callee 354:22 aesLanes -> @nish.aesLanes
-  callee 355:22 aesLanes -> @nish.aesLanes
-  callee 356:22 aesLanes -> @nish.aesLanes
-  callee 357:22 aesLanes -> @nish.aesLanes
-  callee 358:22 aesLanes -> @nish.aesLanes
+  callee 362:8 aesLanes -> @nish.aesLanes
+  callee 363:22 aesLanes -> @nish.aesLanes
+  callee 364:22 aesLanes -> @nish.aesLanes
+  callee 365:22 aesLanes -> @nish.aesLanes
+  callee 366:22 aesLanes -> @nish.aesLanes
+  callee 367:22 aesLanes -> @nish.aesLanes
+  callee 368:22 aesLanes -> @nish.aesLanes
 function aesShiftRows(q: u64[]): void -> @nish.aesShiftRows
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 362:3
+  sharedWrite: 372:3
   calls: nish.aesShiftPlane nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 362:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 363:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 364:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 365:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 366:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 367:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 368:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 369:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 372:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 373:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 374:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 375:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 376:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 377:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 378:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 379:10 aesShiftPlane -> @nish.aesShiftPlane
 function aesNextRow(x: u64): u64 -> @nish.aesNextRow
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 374:22 aesLanes -> @nish.aesLanes
-  callee 374:69 aesLanes -> @nish.aesLanes
+  callee 384:22 aesLanes -> @nish.aesLanes
+  callee 384:69 aesLanes -> @nish.aesLanes
 function aesRowAfterNext(x: u64): u64 -> @nish.aesRowAfterNext
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 378:22 aesLanes -> @nish.aesLanes
-  callee 378:68 aesLanes -> @nish.aesLanes
+  callee 388:22 aesLanes -> @nish.aesLanes
+  callee 388:68 aesLanes -> @nish.aesLanes
 function aesMixColumns(q: u64[]): void -> @nish.aesMixColumns
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 404:3
+  sharedWrite: 414:3
   calls: nish.aesNextRow nish.aesRowAfterNext nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 388:9 n0: u64 (const)
-  callee 388:19 aesNextRow -> @nish.aesNextRow
-  local 389:9 n1: u64 (const)
-  callee 389:19 aesNextRow -> @nish.aesNextRow
-  local 390:9 n2: u64 (const)
-  callee 390:19 aesNextRow -> @nish.aesNextRow
-  local 391:9 n3: u64 (const)
-  callee 391:19 aesNextRow -> @nish.aesNextRow
-  local 392:9 n4: u64 (const)
-  callee 392:19 aesNextRow -> @nish.aesNextRow
-  local 393:9 n5: u64 (const)
-  callee 393:19 aesNextRow -> @nish.aesNextRow
-  local 394:9 n6: u64 (const)
-  callee 394:19 aesNextRow -> @nish.aesNextRow
-  local 395:9 n7: u64 (const)
-  callee 395:19 aesNextRow -> @nish.aesNextRow
-  local 396:9 t0: u64 (const)
-  local 397:9 t1: u64 (const)
-  local 398:9 t2: u64 (const)
-  local 399:9 t3: u64 (const)
-  local 400:9 t4: u64 (const)
-  local 401:9 t5: u64 (const)
-  local 402:9 t6: u64 (const)
-  local 403:9 t7: u64 (const)
-  callee 404:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 405:25 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 406:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 407:25 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 408:25 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 409:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 410:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 411:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  local 398:9 n0: u64 (const)
+  callee 398:19 aesNextRow -> @nish.aesNextRow
+  local 399:9 n1: u64 (const)
+  callee 399:19 aesNextRow -> @nish.aesNextRow
+  local 400:9 n2: u64 (const)
+  callee 400:19 aesNextRow -> @nish.aesNextRow
+  local 401:9 n3: u64 (const)
+  callee 401:19 aesNextRow -> @nish.aesNextRow
+  local 402:9 n4: u64 (const)
+  callee 402:19 aesNextRow -> @nish.aesNextRow
+  local 403:9 n5: u64 (const)
+  callee 403:19 aesNextRow -> @nish.aesNextRow
+  local 404:9 n6: u64 (const)
+  callee 404:19 aesNextRow -> @nish.aesNextRow
+  local 405:9 n7: u64 (const)
+  callee 405:19 aesNextRow -> @nish.aesNextRow
+  local 406:9 t0: u64 (const)
+  local 407:9 t1: u64 (const)
+  local 408:9 t2: u64 (const)
+  local 409:9 t3: u64 (const)
+  local 410:9 t4: u64 (const)
+  local 411:9 t5: u64 (const)
+  local 412:9 t6: u64 (const)
+  local 413:9 t7: u64 (const)
+  callee 414:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 415:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 416:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 417:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 418:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 419:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 420:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 421:20 aesRowAfterNext -> @nish.aesRowAfterNext
 function aesAddRoundKey(q: u64[], rk: u64[], at: i32): void -> @nish.aesAddRoundKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 417:3
+  sharedWrite: 427:3
   calls: nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   pointer rk: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 416:9 p: u32 (const)
+  local 426:9 p: u32 (const)
 function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @nish.aesBitslicedRound [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesSbox
@@ -57743,40 +57743,39 @@ function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @nish.aesBitsl
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSbox#0 nish.aesShiftRows#0 nish.aesMixColumns#0 nish.aesAddRoundKey#0
   pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesAddRoundKey#1
   stackSites=0 stackLocals=0
-  callee 436:3 aesSbox -> @nish.aesSbox
-  callee 437:3 aesShiftRows -> @nish.aesShiftRows
-  callee 438:3 aesMixColumns -> @nish.aesMixColumns
-  callee 439:3 aesAddRoundKey -> @nish.aesAddRoundKey
-function aesEncryptBatch(key: AesKey, buf: u8[], q: u64[]): void -> @nish.aesEncryptBatch
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee 446:3 aesSbox -> @nish.aesSbox
+  callee 447:3 aesShiftRows -> @nish.aesShiftRows
+  callee 448:3 aesMixColumns -> @nish.aesMixColumns
+  callee 449:3 aesAddRoundKey -> @nish.aesAddRoundKey
+function aesEncryptBatch(rk: u64[], rounds: i32, buf: u8[], q: u64[]): void -> @nish.aesEncryptBatch
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesPack
   calls: nish.aesAddRoundKey nish.aesBitslicedRound nish.aesPack nish.aesSbox nish.aesShiftRows nish.aesUnpack nish_panic_overflow
-  pointer key: size=32 writesThrough=false captured=false
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesAddRoundKey#1 nish.aesBitslicedRound#1 nish.aesAddRoundKey#1
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.aesPack#1 nish.aesUnpack#0
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesPack#0 nish.aesAddRoundKey#0 nish.aesBitslicedRound#0 nish.aesSbox#0 nish.aesShiftRows#0 nish.aesAddRoundKey#0 nish.aesUnpack#1
   stackSites=0 stackLocals=0
-  local 444:9 rk: u64[] (const)
-  callee 445:3 aesPack -> @nish.aesPack
-  callee 446:3 aesAddRoundKey -> @nish.aesAddRoundKey
-  local 447:12 round: i32 (let)
-  callee 448:5 aesBitslicedRound -> @nish.aesBitslicedRound
-  callee 450:3 aesSbox -> @nish.aesSbox
-  callee 451:3 aesShiftRows -> @nish.aesShiftRows
-  callee 452:3 aesAddRoundKey -> @nish.aesAddRoundKey
-  callee 453:3 aesUnpack -> @nish.aesUnpack
+  callee 457:3 aesPack -> @nish.aesPack
+  callee 458:3 aesAddRoundKey -> @nish.aesAddRoundKey
+  local 459:12 round: i32 (let)
+  callee 460:5 aesBitslicedRound -> @nish.aesBitslicedRound
+  callee 462:3 aesSbox -> @nish.aesSbox
+  callee 463:3 aesShiftRows -> @nish.aesShiftRows
+  callee 464:3 aesAddRoundKey -> @nish.aesAddRoundKey
+  callee 465:3 aesUnpack -> @nish.aesUnpack
 function aesSubWord(w: u32, q: u64[]): u32 -> @nish.aesSubWord
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 471:5
+  sharedWrite: 483:5
   calls: nish.aesSbox
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSbox#0
   stackSites=0 stackLocals=0
-  local 466:12 b: i32 (let)
-  local 467:9 plane: u64 (let)
-  local 468:14 m: i32 (let)
-  callee 473:3 aesSbox -> @nish.aesSbox
-  local 474:7 out: u32 (let)
-  local 475:12 b: i32 (let)
-  local 476:14 m: i32 (let)
+  local 478:12 b: i32 (let)
+  local 479:9 plane: u64 (let)
+  local 480:14 m: i32 (let)
+  callee 485:3 aesSbox -> @nish.aesSbox
+  local 486:7 out: u32 (let)
+  local 487:12 b: i32 (let)
+  local 488:14 m: i32 (let)
 function aesLoad32(data: u8[], at: i32): u32 -> @nish.aesLoad32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -57785,291 +57784,325 @@ function aesLoad32(data: u8[], at: i32): u32 -> @nish.aesLoad32
   stackSites=0 stackLocals=0
 function aesStore32(out: u8[], at: i32, w: u32): void -> @nish.aesStore32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 492:3
+  sharedWrite: 504:3
   escaping: at
   calls: nish_panic_index
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function aesExpand(key: u8[], rounds: i32): u64[] -> @nish.aesExpand
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 541:7
-  calls: nish.aesLoad32 nish.aesPack nish.aesStore32 nish.aesSubWord nish_exit nish_panic_div nish_panic_index nish_panic_overflow nish_write
+function aesScheduleInto(key: u8[], rounds: i32, rk: u64[]): void -> @nish.aesScheduleInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 560:9
+  calls: nish.aesLoad32 nish.aesPack nish.aesStore32 nish.aesSubWord nish_arena_mark nish_arena_release nish_exit nish_panic_div nish_panic_index nish_panic_overflow nish_write
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
+  pointer rk: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 505:9 nk: i32 (const)
-  local 506:9 total: i32 (const)
-  local 507:9 w: u32[] (const)
-  local 508:9 q: u64[] (const)
-  local 509:9 keyLength: i32 (const)
-  local 510:9 wLength: i32 (const)
-  local 512:7 rcon: u32 (let)
-  local 513:12 i: i32 (let)
-  local 515:13 at: i32 (const)
-  callee 517:16 aesLoad32 -> @nish.aesLoad32
-  local 520:11 temp: u32 (let)
-  callee 522:16 aesSubWord -> @nish.aesSubWord
-  callee 525:16 aesSubWord -> @nish.aesSubWord
-  local 531:9 rk: u64[] (const)
-  local 532:9 buf: u8[] (const)
-  local 533:12 round: i32 (let)
-  local 534:14 k: i32 (let)
-  local 535:16 j: i32 (let)
-  callee 536:9 aesStore32 -> @nish.aesStore32
-  callee 539:5 aesPack -> @nish.aesPack
-  local 540:14 b: i32 (let)
+  local 522:9 nk: i32 (const)
+  local 523:9 total: i32 (const)
+  local 524:9 w: u32[] (const)
+  local 525:9 q: u64[] (const)
+  local 526:9 keyLength: i32 (const)
+  local 527:9 wLength: i32 (const)
+  local 529:7 rcon: u32 (let)
+  local 530:12 i: i32 (let)
+  local 532:13 at: i32 (const)
+  callee 534:16 aesLoad32 -> @nish.aesLoad32
+  local 537:11 temp: u32 (let)
+  callee 539:16 aesSubWord -> @nish.aesSubWord
+  callee 542:16 aesSubWord -> @nish.aesSubWord
+  local 548:9 buf: u8[] (const)
+  local 549:9 rkLength: i32 (const)
+  local 550:12 round: i32 (let)
+  local 551:14 k: i32 (let)
+  local 552:16 j: i32 (let)
+  callee 553:9 aesStore32 -> @nish.aesStore32
+  callee 556:5 aesPack -> @nish.aesPack
+  local 557:14 b: i32 (let)
+  local 558:13 at: i32 (const)
 function aesLoad64(data: u8[], at: i32, end: i32): u64 -> @nish.aesLoad64
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 552:9 length: i32 (const)
-  local 553:7 v: u64 (let)
-  local 554:12 i: i32 (let)
-  local 555:11 from: i32 (const)
-  local 556:9 byte: u64 (let)
+  local 571:9 length: i32 (const)
+  local 572:7 v: u64 (let)
+  local 573:12 i: i32 (let)
+  local 574:11 from: i32 (const)
+  local 575:9 byte: u64 (let)
 function aesStore64(out: u8[], at: i32, v: u64): void -> @nish.aesStore64
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 571:7
+  sharedWrite: 590:7
   calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 567:9 length: i32 (const)
-  local 568:12 i: i32 (let)
-  local 569:11 to: i32 (const)
+  local 586:9 length: i32 (const)
+  local 587:12 i: i32 (let)
+  local 588:11 to: i32 (const)
 function aesCopyPrefix(dst: u8[], src: u8[], count: i32): void -> @nish.aesCopyPrefix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 581:5
+  sharedWrite: 600:5
   pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 578:9 dstLength: i32 (const)
-  local 579:9 srcLength: i32 (const)
-  local 580:12 i: i32 (let)
+  local 597:9 dstLength: i32 (const)
+  local 598:9 srcLength: i32 (const)
+  local 599:12 i: i32 (let)
 function aesKeyUsable(key: AesKey): boolean -> @nish.aesKeyUsable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   pointer key: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 593:9 rounds: i32 (const)
-  local 594:9 words: i32 (const)
-function aesEncryptOne(key: AesKey, block: u8[]): u8[] -> @nish.aesEncryptOne
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local 612:9 rounds: i32 (const)
+  local 613:9 words: i32 (const)
+function aesBlockInto(rk: u64[], rounds: i32, src: u8[], dst: u8[]): void -> @nish.aesBlockInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.aesCopyPrefix
-  calls: nish.aesCopyPrefix nish.aesEncryptBatch nish_exit nish_write
-  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
-  pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1
+  escaping: rounds
+  calls: nish.aesCopyPrefix nish.aesEncryptBatch nish_arena_mark nish_arena_release nish_exit nish_write
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesCopyPrefix#0
   stackSites=1 stackLocals=0
-  local 603:9 buf: u8[] (const)
-  callee 604:3 aesCopyPrefix -> @nish.aesCopyPrefix
-  callee 605:3 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 628:9 buf: u8[] (const)
+  callee 629:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  callee 630:3 aesEncryptBatch -> @nish.aesEncryptBatch
+  callee 631:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  local 632:12 i: i32 (let)
+function aesEncryptOne(key: AesKey, src: u8[], dst: u8[]): void -> @nish.aesEncryptOne
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesBlockInto
+  calls: nish.aesBlockInto nish.aesKeyUsable
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesBlockInto#2
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesBlockInto#3
+  stackSites=0 stackLocals=0
+  callee 644:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 647:3 aesBlockInto -> @nish.aesBlockInto
 function aesKey(key: u8[]): AesKey | null -> @nish.aesKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 622:3
-  calls: nish.AesKey.constructor nish.aesEncryptOne nish.aesExpand nish.aesLoad64 nish_alloc_struct
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesExpand#0
-  stackSites=1 stackLocals=0
-  local 615:9 length: i32 (const)
-  local 619:9 rounds: i32 (const)
-  local 620:9 expanded: AesKey (const)
-  callee 620:28 new AesKey -> @nish.AesKey.constructor
-  callee 620:47 aesExpand -> @nish.aesExpand
-  local 621:9 buf: u8[] (const)
-  callee 621:21 aesEncryptOne -> @nish.aesEncryptOne
-  callee 622:18 aesLoad64 -> @nish.aesLoad64
-  callee 623:18 aesLoad64 -> @nish.aesLoad64
+  sharedWrite: via nish.aesKeyInto
+  calls: nish.AesKey.constructor nish.aesKeyInto nish_alloc_struct nish_exit nish_panic_overflow nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesKeyInto#0
+  stackSites=0 stackLocals=0
+  local 656:9 length: i32 (const)
+  local 660:9 rounds: i32 (const)
+  local 661:9 expanded: AesKey (const)
+  callee 661:28 new AesKey -> @nish.AesKey.constructor
+  callee 662:8 aesKeyInto -> @nish.aesKeyInto
 function aesKeyInto(key: u8[], out: AesKey): boolean -> @nish.aesKeyInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 656:5
-  calls: nish.aesEncryptOne nish.aesExpand nish.aesLoad64 nish_arena_mark nish_arena_release nish_panic_overflow
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesExpand#0
+  sharedWrite: 699:3
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.aesScheduleInto nish_arena_mark nish_arena_release nish_exit nish_panic_overflow nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesScheduleInto#0
   pointer out: size=32 writesThrough=true captured=false passedTo=nish.aesEncryptOne#0
-  stackSites=1 stackLocals=0
-  local 644:9 length: i32 (const)
-  local 648:9 rounds: i32 (const)
-  local 649:9 roundKeys: u64[] (const)
-  local 650:9 words: i32 (const)
-  local 654:9 expanded: u64[] (const)
-  callee 654:27 aesExpand -> @nish.aesExpand
-  local 655:12 i: i32 (let)
-  local 660:9 buf: u8[] (const)
-  callee 660:21 aesEncryptOne -> @nish.aesEncryptOne
-  callee 661:13 aesLoad64 -> @nish.aesLoad64
-  callee 662:13 aesLoad64 -> @nish.aesLoad64
-  local 663:12 i: i32 (let)
+  stackSites=0 stackLocals=0
+  local 689:9 length: i32 (const)
+  local 693:9 rounds: i32 (const)
+  local 694:9 roundKeys: u64[] (const)
+  callee 698:3 aesScheduleInto -> @nish.aesScheduleInto
+  local 700:9 h: u8[] (const)
+  callee 701:3 aesEncryptOne -> @nish.aesEncryptOne
+  callee 702:13 aesLoad64 -> @nish.aesLoad64
+  callee 703:13 aesLoad64 -> @nish.aesLoad64
+  local 704:12 i: i32 (let)
 function aesEncryptBlock(key: AesKey, block: u8[]): u8[] | null -> @nish.aesEncryptBlock [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesCopyPrefix
-  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
+  sharedWrite: via nish.aesEncryptOne
+  calls: nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
   pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   stackSites=0 stackLocals=0
-  callee 671:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 674:9 out: u8[] (const)
-  callee 675:3 aesCopyPrefix -> @nish.aesCopyPrefix
-  callee 675:22 aesEncryptOne -> @nish.aesEncryptOne
+  callee 712:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 715:9 out: u8[] (const)
+  callee 716:3 aesEncryptOne -> @nish.aesEncryptOne
 function aesHeaderMask(key: AesKey, sample: u8[]): u8[] | null -> @nish.aesHeaderMask [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesCopyPrefix
-  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable
+  sharedWrite: via nish.aesEncryptOne
+  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
   pointer sample: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   stackSites=0 stackLocals=0
-  callee 685:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 688:9 mask: u8[] (const)
-  callee 689:3 aesCopyPrefix -> @nish.aesCopyPrefix
-  callee 689:23 aesEncryptOne -> @nish.aesEncryptOne
+  callee 726:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 729:9 block: u8[] (const)
+  callee 730:3 aesEncryptOne -> @nish.aesEncryptOne
+  local 731:9 mask: u8[] (const)
+  callee 732:3 aesCopyPrefix -> @nish.aesCopyPrefix
 function ghashMul32(x: u64, y: u64): u64 -> @nish.ghashMul32
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 707:9 m0: u64 (const)
-  local 708:9 m1: u64 (const)
-  local 709:9 m2: u64 (const)
-  local 710:9 m3: u64 (const)
-  local 711:9 x0: u64 (const)
-  local 712:9 x1: u64 (const)
-  local 713:9 x2: u64 (const)
-  local 714:9 x3: u64 (const)
-  local 715:9 y0: u64 (const)
-  local 716:9 y1: u64 (const)
-  local 717:9 y2: u64 (const)
-  local 718:9 y3: u64 (const)
-  local 719:9 z0: u64 (const)
-  local 720:9 z1: u64 (const)
-  local 721:9 z2: u64 (const)
-  local 722:9 z3: u64 (const)
-  local 723:9 w0: u64 (const)
+  local 750:9 m0: u64 (const)
+  local 751:9 m1: u64 (const)
+  local 752:9 m2: u64 (const)
+  local 753:9 m3: u64 (const)
+  local 754:9 x0: u64 (const)
+  local 755:9 x1: u64 (const)
+  local 756:9 x2: u64 (const)
+  local 757:9 x3: u64 (const)
+  local 758:9 y0: u64 (const)
+  local 759:9 y1: u64 (const)
+  local 760:9 y2: u64 (const)
+  local 761:9 y3: u64 (const)
+  local 762:9 z0: u64 (const)
+  local 763:9 z1: u64 (const)
+  local 764:9 z2: u64 (const)
+  local 765:9 z3: u64 (const)
+  local 766:9 w0: u64 (const)
 function ghashMultiply(y: u64[], hHi: u64, hLo: u64): void -> @nish.ghashMultiply [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 788:3
+  sharedWrite: 831:3
   calls: nish.ghashMul32 nish_panic_index
   pointer y: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 746:9 low32: u64 (const)
-  local 747:9 thirtyTwo: u64 (const)
-  local 748:9 a1: u64 (const)
-  local 749:9 a0: u64 (const)
-  local 750:9 a2: u64 (const)
-  local 751:9 b2: u64 (const)
-  local 754:9 l0: u64 (const)
-  callee 754:19 ghashMul32 -> @nish.ghashMul32
-  local 755:9 l1: u64 (const)
-  callee 755:19 ghashMul32 -> @nish.ghashMul32
-  local 756:9 l2: u64 (const)
-  callee 756:19 ghashMul32 -> @nish.ghashMul32
-  local 757:9 lHi: u64 (const)
-  local 758:9 lLo: u64 (const)
-  local 761:9 h0: u64 (const)
-  callee 761:19 ghashMul32 -> @nish.ghashMul32
-  local 762:9 h1: u64 (const)
-  callee 762:19 ghashMul32 -> @nish.ghashMul32
-  local 763:9 h2: u64 (const)
-  callee 763:19 ghashMul32 -> @nish.ghashMul32
-  local 764:9 hiHi: u64 (const)
-  local 765:9 hiLo: u64 (const)
-  local 768:9 m0: u64 (const)
-  callee 768:19 ghashMul32 -> @nish.ghashMul32
-  local 769:9 m1: u64 (const)
-  callee 769:19 ghashMul32 -> @nish.ghashMul32
-  local 770:9 m2: u64 (const)
-  callee 770:19 ghashMul32 -> @nish.ghashMul32
-  local 771:9 mHi: u64 (const)
-  local 772:9 mLo: u64 (const)
-  local 775:9 r3: u64 (const)
-  local 776:9 r2: u64 (const)
-  local 777:9 r1: u64 (const)
-  local 778:9 r0: u64 (const)
-  local 779:9 one: u64 (const)
-  local 780:9 top: u64 (const)
-  local 781:9 p3: u64 (const)
-  local 782:9 p2: u64 (const)
-  local 783:9 p1: u64 (const)
-  local 784:9 p0: u64 (const)
-  local 787:9 d1: u64 (const)
-function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @nish.ghashUpdate
+  local 789:9 low32: u64 (const)
+  local 790:9 thirtyTwo: u64 (const)
+  local 791:9 a1: u64 (const)
+  local 792:9 a0: u64 (const)
+  local 793:9 a2: u64 (const)
+  local 794:9 b2: u64 (const)
+  local 797:9 l0: u64 (const)
+  callee 797:19 ghashMul32 -> @nish.ghashMul32
+  local 798:9 l1: u64 (const)
+  callee 798:19 ghashMul32 -> @nish.ghashMul32
+  local 799:9 l2: u64 (const)
+  callee 799:19 ghashMul32 -> @nish.ghashMul32
+  local 800:9 lHi: u64 (const)
+  local 801:9 lLo: u64 (const)
+  local 804:9 h0: u64 (const)
+  callee 804:19 ghashMul32 -> @nish.ghashMul32
+  local 805:9 h1: u64 (const)
+  callee 805:19 ghashMul32 -> @nish.ghashMul32
+  local 806:9 h2: u64 (const)
+  callee 806:19 ghashMul32 -> @nish.ghashMul32
+  local 807:9 hiHi: u64 (const)
+  local 808:9 hiLo: u64 (const)
+  local 811:9 m0: u64 (const)
+  callee 811:19 ghashMul32 -> @nish.ghashMul32
+  local 812:9 m1: u64 (const)
+  callee 812:19 ghashMul32 -> @nish.ghashMul32
+  local 813:9 m2: u64 (const)
+  callee 813:19 ghashMul32 -> @nish.ghashMul32
+  local 814:9 mHi: u64 (const)
+  local 815:9 mLo: u64 (const)
+  local 818:9 r3: u64 (const)
+  local 819:9 r2: u64 (const)
+  local 820:9 r1: u64 (const)
+  local 821:9 r0: u64 (const)
+  local 822:9 one: u64 (const)
+  local 823:9 top: u64 (const)
+  local 824:9 p3: u64 (const)
+  local 825:9 p2: u64 (const)
+  local 826:9 p1: u64 (const)
+  local 827:9 p0: u64 (const)
+  local 830:9 d1: u64 (const)
+function ghashBlocksInto(y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], length: i32): void -> @nish.ghashBlocksInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 813:5
-  escaping: length
+  sharedWrite: 863:5
+  escaping: hHi hLo length
   calls: nish.aesLoad64 nish.ghashMultiply nish_panic_overflow
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashMultiply#0
-  pointer key: size=32 writesThrough=false captured=false
+  pointer _rk: size=0 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.aesLoad64#0 nish.aesLoad64#0
   stackSites=0 stackLocals=0
-  local 810:9 blocks: i32 (const)
-  local 811:12 block: i32 (let)
-  local 812:11 at: i32 (const)
-  callee 813:19 aesLoad64 -> @nish.aesLoad64
-  callee 814:19 aesLoad64 -> @nish.aesLoad64
-  callee 815:5 ghashMultiply -> @nish.ghashMultiply
+  local 860:9 blocks: i32 (const)
+  local 861:12 block: i32 (let)
+  local 862:11 at: i32 (const)
+  callee 863:19 aesLoad64 -> @nish.aesLoad64
+  callee 864:19 aesLoad64 -> @nish.aesLoad64
+  callee 865:5 ghashMultiply -> @nish.ghashMultiply
+function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @nish.ghashUpdate
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ghashBlocksInto
+  escaping: length
+  calls: nish.aesKeyUsable nish.ghashBlocksInto
+  pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashBlocksInto#0
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.ghashBlocksInto#4
+  stackSites=0 stackLocals=0
+  callee 876:76 aesKeyUsable -> @nish.aesKeyUsable
+  callee 879:3 ghashBlocksInto -> @nish.ghashBlocksInto
 function ghashLengths(y: u64[], key: AesKey, aadLength: i32, textLength: i32): void -> @nish.ghashLengths
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 821:3
+  sharedWrite: 884:3
   calls: nish.ghashMultiply
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashMultiply#0
   pointer key: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 823:3 ghashMultiply -> @nish.ghashMultiply
+  callee 886:3 ghashMultiply -> @nish.ghashMultiply
 function aesGcmJ0(key: AesKey, iv: u8[]): u8[] -> @nish.aesGcmJ0
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 836:5
+  sharedWrite: 899:5
   calls: nish.aesCopyPrefix nish.aesStore64 nish.ghashLengths nish.ghashUpdate nish_exit nish_panic_index nish_write
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashLengths#1
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1 nish.ghashUpdate#2
   stackSites=1 stackLocals=1
-  local 832:9 length: i32 (const)
-  local 833:9 j0: u8[] (const)
-  callee 835:5 aesCopyPrefix -> @nish.aesCopyPrefix
-  local 839:9 y: u64[] (const)
-  callee 840:3 ghashUpdate -> @nish.ghashUpdate
-  callee 841:3 ghashLengths -> @nish.ghashLengths
-  callee 842:3 aesStore64 -> @nish.aesStore64
-  callee 843:3 aesStore64 -> @nish.aesStore64
+  local 895:9 length: i32 (const)
+  local 896:9 j0: u8[] (const)
+  callee 898:5 aesCopyPrefix -> @nish.aesCopyPrefix
+  local 902:9 y: u64[] (const)
+  callee 903:3 ghashUpdate -> @nish.ghashUpdate
+  callee 904:3 ghashLengths -> @nish.ghashLengths
+  callee 905:3 aesStore64 -> @nish.aesStore64
+  callee 906:3 aesStore64 -> @nish.aesStore64
 function aesGcmLengthFits(length: i32): boolean -> @nish.aesGcmLengthFits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
+function aesCtrInto(rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesCtrInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 887:9
+  sharedWrite: 963:9
+  escaping: rounds
   calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
-  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 868:9 counter: u32 (const)
-  callee 868:24 aesLoad32 -> @nish.aesLoad32
-  local 869:9 buf: u8[] (const)
-  local 870:9 q: u64[] (const)
-  local 871:9 srcLength: i32 (const)
-  local 872:9 dstLength: i32 (const)
-  local 874:9 batches: i32 (const)
-  local 875:12 batch: i32 (let)
-  local 876:11 base: i32 (const)
-  local 877:14 k: i32 (let)
-  local 878:16 i: i32 (let)
-  callee 881:7 aesStore32 -> @nish.aesStore32
-  callee 883:5 aesEncryptBatch -> @nish.aesEncryptBatch
-  local 884:14 j: i32 (let)
-  local 885:13 at: i32 (const)
+  local 938:9 counter: u32 (const)
+  callee 938:24 aesLoad32 -> @nish.aesLoad32
+  local 939:9 buf: u8[] (const)
+  local 940:9 q: u64[] (const)
+  local 941:9 srcLength: i32 (const)
+  local 942:9 dstLength: i32 (const)
+  local 943:9 bufLength: i32 (const)
+  local 945:9 batches: i32 (const)
+  local 946:12 batch: i32 (let)
+  local 947:11 base: i32 (const)
+  local 948:14 k: i32 (let)
+  local 949:16 i: i32 (let)
+  callee 952:7 aesStore32 -> @nish.aesStore32
+  callee 954:5 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 960:14 at: i32 (let)
+  local 961:13 j: i32 (const)
+function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesCtrInto
+  escaping: length
+  calls: nish.aesCtrInto nish.aesKeyUsable
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0
+  pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesCtrInto#2
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesCtrInto#3
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesCtrInto#4
+  stackSites=0 stackLocals=0
+  callee 977:6 aesKeyUsable -> @nish.aesKeyUsable
+  callee 985:3 aesCtrInto -> @nish.aesCtrInto
 function aesGcmTag(y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void -> @nish.aesGcmTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 904:3
+  sharedWrite: 1000:3
   escaping: textLength
-  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release nish_exit nish_write
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashUpdate#0 nish.ghashUpdate#0 nish.ghashLengths#0
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashUpdate#1 nish.ghashLengths#1 nish.aesEncryptOne#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   pointer text: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   stackSites=0 stackLocals=0
-  local 899:9 aadLength: i32 (const)
-  callee 900:3 ghashUpdate -> @nish.ghashUpdate
-  callee 901:3 ghashUpdate -> @nish.ghashUpdate
-  callee 902:3 ghashLengths -> @nish.ghashLengths
-  local 903:9 mask: u8[] (const)
-  callee 903:22 aesEncryptOne -> @nish.aesEncryptOne
-  callee 904:17 aesLoad64 -> @nish.aesLoad64
-  callee 905:17 aesLoad64 -> @nish.aesLoad64
+  local 994:9 aadLength: i32 (const)
+  callee 995:3 ghashUpdate -> @nish.ghashUpdate
+  callee 996:3 ghashUpdate -> @nish.ghashUpdate
+  callee 997:3 ghashLengths -> @nish.ghashLengths
+  local 998:9 mask: u8[] (const)
+  callee 999:3 aesEncryptOne -> @nish.aesEncryptOne
+  callee 1000:17 aesLoad64 -> @nish.aesLoad64
+  callee 1001:17 aesLoad64 -> @nish.aesLoad64
 function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @nish.aesGcmTagMask [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -58082,18 +58115,18 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 926:9 length: i32 (const)
-  local 929:9 longest: i32 (const)
-  callee 930:8 aesKeyUsable -> @nish.aesKeyUsable
-  callee 930:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 933:9 j0: u8[] (const)
-  callee 933:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 934:9 out: u8[] (const)
-  callee 935:3 aesGcmCtr -> @nish.aesGcmCtr
-  local 936:9 tag: u64[] (const)
-  callee 937:3 aesGcmTag -> @nish.aesGcmTag
-  callee 938:3 aesStore64 -> @nish.aesStore64
-  callee 939:3 aesStore64 -> @nish.aesStore64
+  local 1022:9 length: i32 (const)
+  local 1025:9 longest: i32 (const)
+  callee 1026:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 1026:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1029:9 j0: u8[] (const)
+  callee 1029:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1030:9 out: u8[] (const)
+  callee 1031:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1032:9 tag: u64[] (const)
+  callee 1033:3 aesGcmTag -> @nish.aesGcmTag
+  callee 1034:3 aesStore64 -> @nish.aesStore64
+  callee 1035:3 aesStore64 -> @nish.aesStore64
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesGcmJ0
@@ -58103,21 +58136,21 @@ function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#4 nish.aesLoad64#0 nish.aesLoad64#0 nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 952:9 total: i32 (const)
-  callee 953:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 958:9 length: i32 (const)
-  callee 959:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 962:9 j0: u8[] (const)
-  callee 962:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 963:9 tag: u64[] (const)
-  callee 964:3 aesGcmTag -> @nish.aesGcmTag
-  local 965:9 same: u64 (const)
-  callee 965:21 aesGcmTagMask -> @nish.aesGcmTagMask
-  callee 968:5 aesLoad64 -> @nish.aesLoad64
-  callee 969:5 aesLoad64 -> @nish.aesLoad64
-  local 975:9 hashKeySet: u64 (const)
-  local 979:9 out: u8[] (const)
-  callee 980:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1048:9 total: i32 (const)
+  callee 1049:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 1054:9 length: i32 (const)
+  callee 1055:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1058:9 j0: u8[] (const)
+  callee 1058:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1059:9 tag: u64[] (const)
+  callee 1060:3 aesGcmTag -> @nish.aesGcmTag
+  local 1061:9 same: u64 (const)
+  callee 1061:21 aesGcmTagMask -> @nish.aesGcmTagMask
+  callee 1064:5 aesLoad64 -> @nish.aesLoad64
+  callee 1065:5 aesLoad64 -> @nish.aesLoad64
+  local 1071:9 hashKeySet: u64 (const)
+  local 1075:9 out: u8[] (const)
+  callee 1076:3 aesGcmCtr -> @nish.aesGcmCtr
 module std/crypto/chacha20poly1305.ts [package nish]
 const CHACHA20_KEY_SIZE: i32 = 32 [exported]
 const CHACHA20POLY1305_NONCE_SIZE: i32 = 12 [exported]
@@ -79105,6 +79138,643 @@ function jsonStringifyString(s: string): string -> @nish.jsonStringifyString [ex
   callee 1378:25 new JsonWriter -> @nish.JsonWriter.constructor
   callee 1379:3 JsonWriter.string -> @nish.JsonWriter.string
   callee 1380:10 JsonWriter.text -> @nish.JsonWriter.text
+program docs/cookbook/json-tokenizer.ts
+module docs/cookbook/json-tokenizer.ts (entry)
+import JSON_TOK_END from "nish/json-tokenizer" -> const JSON_TOK_END
+import JSON_TOK_KEY from "nish/json-tokenizer" -> const JSON_TOK_KEY
+import JSON_TOK_STRING from "nish/json-tokenizer" -> const JSON_TOK_STRING
+import JsonTokenizer from "nish/json-tokenizer" -> struct JsonTokenizer
+function messageInto(tok: JsonTokenizer, body: u8[], out: u8[]): i32 -> @messageInto [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.reset
+  calls: nish.JsonTokenizer.keyEquals nish.JsonTokenizer.next nish.JsonTokenizer.reset nish.JsonTokenizer.skipValue nish.JsonTokenizer.stringInto
+  pointer tok: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.reset#0 nish.JsonTokenizer.next#0 nish.JsonTokenizer.keyEquals#0 nish.JsonTokenizer.next#0 nish.JsonTokenizer.stringInto#0 nish.JsonTokenizer.skipValue#0 nish.JsonTokenizer.next#0
+  pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.JsonTokenizer.stringInto#1
+  stackSites=0 stackLocals=0
+  callee 8:3 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  local 9:7 length: i32 (let)
+  local 10:7 k: i32 (let)
+  callee 10:16 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 12:50 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee 13:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 15:18 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  callee 17:13 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
+  callee 21:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+module std/json-tokenizer.ts [package nish]
+const JSON_TOK_END: i32 = 0 [exported]
+const JSON_TOK_OBJECT_BEGIN: i32 = 1 [exported]
+const JSON_TOK_OBJECT_END: i32 = 2 [exported]
+const JSON_TOK_ARRAY_BEGIN: i32 = 3 [exported]
+const JSON_TOK_ARRAY_END: i32 = 4 [exported]
+const JSON_TOK_KEY: i32 = 5 [exported]
+const JSON_TOK_STRING: i32 = 6 [exported]
+const JSON_TOK_NUMBER: i32 = 7 [exported]
+const JSON_TOK_TRUE: i32 = 8 [exported]
+const JSON_TOK_FALSE: i32 = 9 [exported]
+const JSON_TOK_NULL: i32 = 10 [exported]
+const JSON_TOK_ERR_SYNTAX: i32 = -1 [exported]
+const JSON_TOK_ERR_TRUNCATED: i32 = -2 [exported]
+const JSON_TOK_ERR_TRAILING: i32 = -3 [exported]
+const JSON_TOK_ERR_UTF8: i32 = -4 [exported]
+const JSON_TOK_ERR_ESCAPE: i32 = -5 [exported]
+const JSON_TOK_ERR_SURROGATE: i32 = -6 [exported]
+const JSON_TOK_ERR_CONTROL: i32 = -7 [exported]
+const JSON_TOK_ERR_NUMBER: i32 = -8 [exported]
+const JSON_TOK_ERR_DEPTH: i32 = -9 [exported]
+const JSON_TOK_ERR_STRING_LIMIT: i32 = -10 [exported]
+const JSON_TOK_ERR_NUMBER_LIMIT: i32 = -11 [exported]
+const JSON_TOK_ERR_TOTAL_LIMIT: i32 = -12 [exported]
+const JSON_TOK_ERR_WINDOW: i32 = -13 [exported]
+const JSON_DEFAULT_MAX_DEPTH: i32 = 128 [exported]
+const JSON_DEFAULT_MAX_STRING_BYTES: i32 = 1048576 [exported]
+const JSON_DEFAULT_MAX_NUMBER_BYTES: i32 = 256 [exported]
+const JSON_DEFAULT_MAX_TOTAL_BYTES: i32 = 16777216 [exported]
+const JSON_TOK_WANT_VALUE: i32 = 0
+const JSON_TOK_WANT_VALUE_OR_CLOSE: i32 = 1
+const JSON_TOK_WANT_KEY_OR_CLOSE: i32 = 2
+const JSON_TOK_WANT_COLON: i32 = 3
+const JSON_TOK_WANT_COMMA_OR_CLOSE: i32 = 4
+const JSON_TOK_WANT_NOTHING: i32 = 5
+const JSON_TOK_IN_OBJECT: i32 = 1
+const JSON_TOK_IN_ARRAY: i32 = 2
+const JSON_TOK_TAB: i32 = 9
+const JSON_TOK_NEWLINE: i32 = 10
+const JSON_TOK_CARRIAGE_RETURN: i32 = 13
+const JSON_TOK_SPACE: i32 = 32
+const JSON_TOK_QUOTE: i32 = 34
+const JSON_TOK_PLUS: i32 = 43
+const JSON_TOK_COMMA: i32 = 44
+const JSON_TOK_MINUS: i32 = 45
+const JSON_TOK_DOT: i32 = 46
+const JSON_TOK_SLASH: i32 = 47
+const JSON_TOK_DIGIT_0: i32 = 48
+const JSON_TOK_DIGIT_1: i32 = 49
+const JSON_TOK_DIGIT_9: i32 = 57
+const JSON_TOK_COLON: i32 = 58
+const JSON_TOK_UPPER_A: i32 = 65
+const JSON_TOK_UPPER_E: i32 = 69
+const JSON_TOK_UPPER_F: i32 = 70
+const JSON_TOK_OPEN_BRACKET: i32 = 91
+const JSON_TOK_BACKSLASH: i32 = 92
+const JSON_TOK_CLOSE_BRACKET: i32 = 93
+const JSON_TOK_LOWER_A: i32 = 97
+const JSON_TOK_LOWER_B: i32 = 98
+const JSON_TOK_LOWER_E: i32 = 101
+const JSON_TOK_LOWER_F: i32 = 102
+const JSON_TOK_LOWER_N: i32 = 110
+const JSON_TOK_LOWER_R: i32 = 114
+const JSON_TOK_LOWER_T: i32 = 116
+const JSON_TOK_LOWER_U: i32 = 117
+const JSON_TOK_OPEN_BRACE: i32 = 123
+const JSON_TOK_CLOSE_BRACE: i32 = 125
+const JSON_TOK_BACKSPACE: i32 = 8
+const JSON_TOK_FORM_FEED: i32 = 12
+const JSON_TOK_ASCII_END: i32 = 128
+const JSON_TOK_CONTINUATION_LOW: i32 = 128
+const JSON_TOK_CONTINUATION_HIGH: i32 = 191
+const JSON_TOK_LEAD_TWO_LOW: i32 = 194
+const JSON_TOK_LEAD_TWO_HIGH: i32 = 223
+const JSON_TOK_LEAD_E0: i32 = 224
+const JSON_TOK_LEAD_ED: i32 = 237
+const JSON_TOK_LEAD_THREE_HIGH: i32 = 239
+const JSON_TOK_LEAD_F0: i32 = 240
+const JSON_TOK_LEAD_F4: i32 = 244
+const JSON_TOK_E0_SECOND_LOW: i32 = 160
+const JSON_TOK_ED_SECOND_HIGH: i32 = 159
+const JSON_TOK_F0_SECOND_LOW: i32 = 144
+const JSON_TOK_F4_SECOND_HIGH: i32 = 143
+const JSON_TOK_TWO_BYTE_LEAD: i32 = 192
+const JSON_TOK_THREE_BYTE_LEAD: i32 = 224
+const JSON_TOK_FOUR_BYTE_LEAD: i32 = 240
+const JSON_TOK_LOW_SIX: i32 = 63
+const JSON_TOK_CONTINUATION_BITS: i32 = 6
+const JSON_TOK_TWO_BYTE_FLOOR: i32 = 128
+const JSON_TOK_THREE_BYTE_FLOOR: i32 = 2048
+const JSON_TOK_FOUR_BYTE_FLOOR: i32 = 65536
+const JSON_TOK_HIGH_SURROGATE: i32 = 55296
+const JSON_TOK_LOW_SURROGATE: i32 = 56320
+const JSON_TOK_SURROGATE_END: i32 = 57344
+const JSON_TOK_HEX_BASE: i32 = 16
+const JSON_TOK_TEN: i32 = 10
+const JSON_TOK_FAST_DIGITS: i32 = 15
+const JSON_TOK_FAST_EXPONENT: i32 = 22
+const JSON_TOK_EXPONENT_CAP: i32 = 100000
+const JSON_TOK_END_CEILING: i32 = 2147483583
+struct JsonLimits (class) size=16 align=4 exported
+  field maxDepth: i32 index=0 offset=0
+  field maxStringBytes: i32 index=1 offset=4
+  field maxNumberBytes: i32 index=2 offset=8
+  field maxTotalBytes: i32 index=3 offset=12
+  constructor -> @nish.JsonLimits.constructor
+struct JsonTokenizer (class) size=88 align=8 exported
+  field src: u8[] index=0 offset=0
+  field integerValue: i64 index=1 offset=8
+  field stack: u8[] index=2 offset=16
+  field off: i32 index=3 offset=24
+  field end: i32 index=4 offset=28
+  field pos: i32 index=5 offset=32
+  field maxDepth: i32 index=6 offset=36
+  field maxStringBytes: i32 index=7 offset=40
+  field maxNumberBytes: i32 index=8 offset=44
+  field maxTotalBytes: i32 index=9 offset=48
+  field depth: i32 index=10 offset=52
+  field want: i32 index=11 offset=56
+  field kind: i32 index=12 offset=60
+  field tokStart: i32 index=13 offset=64
+  field tokEnd: i32 index=14 offset=68
+  field failed: i32 index=15 offset=72
+  field errorAt: i32 index=16 offset=76
+  field stringBytes: i32 index=17 offset=80
+  field integral: boolean index=18 offset=84
+  constructor -> @nish.JsonTokenizer.constructor
+  method reset -> @nish.JsonTokenizer.reset
+  method fail -> @nish.JsonTokenizer.fail
+  method next -> @nish.JsonTokenizer.next
+  method top -> @nish.JsonTokenizer.top
+  method emit -> @nish.JsonTokenizer.emit
+  method close -> @nish.JsonTokenizer.close
+  method open -> @nish.JsonTokenizer.open
+  method key -> @nish.JsonTokenizer.key
+  method value -> @nish.JsonTokenizer.value
+  method literal -> @nish.JsonTokenizer.literal
+  method number -> @nish.JsonTokenizer.number
+  method numberRefused -> @nish.JsonTokenizer.numberRefused
+  method string -> @nish.JsonTokenizer.string
+  method escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  method isText -> @nish.JsonTokenizer.isText
+  method stringInto -> @nish.JsonTokenizer.stringInto
+  method stringLength -> @nish.JsonTokenizer.stringLength
+  method keyEquals -> @nish.JsonTokenizer.keyEquals
+  method isInteger -> @nish.JsonTokenizer.isInteger
+  method numberI64 -> @nish.JsonTokenizer.numberI64
+  method integerScan -> @nish.JsonTokenizer.integerScan
+  method numberF64 -> @nish.JsonTokenizer.numberF64
+  method numberSlow -> @nish.JsonTokenizer.numberSlow
+  method skipValue -> @nish.JsonTokenizer.skipValue
+function JsonLimits.constructor(this: JsonLimits): void -> @nish.JsonLimits.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function jsonTokByteAt(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokByteAt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function jsonTokIsBlank(b: i32): boolean -> @nish.jsonTokIsBlank
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokIsDigit(b: i32): boolean -> @nish.jsonTokIsDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokSkipBlank(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipBlank
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end i
+  calls: nish.jsonTokByteAt nish.jsonTokIsBlank nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  local 273:7 j: i32 (let)
+  callee 274:10 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  callee 274:25 jsonTokByteAt -> @nish.jsonTokByteAt
+function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: b
+  calls: nish.jsonTokIsDigit
+  stackSites=0 stackLocals=0
+  callee 282:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
+function jsonTokHex4(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokHex4
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end
+  calls: nish.jsonTokByteAt nish.jsonTokHexDigit nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  local 300:7 value: i32 (let)
+  local 301:7 k: i32 (let)
+  local 303:11 b: i32 (const)
+  callee 303:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 307:11 digit: i32 (const)
+  callee 307:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
+function jsonTokInRange(b: i32, low: i32, high: i32): boolean -> @nish.jsonTokInRange
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokUtf8Length(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokUtf8Length
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end
+  calls: nish.jsonTokByteAt nish.jsonTokInRange nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0 nish.jsonTokByteAt#0 nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  local 330:9 lead: i32 (const)
+  callee 330:21 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 331:9 second: i32 (const)
+  callee 331:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 332:7 low: i32 (let)
+  local 333:7 high: i32 (let)
+  local 334:7 length: i32 (let)
+  callee 335:7 jsonTokInRange -> @nish.jsonTokInRange
+  callee 337:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 344:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 354:8 jsonTokInRange -> @nish.jsonTokInRange
+  local 357:7 k: i32 (let)
+  local 359:11 next: i32 (const)
+  callee 359:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 360:10 jsonTokInRange -> @nish.jsonTokInRange
+function jsonTokUtf8Width(cp: i32): i32 -> @nish.jsonTokUtf8Width
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokUtf8Byte(cp: i32, width: i32, k: i32): i32 -> @nish.jsonTokUtf8Byte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: cp
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 384:9 shift: i32 (const)
+  local 385:9 bits: i32 (const)
+function jsonTokShortEscape(b: i32): i32 -> @nish.jsonTokShortEscape
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: b
+  stackSites=0 stackLocals=0
+function jsonTokEscapeLength(src: u8[], at: i32, end: i32, cp: i32): i32 -> @nish.jsonTokEscapeLength
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end
+  calls: nish.jsonTokByteAt
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  callee 428:10 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len: i32, limits: JsonLimits): void -> @nish.JsonTokenizer.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.reset
+  escaping: len off src
+  calls: nish.JsonTokenizer.reset nish_exit nish_write
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.reset#0
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
+  pointer limits: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 497:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+function JsonTokenizer.reset(this: JsonTokenizer, src: u8[], off: i32, len: i32): void -> @nish.JsonTokenizer.reset [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 506:5
+  escaping: off src
+  calls: nish.JsonTokenizer.fail nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
+  pointer src: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee 521:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 528:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.fail(this: JsonTokenizer, code: i32, at: i32): i32 -> @nish.JsonTokenizer.fail [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 535:7
+  escaping: at code
+  pointer this: size=88 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function JsonTokenizer.next(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.next [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 553:11
+  calls: nish.JsonTokenizer.close nish.JsonTokenizer.fail nish.JsonTokenizer.key nish.JsonTokenizer.top nish.JsonTokenizer.value nish.jsonTokByteAt nish.jsonTokSkipBlank nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.top#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0
+  stackSites=0 stackLocals=0
+  local 546:11 src: u8[] (const)
+  local 547:11 end: i32 (const)
+  local 548:11 at: i32 (const)
+  callee 548:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  local 549:11 b: i32 (const)
+  callee 549:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 557:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 560:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 560:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 562:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 565:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 567:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 570:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 572:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 575:17 after: i32 (const)
+  callee 575:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 576:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 577:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 579:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 582:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 585:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 587:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 589:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+function JsonTokenizer.top(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.top [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 595:11 d: i32 (const)
+function JsonTokenizer.emit(this: JsonTokenizer, k: i32, start: i32, stop: i32): i32 -> @nish.JsonTokenizer.emit [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 604:5
+  escaping: k start stop
+  pointer this: size=88 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.close [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 625:5
+  escaping: at
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.top nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.top#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  callee 622:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 623:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 626:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.open(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.open [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 635:5
+  escaping: at
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  local 631:11 d: i32 (const)
+  callee 633:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 637:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.key [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.string
+  escaping: at
+  calls: nish.JsonTokenizer.fail nish.JsonTokenizer.string nish.jsonTokByteAt
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 642:11 b: i32 (const)
+  callee 642:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 644:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 646:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.value [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.string
+  escaping: at
+  calls: nish.JsonTokenizer.fail nish.JsonTokenizer.literal nish.JsonTokenizer.number nish.JsonTokenizer.open nish.JsonTokenizer.string nish.jsonTokByteAt nish.jsonTokIsDigit
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.number#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 651:11 src: u8[] (const)
+  local 652:11 end: i32 (const)
+  local 653:11 b: i32 (const)
+  callee 653:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 655:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 657:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 658:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
+  callee 662:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 664:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 666:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 668:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 670:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 672:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i32): i32 -> @nish.JsonTokenizer.literal [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.emit
+  escaping: at k
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.jsonTokByteAt nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.emit#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 678:11 n: i32 (const)
+  local 679:9 matched: i32 (let)
+  callee 682:7 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 687:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 689:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.number [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 751:5
+  escaping: at
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokIsDigit nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  local 704:11 src: u8[] (const)
+  local 705:11 end: i32 (const)
+  local 706:9 i: i32 (let)
+  callee 707:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 710:11 first: i32 (const)
+  callee 710:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 714:14 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 714:29 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 718:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local 720:9 integral: boolean (let)
+  callee 721:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 724:13 digit: i32 (const)
+  callee 724:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 725:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 726:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 728:14 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 728:29 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 732:11 e: i32 (const)
+  callee 732:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 736:13 sign: i32 (const)
+  callee 736:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 740:13 digit: i32 (const)
+  callee 740:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 741:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 742:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 744:14 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 744:29 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 749:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 752:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i: i32): i32 -> @nish.JsonTokenizer.numberRefused [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.fail
+  escaping: code i
+  calls: nish.JsonTokenizer.fail nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  callee 758:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 760:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nish.JsonTokenizer.string [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 814:5
+  escaping: at k
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  local 770:11 src: u8[] (const)
+  local 771:11 end: i32 (const)
+  local 774:11 room: i32 (const)
+  local 775:11 limit: i32 (const)
+  local 776:9 i: i32 (let)
+  local 777:9 decoded: i32 (let)
+  local 779:13 b: i32 (const)
+  callee 779:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 784:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 787:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 790:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 793:15 cp: i32 (const)
+  callee 793:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  callee 797:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  callee 798:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 803:15 width: i32 (const)
+  callee 803:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
+  callee 805:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 812:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 815:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.escapeCodePoint [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.fail
+  escaping: at
+  calls: nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokHex4 nish.jsonTokShortEscape nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 824:11 src: u8[] (const)
+  local 825:11 end: i32 (const)
+  local 826:11 letter: i32 (const)
+  callee 826:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 828:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 831:13 short: i32 (const)
+  callee 831:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
+  callee 832:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 834:11 unit: i32 (const)
+  callee 834:23 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 836:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 842:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 844:11 slash: i32 (const)
+  callee 844:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 845:11 u: i32 (const)
+  callee 845:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 848:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 851:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 853:11 low: i32 (const)
+  callee 853:22 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 855:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 858:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.isText(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isText [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 -> @nish.JsonTokenizer.stringInto [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 887:9
+  escaping: at
+  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 876:11 n: i32 (const)
+  callee 877:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 880:11 src: u8[] (const)
+  local 881:11 end: i32 (const)
+  local 882:9 i: i32 (let)
+  local 883:9 o: i32 (let)
+  local 894:13 b: i32 (const)
+  callee 894:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 903:13 cp: i32 (const)
+  callee 903:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 904:13 width: i32 (const)
+  callee 904:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 905:11 k: i32 (let)
+  callee 908:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 913:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.JsonTokenizer.isText
+  pointer this: size=88 writesThrough=false captured=false passedTo=nish.JsonTokenizer.isText#0
+  stackSites=0 stackLocals=0
+  callee 920:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+function JsonTokenizer.keyEquals(this: JsonTokenizer, name: string): boolean -> @nish.JsonTokenizer.keyEquals [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.escapeCodePoint
+  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
+  stackSites=0 stackLocals=0
+  local 934:11 n: i32 (const)
+  callee 935:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 938:11 src: u8[] (const)
+  local 939:11 end: i32 (const)
+  local 940:9 i: i32 (let)
+  local 941:9 o: i32 (let)
+  callee 946:13 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 954:13 b: i32 (const)
+  callee 954:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 963:13 cp: i32 (const)
+  callee 963:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 964:13 width: i32 (const)
+  callee 964:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 965:11 k: i32 (let)
+  callee 967:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 973:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+function JsonTokenizer.isInteger(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isInteger [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.integerScan
+  calls: nish.JsonTokenizer.integerScan
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.integerScan#0
+  stackSites=0 stackLocals=0
+  callee 984:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
+function JsonTokenizer.numberI64(this: JsonTokenizer): i64 -> @nish.JsonTokenizer.numberI64 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.isInteger
+  calls: nish.JsonTokenizer.isInteger nish.jsonTokByteAt nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isInteger#0
+  stackSites=0 stackLocals=0
+  callee 993:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  local 996:11 src: u8[] (const)
+  local 997:11 negated: i64 (const)
+  callee 998:12 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.integerScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.integerScan [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 1027:5
+  calls: nish.jsonTokByteAt nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 1008:11 src: u8[] (const)
+  local 1009:11 end: i32 (const)
+  local 1010:11 negative: boolean (const)
+  callee 1010:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1014:11 min: i64 (const)
+  local 1015:11 ten: i64 (const)
+  local 1016:11 bound: i64 (const)
+  local 1017:9 acc: i64 (let)
+  local 1018:9 i: i32 (let)
+  local 1020:13 digit: i64 (const)
+  callee 1020:32 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_arena_mark nish_arena_release nish_panic_overflow
+  pointer this: size=88 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
+  stackSites=0 stackLocals=0
+  local 1041:11 src: u8[] (const)
+  local 1042:11 start: i32 (const)
+  local 1043:11 end: i32 (const)
+  local 1044:11 negative: boolean (const)
+  callee 1044:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1046:11 ten: f64 (const)
+  local 1047:9 mantissa: f64 (let)
+  local 1048:9 digits: i32 (let)
+  local 1049:9 scale: i32 (let)
+  local 1050:9 afterDot: boolean (let)
+  local 1051:9 i: i32 (let)
+  local 1053:13 b: i32 (const)
+  callee 1053:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1056:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 1067:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1077:13 sign: i32 (const)
+  callee 1077:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1078:13 minus: boolean (const)
+  local 1082:11 exponent: i32 (let)
+  callee 1084:46 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1088:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1092:9 value: f64 (let)
+  callee 1095:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1097:13 power: f64 (const)
+  callee 1097:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonTokByteAt nish_alloc_struct nish_array_grow nish_parse_number nish_str_new
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 1113:11 src: u8[] (const)
+  local 1114:11 end: i32 (const)
+  local 1115:11 parts: string[] (const)
+  local 1116:9 i: i32 (let)
+  callee 1118:38 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.next
+  calls: nish.JsonTokenizer.next nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.next#0 nish.JsonTokenizer.next#0
+  stackSites=0 stackLocals=0
+  local 1135:9 k: i32 (let)
+  callee 1137:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1142:11 target: i32 (const)
+  callee 1144:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 1152:9 ten: f64 (const)
+  local 1153:7 p: f64 (let)
+  local 1154:7 k: i32 (let)
 program docs/cookbook/json-writer.ts
 module docs/cookbook/json-writer.ts (entry)
 import JsonWriter from "nish/json" -> struct JsonWriter
@@ -82669,280 +83339,280 @@ function AesKey.constructor(this: AesKey, rounds: i32, roundKeys: u64[]): void -
 function aesLanes(pattern: u64): u64 -> @nish.aesLanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 112:9 two: u64 (const)
+  local 122:9 two: u64 (const)
 function aesBytes(pattern: u64): u64 -> @nish.aesBytes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 117:41 aesLanes -> @nish.aesLanes
+  callee 127:41 aesLanes -> @nish.aesLanes
 function aesSwapBits(q: u64[], i: i32, j: i32, mask: u64, shift: u64): void -> @nish.aesSwapBits
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 125:3
+  sharedWrite: 135:3
   escaping: i j
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 124:9 t: u64 (const)
+  local 134:9 t: u64 (const)
 function aesTranspose(q: u64[]): void -> @nish.aesTranspose
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesSwapBits
   calls: nish.aesBytes nish.aesSwapBits
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0 nish.aesSwapBits#0
   stackSites=0 stackLocals=0
-  local 137:9 m1: u64 (const)
-  callee 137:19 aesBytes -> @nish.aesBytes
-  local 138:9 m2: u64 (const)
-  callee 138:19 aesBytes -> @nish.aesBytes
-  local 139:9 m4: u64 (const)
-  callee 139:19 aesBytes -> @nish.aesBytes
-  callee 140:3 aesSwapBits -> @nish.aesSwapBits
-  callee 141:3 aesSwapBits -> @nish.aesSwapBits
-  callee 142:3 aesSwapBits -> @nish.aesSwapBits
-  callee 143:3 aesSwapBits -> @nish.aesSwapBits
-  callee 144:3 aesSwapBits -> @nish.aesSwapBits
-  callee 145:3 aesSwapBits -> @nish.aesSwapBits
-  callee 146:3 aesSwapBits -> @nish.aesSwapBits
-  callee 147:3 aesSwapBits -> @nish.aesSwapBits
-  callee 148:3 aesSwapBits -> @nish.aesSwapBits
-  callee 149:3 aesSwapBits -> @nish.aesSwapBits
+  local 147:9 m1: u64 (const)
+  callee 147:19 aesBytes -> @nish.aesBytes
+  local 148:9 m2: u64 (const)
+  callee 148:19 aesBytes -> @nish.aesBytes
+  local 149:9 m4: u64 (const)
+  callee 149:19 aesBytes -> @nish.aesBytes
   callee 150:3 aesSwapBits -> @nish.aesSwapBits
   callee 151:3 aesSwapBits -> @nish.aesSwapBits
+  callee 152:3 aesSwapBits -> @nish.aesSwapBits
+  callee 153:3 aesSwapBits -> @nish.aesSwapBits
+  callee 154:3 aesSwapBits -> @nish.aesSwapBits
+  callee 155:3 aesSwapBits -> @nish.aesSwapBits
+  callee 156:3 aesSwapBits -> @nish.aesSwapBits
+  callee 157:3 aesSwapBits -> @nish.aesSwapBits
+  callee 158:3 aesSwapBits -> @nish.aesSwapBits
+  callee 159:3 aesSwapBits -> @nish.aesSwapBits
+  callee 160:3 aesSwapBits -> @nish.aesSwapBits
+  callee 161:3 aesSwapBits -> @nish.aesSwapBits
 function aesPack(q: u64[], buf: u8[]): void -> @nish.aesPack
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 166:5
+  sharedWrite: 176:5
   calls: nish.aesTranspose
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesTranspose#0
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 165:12 i: i32 (let)
-  local 168:12 k: i32 (let)
-  local 169:11 low: u64 (const)
-  local 170:11 high: u64 (const)
-  local 171:14 c: i32 (let)
-  callee 176:3 aesTranspose -> @nish.aesTranspose
+  local 175:12 i: i32 (let)
+  local 178:12 k: i32 (let)
+  local 179:11 low: u64 (const)
+  local 180:11 high: u64 (const)
+  local 181:14 c: i32 (let)
+  callee 186:3 aesTranspose -> @nish.aesTranspose
 function aesUnpack(buf: u8[], q: u64[]): void -> @nish.aesUnpack
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 190:7
+  sharedWrite: 200:7
   calls: nish.aesTranspose
   pointer buf: size=0 writesThrough=true captured=false
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesTranspose#0
   stackSites=0 stackLocals=0
-  callee 184:3 aesTranspose -> @nish.aesTranspose
-  local 186:12 k: i32 (let)
-  local 187:11 low: u64 (const)
-  local 188:11 high: u64 (const)
-  local 189:14 c: i32 (let)
+  callee 194:3 aesTranspose -> @nish.aesTranspose
+  local 196:12 k: i32 (let)
+  local 197:11 low: u64 (const)
+  local 198:11 high: u64 (const)
+  local 199:14 c: i32 (let)
 function aesSbox(q: u64[]): void -> @nish.aesSbox
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 337:3
+  sharedWrite: 347:3
   calls: nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 205:9 x0: u64 (const)
-  local 206:9 x1: u64 (const)
-  local 207:9 x2: u64 (const)
-  local 208:9 x3: u64 (const)
-  local 209:9 x4: u64 (const)
-  local 210:9 x5: u64 (const)
-  local 211:9 x6: u64 (const)
-  local 212:9 x7: u64 (const)
-  local 215:9 y14: u64 (const)
-  local 216:9 y13: u64 (const)
-  local 217:9 y9: u64 (const)
-  local 218:9 y8: u64 (const)
-  local 219:9 t0: u64 (const)
-  local 220:9 y1: u64 (const)
-  local 221:9 y4: u64 (const)
-  local 222:9 y12: u64 (const)
-  local 223:9 y2: u64 (const)
-  local 224:9 y5: u64 (const)
-  local 225:9 y3: u64 (const)
-  local 226:9 t1: u64 (const)
-  local 227:9 y15: u64 (const)
-  local 228:9 y20: u64 (const)
-  local 229:9 y6: u64 (const)
-  local 230:9 y10: u64 (const)
-  local 231:9 y11: u64 (const)
-  local 232:9 y7: u64 (const)
-  local 233:9 y17: u64 (const)
-  local 234:9 y19: u64 (const)
-  local 235:9 y16: u64 (const)
-  local 236:9 y21: u64 (const)
-  local 237:9 y18: u64 (const)
-  local 240:9 t2: u64 (const)
-  local 241:9 t3: u64 (const)
-  local 242:9 t4: u64 (const)
-  local 243:9 t5: u64 (const)
-  local 244:9 t6: u64 (const)
-  local 245:9 t7: u64 (const)
-  local 246:9 t8: u64 (const)
-  local 247:9 t9: u64 (const)
-  local 248:9 t10: u64 (const)
-  local 249:9 t11: u64 (const)
-  local 250:9 t12: u64 (const)
-  local 251:9 t13: u64 (const)
-  local 252:9 t14: u64 (const)
-  local 253:9 t15: u64 (const)
-  local 254:9 t16: u64 (const)
-  local 255:9 t17: u64 (const)
-  local 256:9 t18: u64 (const)
-  local 257:9 t19: u64 (const)
-  local 258:9 t20: u64 (const)
-  local 259:9 t21: u64 (const)
-  local 260:9 t22: u64 (const)
-  local 261:9 t23: u64 (const)
-  local 262:9 t24: u64 (const)
-  local 264:9 t25: u64 (const)
-  local 265:9 t26: u64 (const)
-  local 266:9 t27: u64 (const)
-  local 267:9 t28: u64 (const)
-  local 268:9 t29: u64 (const)
-  local 269:9 t30: u64 (const)
-  local 270:9 t31: u64 (const)
-  local 271:9 t32: u64 (const)
-  local 272:9 t33: u64 (const)
-  local 273:9 t34: u64 (const)
-  local 274:9 t35: u64 (const)
-  local 275:9 t36: u64 (const)
-  local 276:9 t37: u64 (const)
-  local 277:9 t38: u64 (const)
-  local 278:9 t39: u64 (const)
-  local 279:9 t40: u64 (const)
-  local 281:9 t41: u64 (const)
-  local 282:9 t42: u64 (const)
-  local 283:9 t43: u64 (const)
-  local 284:9 t44: u64 (const)
-  local 285:9 t45: u64 (const)
-  local 286:9 z0: u64 (const)
-  local 287:9 z1: u64 (const)
-  local 288:9 z2: u64 (const)
-  local 289:9 z3: u64 (const)
-  local 290:9 z4: u64 (const)
-  local 291:9 z5: u64 (const)
-  local 292:9 z6: u64 (const)
-  local 293:9 z7: u64 (const)
-  local 294:9 z8: u64 (const)
-  local 295:9 z9: u64 (const)
-  local 296:9 z10: u64 (const)
-  local 297:9 z11: u64 (const)
-  local 298:9 z12: u64 (const)
-  local 299:9 z13: u64 (const)
-  local 300:9 z14: u64 (const)
-  local 301:9 z15: u64 (const)
-  local 302:9 z16: u64 (const)
-  local 303:9 z17: u64 (const)
-  local 306:9 t46: u64 (const)
-  local 307:9 t47: u64 (const)
-  local 308:9 t48: u64 (const)
-  local 309:9 t49: u64 (const)
-  local 310:9 t50: u64 (const)
-  local 311:9 t51: u64 (const)
-  local 312:9 t52: u64 (const)
-  local 313:9 t53: u64 (const)
-  local 314:9 t54: u64 (const)
-  local 315:9 t55: u64 (const)
-  local 316:9 t56: u64 (const)
-  local 317:9 t57: u64 (const)
-  local 318:9 t58: u64 (const)
-  local 319:9 t59: u64 (const)
-  local 320:9 t60: u64 (const)
-  local 321:9 t61: u64 (const)
-  local 322:9 t62: u64 (const)
-  local 323:9 t63: u64 (const)
-  local 324:9 t64: u64 (const)
-  local 325:9 t65: u64 (const)
-  local 326:9 t66: u64 (const)
-  local 327:9 s0: u64 (const)
-  local 328:9 s6: u64 (const)
-  local 329:9 s7: u64 (const)
-  local 330:9 t67: u64 (const)
-  local 331:9 s3: u64 (const)
-  local 332:9 s4: u64 (const)
-  local 333:9 s5: u64 (const)
-  local 334:9 s1: u64 (const)
-  local 335:9 s2: u64 (const)
+  local 215:9 x0: u64 (const)
+  local 216:9 x1: u64 (const)
+  local 217:9 x2: u64 (const)
+  local 218:9 x3: u64 (const)
+  local 219:9 x4: u64 (const)
+  local 220:9 x5: u64 (const)
+  local 221:9 x6: u64 (const)
+  local 222:9 x7: u64 (const)
+  local 225:9 y14: u64 (const)
+  local 226:9 y13: u64 (const)
+  local 227:9 y9: u64 (const)
+  local 228:9 y8: u64 (const)
+  local 229:9 t0: u64 (const)
+  local 230:9 y1: u64 (const)
+  local 231:9 y4: u64 (const)
+  local 232:9 y12: u64 (const)
+  local 233:9 y2: u64 (const)
+  local 234:9 y5: u64 (const)
+  local 235:9 y3: u64 (const)
+  local 236:9 t1: u64 (const)
+  local 237:9 y15: u64 (const)
+  local 238:9 y20: u64 (const)
+  local 239:9 y6: u64 (const)
+  local 240:9 y10: u64 (const)
+  local 241:9 y11: u64 (const)
+  local 242:9 y7: u64 (const)
+  local 243:9 y17: u64 (const)
+  local 244:9 y19: u64 (const)
+  local 245:9 y16: u64 (const)
+  local 246:9 y21: u64 (const)
+  local 247:9 y18: u64 (const)
+  local 250:9 t2: u64 (const)
+  local 251:9 t3: u64 (const)
+  local 252:9 t4: u64 (const)
+  local 253:9 t5: u64 (const)
+  local 254:9 t6: u64 (const)
+  local 255:9 t7: u64 (const)
+  local 256:9 t8: u64 (const)
+  local 257:9 t9: u64 (const)
+  local 258:9 t10: u64 (const)
+  local 259:9 t11: u64 (const)
+  local 260:9 t12: u64 (const)
+  local 261:9 t13: u64 (const)
+  local 262:9 t14: u64 (const)
+  local 263:9 t15: u64 (const)
+  local 264:9 t16: u64 (const)
+  local 265:9 t17: u64 (const)
+  local 266:9 t18: u64 (const)
+  local 267:9 t19: u64 (const)
+  local 268:9 t20: u64 (const)
+  local 269:9 t21: u64 (const)
+  local 270:9 t22: u64 (const)
+  local 271:9 t23: u64 (const)
+  local 272:9 t24: u64 (const)
+  local 274:9 t25: u64 (const)
+  local 275:9 t26: u64 (const)
+  local 276:9 t27: u64 (const)
+  local 277:9 t28: u64 (const)
+  local 278:9 t29: u64 (const)
+  local 279:9 t30: u64 (const)
+  local 280:9 t31: u64 (const)
+  local 281:9 t32: u64 (const)
+  local 282:9 t33: u64 (const)
+  local 283:9 t34: u64 (const)
+  local 284:9 t35: u64 (const)
+  local 285:9 t36: u64 (const)
+  local 286:9 t37: u64 (const)
+  local 287:9 t38: u64 (const)
+  local 288:9 t39: u64 (const)
+  local 289:9 t40: u64 (const)
+  local 291:9 t41: u64 (const)
+  local 292:9 t42: u64 (const)
+  local 293:9 t43: u64 (const)
+  local 294:9 t44: u64 (const)
+  local 295:9 t45: u64 (const)
+  local 296:9 z0: u64 (const)
+  local 297:9 z1: u64 (const)
+  local 298:9 z2: u64 (const)
+  local 299:9 z3: u64 (const)
+  local 300:9 z4: u64 (const)
+  local 301:9 z5: u64 (const)
+  local 302:9 z6: u64 (const)
+  local 303:9 z7: u64 (const)
+  local 304:9 z8: u64 (const)
+  local 305:9 z9: u64 (const)
+  local 306:9 z10: u64 (const)
+  local 307:9 z11: u64 (const)
+  local 308:9 z12: u64 (const)
+  local 309:9 z13: u64 (const)
+  local 310:9 z14: u64 (const)
+  local 311:9 z15: u64 (const)
+  local 312:9 z16: u64 (const)
+  local 313:9 z17: u64 (const)
+  local 316:9 t46: u64 (const)
+  local 317:9 t47: u64 (const)
+  local 318:9 t48: u64 (const)
+  local 319:9 t49: u64 (const)
+  local 320:9 t50: u64 (const)
+  local 321:9 t51: u64 (const)
+  local 322:9 t52: u64 (const)
+  local 323:9 t53: u64 (const)
+  local 324:9 t54: u64 (const)
+  local 325:9 t55: u64 (const)
+  local 326:9 t56: u64 (const)
+  local 327:9 t57: u64 (const)
+  local 328:9 t58: u64 (const)
+  local 329:9 t59: u64 (const)
+  local 330:9 t60: u64 (const)
+  local 331:9 t61: u64 (const)
+  local 332:9 t62: u64 (const)
+  local 333:9 t63: u64 (const)
+  local 334:9 t64: u64 (const)
+  local 335:9 t65: u64 (const)
+  local 336:9 t66: u64 (const)
+  local 337:9 s0: u64 (const)
+  local 338:9 s6: u64 (const)
+  local 339:9 s7: u64 (const)
+  local 340:9 t67: u64 (const)
+  local 341:9 s3: u64 (const)
+  local 342:9 s4: u64 (const)
+  local 343:9 s5: u64 (const)
+  local 344:9 s1: u64 (const)
+  local 345:9 s2: u64 (const)
 function aesShiftPlane(x: u64): u64 -> @nish.aesShiftPlane
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 352:8 aesLanes -> @nish.aesLanes
-  callee 353:22 aesLanes -> @nish.aesLanes
-  callee 354:22 aesLanes -> @nish.aesLanes
-  callee 355:22 aesLanes -> @nish.aesLanes
-  callee 356:22 aesLanes -> @nish.aesLanes
-  callee 357:22 aesLanes -> @nish.aesLanes
-  callee 358:22 aesLanes -> @nish.aesLanes
+  callee 362:8 aesLanes -> @nish.aesLanes
+  callee 363:22 aesLanes -> @nish.aesLanes
+  callee 364:22 aesLanes -> @nish.aesLanes
+  callee 365:22 aesLanes -> @nish.aesLanes
+  callee 366:22 aesLanes -> @nish.aesLanes
+  callee 367:22 aesLanes -> @nish.aesLanes
+  callee 368:22 aesLanes -> @nish.aesLanes
 function aesShiftRows(q: u64[]): void -> @nish.aesShiftRows
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 362:3
+  sharedWrite: 372:3
   calls: nish.aesShiftPlane nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 362:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 363:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 364:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 365:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 366:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 367:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 368:10 aesShiftPlane -> @nish.aesShiftPlane
-  callee 369:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 372:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 373:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 374:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 375:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 376:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 377:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 378:10 aesShiftPlane -> @nish.aesShiftPlane
+  callee 379:10 aesShiftPlane -> @nish.aesShiftPlane
 function aesNextRow(x: u64): u64 -> @nish.aesNextRow
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 374:22 aesLanes -> @nish.aesLanes
-  callee 374:69 aesLanes -> @nish.aesLanes
+  callee 384:22 aesLanes -> @nish.aesLanes
+  callee 384:69 aesLanes -> @nish.aesLanes
 function aesRowAfterNext(x: u64): u64 -> @nish.aesRowAfterNext
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesLanes
   stackSites=0 stackLocals=0
-  callee 378:22 aesLanes -> @nish.aesLanes
-  callee 378:68 aesLanes -> @nish.aesLanes
+  callee 388:22 aesLanes -> @nish.aesLanes
+  callee 388:68 aesLanes -> @nish.aesLanes
 function aesMixColumns(q: u64[]): void -> @nish.aesMixColumns
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 404:3
+  sharedWrite: 414:3
   calls: nish.aesNextRow nish.aesRowAfterNext nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 388:9 n0: u64 (const)
-  callee 388:19 aesNextRow -> @nish.aesNextRow
-  local 389:9 n1: u64 (const)
-  callee 389:19 aesNextRow -> @nish.aesNextRow
-  local 390:9 n2: u64 (const)
-  callee 390:19 aesNextRow -> @nish.aesNextRow
-  local 391:9 n3: u64 (const)
-  callee 391:19 aesNextRow -> @nish.aesNextRow
-  local 392:9 n4: u64 (const)
-  callee 392:19 aesNextRow -> @nish.aesNextRow
-  local 393:9 n5: u64 (const)
-  callee 393:19 aesNextRow -> @nish.aesNextRow
-  local 394:9 n6: u64 (const)
-  callee 394:19 aesNextRow -> @nish.aesNextRow
-  local 395:9 n7: u64 (const)
-  callee 395:19 aesNextRow -> @nish.aesNextRow
-  local 396:9 t0: u64 (const)
-  local 397:9 t1: u64 (const)
-  local 398:9 t2: u64 (const)
-  local 399:9 t3: u64 (const)
-  local 400:9 t4: u64 (const)
-  local 401:9 t5: u64 (const)
-  local 402:9 t6: u64 (const)
-  local 403:9 t7: u64 (const)
-  callee 404:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 405:25 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 406:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 407:25 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 408:25 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 409:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 410:20 aesRowAfterNext -> @nish.aesRowAfterNext
-  callee 411:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  local 398:9 n0: u64 (const)
+  callee 398:19 aesNextRow -> @nish.aesNextRow
+  local 399:9 n1: u64 (const)
+  callee 399:19 aesNextRow -> @nish.aesNextRow
+  local 400:9 n2: u64 (const)
+  callee 400:19 aesNextRow -> @nish.aesNextRow
+  local 401:9 n3: u64 (const)
+  callee 401:19 aesNextRow -> @nish.aesNextRow
+  local 402:9 n4: u64 (const)
+  callee 402:19 aesNextRow -> @nish.aesNextRow
+  local 403:9 n5: u64 (const)
+  callee 403:19 aesNextRow -> @nish.aesNextRow
+  local 404:9 n6: u64 (const)
+  callee 404:19 aesNextRow -> @nish.aesNextRow
+  local 405:9 n7: u64 (const)
+  callee 405:19 aesNextRow -> @nish.aesNextRow
+  local 406:9 t0: u64 (const)
+  local 407:9 t1: u64 (const)
+  local 408:9 t2: u64 (const)
+  local 409:9 t3: u64 (const)
+  local 410:9 t4: u64 (const)
+  local 411:9 t5: u64 (const)
+  local 412:9 t6: u64 (const)
+  local 413:9 t7: u64 (const)
+  callee 414:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 415:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 416:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 417:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 418:25 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 419:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 420:20 aesRowAfterNext -> @nish.aesRowAfterNext
+  callee 421:20 aesRowAfterNext -> @nish.aesRowAfterNext
 function aesAddRoundKey(q: u64[], rk: u64[], at: i32): void -> @nish.aesAddRoundKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 417:3
+  sharedWrite: 427:3
   calls: nish_panic_index
   pointer q: size=0 writesThrough=true captured=false
   pointer rk: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 416:9 p: u32 (const)
+  local 426:9 p: u32 (const)
 function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @nish.aesBitslicedRound [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesSbox
@@ -82951,40 +83621,39 @@ function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @nish.aesBitsl
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSbox#0 nish.aesShiftRows#0 nish.aesMixColumns#0 nish.aesAddRoundKey#0
   pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesAddRoundKey#1
   stackSites=0 stackLocals=0
-  callee 436:3 aesSbox -> @nish.aesSbox
-  callee 437:3 aesShiftRows -> @nish.aesShiftRows
-  callee 438:3 aesMixColumns -> @nish.aesMixColumns
-  callee 439:3 aesAddRoundKey -> @nish.aesAddRoundKey
-function aesEncryptBatch(key: AesKey, buf: u8[], q: u64[]): void -> @nish.aesEncryptBatch
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee 446:3 aesSbox -> @nish.aesSbox
+  callee 447:3 aesShiftRows -> @nish.aesShiftRows
+  callee 448:3 aesMixColumns -> @nish.aesMixColumns
+  callee 449:3 aesAddRoundKey -> @nish.aesAddRoundKey
+function aesEncryptBatch(rk: u64[], rounds: i32, buf: u8[], q: u64[]): void -> @nish.aesEncryptBatch
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesPack
   calls: nish.aesAddRoundKey nish.aesBitslicedRound nish.aesPack nish.aesSbox nish.aesShiftRows nish.aesUnpack nish_panic_overflow
-  pointer key: size=32 writesThrough=false captured=false
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesAddRoundKey#1 nish.aesBitslicedRound#1 nish.aesAddRoundKey#1
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.aesPack#1 nish.aesUnpack#0
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesPack#0 nish.aesAddRoundKey#0 nish.aesBitslicedRound#0 nish.aesSbox#0 nish.aesShiftRows#0 nish.aesAddRoundKey#0 nish.aesUnpack#1
   stackSites=0 stackLocals=0
-  local 444:9 rk: u64[] (const)
-  callee 445:3 aesPack -> @nish.aesPack
-  callee 446:3 aesAddRoundKey -> @nish.aesAddRoundKey
-  local 447:12 round: i32 (let)
-  callee 448:5 aesBitslicedRound -> @nish.aesBitslicedRound
-  callee 450:3 aesSbox -> @nish.aesSbox
-  callee 451:3 aesShiftRows -> @nish.aesShiftRows
-  callee 452:3 aesAddRoundKey -> @nish.aesAddRoundKey
-  callee 453:3 aesUnpack -> @nish.aesUnpack
+  callee 457:3 aesPack -> @nish.aesPack
+  callee 458:3 aesAddRoundKey -> @nish.aesAddRoundKey
+  local 459:12 round: i32 (let)
+  callee 460:5 aesBitslicedRound -> @nish.aesBitslicedRound
+  callee 462:3 aesSbox -> @nish.aesSbox
+  callee 463:3 aesShiftRows -> @nish.aesShiftRows
+  callee 464:3 aesAddRoundKey -> @nish.aesAddRoundKey
+  callee 465:3 aesUnpack -> @nish.aesUnpack
 function aesSubWord(w: u32, q: u64[]): u32 -> @nish.aesSubWord
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 471:5
+  sharedWrite: 483:5
   calls: nish.aesSbox
   pointer q: size=0 writesThrough=true captured=false passedTo=nish.aesSbox#0
   stackSites=0 stackLocals=0
-  local 466:12 b: i32 (let)
-  local 467:9 plane: u64 (let)
-  local 468:14 m: i32 (let)
-  callee 473:3 aesSbox -> @nish.aesSbox
-  local 474:7 out: u32 (let)
-  local 475:12 b: i32 (let)
-  local 476:14 m: i32 (let)
+  local 478:12 b: i32 (let)
+  local 479:9 plane: u64 (let)
+  local 480:14 m: i32 (let)
+  callee 485:3 aesSbox -> @nish.aesSbox
+  local 486:7 out: u32 (let)
+  local 487:12 b: i32 (let)
+  local 488:14 m: i32 (let)
 function aesLoad32(data: u8[], at: i32): u32 -> @nish.aesLoad32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -82993,291 +83662,325 @@ function aesLoad32(data: u8[], at: i32): u32 -> @nish.aesLoad32
   stackSites=0 stackLocals=0
 function aesStore32(out: u8[], at: i32, w: u32): void -> @nish.aesStore32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 492:3
+  sharedWrite: 504:3
   escaping: at
   calls: nish_panic_index
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function aesExpand(key: u8[], rounds: i32): u64[] -> @nish.aesExpand
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 541:7
-  calls: nish.aesLoad32 nish.aesPack nish.aesStore32 nish.aesSubWord nish_exit nish_panic_div nish_panic_index nish_panic_overflow nish_write
+function aesScheduleInto(key: u8[], rounds: i32, rk: u64[]): void -> @nish.aesScheduleInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 560:9
+  calls: nish.aesLoad32 nish.aesPack nish.aesStore32 nish.aesSubWord nish_arena_mark nish_arena_release nish_exit nish_panic_div nish_panic_index nish_panic_overflow nish_write
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
+  pointer rk: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 505:9 nk: i32 (const)
-  local 506:9 total: i32 (const)
-  local 507:9 w: u32[] (const)
-  local 508:9 q: u64[] (const)
-  local 509:9 keyLength: i32 (const)
-  local 510:9 wLength: i32 (const)
-  local 512:7 rcon: u32 (let)
-  local 513:12 i: i32 (let)
-  local 515:13 at: i32 (const)
-  callee 517:16 aesLoad32 -> @nish.aesLoad32
-  local 520:11 temp: u32 (let)
-  callee 522:16 aesSubWord -> @nish.aesSubWord
-  callee 525:16 aesSubWord -> @nish.aesSubWord
-  local 531:9 rk: u64[] (const)
-  local 532:9 buf: u8[] (const)
-  local 533:12 round: i32 (let)
-  local 534:14 k: i32 (let)
-  local 535:16 j: i32 (let)
-  callee 536:9 aesStore32 -> @nish.aesStore32
-  callee 539:5 aesPack -> @nish.aesPack
-  local 540:14 b: i32 (let)
+  local 522:9 nk: i32 (const)
+  local 523:9 total: i32 (const)
+  local 524:9 w: u32[] (const)
+  local 525:9 q: u64[] (const)
+  local 526:9 keyLength: i32 (const)
+  local 527:9 wLength: i32 (const)
+  local 529:7 rcon: u32 (let)
+  local 530:12 i: i32 (let)
+  local 532:13 at: i32 (const)
+  callee 534:16 aesLoad32 -> @nish.aesLoad32
+  local 537:11 temp: u32 (let)
+  callee 539:16 aesSubWord -> @nish.aesSubWord
+  callee 542:16 aesSubWord -> @nish.aesSubWord
+  local 548:9 buf: u8[] (const)
+  local 549:9 rkLength: i32 (const)
+  local 550:12 round: i32 (let)
+  local 551:14 k: i32 (let)
+  local 552:16 j: i32 (let)
+  callee 553:9 aesStore32 -> @nish.aesStore32
+  callee 556:5 aesPack -> @nish.aesPack
+  local 557:14 b: i32 (let)
+  local 558:13 at: i32 (const)
 function aesLoad64(data: u8[], at: i32, end: i32): u64 -> @nish.aesLoad64
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 552:9 length: i32 (const)
-  local 553:7 v: u64 (let)
-  local 554:12 i: i32 (let)
-  local 555:11 from: i32 (const)
-  local 556:9 byte: u64 (let)
+  local 571:9 length: i32 (const)
+  local 572:7 v: u64 (let)
+  local 573:12 i: i32 (let)
+  local 574:11 from: i32 (const)
+  local 575:9 byte: u64 (let)
 function aesStore64(out: u8[], at: i32, v: u64): void -> @nish.aesStore64
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 571:7
+  sharedWrite: 590:7
   calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 567:9 length: i32 (const)
-  local 568:12 i: i32 (let)
-  local 569:11 to: i32 (const)
+  local 586:9 length: i32 (const)
+  local 587:12 i: i32 (let)
+  local 588:11 to: i32 (const)
 function aesCopyPrefix(dst: u8[], src: u8[], count: i32): void -> @nish.aesCopyPrefix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 581:5
+  sharedWrite: 600:5
   pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 578:9 dstLength: i32 (const)
-  local 579:9 srcLength: i32 (const)
-  local 580:12 i: i32 (let)
+  local 597:9 dstLength: i32 (const)
+  local 598:9 srcLength: i32 (const)
+  local 599:12 i: i32 (let)
 function aesKeyUsable(key: AesKey): boolean -> @nish.aesKeyUsable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   pointer key: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 593:9 rounds: i32 (const)
-  local 594:9 words: i32 (const)
-function aesEncryptOne(key: AesKey, block: u8[]): u8[] -> @nish.aesEncryptOne
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local 612:9 rounds: i32 (const)
+  local 613:9 words: i32 (const)
+function aesBlockInto(rk: u64[], rounds: i32, src: u8[], dst: u8[]): void -> @nish.aesBlockInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.aesCopyPrefix
-  calls: nish.aesCopyPrefix nish.aesEncryptBatch nish_exit nish_write
-  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
-  pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1
+  escaping: rounds
+  calls: nish.aesCopyPrefix nish.aesEncryptBatch nish_arena_mark nish_arena_release nish_exit nish_write
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesCopyPrefix#0
   stackSites=1 stackLocals=0
-  local 603:9 buf: u8[] (const)
-  callee 604:3 aesCopyPrefix -> @nish.aesCopyPrefix
-  callee 605:3 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 628:9 buf: u8[] (const)
+  callee 629:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  callee 630:3 aesEncryptBatch -> @nish.aesEncryptBatch
+  callee 631:3 aesCopyPrefix -> @nish.aesCopyPrefix
+  local 632:12 i: i32 (let)
+function aesEncryptOne(key: AesKey, src: u8[], dst: u8[]): void -> @nish.aesEncryptOne
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesBlockInto
+  calls: nish.aesBlockInto nish.aesKeyUsable
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesBlockInto#2
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesBlockInto#3
+  stackSites=0 stackLocals=0
+  callee 644:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 647:3 aesBlockInto -> @nish.aesBlockInto
 function aesKey(key: u8[]): AesKey | null -> @nish.aesKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 622:3
-  calls: nish.AesKey.constructor nish.aesEncryptOne nish.aesExpand nish.aesLoad64 nish_alloc_struct
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesExpand#0
-  stackSites=1 stackLocals=0
-  local 615:9 length: i32 (const)
-  local 619:9 rounds: i32 (const)
-  local 620:9 expanded: AesKey (const)
-  callee 620:28 new AesKey -> @nish.AesKey.constructor
-  callee 620:47 aesExpand -> @nish.aesExpand
-  local 621:9 buf: u8[] (const)
-  callee 621:21 aesEncryptOne -> @nish.aesEncryptOne
-  callee 622:18 aesLoad64 -> @nish.aesLoad64
-  callee 623:18 aesLoad64 -> @nish.aesLoad64
+  sharedWrite: via nish.aesKeyInto
+  calls: nish.AesKey.constructor nish.aesKeyInto nish_alloc_struct nish_exit nish_panic_overflow nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesKeyInto#0
+  stackSites=0 stackLocals=0
+  local 656:9 length: i32 (const)
+  local 660:9 rounds: i32 (const)
+  local 661:9 expanded: AesKey (const)
+  callee 661:28 new AesKey -> @nish.AesKey.constructor
+  callee 662:8 aesKeyInto -> @nish.aesKeyInto
 function aesKeyInto(key: u8[], out: AesKey): boolean -> @nish.aesKeyInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 656:5
-  calls: nish.aesEncryptOne nish.aesExpand nish.aesLoad64 nish_arena_mark nish_arena_release nish_panic_overflow
-  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesExpand#0
+  sharedWrite: 699:3
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.aesScheduleInto nish_arena_mark nish_arena_release nish_exit nish_panic_overflow nish_write
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesScheduleInto#0
   pointer out: size=32 writesThrough=true captured=false passedTo=nish.aesEncryptOne#0
-  stackSites=1 stackLocals=0
-  local 644:9 length: i32 (const)
-  local 648:9 rounds: i32 (const)
-  local 649:9 roundKeys: u64[] (const)
-  local 650:9 words: i32 (const)
-  local 654:9 expanded: u64[] (const)
-  callee 654:27 aesExpand -> @nish.aesExpand
-  local 655:12 i: i32 (let)
-  local 660:9 buf: u8[] (const)
-  callee 660:21 aesEncryptOne -> @nish.aesEncryptOne
-  callee 661:13 aesLoad64 -> @nish.aesLoad64
-  callee 662:13 aesLoad64 -> @nish.aesLoad64
-  local 663:12 i: i32 (let)
+  stackSites=0 stackLocals=0
+  local 689:9 length: i32 (const)
+  local 693:9 rounds: i32 (const)
+  local 694:9 roundKeys: u64[] (const)
+  callee 698:3 aesScheduleInto -> @nish.aesScheduleInto
+  local 700:9 h: u8[] (const)
+  callee 701:3 aesEncryptOne -> @nish.aesEncryptOne
+  callee 702:13 aesLoad64 -> @nish.aesLoad64
+  callee 703:13 aesLoad64 -> @nish.aesLoad64
+  local 704:12 i: i32 (let)
 function aesEncryptBlock(key: AesKey, block: u8[]): u8[] | null -> @nish.aesEncryptBlock [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesCopyPrefix
-  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
+  sharedWrite: via nish.aesEncryptOne
+  calls: nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
   pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   stackSites=0 stackLocals=0
-  callee 671:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 674:9 out: u8[] (const)
-  callee 675:3 aesCopyPrefix -> @nish.aesCopyPrefix
-  callee 675:22 aesEncryptOne -> @nish.aesEncryptOne
+  callee 712:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 715:9 out: u8[] (const)
+  callee 716:3 aesEncryptOne -> @nish.aesEncryptOne
 function aesHeaderMask(key: AesKey, sample: u8[]): u8[] | null -> @nish.aesHeaderMask [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesCopyPrefix
-  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable
+  sharedWrite: via nish.aesEncryptOne
+  calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable nish_exit nish_write
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
   pointer sample: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   stackSites=0 stackLocals=0
-  callee 685:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 688:9 mask: u8[] (const)
-  callee 689:3 aesCopyPrefix -> @nish.aesCopyPrefix
-  callee 689:23 aesEncryptOne -> @nish.aesEncryptOne
+  callee 726:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 729:9 block: u8[] (const)
+  callee 730:3 aesEncryptOne -> @nish.aesEncryptOne
+  local 731:9 mask: u8[] (const)
+  callee 732:3 aesCopyPrefix -> @nish.aesCopyPrefix
 function ghashMul32(x: u64, y: u64): u64 -> @nish.ghashMul32
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 707:9 m0: u64 (const)
-  local 708:9 m1: u64 (const)
-  local 709:9 m2: u64 (const)
-  local 710:9 m3: u64 (const)
-  local 711:9 x0: u64 (const)
-  local 712:9 x1: u64 (const)
-  local 713:9 x2: u64 (const)
-  local 714:9 x3: u64 (const)
-  local 715:9 y0: u64 (const)
-  local 716:9 y1: u64 (const)
-  local 717:9 y2: u64 (const)
-  local 718:9 y3: u64 (const)
-  local 719:9 z0: u64 (const)
-  local 720:9 z1: u64 (const)
-  local 721:9 z2: u64 (const)
-  local 722:9 z3: u64 (const)
-  local 723:9 w0: u64 (const)
+  local 750:9 m0: u64 (const)
+  local 751:9 m1: u64 (const)
+  local 752:9 m2: u64 (const)
+  local 753:9 m3: u64 (const)
+  local 754:9 x0: u64 (const)
+  local 755:9 x1: u64 (const)
+  local 756:9 x2: u64 (const)
+  local 757:9 x3: u64 (const)
+  local 758:9 y0: u64 (const)
+  local 759:9 y1: u64 (const)
+  local 760:9 y2: u64 (const)
+  local 761:9 y3: u64 (const)
+  local 762:9 z0: u64 (const)
+  local 763:9 z1: u64 (const)
+  local 764:9 z2: u64 (const)
+  local 765:9 z3: u64 (const)
+  local 766:9 w0: u64 (const)
 function ghashMultiply(y: u64[], hHi: u64, hLo: u64): void -> @nish.ghashMultiply [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 788:3
+  sharedWrite: 831:3
   calls: nish.ghashMul32 nish_panic_index
   pointer y: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 746:9 low32: u64 (const)
-  local 747:9 thirtyTwo: u64 (const)
-  local 748:9 a1: u64 (const)
-  local 749:9 a0: u64 (const)
-  local 750:9 a2: u64 (const)
-  local 751:9 b2: u64 (const)
-  local 754:9 l0: u64 (const)
-  callee 754:19 ghashMul32 -> @nish.ghashMul32
-  local 755:9 l1: u64 (const)
-  callee 755:19 ghashMul32 -> @nish.ghashMul32
-  local 756:9 l2: u64 (const)
-  callee 756:19 ghashMul32 -> @nish.ghashMul32
-  local 757:9 lHi: u64 (const)
-  local 758:9 lLo: u64 (const)
-  local 761:9 h0: u64 (const)
-  callee 761:19 ghashMul32 -> @nish.ghashMul32
-  local 762:9 h1: u64 (const)
-  callee 762:19 ghashMul32 -> @nish.ghashMul32
-  local 763:9 h2: u64 (const)
-  callee 763:19 ghashMul32 -> @nish.ghashMul32
-  local 764:9 hiHi: u64 (const)
-  local 765:9 hiLo: u64 (const)
-  local 768:9 m0: u64 (const)
-  callee 768:19 ghashMul32 -> @nish.ghashMul32
-  local 769:9 m1: u64 (const)
-  callee 769:19 ghashMul32 -> @nish.ghashMul32
-  local 770:9 m2: u64 (const)
-  callee 770:19 ghashMul32 -> @nish.ghashMul32
-  local 771:9 mHi: u64 (const)
-  local 772:9 mLo: u64 (const)
-  local 775:9 r3: u64 (const)
-  local 776:9 r2: u64 (const)
-  local 777:9 r1: u64 (const)
-  local 778:9 r0: u64 (const)
-  local 779:9 one: u64 (const)
-  local 780:9 top: u64 (const)
-  local 781:9 p3: u64 (const)
-  local 782:9 p2: u64 (const)
-  local 783:9 p1: u64 (const)
-  local 784:9 p0: u64 (const)
-  local 787:9 d1: u64 (const)
-function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @nish.ghashUpdate
+  local 789:9 low32: u64 (const)
+  local 790:9 thirtyTwo: u64 (const)
+  local 791:9 a1: u64 (const)
+  local 792:9 a0: u64 (const)
+  local 793:9 a2: u64 (const)
+  local 794:9 b2: u64 (const)
+  local 797:9 l0: u64 (const)
+  callee 797:19 ghashMul32 -> @nish.ghashMul32
+  local 798:9 l1: u64 (const)
+  callee 798:19 ghashMul32 -> @nish.ghashMul32
+  local 799:9 l2: u64 (const)
+  callee 799:19 ghashMul32 -> @nish.ghashMul32
+  local 800:9 lHi: u64 (const)
+  local 801:9 lLo: u64 (const)
+  local 804:9 h0: u64 (const)
+  callee 804:19 ghashMul32 -> @nish.ghashMul32
+  local 805:9 h1: u64 (const)
+  callee 805:19 ghashMul32 -> @nish.ghashMul32
+  local 806:9 h2: u64 (const)
+  callee 806:19 ghashMul32 -> @nish.ghashMul32
+  local 807:9 hiHi: u64 (const)
+  local 808:9 hiLo: u64 (const)
+  local 811:9 m0: u64 (const)
+  callee 811:19 ghashMul32 -> @nish.ghashMul32
+  local 812:9 m1: u64 (const)
+  callee 812:19 ghashMul32 -> @nish.ghashMul32
+  local 813:9 m2: u64 (const)
+  callee 813:19 ghashMul32 -> @nish.ghashMul32
+  local 814:9 mHi: u64 (const)
+  local 815:9 mLo: u64 (const)
+  local 818:9 r3: u64 (const)
+  local 819:9 r2: u64 (const)
+  local 820:9 r1: u64 (const)
+  local 821:9 r0: u64 (const)
+  local 822:9 one: u64 (const)
+  local 823:9 top: u64 (const)
+  local 824:9 p3: u64 (const)
+  local 825:9 p2: u64 (const)
+  local 826:9 p1: u64 (const)
+  local 827:9 p0: u64 (const)
+  local 830:9 d1: u64 (const)
+function ghashBlocksInto(y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], length: i32): void -> @nish.ghashBlocksInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 813:5
-  escaping: length
+  sharedWrite: 863:5
+  escaping: hHi hLo length
   calls: nish.aesLoad64 nish.ghashMultiply nish_panic_overflow
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashMultiply#0
-  pointer key: size=32 writesThrough=false captured=false
+  pointer _rk: size=0 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.aesLoad64#0 nish.aesLoad64#0
   stackSites=0 stackLocals=0
-  local 810:9 blocks: i32 (const)
-  local 811:12 block: i32 (let)
-  local 812:11 at: i32 (const)
-  callee 813:19 aesLoad64 -> @nish.aesLoad64
-  callee 814:19 aesLoad64 -> @nish.aesLoad64
-  callee 815:5 ghashMultiply -> @nish.ghashMultiply
+  local 860:9 blocks: i32 (const)
+  local 861:12 block: i32 (let)
+  local 862:11 at: i32 (const)
+  callee 863:19 aesLoad64 -> @nish.aesLoad64
+  callee 864:19 aesLoad64 -> @nish.aesLoad64
+  callee 865:5 ghashMultiply -> @nish.ghashMultiply
+function ghashUpdate(y: u64[], key: AesKey, data: u8[], length: i32): void -> @nish.ghashUpdate
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ghashBlocksInto
+  escaping: length
+  calls: nish.aesKeyUsable nish.ghashBlocksInto
+  pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashBlocksInto#0
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.ghashBlocksInto#4
+  stackSites=0 stackLocals=0
+  callee 876:76 aesKeyUsable -> @nish.aesKeyUsable
+  callee 879:3 ghashBlocksInto -> @nish.ghashBlocksInto
 function ghashLengths(y: u64[], key: AesKey, aadLength: i32, textLength: i32): void -> @nish.ghashLengths
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 821:3
+  sharedWrite: 884:3
   calls: nish.ghashMultiply
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashMultiply#0
   pointer key: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 823:3 ghashMultiply -> @nish.ghashMultiply
+  callee 886:3 ghashMultiply -> @nish.ghashMultiply
 function aesGcmJ0(key: AesKey, iv: u8[]): u8[] -> @nish.aesGcmJ0
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 836:5
+  sharedWrite: 899:5
   calls: nish.aesCopyPrefix nish.aesStore64 nish.ghashLengths nish.ghashUpdate nish_exit nish_panic_index nish_write
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashLengths#1
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1 nish.ghashUpdate#2
   stackSites=1 stackLocals=1
-  local 832:9 length: i32 (const)
-  local 833:9 j0: u8[] (const)
-  callee 835:5 aesCopyPrefix -> @nish.aesCopyPrefix
-  local 839:9 y: u64[] (const)
-  callee 840:3 ghashUpdate -> @nish.ghashUpdate
-  callee 841:3 ghashLengths -> @nish.ghashLengths
-  callee 842:3 aesStore64 -> @nish.aesStore64
-  callee 843:3 aesStore64 -> @nish.aesStore64
+  local 895:9 length: i32 (const)
+  local 896:9 j0: u8[] (const)
+  callee 898:5 aesCopyPrefix -> @nish.aesCopyPrefix
+  local 902:9 y: u64[] (const)
+  callee 903:3 ghashUpdate -> @nish.ghashUpdate
+  callee 904:3 ghashLengths -> @nish.ghashLengths
+  callee 905:3 aesStore64 -> @nish.aesStore64
+  callee 906:3 aesStore64 -> @nish.aesStore64
 function aesGcmLengthFits(length: i32): boolean -> @nish.aesGcmLengthFits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
+function aesCtrInto(rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesCtrInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 887:9
+  sharedWrite: 963:9
+  escaping: rounds
   calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
-  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
+  pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 868:9 counter: u32 (const)
-  callee 868:24 aesLoad32 -> @nish.aesLoad32
-  local 869:9 buf: u8[] (const)
-  local 870:9 q: u64[] (const)
-  local 871:9 srcLength: i32 (const)
-  local 872:9 dstLength: i32 (const)
-  local 874:9 batches: i32 (const)
-  local 875:12 batch: i32 (let)
-  local 876:11 base: i32 (const)
-  local 877:14 k: i32 (let)
-  local 878:16 i: i32 (let)
-  callee 881:7 aesStore32 -> @nish.aesStore32
-  callee 883:5 aesEncryptBatch -> @nish.aesEncryptBatch
-  local 884:14 j: i32 (let)
-  local 885:13 at: i32 (const)
+  local 938:9 counter: u32 (const)
+  callee 938:24 aesLoad32 -> @nish.aesLoad32
+  local 939:9 buf: u8[] (const)
+  local 940:9 q: u64[] (const)
+  local 941:9 srcLength: i32 (const)
+  local 942:9 dstLength: i32 (const)
+  local 943:9 bufLength: i32 (const)
+  local 945:9 batches: i32 (const)
+  local 946:12 batch: i32 (let)
+  local 947:11 base: i32 (const)
+  local 948:14 k: i32 (let)
+  local 949:16 i: i32 (let)
+  callee 952:7 aesStore32 -> @nish.aesStore32
+  callee 954:5 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 960:14 at: i32 (let)
+  local 961:13 j: i32 (const)
+function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.aesCtrInto
+  escaping: length
+  calls: nish.aesCtrInto nish.aesKeyUsable
+  pointer key: size=32 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0
+  pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesCtrInto#2
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesCtrInto#3
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesCtrInto#4
+  stackSites=0 stackLocals=0
+  callee 977:6 aesKeyUsable -> @nish.aesKeyUsable
+  callee 985:3 aesCtrInto -> @nish.aesCtrInto
 function aesGcmTag(y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void -> @nish.aesGcmTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 904:3
+  sharedWrite: 1000:3
   escaping: textLength
-  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release nish_exit nish_write
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashUpdate#0 nish.ghashUpdate#0 nish.ghashLengths#0
   pointer key: size=32 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashUpdate#1 nish.ghashLengths#1 nish.aesEncryptOne#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   pointer text: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   stackSites=0 stackLocals=0
-  local 899:9 aadLength: i32 (const)
-  callee 900:3 ghashUpdate -> @nish.ghashUpdate
-  callee 901:3 ghashUpdate -> @nish.ghashUpdate
-  callee 902:3 ghashLengths -> @nish.ghashLengths
-  local 903:9 mask: u8[] (const)
-  callee 903:22 aesEncryptOne -> @nish.aesEncryptOne
-  callee 904:17 aesLoad64 -> @nish.aesLoad64
-  callee 905:17 aesLoad64 -> @nish.aesLoad64
+  local 994:9 aadLength: i32 (const)
+  callee 995:3 ghashUpdate -> @nish.ghashUpdate
+  callee 996:3 ghashUpdate -> @nish.ghashUpdate
+  callee 997:3 ghashLengths -> @nish.ghashLengths
+  local 998:9 mask: u8[] (const)
+  callee 999:3 aesEncryptOne -> @nish.aesEncryptOne
+  callee 1000:17 aesLoad64 -> @nish.aesLoad64
+  callee 1001:17 aesLoad64 -> @nish.aesLoad64
 function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @nish.aesGcmTagMask [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -83290,18 +83993,18 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 926:9 length: i32 (const)
-  local 929:9 longest: i32 (const)
-  callee 930:8 aesKeyUsable -> @nish.aesKeyUsable
-  callee 930:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 933:9 j0: u8[] (const)
-  callee 933:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 934:9 out: u8[] (const)
-  callee 935:3 aesGcmCtr -> @nish.aesGcmCtr
-  local 936:9 tag: u64[] (const)
-  callee 937:3 aesGcmTag -> @nish.aesGcmTag
-  callee 938:3 aesStore64 -> @nish.aesStore64
-  callee 939:3 aesStore64 -> @nish.aesStore64
+  local 1022:9 length: i32 (const)
+  local 1025:9 longest: i32 (const)
+  callee 1026:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 1026:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1029:9 j0: u8[] (const)
+  callee 1029:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1030:9 out: u8[] (const)
+  callee 1031:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1032:9 tag: u64[] (const)
+  callee 1033:3 aesGcmTag -> @nish.aesGcmTag
+  callee 1034:3 aesStore64 -> @nish.aesStore64
+  callee 1035:3 aesStore64 -> @nish.aesStore64
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesGcmJ0
@@ -83311,21 +84014,21 @@ function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#4 nish.aesLoad64#0 nish.aesLoad64#0 nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 952:9 total: i32 (const)
-  callee 953:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 958:9 length: i32 (const)
-  callee 959:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 962:9 j0: u8[] (const)
-  callee 962:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 963:9 tag: u64[] (const)
-  callee 964:3 aesGcmTag -> @nish.aesGcmTag
-  local 965:9 same: u64 (const)
-  callee 965:21 aesGcmTagMask -> @nish.aesGcmTagMask
-  callee 968:5 aesLoad64 -> @nish.aesLoad64
-  callee 969:5 aesLoad64 -> @nish.aesLoad64
-  local 975:9 hashKeySet: u64 (const)
-  local 979:9 out: u8[] (const)
-  callee 980:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1048:9 total: i32 (const)
+  callee 1049:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 1054:9 length: i32 (const)
+  callee 1055:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1058:9 j0: u8[] (const)
+  callee 1058:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1059:9 tag: u64[] (const)
+  callee 1060:3 aesGcmTag -> @nish.aesGcmTag
+  local 1061:9 same: u64 (const)
+  callee 1061:21 aesGcmTagMask -> @nish.aesGcmTagMask
+  callee 1064:5 aesLoad64 -> @nish.aesLoad64
+  callee 1065:5 aesLoad64 -> @nish.aesLoad64
+  local 1071:9 hashKeySet: u64 (const)
+  local 1075:9 out: u8[] (const)
+  callee 1076:3 aesGcmCtr -> @nish.aesGcmCtr
 module std/crypto/chacha20poly1305.ts [package nish]
 const CHACHA20_KEY_SIZE: i32 = 32 [exported]
 const CHACHA20POLY1305_NONCE_SIZE: i32 = 12 [exported]
@@ -84557,6 +85260,672 @@ function indexOfAnyFrom(text: string, bytes: string, from: i32): i32 -> @nish.in
   local 255:7 i: i32 (let)
   local 259:11 code: i32 (const)
   local 260:9 j: i32 (let)
+program bench/json-tokenizer/main.ts
+module bench/json-tokenizer/main.ts (entry)
+import JSON_TOK_END from "nish/json-tokenizer" -> const JSON_TOK_END
+import JSON_TOK_KEY from "nish/json-tokenizer" -> const JSON_TOK_KEY
+import JSON_TOK_NUMBER from "nish/json-tokenizer" -> const JSON_TOK_NUMBER
+import JSON_TOK_STRING from "nish/json-tokenizer" -> const JSON_TOK_STRING
+import JsonLimits from "nish/json-tokenizer" -> struct JsonLimits
+import JsonTokenizer from "nish/json-tokenizer" -> struct JsonTokenizer
+const BODY: string = "{\"id\":1234567,\"user\":{\"name\":\"Ada Lovelace\",\"email\":\"ada@example.com\",\"verified\":true},\"items\":[{\"sku\":\"A-100\",\"qty\":2,\"price\":19.99},{\"sku\":\"B-205\",\"qty\":1,\"price\":5.5}],\"note\":\"caf\\u00e9 \\ud83d\\ude00 \\\"quoted\\\"\",\"coupon\":null,\"total\":45.48}"
+function benchBytes(s: string): u8[] -> @benchBytes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 33:5
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+  local 29:9 n: i32 (const)
+  local 30:9 out: u8[] (const)
+  local 31:7 i: i32 (let)
+function benchOne(tok: JsonTokenizer, body: u8[], out: u8[]): i64 -> @benchOne
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.reset
+  calls: llvm.fptosi.sat.i64.f64 nish.JsonTokenizer.keyEquals nish.JsonTokenizer.next nish.JsonTokenizer.numberF64 nish.JsonTokenizer.reset nish.JsonTokenizer.stringInto nish_panic_index nish_panic_overflow
+  pointer tok: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.reset#0 nish.JsonTokenizer.next#0 nish.JsonTokenizer.stringInto#0 nish.JsonTokenizer.keyEquals#0 nish.JsonTokenizer.numberF64#0 nish.JsonTokenizer.next#0
+  pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.JsonTokenizer.stringInto#1
+  stackSites=0 stackLocals=0
+  callee 41:3 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  local 42:7 sum: i64 (let)
+  local 43:7 k: i32 (let)
+  callee 43:16 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 47:13 n: i32 (const)
+  callee 47:22 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  callee 51:11 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee 55:25 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
+  callee 59:9 JsonTokenizer.next -> @nish.JsonTokenizer.next
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 76:7
+  calls: benchBytes benchOne llvm.fptosi.sat.i32.f64 nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_arena_mark nish_arena_release nish_exit nish_monotonic_nanos nish_panic_div nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_write
+  stackSites=2 stackLocals=1
+  local 65:9 rounds: i32 (const)
+  local 66:9 body: u8[] (const)
+  callee 66:16 benchBytes -> @benchBytes
+  local 67:9 out: u8[] (const)
+  local 68:9 tok: JsonTokenizer (const)
+  callee 68:15 new JsonTokenizer -> @nish.JsonTokenizer.constructor
+  callee 68:62 new JsonLimits -> @nish.JsonLimits.constructor
+  local 70:9 at: i32 (const)
+  local 71:7 checksum: i64 (let)
+  local 72:9 started: i64 (const)
+  local 73:7 r: i32 (let)
+  callee 78:28 benchOne -> @benchOne
+  local 81:9 elapsed: i64 (const)
+module std/json-tokenizer.ts [package nish]
+const JSON_TOK_END: i32 = 0 [exported]
+const JSON_TOK_OBJECT_BEGIN: i32 = 1 [exported]
+const JSON_TOK_OBJECT_END: i32 = 2 [exported]
+const JSON_TOK_ARRAY_BEGIN: i32 = 3 [exported]
+const JSON_TOK_ARRAY_END: i32 = 4 [exported]
+const JSON_TOK_KEY: i32 = 5 [exported]
+const JSON_TOK_STRING: i32 = 6 [exported]
+const JSON_TOK_NUMBER: i32 = 7 [exported]
+const JSON_TOK_TRUE: i32 = 8 [exported]
+const JSON_TOK_FALSE: i32 = 9 [exported]
+const JSON_TOK_NULL: i32 = 10 [exported]
+const JSON_TOK_ERR_SYNTAX: i32 = -1 [exported]
+const JSON_TOK_ERR_TRUNCATED: i32 = -2 [exported]
+const JSON_TOK_ERR_TRAILING: i32 = -3 [exported]
+const JSON_TOK_ERR_UTF8: i32 = -4 [exported]
+const JSON_TOK_ERR_ESCAPE: i32 = -5 [exported]
+const JSON_TOK_ERR_SURROGATE: i32 = -6 [exported]
+const JSON_TOK_ERR_CONTROL: i32 = -7 [exported]
+const JSON_TOK_ERR_NUMBER: i32 = -8 [exported]
+const JSON_TOK_ERR_DEPTH: i32 = -9 [exported]
+const JSON_TOK_ERR_STRING_LIMIT: i32 = -10 [exported]
+const JSON_TOK_ERR_NUMBER_LIMIT: i32 = -11 [exported]
+const JSON_TOK_ERR_TOTAL_LIMIT: i32 = -12 [exported]
+const JSON_TOK_ERR_WINDOW: i32 = -13 [exported]
+const JSON_DEFAULT_MAX_DEPTH: i32 = 128 [exported]
+const JSON_DEFAULT_MAX_STRING_BYTES: i32 = 1048576 [exported]
+const JSON_DEFAULT_MAX_NUMBER_BYTES: i32 = 256 [exported]
+const JSON_DEFAULT_MAX_TOTAL_BYTES: i32 = 16777216 [exported]
+const JSON_TOK_WANT_VALUE: i32 = 0
+const JSON_TOK_WANT_VALUE_OR_CLOSE: i32 = 1
+const JSON_TOK_WANT_KEY_OR_CLOSE: i32 = 2
+const JSON_TOK_WANT_COLON: i32 = 3
+const JSON_TOK_WANT_COMMA_OR_CLOSE: i32 = 4
+const JSON_TOK_WANT_NOTHING: i32 = 5
+const JSON_TOK_IN_OBJECT: i32 = 1
+const JSON_TOK_IN_ARRAY: i32 = 2
+const JSON_TOK_TAB: i32 = 9
+const JSON_TOK_NEWLINE: i32 = 10
+const JSON_TOK_CARRIAGE_RETURN: i32 = 13
+const JSON_TOK_SPACE: i32 = 32
+const JSON_TOK_QUOTE: i32 = 34
+const JSON_TOK_PLUS: i32 = 43
+const JSON_TOK_COMMA: i32 = 44
+const JSON_TOK_MINUS: i32 = 45
+const JSON_TOK_DOT: i32 = 46
+const JSON_TOK_SLASH: i32 = 47
+const JSON_TOK_DIGIT_0: i32 = 48
+const JSON_TOK_DIGIT_1: i32 = 49
+const JSON_TOK_DIGIT_9: i32 = 57
+const JSON_TOK_COLON: i32 = 58
+const JSON_TOK_UPPER_A: i32 = 65
+const JSON_TOK_UPPER_E: i32 = 69
+const JSON_TOK_UPPER_F: i32 = 70
+const JSON_TOK_OPEN_BRACKET: i32 = 91
+const JSON_TOK_BACKSLASH: i32 = 92
+const JSON_TOK_CLOSE_BRACKET: i32 = 93
+const JSON_TOK_LOWER_A: i32 = 97
+const JSON_TOK_LOWER_B: i32 = 98
+const JSON_TOK_LOWER_E: i32 = 101
+const JSON_TOK_LOWER_F: i32 = 102
+const JSON_TOK_LOWER_N: i32 = 110
+const JSON_TOK_LOWER_R: i32 = 114
+const JSON_TOK_LOWER_T: i32 = 116
+const JSON_TOK_LOWER_U: i32 = 117
+const JSON_TOK_OPEN_BRACE: i32 = 123
+const JSON_TOK_CLOSE_BRACE: i32 = 125
+const JSON_TOK_BACKSPACE: i32 = 8
+const JSON_TOK_FORM_FEED: i32 = 12
+const JSON_TOK_ASCII_END: i32 = 128
+const JSON_TOK_CONTINUATION_LOW: i32 = 128
+const JSON_TOK_CONTINUATION_HIGH: i32 = 191
+const JSON_TOK_LEAD_TWO_LOW: i32 = 194
+const JSON_TOK_LEAD_TWO_HIGH: i32 = 223
+const JSON_TOK_LEAD_E0: i32 = 224
+const JSON_TOK_LEAD_ED: i32 = 237
+const JSON_TOK_LEAD_THREE_HIGH: i32 = 239
+const JSON_TOK_LEAD_F0: i32 = 240
+const JSON_TOK_LEAD_F4: i32 = 244
+const JSON_TOK_E0_SECOND_LOW: i32 = 160
+const JSON_TOK_ED_SECOND_HIGH: i32 = 159
+const JSON_TOK_F0_SECOND_LOW: i32 = 144
+const JSON_TOK_F4_SECOND_HIGH: i32 = 143
+const JSON_TOK_TWO_BYTE_LEAD: i32 = 192
+const JSON_TOK_THREE_BYTE_LEAD: i32 = 224
+const JSON_TOK_FOUR_BYTE_LEAD: i32 = 240
+const JSON_TOK_LOW_SIX: i32 = 63
+const JSON_TOK_CONTINUATION_BITS: i32 = 6
+const JSON_TOK_TWO_BYTE_FLOOR: i32 = 128
+const JSON_TOK_THREE_BYTE_FLOOR: i32 = 2048
+const JSON_TOK_FOUR_BYTE_FLOOR: i32 = 65536
+const JSON_TOK_HIGH_SURROGATE: i32 = 55296
+const JSON_TOK_LOW_SURROGATE: i32 = 56320
+const JSON_TOK_SURROGATE_END: i32 = 57344
+const JSON_TOK_HEX_BASE: i32 = 16
+const JSON_TOK_TEN: i32 = 10
+const JSON_TOK_FAST_DIGITS: i32 = 15
+const JSON_TOK_FAST_EXPONENT: i32 = 22
+const JSON_TOK_EXPONENT_CAP: i32 = 100000
+const JSON_TOK_END_CEILING: i32 = 2147483583
+struct JsonLimits (class) size=16 align=4 exported
+  field maxDepth: i32 index=0 offset=0
+  field maxStringBytes: i32 index=1 offset=4
+  field maxNumberBytes: i32 index=2 offset=8
+  field maxTotalBytes: i32 index=3 offset=12
+  constructor -> @nish.JsonLimits.constructor
+struct JsonTokenizer (class) size=88 align=8 exported
+  field src: u8[] index=0 offset=0
+  field integerValue: i64 index=1 offset=8
+  field stack: u8[] index=2 offset=16
+  field off: i32 index=3 offset=24
+  field end: i32 index=4 offset=28
+  field pos: i32 index=5 offset=32
+  field maxDepth: i32 index=6 offset=36
+  field maxStringBytes: i32 index=7 offset=40
+  field maxNumberBytes: i32 index=8 offset=44
+  field maxTotalBytes: i32 index=9 offset=48
+  field depth: i32 index=10 offset=52
+  field want: i32 index=11 offset=56
+  field kind: i32 index=12 offset=60
+  field tokStart: i32 index=13 offset=64
+  field tokEnd: i32 index=14 offset=68
+  field failed: i32 index=15 offset=72
+  field errorAt: i32 index=16 offset=76
+  field stringBytes: i32 index=17 offset=80
+  field integral: boolean index=18 offset=84
+  constructor -> @nish.JsonTokenizer.constructor
+  method reset -> @nish.JsonTokenizer.reset
+  method fail -> @nish.JsonTokenizer.fail
+  method next -> @nish.JsonTokenizer.next
+  method top -> @nish.JsonTokenizer.top
+  method emit -> @nish.JsonTokenizer.emit
+  method close -> @nish.JsonTokenizer.close
+  method open -> @nish.JsonTokenizer.open
+  method key -> @nish.JsonTokenizer.key
+  method value -> @nish.JsonTokenizer.value
+  method literal -> @nish.JsonTokenizer.literal
+  method number -> @nish.JsonTokenizer.number
+  method numberRefused -> @nish.JsonTokenizer.numberRefused
+  method string -> @nish.JsonTokenizer.string
+  method escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  method isText -> @nish.JsonTokenizer.isText
+  method stringInto -> @nish.JsonTokenizer.stringInto
+  method stringLength -> @nish.JsonTokenizer.stringLength
+  method keyEquals -> @nish.JsonTokenizer.keyEquals
+  method isInteger -> @nish.JsonTokenizer.isInteger
+  method numberI64 -> @nish.JsonTokenizer.numberI64
+  method integerScan -> @nish.JsonTokenizer.integerScan
+  method numberF64 -> @nish.JsonTokenizer.numberF64
+  method numberSlow -> @nish.JsonTokenizer.numberSlow
+  method skipValue -> @nish.JsonTokenizer.skipValue
+function JsonLimits.constructor(this: JsonLimits): void -> @nish.JsonLimits.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function jsonTokByteAt(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokByteAt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function jsonTokIsBlank(b: i32): boolean -> @nish.jsonTokIsBlank
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokIsDigit(b: i32): boolean -> @nish.jsonTokIsDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokSkipBlank(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipBlank
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end i
+  calls: nish.jsonTokByteAt nish.jsonTokIsBlank nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  local 273:7 j: i32 (let)
+  callee 274:10 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  callee 274:25 jsonTokByteAt -> @nish.jsonTokByteAt
+function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: b
+  calls: nish.jsonTokIsDigit
+  stackSites=0 stackLocals=0
+  callee 282:7 jsonTokIsDigit -> @nish.jsonTokIsDigit
+function jsonTokHex4(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokHex4
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end
+  calls: nish.jsonTokByteAt nish.jsonTokHexDigit nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  local 300:7 value: i32 (let)
+  local 301:7 k: i32 (let)
+  local 303:11 b: i32 (const)
+  callee 303:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 307:11 digit: i32 (const)
+  callee 307:24 jsonTokHexDigit -> @nish.jsonTokHexDigit
+function jsonTokInRange(b: i32, low: i32, high: i32): boolean -> @nish.jsonTokInRange
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokUtf8Length(src: u8[], at: i32, end: i32): i32 -> @nish.jsonTokUtf8Length
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end
+  calls: nish.jsonTokByteAt nish.jsonTokInRange nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0 nish.jsonTokByteAt#0 nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  local 330:9 lead: i32 (const)
+  callee 330:21 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 331:9 second: i32 (const)
+  callee 331:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 332:7 low: i32 (let)
+  local 333:7 high: i32 (let)
+  local 334:7 length: i32 (let)
+  callee 335:7 jsonTokInRange -> @nish.jsonTokInRange
+  callee 337:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 344:14 jsonTokInRange -> @nish.jsonTokInRange
+  callee 354:8 jsonTokInRange -> @nish.jsonTokInRange
+  local 357:7 k: i32 (let)
+  local 359:11 next: i32 (const)
+  callee 359:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 360:10 jsonTokInRange -> @nish.jsonTokInRange
+function jsonTokUtf8Width(cp: i32): i32 -> @nish.jsonTokUtf8Width
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokUtf8Byte(cp: i32, width: i32, k: i32): i32 -> @nish.jsonTokUtf8Byte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: cp
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 384:9 shift: i32 (const)
+  local 385:9 bits: i32 (const)
+function jsonTokShortEscape(b: i32): i32 -> @nish.jsonTokShortEscape
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: b
+  stackSites=0 stackLocals=0
+function jsonTokEscapeLength(src: u8[], at: i32, end: i32, cp: i32): i32 -> @nish.jsonTokEscapeLength
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end
+  calls: nish.jsonTokByteAt
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.jsonTokByteAt#0
+  stackSites=0 stackLocals=0
+  callee 428:10 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.constructor(this: JsonTokenizer, src: u8[], off: i32, len: i32, limits: JsonLimits): void -> @nish.JsonTokenizer.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.reset
+  escaping: len off src
+  calls: nish.JsonTokenizer.reset nish_exit nish_write
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.reset#0
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
+  pointer limits: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 497:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+function JsonTokenizer.reset(this: JsonTokenizer, src: u8[], off: i32, len: i32): void -> @nish.JsonTokenizer.reset [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 506:5
+  escaping: off src
+  calls: nish.JsonTokenizer.fail nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
+  pointer src: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee 521:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 528:7 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.fail(this: JsonTokenizer, code: i32, at: i32): i32 -> @nish.JsonTokenizer.fail [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 535:7
+  escaping: at code
+  pointer this: size=88 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function JsonTokenizer.next(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.next [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 553:11
+  calls: nish.JsonTokenizer.close nish.JsonTokenizer.fail nish.JsonTokenizer.key nish.JsonTokenizer.top nish.JsonTokenizer.value nish.jsonTokByteAt nish.jsonTokSkipBlank nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.top#0 nish.JsonTokenizer.key#0 nish.JsonTokenizer.value#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.close#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.value#0
+  stackSites=0 stackLocals=0
+  local 546:11 src: u8[] (const)
+  local 547:11 end: i32 (const)
+  local 548:11 at: i32 (const)
+  callee 548:21 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  local 549:11 b: i32 (const)
+  callee 549:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 557:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 560:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 560:29 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 562:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 565:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 567:16 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 570:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 572:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  local 575:17 after: i32 (const)
+  callee 575:30 jsonTokSkipBlank -> @nish.jsonTokSkipBlank
+  callee 576:15 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 577:20 JsonTokenizer.key -> @nish.JsonTokenizer.key
+  callee 579:18 JsonTokenizer.value -> @nish.JsonTokenizer.value
+  callee 582:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 585:18 JsonTokenizer.close -> @nish.JsonTokenizer.close
+  callee 587:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 589:16 JsonTokenizer.value -> @nish.JsonTokenizer.value
+function JsonTokenizer.top(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.top [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 595:11 d: i32 (const)
+function JsonTokenizer.emit(this: JsonTokenizer, k: i32, start: i32, stop: i32): i32 -> @nish.JsonTokenizer.emit [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 604:5
+  escaping: k start stop
+  pointer this: size=88 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.close [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 625:5
+  escaping: at
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.top nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.top#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  callee 622:9 JsonTokenizer.top -> @nish.JsonTokenizer.top
+  callee 623:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 626:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.open(this: JsonTokenizer, at: i32, inside: i32): i32 -> @nish.JsonTokenizer.open [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 635:5
+  escaping: at
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  local 631:11 d: i32 (const)
+  callee 633:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 637:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.key(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.key [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.string
+  escaping: at
+  calls: nish.JsonTokenizer.fail nish.JsonTokenizer.string nish.jsonTokByteAt
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 642:11 b: i32 (const)
+  callee 642:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 644:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 646:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.value(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.value [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.string
+  escaping: at
+  calls: nish.JsonTokenizer.fail nish.JsonTokenizer.literal nish.JsonTokenizer.number nish.JsonTokenizer.open nish.JsonTokenizer.string nish.jsonTokByteAt nish.jsonTokIsDigit
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.string#0 nish.JsonTokenizer.number#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.open#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.literal#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 651:11 src: u8[] (const)
+  local 652:11 end: i32 (const)
+  local 653:11 b: i32 (const)
+  callee 653:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 655:14 JsonTokenizer.string -> @nish.JsonTokenizer.string
+  callee 657:33 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 658:14 JsonTokenizer.number -> @nish.JsonTokenizer.number
+  callee 662:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 664:16 JsonTokenizer.open -> @nish.JsonTokenizer.open
+  callee 666:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 668:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 670:16 JsonTokenizer.literal -> @nish.JsonTokenizer.literal
+  callee 672:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.literal(this: JsonTokenizer, at: i32, word: string, k: i32): i32 -> @nish.JsonTokenizer.literal [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.emit
+  escaping: at k
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.jsonTokByteAt nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.emit#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 678:11 n: i32 (const)
+  local 679:9 matched: i32 (let)
+  callee 682:7 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 687:14 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+  callee 689:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.number [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 751:5
+  escaping: at
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokIsDigit nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  local 704:11 src: u8[] (const)
+  local 705:11 end: i32 (const)
+  local 706:9 i: i32 (let)
+  callee 707:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 710:11 first: i32 (const)
+  callee 710:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 714:14 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 714:29 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 718:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local 720:9 integral: boolean (let)
+  callee 721:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 724:13 digit: i32 (const)
+  callee 724:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 725:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 726:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 728:14 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 728:29 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 732:11 e: i32 (const)
+  callee 732:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 736:13 sign: i32 (const)
+  callee 736:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 740:13 digit: i32 (const)
+  callee 740:26 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 741:12 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 742:16 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  callee 744:14 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 744:29 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 749:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 752:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.numberRefused(this: JsonTokenizer, code: i32, at: i32, i: i32): i32 -> @nish.JsonTokenizer.numberRefused [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.fail
+  escaping: code i
+  calls: nish.JsonTokenizer.fail nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  callee 758:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 760:12 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nish.JsonTokenizer.string [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 814:5
+  escaping: at k
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
+  stackSites=0 stackLocals=0
+  local 770:11 src: u8[] (const)
+  local 771:11 end: i32 (const)
+  local 774:11 room: i32 (const)
+  local 775:11 limit: i32 (const)
+  local 776:9 i: i32 (let)
+  local 777:9 decoded: i32 (let)
+  local 779:13 b: i32 (const)
+  callee 779:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 784:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 787:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 790:16 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 793:15 cp: i32 (const)
+  callee 793:25 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  callee 797:20 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  callee 798:14 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local 803:15 width: i32 (const)
+  callee 803:28 jsonTokUtf8Length -> @nish.jsonTokUtf8Length
+  callee 805:18 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 812:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 815:12 JsonTokenizer.emit -> @nish.JsonTokenizer.emit
+function JsonTokenizer.escapeCodePoint(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTokenizer.escapeCodePoint [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.fail
+  escaping: at
+  calls: nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokHex4 nish.jsonTokShortEscape nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0
+  stackSites=0 stackLocals=0
+  local 824:11 src: u8[] (const)
+  local 825:11 end: i32 (const)
+  local 826:11 letter: i32 (const)
+  callee 826:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 828:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 831:13 short: i32 (const)
+  callee 831:26 jsonTokShortEscape -> @nish.jsonTokShortEscape
+  callee 832:26 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 834:11 unit: i32 (const)
+  callee 834:23 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 836:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 842:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 844:11 slash: i32 (const)
+  callee 844:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 845:11 u: i32 (const)
+  callee 845:20 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 848:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 851:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  local 853:11 low: i32 (const)
+  callee 853:22 jsonTokHex4 -> @nish.jsonTokHex4
+  callee 855:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+  callee 858:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
+function JsonTokenizer.isText(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isText [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 -> @nish.JsonTokenizer.stringInto [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 887:9
+  escaping: at
+  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 876:11 n: i32 (const)
+  callee 877:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 880:11 src: u8[] (const)
+  local 881:11 end: i32 (const)
+  local 882:9 i: i32 (let)
+  local 883:9 o: i32 (let)
+  local 894:13 b: i32 (const)
+  callee 894:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 903:13 cp: i32 (const)
+  callee 903:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 904:13 width: i32 (const)
+  callee 904:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 905:11 k: i32 (let)
+  callee 908:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 913:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.JsonTokenizer.isText
+  pointer this: size=88 writesThrough=false captured=false passedTo=nish.JsonTokenizer.isText#0
+  stackSites=0 stackLocals=0
+  callee 920:12 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+function JsonTokenizer.keyEquals(this: JsonTokenizer, name: string): boolean -> @nish.JsonTokenizer.keyEquals [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.escapeCodePoint
+  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
+  stackSites=0 stackLocals=0
+  local 934:11 n: i32 (const)
+  callee 935:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local 938:11 src: u8[] (const)
+  local 939:11 end: i32 (const)
+  local 940:9 i: i32 (let)
+  local 941:9 o: i32 (let)
+  callee 946:13 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 954:13 b: i32 (const)
+  callee 954:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 963:13 cp: i32 (const)
+  callee 963:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local 964:13 width: i32 (const)
+  callee 964:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local 965:11 k: i32 (let)
+  callee 967:23 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee 973:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+function JsonTokenizer.isInteger(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isInteger [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.integerScan
+  calls: nish.JsonTokenizer.integerScan
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.integerScan#0
+  stackSites=0 stackLocals=0
+  callee 984:62 JsonTokenizer.integerScan -> @nish.JsonTokenizer.integerScan
+function JsonTokenizer.numberI64(this: JsonTokenizer): i64 -> @nish.JsonTokenizer.numberI64 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.isInteger
+  calls: nish.JsonTokenizer.isInteger nish.jsonTokByteAt nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isInteger#0
+  stackSites=0 stackLocals=0
+  callee 993:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  local 996:11 src: u8[] (const)
+  local 997:11 negated: i64 (const)
+  callee 998:12 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.integerScan(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.integerScan [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 1027:5
+  calls: nish.jsonTokByteAt nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 1008:11 src: u8[] (const)
+  local 1009:11 end: i32 (const)
+  local 1010:11 negative: boolean (const)
+  callee 1010:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1014:11 min: i64 (const)
+  local 1015:11 ten: i64 (const)
+  local 1016:11 bound: i64 (const)
+  local 1017:9 acc: i64 (let)
+  local 1018:9 i: i32 (let)
+  local 1020:13 digit: i64 (const)
+  callee 1020:32 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_arena_mark nish_arena_release nish_panic_overflow
+  pointer this: size=88 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
+  stackSites=0 stackLocals=0
+  local 1041:11 src: u8[] (const)
+  local 1042:11 start: i32 (const)
+  local 1043:11 end: i32 (const)
+  local 1044:11 negative: boolean (const)
+  callee 1044:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1046:11 ten: f64 (const)
+  local 1047:9 mantissa: f64 (let)
+  local 1048:9 digits: i32 (let)
+  local 1049:9 scale: i32 (let)
+  local 1050:9 afterDot: boolean (let)
+  local 1051:9 i: i32 (let)
+  local 1053:13 b: i32 (const)
+  callee 1053:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1056:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee 1067:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1077:13 sign: i32 (const)
+  callee 1077:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local 1078:13 minus: boolean (const)
+  local 1082:11 exponent: i32 (let)
+  callee 1084:46 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee 1088:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1092:9 value: f64 (let)
+  callee 1095:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local 1097:13 power: f64 (const)
+  callee 1097:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonTokByteAt nish_alloc_struct nish_array_grow nish_parse_number nish_str_new
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 1113:11 src: u8[] (const)
+  local 1114:11 end: i32 (const)
+  local 1115:11 parts: string[] (const)
+  local 1116:9 i: i32 (let)
+  callee 1118:38 jsonTokByteAt -> @nish.jsonTokByteAt
+function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonTokenizer.next
+  calls: nish.JsonTokenizer.next nish_panic_overflow
+  pointer this: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.next#0 nish.JsonTokenizer.next#0
+  stackSites=0 stackLocals=0
+  local 1135:9 k: i32 (let)
+  callee 1137:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 1142:11 target: i32 (const)
+  callee 1144:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 1152:9 ten: f64 (const)
+  local 1153:7 p: f64 (let)
+  local 1154:7 k: i32 (let)
 program bench/json-writer/main.ts
 module bench/json-writer/main.ts (entry)
 import JsonWriter from "nish/json" -> struct JsonWriter
