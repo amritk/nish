@@ -2706,6 +2706,22 @@ class FactCollector {
     }
   }
 
+  /**
+   * The callees of the builtin `name`. `panic` prints to fd 2 and `_exit`s as
+   * every runtime check's panic does, so its `nish_write` and `nish_exit` are
+   * a panic's tail, not output (`FunctionFacts.writesOutput`): a function
+   * that can only fail that way writes nothing another thread reads.
+   */
+  addBuiltinCallees(name: string, names: string[]): void {
+    if (name !== "panic") {
+      this.addCallees(names)
+      return
+    }
+    for (const callee of names) {
+      this.facts.callees.add(callee)
+    }
+  }
+
   addCallees(names: string[]): void {
     for (const name of names) {
       this.facts.callees.add(name)
@@ -3226,11 +3242,11 @@ class FactCollector {
         imported.indexOf(".") < 0
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
-      this.addCallees(named)
+      this.addBuiltinCallees(imported, named)
       this.noteWorld(node, named, imported)
     } else {
       const plain = identifierBuiltinCallees(this.unit.program, this.table, node, unchecked)
-      this.addCallees(plain)
+      this.addBuiltinCallees(node.children[0].text, plain)
       this.noteWorld(node, plain, node.children[0].text)
     }
     if (isArenaCall(this.unit.program, node)) {
