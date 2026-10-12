@@ -1,0 +1,1 @@
+`User.json` names `tag` in `optional`, which is not a field of `User`: an option names one of the class's own fields, spelled as it is declared

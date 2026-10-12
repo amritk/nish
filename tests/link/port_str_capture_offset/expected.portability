@@ -1,0 +1,1 @@
+{"file":"tests/link/port_str_capture_offset/main.ts","line":11,"column":38,"endLine":11,"endColumn":40,"severity":"portability","code":"NL8001","message":"`at`, which holds `word.indexOf(\"l\")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `2`, which was not counted in that unit"}

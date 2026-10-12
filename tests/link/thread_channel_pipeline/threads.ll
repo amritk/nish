@@ -11,8 +11,8 @@
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" elements\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
-declare noundef i32 @produce(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
-declare noundef i32 @consume(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
+declare noundef i32 @produce$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
+declare noundef i32 @consume$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare noundef i64 @nish_arena_mark() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
@@ -213,7 +213,7 @@ entry:
   %0 = bitcast i8* %p to { %struct.Pipe*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Pipe*, %struct.Pipe** %1
-  %3 = call i32 @produce(%struct.Pipe* %2)
+  %3 = call i32 @produce$(%struct.Pipe* %2)
   %4 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
   store i32 %3, i32* %4
   %5 = getelementptr inbounds %struct.Pipe, %struct.Pipe* %2, i32 0, i32 0
@@ -282,7 +282,7 @@ entry:
   %0 = bitcast i8* %p to { %struct.Pipe*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Pipe*, %struct.Pipe** %1
-  %3 = call i32 @consume(%struct.Pipe* %2)
+  %3 = call i32 @consume$(%struct.Pipe* %2)
   %4 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
   store i32 %3, i32* %4
   ret void
@@ -340,14 +340,14 @@ if.end:
 
 define internal void @nish.runTask$$Pipe$i32$fn.7.produce(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
-  %0 = call i32 @produce(%struct.Pipe* %arg)
+  %0 = call i32 @produce$(%struct.Pipe* %arg)
   call void @nish.storeResult$i32(%struct.nish_array* %dst, i32 %at, i32 %0)
   ret void
 }
 
 define internal void @nish.runTask$$Pipe$i32$fn.7.consume(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
-  %0 = call i32 @consume(%struct.Pipe* %arg)
+  %0 = call i32 @consume$(%struct.Pipe* %arg)
   call void @nish.storeResult$i32(%struct.nish_array* %dst, i32 %at, i32 %0)
   ret void
 }

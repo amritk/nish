@@ -21,7 +21,7 @@ import { CheckContext } from "./context"
 import { SourceFile } from "./diagnostics"
 import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
-import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes"
+import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
 import { isCollectionsModule, isJsonTypedModule, isMapExtrasModule, isSecretModule } from "./std-modules"
@@ -102,6 +102,18 @@ export class FunctionSig {
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
   /**
+   * WP29: on an arrow passed to a data-parallel form, the locals of the
+   * function it is written in that its body reads, in the order it first
+   * reads them (docs/LANGUAGE.md, "Data parallelism"). Each is a parameter of
+   * the arrow too, appended to `paramNames` after the ones it wrote, so the
+   * analyses read it as the parameter it is in the IR. Every instance the arrow
+   * is handed to carries the same values as parameters the emitter adds
+   * (`capturesOf` in `src/parallel.ts`), and `captureHost` is the function
+   * whose own locals they are read from. Empty everywhere else.
+   */
+  captures: Local[]
+  captureHost: FunctionSig | null
+  /**
    * WP33 R2: the typed-array name the return type is spelled with, or `""`
    * (`annotationSpelling` in `src/arrays.ts`). It is read where the signature
    * is collected, in the module that declares it, because that is the one
@@ -115,6 +127,11 @@ export class FunctionSig {
    * 2 not. Only an answer that rested on no assumption is written.
    */
   keepsLength: i32[]
+
+  /** The parameters a call writes: every one but the captures an arrow appended (WP29). */
+  writtenArity(): i32 {
+    return this.paramNames.length - this.captures.length
+  }
 
   /** Whether parameter `index` is a compile-time function parameter (WP29). */
   isCompileTime(index: i32): boolean {
@@ -193,6 +210,8 @@ export class FunctionSig {
     this.hidden = false
     this.lifted = false
     this.arrowCount = 0
+    this.captures = []
+    this.captureHost = null
     this.returnSpelling = ""
     this.keepsLength = []
   }
@@ -207,12 +226,16 @@ export const PAR_NONE: i32 = 0
 export const PAR_MAP: i32 = 1
 /** `parallelReduce` from `nish/threads`: its call to `reduceBlocks` becomes a region. */
 export const PAR_REDUCE: i32 = 2
-/** `mapRange` or `reduceBlocks`: the loop one thread runs over its share of a region. */
+/** `mapRange`, `fromRange` or `reduceBlocks`: the loop one thread runs over its share of a region. */
 export const PAR_CHUNK: i32 = 3
 /** `ThreadScope.spawn` from `nish/threads` (WP29 P2): its call to `runTask` becomes a task on the scope. */
 export const PAR_SPAWN: i32 = 4
 /** `runTask`: what one task computes on its thread, and the store its scope makes at the join. */
 export const PAR_TASK: i32 = 5
+/** `parallelMap` from `nish/threads`: judged at its call like a map, and lowered as its body is written. */
+export const PAR_MAP_NEW: i32 = 6
+/** `parallelFrom` from `nish/threads`: its call to `fromRange` becomes a region. */
+export const PAR_FROM: i32 = 7
 
 // WP32: what an instantiation is to the emitter's `Map` lowering
 // (`mapIntrinsicRole` in `src/generics.ts` decides, `src/emit-map.ts` reads).
@@ -319,10 +342,37 @@ export class ParallelCall {
   node: Node
   /** The instantiation it calls, whose `functionArgs[0]` is the body. */
   sig: FunctionSig
+  /**
+   * The local a `parallelMapInto`'s `dst` names, or `null`: read when the call
+   * is checked, in the tables of the body that holds it (an instantiation's
+   * own, for a generic caller), because the rules run once the fixpoint has,
+   * outside every body (`captureReachesDstMessage`).
+   */
+  dst: Local | null
 
-  constructor(node: Node, sig: FunctionSig) {
+  constructor(node: Node, sig: FunctionSig, dst: Local | null) {
     this.node = node
     this.sig = sig
+    this.dst = dst
+  }
+}
+
+/**
+ * Every name under `node` that an arrow passed to a data-parallel form reads
+ * as a capture (`Local.captureOf`), in source order. The arrow is a function
+ * of its own, so a walk over the function around it passes over its body; a
+ * rule that tracks a local of that function reads these instead, at the
+ * arrow, which is where the call runs the body (WP29).
+ */
+export const capturedReads = (program: CheckedProgram, node: Node, out: Node[]): void => {
+  if (node.kind === N_IDENT) {
+    const local = program.nodeLocals[node.id]
+    if (local !== null && local.captureOf !== null) {
+      out.push(node)
+    }
+  }
+  for (const child of node.children) {
+    capturedReads(program, child, out)
   }
 }
 
@@ -690,6 +740,8 @@ export class FieldInfo {
   offset: i32
   /** `readonly` fields may only be assigned through `this` in the constructor. */
   readonly: boolean
+  /** Named in the class's `json.optional`: a missing key sets the field to its initializer. */
+  jsonOptional: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null
   decl: Node
@@ -706,6 +758,12 @@ export class FieldInfo {
    * in the declaring module for the reason `FunctionSig.returnSpelling` is.
    */
   spelling: string
+  /**
+   * The key typed JSON reads and writes the field under: its name, or the one
+   * the class's `static readonly json` gives it in `rename`
+   * (`src/json-typed.ts`, docs/LANGUAGE.md, "Typed JSON").
+   */
+  wireName: string
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
@@ -717,6 +775,8 @@ export class FieldInfo {
     this.decl = decl
     this.inlineCapacity = -1
     this.spelling = ""
+    this.wireName = name
+    this.jsonOptional = false
   }
 
   /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
@@ -771,6 +831,8 @@ export class StructInfo {
   poisoned: boolean
   /** Pass 1b progress, so a struct is collected once. */
   collected: boolean
+  /** `nish/json-typed`'s `JsonNumber`, which typed JSON reads and writes as one number. */
+  jsonNumber: boolean
   /**
    * The (template, type-argument tuple) this layout was monomorphised from, or
    * `null` for a class or interface somebody declared (WP18 G5).
@@ -783,6 +845,12 @@ export class StructInfo {
    * level down, for the same reason.
    */
   instance: StructInstantiation | null
+  /**
+   * The class's `static readonly json = { ... }`, the typed JSON options it
+   * declares, or `null`. It is not a field: `src/json-typed.ts` reads it once
+   * the fields are collected and writes what it says into each field.
+   */
+  jsonOptions: Node | null
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -805,6 +873,8 @@ export class StructInfo {
     this.exported = false
     this.poisoned = false
     this.collected = false
+    this.jsonOptions = null
+    this.jsonNumber = false
   }
 
   /** The field called `name` on this struct, or `null`. */

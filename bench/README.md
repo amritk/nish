@@ -18,6 +18,7 @@ node bench/run.mjs --n fib=30,sieve=1000000   # other sizes (rewrites the `bench
 node bench/run.mjs --validate --only fib,sieve --n fib=25,sieve=100000   # what CI runs: checksums only
 node bench/run.mjs --no-rust              # skip Rust even when rustc is installed
 node bench/run.mjs --no-go                # skip Go even when the go tool is installed
+node bench/run.mjs --no-rayon             # skip the Rayon twins of the parallel kernels
 ```
 
 The report's header describes the **run**, not the checkout that happens to
@@ -80,13 +81,13 @@ a garbage collector, not `free` or an arena, reclaims the intermediates — so
 
 ## Data parallelism
 
-Five more programs measure `parallelMapInto` from `nish/threads`
-([wp29](../docs/wp29-thread-surface.md) §4.1) against the loop it replaces.
-They have no twins. Each is one Nish binary that runs the loop when its first
-argument is `seq` and the map when it is `par`, and the two runs must print the
-same checksum. The table in `docs/BENCHMARKS.md` gives the loop's time, the
-map's time on every core the machine has, the ratio and the peak memory of
-both.
+Six more programs measure `nish/threads`
+([wp29](../docs/wp29-thread-surface.md) §4): five `parallelMapInto` against the
+loop it replaces, and one scope whose tasks share a `Mutex`. Each is one Nish
+binary that runs the loop when its first argument is `seq` and the parallel
+form when it is `par`, and the two runs must print the same checksum. The
+first table in `docs/BENCHMARKS.md` gives the loop's time, the parallel time on
+every core the machine has, the ratio and the peak memory of both.
 
 | Name | What it measures | Size (`bench:n`) |
 | --- | --- | --- |
@@ -95,17 +96,100 @@ both.
 | `par-nbody` | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body | 1024 bodies, 16 steps |
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 | `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
+| `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
 
 ```bash
-node bench/run.mjs --only par            # the five; `--only par-nbody` names one
-node bench/run.mjs --validate --only par # both runs of each, checksums only
+node bench/run.mjs --only par            # the six and their twins; `--only par-nbody` names one
+node bench/run.mjs --validate --only par # both runs of each and every twin, checksums only
 ```
 
-`--only par` rewrites the data-parallel table of `docs/BENCHMARKS.md` and
-nothing else: every other section, the header and json-compare's marked
-section included, stays byte for byte, and the table says the date, the CPU
-and the commit it was measured at, since those may differ from the header's.
-It does so only when all five kernels ran and nothing else was timed. A subset
+### Against Rust and Go
+
+`par-compute`, `par-nbody`, `par-regions` and `par-histogram` have twins, so
+the second table in `docs/BENCHMARKS.md` compares the Nish `par` run with the
+same program in Rust and in Go:
+
+| File | Threads |
+| --- | --- |
+| `par-<kernel>.rs` | `std::thread::scope`, built by `rustc` with the flags of the main table |
+| `par-<kernel>-rayon.rs` | Rayon's global pool (`par_iter_mut`, `rayon::scope` for the histogram), built by cargo as one package in `build/bench/rayon` with the same profile |
+| `par-<kernel>.go` | goroutines and a `sync.WaitGroup`, built by `go build` |
+
+Each twin does the same work at the same size (its `bench:n` line follows
+`--n`) and must print the checksum the Nish `par` run prints, or the run fails.
+The map twins cut the array into one contiguous chunk per thread and run the
+first on the calling thread, which is how Nish's partitioner divides these
+kernels; the Rayon twins split as Rayon does. `par-regions`' scope twin starts
+its threads on every call, because a scope cannot outlive it; the Rayon twin
+and the Go twin are the ones with a pool to compare with Nish's workers. The
+histogram takes a lock per value in every language (`Mutex`,
+`std::sync::Mutex`, `sync.Mutex`): Nish has no atomic counter yet, and a lock in
+one language against an atomic in another would not be the same program.
+
+**The same work is not the same checks or the same build**, and the table
+says so. Nish keeps its default overflow and bounds checks
+(`nish_panic_overflow` and `nish_panic_index` are reached from
+`par-histogram`'s `binStream`); the Rust twins build as `--release` does,
+bounds-checked and without overflow checks, and Go checks bounds only. Nish's
+`--profile speed` links with LTO and neither Rust build does, a small edge to
+Nish. In `par-nbody` a Nish probe reaches the bodies through class references
+where the twins index an array of structs, which slightly favours Rust and Go.
+
+**How it is timed.** Every binary divides over the same number of threads, the
+count Nish's runtime picks here (the cores the process may use, lowered by a
+cgroup quota): `bench/run.mjs` sets `NISH_NUM_THREADS`, `RAYON_NUM_THREADS`,
+`GOMAXPROCS` and `PAR_THREADS` (which the scope twins read) to it, and the
+table records it. The comparison runs whole `--twin-runs` times, three by
+default, minutes apart. Each run is eleven interleaved rounds unless `--runs`
+says otherwise, after `--warmup`: in each round every binary *and a
+byte-identical copy of it* runs once, in an order that rotates by one each
+round. In each run, separately for the minimum and the median, Nish is divided
+by the fastest other column on that statistic, and the row's band is the
+larger of Nish's gap to its copy and that column's gap to its copy. A ratio
+reads as faster or slower only outside its band, and as at the band's edge
+within half a percent of it. Ratios are printed to three decimals and judged
+unrounded. The reading takes every run together: a kernel whose runs fall on
+both sides of the band is "noisy, machine-dependent; no claim", and a loss past
+1.10x says in how many runs it held. The table prints the spread of the ratios
+over the runs and a second table prints every run, because this machine moves
+between runs by more than the band inside one run shows. The section stamps
+the date, the CPU, the cores, the threads, every compiler's version and the
+commit: a run on a branch names the `main` commit the branch grew from,
+because a squash merge does not keep the branch's own commits.
+
+**Where Nish loses**, and what has been measured of why. Neither is tuned here:
+
+- `par-regions`: the loop each chunk runs, not the pool. `mapRange` in
+  `std/threads.ts` stores each element under `if (i < dst.length)`, though
+  `dstTooShort` has already proved `dst` long enough, and that conditional
+  store keeps LLVM's loop vectoriser off: the Nish binary has no `pslld` or
+  `psrad`, and Rust's vectorised `scramble` has both. A probe that clamped the
+  end of the range once and stored unconditionally took Nish from 602.6 to
+  192.2 ms on one thread (Rust's scope twin: 185.5 ms) and from 176.8 to
+  60.9 ms on four (Rayon: 76.4 ms), and its loop gained `pslld` and `psrad`.
+  The fix is [#619](https://github.com/amritk/nish/issues/619); the table is
+  measured without it.
+- `par-histogram`: a contended lock, and the most machine- and load-sensitive
+  of the four; read its spread before its reading. What is measured: past 64
+  spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
+  and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
+  System time is not the whole story, though: Rust's futex lock spends about
+  as much (0.46 s), and in the table's runs it comes out about level with
+  Nish, so parking on a futex is not shown to be the cure. The sign is not even stable across machines: the table's
+  runs put Nish behind Go on every median, while a probe on another VM of the
+  same kind found Nish ahead of Go outside the band in four interleaved runs.
+
+A missing toolchain is a skipped column, never a failure: without `rustc` the
+Rust columns go, without cargo or without crates.io the Rayon column goes, and
+with neither `rustc` nor `go` the table is not measured and the report keeps
+the one it has. Each says so on stderr.
+
+`--only par` rewrites these two tables of `docs/BENCHMARKS.md` and nothing
+else: every other section, the header and json-compare's marked section
+included, stays byte for byte, and each table says the date, the CPU and the
+commit it was measured at, since those may differ from the header's. A report
+with no twins' table gets one under the data-parallel table. It writes only
+when all six kernels ran and nothing else was timed. A subset
 (`--only par-nbody`), a report with no data-parallel table, and the map half of
 `--only maps,par` leave the file as it was, and the run says so; any run that
 times the benchmark tables rewrites the whole report, as a full run does.

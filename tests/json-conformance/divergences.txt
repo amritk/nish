@@ -20,21 +20,14 @@
 
 
 reason lone-surrogate SURROGATE A string holding a lone surrogate. JSON.stringify escapes one as \udxxx, but a Nish string is UTF-8, which cannot hold one, so the case's value has no Nish spelling: the escape that spells it is refused by the tokenizer (docs/security/json.md, "Lone surrogates").
-reason indent unindented JSON.stringify with a space: JsonWriter writes no indentation yet, so the case answers upstream's text without it. The writer-modes stage of json-parity adds indentation.
+reason indent-gap unindented JSON.stringify with a space string that is neither spaces nor one tab, such as "xxx" or "=": JsonWriter indents by spaces (setIndent) or by a tab (setIndentTab) only, so the case answers upstream's text without its indentation. A case whose space is spaces or one tab is held to upstream's indented text exactly.
 reason depth DEPTH A nesting past JsonLimits.maxDepth, 128 by default: V8 parses 10,001 levels, and the tokenizer refuses the 129th opener, its defence against a depth bomb (docs/security/json.md, "Depth bombs").
 reason duplicate-key exact A key repeated in one object. JSON.parse keeps the last value at the first one's place; the tokenizer hands on both members, because which one wins is the reader's decision (docs/security/json.md, JSON-3), so the rewrite writes both, in order.
 
 test262/parse/duplicate-proto.js#1 duplicate-key {"__proto__":1,"__proto__":2}
-test262/stringify/space-number-float.js#2 indent
-test262/stringify/space-number-float.js#3 indent
-test262/stringify/space-number-object.js#1 indent
-test262/stringify/space-number-object.js#2 indent
-test262/stringify/space-number-range.js#2 indent
-test262/stringify/space-number.js#2 indent
-test262/stringify/space-string-object.js#1 indent
-test262/stringify/space-string-object.js#2 indent
-test262/stringify/space-string-range.js#1 indent
-test262/stringify/space-string.js#2 indent
+test262/stringify/space-string-object.js#1 indent-gap
+test262/stringify/space-string-object.js#2 indent-gap
+test262/stringify/space-string-range.js#1 indent-gap
 test262/stringify/value-string-escape-unicode.js#1 lone-surrogate
 test262/stringify/value-string-escape-unicode.js#2 lone-surrogate
 test262/stringify/value-string-escape-unicode.js#4 lone-surrogate
@@ -46,18 +39,12 @@ test262/stringify/value-string-escape-unicode.js#9 lone-surrogate
 test262/stringify/value-string-escape-unicode.js#11 lone-surrogate
 test262/stringify/value-string-escape-unicode.js#12 lone-surrogate
 v8/json-parser-recursive.js#1 depth
-v8/json.js#109 indent
-v8/json.js#110 indent
-v8/json.js#111 indent
-v8/json.js#112 indent
-v8/json.js#113 indent
-v8/json.js#117 indent
-v8/json.js#119 indent
-v8/json.js#121 indent
-v8/json.js#123 indent
-v8/json.js#125 indent
-v8/json.js#127 indent
-v8/json.js#128 indent
-v8/json.js#144 indent
-v8/json.js#151 indent
-v8/json.js#154 indent
+v8/json.js#109 indent-gap
+v8/json.js#112 indent-gap
+v8/json.js#117 indent-gap
+v8/json.js#119 indent-gap
+v8/json.js#121 indent-gap
+v8/json.js#123 indent-gap
+v8/json.js#125 indent-gap
+v8/json.js#127 indent-gap
+v8/json.js#151 indent-gap

@@ -58,15 +58,90 @@ Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String buildi
 
 ## Data parallelism (ms, min / median)
 
-Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par_*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.80GHz, at commit 00fd12d4, by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
+Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at 63527136, the base of the branch it was measured on (branch commit 5df7859b, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par-compute | 64 square roots per element, 2^21 elements (f64) | 993 / 1033 | 282 / 297 | 3.52x | 33,908 / 34,604 |
-| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 241 / 254 | 116 / 126 | 2.07x | 33,896 / 34,592 |
-| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 190 / 238 | 68.3 / 73.8 | 2.78x | 1,528 / 1,968 |
-| par-short | an 8-element map called 2^20 times, each call fed by the last | 80.2 / 93.7 | 78.0 / 98.7 | 1.03x | 1,256 / 1,256 |
-| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 880 / 893 | 361 / 371 | 2.44x | 2,152 / 2,848 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 801 / 836 | 232 / 249 | 3.45x | 34,028 / 34,472 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 191 / 199 | 84.6 / 86.6 | 2.26x | 34,020 / 34,460 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 170 / 176 | 55.3 / 66.8 | 3.07x | 1,524 / 1,836 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 61.1 / 63.5 | 60.9 / 81.1 | 1.00x | 1,252 / 1,252 |
+| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 601 / 611 | 229 / 259 | 2.63x | 2,276 / 2,716 |
+| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 22.0 / 25.5 | 210 / 341 | 0.10x | 1,252 / 1,568 |
+
+## Data parallelism against Rust and Go (ms, min / median)
+
+Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, since Nish has no atomic counter to compare with.
+
+**The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (`nish_panic_overflow` and `nish_panic_index` are reached from par-histogram's `binStream`, for one). The Rust twins build as `--release` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's `--profile speed` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.
+
+**How it is timed.** Every binary divides over 4 threads, the count Nish's runtime chooses on this machine: `NISH_NUM_THREADS`, `RAYON_NUM_THREADS`, `GOMAXPROCS` and `PAR_THREADS` (read by the scope twins) are all set to it. The comparison is run 3 time(s), minutes apart, each run 11 interleaved rounds after 1 warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round. The times below are process wall time, min / median in ms over every round of every run. In each run, and separately for the minimum and the median, Nish is divided by the fastest other column on that statistic, and the band is the larger of the gaps between Nish and its copy and between that column and its copy. A ratio reads as faster or slower only outside the band, and within 0.5% of its edge as at the edge. The reading takes every run together: runs that fall on both sides of the band make no claim. The Nish column is the `par` run of the table above, timed again here beside seven other binaries rather than in that table's alternation with its loop, so the two tables' Nish figures differ by about as much as this machine moves between runs: compare within a table, not across.
+
+Measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 4 threads, linux 6.18.44-fc-v114, by `node bench/run.mjs --only par` at `main` at 63527136, the base of the branch it was measured on (branch commit 5df7859b, which a squash merge does not keep). nish 0.18.0; rustc 1.97.0 (2d8144b78 2026-07-07); Rayon 1.12.0, built by cargo with the same profile; go version go1.24.7 linux/amd64.
+
+| Kernel | Nish | Rust `thread::scope` | Rust Rayon | Go | Nish / fastest, min, over 3 run(s) | Nish / fastest, median | Reading, min | Reading, median |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| par-compute | 226 / 242 | 215 / 232 | 211 / 222 | 215 / 231 | 1.064x to 1.077x | 1.084x to 1.134x | slower outside the band in all 3 runs; within 1.10x in all 3 runs | slower outside the band in all 3 runs; **past 1.10x in 1 of 3 runs** |
+| par-nbody | 49.7 / 57.1 | 50.4 / 61.6 | 48.2 / 53.8 | 104 / 121 | 1.026x to 1.095x | 1.056x to 1.072x | slower outside the band in 1 of 3 runs, within it or at its edge in the rest; within 1.10x in all 3 runs | slower outside the band in 2 of 3 runs, within it or at its edge in the rest; within 1.10x in all 3 runs |
+| par-regions | 171 / 221 | 146 / 168 | 89.5 / 103 | 286 / 326 | 1.897x to 2.247x | 1.854x to 2.484x | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** |
+| par-histogram | 274 / 402 | 271 / 396 | 353 / 421 | 231 / 269 | 1.121x to 1.430x | 1.468x to 1.629x | slower outside the band in 2 of 3 runs, within it or at its edge in the rest; **past 1.10x in all 3 runs** | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** |
+
+Each run on its own: the fastest other column on each statistic, Nish over it, and that row's band.
+
+| Kernel | Run | Fastest, min | Nish / it | Band | Fastest, median | Nish / it | Band |
+| --- | ---: | --- | ---: | ---: | --- | ---: | ---: |
+| par-compute | 1 | Rust Rayon | 1.064x | 4.0% | Rust Rayon | 1.134x | 1.2% |
+| par-compute | 2 | Rust `thread::scope` | 1.065x | 2.3% | Rust Rayon | 1.091x | 2.8% |
+| par-compute | 3 | Rust Rayon | 1.077x | 6.3% | Rust Rayon | 1.084x | 1.7% |
+| par-nbody | 1 | Rust Rayon | 1.027x | 2.7% | Rust Rayon | 1.056x | 12.3% |
+| par-nbody | 2 | Rust Rayon | 1.095x | 3.7% | Rust Rayon | 1.072x | 6.3% |
+| par-nbody | 3 | Rust Rayon | 1.026x | 2.5% | Rust Rayon | 1.059x | 1.4% |
+| par-regions | 1 | Rust Rayon | 1.963x | 2.0% | Rust Rayon | 2.224x | 5.6% |
+| par-regions | 2 | Rust Rayon | 2.247x | 13.9% | Rust Rayon | 2.484x | 4.2% |
+| par-regions | 3 | Rust Rayon | 1.897x | 12.2% | Rust Rayon | 1.854x | 8.1% |
+| par-histogram | 1 | Go | 1.430x | 42.4% | Go | 1.629x | 16.7% |
+| par-histogram | 2 | Go | 1.121x | 20.0% | Go | 1.511x | 9.7% |
+| par-histogram | 3 | Go | 1.298x | 17.7% | Go | 1.468x | 11.4% |
+
+Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021`, without `target-cpu=native` or LTO; Nish's `--profile speed` has no `-march` either. Go: `go build -trimpath -ldflags=-s -w`. bench/README.md says what each kernel measures and, where Nish loses, what has been measured of why.
+
+The Checksums and Commands sections below are written by a full run, which `--only par` leaves as they were, so a kernel added since the last full run is missing there. Every binary of this table printed its kernel's checksum, and was built so:
+
+- **par-compute**: `1875749.772460931`
+
+  ```
+  nish build/bench/src/par-compute.ts --link build/bench/par-compute --profile speed
+  rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021 build/bench/src/par-compute.rs -o build/bench/par-compute-rust
+  cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
+  go build -trimpath -ldflags=-s -w -o build/bench/par-compute-go build/bench/src/par-compute.go
+  ```
+
+- **par-nbody**: `-534915.1104460816 -536673.7291541903`
+
+  ```
+  nish build/bench/src/par-nbody.ts --link build/bench/par-nbody --profile speed
+  rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021 build/bench/src/par-nbody.rs -o build/bench/par-nbody-rust
+  cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
+  go build -trimpath -ldflags=-s -w -o build/bench/par-nbody-go build/bench/src/par-nbody.go
+  ```
+
+- **par-regions**: `676527561 507283512`
+
+  ```
+  nish build/bench/src/par-regions.ts --link build/bench/par-regions --profile speed
+  rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021 build/bench/src/par-regions.rs -o build/bench/par-regions-rust
+  cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
+  go build -trimpath -ldflags=-s -w -o build/bench/par-regions-go build/bench/src/par-regions.go
+  ```
+
+- **par-histogram**: `56760 3200000`
+
+  ```
+  nish build/bench/src/par-histogram.ts --link build/bench/par-histogram --profile speed
+  rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021 build/bench/src/par-histogram.rs -o build/bench/par-histogram-rust
+  cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
+  go build -trimpath -ldflags=-s -w -o build/bench/par-histogram-go build/bench/src/par-histogram.go
+  ```
 
 ## Map and Set (WP32)
 
@@ -325,7 +400,7 @@ What differs between the rows:
 | | |
 | --- | --- |
 | Date | 2026-10-12 |
-| nish | nish 0.18.0 (commit a617c1f6) |
+| nish | nish 0.18.0 (commit 06645ecf) |
 | CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores |
 | OS | linux 6.18.44-fc-v114 (x64) |
 | Toolchains | Nish: nish 0.18.0; C++: `clang++` Ubuntu clang version 18.1.3 (1ubuntu1); C: `clang` Ubuntu clang version 18.1.3 (1ubuntu1); Rust: cargo 1.97.0 (c980f4866 2026-06-30), rustc 1.97.0 (2d8144b78 2026-07-07); Go: `go` go version go1.24.7 linux/amd64 |
@@ -338,15 +413,15 @@ Checksum `tokenize 16249681129112504606 29573 2.1169264482695808e+22 17968486845
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 1,434,351 | 1,629,580 | 440 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 535,055 | 575,947 | 1180 | 2.68x |
-| yyjson 0.12.0 | 393,917 | 429,927 | 1603 | 3.64x |
-| Nish (byte-identical copy) | 1,490,032 | 1,662,533 | 424 | 0.96x, the noise band |
-| RapidJSON (Reader, SAX) | 1,343,348 | 1,451,709 | 470 | 1.07x |
-| serde_json 1.0.154 | 1,146,229 | 1,266,081 | 551 | 1.25x |
-| Go encoding/json | 15,959,622 | 17,189,585 | 40 | 0.09x |
+| Nish | 1,247,246 | 1,377,206 | 506 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 531,608 | 550,903 | 1188 | 2.35x |
+| yyjson 0.12.0 | 397,616 | 428,658 | 1588 | 3.14x |
+| Nish (byte-identical copy) | 1,258,439 | 1,340,282 | 502 | 0.99x, the noise band |
+| RapidJSON (Reader, SAX) | 1,328,199 | 1,397,126 | 475 | 0.94x |
+| serde_json 1.0.154 | 1,157,710 | 1,227,389 | 545 | 1.08x |
+| Go encoding/json | 15,424,203 | 16,330,703 | 41 | 0.08x |
 
-Noise band, Nish against its byte-identical copy: 3.7% on the minimums (2.0% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 0.9% on the minimums (2.8% on the medians). A ratio within it is no difference.
 
 ### tokenize, citm_catalog.json (1,727,204 bytes, 78 per run, 14 rounds)
 
@@ -354,15 +429,15 @@ Checksum `tokenize 5073453772714654304 85035 26602007581164610 71298874593416537
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 2,686,584 | 2,790,401 | 643 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 1,291,123 | 1,394,866 | 1338 | 2.08x |
-| yyjson 0.12.0 | 1,047,871 | 1,201,398 | 1648 | 2.56x |
-| Nish (byte-identical copy) | 2,565,255 | 2,918,989 | 673 | 1.05x, the noise band |
-| RapidJSON (Reader, SAX) | 2,003,278 | 2,207,818 | 862 | 1.34x |
-| serde_json 1.0.154 | 1,890,903 | 2,254,661 | 913 | 1.42x |
-| Go encoding/json | 24,824,599 | 28,141,490 | 70 | 0.11x |
+| Nish | 2,397,781 | 2,611,279 | 720 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 1,304,878 | 1,402,979 | 1324 | 1.84x |
+| yyjson 0.12.0 | 1,092,155 | 1,229,289 | 1581 | 2.20x |
+| Nish (byte-identical copy) | 2,460,441 | 2,672,876 | 702 | 0.97x, the noise band |
+| RapidJSON (Reader, SAX) | 2,021,113 | 2,310,335 | 855 | 1.19x |
+| serde_json 1.0.154 | 1,920,145 | 2,167,800 | 900 | 1.25x |
+| Go encoding/json | 24,692,846 | 27,226,268 | 70 | 0.10x |
 
-Noise band, Nish against its byte-identical copy: 4.7% on the minimums (4.4% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 2.5% on the minimums (2.3% on the medians). A ratio within it is no difference.
 
 ### tokenize, canada.json (2,251,051 bytes, 60 per run, 14 rounds)
 
@@ -370,15 +445,15 @@ Checksum `tokenize 388743233009497152 223236 -75931866.53303604 7819388002301591
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 35,343,950 | 37,054,606 | 64 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 5,699,896 | 6,251,887 | 395 | 6.20x |
-| yyjson 0.12.0 | 3,599,630 | 4,041,043 | 625 | 9.82x |
-| Nish (byte-identical copy) | 34,716,591 | 37,442,559 | 65 | 1.02x, the noise band |
-| RapidJSON (Reader, SAX) | 10,380,700 | 11,203,451 | 217 | 3.40x |
-| serde_json 1.0.154 | 6,639,525 | 7,782,717 | 339 | 5.32x |
-| Go encoding/json | 82,713,737 | 87,592,574 | 27 | 0.43x |
+| Nish | 21,986,700 | 23,501,141 | 102 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 5,743,654 | 6,041,012 | 392 | 3.83x |
+| yyjson 0.12.0 | 3,518,113 | 3,972,972 | 640 | 6.25x |
+| Nish (byte-identical copy) | 20,561,996 | 23,088,790 | 109 | 1.07x, the noise band |
+| RapidJSON (Reader, SAX) | 9,882,139 | 11,365,456 | 228 | 2.22x |
+| serde_json 1.0.154 | 6,681,493 | 7,427,639 | 337 | 3.29x |
+| Go encoding/json | 83,624,487 | 88,660,908 | 27 | 0.26x |
 
-Noise band, Nish against its byte-identical copy: 1.8% on the minimums (1.0% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 6.9% on the minimums (1.8% on the medians). A ratio within it is no difference.
 
 ### typed, citm_catalog.json (1,727,204 bytes, 78 per run, 10 rounds)
 
@@ -386,13 +461,13 @@ Checksum `typed 13164840133002388121 243`, the same from every implementation.
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 3,831,809 | 4,552,451 | 451 | 1.00x |
-| simdjson 4.4.2 (On-Demand; reads only `performances`, MB/s over the whole document) | 873,729 | 921,060 | 1977 | 4.39x |
-| Nish (byte-identical copy) | 3,617,558 | 4,002,417 | 477 | 1.06x, the noise band |
-| serde_json 1.0.154 | 2,236,758 | 2,731,574 | 772 | 1.71x |
-| Go encoding/json | 16,867,274 | 17,791,066 | 102 | 0.23x |
+| Nish | 3,164,937 | 3,316,471 | 546 | 1.00x |
+| simdjson 4.4.2 (On-Demand; reads only `performances`, MB/s over the whole document) | 872,251 | 933,168 | 1980 | 3.63x |
+| Nish (byte-identical copy) | 3,168,746 | 3,402,752 | 545 | 1.00x, the noise band |
+| serde_json 1.0.154 | 2,213,359 | 2,431,334 | 780 | 1.43x |
+| Go encoding/json | 16,615,463 | 18,333,601 | 104 | 0.19x |
 
-Noise band, Nish against its byte-identical copy: 5.9% on the minimums (13.7% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 0.1% on the minimums (2.5% on the medians). A ratio within it is no difference.
 
 ### typed-reuse, citm_catalog.json (1,727,204 bytes, 78 per run, 12 rounds)
 
@@ -400,10 +475,10 @@ Checksum `typed 13164840133002388121 243`, the same from every implementation.
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish, decoding into the same objects | 3,177,683 | 3,323,066 | 544 | 1.00x |
-| Nish (byte-identical copy) | 3,072,245 | 3,354,247 | 562 | 1.03x, the noise band |
+| Nish, decoding into the same objects | 2,669,566 | 2,836,620 | 647 | 1.00x |
+| Nish (byte-identical copy) | 2,631,730 | 2,870,934 | 656 | 1.01x, the noise band |
 
-Noise band, Nish against its byte-identical copy: 3.4% on the minimums (0.9% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 1.4% on the minimums (1.2% on the medians). A ratio within it is no difference.
 
 ### serialize, citm_catalog.json (452,530 bytes written, 297 per run, 10 rounds)
 
@@ -411,11 +486,11 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 835,861 | 897,689 | 541 | 1.00x |
-| simdjson 4.4.2 (builder::string_builder, written by hand field by field) | 345,151 | 378,303 | 1311 | 2.42x |
-| Nish (byte-identical copy) | 807,750 | 960,672 | 560 | 1.03x, the noise band |
-| serde_json 1.0.154 | 396,808 | 479,965 | 1140 | 2.11x |
-| Go encoding/json | 1,064,827 | 1,220,606 | 425 | 0.78x |
+| Nish | 870,432 | 980,479 | 520 | 1.00x |
+| simdjson 4.4.2 (builder::string_builder, written by hand field by field) | 343,223 | 370,123 | 1318 | 2.54x |
+| Nish (byte-identical copy) | 860,636 | 980,079 | 526 | 1.01x, the noise band |
+| serde_json 1.0.154 | 409,659 | 458,145 | 1105 | 2.12x |
+| Go encoding/json | 1,038,433 | 1,154,041 | 436 | 0.84x |
 
-Noise band, Nish against its byte-identical copy: 3.5% on the minimums (6.6% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 1.1% on the minimums (0.0% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->

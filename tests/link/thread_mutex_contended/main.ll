@@ -93,7 +93,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @binStream(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %j) #1 {
+define hidden noundef i32 @binStream$(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %j) #1 {
 entry:
   %v.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4

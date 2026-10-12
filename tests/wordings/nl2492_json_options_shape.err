@@ -1,0 +1,1 @@
+`static` member `json` of class `User` is written `static readonly json = { ... }`, with no type annotation, in a class that is not generic: it holds the class's typed JSON options and is not a field

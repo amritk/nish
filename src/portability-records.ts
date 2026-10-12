@@ -54,7 +54,8 @@ import {
 } from "./nodes"
 import { StringMap, StringSet } from "./map"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { Local } from "./symbols"
+import { capturedReads } from "./program"
+import { Local, sourceLocal } from "./symbols"
 
 /**
  * The records rows, asked about one node at a time.
@@ -62,7 +63,8 @@ import { Local } from "./symbols"
  * `src/portability.ts` calls this once for every node of every checked
  * function body, in source order, after NL8005 and before the next row
  * module; an arrow argument's body is handed over under its own function
- * rather than inside its parent's. `walk` carries the facts
+ * rather than inside its parent's, though a name it captures (WP29) is read
+ * as the parent's local. `walk` carries the facts
  * (`PortabilityWalk`): the module with this body's side tables installed —
  * a generic instantiation's own, so a type read there is concrete — the type
  * table, the options (`--wrapping`, `--number-mode`), the parent links, and
@@ -145,7 +147,7 @@ class Side {
 
 /** Whether `node` is a use of the binding `local`. */
 const namesLocal = (walk: PortabilityWalk, node: Node, local: Local): boolean => {
-  const bound = walk.program.nodeLocals[node.id]
+  const bound = sourceLocal(walk.program.nodeLocals[node.id])
   return node.kind === N_IDENT && bound !== null && bound === local
 }
 
@@ -222,7 +224,7 @@ class RecordIndex {
       return new Side(null, "", elem, inner)
     }
     if (inner.kind === N_IDENT) {
-      const local = this.walk.program.nodeLocals[inner.id]
+      const local = sourceLocal(this.walk.program.nodeLocals[inner.id])
       return local === null ? null : new Side(local, "", "", inner)
     }
     if (inner.kind !== N_MEMBER) {
@@ -309,7 +311,7 @@ class RecordIndex {
   indexUse(node: Node): void {
     const walk = this.walk
     if (node.kind === N_IDENT) {
-      const local = walk.program.nodeLocals[node.id]
+      const local = sourceLocal(walk.program.nodeLocals[node.id])
       if (local !== null) {
         this.add(`ul:${local.name}`, node)
       }
@@ -366,9 +368,19 @@ class RecordIndex {
     }
   }
 
-  /** Every node under `node`, once, into the copies and the buckets. */
+  /**
+   * Every node under `node`, once, into the copies and the buckets. An arrow
+   * is a function of its own, except that one handed to a data-parallel form
+   * may read this body's `const` locals (WP29): its uses are filed here too,
+   * where the call runs them, and nothing else of it is.
+   */
   index(node: Node): void {
     if (node.kind === N_ARROW) {
+      const reads: Node[] = []
+      capturedReads(this.walk.program, node, reads)
+      if (reads.length > 0) {
+        this.indexArrowUses(node)
+      }
       return
     }
     this.indexCopy(node)
@@ -382,6 +394,14 @@ class RecordIndex {
     }
     for (const child of node.children) {
       this.index(child)
+    }
+  }
+
+  /** The uses under a capturing arrow: it reads, and cannot write, what it captures. */
+  indexArrowUses(node: Node): void {
+    this.indexUse(node)
+    for (const child of node.children) {
+      this.indexArrowUses(child)
     }
   }
 

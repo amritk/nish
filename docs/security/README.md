@@ -39,8 +39,8 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 5 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 ¹⁰ |
-| **Total** ⁸ | | | **3 / 10 / 12 / 80** | **0 / 1 / 2 / 20** |
+| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 1 / 1 ¹⁰ |
+| **Total** ⁸ | | | **3 / 10 / 12 / 80** | **0 / 1 / 3 / 20** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -74,8 +74,12 @@ the record that found it. The notes below the table name each such finding.
    #512 made the server's P-256 signature in scratch, and #515 made the
    listener read the first Initial in place and answer into scratch, so a
    handshake through a reused slot keeps 0 bytes of arena memory.
-10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9 and JSON-11 (Low) are accepted, with the reason in
-    their record, and are not counted. JSON-2 is open. JSON-3, duplicate keys
+10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9, JSON-11 and JSON-12 (Low) are accepted, with the reason in
+    their record, and are not counted, and so is JSON-14 (Low), a `JsonNumber`'s
+    bytes written raw. JSON-2 is open, and so is JSON-13
+    (Medium), the map keys a body can make collide: `jsonDecode` (#622)
+    bounds the keys of one decoding with `maxMapKeys`, which mitigates it,
+    and a seeded string hash for the global `Map` is what would close it. JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed for
     `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
     of a field; it is counted as a fixed Low. The tokenizer is unchanged, a
@@ -115,6 +119,7 @@ only.
 | QUIC-6 | Low | `std/net/quic.ts` | RFC 9001 §6.6's AEAD limits are not counted: no key update before 2^23 packets under one AES-GCM key, no AEAD_LIMIT_REACHED after too many failed opens | Q3 and Q4 |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
+| JSON-13 | Medium | `src/emit-json.ts` (`emitJsonDecodeMapBody`), `std/json-typed.ts` (`mapRoom`), `std/collections.ts` and `src/emit-map.ts` (the string hash) | The global `Map` hashes a string with no seed, so a body can give a `Map<string, V>` field keys that all collide. `maxMapKeys` (4,096 by default) bounds the keys of one decoding, and with them its probes; the fix is a seeded hash | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
 | SC-16 | Low | `.github/workflows/release.yml` | Immutable releases are on from v0.16.0 (`immutable: true`), so its assets and `SHA256SUMS` are fixed once published. Build provenance attestations, the stronger answer, are not: they need `id-token` and `attestations: write` on `release.yml` | #389 |
 
