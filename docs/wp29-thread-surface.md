@@ -107,9 +107,10 @@ const total = parallelReduce(src, (a, b) => a + b, 0);
 - **A body may allocate, and gives the memory back per element.** It gets an
   arena scope of its own (`scopeParallelBodies` in `src/attributes.ts`) and the
   warning NL9012 (§8a). A body that touches `Arena` is refused (NL2351).
-- **The grain is sized from the body**: `2^22` over a static cost estimate
+- **The grain is sized from the body**: `2^21` over a static cost estimate
   (`mapGrain` in `src/parallel.ts`). A map within its grain calls its loop
-  directly. P1 first shipped a constant 2^20.
+  directly. P1 first shipped a constant 2^20, then `2^22` over the estimate
+  until the worker pool (§8a).
 - **`--threads` is implied** by importing the module (wp20 §8c.3). This is a
   soundness requirement: allocation counts as no shared write only because the
   arena is thread-local.
@@ -450,6 +451,86 @@ across the kernels. The target was set by the cheapest body,
 to the loop at 262,144 elements. With 2^22 it wins 1.54x at 1,677,722. The
 default of 64 trips is what divides n-body four ways.
 [BENCHMARKS.md](BENCHMARKS.md) carries the current numbers.
+
+**Retuned for the pool: 2^21.** Those numbers were taken when every divided
+region started and joined its own threads, about 100 µs a region. The worker
+pool (wp20 §8e) brought that to about 11 µs, so the same body pays for its
+hand-off at far fewer elements, and the target was measured again. A map whose
+length passes the grain is divided into `ceil(length / grain)` chunks, so its
+first division is two chunks of half the grain; each row below is two chunks of
+`c` elements, and the grain whose first division it is. The body is
+`(x) => x + 1`, at an estimate of 3 (`x & 255` estimates the same; `(x) => x`
+estimates 1 and divides later), over `n = 2c` elements, the map called
+`2^28 / n` times with one input element fed from an output element between
+calls and the outputs folded into a printed checksum. The loop and the map are the same binary, the grain written
+into its IR, and the loop is also timed as a byte-identical copy of the binary
+in the same rounds, for the noise band. Eleven interleaved rounds, minimum /
+median in ms, on a four-core Intel Xeon at 2.80 GHz, a virtual machine, with
+clang 18.1.3, on 2026-10-12:
+
+| units per chunk (`c` elements) | grain | loop | loop, the copy | map, two chunks | speedup (min / median) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2^17 (43,690) | 2^18 | 172.5 / 177.8 | 174.3 / 194.0 | 180.6 / 209.2 | 0.96x / 0.85x |
+| 2^18 (87,381) | 2^19 | 172.2 / 186.2 | 175.7 / 180.0 | 150.8 / 198.2 | 1.14x / 0.94x |
+| 2^19 (174,762) | 2^20 | 174.1 / 184.6 | 179.8 / 189.8 | 150.1 / 177.9 | 1.16x / 1.04x |
+| **2^20 (349,525)** | **2^21** | 178.8 / 191.2 | 181.2 / 191.6 | 136.6 / 161.2 | **1.31x / 1.19x** |
+
+The loop against its own copy differs by 1.0%, 2.0%, 3.3% and 1.3% on the
+minimum and by 9.1%, 3.4%, 2.8% and 0.2% on the median, row by row, so the
+noise band is up to 3.3% on a minimum and up to 9.1% on a median. Two chunks
+of 2^20 units are the first whose wins, 1.31x and 1.19x, clear both, so
+`REGION_COST` in `src/parallel.ts` is 2^21: `(x) => x + 1` is divided past
+699,050 elements, into two chunks of 349,525, instead of past 1,398,101. Two
+chunks of 2^19 units, a grain of 2^20, were rejected because only their
+minimum's win, 1.16x, is established: the median's 1.04x is more than that
+row's own loop-against-copy difference (2.8%) but less than the table's worst
+(9.1%). An earlier sweep with `(x) => x * 3 + 1` (estimate 5) agreed: 0.98x
+at two chunks of 2^19 units, 1.19x / 1.16x at two of 2^20, 1.25x at two of
+2^21, against a band of up to 6% on a minimum. The kernel is memory bound — the
+loop vectorises to under a nanosecond an element — which is why two chunks win
+no more than about 1.4x at any size; a body with more work per element wins
+sooner and by more, and its grain is smaller by its estimate.
+
+### 8b. A lock that sleeps, measured and declined
+
+The P3 lock spins on its word 64 times with relaxed reads and then yields the
+processor between tries, so a task that waits on a busy lock keeps a core
+busy. A futex lock that sleeps instead was built and measured (#607), and
+declined: every version of it was slower than the spinning lock in some shape,
+by more than that shape's noise band.
+
+Two programs were timed. One is `tests/link/thread_mutex_contended`: eight
+tasks binning into one guarded histogram, `contended 200`. The other has `N`
+tasks each take one `Mutex` `M` times, running `I` steps of a generator inside
+the critical section and `O` steps between takes; the shapes were short
+(`N = 8`, `M = 500,000`, no steps), long (8, 40,000, `I = 300`), and long with
+work between (2 × 10,000, 8 × 2,500 and 4 × 5,000 with `I = 3,000` and
+`O = 3,000` or `10,000`; 8 × 10,000 with `I = 1,000`). Each ran at
+`NISH_NUM_THREADS` 2, 4 and 8 with every binary linked the same way, the
+spinning lock built twice for the noise band, in 5 to 7 interleaved rounds, on
+the 2.80 GHz Xeon of §8a. The band was 0–5% on the minimum in most shapes,
+but on the contended histogram at 4 and 8 threads it moved between 3% and 76%
+from one run to the next, so each figure below names its own run's band. The
+worst wall time of each design over the spinning lock's, on the minimum:
+
+| design | worst with short sections | worst with long sections, or work between |
+| --- | --- | --- |
+| Drepper's mutex 3: the word goes to 2 at the first sleeper, and every release then wakes | 4.7x, `contended 200` at 2 threads (measured in #607's review on a 2.10 GHz Xeon, band 1–4%) | 2.3x, long at 2 threads (same) |
+| the word counts sleepers above a held bit; the release subtracts and wakes only on a count | 4.4x, short at 8 threads (band 8%) | 1.78x, long at 2 threads (band 0%) |
+| the release stays a store; a waiter sleeps in 50–200 µs slices and nobody wakes it | none outside its band (at most 1.10x, `contended 200` at 2 threads, band 25%) | 1.11x, 4 × 5,000 with `O = 10,000` at 8 threads (band 1%) |
+| the release stays a store, then reads a global count of sleepers and wakes on one | 1.12x, `contended 200` at 4 threads (band 3%) | 1.25x, long at 2 threads (band 0%) |
+
+The first two make the release a locked read-modify-write, because the release
+has to learn whether anyone sleeps: that instruction alone made the contended
+histogram 1.96x slower at two threads with nobody ever asleep. The last two
+keep the release a plain store, and pay in hand-off instead: a waiter woken
+from the kernel, or by a timeout, takes the word later than one that yields
+and looks again, which is what costs the long-section shapes. Each design used
+less processor time somewhere — the third up to 3x less — but none was no
+slower everywhere, and a lock that is slower for a program that holds it for a
+long time is not the trade this note makes on a reader's behalf. The lock
+stays as it is. A sleeping lock comes back with a measurement that clears every
+shape, or with a second kind of lock a program chooses.
 
 ---
 

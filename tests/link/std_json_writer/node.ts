@@ -1,9 +1,13 @@
 // The half of `JsonWriter` whose answer does not depend on how a string or an
-// integer is read: ASCII text, no `i64`. `tests/run.js` builds this natively
-// and runs it under Node, and holds both to `JSON.stringify` of the same
-// values, computed there — so each line below is checked against JavaScript's
-// own spelling rather than against a golden this repository wrote. The order
-// of the lines is the order of `JSON_WRITER_NODE_VALUES` in `tests/run.js`.
+// integer is read: ASCII text, and `i64` only where its digits are exact.
+// `tests/run.js` builds this natively and runs it under Node, and holds both
+// to `JSON.stringify` of the same values, computed there — so each line below
+// is checked against JavaScript's own spelling rather than against a golden
+// this repository wrote. The order
+// of the lines is the order of `JSON_WRITER_NODE_VALUES` in `tests/run.js`,
+// then `JSON_WRITER_NODE_PRETTY` once per indent of `JSON_WRITER_NODE_INDENTS`,
+// then `JSON_WRITER_NODE_STRICT`, `JSON_WRITER_NODE_I64` and the kind stack's
+// lines, `JSON_WRITER_NODE_STACK`.
 import { JsonWriter, jsonStringifyString } from "nish/json";
 
 /** Prints what `w` wrote, then starts it over on the same buffer. */
@@ -12,8 +16,155 @@ const flush = (w: JsonWriter, out: u8[]): void => {
   w.reset(out, 0);
 };
 
+/**
+ * The values the indented runs write, each flushed: an object that holds
+ * every kind of member — empty and full containers, nested both ways, a
+ * string with an escape, numbers — then a top-level empty object and array,
+ * a string and a number, which indent leaves as they are.
+ */
+const writePretty = (w: JsonWriter, out: u8[]): void => {
+  // { message: "Hello", empty: {}, none: [], list: [1, [2, []], { a: null }], deep: { b: { c: [true, false] } }, s: "x\ny", f: 1.5, n: [...] }
+  const half: f64 = 1.5;
+  w.beginObject();
+  w.key("message");
+  w.string("Hello");
+  w.key("empty");
+  w.beginObject();
+  w.endObject();
+  w.key("none");
+  w.beginArray();
+  w.endArray();
+  w.key("list");
+  w.beginArray();
+  w.i32(1);
+  w.beginArray();
+  w.i32(2);
+  w.beginArray();
+  w.endArray();
+  w.endArray();
+  w.beginObject();
+  w.key("a");
+  w.nullValue();
+  w.endObject();
+  w.endArray();
+  w.key("deep");
+  w.beginObject();
+  w.key("b");
+  w.beginObject();
+  w.key("c");
+  w.beginArray();
+  w.boolean(true);
+  w.boolean(false);
+  w.endArray();
+  w.endObject();
+  w.endObject();
+  w.key("s");
+  w.string("x\ny");
+  w.key("f");
+  w.f64(half);
+  // [4294967295, -12345, NaN, Infinity]: the other number kinds, and the
+  // default mode's null for a non-finite f64, on lines of their own.
+  const uMax: u32 = 4294967295;
+  w.key("n");
+  w.beginArray();
+  w.u32(uMax);
+  w.i64(toI64(-12345));
+  w.f64(toF64(0) / toF64(0));
+  w.f64(toF64(1) / toF64(0));
+  w.endArray();
+  w.endObject();
+  flush(w, out);
+  // [[{}]], {}, [], "top", -7
+  w.beginArray();
+  w.beginArray();
+  w.beginObject();
+  w.endObject();
+  w.endArray();
+  w.endArray();
+  flush(w, out);
+  w.beginObject();
+  w.endObject();
+  flush(w, out);
+  w.beginArray();
+  w.endArray();
+  flush(w, out);
+  w.string("top");
+  flush(w, out);
+  w.i32(-7);
+  flush(w, out);
+};
+
+/**
+ * The kind of the container opened at depth `d` (from 0) by `openMixed`: an
+ * array when `d % 3 === 1`, an object otherwise. The kinds then differ on
+ * either side of the 32nd level, where the kind stack moves from one word
+ * to the next, and at every level something other than a neighbour's kind
+ * has to come back off it.
+ */
+const objectAt = (d: i32): boolean => d % 3 !== 1;
+
+/** Opens `n` containers of `objectAt`'s kinds, each object with the key `k` before its child. */
+const openMixed = (w: JsonWriter, n: i32): void => {
+  for (let d: i32 = 0; d < n; d += 1) {
+    if (objectAt(d)) {
+      w.beginObject();
+      w.key("k");
+    } else {
+      w.beginArray();
+    }
+  }
+};
+
+/** Closes the containers `openMixed` opened, from depth `from` back to depth `to`, each with its own closer. */
+const closeMixed = (w: JsonWriter, from: i32, to: i32): void => {
+  for (let d: i32 = from - 1; d >= to; d -= 1) {
+    if (objectAt(d)) {
+      w.endObject();
+    } else {
+      w.endArray();
+    }
+  }
+};
+
+/** `openMixed(n)`, the value `1`, then `closeMixed(n, 0)`: the text `JSON.stringify` writes for that value. */
+const writeMixed = (w: JsonWriter, n: i32): void => {
+  openMixed(w, n);
+  w.i32(1);
+  closeMixed(w, n, 0);
+};
+
+/**
+ * For each depth `t` from 1 to `64`: the writer opens the
+ * full 64 levels, writes a value, closes back to depth `t` with the right
+ * closer each time, and is then given the wrong closer for depth `t`, which
+ * must be `JSON_WRITE_UNBALANCED` and write nothing. That reads the innermost
+ * kind after every number of pops, across the words' boundary both ways.
+ * Answers the first depth that went wrong, or 0.
+ */
+const mixedKindsAtEveryDepth = (w: JsonWriter, buf: u8[]): i32 => {
+  for (let t: i32 = 1; t <= 64; t += 1) {
+    w.reset(buf, 0);
+    openMixed(w, 64);
+    w.i32(1);
+    closeMixed(w, 64, t);
+    if (w.failed !== 0 || w.depth !== t) {
+      return t;
+    }
+    const before: i32 = w.written();
+    if (objectAt(t - 1)) {
+      w.endArray();
+    } else {
+      w.endObject();
+    }
+    if (w.failed !== -3 || w.written() !== before) {
+      return t;
+    }
+  }
+  return 0;
+};
+
 export const main = (): number => {
-  const out = new Array<u8>(512);
+  const out = new Array<u8>(1024);
   const w = new JsonWriter(out, 0);
 
   // { message: "Hello, World!" }
@@ -133,5 +284,84 @@ export const main = (): number => {
 
   // jsonStringifyString('a\t"\u0001'), which is JSON.stringify of the string.
   console.log(jsonStringifyString(`a\t"${String.fromCharCode(1)}`));
+
+  // The indented text: the nested value and the top-level scalars, once per
+  // indent of `JSON_WRITER_NODE_INDENTS`, in its order, then the minified
+  // text again. 11 is clamped to 10 and -3 is minified, as JSON.stringify does.
+  const spaces: i32[] = [2, 4, 1, 3, 5, 6, 7, 8, 9, 10, 11, 0, -3];
+  for (const n of spaces) {
+    w.setIndent(n);
+    writePretty(w, out);
+  }
+  w.setIndentTab();
+  writePretty(w, out);
+  w.setIndent(0);
+  writePretty(w, out);
+
+  // Strict mode: a finite f64 as ever, and each non-finite one is
+  // JSON_WRITE_NON_FINITE (-8), written as nothing: `written` is what came
+  // before it, at the top level, after an element and after a key.
+  w.setStrict(true);
+  w.beginArray();
+  w.f64(half);
+  w.f64(negZero);
+  w.endArray();
+  flush(w, out);
+  w.f64(nan);
+  console.log(`written ${w.written()}`);
+  flush(w, out);
+  w.beginArray();
+  w.i32(1);
+  w.f64(inf);
+  console.log(`written ${w.written()}`);
+  flush(w, out);
+  w.beginObject();
+  w.key("x");
+  w.f64(-inf);
+  console.log(`written ${w.written()}`);
+  flush(w, out);
+  w.setStrict(false);
+  w.f64(nan);
+  flush(w, out);
+
+  // [0, -1, i64 min, i64 max]: every i64 is built with toI64, which under
+  // Node makes it a BigInt, so a bare number literal mixed into the writer's
+  // i64 arithmetic throws here rather than passing unseen.
+  // 2^53 is spelled as an i64 natively; toI64 makes it the BigInt Node needs.
+  const twoTo53: i64 = 9007199254740992;
+  const lo: i64 = -toI64(twoTo53) << toI64(10);
+  w.beginArray();
+  w.i64(toI64(0));
+  w.i64(toI64(-1));
+  w.i64(lo);
+  w.i64(-(lo + toI64(1)));
+  w.endArray();
+  flush(w, out);
+
+  // The kind stack under Node, where the shifts are on numbers: mixed kinds
+  // at 31, 32, 33, 63 and 64 levels, each `JSON.stringify` of the same
+  // value; then the wrong closer after every number of closes; then the
+  // limit, and a reset after a deep text.
+  const depths: i32[] = [31, 32, 33, 63, 64];
+  for (const n of depths) {
+    writeMixed(w, n);
+    flush(w, out);
+  }
+  console.log(`every depth ${mixedKindsAtEveryDepth(w, out)}`);
+  w.reset(out, 0);
+  openMixed(w, 64);
+  w.beginArray();
+  console.log(`past the limit ${w.failed}`);
+  w.reset(out, 0);
+  w.key("a");
+  console.log(`a key after the reset ${w.failed}`);
+  w.reset(out, 0);
+  w.beginObject();
+  w.key("a");
+  w.beginArray();
+  w.i32(1);
+  w.endArray();
+  w.endObject();
+  flush(w, out);
   return 0;
 };

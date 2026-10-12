@@ -1,7 +1,8 @@
 // `JsonWriter` from `nish/json`: every value kind, every escape, the number
 // edges `JSON.stringify` decides, every `JSON_WRITE_*` code, a full buffer at
 // every length, the two portability edges, and an arena that stays flat over
-// 10,000 writes into one reused buffer.
+// 10,000 writes into one reused buffer; and the two modes, indented and
+// strict, with the same edges.
 //
 // The expected texts are the ones `JSON.stringify` answers for the same value.
 // `node.ts` beside this file is the ASCII, i64-free half of them, which
@@ -12,6 +13,7 @@ import {
   JSON_WRITE_DONE,
   JSON_WRITE_FULL,
   JSON_WRITE_KEY_EXPECTED,
+  JSON_WRITE_NON_FINITE,
   JSON_WRITE_OK,
   JSON_WRITE_TOO_DEEP,
   JSON_WRITE_UNBALANCED,
@@ -19,8 +21,23 @@ import {
   JSON_WRITER_MAX_DEPTH,
   JsonWriter,
   jsonStringifyString,
-} from "../../../std/json";
-import { Suite } from "../../../std/testing";
+} from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+import { Suite } from "nish/testing";
+
+/** A class `jsonEncode` writes, to show that the code it writes goes through the writer's modes. */
+class Pair {
+  name: string = "a";
+  values: i32[];
+  constructor() {
+    this.values = [1, 2];
+  }
+}
+
+/** A class with an `f64` field, for `jsonEncode` through a strict writer. */
+class Reading {
+  value: f64 = 0;
+}
 
 /** The arena's chunk, which `Arena.used()` counts within (runtime/runtime.c, `nish_arena_grow`). */
 const LB_CHUNK: i64 = 65536;
@@ -140,18 +157,52 @@ const stuck = (w: JsonWriter): boolean => {
   return w.failed === failed && w.end === end;
 };
 
+/** `{"a":[],"b":{},"c":[1,{"d":true}]}`: empty and full containers, nested both ways. */
+const writeNested = (w: JsonWriter): void => {
+  w.beginObject();
+  w.key("a");
+  w.beginArray();
+  w.endArray();
+  w.key("b");
+  w.beginObject();
+  w.endObject();
+  w.key("c");
+  w.beginArray();
+  w.i32(1);
+  w.beginObject();
+  w.key("d");
+  w.boolean(true);
+  w.endObject();
+  w.endArray();
+  w.endObject();
+};
+
+/** The tab indent, which `prefixAtEveryLength` takes as an `indent` of -1. */
+const TAB: i32 = -1;
+
 /**
- * Every buffer length from 0 to one short of what the hello object needs:
- * the first that fails some other way than `JSON_WRITE_FULL`, that moves the
- * cursor past the buffer, or that leaves bytes that are not a prefix of the
- * object, as one line; `""` when every length fails cleanly.
+ * Every buffer length from 0 to one short of what the value needs — the
+ * hello object, or `writeNested`'s when `nested` — written at `indent`
+ * spaces, or a tab for `TAB`: the first length that fails some other way
+ * than `JSON_WRITE_FULL`, that moves the cursor past the buffer, or that
+ * leaves bytes that are not a prefix of `want`, as one line; `""` when every
+ * length fails cleanly.
  */
-const helloAtEveryLength = (want: string): string => {
+const prefixAtEveryLength = (want: string, indent: i32, nested: boolean): string => {
   const n: i32 = toI32(want.length);
   for (let len: i32 = 0; len < n; len += 1) {
     const buf = new Array<u8>(len);
     const w = new JsonWriter(buf, 0);
-    writeHello(w, "Hello, World!");
+    if (indent === TAB) {
+      w.setIndentTab();
+    } else {
+      w.setIndent(indent);
+    }
+    if (nested) {
+      writeNested(w);
+    } else {
+      writeHello(w, "Hello, World!");
+    }
     if (w.failed !== JSON_WRITE_FULL) {
       return `length ${len}: failed is ${w.failed}`;
     }
@@ -164,6 +215,85 @@ const helloAtEveryLength = (want: string): string => {
     }
   }
   return "";
+};
+
+/**
+ * The kind of the container opened at depth `d` (from 0) by `openMixed`: an
+ * array when `d % 3 === 1`, an object otherwise. The kinds then differ on
+ * either side of the 32nd level, where the kind stack moves from one word
+ * to the next, and at every level something other than a neighbour's kind
+ * has to come back off it.
+ */
+const objectAt = (d: i32): boolean => d % 3 !== 1;
+
+/** Opens `n` containers of `objectAt`'s kinds, each object with the key `k` before its child. */
+const openMixed = (w: JsonWriter, n: i32): void => {
+  for (let d: i32 = 0; d < n; d += 1) {
+    if (objectAt(d)) {
+      w.beginObject();
+      w.key("k");
+    } else {
+      w.beginArray();
+    }
+  }
+};
+
+/** Closes the containers `openMixed` opened, from depth `from` back to depth `to`, each with its own closer. */
+const closeMixed = (w: JsonWriter, from: i32, to: i32): void => {
+  for (let d: i32 = from - 1; d >= to; d -= 1) {
+    if (objectAt(d)) {
+      w.endObject();
+    } else {
+      w.endArray();
+    }
+  }
+};
+
+/** `openMixed(n)`, the value `1`, then `closeMixed(n, 0)`: the text `JSON.stringify` writes for that value. */
+const writeMixed = (w: JsonWriter, n: i32): void => {
+  openMixed(w, n);
+  w.i32(1);
+  closeMixed(w, n, 0);
+};
+
+/**
+ * For each depth `t` from 1 to `JSON_WRITER_MAX_DEPTH`: the writer opens the
+ * full 64 levels, writes a value, closes back to depth `t` with the right
+ * closer each time, and is then given the wrong closer for depth `t`, which
+ * must be `JSON_WRITE_UNBALANCED` and write nothing. That reads the innermost
+ * kind after every number of pops, across the words' boundary both ways.
+ * Answers the first depth that went wrong, or 0.
+ */
+const mixedKindsAtEveryDepth = (w: JsonWriter, buf: u8[]): i32 => {
+  for (let t: i32 = 1; t <= JSON_WRITER_MAX_DEPTH; t += 1) {
+    w.reset(buf, 0);
+    openMixed(w, JSON_WRITER_MAX_DEPTH);
+    w.i32(1);
+    closeMixed(w, JSON_WRITER_MAX_DEPTH, t);
+    if (w.failed !== 0 || w.depth !== t) {
+      return t;
+    }
+    const before: i32 = w.written();
+    if (objectAt(t - 1)) {
+      w.endArray();
+    } else {
+      w.endObject();
+    }
+    if (w.failed !== -3 || w.written() !== before) {
+      return t;
+    }
+  }
+  return 0;
+};
+
+/** `JSON_WRITER_MAX_DEPTH` empty arrays, each inside the last, opened and closed. */
+const nestArrays = (w: JsonWriter): void => {
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    w.beginArray();
+  }
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    w.endArray();
+  }
 };
 
 /**
@@ -480,7 +610,7 @@ export const main = (): number => {
   t.eqI32("an object at depth 40 still takes keys after an array inside it closes", w.failed, JSON_WRITE_OK);
   t.ok("and writes the key after the array with its comma", w.text().endsWith(':[],"x":1'));
 
-  t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", helloAtEveryLength(hello), "");
+  t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", prefixAtEveryLength(hello, 0, false), "");
   const short = new Array<u8>(4);
   w.reset(short, 0);
   writeHello(w, "Hello, World!");
@@ -576,6 +706,413 @@ export const main = (): number => {
   t.eqI32("a text from start 5 counts only its own bytes", w.written(), 16);
   t.eqStr("and is read from start", w.text(), '{"message":"hi"}');
 
+  // ---- Indented ------------------------------------------------------------------
+  // The spellings are JSON.stringify(v, null, indent)'s; `node.ts` holds a
+  // larger value to JSON.stringify itself under Node and natively.
+  const big4 = new Array<u8>(256);
+  const pw = new JsonWriter(big4, 0);
+  pw.setIndent(2);
+  writeHello(pw, "Hello, World!");
+  const prettyHello = '{\n  "message": "Hello, World!"\n}';
+  t.eqStr("the hello object at two spaces", pw.text(), prettyHello);
+  t.ok("is complete", pw.complete());
+  pw.reset(big4, 0);
+  t.eqI32("reset keeps the indent", pw.indentWidth, 2);
+  pw.beginArray();
+  pw.beginObject();
+  pw.endObject();
+  pw.beginArray();
+  pw.endArray();
+  pw.string(accented);
+  pw.endArray();
+  t.eqStr("empty containers stay on one line, and UTF-8 goes through", pw.text(), `[\n  {},\n  [],\n  "${accented}"\n]`);
+  pw.reset(big4, 0);
+  pw.i32(5);
+  t.eqStr("a top-level number is not indented", pw.text(), "5");
+  pw.setIndentTab();
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.beginArray();
+  pw.i32(1);
+  pw.endArray();
+  pw.endObject();
+  t.eqStr("a tab a level", pw.text(), '{\n\t"a": [\n\t\t1\n\t]\n}');
+  pw.setIndent(11);
+  t.eqI32("an indent past 10 is clamped to 10", pw.indentWidth, 10);
+  pw.setIndent(-1);
+  t.eqI32("and one below 0 is the minified text", pw.indentWidth, 0);
+  pw.reset(big4, 0);
+  writeHello(pw, "Hello, World!");
+  t.eqStr("which writes what it wrote before", pw.text(), hello);
+  t.eqStr(
+    "an indented text too short at every length is JSON_WRITE_FULL and a clean prefix",
+    prefixAtEveryLength(prettyHello, 2, false),
+    ""
+  );
+  const nestedTab = '{\n\t"a": [],\n\t"b": {},\n\t"c": [\n\t\t1,\n\t\t{\n\t\t\t"d": true\n\t\t}\n\t]\n}';
+  const nestedThree =
+    '{\n   "a": [],\n   "b": {},\n   "c": [\n      1,\n      {\n         "d": true\n      }\n   ]\n}';
+  pw.setIndentTab();
+  pw.reset(big4, 0);
+  writeNested(pw);
+  t.eqStr("nested containers with a tab are JSON.stringify(v, null, \"\\t\")", pw.text(), nestedTab);
+  pw.setIndent(3);
+  pw.reset(big4, 0);
+  writeNested(pw);
+  t.eqStr("and at three spaces JSON.stringify(v, null, 3)", pw.text(), nestedThree);
+  t.eqStr(
+    "nested containers with a tab, too short at every length, are JSON_WRITE_FULL and a clean prefix",
+    prefixAtEveryLength(nestedTab, TAB, true),
+    ""
+  );
+  t.eqStr(
+    "and at three spaces",
+    prefixAtEveryLength(nestedThree, 3, true),
+    ""
+  );
+
+  // A raw fragment goes where a value would, after its line break and
+  // indent, and is copied as it is: not re-indented.
+  const fragment: u8[] = [123, 34, 120, 34, 58, 49, 125];
+  pw.setIndent(2);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.raw(fragment, 0, 7);
+  pw.endArray();
+  t.eqStr("an indented raw element is on its own line and not re-indented", pw.text(), '[\n  {"x":1}\n]');
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("r");
+  pw.raw(fragment, 0, 7);
+  pw.endObject();
+  t.eqStr("an indented raw member value follows its key's colon and space", pw.text(), '{\n  "r": {"x":1}\n}');
+  pw.reset(big4, 0);
+  pw.raw(fragment, 0, 7);
+  t.eqStr("an indented raw top-level value is the fragment alone", pw.text(), '{"x":1}');
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.raw(fragment, 0, 7);
+  pw.endArray();
+  t.eqStr(
+    "an indented raw element after a sibling takes the comma, line break and indent first",
+    pw.text(),
+    '[\n  1,\n  {"x":1}\n]'
+  );
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.raw(fragment, 7, 0);
+  pw.endArray();
+  t.eqStr(
+    "an empty raw window in indent mode still takes its comma, line break and indent, and nothing else",
+    pw.text(),
+    "[\n  1,\n  \n]"
+  );
+  // A closer's line break with no room: `[\n  1` fits in 5 bytes, and the
+  // `\n` before `]` does not.
+  const five = new Array<u8>(5);
+  pw.setIndent(2);
+  pw.reset(five, 0);
+  pw.beginArray();
+  pw.i32(1);
+  t.eqI32("an element and its indent fill the buffer", pw.failed, JSON_WRITE_OK);
+  pw.endArray();
+  t.eqI32("a closer whose line break has no room is JSON_WRITE_FULL", pw.failed, JSON_WRITE_FULL);
+  t.eqI32("and writes none of it", pw.written(), 5);
+  t.ok("and the writer holds still after it", stuck(pw));
+  // The deepest line at the widest indent: 64 nested arrays at 10 spaces,
+  // JSON.stringify's 39,944 bytes. Every opener but the outermost and every
+  // closer but the innermost's starts a line indented 10 a level, and the
+  // buffer is exactly that long, so the last `]` fills it.
+  const deepest: i32 = 39944;
+  const widest = new Array<u8>(deepest);
+  pw.setIndent(10);
+  pw.reset(widest, 0);
+  nestArrays(pw);
+  t.ok("JSON_WRITER_MAX_DEPTH empty arrays at 10 spaces close back to complete", pw.complete());
+  t.eqI32("in JSON.stringify's 39,944 bytes", pw.written(), deepest);
+  pw.reset(widest, 1);
+  nestArrays(pw);
+  t.eqI32("and one byte less is JSON_WRITE_FULL", pw.failed, JSON_WRITE_FULL);
+  t.eqI32("at the last closer, whose line break fits and whose ] does not", pw.written(), deepest - 1);
+
+  // jsonEncode is calls of the writer's methods, so it writes in the writer's mode.
+  pw.setIndent(2);
+  pw.reset(big4, 0);
+  jsonEncode(pw, new Pair());
+  t.eqStr(
+    "jsonEncode through an indented writer is JSON.stringify(v, null, 2)",
+    pw.text(),
+    '{\n  "name": "a",\n  "values": [\n    1,\n    2\n  ]\n}'
+  );
+
+  // Switching the indent in the middle of a text applies from the next
+  // byte: on, the next element takes its comma and a line break and every
+  // closer after it a line of its own; off, the rest is minified.
+  pw.setIndent(0);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.setIndent(2);
+  pw.i32(2);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(3);
+  pw.endObject();
+  pw.endArray();
+  t.eqStr("indenting from the middle of a text", pw.text(), '[1,\n  2,\n  {\n    "a": 3\n  }\n]');
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.setIndent(0);
+  pw.i32(2);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(3);
+  pw.endObject();
+  pw.endArray();
+  t.eqStr("and minifying from the middle of one", pw.text(), '[\n  1,2,{"a":3}]');
+
+  // Every misuse has the code it has in the minified text, with an indent
+  // set, and writes nothing: not its line break, not its indent.
+  pw.setIndent(2);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  let before: i32 = pw.written();
+  pw.endObject();
+  t.eqI32("indented, endObject closing an array is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("and writes nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  before = pw.written();
+  pw.endArray();
+  t.eqI32("indented, endArray straight after the first key is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("and writes nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(1);
+  pw.key("b");
+  before = pw.written();
+  pw.endArray();
+  t.eqI32("and straight after a later key", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("writing nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(1);
+  pw.key("b");
+  before = pw.written();
+  pw.endObject();
+  t.eqI32("indented, endObject straight after a later key is JSON_WRITE_VALUE_EXPECTED", pw.failed, JSON_WRITE_VALUE_EXPECTED);
+  t.eqI32("and writes nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.endArray();
+  t.eqI32("indented, endArray with nothing open is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("and writes nothing", pw.written(), 0);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.endArray();
+  before = pw.written();
+  pw.endObject();
+  t.eqI32("and endObject after the value is whole is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("writing nothing", pw.written(), before);
+  pw.reset(widest, 0);
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    pw.beginArray();
+  }
+  before = pw.written();
+  pw.beginObject();
+  t.eqI32("indented, one opener past JSON_WRITER_MAX_DEPTH is JSON_WRITE_TOO_DEEP", pw.failed, JSON_WRITE_TOO_DEEP);
+  t.eqI32("and writes no line break for it", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(1);
+  before = pw.written();
+  pw.i32(2);
+  t.eqI32("indented, a value where a key is due is JSON_WRITE_KEY_EXPECTED", pw.failed, JSON_WRITE_KEY_EXPECTED);
+  t.eqI32("and writes no comma or line break for it", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.i32(1);
+  pw.i32(2);
+  t.eqI32("indented, a second top-level value is JSON_WRITE_DONE", pw.failed, JSON_WRITE_DONE);
+  t.eqStr("and the first is all that was written", pw.text(), "1");
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.endObject();
+  pw.key("a");
+  t.eqI32("and so is a key after the value is whole", pw.failed, JSON_WRITE_DONE);
+  t.eqStr("leaving the empty object", pw.text(), "{}");
+
+  // ---- The kind stack ---------------------------------------------------------------
+  // The kinds of the open containers are a stack that shifts across two
+  // words: mixed kinds at every level, the boundary at 32 crossed both ways,
+  // the limit at 64, and a reset after a deep text that left it full.
+  const stackBuf = new Array<u8>(1024);
+  const kw = new JsonWriter(stackBuf, 0);
+  const depths: i32[] = [31, 32, 33, 63, 64];
+  for (const n of depths) {
+    kw.reset(stackBuf, 0);
+    writeMixed(kw, n);
+    const parts: string[] = [];
+    for (let d: i32 = 0; d < n; d += 1) {
+      parts.push(objectAt(d) ? '{"k":' : "[");
+    }
+    parts.push("1");
+    for (let d: i32 = n - 1; d >= 0; d -= 1) {
+      parts.push(objectAt(d) ? "}" : "]");
+    }
+    t.eqStr(`${n} levels of mixed kinds open and close in order`, kw.text(), parts.join(""));
+    t.ok(`and are complete at ${n}`, kw.complete());
+  }
+  t.eqI32(
+    "after every number of closes from 64 levels, the wrong closer is JSON_WRITE_UNBALANCED and writes nothing",
+    mixedKindsAtEveryDepth(kw, stackBuf),
+    0
+  );
+  kw.reset(stackBuf, 0);
+  openMixed(kw, JSON_WRITER_MAX_DEPTH - 1);
+  kw.beginArray();
+  t.eqI32("an opener reaching exactly JSON_WRITER_MAX_DEPTH is accepted", kw.failed, JSON_WRITE_OK);
+  const atLimit: i32 = kw.written();
+  kw.beginObject();
+  t.eqI32("and one past it is JSON_WRITE_TOO_DEEP", kw.failed, JSON_WRITE_TOO_DEEP);
+  t.eqI32("writing nothing", kw.written(), atLimit);
+  kw.reset(stackBuf, 0);
+  openMixed(kw, JSON_WRITER_MAX_DEPTH);
+  kw.reset(stackBuf, 0);
+  kw.key("a");
+  t.eqI32(
+    "a reset after 64 open levels clears the stack: a key at the top level is JSON_WRITE_VALUE_EXPECTED",
+    kw.failed,
+    JSON_WRITE_VALUE_EXPECTED
+  );
+  kw.reset(stackBuf, 0);
+  kw.beginObject();
+  kw.key("a");
+  kw.beginArray();
+  kw.i32(1);
+  kw.endArray();
+  kw.endObject();
+  t.eqStr("and a text after it is written as from new", kw.text(), '{"a":[1]}');
+  t.ok("and is complete", kw.complete());
+  kw.reset(stackBuf, 0);
+  kw.beginArray();
+  kw.endArray();
+  kw.endArray();
+  kw.reset(stackBuf, 0);
+  kw.i32(1);
+  t.ok("a reset after a failed text writes a whole value too", kw.complete());
+  // 40 object levels set bits of the stack's second word; a reset must clear
+  // them, or the 33rd array below would read an object's bit and refuse its
+  // closer.
+  kw.reset(stackBuf, 0);
+  for (let d: i32 = 0; d < 40; d += 1) {
+    kw.beginObject();
+    kw.key("k");
+  }
+  kw.reset(stackBuf, 0);
+  for (let d: i32 = 0; d < 33; d += 1) {
+    kw.beginArray();
+  }
+  for (let d: i32 = 0; d < 33; d += 1) {
+    kw.endArray();
+  }
+  const brackets: string[] = [];
+  for (let d: i32 = 0; d < 33; d += 1) {
+    brackets.push("[");
+  }
+  for (let d: i32 = 0; d < 33; d += 1) {
+    brackets.push("]");
+  }
+  t.eqStr(
+    "a reset after 40 object levels clears the stack's second word: 33 arrays open and close after it",
+    kw.text(),
+    brackets.join("")
+  );
+  t.ok("and are complete", kw.complete());
+
+  // ---- Strict --------------------------------------------------------------------
+  const sw = new JsonWriter(out, 0);
+  sw.setStrict(true);
+  sw.beginArray();
+  sw.f64(one);
+  sw.f64(negZero);
+  sw.f64(huge);
+  sw.endArray();
+  t.eqStr("a strict writer writes a finite f64 as ever", sw.text(), "[1.5,0,1.7976931348623157e+308]");
+  t.ok("and completes", sw.complete());
+  sw.reset(out, 0);
+  t.ok("reset keeps strict mode", sw.strict);
+  sw.beginArray();
+  sw.i32(1);
+  const beforeNan = sw.end;
+  sw.f64(nan);
+  t.eqI32("NaN in strict mode is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqI32("and writes nothing, not even its comma", sw.end, beforeNan);
+  t.ok("and the writer holds still after it", stuck(sw));
+  t.ok("and is not complete", !sw.complete());
+  sw.reset(out, 0);
+  sw.f64(inf);
+  t.eqI32("Infinity in strict mode is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqI32("with nothing written", sw.written(), 0);
+  sw.reset(out, 0);
+  sw.f64(-inf);
+  t.eqI32("-Infinity in strict mode is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  sw.reset(out, 0);
+  sw.beginObject();
+  sw.i32(1);
+  sw.f64(nan);
+  t.eqI32("an earlier error is kept over a later non-finite f64", sw.failed, JSON_WRITE_KEY_EXPECTED);
+  sw.reset(out, 0);
+  sw.beginObject();
+  sw.f64(nan);
+  t.eqI32(
+    "a non-finite f64 where a key is due is JSON_WRITE_KEY_EXPECTED, as a finite one is",
+    sw.failed,
+    JSON_WRITE_KEY_EXPECTED
+  );
+  sw.reset(out, 0);
+  sw.i32(1);
+  sw.f64(inf);
+  t.eqI32("and after the top-level value it is JSON_WRITE_DONE", sw.failed, JSON_WRITE_DONE);
+  t.eqStr("with the first value all that was written", sw.text(), "1");
+  sw.reset(out, 0);
+  sw.beginObject();
+  sw.key("v");
+  sw.f64(nan);
+  t.eqI32("but after a key it is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  // Strict and indented together: the check comes before the line break, so
+  // a failing value writes neither its comma nor its indent.
+  sw.setIndent(2);
+  sw.reset(out, 0);
+  sw.beginArray();
+  sw.i32(1);
+  const beforeIndented = sw.written();
+  sw.f64(nan);
+  t.eqI32("an indented strict writer fails NaN with JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqI32("and writes no comma, line break or indent for it", sw.written(), beforeIndented);
+  t.eqI32("after the five bytes of [, a line break, its indent and 1", beforeIndented, 5);
+  sw.setIndent(0);
+  const reading = new Reading();
+  reading.value = inf;
+  sw.reset(out, 0);
+  jsonEncode(sw, reading);
+  t.eqI32("jsonEncode through a strict writer fails an infinite field with JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqStr("after the bytes before the value", sw.text(), '{"value":');
+  sw.setStrict(false);
+  sw.reset(out, 0);
+  sw.f64(nan);
+  t.eqStr("off again, NaN is null", sw.text(), "null");
+  t.ok("a writer is not strict until it is asked to be", !new JsonWriter(out, 0).strict);
+  t.eqI32("nor indented", new JsonWriter(out, 0).indentWidth, 0);
+
   // ---- The arena -----------------------------------------------------------------
   // Every write into the one buffer, reset each round, with a message, an i32
   // and an f64 that change each round so no two neighbouring rounds write the
@@ -613,6 +1150,36 @@ export const main = (): number => {
     fresh.end();
   }
   t.eqI64("an f64 write started at the head of a chunk keeps nothing either", fresh.kept, toI64(0));
+
+  // The same rounds indented, at 4 spaces and with a tab, so every line break
+  // is measured too: an indent is stored, never built.
+  const prettyOut = new Array<u8>(256);
+  const pretty = new LbMeter(false);
+  let prettyFinished: i32 = 0;
+  for (let round: i32 = 0; round < 10000; round += 1) {
+    if (round % 2 === 0) {
+      pw.setIndent(4);
+    } else {
+      pw.setIndentTab();
+    }
+    pretty.begin();
+    pw.reset(prettyOut, 0);
+    const pick: i32 = round % 64;
+    pw.beginArray();
+    writeHello(pw, pick < toI32(messages.length) ? messages[pick] : "");
+    pw.beginArray();
+    pw.endArray();
+    pw.i32(round);
+    pw.f64(toF64(round) / toF64(8));
+    pw.i64(lo);
+    pw.endArray();
+    pretty.end();
+    if (pw.complete()) {
+      prettyFinished += 1;
+    }
+  }
+  t.eqI32("10,000 indented writes into a reused buffer all complete", prettyFinished, 10000);
+  t.eqI64("and keep nothing in the arena", pretty.kept, toI64(0));
 
   return t.done();
 };
