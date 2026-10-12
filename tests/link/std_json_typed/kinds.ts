@@ -19,7 +19,7 @@ import {
 } from "nish/json-typed";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { Kinds, Level, MapShapes, Names, Sign, Wide } from "./models.ts";
+import { Kinds, Level, MapShapes, Names, Sign, Wide, Xy } from "./models.ts";
 import { jtBytes, jtDecode, jtEncode } from "./support.ts";
 import { Tag, tagDecode, tagEncode } from "./tag.ts";
 
@@ -248,19 +248,27 @@ const jtMaps = (t: Suite): void => {
   // The values `Kinds` leaves out. A number that names no member, in a map of
   // enums, is a type error, and the entry keeps the enum's first member.
   const shapes =
-    `{"levels":{"k":[0,9],"z":[]},"players":{"n":null,"p":{"name":"P","score":1,"rating":0,"tags":[]}},` +
+    `{"aliased":{"one":1},"levels":{"k":[0,9],"z":[]},"players":{"n":null,"p":{"name":"P","score":1,"rating":0,"tags":[]}},` +
     `"lists":{"n":null,"u":[18446744073709551615]},"signs":{"m":-1},"maybe":{"q":{"name":"Q","score":2,"rating":0.5,"tags":["t"]}}}`;
   const s = new MapShapes();
   t.eqI32("map: arrays of enums, | null objects and arrays, a | null map", jtDecode(shapes, s, new JsonLimits(), false).failed, JSON_DECODE_OK);
   t.eqStr("map: and encode", jtEncode(s, 1024), shapes);
-  const bare = `{"levels":{},"players":{},"lists":{},"signs":{"m":2},"maybe":null}`;
-  const b = new MapShapes();
-  t.eqI32("map: a number that names no member of a map's enum", jtDecode(bare, b, new JsonLimits(), false).failed, JSON_DECODE_TYPE);
-  t.ok("map: the entry holds a member", (b.signs.get("m") ?? Sign.Zero) === Sign.Minus);
+  t.ok("map: a map through an alias", (s.aliased.get("one") ?? 0) === 1);
 
-  // A map's keys are bounded by the decoder's `maxMapKeys`, 4,096 unless set,
-  // each map on its own: the key past the limit is refused before it is
-  // read, with its own code at its own byte.
+  // A value whose read fails is not set: the map holds only the entries read
+  // whole, for an i32 value and for an enum's.
+  const bare = `{"aliased":{"a":1,"b":"x"},"levels":{},"players":{},"lists":{},"signs":{},"maybe":null}`;
+  const b = new MapShapes();
+  t.eqI32("map: a string for an i32 value fails", jtDecode(bare, b, new JsonLimits(), false).failed, JSON_DECODE_TYPE);
+  t.ok("map: and the map holds only the entry read before it", b.aliased.size === 1 && !b.aliased.has("b"));
+  const badEnum = `{"aliased":{},"levels":{},"players":{},"lists":{},"signs":{"p":1,"m":2},"maybe":null}`;
+  const e = new MapShapes();
+  t.eqI32("map: a number that names no member of a map's enum", jtDecode(badEnum, e, new JsonLimits(), false).failed, JSON_DECODE_TYPE);
+  t.ok("map: and nothing is set for it", e.signs.size === 1 && !e.signs.has("m"));
+
+  // The keys of every map of one decoding are bounded together by the
+  // decoder's `maxMapKeys`, 4,096 unless set: the key past the limit is
+  // refused before it is read, with its own code at its own byte.
   const limited = jtBytes(jtKindsWith("counts", `{"a":1,"b":2,"c":3}`));
   const ld = new JsonDecoder(limited, 0, toI32(limited.length), new JsonLimits());
   ld.maxMapKeys = 3;
@@ -271,10 +279,42 @@ const jtMaps = (t: Suite): void => {
   od.maxMapKeys = 3;
   t.eqI32("map limit: one key past it: code", jsonDecode(od, new Kinds()), JSON_DECODE_MAP_LIMIT);
   t.eqI32("map limit: one key past it: errorAt", od.errorAt, jtValueAt("counts", `{"a":1,"b":2,"c":3,"d":4}`) + 19);
-  const nested = jtBytes(jtKindsWith("groups", `{"a":{"x":0,"y":5,"z":9},"b":{"x":0},"c":{}}`));
+  // A map of maps counts every key of every map: 3 outer and 3 inner keys.
+  const nestedText = jtKindsWith("groups", `{"a":{"x":0,"y":5},"b":{"x":0},"c":{}}`);
+  const nested = jtBytes(nestedText);
   const nd = new JsonDecoder(nested, 0, toI32(nested.length), new JsonLimits());
-  nd.maxMapKeys = 3;
-  t.eqI32("map limit: each map of a map of maps has its own", jsonDecode(nd, new Kinds()), JSON_DECODE_OK);
+  nd.maxMapKeys = 6;
+  t.eqI32("map limit: a map of maps counts every key of every map", jsonDecode(nd, new Kinds()), JSON_DECODE_OK);
+  nd.reset(nested, 0, toI32(nested.length));
+  nd.maxMapKeys = 5;
+  t.eqI32("map limit: and one fewer refuses it", jsonDecode(nd, new Kinds()), JSON_DECODE_MAP_LIMIT);
+  t.eqI32("map limit: at the last key", nd.errorAt, toI32(nestedText.indexOf(`"c"`)));
+  // `reset` starts the count again.
+  nd.reset(nested, 0, toI32(nested.length));
+  nd.maxMapKeys = 6;
+  t.eqI32("map limit: reset clears the count", jsonDecode(nd, new Kinds()), JSON_DECODE_OK);
+  // Many small maps pass the total together: 819 maps of four keys and their
+  // own 819 keys are 4,095 keys, and one more map is past 4,096.
+  const groups: string[] = [];
+  for (let i: i32 = 0; i < 819; i += 1) {
+    groups.push(`"g${i}":{"a":0,"b":5,"c":9,"d":0}`);
+  }
+  const under = jtKindsWith("groups", `{${groups.join(",")}}`);
+  t.eqI32("map limit: 819 small maps, 4,095 keys, decode", jtDecode(under, new Kinds(), new JsonLimits(), false).failed, JSON_DECODE_OK);
+  groups.push(`"g819":{"a":0,"b":5,"c":9,"d":0}`);
+  const past = jtKindsWith("groups", `{${groups.join(",")}}`);
+  t.eqI32("map limit: 820 small maps, 4,100 keys, are refused", jtDecode(past, new Kinds(), new JsonLimits(), false).failed, JSON_DECODE_MAP_LIMIT);
+  // At `0` or below, no map takes a key, and `{}` is still a map.
+  const none = jtBytes(jtKindsWith("counts", `{"a":1}`));
+  const emptyMaps = jtBytes(jtKindsWith("counts", "{}"));
+  for (const limit of [0, -1]) {
+    const zd = new JsonDecoder(none, 0, toI32(none.length), new JsonLimits());
+    zd.maxMapKeys = limit;
+    t.eqI32(`map limit: ${limit} refuses a map's first key`, jsonDecode(zd, new Kinds()), JSON_DECODE_MAP_LIMIT);
+    const ed = new JsonDecoder(emptyMaps, 0, toI32(emptyMaps.length), new JsonLimits());
+    ed.maxMapKeys = limit;
+    t.eqI32(`map limit: ${limit} still takes {}`, jsonDecode(ed, new Kinds()), JSON_DECODE_OK);
+  }
   const keys: string[] = [];
   for (let i: i32 = 0; i < 4096; i += 1) {
     keys.push(`"k${i}":${i % 7}`);
@@ -368,7 +408,7 @@ const jtEscapeKeys = (text: string): string => {
 
 /** The module whose IR is the golden, decoded and encoded once. */
 const jtTag = (t: Suite): void => {
-  const text = `{"id":18446744073709551615,"scores":[1,9223372036854775808],"levels":[9,0],"level":5}`;
+  const text = `{"id":18446744073709551615,"scores":[1,9223372036854775808],"levels":[9,0],"totals":[2],"level":5}`;
   const src = jtBytes(text);
   const tag = new Tag();
   t.eqI32("tag: decodes", tagDecode(new JsonDecoder(src, 0, toI32(src.length), new JsonLimits()), tag), JSON_DECODE_OK);
@@ -428,6 +468,32 @@ export const jtBenchWide = (n: i32): i32 => {
     }
     d.reset(src, 0, toI32(src.length));
     sum = (sum * 31 + jsonDecode(d, w) + w.id + w.weight + toI32(w.country.length)) % 1000003;
+  }
+  const took = monotonicNanos() - start;
+  console.log(`checksum ${sum} ns/op ${toF64(took) / toF64(n)}`);
+  return 0;
+};
+
+/**
+ * `--bench-xy <n>`: decode `{"x":1000000,"y":2}` `n` times into one reused
+ * object, the six digits after the `1` the iteration's, as `--bench-wide`
+ * does for twenty-four fields: the class of two names of one length, whose
+ * keys are compared in turn.
+ */
+export const jtBenchXy = (n: i32): i32 => {
+  const src = jtBytes(`{"x":1000000,"y":2}`);
+  const d = new JsonDecoder(src, 0, toI32(src.length), new JsonLimits());
+  const p = new Xy();
+  let sum: i32 = 0;
+  const start = monotonicNanos();
+  for (let i: i32 = 0; i < n; i += 1) {
+    let v: i32 = i;
+    for (let k: i32 = 11; k >= 6 && k < toI32(src.length); k -= 1) {
+      src[k] = toU8(48 + (v % 10));
+      v = toI32(v / 10);
+    }
+    d.reset(src, 0, toI32(src.length));
+    sum = (sum * 31 + jsonDecode(d, p) + p.x + p.y) % 1000003;
   }
   const took = monotonicNanos() - start;
   console.log(`checksum ${sum} ns/op ${toF64(took) / toF64(n)}`);

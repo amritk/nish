@@ -169,9 +169,19 @@ export class Wide {
 
 /**
  * The map values `Kinds` leaves out: an array of enums, a `| null` object and
- * a `| null` array, and a `| null` map of objects.
+ * a `| null` array, and a `| null` map of objects; and a map through an alias.
  */
+/** Two fields whose names have one length, the shape `--bench-xy` decodes. */
+export class Xy {
+  x: i32 = 0;
+  y: i32 = 0;
+}
+
+/** A `Map` named through an alias, which is the `Map` it names. */
+export type Counts = Map<string, i32>;
+
 export class MapShapes {
+  aliased: Counts;
   levels: Map<string, Level[]>;
   players: Map<string, Player | null>;
   lists: Map<string, u64[] | null>;
@@ -179,6 +189,7 @@ export class MapShapes {
   maybe: Map<string, Player> | null = null;
 
   constructor() {
+    this.aliased = new Map<string, i32>();
     this.levels = new Map<string, Level[]>();
     this.players = new Map<string, Player | null>();
     this.lists = new Map<string, u64[] | null>();

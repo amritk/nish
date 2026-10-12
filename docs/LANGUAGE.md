@@ -6311,12 +6311,13 @@ export const main = (): i32 => {
   NaN or infinite `f64` field with `JSON_WRITE_NON_FINITE`
   (`tests/link/std_json_writer`).
 - **A key is sent to its field by its length, then by one byte.** The code
-  written for a class switches on the key's length in bytes, so a key is
-  compared only with the names of that length. Where several names share a
-  length, it switches once more, on the key's byte at the one position where
-  those names differ most, and calls `keyIs` for each name that has that byte
-  there, in declaration order; a byte none of them has is an unknown key at
-  once. A key with an escape has no byte to switch on there, and is compared
+  written for a class of three or more fields switches on the key's length in
+  bytes, so a key is compared only with the names of that length. Where three
+  or more names share a length, it switches once more, on the key's byte at
+  the one position where those names differ most, and calls `keyIs` for each
+  name that has that byte there, in declaration order; a byte none of them has
+  is an unknown key at once. One or two names, of a class or of one length,
+  are compared in turn with `keyIs`, which is no more calls. A key with an escape has no byte to switch on there, and is compared
   with every name of its length, so `"\u0069d"` is the field `id`
   (`tests/link/std_json_typed`, "wide: every key escaped"). A key is
   therefore compared with the names of its length that share its byte at that
@@ -6377,7 +6378,7 @@ export const main = (): i32 => {
   | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
   | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
-  | a `Map` field's object with more keys than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
+  | more keys, over every `Map` field of the decoding, than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
@@ -6419,12 +6420,17 @@ export const main = (): i32 => {
   index (`"1"`) keeps its place, where `JSON.parse` would move it first
   ("map: a key like an index keeps the input's order"). Unlike the rest of a
   decode, a map's entries are made anew each time, so decoding into a map
-  allocates its keys and values. Each map takes at most `d.maxMapKeys` keys,
-  4,096 unless set, each map of a map of maps on its own, and the key past it
-  is `JSON_DECODE_MAP_LIMIT` before it is read ("map limit: one key past it:
-  code"). The global `Map` hashes a string with no seed, so a body can choose
-  keys that all collide, and this limit is what bounds the probes one map's
-  decoding costs (docs/security/json.md, JSON-9).
+  allocates its keys and values. A value whose read fails is not `set`, so a
+  map never holds a value the input did not give ("map: and the map holds
+  only the entry read before it"). The maps of one decoding take at most
+  `d.maxMapKeys` keys between them, 4,096 unless set, the keys of a map inside
+  another map included, and the key past it is `JSON_DECODE_MAP_LIMIT` before
+  it is read ("map limit: one key past it: code", "map limit: 820 small maps,
+  4,100 keys, are refused"); `d.reset` starts the count again. At `0` or below
+  no map may take a key, and `{}` is the one map value accepted. The global
+  `Map` hashes a string with no seed, so a body can choose keys that all
+  collide, and this limit is what bounds the probes all the maps of one
+  decoding cost together (docs/security/json.md, JSON-9).
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps

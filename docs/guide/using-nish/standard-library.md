@@ -417,12 +417,13 @@ export const main = (): i32 => {
 };
 ```
 
-A key is matched to a field by its length first and then, where several field
-names share that length, by its byte at one position, before the whole key is
-compared, so a key is usually compared with one name rather than with each in
-turn. A map takes at most `d.maxMapKeys` keys, 4,096 unless you set it; a body
-with more is refused with `JSON_DECODE_MAP_LIMIT` rather than left to slow the
-map down.
+In a class of three or more fields, a key is matched to a field by its length
+first and then, where three or more field names share that length, by its
+byte at one position, before the whole key is compared, so a key is usually
+compared with one name rather than with each in turn. All the maps of one
+decode take at most `d.maxMapKeys` keys between them, 4,096 unless you set it;
+a body with more is refused with `JSON_DECODE_MAP_LIMIT` rather than left to
+slow the maps down, and `d.reset` starts the count again.
 
 Both calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in

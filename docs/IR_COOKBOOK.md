@@ -7370,15 +7370,17 @@ attributes #2 = { nounwind willreturn readonly }
 `jsonDecode(d, out)` and `jsonEncode(w, value)` from `nish/json-typed` are
 lowered at the call to a call of a function the compiler writes into the
 calling module, `internal`, once per class and direction. The decoding loops
-over the object's keys: a `switch` on `keyLength`, then, where two names share
-a length (`name` and `mood` below), a `switch` on the `keyByte` where they
-differ, with `-1` for a key written with an escape, and `keyIs` against the one
-name left; a `seen` flag per field for the duplicate and the missing checks;
+over the object's keys: for three or more fields, a `switch` on `keyLength`,
+then, where three or more names share a length (`name`, `mood` and `kind`
+below), a `switch` on the `keyByte` where they differ, with `-1` for a key
+written with an escape, and `keyIs` against the name left, and `keyIs` in turn
+for one or two; a `seen` flag per field for the duplicate and the missing checks;
 and the field's reader, whose result is stored straight into the field. An
 enum is `i32` and then a `switch` over its members' values, which stores only a
 member; a `u64` is `u64` and is written by `jsonEncodeU64`. A `Map<string, V>`
-gets a function of its own per direction, which calls the map's `clear`, `has`
-and `set`, or `walkNext`, `keyAt` and `valueAt`, copied into the module. A string's
+gets a function of its own per direction, which asks the decoder's `mapRoom`
+before each key and calls the map's `clear`, `has` and `set`, or `walkNext`,
+`keyAt` and `valueAt`, copied into the module. A string's
 reader is bracketed by `nish_arena_mark` and `nish_arena_keep`, so the bytes
 it decoded through are given back. The encoding is `key` and the field's
 writer per field, after one load of the writer's `failed` that stops a graph

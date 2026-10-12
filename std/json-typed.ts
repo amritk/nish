@@ -23,15 +23,17 @@
  * straight-line calls into the methods of `JsonDecoder` and the functions
  * here for each field, and into `JsonWriter`'s, so all of the parsing is the
  * tokenizer's and all of the writing is the writer's. A field may be an
- * `i32`, `u32`, `i64`, `f64` (or `number`), `boolean` or `string`, a class
- * decoded the same way, an array of any of those, or any of those `| null`;
- * anything else is refused at the call, naming the field
- * (docs/LANGUAGE.md, "Typed JSON").
+ * `i32`, `u32`, `i64`, `u64`, `f64` (or `number`), `boolean` or `string`, a
+ * numeric enum (its number), a class decoded the same way, an array of any of
+ * those, a `Map<string, V>` (a JSON object) whose `V` is any of these, or a
+ * string, class, array or map `| null`; anything else is refused at the
+ * call, naming the field (docs/LANGUAGE.md, "Typed JSON").
  *
  * **The decoding rules.** A JSON object's keys are the class's field names,
- * byte for byte. Every field is required, a key may appear once, and a key
- * that names no field is an error unless `ignoreUnknown` is set, when its
- * value is stepped over. A number must fit its field: an integer field takes
+ * byte for byte, found by the key's length and then, among three or more
+ * names of that length, by one of its bytes. Every field is required, a key
+ * may appear once, and a key that names no field is an error unless
+ * `ignoreUnknown` is set, when its value is stepped over. A number must fit its field: an integer field takes
  * an integer written without a fraction or an exponent and in the field's
  * range, and `f64` takes any number. `null` is accepted only by a field whose
  * type is `| null`. Fields are written to `out` as they are read, in the
@@ -39,8 +41,10 @@
  * holds, an array's elements into the elements it already has (so a reused
  * object reuses its arrays and objects, and `Arena.used()` stays flat), and a
  * string field keeps the string it holds when the input's is equal.
- * A class the decoder has to make — an array element past the array's end, or
- * a `| null` field that holds `null` — is made with `new C()`.
+ * A class the decoder has to make — an array element past the array's end, a
+ * `| null` field that holds `null`, or a map's value — is made with `new C()`.
+ * A map is emptied and filled in the input's order, and every map of one
+ * decoding takes at most `maxMapKeys` keys between them.
  *
  * **Errors are sticky codes**, as the tokenizer's and the writer's are. The
  * first error sets `failed` to a negative code — a `JSON_DECODE_*` code here,
@@ -92,10 +96,11 @@ export const JSON_DECODE_DUPLICATE: i32 = -23
 /** An object that ended without one of the class's fields; `errorAt` is its closing brace. */
 export const JSON_DECODE_MISSING: i32 = -24
 /**
- * A `Map` field's object with more keys than `maxMapKeys`; `errorAt` is the
- * first key past the limit. The global `Map` hashes a string with no seed, so
- * a body can choose keys that all collide, and the limit bounds what one
- * map's probes cost (docs/security/json.md, JSON-9).
+ * More keys, over every `Map` field one decoding fills, than `maxMapKeys`;
+ * `errorAt` is the first key past the limit. The global `Map` hashes a
+ * string with no seed, so a body can choose keys that all collide, and the
+ * limit bounds what the maps' probes cost over the whole decoding
+ * (docs/security/json.md, JSON-9).
  */
 export const JSON_DECODE_MAP_LIMIT: i32 = -25
 
@@ -114,8 +119,14 @@ export class JsonDecoder {
   failed: i32 = 0
   /** The byte offset in the input of the token the error was found at; `-1` until one. */
   errorAt: i32 = -1
-  /** The most keys one `Map` field's object may give, 4,096 unless set; past it, `JSON_DECODE_MAP_LIMIT`. */
+  /**
+   * The most keys every `Map` field of one decoding may take together, 4,096
+   * unless set; past it, `JSON_DECODE_MAP_LIMIT`. At `0` or below, no map may
+   * take a key, so a map's only accepted value is `{}`.
+   */
   maxMapKeys: i32 = 4096
+  /** The keys the maps of this decoding have taken so far; `reset` clears it. */
+  mapKeys: i32 = 0
   /** Step over a key that names no field instead of failing with `JSON_DECODE_UNKNOWN`. */
   ignoreUnknown: boolean = false
   /**
@@ -129,12 +140,16 @@ export class JsonDecoder {
     this.tok = new JsonTokenizer(src, off, len, limits)
   }
 
-  /** Starts over on `src[off, off + len)`, keeping the limits, `ignoreUnknown` and `maxMapKeys`, and clearing any error. */
+  /**
+   * Starts over on `src[off, off + len)`, keeping the limits, `ignoreUnknown`
+   * and `maxMapKeys`, and clearing any error and the count of map keys taken.
+   */
   reset(src: u8[], off: i32, len: i32): void {
     this.tok.reset(src, off, len)
     this.failed = JSON_DECODE_OK
     this.errorAt = -1
     this.held = false
+    this.mapKeys = 0
   }
 
   /** Records the first error. */
@@ -230,11 +245,16 @@ export class JsonDecoder {
   }
 
   /**
-   * Whether a map that already holds `count` keys may take another, the
-   * current one; `JSON_DECODE_MAP_LIMIT` at the key when it may not.
+   * Whether the maps of this decoding may take another key, the current one:
+   * whether they have taken fewer than `maxMapKeys` between them, counting
+   * it as taken when they may. A key is counted here, before its value is
+   * read, so the keys of a map inside another map count before the outer
+   * key's value is whole, and the total never passes the limit.
+   * `JSON_DECODE_MAP_LIMIT` at the key when they may not.
    */
-  mapRoom(count: i32): boolean {
-    if (count < this.maxMapKeys) {
+  mapRoom(): boolean {
+    if (this.mapKeys < this.maxMapKeys) {
+      this.mapKeys += 1
       return true
     }
     this.fail(JSON_DECODE_MAP_LIMIT, this.tok.tokStart)

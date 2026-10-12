@@ -3,7 +3,7 @@
 // Each call becomes a call of a function of this module's own, one per class
 // and direction (`.json.decode.Greeting`, `.json.encode.Greeting`), whose body
 // is a call of the decoder's or the writer's method per field, after a switch
-// on the key's length and, for `name` and `mood`, on its first byte.
+// on the key's length and, for `name`, `mood` and `kind`, on its first byte.
 import { JsonWriter } from "nish/json"
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
 
@@ -16,6 +16,7 @@ class Greeting {
   id: u64 = 0
   name: string = ""
   times: i32 = 0
+  kind: i32 = 0
   mood: Mood
 
   constructor() {

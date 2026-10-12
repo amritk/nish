@@ -184,7 +184,7 @@ export const main = (): i32 => {
   room.maxMapKeys = 2;
   room.beginObject();
   room.nextField();
-  console.log(`mapRoom ${room.mapRoom(1)} ${room.mapRoom(2)} ${room.failed} at ${room.errorAt}`);
+  console.log(`mapRoom ${room.mapRoom()} ${room.mapRoom()} ${room.mapRoom()} ${room.mapKeys} ${room.failed} at ${room.errorAt}`);
   return 0;
 };
 
