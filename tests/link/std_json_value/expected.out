@@ -1,0 +1,191 @@
+PASS  readers: the document parses
+PASS  readers: the root is an object
+PASS  readers: it has six members
+PASS  readers: keyAt answers the keys in order
+PASS  readers: get finds a string member
+PASS  readers: stringEquals compares without allocating
+PASS  readers: stringEquals refuses another string
+PASS  readers: boolean reads true and false
+PASS  readers: kind of a boolean
+PASS  readers: kind of null
+PASS  readers: an array's kind and length
+PASS  readers: at reads elements in order
+PASS  readers: at on an object reads a member's value
+PASS  readers: a number keeps its text
+PASS  readers: f64 reads it
+PASS  readers: the whole document written back
+PASS  readers: get of a missing key is -1
+PASS  readers: get on an array is -1
+PASS  readers: at past the end is -1
+PASS  readers: at before the start is -1
+PASS  readers: keyAt on an array is empty
+PASS  readers: keyAt past the end is empty
+PASS  readers: length of a string is -1
+PASS  readers: string of a number is empty
+PASS  readers: numberText of a string is empty
+PASS  readers: boolean of a string is false
+PASS  readers: kind of -1 is NONE
+PASS  readers: kind past the last value is NONE
+PASS  readers: f64 of a string is 0
+PASS  readers: stringify of no value is empty
+PASS  readers: an empty string
+PASS  readers: stringify doubles its buffer for a text longer than its first guess
+PASS  readers: a scalar root
+PASS  readers: a string root
+PASS  readers: escapes are decoded and written as JSON.stringify writes them
+PASS  readers: a nested path
+PASS  numbers: the array parses
+PASS  numbers: -0 is an i64 0
+PASS  numbers: -0 is not a u64
+PASS  numbers: i64 max
+PASS  numbers: i64 min
+PASS  numbers: i64 max + 1 is a u64 only
+PASS  numbers: i64 min - 1 is neither
+PASS  numbers: u64 max
+PASS  numbers: u64 max + 1 is neither, and keeps its text
+PASS  numbers: 1.0 is not an integer
+PASS  numbers: 1e2 is not an integer
+PASS  numbers: 34 significant digits read as the nearest f64 and keep their text
+PASS  numbers: -1 is an i64, not a u64
+PASS  numbers: 0 is both
+PASS  numbers: 30 digits
+PASS  numbers: 1E400 reads as an infinity
+PASS  numbers: 5e-324 reads as the smallest subnormal
+PASS  numbers: every one written back as its text, byte for byte
+PASS  numbers: 2^53 + 1 reads as 2^53, ties to even, and keeps its text
+PASS  numbers: i64 of a string is 0
+PASS  numbers: u64 of null is 0
+PASS  errors: '' is the tokenizer's code and offset
+PASS  errors: '[1,]' is the tokenizer's code and offset
+PASS  errors: '[1] x' is the tokenizer's code and offset
+PASS  errors: '{"a" 1}' is the tokenizer's code and offset
+PASS  errors: '[01]' is the tokenizer's code and offset
+PASS  errors: '[' is the tokenizer's code and offset
+PASS  errors: '"abc' is the tokenizer's code and offset
+PASS  errors: 'nul' is the tokenizer's code and offset
+PASS  errors: a failed parse leaves no value
+PASS  errors: the next parse clears the error
+PASS  errors: the depth limit is the tokenizer's
+PASS  errors: the string limit is the tokenizer's
+PASS  errors: the number limit is the tokenizer's
+PASS  errors: within every limit it parses
+PASS  errors: a window outside its array is the tokenizer's
+PASS  duplicates: refused by default
+PASS  duplicates: a repeated key is refused at the repeat
+PASS  duplicates: the first repeat in the text is the one named
+PASS  duplicates: inside an array inside an object
+PASS  duplicates: the same key in two objects is not a repeat
+PASS  duplicates: keys that differ in their last byte are not a repeat
+PASS  duplicates: an escape that decodes to the same key is a repeat
+PASS  duplicates: LAST keeps the first place and the last value
+PASS  duplicates: LAST with three of one key
+PASS  duplicates: LAST nested
+PASS  duplicates: LAST, and the dropped value's slot is not written
+PASS  duplicates: switching back refuses again on the next parse
+PASS  duplicates: forty distinct keys parse
+PASS  duplicates: a repeat of the first key at the end of forty
+PASS  duplicates: a repeat in the middle of forty is named before a later one
+PASS  duplicates: LAST past eight members keeps each first place and each last value
+PASS  duplicates: eight members, the last repeating the one before, pairwise
+PASS  duplicates: nine members, the last repeating the one before, sorted
+PASS  duplicates: LAST at eight
+PASS  duplicates: LAST at nine
+PASS  builders: push a string
+PASS  builders: set a new key
+PASS  builders: the tree written
+PASS  builders: set an existing key
+PASS  builders: it keeps its place
+PASS  builders: the replaced value is free to go elsewhere
+PASS  builders: and is there
+PASS  builders: two arrays grown in turn
+PASS  builders: a parsed array grows by push
+PASS  builders: a parsed object grows by set
+PASS  builders: a parsed tree changed
+PASS  builders: push onto an object
+PASS  builders: set on an array
+PASS  builders: push of no value
+PASS  builders: set of no value
+PASS  builders: push onto no value
+PASS  builders: push of a value already in a container
+PASS  builders: set of a value already in a container
+PASS  builders: push of an array into itself
+PASS  builders: push of the root into its own grandchild
+PASS  builders: set of an object on itself
+PASS  builders: a refused call changed nothing
+PASS  builders: newNumber refuses a leading zero
+PASS  builders: newNumber refuses a trailing blank
+PASS  builders: newNumber refuses a leading blank
+PASS  builders: newNumber refuses a lone minus
+PASS  builders: newNumber refuses an empty text
+PASS  builders: newNumber refuses two numbers
+PASS  builders: newF64 refuses NaN
+PASS  builders: newF64 refuses an infinity
+PASS  builders: newNumber keeps any JSON number
+PASS  builders: newF64 spells as String(x)
+PASS  builders: a string built with every escape
+PASS  unicode: the document parses
+PASS  unicode: get with a two-byte key
+PASS  unicode: keyAt is the key's UTF-8
+PASS  unicode: a two-byte string and its escape decode alike
+PASS  unicode: three-byte strings and their escapes decode alike
+PASS  unicode: a four-byte string and its surrogate pair decode alike
+PASS  unicode: stringEquals against the UTF-8
+PASS  unicode: written back as UTF-8, escapes and all
+PASS  unicode: a window ending on the closing bracket after a 3-byte string
+PASS  unicode: a top-level string ending on the window's last byte
+PASS  unicode: a window that cuts a 3-byte sequence is the tokenizer's
+PASS  unicode: a built string's bytes go out as they came in
+PASS  write: into a caller's writer
+PASS  write: values as elements of a caller's array
+PASS  write: no value writes nothing and fails nothing
+PASS  write: a full buffer is JSON_WRITE_FULL exactly
+PASS  depth: 64 nested arrays parse and write back whole
+PASS  depth: 65 is the tokenizer's DEPTH at the 65th bracket
+PASS  depth: 128, the tokenizer's own default, is refused at the same bracket
+PASS  depth: a lower limit is kept
+PASS  depth: a built tree 65 deep writes JSON_WRITE_TOO_DEEP
+PASS  depth: and stringify answers empty for it
+PASS  pretty: two spaces, as JSON.stringify(v, null, 2) lays it out, numbers as written
+PASS  pretty: a tab
+PASS  pretty: an indent of 0 is minified again
+PASS  pretty: a full buffer is JSON_WRITE_FULL
+PASS  clear: every handle names nothing
+PASS  clear: building starts again
+PASS  clear: the new handle is not the old one
+PASS  stale: the old root names nothing after a same-size refill
+PASS  stale: an old member reads nothing, not the new one
+PASS  stale: every reader refuses it
+PASS  stale: the new handles read the new document
+PASS  stale: push of a stale value
+PASS  stale: set on a stale object
+PASS  stale: and after a larger refill
+PASS  stale: a clear bumps the generation by one, a parse by one, a failed parse by two
+PASS  stale: 510 clears later the handle still names nothing
+PASS  stale: 511 generations later it names the new root, as documented
+PASS  values: the default cap
+PASS  values: three values fit a cap of three
+PASS  values: a fourth is JSON_VALUE_ERR_VALUES at its first byte
+PASS  values: a container past the cap too
+PASS  values: and nothing is kept: no values, slots or bytes
+PASS  values: a builder past the cap
+PASS  values: a cap past JSON_VALUE_MAX_VALUES still parses a small body
+PASS  values: the value at index 2^22 - 1 is made, the one at 2^22 is JSON_VALUE_ERR_VALUES whatever maxValues says
+PASS  corpus: tests/json-suite/test-parsing.txt holds 318 files
+PASS  corpus: 95 y_ files
+PASS  corpus: 223 n_ and i_ files
+PASS  JSONTestSuite: every y_ file parsed and written is the tokenizer's canonical form of it
+PASS  JSONTestSuite: 55 y_ files were minified already and come back byte for byte
+PASS  JSONTestSuite: the y_ files with a repeated key are refused by default
+PASS  JSONTestSuite: and merged as JSON.parse merges them under LAST
+PASS  JSONTestSuite: every n_ and i_ file gets the tokenizer's verdict, code and offset
+PASS  JSONTestSuite: every key and string of every y_ file is written by keyBytes and stringBytes as key and string write it
+PASS  reuse: a parsed tree reads back whole after churn
+PASS  reuse: and writes back whole after churn
+PASS  reuse: a second, larger body replaces the first and reads back after churn
+PASS  reuse: a third, smaller body names only its own values
+PASS  reuse: a built tree reads back after churn
+PASS  alloc: 10,000 reused bodies parse, read and write
+PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers and the write included
+PASS  alloc: the checksum is the work being done
+PASS  alloc: the last body as written
+std/json-value: 190 passed, 0 failed, 0 skipped
