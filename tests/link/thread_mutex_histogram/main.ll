@@ -11,7 +11,7 @@
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #0
-declare void @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Shard* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Shard$i32$fn.9.binShard$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Shard* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.Mutex$$Hist.constructor(%struct.Mutex$$Hist* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Hist* noundef nonnull align 8 dereferenceable(56)) #0
 declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Hist* @nish.Mutex$$Hist.lock(%struct.Mutex$$Hist* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #1
 declare void @nish.MutexGuard$$Hist.constructor(%struct.MutexGuard$$Hist* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Hist* noundef nonnull align 8 dereferenceable(56)) #0
@@ -89,7 +89,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @binShard(%struct.Shard* noundef nonnull readonly align 8 dereferenceable(16) nocapture %s) #1 {
+define hidden noundef i32 @binShard$(%struct.Shard* noundef nonnull readonly align 8 dereferenceable(16) nocapture %s) #1 {
 entry:
   %x.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
@@ -335,7 +335,7 @@ for.body:
   call void @Shard.constructor(%struct.Shard* %28, %struct.nish_array* %31, %struct.Mutex$$Hist* %32)
   %33 = load %struct.nish_array*, %struct.nish_array** %counted.addr, align 8
   %34 = load i32, i32* %t.addr, align 4
-  call void @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard(%struct.ThreadScope* %26, %struct.Shard* %28, %struct.nish_array* %33, i32 %34)
+  call void @nish.ThreadScope.spawn$$Shard$i32$fn.9.binShard$(%struct.ThreadScope* %26, %struct.Shard* %28, %struct.nish_array* %33, i32 %34)
   br label %for.inc
 
 for.inc:

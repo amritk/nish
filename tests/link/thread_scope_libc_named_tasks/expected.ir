@@ -1,0 +1,8 @@
+define hidden noundef i32 @read$(
+define hidden noundef i32 @write$(
+define hidden noundef i32 @free$(
+define hidden noundef i32 @close$(
+declare noundef i32 @read$(
+declare noundef i32 @write$(
+declare noundef i32 @free$(
+declare noundef i32 @close$(

@@ -6,8 +6,8 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #2
-declare void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare void @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
@@ -46,7 +46,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef double @sumOf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define hidden noundef double @sumOf$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %t.addr = alloca double, align 8
   %x.addr = alloca double, align 8
@@ -86,7 +86,7 @@ forof.end:
   ret double %14
 }
 
-define hidden noundef i32 @primesBelow(i32 noundef %n) #1 {
+define hidden noundef i32 @primesBelow$(i32 noundef %n) #1 {
 entry:
   %count.addr = alloca i32, align 4
   %k.addr = alloca i32, align 4
@@ -230,10 +230,10 @@ entry:
   %29 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %30 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %31 = load %struct.nish_array*, %struct.nish_array** %sums.addr, align 8
-  call void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf(%struct.ThreadScope* %29, %struct.nish_array* %30, %struct.nish_array* %31, i32 0)
+  call void @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$(%struct.ThreadScope* %29, %struct.nish_array* %30, %struct.nish_array* %31, i32 0)
   %32 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %33 = load %struct.nish_array*, %struct.nish_array** %counts.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow(%struct.ThreadScope* %32, i32 1000, %struct.nish_array* %33, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$(%struct.ThreadScope* %32, i32 1000, %struct.nish_array* %33, i32 0)
   call void @nish_scope_join(i8* %28)
   %34 = load %struct.nish_array*, %struct.nish_array** %sums.addr, align 8
   %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 0

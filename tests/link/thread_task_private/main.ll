@@ -9,10 +9,10 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$i32$i32$fn.5.sieve(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare void @nish.ThreadScope.spawn$i32$i32$fn.5.total(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare void @nish.ThreadScope.spawn$i32$i32$fn.5.evens(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare void @nish.parallelMapInto$i32$i32$fn.8.digitSum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.sieve$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.total$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.evens$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.parallelMapInto$i32$i32$fn.9.digitSum$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -53,7 +53,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @sieve(i32 noundef %n) #0 {
+define hidden noundef i32 @sieve$(i32 noundef %n) #0 {
 entry:
   %marks.addr = alloca %struct.nish_array*, align 8
   %fill.at = alloca i64, align 8
@@ -255,7 +255,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @total(i32 noundef %n) #0 {
+define hidden noundef i32 @total$(i32 noundef %n) #0 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %t.addr = alloca i32, align 4
@@ -332,7 +332,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @evens(i32 noundef %n) #1 {
+define hidden noundef i32 @evens$(i32 noundef %n) #1 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -402,7 +402,7 @@ for.end:
   ret i32 %26
 }
 
-define hidden noundef i32 @digitSum(i32 noundef %x) #0 {
+define hidden noundef i32 @digitSum$(i32 noundef %x) #0 {
 entry:
   %ds.addr = alloca %struct.nish_array*, align 8
   %fill.at = alloca i64, align 8
@@ -614,16 +614,16 @@ entry:
   %27 = bitcast %struct.ThreadScope* %26 to i8*
   %28 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %29 = load %struct.nish_array*, %struct.nish_array** %primes.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.5.sieve(%struct.ThreadScope* %28, i32 100, %struct.nish_array* %29, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.sieve$(%struct.ThreadScope* %28, i32 100, %struct.nish_array* %29, i32 0)
   %30 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %31 = load %struct.nish_array*, %struct.nish_array** %primes.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.5.sieve(%struct.ThreadScope* %30, i32 10000, %struct.nish_array* %31, i32 1)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.sieve$(%struct.ThreadScope* %30, i32 10000, %struct.nish_array* %31, i32 1)
   %32 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %33 = load %struct.nish_array*, %struct.nish_array** %sums.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.5.total(%struct.ThreadScope* %32, i32 10, %struct.nish_array* %33, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.total$(%struct.ThreadScope* %32, i32 10, %struct.nish_array* %33, i32 0)
   %34 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %35 = load %struct.nish_array*, %struct.nish_array** %counts.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.5.evens(%struct.ThreadScope* %34, i32 101, %struct.nish_array* %35, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.evens$(%struct.ThreadScope* %34, i32 101, %struct.nish_array* %35, i32 0)
   call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4)
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %36 = load %struct.Point*, %struct.Point** %p.addr, align 8
@@ -706,7 +706,7 @@ ovf.ok.2:
   store %struct.nish_array* %71, %struct.nish_array** %dst.addr, align 8
   %83 = load %struct.nish_array*, %struct.nish_array** %src.addr, align 8
   %84 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
-  call void @nish.parallelMapInto$i32$i32$fn.8.digitSum(%struct.nish_array* %83, %struct.nish_array* %84)
+  call void @nish.parallelMapInto$i32$i32$fn.9.digitSum$(%struct.nish_array* %83, %struct.nish_array* %84)
   %85 = load %struct.nish_array*, %struct.nish_array** %primes.addr, align 8
   %86 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %85, i64 0, i32 0
   %87 = load i64, i64* %86, align 8, !alias.scope !3, !noalias !4, !tbaa !10

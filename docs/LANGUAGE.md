@@ -2369,7 +2369,12 @@ export const main = (): i32 => {
   (WP18 G7), so it may call a private function, or an arrow, of the module that
   asked. That callee is `hidden` rather than `internal` — in the final link,
   exported from nothing — and the template's module `declare`s it with the
-  attributes of its `define` (`tests/link/fnarg_private`). The interop sidecars
+  attributes of its `define` (`tests/link/fnarg_private`). A hidden symbol is
+  still global in the executable, so one the program's own package declared,
+  which carries no prefix, ends with a `$` (`@square$`): C cannot spell it,
+  so a task called `read`, `write` or `free` is never the definition the
+  runtime's calls into the C library reach
+  (`tests/link/thread_scope_libc_named_tasks`, #610). The interop sidecars
   describe no instantiation that was given a function, and no lifted arrow:
   neither has a name a host could call.
 

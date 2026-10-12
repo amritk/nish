@@ -10,7 +10,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #0
-declare void @nish.ThreadScope.spawn$$Job$i32$fn.7.addMany(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Job* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Job$i32$fn.8.addMany$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Job* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.Mutex$$Counter.constructor(%struct.Mutex$$Counter* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Counter* noundef nonnull align 8 dereferenceable(4)) #0
 declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Counter* @nish.Mutex$$Counter.lock(%struct.Mutex$$Counter* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #1
 declare void @nish.MutexGuard$$Counter.constructor(%struct.MutexGuard$$Counter* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Counter* noundef nonnull align 8 dereferenceable(4)) #0
@@ -59,7 +59,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @addMany(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %job) #1 {
+define hidden noundef i32 @addMany$(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %job) #1 {
 entry:
   %k.addr = alloca i32, align 4
   %g.addr = alloca %struct.MutexGuard$$Counter*, align 8
@@ -170,7 +170,7 @@ for.body:
   call void @Job.constructor(%struct.Job* %23, i32 100000, %struct.Mutex$$Counter* %24)
   %25 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
   %26 = load i32, i32* %t.addr, align 4
-  call void @nish.ThreadScope.spawn$$Job$i32$fn.7.addMany(%struct.ThreadScope* %21, %struct.Job* %23, %struct.nish_array* %25, i32 %26)
+  call void @nish.ThreadScope.spawn$$Job$i32$fn.8.addMany$(%struct.ThreadScope* %21, %struct.Job* %23, %struct.nish_array* %25, i32 %26)
   br label %for.inc
 
 for.inc:

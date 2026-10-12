@@ -1612,20 +1612,31 @@ const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionB
  * of an imported template that was given a caller's *private* function, or an
  * arrow the caller wrote, calls a function another module defines. Such a
  * function would be `internal`, so it becomes `hidden` instead: in the final
- * link, and exported from nothing. Its symbol needs no change for that, because
- * a function's symbol is already unique across the program whether or not it
- * is exported (`rejectSymbolClashes`), and a lifted arrow's is its enclosing
- * function's with a `$` no declared name can spell. The module that calls it
- * gets a `declare`, the way an instantiation it calls and another module
- * defines does.
+ * link, and exported from nothing. A function's symbol is already unique across
+ * the program whether or not it is exported (`rejectSymbolClashes`), and a
+ * lifted arrow's is its enclosing function's with a `$` no declared name can
+ * spell. The module that calls it gets a `declare`, the way an instantiation it
+ * calls and another module defines does.
+ *
+ * Unique across the program is not unique across the link, though. A hidden
+ * symbol is global in the executable, so one C could spell -- a function of
+ * the program's own package, which carries no prefix -- is the definition the
+ * runtime's calls into the C library bind to: a task called `read` was called
+ * in place of `read(2)` by the pool's first start, and crashed (#610). Such a
+ * symbol takes a `$` at its end, which C cannot spell, no declared name holds,
+ * and no instantiation or lifted arrow ends with. A package's prefix and a
+ * method's owner already put a `.` in the others.
  */
 const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
   if (fn.definedIn(home.source)) {
     return
   }
   // A `declare function` is C's symbol, and has no linkage of this program's.
-  if (!fn.exported && !fn.foreign()) {
+  if (!fn.exported && !fn.foreign() && !fn.hidden) {
     fn.hidden = true
+    if (fn.name.indexOf("$") < 0 && fn.name.indexOf(".") < 0) {
+      fn.name = `${fn.name}$`
+    }
   }
   useExternalInstance(home, fn)
 }

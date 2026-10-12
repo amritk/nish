@@ -9,7 +9,7 @@
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" elements\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
-declare noundef i32 @digits(i8* noundef nonnull noalias readonly align 8 nocapture) #1
+declare noundef i32 @digits$(i8* noundef nonnull noalias readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
@@ -118,18 +118,18 @@ entry:
   ret %struct.ThreadScope* %1
 }
 
-define internal void @nish.ThreadScope.spawn$str$i32$fn.6.digits$run(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$str$i32$fn.7.digits$$run(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { i8*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { i8*, %struct.nish_array*, i32, i32 }, { i8*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load i8*, i8** %1
-  %3 = call i32 @digits(i8* %2)
+  %3 = call i32 @digits$(i8* %2)
   %4 = getelementptr inbounds { i8*, %struct.nish_array*, i32, i32 }, { i8*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
   store i32 %3, i32* %4
   ret void
 }
 
-define internal void @nish.ThreadScope.spawn$str$i32$fn.6.digits$finish(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$str$i32$fn.7.digits$$finish(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { i8*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { i8*, %struct.nish_array*, i32, i32 }, { i8*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 1
@@ -142,7 +142,7 @@ entry:
   ret void
 }
 
-define void @nish.ThreadScope.spawn$str$i32$fn.6.digits(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, i8* noundef nonnull noalias readonly align 8 %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
+define void @nish.ThreadScope.spawn$str$i32$fn.7.digits$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, i8* noundef nonnull noalias readonly align 8 %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
 entry:
   %task.payload = alloca { i8*, %struct.nish_array*, i32, i32 }, align 8
   %0 = icmp slt i32 %at, 0
@@ -175,13 +175,13 @@ if.end:
   store i32 %at, i32* %11
   %12 = bitcast { i8*, %struct.nish_array*, i32, i32 }* %task.payload to i8*
   %13 = bitcast %struct.ThreadScope* %this to i8*
-  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$str$i32$fn.6.digits$run, void (i8*)* @nish.ThreadScope.spawn$str$i32$fn.6.digits$finish, i8* %12, i64 ptrtoint ({ i8*, %struct.nish_array*, i32, i32 }* getelementptr ({ i8*, %struct.nish_array*, i32, i32 }, { i8*, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
+  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$str$i32$fn.7.digits$$run, void (i8*)* @nish.ThreadScope.spawn$str$i32$fn.7.digits$$finish, i8* %12, i64 ptrtoint ({ i8*, %struct.nish_array*, i32, i32 }* getelementptr ({ i8*, %struct.nish_array*, i32, i32 }, { i8*, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
   ret void
 }
 
-define internal void @nish.runTask$str$i32$fn.6.digits(i8* noundef nonnull noalias readonly align 8 %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
+define internal void @nish.runTask$str$i32$fn.7.digits$(i8* noundef nonnull noalias readonly align 8 %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
-  %0 = call i32 @digits(i8* %arg)
+  %0 = call i32 @digits$(i8* %arg)
   call void @nish.storeResult$i32(%struct.nish_array* %dst, i32 %at, i32 %0)
   ret void
 }

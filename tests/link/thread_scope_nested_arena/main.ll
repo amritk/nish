@@ -9,7 +9,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$str$i32$fn.6.digits(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i8* noundef nonnull noalias readonly align 8, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$str$i32$fn.7.digits$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i8* noundef nonnull noalias readonly align 8, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -48,7 +48,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @digits(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+define hidden noundef i32 @digits$(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
   %n.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -181,7 +181,7 @@ entry:
   %27 = call i8* @label(i32 9)
   %28 = call i8* @nish_arena_keep(i64 %26, i8* %27)
   %29 = load %struct.nish_array*, %struct.nish_array** %inner.addr, align 8
-  call void @nish.ThreadScope.spawn$str$i32$fn.6.digits(%struct.ThreadScope* %25, i8* %28, %struct.nish_array* %29, i32 0)
+  call void @nish.ThreadScope.spawn$str$i32$fn.7.digits$(%struct.ThreadScope* %25, i8* %28, %struct.nish_array* %29, i32 0)
   call void @nish_scope_join(i8* %24)
   store i32 0, i32* %k.addr, align 4
   br label %for.cond
@@ -200,7 +200,7 @@ for.body:
   %37 = call i8* @nish_arena_keep(i64 %35, i8* %36)
   %38 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %39 = load i32, i32* %k.addr, align 4
-  call void @nish.ThreadScope.spawn$str$i32$fn.6.digits(%struct.ThreadScope* %32, i8* %37, %struct.nish_array* %38, i32 %39)
+  call void @nish.ThreadScope.spawn$str$i32$fn.7.digits$(%struct.ThreadScope* %32, i8* %37, %struct.nish_array* %38, i32 %39)
   br label %for.inc
 
 for.inc:

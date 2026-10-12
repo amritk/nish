@@ -11,8 +11,8 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.produce(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(56), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.consume(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(56), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.produce$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(56), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.consume$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(56), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare void @nish.Channel$i32.constructor(%struct.Channel$i32* noundef nonnull noalias align 8 dereferenceable(24) nocapture) #1
 declare void @nish.Channel$i32.send(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
 declare noundef i32 @nish.Channel$i32.take(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture) #0
@@ -199,7 +199,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @produce(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(56) nocapture %p) #0 {
+define hidden noundef i32 @produce$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(56) nocapture %p) #0 {
 entry:
   %i.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Pipe, %struct.Pipe* %p, i32 0, i32 8
@@ -275,7 +275,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @consume(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(56) nocapture %p) #0 {
+define hidden noundef i32 @consume$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(56) nocapture %p) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -401,14 +401,14 @@ entry:
   %26 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
   call void @Pipe.constructor(%struct.Pipe* %25, %struct.Channel$i32* %26, i32 1, i32 1000, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*))
   %27 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8
-  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.produce(%struct.ThreadScope* %23, %struct.Pipe* %25, %struct.nish_array* %27, i32 0)
+  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.produce$(%struct.ThreadScope* %23, %struct.Pipe* %25, %struct.nish_array* %27, i32 0)
   %28 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %29 = call i8* @nish_alloc_struct(i64 56)
   %30 = bitcast i8* %29 to %struct.Pipe*
   %31 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
   call void @Pipe.constructor(%struct.Pipe* %30, %struct.Channel$i32* %31, i32 0, i32 0, i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
   %32 = load %struct.nish_array*, %struct.nish_array** %sums.addr, align 8
-  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.consume(%struct.ThreadScope* %28, %struct.Pipe* %30, %struct.nish_array* %32, i32 0)
+  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.consume$(%struct.ThreadScope* %28, %struct.Pipe* %30, %struct.nish_array* %32, i32 0)
   call void @nish_channel_count(i64* %22, i64 -1)
   call void @nish_scope_join(i8* %20)
   %33 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8

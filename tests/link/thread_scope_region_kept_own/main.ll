@@ -10,7 +10,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #0
-declare void @nish.ThreadScope.spawn$$Holder$i32$fn.4.read(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Holder* noundef nonnull align 8 dereferenceable(8), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #2
+declare void @nish.ThreadScope.spawn$$Holder$i32$fn.5.read$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Holder* noundef nonnull align 8 dereferenceable(8), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
@@ -111,7 +111,7 @@ push.store:
   ret void
 }
 
-define hidden noundef i32 @read(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h) #1 {
+define hidden noundef i32 @read$(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
   %1 = load %struct.Inner*, %struct.Inner** %0, align 8, !tbaa !7
@@ -237,7 +237,7 @@ entry:
   %13 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %14 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
   %15 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
-  call void @nish.ThreadScope.spawn$$Holder$i32$fn.4.read(%struct.ThreadScope* %13, %struct.Holder* %14, %struct.nish_array* %15, i32 0)
+  call void @nish.ThreadScope.spawn$$Holder$i32$fn.5.read$(%struct.ThreadScope* %13, %struct.Holder* %14, %struct.nish_array* %15, i32 0)
   %16 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
   %17 = call i32 @sum(%struct.Holder* %16)
   store i32 %17, i32* %total.addr, align 4

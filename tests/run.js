@@ -4688,6 +4688,9 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert` and
 // `thread_scope_region_set_add` fill a `Map` or a `Set` of their own there,
 // whose methods write the table and nothing of the task's.
+// `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
+// `free`, and its map body `close`: each task stores only its own answer, so
+// spawn order and join order print the same.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4714,6 +4717,7 @@ for (const name of [
   "thread_scope_region_map_set",
   "thread_scope_region_map_get_or_insert",
   "thread_scope_region_set_add",
+  "thread_scope_libc_named_tasks",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
