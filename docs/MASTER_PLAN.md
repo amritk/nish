@@ -132,7 +132,7 @@ WP16), labelled statements, generators and `yield`, `async`/`await` (WP24),
 decorators, enum members that are not numeric literals, namespaces and
 `declare global`, computed property names, object spread, prototype access,
 `Object.assign` and its relatives, string-keyed element access, `?.`, `??`
-except on a `Map.get` result, regex literals, dynamic `import()`,
+except on a `T | null` or a `Map.get` result, regex literals, dynamic `import()`,
 `import.meta`, and type parameters on a type alias or a constructor.
 [LANGUAGE.md](LANGUAGE.md#forbidden-constructs-phase-0-validator) has the
 table with each message and the idiom to write instead.
