@@ -138,9 +138,10 @@ export const main = (): i32 => {
   task could read — through a constructor either: `new Bump(counter)` whose
   constructor writes `counter` is refused like a call that does. An object
   you make in the block is yours to write, until anything a task reads may
-  have got into it: stored in a field or an element, pushed, put in a literal,
-  or handed to a function that keeps it. A field or an element of it counts
-  as much as the object itself.
+  have got into it: stored in a field or an element, pushed, added to a `Map`
+  or a `Set`, put in a literal, or handed to a function that keeps it. A field
+  or an element of it counts as much as the object itself. So a `Map` or a
+  `Set` you make there is yours to fill.
 - **A task is a named top-level function**, not an arrow, so a debugger or a
   profiler can name its thread. It follows the rules of a parallel `f` above:
   it writes nothing another thread can see (except through a `Mutex` or a

@@ -29,24 +29,6 @@ interface Pair {
   inner: Inner;
 }
 
-class PK {
-  p: Pair;
-
-  constructor(p: Pair) {
-    this.p = p;
-  }
-}
-
-class Wrap {
-  inner: Inner;
-  items: Inner[];
-
-  constructor() {
-    this.inner = new Inner();
-    this.items = [new Inner()];
-  }
-}
-
 const bump = (h: Holder): void => {
   const p: Pair = { inner: h.inner };
   p.inner.x = 1;

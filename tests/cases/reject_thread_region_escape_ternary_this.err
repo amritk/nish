@@ -1,2 +1,2 @@
-reject_thread_region_escape_ternary_this.ts:74:5
+reject_thread_region_escape_ternary_this.ts:41:5
 `build` writes memory a task of `s` may read, before the scope joins

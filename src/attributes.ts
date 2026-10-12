@@ -144,6 +144,7 @@ import {
   JSON_NONE,
   PAR_MAP,
   ROLE_CONSTRUCTOR,
+  StructInfo,
 } from "./program"
 import {
   EFFECT_NONE,
@@ -171,6 +172,7 @@ import {
   TypeTable,
 } from "./types"
 import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map"
+import { isCollectionStruct } from "./generics"
 import {
   builtinPanicKind,
   PANIC_ARRAY_LENGTH,
@@ -2135,20 +2137,26 @@ class FactCollector {
    * of a comparison, a `return` (what the caller does with it is the
    * caller's), or a statement of its own. Every other place — the right side
    * of an assignment, an element of an array literal, a property of an object
-   * literal, an argument of `push` or any builtin, an arm of a `?:`, the
-   * iterable of a `for...of` — hands the object on to something the analysis
-   * does not follow.
+   * literal, an argument of `push`, of a `Map` or `Set` method or of any
+   * builtin, an arm of a `?:` — hands the object on to something the analysis
+   * does not follow. The iterable of a `for...of` is only read: what its loop
+   * variable names is judged where that is used.
    */
   noteEscape(node: Node): void {
     if (node.kind !== N_IDENT && node.kind !== N_THIS && node.kind !== N_MEMBER && node.kind !== N_INDEX) {
       return
     }
     const program = this.unit.program
-    const above = this.unit.parents.parentOf(node)
-    if (above !== null && (above.kind === N_MEMBER || above.kind === N_INDEX) && above.children[0] === node) {
-      return // part of a longer path, which is judged where it ends
+    let at = node
+    let parent = this.unit.parents.parentOf(at)
+    while (parent !== null && parent.kind === N_PAREN) {
+      at = parent
+      parent = this.unit.parents.parentOf(at)
     }
-    if (above !== null && above.kind === N_VAR_DECL && above.children[0] === node) {
+    if (parent !== null && (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at) {
+      return // part of a longer path, `(t).mid` included, which is judged where it ends
+    }
+    if (parent !== null && parent.kind === N_VAR_DECL && parent.children[0] === at) {
       return // the name a declaration binds
     }
     const type = program.nodeTypes[node.id]
@@ -2163,12 +2171,6 @@ class FactCollector {
       if (local === null || local.storage === STORAGE_PARAM) {
         return
       }
-    }
-    let at = node
-    let parent = this.unit.parents.parentOf(at)
-    while (parent !== null && parent.kind === N_PAREN) {
-      at = parent
-      parent = this.unit.parents.parentOf(at)
     }
     if (parent !== null && this.followsUse(parent, at)) {
       return
@@ -2194,17 +2196,28 @@ class FactCollector {
     if (parent.kind === N_CALL) {
       return parent.children[0] === at
     }
+    if (parent.kind === N_FOR_OF) {
+      // The walk only reads it; what the loop variable names is judged where it is used.
+      return parent.children[1] === at
+    }
     if (parent.kind === N_VAR_DECL && parent.children[2] === at) {
       const bound: Local | null = program.nodeLocals[parent.id]
       return bound !== null && !bound.mutable
     }
     if (parent.kind === N_LIST) {
       const call = this.unit.parents.parentOf(parent)
-      return (
-        call !== null &&
-        (call.kind === N_CALL || call.kind === N_NEW) &&
-        program.nodeCallees[call.id] !== null
-      )
+      if (call === null || (call.kind !== N_CALL && call.kind !== N_NEW) || program.nodeCallees[call.id] === null) {
+        return false
+      }
+      // A table call stores what it is handed (`noteTableStores`); only its receiver is followed.
+      const callee = program.nodeCallees[call.id]
+      const owner: StructInfo | null = callee === null ? null : callee.owner
+      const collection = owner !== null && isCollectionStruct(owner)
+      if (!collection && fusedCalleesOf(program, this.table, call) === null) {
+        return true
+      }
+      const receiver = tableReceiver(program, call)
+      return receiver !== null && receiver === at
     }
     return false
   }
@@ -2347,7 +2360,13 @@ class FactCollector {
       return
     }
     const receiver = methodReceiver(call)
-    if (callee.owner !== null && receiver !== null) {
+    const owner = callee.owner
+    if (owner !== null && receiver !== null && isCollectionStruct(owner)) {
+      // A `Map` or `Set` keeps only what it is handed (`noteTableStores`), so
+      // its receiver is written but holds nothing the call did not give it.
+      this.facts.argEdges.push(new ArgEdge(callee.name, 0, "", null, this.pathOf(unwrapParens(receiver))))
+      this.noteTableStores(call, receiver)
+    } else if (owner !== null && receiver !== null) {
       this.noteArgument(callee, receiver, 0)
     }
     this.noteArgumentList(callee, call.children[1].children, callee.owner !== null ? 1 : 0)
@@ -2409,11 +2428,13 @@ class FactCollector {
     const fused: FunctionSig[] | null =
       node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null
     if (fused !== null) {
+      const receiver = tableReceiver(program, node)
       for (const sig of fused) {
         this.addUserCallee(sig.name, node)
         this.noteCall(node, sig)
-        this.noteWholeReach(sig.name, methodReceiver(node))
+        this.noteWholeReach(sig.name, receiver)
       }
+      this.noteTableStores(node, receiver)
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
@@ -2488,7 +2509,23 @@ class FactCollector {
   /** The receiver of a call to `callee`, taken whole: what it may write is anything `receiver` reaches (`FunctionFacts.wholeReaches`). */
   noteWholeReach(callee: string, receiver: Node | null): void {
     const path = receiver === null ? new MemPath(ROOT_UNKNOWN, "", "") : this.pathOf(receiver)
-    this.facts.wholeReaches.push(this.ownEdge(new ArgEdge(callee, -1, "", null, path)))
+    this.facts.wholeReaches.push(new ArgEdge(callee, -1, "", null, path))
+  }
+
+  /**
+   * A `Map` or `Set` call fused into its table's pieces keeps exactly the
+   * values it is handed, the key and the value of a `set` or the element of
+   * an `add`: each is a store into the table its receiver names, judged as a
+   * `push` is (`noteSlotStore`).
+   */
+  noteTableStores(call: Node, receiver: Node | null): void {
+    const table = receiver === null ? new MemPath(ROOT_UNKNOWN, "", "") : this.pathOf(receiver)
+    const slot = new MemPath(table.kind, table.name, `${table.steps}[]`)
+    for (const arg of call.children[1].children) {
+      if (receiver === null || arg !== receiver) {
+        this.noteSlotStore(slot, arg)
+      }
+    }
   }
 
   /** `edge`, with the `DIRT_CALL` mark an argument of this call's own gets, which the fixpoint sets when the callee writes it. */
@@ -4341,6 +4378,20 @@ const pollutePath = (f: FunctionFacts, path: MemPath): boolean => {
   return false
 }
 
+/**
+ * The table a fused `Map` or `Set` call works on: the receiver of a method
+ * call, or the first argument of a `nish/map` route such as `getOrInsert(m, k, v)`.
+ */
+const tableReceiver = (program: CheckedProgram, call: Node): Node | null => {
+  const receiver = methodReceiver(call)
+  if (receiver !== null) {
+    return receiver
+  }
+  const sig = program.nodeCallees[call.id]
+  const args = call.children[1].children
+  return sig !== null && isMapRoute(sig) && args.length > 0 ? args[0] : null
+}
+
 /** Whether `f` has an active `DirtMark` on its object `key`. */
 const isDirty = (f: FunctionFacts, key: string): boolean => {
   for (const d of f.dirt) {
@@ -4447,14 +4498,6 @@ const keepsOwn = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): boolean =
   }
   const g = facts.get(edge.callee)
   const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
-  if (edge.index < 0) {
-    // A receiver of a callee taken whole: what it may store is unknown.
-    if (g !== null && !g.sharedWrite) {
-      return false
-    }
-    mark.active = true
-    return true
-  }
   // A callee that may store memory not the caller's into what it is handed.
   const polluted = g === null || target === null || target.polluted
   let keeps = polluted
@@ -4523,12 +4566,6 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     const g = facts.get(edge.callee)
     const writes = g === null || g.sharedWrite
     if (writes && callWrites(f, edge, true)) {
-      changed = true
-    }
-    if (keepsOwn(facts, f, edge)) {
-      changed = true
-    }
-    if (writes && pollutePath(f, edge.path)) {
       changed = true
     }
   }

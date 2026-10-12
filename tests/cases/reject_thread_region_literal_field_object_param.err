@@ -1,2 +1,2 @@
-reject_thread_region_literal_field_object_param.ts:63:5
+reject_thread_region_literal_field_object_param.ts:53:5
 `bump` writes memory a task of `s` may read, before the scope joins

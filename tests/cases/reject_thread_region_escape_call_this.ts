@@ -7,26 +7,6 @@ class Leaf {
   x: i32 = 0;
 }
 
-class Mid {
-  leaf: Leaf;
-
-  constructor() {
-    this.leaf = new Leaf();
-  }
-}
-
-class Top {
-  mid: Mid;
-
-  constructor() {
-    this.mid = new Mid();
-  }
-}
-
-interface MidRec {
-  mid: Mid;
-}
-
 class Holder {
   leaf: Leaf;
 
@@ -46,20 +26,11 @@ class Node3 {
   }
 }
 
-interface NRec {
-  n: Node3;
-}
-
 const linkN = (xs: Node3[], n: Node3): void => {
   xs.push(n);
 };
 
 const read = (h: Holder): i32 => h.leaf.x;
-
-const link = (u: Top, m: Mid): void => {
-  u.mid = m;
-};
-
 
 const build = (h: Holder): void => {
   const w = new Node3(h, true, 0);

@@ -4677,6 +4677,9 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_own_handoff` hands the task's argument to a function
 // that returns a fresh object of its own, and to a method that writes a fresh
 // counter from it: neither keeps the task's memory where a write reaches it.
+// `thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert` and
+// `thread_scope_region_set_add` fill a `Map` or a `Set` of their own there,
+// whose methods write the table and nothing of the task's.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4699,6 +4702,9 @@ for (const name of [
   "thread_scope_region_fresh_object",
   "thread_scope_region_kept_own",
   "thread_scope_region_own_handoff",
+  "thread_scope_region_map_set",
+  "thread_scope_region_map_get_or_insert",
+  "thread_scope_region_set_add",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue

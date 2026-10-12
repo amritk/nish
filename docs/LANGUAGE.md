@@ -2576,13 +2576,21 @@ export const main = (): i32 => {
     as a value anywhere but a read, a comparison or an argument the checker
     follows into its callee: the right side of an assignment, a `const`'s
     initialiser, an element of an array literal, a property of an object
-    literal, `{ k: v }` or `{ k }`, an argument of `push` or of a call, an arm
-    of a `?:`. Each position is refused for each form of the value, a local,
-    a field, an element and `this.f`
+    literal, `{ k: v }` or `{ k }`, an argument of `push`, of a `Map` or `Set`
+    method or of a call, an arm of a `?:`. Each position is refused for each
+    form of the value, a local, a field, an element and `this.f`
     (`reject_thread_region_escape_<position>_<form>`, with positions
     `assign`, `alias`, `array`, `object`, `shorthand`, `push`, `call`,
     `ternary` and `element`, forms `local`, `member`, `index` and
-    `this_field`, and `_this` for the bare `this`), and an object literal
+    `this_field`, and `_this` for the bare `this` in every position but
+    `shorthand`, which cannot name it). A `Map` or a `Set` keeps exactly what
+    its methods are handed — `set`'s key and value, `add`'s element,
+    `getOrInsert`'s from `nish/map` — so each is a store into the table, as a
+    `push` is (`reject_thread_region_map_value_param`, `_map_fused_value_param`,
+    `_map_own_subpath`, `_map_route_subpath`, `_map_route_value_param`,
+    `_set_own_subpath`). The iterable of a `for...of` is only read, and a
+    store through its loop variable is a store into the container
+    (`_walk_array_store`, `_walk_set_store`). An object literal
     whose property is an argument's memory carries it however it is written
     (`reject_thread_region_literal_object_param`, `_shorthand_param`,
     `_array_object_param`, `_field_object_param`, `_push_object_param`,
@@ -2604,7 +2612,10 @@ export const main = (): i32 => {
     or returns an object of its own, keeps nothing of the caller's in it:
     `w = build(h)` on a function that returns a fresh object, and
     `c.reset(h.nums[0])` on a fresh counter followed by writes into `c`
-    (`thread_scope_region_own_handoff`). A task argument read out of a
+    (`thread_scope_region_own_handoff`). So a `Map` or a `Set` a function
+    makes and fills itself writes nothing of the task's
+    (`thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert`,
+    `thread_scope_region_set_add`). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the

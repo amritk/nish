@@ -23,10 +23,6 @@ class Top {
   }
 }
 
-interface MidRec {
-  mid: Mid;
-}
-
 class Holder {
   leaf: Leaf;
 

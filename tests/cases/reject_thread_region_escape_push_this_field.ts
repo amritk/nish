@@ -15,18 +15,6 @@ class Mid {
   }
 }
 
-class Top {
-  mid: Mid;
-
-  constructor() {
-    this.mid = new Mid();
-  }
-}
-
-interface MidRec {
-  mid: Mid;
-}
-
 class Holder {
   leaf: Leaf;
 
@@ -37,16 +25,11 @@ class Holder {
 
 const read = (h: Holder): i32 => h.leaf.x;
 
-const link = (u: Top, m: Mid): void => {
-  u.mid = m;
-};
-
 class Shell {
   mid: Mid;
 
   constructor(h: Holder, c: boolean) {
     this.mid = new Mid();
-    const u = new Top();
     const xs: Mid[] = [];
     xs.push(this.mid);
     xs[0].leaf = h.leaf;

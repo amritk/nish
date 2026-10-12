@@ -23,10 +23,6 @@ class Top {
   }
 }
 
-interface MidRec {
-  mid: Mid;
-}
-
 class Holder {
   leaf: Leaf;
 
@@ -36,10 +32,6 @@ class Holder {
 }
 
 const read = (h: Holder): i32 => h.leaf.x;
-
-const link = (u: Top, m: Mid): void => {
-  u.mid = m;
-};
 
 const bump = (h: Holder, c: boolean): void => {
   const ms = [new Mid()];

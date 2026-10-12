@@ -37,13 +37,8 @@ class Holder {
 
 const read = (h: Holder): i32 => h.leaf.x;
 
-const link = (u: Top, m: Mid): void => {
-  u.mid = m;
-};
-
 const bump = (h: Holder, c: boolean): void => {
   const t = new Top();
-  const u = new Top();
   const r: MidRec = { mid: t.mid };
   r.mid.leaf = h.leaf;
   t.mid.leaf.x = 1;

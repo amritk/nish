@@ -37,16 +37,6 @@ class PK {
   }
 }
 
-class Wrap {
-  inner: Inner;
-  items: Inner[];
-
-  constructor() {
-    this.inner = new Inner();
-    this.items = [new Inner()];
-  }
-}
-
 const bump = (h: Holder): void => {
   const inner = h.inner;
   const o = new PK({ inner: new Inner() });
