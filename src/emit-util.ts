@@ -24,6 +24,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
+import { Local } from "./symbols"
 import { T_STRING, TypeTable } from "./types"
 
 /** Through `(e)`, which is transparent to every rule here. */
@@ -33,6 +34,19 @@ export const unwrapParens = (expr: Node): Node => {
     inner = inner.children[0]
   }
   return inner
+}
+
+/**
+ * Whether the `??` `coalesce` defaults a maybe (`m.get(k)`, or a `const` bound
+ * to one) rather than a `T | null`. A `const` bound to `get` is a maybe even
+ * where a test has narrowed it, as the checker's `maybeOperand` reads it, so
+ * the local's own type decides, and the checker, the emitter and the escape
+ * analysis all read the same answer.
+ */
+export const coalescesMaybe = (program: CheckedProgram, table: TypeTable, coalesce: Node): boolean => {
+  const left = unwrapParens(coalesce.children[0])
+  const local: Local | null = left.kind === N_IDENT ? program.nodeLocals[left.id] : null
+  return table.isMaybe(local !== null ? local.type : program.nodeTypes[left.id])
 }
 
 /**

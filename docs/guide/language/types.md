@@ -136,9 +136,51 @@ A few rules shape how narrowing works:
   loop that assigns the variable.
 - `if (p === null) { return …; }` narrows `p` for the rest of the block,
   because the `if` cannot fall through.
-- `?.` and `??` are not available on a nullable; write the test.
+- `?.` is not available on a nullable; write the test.
 - Two nullable values cannot be compared with each other — compare each with
   `null`.
+
+### A default with `??`
+
+When all you want is a fallback, `a ?? fallback` gives `a` where it is not
+`null` and `fallback` where it is. The result is plain `T`, so it needs no
+test afterwards, and because it reads `a` only once, it works on a property
+path too:
+
+```ts nish:ok
+class Node {
+  value: i32;
+  next: Node | null = null;
+  constructor(value: i32) {
+    this.value = value;
+  }
+}
+
+const greet = (name: string | null): string => `hello ${name ?? "stranger"}`;
+
+export const main = (): i32 => {
+  const head = new Node(1);
+  head.next = new Node(2);
+  let cur = head;
+  for (let i = 0; i < 5; i++) {
+    cur = cur.next ?? cur;   // stays on the last node
+  }
+  console.log(`${greet(null)} ${cur.value}`);   // hello stranger 2
+  return 0;
+};
+```
+
+The fallback runs only when it is needed, as in TypeScript. If the fallback
+may itself be `null`, the result stays `T | null`. One form is refused: a
+default for an array element, `xs[i] ?? fallback`. TypeScript programs use it
+for "past the end", where Node reads `undefined` and takes the fallback, but
+Nish checks the index and stops the program instead. Test the index against
+`xs.length` first:
+
+```ts nish:err-body NL2489
+const names = new Array<string | null>(2);
+console.log(names[5] ?? "none");
+```
 
 The reference's [Nullable types](../../LANGUAGE.md#nullable-types) section
 has every form a test may take. A function that can *fail*, rather than find

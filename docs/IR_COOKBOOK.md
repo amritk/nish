@@ -16175,6 +16175,155 @@ attributes #4 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end mem-nullable -->
 
+### `a ?? d` on a `T | null`
+
+`??` on a nullable is the `icmp ne` against `null` a narrowing test makes, and
+nothing else: no `undefined`, no box, no runtime call. With a literal or a name
+as the default it is one `select`, since evaluating the default has no effect.
+Any other default is a branch to `nullish.default` and a `phi`, so it runs only
+where the value is `null`. The result is `T` when the default is, which is why
+`nextOrNew` keeps `nonnull` and `dereferenceable` on its return. The left
+operand is read once, so `cur.next ?? cur` is one load of the field.
+
+<!-- cookbook:begin mem-nullish -->
+```ts
+class Node {
+  value: i32
+  next: Node | null = null
+
+  constructor(value: i32) {
+    this.value = value
+  }
+}
+
+// A literal or a name as the default: one `select`, nothing branches.
+export const nameOr = (name: string | null): string => name ?? "anonymous"
+
+// A default with an effect runs only where the value is `null`: a branch to
+// `nullish.default` and a `phi`, the blocks a written-out test makes.
+export const nextOrNew = (n: Node): Node => n.next ?? new Node(0)
+
+// The field is read once and tested, so the property path needs no local.
+export const last = (head: Node): Node => {
+  let cur = head
+  while (cur.next !== null) {
+    cur = cur.next ?? cur
+  }
+  return cur
+}
+```
+
+```llvm
+%struct.Node = type { i32, %struct.Node* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"anonymous\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 1
+  store %struct.Node* null, %struct.Node** %0, align 8, !tbaa !5
+  %1 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 0
+  store i32 %value, i32* %1, align 4, !tbaa !6
+  ret void
+}
+
+define noundef nonnull align 8 i8* @nameOr(i8* noundef noalias readonly align 8 %name) #1 {
+entry:
+  %0 = icmp ne i8* %name, null
+  %1 = select i1 %0, i8* %name, i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*)
+  ret i8* %1
+}
+
+define noundef nonnull align 8 dereferenceable(16) %struct.Node* @nextOrNew(%struct.Node* noundef nonnull readonly align 8 dereferenceable(16) nocapture %n) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Node, %struct.Node* %n, i32 0, i32 1
+  %1 = load %struct.Node*, %struct.Node** %0, align 8, !tbaa !5
+  %2 = icmp ne %struct.Node* %1, null
+  br i1 %2, label %nullish.end, label %nullish.default
+
+nullish.default:
+  %3 = call i8* @nish_alloc_struct(i64 16)
+  %4 = bitcast i8* %3 to %struct.Node*
+  call void @Node.constructor(%struct.Node* %4, i32 0)
+  br label %nullish.end
+
+nullish.end:
+  %5 = phi %struct.Node* [ %1, %entry ], [ %4, %nullish.default ]
+  ret %struct.Node* %5
+}
+
+define noundef nonnull align 8 dereferenceable(16) %struct.Node* @last(%struct.Node* noundef nonnull align 8 dereferenceable(16) %head) #2 {
+entry:
+  %cur.addr = alloca %struct.Node*, align 8
+  store %struct.Node* %head, %struct.Node** %cur.addr, align 8
+  br label %while.cond
+
+while.cond:
+  %0 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %1 = getelementptr inbounds %struct.Node, %struct.Node* %0, i32 0, i32 1
+  %2 = load %struct.Node*, %struct.Node** %1, align 8, !tbaa !5
+  %3 = icmp ne %struct.Node* %2, null
+  br i1 %3, label %while.body, label %while.end
+
+while.body:
+  %4 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %5 = getelementptr inbounds %struct.Node, %struct.Node* %4, i32 0, i32 1
+  %6 = load %struct.Node*, %struct.Node** %5, align 8, !tbaa !5
+  %7 = icmp ne %struct.Node* %6, null
+  %8 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %9 = select i1 %7, %struct.Node* %6, %struct.Node* %8
+  store %struct.Node* %9, %struct.Node** %cur.addr, align 8
+  br label %while.cond
+
+while.end:
+  %10 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  ret %struct.Node* %10
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"Node", !2, i64 0, !3, i64 8}
+!5 = !{!4, !3, i64 8}
+!6 = !{!4, !2, i64 0}
+```
+<!-- cookbook:end mem-nullish -->
+
 ## Builtins
 
 ### `Math.*` on `f64`

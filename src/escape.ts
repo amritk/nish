@@ -44,6 +44,7 @@ import {
 import {
   arrayMethodName,
   builtinNameOf,
+  coalescesMaybe,
   dottedName,
   isArenaCall,
   intrinsicType,
@@ -1597,8 +1598,13 @@ class PassWalk {
     if (e.kind === N_CONDITIONAL) {
       return this.isOld(e.children[1]) && this.isOld(e.children[2])
     }
-    // WP32: `m.get(k) ?? d` is a value read out of the map, or `d`.
+    // WP32: `m.get(k) ?? d` is a value read out of the map, or `d`. A
+    // `T | null` on the left is either operand, as a ternary's arms are: a
+    // fresh object there is as new as it would be on its own.
     if (e.kind === N_BINARY && e.text === "??") {
+      if (!coalescesMaybe(program, this.table, e)) {
+        return this.isOld(e.children[0]) && this.isOld(e.children[1])
+      }
       return this.isOld(e.children[1])
     }
     if (e.kind === N_CALL) {

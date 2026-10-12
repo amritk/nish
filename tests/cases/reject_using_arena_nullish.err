@@ -1,0 +1,1 @@
+`` make(`made ${last.label.length}`) ?? last `` may be allocated inside the `using arena()` block at 16:5 and is assigned to `last`, which is declared outside the block: the block releases what it allocated when it ends, and the local would outlive it pointing into freed memory

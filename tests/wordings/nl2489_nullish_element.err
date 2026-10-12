@@ -1,0 +1,1 @@
+`??` cannot default an element read: past the end of the array, JavaScript answers the default and Nish panics (test the index against `length`, or read the element into a `const` first)
