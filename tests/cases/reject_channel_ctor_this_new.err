@@ -1,0 +1,2 @@
+reject_channel_ctor_this_new.ts:19:26
+The constructor of a class that holds a channel uses `this` other than to read or set its own fields, `this.f`, where a send made through it could not be counted

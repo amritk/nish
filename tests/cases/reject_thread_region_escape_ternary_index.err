@@ -1,0 +1,2 @@
+reject_thread_region_escape_ternary_index.ts:50:5
+`bump` writes memory a task of `s` may read, before the scope joins

@@ -1,0 +1,2 @@
+`boxed` writes memory its caller can see at 
+reject_thread_task_private_new.ts:16:3, and `spawn`

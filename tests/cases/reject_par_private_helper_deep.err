@@ -1,0 +1,2 @@
+`clear` writes memory its caller can see through `zeroFirst`
+`parallelMapInto` runs it on several threads at once

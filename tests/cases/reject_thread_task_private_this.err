@@ -1,0 +1,2 @@
+`register` writes memory its caller can see at 
+reject_thread_task_private_this.ts:25:3, and `spawn`
