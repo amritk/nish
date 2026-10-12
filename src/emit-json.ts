@@ -303,6 +303,17 @@ const jsonEnumValues = (emitter: Emitter, f: JsonField): i32[] => {
   return out
 }
 
+/** Whether the decoder has not failed: one load of its `failed`, compared with `0`. */
+const jsonDecoderOk = (emitter: Emitter, part: JsonPart): string => {
+  const code = part.receiver.field("failed")
+  if (code === null) {
+    jsonFail(emitter, `\`${part.receiver.name}\` has no \`failed\``)
+    return "true"
+  }
+  const failed = loadField(emitter, part.receiver, "%r", code)
+  return emitter.fn.emitValue(`icmp eq ${emitter.llvm(code.type)} ${failed}, 0`)
+}
+
 /** `br i1 cond, label %yes, label %no`. */
 const jsonBranch = (emitter: Emitter, cond: string, yes: string, no: string): void => {
   emitter.fn.emit(`br i1 ${cond}, label %${yes}, label %${no}`)
@@ -647,8 +658,22 @@ const jsonSplitAt = (d: JsonDispatch, candidates: i32[], n: i32): i32 => {
 }
 
 /**
- * Dispatch a key among `candidates`, whose names all have `n` bytes. One
- * candidate is compared at once. Several are split by the byte where their
+ * Below this many candidates of one length, a key is compared with each in
+ * turn: with two, `keyIs` against the first and then the second is no more
+ * calls than `keyByte` and then `keyIs`.
+ */
+const JSON_SPLIT_FROM: i32 = 3
+
+/**
+ * Below this many fields, a class's keys are compared with its names in
+ * turn, as before the dispatch: one or two `keyIs` per key is no more than
+ * `keyLength` and then `keyIs`.
+ */
+const JSON_DISPATCH_FROM: i32 = 3
+
+/**
+ * Dispatch a key among `candidates`, whose names all have `n` bytes. One or
+ * two candidates are compared in turn. More are split by the byte where their
  * names differ most: each byte value goes to the candidates with that byte, a
  * key whose byte is none of theirs is unknown at once, and a key with an
  * escape, whose byte reads `-1`, is compared with every one of them.
@@ -661,7 +686,7 @@ const emitJsonDispatchLength = (
   n: i32
 ): void => {
   const fn = emitter.fn
-  if (candidates.length < 2) {
+  if (candidates.length < JSON_SPLIT_FROM) {
     emitJsonCompareEach(emitter, part, d, candidates)
     return
   }
@@ -712,6 +737,14 @@ const emitJsonDispatchLength = (
  */
 const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): void => {
   const fn = emitter.fn
+  if (d.fields.length < JSON_DISPATCH_FROM) {
+    const all: i32[] = []
+    while (all.length < d.fields.length) {
+      all.push(all.length)
+    }
+    emitJsonCompareEach(emitter, part, d, all)
+    return
+  }
   const lengths: i32[] = []
   let k = 0
   while (k < d.fields.length) {
@@ -864,16 +897,8 @@ const emitJsonEnumCheck = (
   failed: string
 ): void => {
   const fn = emitter.fn
-  const code = part.receiver.field("failed")
-  if (code === null) {
-    jsonFail(emitter, `\`${part.receiver.name}\` has no \`failed\``)
-    return
-  }
-  const ok = fn.emitValue(
-    `icmp eq ${emitter.llvm(code.type)} ${loadField(emitter, part.receiver, "%r", code)}, 0`
-  )
   const check = fn.newBlock("json.read")
-  jsonBranch(emitter, ok, check.label, failed)
+  jsonBranch(emitter, jsonDecoderOk(emitter, part), check.label, failed)
   fn.placeBlock(check)
   const labels: string[] = []
   for (const v of jsonEnumValues(emitter, f)) {
@@ -1167,9 +1192,11 @@ const emitJsonFresh = (emitter: Emitter, part: JsonPart, f: JsonField): string =
 /**
  * A map, decoded into the map `%v`: emptied once the input's object opens,
  * then each key read as a string and its value decoded into a slot of its
- * own and `set`, so the map's entries are in the input's order. A key past
- * the decoder's `maxMapKeys` is `JSON_DECODE_MAP_LIMIT` before it is read,
- * which bounds what a body of colliding keys costs the map's probes. A key the
+ * own and `set`, so the map's entries are in the input's order, unless its
+ * read failed, when nothing is set. A key past the decoder's `maxMapKeys`,
+ * counted over every map of the decoding, is `JSON_DECODE_MAP_LIMIT` before it
+ * is read, which bounds what a body of colliding keys costs all the maps'
+ * probes together. A key the
  * object gave already is `JSON_DECODE_DUPLICATE` before its value is read,
  * as a field's is (docs/security/json.md, JSON-3).
  */
@@ -1179,12 +1206,11 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
   const value = jsonPartValue(emitter, part)
   const valueType = emitter.llvm(value.type)
   const slot = fn.emitAlloca("value", valueType, emitter.align(value.type))
-  const count = fn.emitAlloca("count", "i32", 4)
-  fn.emit(`store i32 0, i32* ${count}, align 4`)
   const loop = fn.newBlock("json.loop")
   const room = fn.newBlock("json.room")
   const entry = fn.newBlock("json.entry")
   const fresh = fn.newBlock("json.fresh")
+  const keep = fn.newBlock("json.keep")
   const duplicate = fn.newBlock("json.duplicate")
   const done = fn.newBlock("json.done")
   const open = jsonCallMethod(emitter, part.receiver, "beginObject", "%r", [])
@@ -1200,8 +1226,7 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
 
   // The limit is asked before the key is made: a refused key costs nothing.
   fn.placeBlock(room)
-  const held = fn.emitValue(`load i32, i32* ${count}, align 4`)
-  const allowed = jsonCallMethod(emitter, part.receiver, "mapRoom", "%r", [`i32 ${held}`])
+  const allowed = jsonCallMethod(emitter, part.receiver, "mapRoom", "%r", [])
   jsonBranch(emitter, allowed, entry.label, loop.label)
 
   fn.placeBlock(entry)
@@ -1213,9 +1238,12 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
   const place = new JsonPlace(null, "", null, slot, value.type)
   jsonStore(emitter, place, emitJsonFresh(emitter, part, value))
   emitJsonDecodeValue(emitter, part, value, place)
+  // A value whose read failed is no value the input gave, and the map takes
+  // nothing for it; the decoding is over, and its count of keys with it.
+  jsonBranch(emitter, jsonDecoderOk(emitter, part), keep.label, loop.label)
+  fn.placeBlock(keep)
   const decoded = jsonLoad(emitter, place)
   jsonCallMethod(emitter, map, "set", "%v", [`i8* ${key}`, `${valueType} ${decoded}`])
-  fn.emit(`store i32 ${fn.emitValue(`add i32 ${held}, 1`)}, i32* ${count}, align 4`)
   fn.emit(`br label %${loop.label}`)
 
   fn.placeBlock(duplicate)

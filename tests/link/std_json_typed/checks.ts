@@ -30,7 +30,7 @@ import {
 } from "nish/json-typed";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { jtBenchWide, jtKindsChecks, jtKindsRoundTripFile } from "./kinds.ts";
+import { jtBenchWide, jtBenchXy, jtKindsChecks, jtKindsRoundTripFile } from "./kinds.ts";
 import { jtOptionsChecks, jtOptionsRoundTripFile } from "./options.ts";
 import { Chain, Lists, Match, Player, Scalars, Team } from "./models.ts";
 import { jtBytes, jtDecode, jtEncode } from "./support.ts";
@@ -370,7 +370,8 @@ const jtRoundTripFile = (path: string): i32 => {
 
 /**
  * The program's modes, other than the suite: `--round-trip <file>`,
- * `--round-trip-kinds <file>`, `--bench <n>` and `--bench-wide <n>`, each
+ * `--round-trip-kinds <file>`, `--bench <n>`, `--bench-wide <n>` and
+ * `--bench-xy <n>`, each
  * answering its exit code, and `-1` when `argv` names none of them.
  */
 export const jtModes = (argv: string[]): i32 => {
@@ -390,6 +391,9 @@ export const jtModes = (argv: string[]): i32 => {
   }
   if (mode === "--bench") {
     return jtBench(toI32(parseInt(arg)));
+  }
+  if (mode === "--bench-xy") {
+    return jtBenchXy(toI32(parseInt(arg)));
   }
   return mode === "--bench-wide" ? jtBenchWide(toI32(parseInt(arg))) : -1;
 };

@@ -211,12 +211,24 @@ PASS  map: a | null map decodes into its null
 PASS  map: and back to null
 PASS  map: arrays of enums, | null objects and arrays, a | null map
 PASS  map: and encode
+PASS  map: a map through an alias
+PASS  map: a string for an i32 value fails
+PASS  map: and the map holds only the entry read before it
 PASS  map: a number that names no member of a map's enum
-PASS  map: the entry holds a member
+PASS  map: and nothing is set for it
 PASS  map limit: as many keys as the limit
 PASS  map limit: one key past it: code
 PASS  map limit: one key past it: errorAt
-PASS  map limit: each map of a map of maps has its own
+PASS  map limit: a map of maps counts every key of every map
+PASS  map limit: and one fewer refuses it
+PASS  map limit: at the last key
+PASS  map limit: reset clears the count
+PASS  map limit: 819 small maps, 4,095 keys, decode
+PASS  map limit: 820 small maps, 4,100 keys, are refused
+PASS  map limit: 0 refuses a map's first key
+PASS  map limit: 0 still takes {}
+PASS  map limit: -1 refuses a map's first key
+PASS  map limit: -1 still takes {}
 PASS  map limit: 4,096 keys by default
 PASS  map limit: and not 4,097
 PASS  map: a window ending on the closing brace
@@ -305,8 +317,9 @@ PASS  number: a string: errorAt
 PASS  number: null for a JsonNumber that is not | null
 PASS  number: an object
 PASS  number: past maxNumberBytes is the tokenizer's error
+PASS  number: a count past its bytes is the writer's bad window
 PASS  number: 1,000 decodes into one Reading succeed
 PASS  number: Arena.used() is flat over them
 PASS  renamed: decodes
 PASS  renamed: encodes, tries at its initializer
-std_json_typed: 310 passed, 0 failed, 0 skipped
+std_json_typed: 323 passed, 0 failed, 0 skipped

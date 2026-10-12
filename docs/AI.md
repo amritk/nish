@@ -1751,7 +1751,8 @@ every outcome a sticky negative code in `d.failed`, never a panic. An enum is
 its number, and a number that is no member's value is `JSON_DECODE_TYPE`; a
 `u64` is exact to 2^64 - 1, and negative is `JSON_DECODE_RANGE`; a map is
 emptied and filled in the input's key order, a repeated key an error, and
-more keys than `d.maxMapKeys` (4,096 unless set) `JSON_DECODE_MAP_LIMIT`. A class
+more keys over all the maps of one decode than `d.maxMapKeys` (4,096 unless
+set) `JSON_DECODE_MAP_LIMIT`. A class
 the decoder makes (an array's element, a `| null` field's object, a map's
 value) has a constructor with no parameters (NL2488). A class's options are
 one `static readonly json = { rename: { field: "key" }, optional: ["field"] }`

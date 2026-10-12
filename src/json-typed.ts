@@ -503,6 +503,8 @@ const jsonValueOf = (
     return f
   }
   if (table.isEnum(base)) {
+    // The checker refuses `Level | null` where it is written (NL2010,
+    // tests/cases/json_reject_enum_nullable); a number has no `null`.
     if (nullable) {
       return null
     }
