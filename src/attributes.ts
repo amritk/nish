@@ -1909,6 +1909,10 @@ class FactCollector {
         ? new MemPath(ROOT_NONE, "", "")
         : new MemPath(ROOT_PARAM, "this", "")
     }
+    if (e.kind === N_CALL) {
+      const read = this.readBackPath(e, depth)
+      return read === null ? new MemPath(ROOT_UNKNOWN, "", "") : read
+    }
     if (e.kind !== N_IDENT) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
@@ -1947,10 +1951,69 @@ class FactCollector {
     const body = this.sig.body()
     const decl: Node | null =
       local.mutable || body === null || depth >= 8 ? null : declarationIn(this.unit.program, body, local)
-    if (decl === null || decl.children[2].kind === N_EMPTY) {
+    if (decl === null) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
+    }
+    // A `for...of` head is a `const` statement of one declaration.
+    let loop = this.unit.parents.parentOf(decl)
+    while (loop !== null && (loop.kind === N_LIST || loop.kind === N_VAR)) {
+      loop = this.unit.parents.parentOf(loop)
+    }
+    if (loop !== null && loop.kind === N_FOR_OF) {
+      return this.elementPath(loop.children[1], depth + 1)
+    }
+    if (decl.children[2].kind === N_EMPTY) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
     return this.pathFrom(decl.children[2], depth + 1)
+  }
+
+  /**
+   * Where each element a walk of `iterable` gives lives: an element of the
+   * array, of the `Set`, or of the `Map` whose `keys()` or `values()` it is,
+   * `[]` below that container's path. Anything else a `for...of` walks — a
+   * `Channel`, whose messages are another task's — may be anything.
+   */
+  elementPath(iterable: Node, depth: i32): MemPath {
+    const program = this.unit.program
+    const e = unwrapParens(iterable)
+    const table = walkTable(e)
+    const type = program.nodeTypes[table.id]
+    if (type < 0 || !(this.table.isArray(type) || this.isCollectionType(type))) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
+    }
+    const base = this.pathFrom(table, depth)
+    return new MemPath(base.kind, base.name, `${base.steps}[]`)
+  }
+
+  /** Whether `type` is an instance of the global `Map` or `Set`. */
+  isCollectionType(type: i32): boolean {
+    const info: StructInfo | null = this.table.isStruct(type) ? this.unit.program.struct(this.table.nameOf(type)) : null
+    return info !== null && isCollectionStruct(info)
+  }
+
+  /**
+   * Where what a `Map` or `Set` call answers lives: the table itself for a
+   * call that answers it (`set`, `add`), an element, `[]` below the table,
+   * for one that reads one back (`get`, `getOrInsert` from `nish/map`), and
+   * null for a call that is not one of a table's.
+   */
+  readBackPath(call: Node, depth: i32): MemPath | null {
+    const program = this.unit.program
+    const callee = program.nodeCallees[call.id]
+    const receiver = tableReceiver(program, call)
+    if (callee === null || receiver === null) {
+      return null
+    }
+    const owner = callee.owner
+    if (!isMapRoute(callee) && (owner === null || !isCollectionStruct(owner))) {
+      return null
+    }
+    const base = this.pathFrom(receiver, depth)
+    if (program.nodeTypes[call.id] === program.nodeTypes[receiver.id]) {
+      return base
+    }
+    return new MemPath(base.kind, base.name, `${base.steps}[]`)
   }
 
   /**
@@ -2370,9 +2433,9 @@ class FactCollector {
     const receiver = methodReceiver(call)
     const owner = callee.owner
     if (owner !== null && receiver !== null && isCollectionStruct(owner)) {
-      // A `Map` or `Set` keeps only what it is handed (`noteTableStores`), so
-      // its receiver is written but holds nothing the call did not give it.
-      this.facts.argEdges.push(new ArgEdge(callee.name, 0, "", null, this.pathOf(unwrapParens(receiver))))
+      // A `Map` or `Set` keeps only what it is handed (`noteTableStores`), and
+      // writes only its own storage (`FunctionFacts.wholeReaches`).
+      this.noteWholeReach(callee.name, receiver)
       this.noteTableStores(call, receiver)
     } else if (owner !== null && receiver !== null) {
       this.noteArgument(callee, receiver, 0)
@@ -2473,7 +2536,7 @@ class FactCollector {
         for (const sig of walkMethodsOf(read)) {
           this.addUserCallee(sig.name, node)
           this.noteCall(node, sig)
-          this.noteWholeReach(sig.name, node.children[1])
+          this.noteWholeReach(sig.name, walkTable(node.children[1]))
         }
       }
     }
@@ -4400,6 +4463,13 @@ const tableReceiver = (program: CheckedProgram, call: Node): Node | null => {
   return sig !== null && isMapRoute(sig) && args.length > 0 ? args[0] : null
 }
 
+/** The table a walk of `iterable` reads: the receiver of `m.keys()` or `m.values()`, or `iterable` itself. */
+const walkTable = (iterable: Node): Node => {
+  const e = unwrapParens(iterable)
+  const receiver = methodReceiver(e)
+  return receiver === null ? e : receiver
+}
+
 /** Whether `f` has an active `DirtMark` on its object `key`. */
 const isDirty = (f: FunctionFacts, key: string): boolean => {
   for (const d of f.dirt) {
@@ -4573,7 +4643,7 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   for (const edge of f.wholeReaches) {
     const g = facts.get(edge.callee)
     const writes = g === null || g.sharedWrite
-    if (writes && callWrites(f, edge, true)) {
+    if (writes && callWrites(f, edge, false)) {
       changed = true
     }
   }
