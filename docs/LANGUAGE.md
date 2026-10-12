@@ -6430,7 +6430,7 @@ export const main = (): i32 => {
   no map may take a key, and `{}` is the one map value accepted. The global
   `Map` hashes a string with no seed, so a body can choose keys that all
   collide, and this limit is what bounds the probes all the maps of one
-  decoding cost together (docs/security/json.md, JSON-9).
+  decoding cost together (docs/security/json.md, JSON-13).
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps

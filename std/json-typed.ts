@@ -100,7 +100,7 @@ export const JSON_DECODE_MISSING: i32 = -24
  * `errorAt` is the first key past the limit. The global `Map` hashes a
  * string with no seed, so a body can choose keys that all collide, and the
  * limit bounds what the maps' probes cost over the whole decoding
- * (docs/security/json.md, JSON-9).
+ * (docs/security/json.md, JSON-13).
  */
 export const JSON_DECODE_MAP_LIMIT: i32 = -25
 
