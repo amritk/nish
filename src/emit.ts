@@ -118,7 +118,7 @@ import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-st
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
-import { isIndexOfAnyWalk } from "./kernels"
+import { AES_HW, AES_SEAM_NONE, aesKernelOf, isAesSeam, isIndexOfAnyWalk } from "./kernels"
 import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
@@ -182,6 +182,7 @@ import {
 import { Local, STORAGE_PARAM } from "./symbols"
 import { resolveTarget, targetHeader } from "./target"
 import { T_VOID, TypeTable } from "./types"
+import { isWasmBuild } from "./visibility"
 
 /**
  * Branch targets of an enclosing loop, for `break` and `continue`. A `switch`
@@ -1434,6 +1435,12 @@ export class Emitter {
     if (isIndexOfAnyWalk(this.program, sig)) {
       return emitIndexOfAnyKernel(this, operandValues)
     }
+    // WP38 S5: a seam of `nish/crypto/aes` runs the runtime kernel when
+    // `nish_aes_hw` says so and the walker below when not (`src/kernels.ts`).
+    // Never on wasm32, which has no kernel to branch to.
+    const aesSeam = isWasmBuild(this.opts) ? AES_SEAM_NONE : isAesSeam(this.program, sig)
+    const aesJoin: IRBlock | null =
+      aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).
     const mark = this.beginReclaim(sig)
@@ -1441,6 +1448,10 @@ export class Emitter {
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)
+      if (aesJoin !== null) {
+        this.fn.emit(`br label %${aesJoin.label}`)
+        this.fn.placeBlock(aesJoin)
+      }
       return "void"
     }
     // WP17: a small `Result` comes back in a register; unpack it into the
@@ -1449,6 +1460,28 @@ export class Emitter {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
     return this.endReclaim(mark, this.fn.emitValue(call))
+  }
+
+  /**
+   * WP38 S5: the branch in front of an AES seam's call, and its kernel arm.
+   * The kernel takes the walker's own operands, which is the contract
+   * `runtime/nish.h` states for it. Answers the join block, and leaves the
+   * walker's arm as the insertion point, so the call the caller emits next is
+   * the original one, unchanged; every seam is `void`, so the join needs no
+   * `phi`.
+   */
+  emitAesKernelArm(seam: i32, operands: string[]): IRBlock {
+    const hw = this.fn.emitValue(`call i32 ${this.useRuntime(AES_HW)}()`)
+    const taken = this.fn.emitValue(`icmp ne i32 ${hw}, 0`)
+    const kernel = this.fn.newBlock("aes.kernel")
+    const walker = this.fn.newBlock("aes.walker")
+    const join = this.fn.newBlock("aes.join")
+    this.fn.emit(`br i1 ${taken}, label %${kernel.label}, label %${walker.label}`)
+    this.fn.placeBlock(kernel)
+    this.fn.emit(`call void ${this.useRuntime(aesKernelOf(seam))}(${operands.join(", ")})`)
+    this.fn.emit(`br label %${join.label}`)
+    this.fn.placeBlock(walker)
+    return join
   }
 
   // ---- Context helpers ----------------------------------------------------
