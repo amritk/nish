@@ -1539,17 +1539,37 @@ if (parallelRows.length > 0) {
   lines.push("")
 }
 
-/** What the ratio of a twins row says, read against its band: faster or slower only outside it. */
+/** Which side of its band a ratio falls: 1 slower, -1 faster, 0 inside it. */
+const sideOf = (quotient, band) => {
+  if (quotient > 1 + band) {
+    return 1
+  }
+  return quotient < 1 - band ? -1 : 0
+}
+const SIDE_WORDS = new Map([
+  [1, "slower, outside the band"],
+  [-1, "faster, outside the band"],
+  [0, "within the band"],
+])
+
+/**
+ * What a twins row says, read against its band on the minimum and on the
+ * median separately: faster or slower only outside the band, and a loss past
+ * the 1.10x target named as one, on either statistic.
+ */
 const twinReading = (r) => {
   const label = TWIN_COLUMNS.find(([id]) => id === r.fastest.id)[1]
-  if (r.ratioMin > 1 + r.bandMin) {
-    const target = r.ratioMin > 1.1 ? "**loses by more than 1.10x**" : "within 1.10x"
-    return `Nish slower than ${label}, outside the band; ${target}`
+  const onMin = sideOf(r.ratioMin, r.bandMin)
+  const onMedian = sideOf(r.ratioMedian, r.bandMedian)
+  const text =
+    onMin === onMedian
+      ? `Nish against ${label}: ${SIDE_WORDS.get(onMin)}`
+      : `Nish against ${label}: minimum ${SIDE_WORDS.get(onMin)}, median ${SIDE_WORDS.get(onMedian)}`
+  if (onMin !== 1 && onMedian !== 1) {
+    return text
   }
-  if (r.ratioMin < 1 - r.bandMin) {
-    return `Nish faster than ${label}, outside the band`
-  }
-  return `within the band of ${label}`
+  const loses = (onMin === 1 && r.ratioMin > 1.1) || (onMedian === 1 && r.ratioMedian > 1.1)
+  return `${text}; ${loses ? "**loses by more than 1.10x**" : "within 1.10x"}`
 }
 
 const TWINS_HEADING = "## Data parallelism against Rust and Go (ms, min / median)"
