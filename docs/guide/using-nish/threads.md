@@ -147,7 +147,9 @@ export const main = (): i32 => {
   profiler can name its thread. It follows the rules of a parallel `f` above:
   it writes nothing another thread can see (except through a `Mutex` or a
   `Channel`, below), answers a number, a `boolean` or an enum, and opens no
-  scope of its own.
+  scope of its own. Looking a key up in a shared `Map` or `Set` (`get`,
+  `has`, `size`) is a read, so tasks may share a table that way; changing it,
+  or walking it with `for...of`, is a write.
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.

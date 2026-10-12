@@ -2772,6 +2772,14 @@ element's arena, which a task does not share, and each rule is reported at the
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
+  tasks of one scope may look keys up in the same table
+  (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
+  `delete`, `clear`, `getOrInsert` — writes it, a walk counts itself into it
+  (`walkOpen`), and what a lookup answers is the table's memory, so each is
+  refused (`reject_thread_task_map_set`, `_map_delete`, `_map_clear`,
+  `_map_get_or_insert`, `_set_add`, `_set_delete`, `_set_clear`,
+  `_map_walk_keys`, `_map_walk_values`, `_set_walk`, `_map_readback_write`).
   A store into an array the task allocated and hands to nothing that keeps it
   is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
   sieve may fill its own table, and a helper may fill the array it is handed
