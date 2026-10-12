@@ -142,6 +142,7 @@ import {
   inlineElementStruct,
   JSON_DECODE,
   JSON_NONE,
+  MAP_GET_OR_INSERT,
   PAR_MAP,
   ROLE_CONSTRUCTOR,
   StructInfo,
@@ -171,7 +172,14 @@ import {
   T_VOID,
   TypeTable,
 } from "./types"
-import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map"
+import {
+  fusedCalleesOf,
+  isMapRoute,
+  mapIntrinsicOf,
+  routeCalleesOf,
+  valueReaderOf,
+  walkMethodsOf,
+} from "./emit-map"
 import { isCollectionStruct } from "./generics"
 import {
   builtinPanicKind,
@@ -1910,6 +1918,10 @@ class FactCollector {
         ? new MemPath(ROOT_NONE, "", "")
         : new MemPath(ROOT_PARAM, "this", "")
     }
+    if (e.kind === N_CALL) {
+      const read = this.readBackPath(e, depth)
+      return read === null ? new MemPath(ROOT_UNKNOWN, "", "") : read
+    }
     if (e.kind !== N_IDENT) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
@@ -1948,10 +1960,71 @@ class FactCollector {
     const body = this.sig.body()
     const decl: Node | null =
       local.mutable || body === null || depth >= 8 ? null : declarationIn(this.unit.program, body, local)
-    if (decl === null || decl.children[2].kind === N_EMPTY) {
+    if (decl === null) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
+    }
+    // A `for...of` head is a `const` statement of one declaration.
+    let loop = this.unit.parents.parentOf(decl)
+    while (loop !== null && (loop.kind === N_LIST || loop.kind === N_VAR)) {
+      loop = this.unit.parents.parentOf(loop)
+    }
+    if (loop !== null && loop.kind === N_FOR_OF) {
+      return this.elementPath(loop.children[1], depth + 1)
+    }
+    if (decl.children[2].kind === N_EMPTY) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
     return this.pathFrom(decl.children[2], depth + 1)
+  }
+
+  /**
+   * Where each element a walk of `iterable` gives lives: an element of the
+   * array, of the `Set`, or of the `Map` whose `keys()` or `values()` it is,
+   * `[]` below that container's path. Anything else a `for...of` walks — a
+   * `Channel`, whose messages are another task's — may be anything.
+   */
+  elementPath(iterable: Node, depth: i32): MemPath {
+    const program = this.unit.program
+    const e = unwrapParens(iterable)
+    const table = walkTable(e)
+    const type = program.nodeTypes[table.id]
+    if (type < 0 || !(this.table.isArray(type) || this.isCollectionType(type))) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
+    }
+    const base = this.pathFrom(table, depth)
+    return new MemPath(base.kind, base.name, `${base.steps}[]`)
+  }
+
+  /** Whether `type` is an instance of the global `Map` or `Set`. */
+  isCollectionType(type: i32): boolean {
+    const info: StructInfo | null = this.table.isStruct(type)
+      ? this.unit.program.struct(this.table.nameOf(type))
+      : null
+    return info !== null && isCollectionStruct(info)
+  }
+
+  /**
+   * Where what a `Map` or `Set` call answers lives: the table itself for a
+   * call that answers it (`set`, `add`), an element, `[]` below the table,
+   * for one that reads one back (`get`, `getOrInsert` from `nish/map`), and
+   * null for a call that is not one of a table's.
+   */
+  readBackPath(call: Node, depth: i32): MemPath | null {
+    const program = this.unit.program
+    const callee = program.nodeCallees[call.id]
+    const receiver = tableReceiver(program, call)
+    if (callee === null || receiver === null) {
+      return null
+    }
+    const owner = callee.owner
+    if (!isMapRoute(callee) && (owner === null || !isCollectionStruct(owner))) {
+      return null
+    }
+    const base = this.pathFrom(receiver, depth)
+    if (program.nodeTypes[call.id] === program.nodeTypes[receiver.id]) {
+      return base
+    }
+    return new MemPath(base.kind, base.name, `${base.steps}[]`)
   }
 
   /**
@@ -2046,6 +2119,24 @@ class FactCollector {
     this.facts.dirt.push(mark)
   }
 
+  /**
+   * Whether a value of `type` holds no memory: a number, a ranged integer, a
+   * `boolean`, an enum or a string, or any of them through `| null` or the
+   * `| undefined` a `get` answers. A type the checker did not record may hold
+   * anything.
+   */
+  isPlainValue(type: i32): boolean {
+    if (type < 0) {
+      return true // no recorded type: not an expression a value can be read from
+    }
+    const table = this.table
+    let t = table.stripNull(type)
+    if (table.isMaybe(t)) {
+      t = table.stripNull(table.refOf(t))
+    }
+    return t === T_STRING || table.isRanged(t) || isScalarArgument(table, t)
+  }
+
   /** What `value` may be (`ValueDesc`). */
   valueOf(value: Node): ValueDesc {
     const desc = new ValueDesc()
@@ -2058,7 +2149,7 @@ class FactCollector {
     const table = this.table
     const v = unwrapParens(value)
     const type = program.nodeTypes[v.id]
-    if (type >= 0 && (type === T_STRING || isScalarArgument(table, table.stripNull(type)))) {
+    if (type >= 0 && this.isPlainValue(type)) {
       return
     }
     if (v.kind === N_NULL) {
@@ -2081,6 +2172,17 @@ class FactCollector {
       for (const element of v.children) {
         this.describe(element, desc)
       }
+      return
+    }
+    // Either arm of a `?:`, either side of a `??`: what one of them may be.
+    if (v.kind === N_CONDITIONAL) {
+      this.describe(v.children[1], desc)
+      this.describe(v.children[2], desc)
+      return
+    }
+    if (v.kind === N_BINARY && v.text === "??") {
+      this.describe(v.children[0], desc)
+      this.describe(v.children[1], desc)
       return
     }
     if (v.kind === N_OBJECT) {
@@ -2128,8 +2230,9 @@ class FactCollector {
 
   /**
    * The one rule for an object of this call's own (or a part of one) used as
-   * a value: every path expression — a name, `this`, a field or an element
-   * chain — of a type that is not a number, a `boolean` or a string, rooted at
+   * a value: every expression with a path (`pathOf`) — a name, `this`, a
+   * field or an element chain, a call that answers a table or reads one back
+   * — of a type that is not a number, a `boolean` or a string, rooted at
    * such an object, makes everything below what it names may-be-anything
    * (`DIRT_ESCAPE`), unless where it stands is one the analysis follows: the
    * target of an assignment or of `++`/`--`, the initialiser of a `const`
@@ -2138,14 +2241,15 @@ class FactCollector {
    * of a comparison, a `return` (what the caller does with it is the
    * caller's), or a statement of its own. Every other place — the right side
    * of an assignment, an element of an array literal, a property of an object
-   * literal, an argument of `push`, of a `Map` or `Set` method or of any
-   * builtin, an arm of a `?:` — hands the object on to something the analysis
-   * does not follow. The iterable of a `for...of` is only read: what its loop
-   * variable names is judged where that is used.
+   * literal, an argument of `push`, of a `Map` or `Set` call that keeps it
+   * (`set`, `add`, `getOrInsert`) or of any builtin, an arm of a `?:` — hands
+   * the object on to something the analysis does not follow. A lookup's key
+   * (`has`, `get`, `delete`) is only read, and so is the iterable of a
+   * `for...of`: what its loop variable names is judged where that is used.
    */
   noteEscape(node: Node): void {
-    if (node.kind !== N_IDENT && node.kind !== N_THIS && node.kind !== N_MEMBER && node.kind !== N_INDEX) {
-      return
+    if (node.kind === N_PAREN) {
+      return // what it wraps is judged where the parentheses stand
     }
     const program = this.unit.program
     let at = node
@@ -2164,8 +2268,7 @@ class FactCollector {
     if (parent !== null && parent.kind === N_VAR_DECL && parent.children[0] === at) {
       return // the name a declaration binds
     }
-    const type = program.nodeTypes[node.id]
-    if (type < 0 || type === T_STRING || isScalarArgument(this.table, this.table.stripNull(type))) {
+    if (this.isPlainValue(program.nodeTypes[node.id])) {
       return
     }
     if (node.kind === N_THIS && !this.facts.freshThis) {
@@ -2180,6 +2283,8 @@ class FactCollector {
     if (parent !== null && this.followsUse(parent, at)) {
       return
     }
+    // Whatever the expression's form, its path decides: a name, a field or an
+    // element chain, `this`, or a call that answers a table or what one holds.
     const path = this.pathOf(node)
     if (path.kind === ROOT_OWN) {
       this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
@@ -2218,7 +2323,8 @@ class FactCollector {
       ) {
         return false
       }
-      // A table call stores what it is handed (`noteTableStores`); only its receiver is followed.
+      // A table call that keeps what it is handed stores it (`noteTableStores`), so only
+      // its receiver is followed; a lookup keeps nothing, so its key is followed too.
       const callee = program.nodeCallees[call.id]
       const owner: StructInfo | null = callee === null ? null : callee.owner
       const collection = owner !== null && isCollectionStruct(owner)
@@ -2226,7 +2332,7 @@ class FactCollector {
         return true
       }
       const receiver = tableReceiver(program, call)
-      return receiver !== null && receiver === at
+      return (receiver !== null && receiver === at) || !keepsArguments(program, call)
     }
     return false
   }
@@ -2371,9 +2477,9 @@ class FactCollector {
     const receiver = methodReceiver(call)
     const owner = callee.owner
     if (owner !== null && receiver !== null && isCollectionStruct(owner)) {
-      // A `Map` or `Set` keeps only what it is handed (`noteTableStores`), so
-      // its receiver is written but holds nothing the call did not give it.
-      this.facts.argEdges.push(new ArgEdge(callee.name, 0, "", null, this.pathOf(unwrapParens(receiver))))
+      // A `Map` or `Set` keeps only what it is handed (`noteTableStores`), and
+      // writes only its own storage (`FunctionFacts.wholeReaches`).
+      this.noteWholeReach(callee.name, receiver)
       this.noteTableStores(call, receiver)
     } else if (owner !== null && receiver !== null) {
       this.noteArgument(callee, receiver, 0)
@@ -2474,7 +2580,7 @@ class FactCollector {
         for (const sig of walkMethodsOf(read)) {
           this.addUserCallee(sig.name, node)
           this.noteCall(node, sig)
-          this.noteWholeReach(sig.name, node.children[1])
+          this.noteWholeReach(sig.name, walkTable(node.children[1]))
         }
       }
     }
@@ -2528,6 +2634,9 @@ class FactCollector {
    * `push` is (`noteSlotStore`).
    */
   noteTableStores(call: Node, receiver: Node | null): void {
+    if (!keepsArguments(this.unit.program, call)) {
+      return // a lookup: `has`, `get`, `delete` keep nothing they are handed
+    }
     const table = receiver === null ? new MemPath(ROOT_UNKNOWN, "", "") : this.pathOf(receiver)
     const slot = new MemPath(table.kind, table.name, `${table.steps}[]`)
     for (const arg of call.children[1].children) {
@@ -4401,6 +4510,35 @@ const tableReceiver = (program: CheckedProgram, call: Node): Node | null => {
   return sig !== null && isMapRoute(sig) && args.length > 0 ? args[0] : null
 }
 
+/**
+ * Whether a table call keeps what it is handed: a `Map`'s `set` its key and
+ * value, a `Set`'s `add` its element, and `getOrInsert` from `nish/map` its
+ * key and default. A lookup — `has`, `get`, `delete` — keeps nothing.
+ */
+const keepsArguments = (program: CheckedProgram, call: Node): boolean => {
+  const callee = program.nodeCallees[call.id]
+  if (callee === null) {
+    return true
+  }
+  if (isMapRoute(callee)) {
+    return mapIntrinsicOf(callee) === MAP_GET_OR_INSERT
+  }
+  const owner = callee.owner
+  if (owner === null || !isCollectionStruct(owner)) {
+    return true
+  }
+  const set = owner.method("set")
+  const add = owner.method("add")
+  return (set !== null && set === callee) || (add !== null && add === callee)
+}
+
+/** The table a walk of `iterable` reads: the receiver of `m.keys()` or `m.values()`, or `iterable` itself. */
+const walkTable = (iterable: Node): Node => {
+  const e = unwrapParens(iterable)
+  const receiver = methodReceiver(e)
+  return receiver === null ? e : receiver
+}
+
 /** Whether `f` has an active `DirtMark` on its object `key`. */
 const isDirty = (f: FunctionFacts, key: string): boolean => {
   for (const d of f.dirt) {
@@ -4572,9 +4710,12 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     }
   }
   for (const edge of f.wholeReaches) {
+    // A table's method writes its receiver only when it writes through its
+    // `this` (parameter 0): `has` and a fused `get`'s `probe` read it.
     const g = facts.get(edge.callee)
-    const writes = g === null || g.sharedWrite
-    if (writes && callWrites(f, edge, true)) {
+    const self: PointerParamFacts | null = g === null ? null : g.pointerParamAt(0)
+    const writes = g === null || (g.sharedWrite && (self === null || self.writesReach))
+    if (writes && callWrites(f, edge, false)) {
       changed = true
     }
   }

@@ -1,0 +1,2 @@
+reject_thread_region_call_escape_let_assign_goi.ts:47:5
+`bump` writes memory a task of `s` may read, before the scope joins
