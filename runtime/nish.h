@@ -168,7 +168,7 @@ __attribute__((noreturn)) void nish_panic(const nish_str *s);
 #ifdef NISH_THREADS
 void nish_panic_claim(void);
 #else
-static inline void nish_panic_claim(void) {}
+#define nish_panic_claim() ((void)0)
 #endif
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 nish_str *nish_str_from_i32(int32_t v);
