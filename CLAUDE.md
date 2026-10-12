@@ -116,6 +116,32 @@ A new positive `tests/cases/*` is registered with `node
 tests/differential/goldens.js --update` in the same commit, or `differential:
 the frozen rewrites` fails (#548).
 
+**A new runtime unit is paired in `scripts/build.sh` and `src/run-cache.ts` in
+one commit.** It goes into `build.sh`'s `halves` and `run-cache.ts`'s
+`runtimeUnits()` together: either one alone makes `build.sh --runtime-from`
+exit 2 on every cached `nish --link` and `nish run`. #594 added
+`runtime/runtime-aes.c` and left the pairing to #598, which landed both in
+one commit.
+
+**A declaration added to `src/runtime.ts` moves `docs/IR_COOKBOOK.md`'s
+runtime prelude.** The `<!-- cookbook:begin runtime-prelude -->` block is the
+generated `--runtime-decls` output: regenerate it with `docs/cookbook/regen.sh`
+in the same change, or CI's `regen.sh --check` fails. #598's five `nish_aes_*`
+declarations moved it.
+
+**A lowering skipped for wasm32 also covers the freestanding `--profile wasm`
+route.** `scripts/build.sh --profile wasm` links IR that was compiled for the
+host, so a wasm32 guard in the compiler never sees it. On #598's first head,
+such a link of AES IR referenced `nish_aes_*` without `runtime-aes.c`; review
+round 1 found it.
+
+**A positive check gated on `/proc/cpuinfo` has a CI step that greps its PASS
+line.** A runner that masks the instructions takes the check's other arm and
+stays green, so the line that says the path ran is required in
+`.github/workflows/ci.yml`, where the instructions are known to exist. #598's
+"calls all four kernels" check was gated that way and required nowhere until
+review round 1.
+
 ## Security
 
 Vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) says,
@@ -173,6 +199,11 @@ decision however green it is. Never merge it.
 
 [`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it)
 states the five conditions in full.
+
+**A pull request that conflicts with `main` gets no `pull_request` CI.** When
+a push shows no runs, check mergeability before anything else: #594's
+`a7cfdb7` and `52a50f6` never ran CI because `docs/security/README.md`
+conflicted, and CI started only once `main` was merged in.
 
 **Commit messages are the changelog.** `scripts/changelog-gen.mjs` builds each
 release from the commits it contains, so the subject is the line a reader sees
