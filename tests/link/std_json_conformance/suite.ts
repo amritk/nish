@@ -2,9 +2,8 @@
 // whole text, and that text must rewrite to itself. That the rewrite is
 // JSON.stringify(JSON.parse(x)) is held by tests/run.js, which has Node's JSON
 // to compare with.
-import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { JC_SUITE_PATH, jcPack, jcRewrite, jcUnpack } from "./rewrite";
+import { JC_SUITE_PATH, JcSuiteFile, jcPack, jcRewrite, jcSuiteFiles } from "./rewrite";
 
 /** How many y_ files the corpus holds at the commit test-parsing.txt names. */
 const JC_Y_FILES: i32 = 95;
@@ -29,27 +28,21 @@ const jcRewriteProblem = (bytes: u8[]): string => {
 };
 
 export const jcSuiteChecks = (t: Suite): void => {
-  const text = readFileSyncOrNull(JC_SUITE_PATH);
-  const lines: string[] = text === null ? [] : splitLines(text);
+  const loaded = jcSuiteFiles();
+  const files: JcSuiteFile[] = loaded === null ? [] : loaded;
   const problems: string[] = [];
-  let files: i32 = 0;
-  for (const line of lines) {
-    if (!line.startsWith("y_")) {
-      continue;
-    }
-    files += 1;
-    const space: i32 = toI32(line.indexOf(" "));
-    const bytes: u8[] | null = space > 0 ? jcUnpack(line.slice(space + 1)) : null;
+  for (const f of files) {
+    const bytes = f.bytes;
     const problem: string = bytes === null ? "does not unpack" : jcRewriteProblem(bytes);
     if (problem !== "") {
-      problems.push(`${line.slice(0, space)}: ${problem}`);
+      problems.push(`${f.name}: ${problem}`);
     }
   }
-  t.eqI32(`JSONTestSuite: ${JC_SUITE_PATH} holds ${JC_Y_FILES} y_ files`, files, JC_Y_FILES);
+  t.eqI32(`JSONTestSuite: ${JC_SUITE_PATH} holds ${JC_Y_FILES} y_ files`, toI32(files.length), JC_Y_FILES);
   const name = "JSONTestSuite: each y_ file rewrites to a whole text, which rewrites to itself";
-  if (files > 0 && toI32(problems.length) === 0) {
+  if (toI32(files.length) > 0 && toI32(problems.length) === 0) {
     t.pass(name);
   } else {
-    t.fail(name, problems.join("\n"));
+    t.fail(name, problems.join("\n      "));
   }
 };

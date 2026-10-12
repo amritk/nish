@@ -8,7 +8,7 @@
 import { JSON_TOK_END, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { JcOutcome, jcPack, jcRewrite, jcStringify, jcUnpack } from "./rewrite";
+import { JcOutcome, jcNextSpace, jcPack, jcRewrite, jcStringify, jcUnpack } from "./rewrite";
 
 const JC_TEST262_PATH: string = "tests/json-conformance/test262.txt";
 const JC_V8_PATH: string = "tests/json-conformance/v8.txt";
@@ -59,17 +59,6 @@ class JcReason {
   }
 }
 
-/** The index of the first space in `s` from `from`, or `s.length`. */
-const jcNextSpace = (s: string, from: i32): i32 => {
-  const space: i32 = 32;
-  const n: i32 = toI32(s.length);
-  let i: i32 = from;
-  while (i >= 0 && i < n && toI32(s.charCodeAt(i)) !== space) {
-    i += 1;
-  }
-  return i < n ? i : n;
-};
-
 /** Every case of the data file at `path`, in file order; empty when it is missing. */
 const jcLoadCases = (path: string): JcCase[] => {
   const cases: JcCase[] = [];
@@ -94,17 +83,8 @@ const jcLoadCases = (path: string): JcCase[] => {
 };
 
 /** Whether `out[0, len)` is exactly `want`. */
-const jcSameBytes = (out: u8[], len: i32, want: u8[]): boolean => {
-  if (len !== toI32(want.length) || len > toI32(out.length)) {
-    return false;
-  }
-  for (let i: i32 = 0; i < len && i < toI32(out.length) && i < toI32(want.length); i += 1) {
-    if (out[i] !== want[i]) {
-      return false;
-    }
-  }
-  return true;
-};
+const jcSameBytes = (out: u8[], len: i32, want: u8[]): boolean =>
+  len === toI32(want.length) && len <= toI32(out.length) && jcGapAt(out, 0, want);
 
 /**
  * An indented `text` with its indentation taken out, as `JSON.stringify(v,
@@ -192,16 +172,16 @@ const jcMatches = (c: JcCase, o: JcOutcome): boolean => {
   return want !== null && jcSameBytes(o.out, o.len, want);
 };
 
-/** Whether `o` is the answer reason `r` says a case listed under it gives instead. */
+/** Whether `o`, which is not upstream's answer, is the one reason `r` says a case listed under it gives instead. */
 const jcDivergesAs = (c: JcCase, o: JcOutcome, r: JcReason): boolean => {
   if (r.answer === "text") {
-    return o.error === "" && !jcMatches(c, o);
+    return o.error === "";
   }
   if (r.answer === "unindented") {
     const want = jcUnpack(c.expected);
     const gap: u8[] | null = c.op.startsWith("indent:") ? jcUnpack(c.op.substring(7)) : null;
     return (
-      o.error === "" && want !== null && gap !== null && !jcMatches(c, o) && jcSameBytes(o.out, o.len, jcUnindent(want, gap))
+      o.error === "" && want !== null && gap !== null && jcSameBytes(o.out, o.len, jcUnindent(want, gap))
     );
   }
   return o.error !== "" && `,${r.answer},`.indexOf(`,${o.error},`) >= 0;
@@ -217,29 +197,26 @@ const jcAnswer = (o: JcOutcome): string => {
 };
 
 /**
- * Judges one case: `0` when it answers as it should (upstream's value, or the
- * divergence its reason names), `1` when it is unlisted and differs, `2` when
- * it is listed but answers upstream's value, `3` when it is listed but differs
- * in another way than its reason says. A function of its own so that each
- * case's allocations are released when it returns.
+ * Judges one case: `""` when it answers as it should (upstream's value, or the
+ * divergence its reason names), or the failed check's line for it. A function
+ * of its own so that each case's allocations are released when it returns.
  */
-const jcJudge = (c: JcCase, r: JcReason | null): i32 => {
+const jcJudge = (c: JcCase, r: JcReason | null): string => {
   const o = jcOutcome(c);
   const matches: boolean = jcMatches(c, o);
+  let what: string = "";
   if (r === null) {
-    return matches ? 0 : 1;
+    what = matches ? "" : "answers";
+  } else if (matches) {
+    what = "is listed but answers as upstream:";
+  } else if (!jcDivergesAs(c, o, r)) {
+    what = "answers otherwise than its reason says:";
   }
-  if (matches) {
-    return 2;
+  if (what === "") {
+    return "";
   }
-  return jcDivergesAs(c, o, r) ? 0 : 3;
-};
-
-/** The failed check's line for one case. */
-const jcExplain = (c: JcCase, verdict: i32): string => {
-  const what: string[] = ["", "answers", "is listed but answers as upstream:", "answers otherwise than its reason says:"];
   const expected: string = c.expected.length > 80 ? `${c.expected.slice(0, 80)}...` : c.expected;
-  return `${c.name} ${what[verdict]} ${jcAnswer(jcOutcome(c))}, upstream ${expected}`;
+  return `${c.name} ${what} ${jcAnswer(o)}, upstream ${expected}`;
 };
 
 /** One group of cases reported together: an upstream and an operation. */
@@ -262,11 +239,14 @@ class JcGroup {
 class JcRegister {
   reasons: JcReason[];
   reasonOf: Map<string, i32>;
+  /** Each reason's index in `reasons`, by key. */
+  reasonAt: Map<string, i32>;
   problems: string[];
 
   constructor() {
     this.reasons = [];
     this.reasonOf = new Map<string, i32>();
+    this.reasonAt = new Map<string, i32>();
     this.problems = [];
   }
 }
@@ -287,17 +267,17 @@ const jcLoadRegister = (): JcRegister => {
     const b: i32 = jcNextSpace(line, a + 1);
     if (line.startsWith("reason ")) {
       const c: i32 = jcNextSpace(line, b + 1);
-      reg.reasons.push(new JcReason(line.slice(a + 1, b), line.slice(b + 1, c), line.substring(c + 1)));
+      const reasonKey = line.slice(a + 1, b);
+      if (reg.reasonAt.has(reasonKey)) {
+        reg.problems.push(`reason ${reasonKey}: defined twice`);
+      }
+      reg.reasonAt.set(reasonKey, toI32(reg.reasons.length));
+      reg.reasons.push(new JcReason(reasonKey, line.slice(b + 1, c), line.substring(c + 1)));
       continue;
     }
     const name = line.slice(0, a);
     const key = line.substring(a + 1);
-    let found: i32 = -1;
-    for (let i: i32 = 0; i < toI32(reg.reasons.length); i += 1) {
-      if (reg.reasons[i].key === key) {
-        found = i;
-      }
-    }
+    const found: i32 = reg.reasonAt.get(key) ?? -1;
     if (found < 0) {
       reg.problems.push(`${name}: no reason ${key}`);
     } else if (reg.reasonOf.has(name)) {
@@ -337,19 +317,19 @@ export const jcConformance = (t: Suite): void => {
       seen.add(c.name);
       const at: i32 = reg.reasonOf.get(c.name) ?? -1;
       const r: JcReason | null = at >= 0 && at < toI32(reg.reasons.length) ? reg.reasons[at] : null;
-      const verdict: i32 = jcJudge(c, r);
+      const failure: string = jcJudge(c, r);
       if (at >= 0 && at < toI32(listedCounts.length) && at < toI32(listedFailures.length)) {
         listedCounts[at] = listedCounts[at] + 1;
-        if (verdict !== 0 && toI32(listedFailures[at].length) < JC_SHOWN) {
-          listedFailures[at].push(jcExplain(c, verdict));
+        if (failure !== "" && toI32(listedFailures[at].length) < JC_SHOWN) {
+          listedFailures[at].push(failure);
         }
         continue;
       }
       for (const g of groups) {
         if (c.name.startsWith(g.upstream) && (c.op === "parse") === g.parse) {
           g.count += 1;
-          if (verdict !== 0 && toI32(g.failures.length) < JC_SHOWN) {
-            g.failures.push(jcExplain(c, verdict));
+          if (failure !== "" && toI32(g.failures.length) < JC_SHOWN) {
+            g.failures.push(failure);
           }
         }
       }
@@ -377,7 +357,7 @@ export const jcConformance = (t: Suite): void => {
       reg.problems.push(`${name}: listed, but no data file holds it`);
     }
   }
-  const regName = "divergences.txt: every line names a case once, under a reason it defines";
+  const regName = "divergences.txt: every line names a case once, under a reason it defines once";
   if (toI32(reg.problems.length) === 0) {
     t.pass(regName);
   } else {

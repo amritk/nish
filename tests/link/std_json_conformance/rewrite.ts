@@ -221,35 +221,26 @@ export class JcOutcome {
   }
 }
 
-/** Every token of `src` through `w`; answers the tokenizer's last code, `JSON_TOK_END` or an error. */
-const jcCopyTokens = (src: u8[], w: JsonWriter): i32 => {
-  const len: i32 = toI32(src.length);
-  const t = new JsonTokenizer(src, 0, len, new JsonLimits());
-  const scratch = new Array<u8>(len);
+/** Every token of `src` through `w`; answers `""`, or the tokenizer's error. */
+const jcCopyTokens = (src: u8[], w: JsonWriter, scratch: u8[]): string => {
+  const t = new JsonTokenizer(src, 0, toI32(src.length), new JsonLimits());
   let k: i32 = t.next();
   while (k > 0) {
     jcWriteToken(t, k, w, scratch);
     k = t.next();
   }
-  return k;
+  return k === JSON_TOK_END ? "" : jcTokenError(k);
 };
 
-/** `src` read by the tokenizer and written back by the writer, minified. */
-export const jcRewrite = (src: u8[]): JcOutcome => {
-  let cap: i32 = 2 * toI32(src.length) + 64;
-  while (true) {
-    const out = new Array<u8>(cap);
-    const w = new JsonWriter(out, 0);
-    const k: i32 = jcCopyTokens(src, w);
-    if (k !== JSON_TOK_END) {
-      return new JcOutcome(jcTokenError(k), out, 0);
-    }
-    if (w.failed === JSON_WRITE_FULL && cap < JC_MAX_OUT) {
-      cap = cap * 4;
-      continue;
-    }
-    return w.complete() ? new JcOutcome("", out, w.end) : new JcOutcome(jcWriteError(w.failed), out, 0);
+/** The index of the first space in `s` from `from`, or `s.length`. */
+export const jcNextSpace = (s: string, from: i32): i32 => {
+  const space: i32 = 32;
+  const n: i32 = toI32(s.length);
+  let i: i32 = from;
+  while (i >= 0 && i < n && toI32(s.charCodeAt(i)) !== space) {
+    i += 1;
   }
+  return i < n ? i : n;
 };
 
 /**
@@ -260,14 +251,10 @@ export const jcRewrite = (src: u8[]): JcOutcome => {
  * number is written as the double it is, as a JavaScript number is.
  */
 const jcWriteWords = (input: string, w: JsonWriter, scratch: u8[]): string => {
-  const space: i32 = 32;
   const n: i32 = toI32(input.length);
   let start: i32 = 0;
   while (start < n) {
-    let end: i32 = start;
-    while (end >= 0 && end < n && toI32(input.charCodeAt(end)) !== space) {
-      end += 1;
-    }
+    const end: i32 = jcNextSpace(input, start);
     const word = input.slice(start, end);
     start = end + 1;
     if (word === "[") {
@@ -308,14 +295,20 @@ const jcWriteWords = (input: string, w: JsonWriter, scratch: u8[]): string => {
   return "";
 };
 
-/** The value the stringify words `input` spell, written by the writer, minified. */
-export const jcStringify = (input: string): JcOutcome => {
-  let cap: i32 = 2 * toI32(input.length) + 64;
-  const scratch = new Array<u8>(toI32(input.length));
+/**
+ * Writes `src` back through the tokenizer, or, when `src` is null, the value
+ * the stringify words `words` spell, into a buffer grown on
+ * `JSON_WRITE_FULL`; minified.
+ */
+const jcWriteAll = (src: u8[] | null, words: string): JcOutcome => {
+  const size: i32 = src !== null ? toI32(src.length) : toI32(words.length);
+  // A decoded string is never longer than the text it is written with.
+  const scratch = new Array<u8>(size);
+  let cap: i32 = 2 * size + 64;
   while (true) {
     const out = new Array<u8>(cap);
     const w = new JsonWriter(out, 0);
-    const error = jcWriteWords(input, w, scratch);
+    const error: string = src !== null ? jcCopyTokens(src, w, scratch) : jcWriteWords(words, w, scratch);
     if (error !== "") {
       return new JcOutcome(error, out, 0);
     }
@@ -327,6 +320,39 @@ export const jcStringify = (input: string): JcOutcome => {
   }
 };
 
+/** `src` read by the tokenizer and written back by the writer, minified. */
+export const jcRewrite = (src: u8[]): JcOutcome => jcWriteAll(src, "");
+
+/** The value the stringify words `input` spell, written by the writer, minified. */
+export const jcStringify = (input: string): JcOutcome => jcWriteAll(null, input);
+
+/** One y_ file of JSONTestSuite: its name, and its bytes, or `null` when its line does not unpack. */
+export class JcSuiteFile {
+  name: string;
+  bytes: u8[] | null;
+
+  constructor(name: string, bytes: u8[] | null) {
+    this.name = name;
+    this.bytes = bytes;
+  }
+}
+
+/** Every y_ file of JSONTestSuite, in name order; `null` when the corpus does not read. */
+export const jcSuiteFiles = (): JcSuiteFile[] | null => {
+  const text = readFileSyncOrNull(JC_SUITE_PATH);
+  if (text === null) {
+    return null;
+  }
+  const files: JcSuiteFile[] = [];
+  for (const line of splitLines(text)) {
+    if (line.startsWith("y_")) {
+      const space: i32 = jcNextSpace(line, 0);
+      files.push(new JcSuiteFile(line.slice(0, space), jcUnpack(line.substring(space + 1))));
+    }
+  }
+  return files;
+};
+
 /**
  * Prints `<name> <rewrite>` for every y_ file of JSONTestSuite, the rewrite
  * packed, or `<name> !<error>` for one the rewrite refuses; answers 1 when the
@@ -334,21 +360,17 @@ export const jcStringify = (input: string): JcOutcome => {
  * JSON.stringify(JSON.parse(x)), under Node and natively.
  */
 export const jcPrintRewrites = (): number => {
-  const text = readFileSyncOrNull(JC_SUITE_PATH);
-  if (text === null) {
+  const files = jcSuiteFiles();
+  if (files === null) {
     return 1;
   }
-  for (const line of splitLines(text)) {
-    if (!line.startsWith("y_")) {
-      continue;
-    }
-    const space: i32 = toI32(line.indexOf(" "));
-    const bytes: u8[] | null = space > 0 ? jcUnpack(line.slice(space + 1)) : null;
+  for (const f of files) {
+    const bytes = f.bytes;
     if (bytes === null) {
       return 1;
     }
     const o = jcRewrite(bytes);
-    console.log(o.error === "" ? `${line.slice(0, space)} ${jcPack(o.out, o.len)}` : `${line.slice(0, space)} !${o.error}`);
+    console.log(o.error === "" ? `${f.name} ${jcPack(o.out, o.len)}` : `${f.name} !${o.error}`);
   }
   return 0;
 };

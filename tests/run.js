@@ -1151,7 +1151,7 @@ const runCaseUnderPrelude = (name, args) =>
   runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
 
 /** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
-const runUnderPrelude = (entry, args) =>
+const runUnderPrelude = (entry, args, exported = "main") =>
   spawnSync(
     "node",
     [
@@ -1160,7 +1160,7 @@ const runUnderPrelude = (entry, args) =>
       "--import",
       path.join(root, "runtime", "nish.mjs"),
       "-e",
-      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.${exported}());`,
       ...args,
     ],
     { cwd: root, encoding: "utf8" }
@@ -5264,10 +5264,15 @@ if (!only || "std_json_typed".includes(only)) {
 // each must still differ, and must parse back to the same value.
 const JSON_SUITE_DUPLICATE_KEYS = ["y_object_duplicated_key.json", "y_object_duplicated_key_and_value.json"]
 if (!only || "std_json_conformance".includes(only)) {
-  const verify = spawnSync("node", [path.join(root, "tests", "json-conformance", "extract.js"), "--verify"], {
-    cwd: root,
-    encoding: "utf8",
-  })
+  // The stack the extractor asks for, so that it does not start a second Node to get it.
+  const verify = spawnSync(
+    "node",
+    ["--stack-size=4000", path.join(root, "tests", "json-conformance", "extract.js"), "--verify"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
   check(
     "link/std_json_conformance: every expected value in tests/json-conformance/ is what Node's JSON answers",
     verify.status === 0,
@@ -5278,17 +5283,18 @@ if (!only || "std_json_conformance".includes(only)) {
       p.replace(/%([0-9A-F]{2})/g, (_, h) => String.fromCharCode(Number.parseInt(h, 16))),
       "latin1"
     )
+  const viaNode = (bytes) =>
+    Buffer.from(JSON.stringify(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))), "utf8")
+  // Each y_ file's JSON.stringify(JSON.parse(x)), by name.
   const files = new Map()
   for (const line of fs
     .readFileSync(path.join(root, "tests", "json-suite", "test-parsing.txt"), "utf8")
     .split("\n")) {
     if (line.startsWith("y_")) {
       const space = line.indexOf(" ")
-      files.set(line.slice(0, space), unpack(line.slice(space + 1)))
+      files.set(line.slice(0, space), viaNode(unpack(line.slice(space + 1))))
     }
   }
-  const viaNode = (bytes) =>
-    Buffer.from(JSON.stringify(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))), "utf8")
   // The problems with one run's `<name> <packed rewrite>` lines, or `!<error>` for a refusal.
   const judge = (run) => {
     const problems = []
@@ -5299,14 +5305,13 @@ if (!only || "std_json_conformance".includes(only)) {
       const space = line.indexOf(" ")
       const name = line.slice(0, space)
       const answer = line.slice(space + 1)
-      const bytes = files.get(name) ?? null
+      const want = files.get(name) ?? null
       seen.add(name)
-      if (bytes === null || answer.startsWith("!")) {
-        problems.push(`${name}: ${bytes === null ? "not in the corpus" : answer}`)
+      if (want === null || answer.startsWith("!")) {
+        problems.push(`${name}: ${want === null ? "not in the corpus" : answer}`)
         continue
       }
       const got = unpack(answer)
-      const want = viaNode(bytes)
       if (JSON_SUITE_DUPLICATE_KEYS.includes(name)) {
         if (got.equals(want) || !viaNode(got).equals(want)) {
           problems.push(`${name}: a listed duplicate key, rewritten as ${got}, against ${want}`)
@@ -5336,17 +5341,11 @@ if (!only || "std_json_conformance".includes(only)) {
   } else {
     skip("skipped: link/std_json_conformance: no native program to rewrite JSONTestSuite with")
   }
-  const underNode = spawnSync(
-    "node",
-    [
-      "--experimental-strip-types",
-      "--no-warnings",
-      "--import",
-      path.join(root, "runtime", "nish.mjs"),
-      "-e",
-      `const m = await import(${JSON.stringify(path.join(linkDir, "std_json_conformance", "rewrite.ts"))}); process.exit(m.jcPrintRewrites());`,
-    ],
-    { cwd: root, encoding: "utf8" }
+  // rewrite.ts declares no `main`, which only an entry module may.
+  const underNode = runUnderPrelude(
+    path.join(linkDir, "std_json_conformance", "rewrite.ts"),
+    [],
+    "jcPrintRewrites"
   )
   const nodeProblems = judge(underNode)
   check(

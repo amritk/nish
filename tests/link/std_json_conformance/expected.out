@@ -8,7 +8,7 @@ PASS  divergence lone-surrogate: each of the 2058 cases listed answers SURROGATE
 PASS  divergence indent: each of the 25 cases listed answers unindented, not upstream's value
 PASS  divergence depth: each of the 1 cases listed answers DEPTH, not upstream's value
 PASS  divergence duplicate-key: each of the 1 cases listed answers text, not upstream's value
-PASS  divergences.txt: every line names a case once, under a reason it defines
+PASS  divergences.txt: every line names a case once, under a reason it defines once
 PASS  JSONTestSuite: tests/json-suite/test-parsing.txt holds 95 y_ files
 PASS  JSONTestSuite: each y_ file rewrites to a whole text, which rewrites to itself
 std/json conformance: 13 passed, 0 failed, 0 skipped
