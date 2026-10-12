@@ -169,6 +169,13 @@ panic: it sets a negative `JSON_WRITE_*` code in `w.failed`, and every later
 call does nothing, so you write the whole value and check once at the end.
 `jsonStringifyString(s)` answers one string as a JSON string literal.
 
+When your text is already bytes — a window of a request body, or what a
+[`JsonDocument`](#nishjson-value) holds — `w.stringBytes(bytes, off, len)` and
+`w.keyBytes(bytes, off, len)` write `bytes[off .. off + len)` exactly as
+`string` and `key` write a string of those bytes, without making the string.
+A window that is not inside `bytes` is `JSON_WRITE_BAD_WINDOW`, and nothing
+is written.
+
 The writer has two modes, both off until you ask for them. Each is a
 setting of the writer rather than of one text: `reset` keeps it, so you set
 it once, and it stays until you set it again.

@@ -5228,6 +5228,18 @@ const JSON_WRITER_NODE_STACK = [
   "a key after the reset -2",
   JSON.stringify({ a: [1] }),
 ]
+// `keyBytes` and `stringBytes`: the member `node.ts` writes from byte windows,
+// minified, by 2 and by a tab, is `JSON.stringify`'s text for it; a window
+// inside its array is that window's string, and each of the three outside it
+// is `JSON_WRITE_BAD_WINDOW` (-7).
+const JSON_WRITER_NODE_BYTES_MEMBER = { 'k"\n': 'a\t"\u0001/\u007f' }
+const JSON_WRITER_NODE_BYTES = [
+  ...[0, 2, "\t"].map((n) => JSON.stringify(JSON_WRITER_NODE_BYTES_MEMBER, null, n)),
+  JSON.stringify('\t"'),
+  "failed -7",
+  "failed -7",
+  "failed -7",
+]
 if (!only || "std_json_writer".includes(only)) {
   const entry = path.join(linkDir, "std_json_writer", "node.ts")
   const want = [
@@ -5238,12 +5250,13 @@ if (!only || "std_json_writer".includes(only)) {
     ...JSON_WRITER_NODE_STRICT,
     ...JSON_WRITER_NODE_I64,
     ...JSON_WRITER_NODE_STACK,
+    ...JSON_WRITER_NODE_BYTES,
   ]
     .map((line) => `${line}\n`)
     .join("")
   const run = runUnderPrelude(entry, [])
   check(
-    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines, the i64 edges and the kind stack`,
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines, the i64 edges, the kind stack and keyBytes and stringBytes`,
     run.status === 0 && run.stdout === want,
     `--- JSON.stringify\n${want}--- node\n${shown(run)}`
   )

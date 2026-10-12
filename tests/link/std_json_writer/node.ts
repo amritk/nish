@@ -10,6 +10,15 @@
 // lines, `JSON_WRITER_NODE_STACK`.
 import { JsonWriter, jsonStringifyString } from "nish/json";
 
+/** The bytes of `s`, one per `charCodeAt`: ASCII here, so the same both ways. */
+const bytesOf = (s: string): u8[] => {
+  const out = new Array<u8>(toI32(s.length));
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(s.length); i += 1) {
+    out[i] = toU8(toI32(s.charCodeAt(i)));
+  }
+  return out;
+};
+
 /** Prints what `w` wrote, then starts it over on the same buffer. */
 const flush = (w: JsonWriter, out: u8[]): void => {
   console.log(w.complete() ? w.text() : `failed ${w.failed}`);
@@ -362,6 +371,35 @@ export const main = (): number => {
   w.i32(1);
   w.endArray();
   w.endObject();
+  flush(w, out);
+
+  // `keyBytes` and `stringBytes`: a member whose key and value are windows of
+  // byte arrays, minified, by 2 and by a tab, which must be what `key` and
+  // `string` would write for those bytes; then one window inside the array and
+  // three outside it, each JSON_WRITE_BAD_WINDOW (-7).
+  const keyBytes = bytesOf('k"\n');
+  const valueBytes = bytesOf('a\t"\u0001/\u007f');
+  for (let pass: i32 = 0; pass < 3; pass += 1) {
+    if (pass === 2) {
+      w.setIndentTab();
+    } else {
+      w.setIndent(pass * 2);
+    }
+    w.beginObject();
+    w.keyBytes(keyBytes, 0, toI32(keyBytes.length));
+    w.stringBytes(valueBytes, 0, toI32(valueBytes.length));
+    w.endObject();
+    flush(w, out);
+  }
+  w.setIndent(0);
+  w.stringBytes(valueBytes, 1, 2);
+  flush(w, out);
+  w.stringBytes(valueBytes, -1, 2);
+  flush(w, out);
+  w.stringBytes(valueBytes, 5, 2);
+  flush(w, out);
+  w.beginObject();
+  w.keyBytes(keyBytes, 1, -1);
   flush(w, out);
   return 0;
 };
