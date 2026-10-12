@@ -109,6 +109,12 @@ export class FunctionSig {
    * module reads this rather than the annotation (#347).
    */
   returnSpelling: string
+  /**
+   * Per parameter, whether this body keeps the length of an array handed
+   * there (`keepsParameter` in `src/bounds.ts`): 0 not yet known, 1 kept,
+   * 2 not. Only an answer that rested on no assumption is written.
+   */
+  keepsLength: i32[]
 
   /** Whether parameter `index` is a compile-time function parameter (WP29). */
   isCompileTime(index: i32): boolean {
@@ -188,6 +194,7 @@ export class FunctionSig {
     this.lifted = false
     this.arrowCount = 0
     this.returnSpelling = ""
+    this.keepsLength = []
   }
 }
 

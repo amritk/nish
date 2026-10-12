@@ -47,6 +47,7 @@ cases/arr_bounds_returned_stored added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_through added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_through_cycle added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_through_deep added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_memo added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_through_param added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_through_return added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_through_store added after R6: no rewriter to freeze it with

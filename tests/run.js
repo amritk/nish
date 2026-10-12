@@ -6385,7 +6385,8 @@ if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_ra
 // the array to a callee that keeps its length, through a chain and a
 // recursion, and its negatives panic where the callee returns the array,
 // hands it on to one that pops, pops inside a recursion, stores it, or is a
-// function parameter. A size the call does not fix, a size
+// function parameter, and where an answer drawn on a recursion's assumption
+// would have been remembered (`_through_memo`). A size the call does not fix, a size
 // the body computes, a generic helper, an arrow in the body, a method and a
 // `let` receiver are pinned by their counts.
 if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds_returned")) {
@@ -6406,6 +6407,7 @@ if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds
     ["arr_bounds_returned_through_cycle", "nish_main", 1],
     ["arr_bounds_returned_through_store", "nish_main", 1],
     ["arr_bounds_returned_through_param", "nish_main", 1],
+    ["arr_bounds_returned_through_memo", "nish_main", 1],
     ["arr_bounds_returned_kept", "unknownSize", 1],
     ["arr_bounds_returned_kept", "computedSize", 1],
     ["arr_bounds_returned_kept", "shadowedSize", 1],
@@ -6439,6 +6441,7 @@ if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds
       ["arr_bounds_returned_through_cycle", "a recursion that pops on the way", "", "3 >= 3"],
       ["arr_bounds_returned_through_store", "a callee that stores its array", "", "3 >= 3"],
       ["arr_bounds_returned_through_param", "a call of a function parameter", "", "3 >= 3"],
+      ["arr_bounds_returned_through_memo", "an answer drawn on a recursion's assumption", "2", "3 >= 2"],
     ]) {
       const ll = path.join(buildDir, `${name}.ll`)
       if (!fs.existsSync(ll)) {

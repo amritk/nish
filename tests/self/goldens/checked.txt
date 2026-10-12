@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1001 programs, 96400 dump lines.
+# 1002 programs, 96439 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1391,6 +1391,46 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 20:9 xs: i32[] (const)
   callee 20:14 relayed -> @relayed
+program tests/cases/arr_bounds_returned_through_memo.ts
+module tests/cases/arr_bounds_returned_through_memo.ts (entry)
+function drain(ys: i32[], n: i32): void -> @drain
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 10:3
+  calls: nish_panic_index pass
+  pointer ys: size=0 writesThrough=true captured=false passedTo=pass#0
+  stackSites=0 stackLocals=0
+  callee 8:5 pass -> @pass
+function pass(ys: i32[], n: i32): void -> @pass
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via drain
+  escaping: n
+  calls: drain
+  pointer ys: size=0 writesThrough=true captured=false passedTo=drain#0
+  stackSites=0 stackLocals=0
+  callee 14:3 drain -> @drain
+function first(): i32[] -> @first
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via drain
+  calls: drain
+  stackSites=0 stackLocals=0
+  local 18:9 arr: i32[] (const)
+  callee 19:3 drain -> @drain
+function second(): i32[] -> @second
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pass
+  calls: pass
+  stackSites=0 stackLocals=0
+  local 24:9 arr: i32[] (const)
+  callee 25:3 pass -> @pass
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via first
+  calls: first nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32 second
+  stackSites=0 stackLocals=0
+  local 30:9 a: i32[] (const)
+  callee 30:13 first -> @first
+  local 31:9 b: i32[] (const)
+  callee 31:13 second -> @second
 program tests/cases/arr_bounds_returned_through_param.ts
 module tests/cases/arr_bounds_returned_through_param.ts (entry)
 function fill(ys: i32[]): void -> @fill

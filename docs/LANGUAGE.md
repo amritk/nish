@@ -3801,8 +3801,8 @@ and both come from the program as written:
     (`tests/cases/arr_bounds_returned`, `arr_bounds_returned_through`;
     `arr_bounds_returned_pop`, `_passed`, `_stored`, `_least`, `_rebind`,
     `_shadow`, `_shadow_param`, `_through_return`, `_through_deep`,
-    `_through_cycle`, `_through_store` and `_through_param` each keep their
-    check and panic; `tests/link/arr_bounds_returned_import` keeps its check;
+    `_through_cycle`, `_through_store`, `_through_param` and `_through_memo`
+    each keep their check and panic; `tests/link/arr_bounds_returned_import` keeps its check;
     `arr_bounds_returned_kept` keeps its seven).
 
 A fact ends where it stops being true: at any assignment to `i` that is not

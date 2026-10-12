@@ -2171,21 +2171,37 @@ const writesName = (n: Node, name: string): boolean => {
 const KEEP_DEPTH: i32 = 8
 
 /**
+ * The parameters `keepsParameter` is following, each as `symbol#index`, so
+ * that a recursion is read once, and how many answers below rested on an
+ * assumption: a parameter taken to keep the length because it was already
+ * being followed, or one refused at `KEEP_DEPTH`. An answer reached with that
+ * count unchanged is exact, and only such an answer is remembered.
+ */
+class KeepTrail {
+  visiting: string[]
+  assumed: i32
+
+  constructor() {
+    this.visiting = []
+    this.assumed = 0
+  }
+}
+
+/**
  * The body `usesKeepLength` reads: whose it is, so that a call in it names a
- * function of that body's module, and the parameters being followed, each as
- * `symbol#index`, so that a recursion is read once.
+ * function of that body's module, and the trail of parameters being followed.
  */
 class KeepScan {
   ctx: CheckContext
   sig: FunctionSig
   body: Node
-  visiting: string[]
+  trail: KeepTrail
 
-  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, visiting: string[]) {
+  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, trail: KeepTrail) {
     this.ctx = ctx
     this.sig = sig
     this.body = body
-    this.visiting = visiting
+    this.trail = trail
   }
 }
 
@@ -2269,7 +2285,7 @@ const passesKeepingLength = (scan: KeepScan, callee: string, k: i32): boolean =>
     return false
   }
   const sig = scan.ctx.signature(callee)
-  return sig !== null && keepsParameter(scan.ctx, sig, k, scan.visiting)
+  return sig !== null && keepsParameter(scan.ctx, sig, k, scan.trail)
 }
 
 /**
@@ -2279,41 +2295,48 @@ const passesKeepingLength = (scan: KeepScan, callee: string, k: i32): boolean =>
  * which uses the parameter only in the ways `usesKeepLength` follows, without
  * returning it. A parameter already being read is taken to keep it: a
  * shrink needs a `pop` or a store somewhere the walk reaches, and the walk
- * reaches every body of the cycle from where it entered it.
+ * reaches every body of the cycle from where it entered it. The answer is
+ * remembered on `sig` when it rested on no such assumption.
  */
-const keepsParameter = (ctx: CheckContext, sig: FunctionSig, k: i32, visiting: string[]): boolean => {
+const keepsParameter = (ctx: CheckContext, sig: FunctionSig, k: i32, trail: KeepTrail): boolean => {
   const home = sig.origin
-  if (
-    home === null ||
-    home !== ctx.source ||
-    sig.role !== ROLE_FUNCTION ||
-    sig.instance !== null ||
-    sig.lifted
-  ) {
+  if (home === null || home !== ctx.source || sig.role !== ROLE_FUNCTION || sig.instance !== null) {
     return false
   }
-  if (k >= sig.paramNames.length || sig.isCompileTime(k) || !ctx.table.isArray(sig.paramTypes[k])) {
+  if (sig.compileTimeOnly() || k >= sig.paramNames.length || !ctx.table.isArray(sig.paramTypes[k])) {
     return false
+  }
+  if (k < sig.keepsLength.length && sig.keepsLength[k] !== 0) {
+    return sig.keepsLength[k] === 1
   }
   const body = sig.body()
   if (body === null || body.kind !== N_BLOCK) {
     return false
   }
   const key = `${sig.name}#${k}`
-  if (visiting.indexOf(key) >= 0) {
+  if (trail.visiting.indexOf(key) >= 0) {
+    trail.assumed = trail.assumed + 1
     return true
   }
+  if (trail.visiting.length >= KEEP_DEPTH) {
+    trail.assumed = trail.assumed + 1
+    return false
+  }
   const returns: Node[] = []
-  if (visiting.length >= KEEP_DEPTH || !gatherReturns(body, returns)) {
-    return false
-  }
   const name = sig.paramNames[k]
-  if (declarationsOf(body, name) > 0) {
-    return false
+  const before = trail.assumed
+  let kept = false
+  if (gatherReturns(body, returns) && declarationsOf(body, name) === 0) {
+    trail.visiting.push(key)
+    kept = usesKeepLength(new KeepScan(ctx, sig, body, trail), body, name, false)
+    trail.visiting.pop()
   }
-  visiting.push(key)
-  const kept = usesKeepLength(new KeepScan(ctx, sig, body, visiting), body, name, false)
-  visiting.pop()
+  if (trail.assumed === before) {
+    while (sig.keepsLength.length < sig.paramNames.length) {
+      sig.keepsLength.push(0)
+    }
+    sig.keepsLength[k] = kept ? 1 : 2
+  }
   return kept
 }
 
@@ -2480,7 +2503,7 @@ const returnedLength = (ctx: CheckContext, value: Node): i32 => {
   }
   if (
     declarationsOf(body, name) !== 1 ||
-    !usesKeepLength(new KeepScan(ctx, sig, body, []), body, name, true)
+    !usesKeepLength(new KeepScan(ctx, sig, body, new KeepTrail()), body, name, true)
   ) {
     return -1
   }
