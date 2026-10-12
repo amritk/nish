@@ -1,11 +1,12 @@
 // The half of `JsonWriter` whose answer does not depend on how a string or an
-// integer is read: ASCII text, no `i64`. `tests/run.js` builds this natively
-// and runs it under Node, and holds both to `JSON.stringify` of the same
-// values, computed there — so each line below is checked against JavaScript's
-// own spelling rather than against a golden this repository wrote. The order
+// integer is read: ASCII text, and `i64` only where its digits are exact.
+// `tests/run.js` builds this natively and runs it under Node, and holds both
+// to `JSON.stringify` of the same values, computed there — so each line below
+// is checked against JavaScript's own spelling rather than against a golden
+// this repository wrote. The order
 // of the lines is the order of `JSON_WRITER_NODE_VALUES` in `tests/run.js`,
 // then `JSON_WRITER_NODE_PRETTY` once per indent of `JSON_WRITER_NODE_INDENTS`,
-// then `JSON_WRITER_NODE_STRICT`.
+// then `JSON_WRITER_NODE_STRICT` and `JSON_WRITER_NODE_I64`.
 import { JsonWriter, jsonStringifyString } from "nish/json";
 
 /** Prints what `w` wrote, then starts it over on the same buffer. */
@@ -237,6 +238,20 @@ export const main = (): number => {
   flush(w, out);
   w.setStrict(false);
   w.f64(nan);
+  flush(w, out);
+
+  // [0, -1, i64 min, i64 max]: every i64 is built with toI64, which under
+  // Node makes it a BigInt, so a bare number literal mixed into the writer's
+  // i64 arithmetic throws here rather than passing unseen.
+  // 2^53 is spelled as an i64 natively; toI64 makes it the BigInt Node needs.
+  const twoTo53: i64 = 9007199254740992;
+  const lo: i64 = -toI64(twoTo53) << toI64(10);
+  w.beginArray();
+  w.i64(toI64(0));
+  w.i64(toI64(-1));
+  w.i64(lo);
+  w.i64(-(lo + toI64(1)));
+  w.endArray();
   flush(w, out);
   return 0;
 };

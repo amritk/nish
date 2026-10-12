@@ -1452,7 +1452,9 @@ const jsonWriterPutDigits = (w: JsonWriter, v: i32, suffix: i32): boolean => {
 
 /** `jsonWriterPutDigits` in 64 bits, for `i64`, whose minimum likewise needs no case of its own. */
 const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
-  const ten: i64 = 10
+  // Built with `toI64`: under Node an `i64` is a BigInt, and a bare `10` would
+  // stay a number that `%` and `/` refuse to mix with one.
+  const ten: i64 = toI64(10)
   let digits: i32 = 1
   let rest: i64 = v
   while (rest <= -ten || rest >= ten) {

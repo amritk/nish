@@ -5095,7 +5095,7 @@ if (!only || "std_text_index_of_any".includes(only)) {
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
 // `JSON.stringify`. `tests/link/std_json_writer/node.ts` writes each of these
-// values, one line apiece and in this order, and is ASCII and i64-free, so its
+// values, one line apiece and in this order, and is ASCII, so its
 // answer does not depend on how a string or an integer is read: built natively
 // and run under `runtime/nish.mjs`, both must print `JSON.stringify` of every
 // value, computed here rather than read from a golden.
@@ -5154,6 +5154,11 @@ const JSON_WRITER_NODE_INDENTS = [2, 4, 1, 10, 11, 0, -3, "\t", 0]
 // `JSON_WRITE_NON_FINITE` (-8) with nothing written after `{"x":`, and NaN
 // `null` again once strict is off.
 const JSON_WRITER_NODE_STRICT = ["[1.5,0]", "failed -8", "failed -8", "written 5", "failed -8", "null"]
+// `w.i64` at 0, -1 and both ends of the range. Spelled out, because
+// `JSON.stringify` of a number past 2^53 rounds it; what is pinned is that
+// the i64 arithmetic runs under Node at all, where an i64 is a BigInt and a
+// bare number literal mixed into it throws.
+const JSON_WRITER_NODE_I64 = ["[0,-1,-9223372036854775808,9223372036854775807]"]
 if (!only || "std_json_writer".includes(only)) {
   const entry = path.join(linkDir, "std_json_writer", "node.ts")
   const want = [
@@ -5162,12 +5167,13 @@ if (!only || "std_json_writer".includes(only)) {
       JSON_WRITER_NODE_PRETTY.map((v) => JSON.stringify(v, null, n))
     ),
     ...JSON_WRITER_NODE_STRICT,
+    ...JSON_WRITER_NODE_I64,
   ]
     .map((line) => `${line}\n`)
     .join("")
   const run = runUnderPrelude(entry, [])
   check(
-    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, and strict mode's lines`,
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines and the i64 edges`,
     run.status === 0 && run.stdout === want,
     `--- JSON.stringify\n${want}--- node\n${shown(run)}`
   )
