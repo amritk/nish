@@ -1,0 +1,60 @@
+p01a_ctor_alias_field | REFUSED (exit 1) | NL2394 40:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p01b_ctor_alias_push | REFUSED (exit 1) | NL2394 41:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p01c_ctor_alias_index | REFUSED (exit 1) | NL2394 40:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p01d_ctor_alias_literal_index | REFUSED (exit 1) | NL2394 40:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p01e_ctor_alias_index_store | REFUSED (exit 1) | NL2394 41:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p02a_pick_write | REFUSED (exit 1) | NL2394 33:5 This assignment writes memory a task of `s` may read, before the scope joins;
+p02b_ctor_touch | REFUSED (exit 1) | NL2394 44:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p02c_wrap_parent_write | REFUSED (exit 1) | NL2394 39:34 This assignment writes memory a task of `s` may read, before the scope joins;
+p02d_ctor_local_alias | REFUSED (exit 1) | NL2394 41:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p02e_ctor_push_later_method | REFUSED (exit 1) | NL2394 44:28 `Bump.poke` writes memory a task of `s` may read, before the scope joins;
+p02f2_ctor_store_later_fn | REFUSED (exit 1) | NL2394 43:28 `poke` writes memory a task of `s` may read, before the scope joins;
+p02f3_prebuilt_wrap_method | REFUSED (exit 1) | NL2394 44:5 `Wrap.poke` writes memory a task of `s` may read, before the scope joins;
+p02f4_prebuilt_wrap_field | REFUSED (exit 1) | NL2394 40:5 This assignment writes memory a task of `s` may read, before the scope joins;
+p02f5_prebuilt_fresh_then_assign | REFUSED (exit 1) | NL2394 41:5 This assignment writes memory a task of `s` may read, before the scope joins;
+p02f6_prebuilt_array_alias | REFUSED (exit 1) | NL2394 32:5 This assignment writes memory a task of `s` may read, before the scope joins;
+p02f7_prebuilt_local_alias | REFUSED (exit 1) | NL2394 32:5 `Inner.bump` writes memory a task of `s` may read, before the scope joins;
+p02f_ctor_store_later_method | REFUSED (exit 1) | NL2394 43:28 `Wrap.poke` writes memory a task of `s` may read, before the scope joins;
+p02g2_const_two_declarators | REFUSED (exit 1) | NL2394 41:11 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p02g_using_two_scopes | REFUSED (exit 1) | NL2394 44:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p02h2_callback_param | REFUSED (exit 1) | NL2394 35:5 `apply<(i) => ...>` writes memory a task of `s` may read, before the scope joins;
+p02h3_callback_named | REFUSED (exit 1) | NL2394 39:5 `apply<setOne>` writes memory a task of `s` may read, before the scope joins;
+p02h4_ctor_callback | REFUSED (exit 1) | NL2338 32:29 `f` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is give;
+p02h_closure_capture | REFUSED (exit 1) | NL2336 32:15 An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is ne;
+p03a_fresh_object_own_field | ACCEPTED | native: 10 6 exit=0 | node: 10 6 exit=0 | same
+p03b_ctor_primitive_fields | ACCEPTED | native: 8 6 exit=0 | node: 8 6 exit=0 | same
+p03c_fresh_holder_write | ACCEPTED | native: 13 6 exit=0 | node: 13 6 exit=0 | same
+p03d_fresh_holder_parent | REFUSED (exit 1) | NL2394 31:29 This assignment writes memory a task of `s` may read, before the scope joins;NL2394 31:44 `Inner.bump` writes memory a task of `s` may read, before the scope joins;
+p03e_ctor_push_alias_no_write | ACCEPTED | native: 1 6 exit=0 | node: 1 6 exit=0 | same
+p03f_ctor_reads_arg_writes_own | ACCEPTED | native: 7 6 exit=0 | node: 7 6 exit=0 | same
+p03g_grid_literal_in_ctor | REFUSED (exit 1) | NL2394 40:28 This assignment writes memory a task of `s` may read, before the scope joins;
+p04a_inline_post_ctor_store | REFUSED (exit 1) | NL2394 41:27 This assignment writes memory a task of `s` may read, before the scope joins;NL2394 41:46 This assignment writes memory a task of `s` may read, before the scope joins;
+p04b_ctor_nested_fresh_store | REFUSED (exit 1) | NL2394 51:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p04c_helper_fresh_array_alias | REFUSED (exit 1) | NL2394 37:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p04d_helper_fresh_array_push_alias | REFUSED (exit 1) | NL2394 37:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p04e_helper_fresh_items_push | REFUSED (exit 1) | NL2394 47:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p04f_helper_mk_returns_wrap | REFUSED (exit 1) | NL2394 47:22 This assignment writes memory a task of `s` may read, before the scope joins;
+p04g_ternary_alias | REFUSED (exit 1) | NL2394 37:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p04h_ctor_stores_h_itself | REFUSED (exit 1) | NL2394 40:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p04i_method_on_fresh_takes_h | REFUSED (exit 1) | NL2394 54:28 `Taker.take` writes memory a task of `s` may read, before the scope joins;
+p04j_ctor_fresh_wrap_via_helper | REFUSED (exit 1) | NL2394 55:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p04k_ctor_this_to_helper | REFUSED (exit 1) | NL2394 45:15 `new Bump` writes memory a task of `s` may read, before the scope joins;
+p04l_for_of_fresh_alias | REFUSED (exit 1) | NL2394 38:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p05a_task_writes_via_fresh_wrap | REFUSED (exit 1) | NL2471 48:5 `write` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/probes/p05a_task_writes_via_fresh_wrap.ts:3;
+p05b_task_writes_direct_control | REFUSED (exit 1) | NL2471 36:5 `write` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/probes/p05b_task_writes_direct_control.ts:2;
+p05c_parmap_body_fresh_wrap | REFUSED (exit 1) | NL2347 46:3 `body` can reach a `i32[]` through `h.nums`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so ;NL2345 46:3 `body` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/probes/p05c_parmap_body_fresh_wrap.ts:38:3, ;NL2352 46:3 `body` allocates and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate o;
+p05d_task_writes_via_items_push | REFUSED (exit 1) | NL2471 48:5 `write` writes memory its caller can see at /tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/probes/p05d_task_writes_via_items_push.ts:3;
+p06a_helper_fresh_items_index_store | REFUSED (exit 1) | NL2394 47:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p06b_helper_fresh_items_field_swap | REFUSED (exit 1) | NL2394 47:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p06c_helper_fresh_nested_outer | REFUSED (exit 1) | NL2394 55:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p06d_ctor_attach_this_write_outside | REFUSED (exit 1) | NL2394 49:5 `build` writes memory a task of `s` may read, before the scope joins;
+p06e_helper_fresh_method_bump | REFUSED (exit 1) | NL2394 47:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p06f_helper_fresh_local_alias | REFUSED (exit 1) | NL2394 48:5 `bump` writes memory a task of `s` may read, before the scope joins;
+p06g_helper_fresh_store_arg_param | REFUSED (exit 1) | NL2394 47:5 `bump` writes memory a task of `s` may read, before the scope joins;
+pA1_bind_method | REFUSED (exit 1) | NL2394 41:5 `bump` writes memory a task of `s` may read, before the scope joins;
+pA2_attach_fn | REFUSED (exit 1) | NL2394 41:5 `bump` writes memory a task of `s` may read, before the scope joins;
+pA_post_ctor_store | REFUSED (exit 1) | NL2394 37:5 `bump` writes memory a task of `s` may read, before the scope joins;
+pB_ctor_this_local | REFUSED (exit 1) | NL2394 42:5 `build` writes memory a task of `s` may read, before the scope joins;
+pC2_ctor_init_method | ACCEPTED | native: 2 0 exit=0 | node: 2 0 exit=0 | same
+pC3_ctor_init_direct | ACCEPTED | native: 0 0 exit=0 | node: 0 0 exit=0 | same
+pC_grid_array_arg | ACCEPTED | native: 1 0 exit=0 | node: 1 0 exit=0 | same

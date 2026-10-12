@@ -1,0 +1,46 @@
+import { scope } from "nish/threads";
+
+class Inner {
+  x: i32 = 0;
+}
+
+class Holder {
+  inner: Inner;
+
+  constructor() {
+    this.inner = new Inner();
+  }
+}
+
+const read = (h: Holder): i32 => h.inner.x;
+
+class Wrap {
+  inner: Inner;
+
+  constructor(h: Holder) {
+    this.inner = new Inner();
+    const me = this;
+    attach(me, h);
+  }
+}
+
+const attach = (w: Wrap, h: Holder): void => {
+  w.inner = h.inner;
+};
+
+const build = (h: Holder): void => {
+  const w = new Wrap(h);
+  w.inner.x = 1;
+};
+
+export const main = (): i32 => {
+  const h = new Holder();
+  const done: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(read, h, done, 0);
+    build(h);
+  }
+  console.log(`${done[0]}`);
+  return 0;
+};

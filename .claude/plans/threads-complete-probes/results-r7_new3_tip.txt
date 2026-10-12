@@ -1,0 +1,16 @@
+r7_O7a_walk_own_map_keys | REFUSED (exit 1) | NL2394 9:55 `tally` writes memory a task of `s` may read, before the scope joins;
+r7_O7b_walk_own_map_values | REFUSED (exit 1) | NL2394 9:55 `tally` writes memory a task of `s` may read, before the scope joins;
+r7_O7c_own_map_caller_ref_size | REFUSED (exit 1) | NL2394 9:55 `idx` writes memory a task of `s` may read, before the scope joins;
+r7_O7d_index_param_items | REFUSED (exit 1) | NL2394 7:64 `build` writes memory a task of `s` may read, before the scope joins;
+r7_O7e_own_obj_in_own_map_twice | REFUSED (exit 1) | NL2394 9:55 `f` writes memory a task of `s` may read, before the scope joins;
+r7_e10_cmp_push_caller_leaf | ACCEPTED | native: 1 2 exit=0 | node: 1 2 exit=0 | same
+r7_e11_own_const_set_add | REFUSED (exit 1) | NL2394 9:55 `f` writes memory a task of `s` may read, before the scope joins;
+r7_e1_own_leaf_set_once | REFUSED (exit 1) | NL2394 9:55 `f` writes memory a task of `s` may read, before the scope joins;
+r7_e2_own_leaf_set_once_size | REFUSED (exit 1) | NL2394 9:55 `f` writes memory a task of `s` may read, before the scope joins;
+r7_e3_fresh_leaf_set_size | ACCEPTED | native: 1 2 exit=0 | node: 1 2 exit=0 | same
+r7_e4_i32_map_set_size | ACCEPTED | native: 1 2 exit=0 | node: 1 2 exit=0 | same
+r7_e5_i32_map_delete_size | ACCEPTED | native: 1 1 exit=0 | node: 1 1 exit=0 | same
+r7_e6_own_leaf_set_delete | ACCEPTED | native: 1 1 exit=0 | node: 1 1 exit=0 | same
+r7_e7_caller_leaf_set_only | REFUSED (exit 1) | NL2394 9:55 `f` writes memory a task of `s` may read, before the scope joins;
+r7_e8_caller_leaf_set_has | REFUSED (exit 1) | NL2394 9:55 `f` writes memory a task of `s` may read, before the scope joins;
+r7_e9_cmp_push_own_const | ACCEPTED | native: 1 2 exit=0 | node: 1 2 exit=0 | same
