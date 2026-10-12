@@ -1087,6 +1087,65 @@ export class JsonWriter {
     }
   }
 
+  /**
+   * `key` for a name held as bytes, `bytes[off .. off + len)`, escaped exactly
+   * as `key` escapes a string of those bytes, and allocating nothing: what a
+   * caller that keeps its text in a byte buffer, such as `nish/json-value`'s
+   * `JsonDocument`, writes without making a string per key. A window outside
+   * `bytes` is `JSON_WRITE_BAD_WINDOW`, checked once, before anything is
+   * written.
+   */
+  keyBytes(bytes: u8[], off: i32, len: i32): void {
+    if (this.failed !== JSON_WRITE_OK) {
+      return
+    }
+    if (!jsonWriterWindowOk(this, bytes, off, len)) {
+      return
+    }
+    if (this.depth === 0 && this.done) {
+      this.failed = JSON_WRITE_DONE
+      return
+    }
+    if (!jsonWriterInObject(this) || this.afterKey) {
+      this.failed = JSON_WRITE_VALUE_EXPECTED
+      return
+    }
+    const sep: i32 = this.sep
+    const indented: boolean = sep !== JSON_WRITER_SEP_NONE && sep !== JSON_WRITER_SEP_COMMA
+    if (indented) {
+      if (!jsonWriterBreakBeforeKey(this)) {
+        return
+      }
+    } else if (sep === JSON_WRITER_SEP_COMMA && !jsonWriterPutByte(this, JSON_COMMA)) {
+      return
+    }
+    if (
+      jsonWriterPutBytes(this, bytes, off, len) &&
+      jsonWriterPutByte(this, JSON_COLON) &&
+      (!indented || jsonWriterPutByte(this, JSON_SPACE))
+    ) {
+      this.afterKey = true
+    }
+  }
+
+  /**
+   * `string` for text held as bytes, `bytes[off .. off + len)`: the same
+   * quotes and escapes, byte for byte, and no allocation. A window outside
+   * `bytes` is `JSON_WRITE_BAD_WINDOW`, checked once, before anything is
+   * written.
+   */
+  stringBytes(bytes: u8[], off: i32, len: i32): void {
+    if (this.failed !== JSON_WRITE_OK) {
+      return
+    }
+    if (!jsonWriterWindowOk(this, bytes, off, len)) {
+      return
+    }
+    if (jsonWriterValueDue(this) && jsonWriterPutBytes(this, bytes, off, len)) {
+      jsonWriterValueDone(this)
+    }
+  }
+
   i32(v: i32): void {
     if (jsonWriterValueDue(this) && jsonWriterPutDigits(this, v, -1)) {
       jsonWriterValueDone(this)
@@ -1393,6 +1452,41 @@ const jsonWriterIndented = (w: JsonWriter, level: i32, name: string): boolean =>
   return false
 }
 
+/** Whether `bytes[off .. off + len)` lies inside `bytes`, for `keyBytes` and `stringBytes`; `JSON_WRITE_BAD_WINDOW` when not. */
+const jsonWriterWindowOk = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean => {
+  if (off < 0 || len < 0 || off > toI32(bytes.length) - len) {
+    w.failed = JSON_WRITE_BAD_WINDOW
+    return false
+  }
+  return true
+}
+
+/**
+ * The comma when one is due, a line break and the indent before a key of an
+ * indented object: `jsonWriterIndented`'s first half, for `keyBytes`, whose
+ * name is bytes rather than the string that function writes. It is a
+ * function of its own rather than a parameter of that one so that the
+ * string path, which every `key` takes, is left exactly as it was. Answers
+ * whether the key may follow; all of it or, with `JSON_WRITE_FULL`, none of
+ * the break.
+ */
+const jsonWriterBreakBeforeKey = (w: JsonWriter): boolean => {
+  if (w.sep === JSON_WRITER_SEP_COMMA_BREAK && !jsonWriterPutByte(w, JSON_COMMA)) {
+    return false
+  }
+  const buf: u8[] = w.buf
+  const at: i32 = w.end
+  const stop: i32 = at + 1 + w.indentWidth * w.depth
+  if (at < 0 || stop > toI32(buf.length)) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  buf[at] = toU8(JSON_NEWLINE)
+  buf.fill(toU8(w.indentByte), at + 1, stop)
+  w.end = stop
+  return true
+}
+
 /**
  * The bytes of `text`, which needs no escaping, at the cursor; all of them or,
  * with `JSON_WRITE_FULL`, none.
@@ -1441,6 +1535,67 @@ const jsonWriterPutString = (w: JsonWriter, s: string): boolean => {
     // A plain byte is almost every byte, and costs one test of the room.
     // Each branch moves the cursor by a constant, which is what lets the
     // bounds proof keep `at >= 0` from one byte to the next.
+    if (jsonIsPlainByte(code)) {
+      if (at >= cap) {
+        w.failed = JSON_WRITE_FULL
+        return false
+      }
+      buf[at] = toU8(code)
+      at += 1
+      continue
+    }
+    const letter: i32 = jsonShortEscape(code)
+    if (letter !== 0) {
+      if (at < 0 || at + 1 >= cap) {
+        w.failed = JSON_WRITE_FULL
+        return false
+      }
+      buf[at] = toU8(JSON_BACKSLASH)
+      buf[at + 1] = toU8(letter)
+      at += 2
+      continue
+    }
+    if (at < 0 || at + 5 >= cap) {
+      w.failed = JSON_WRITE_FULL
+      return false
+    }
+    buf[at] = toU8(JSON_BACKSLASH)
+    buf[at + 1] = toU8(JSON_LETTER_U)
+    buf[at + 2] = toU8(JSON_DIGIT_ZERO)
+    buf[at + 3] = toU8(JSON_DIGIT_ZERO)
+    buf[at + 4] = toU8(jsonHexByte(code >> 4))
+    buf[at + 5] = toU8(jsonHexByte(code & 15))
+    at += 6
+  }
+  if (at >= cap) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  buf[at] = toU8(JSON_QUOTE)
+  w.end = at + 1
+  return true
+}
+
+/**
+ * `jsonWriterPutString` over `bytes[off .. off + len)`, a window the caller
+ * has checked: the same quotes and escapes, from the same three helpers, so
+ * the two write the same bytes for the same text. The loop is its own rather
+ * than shared with the string one, so that `string` and `key` keep the code
+ * they had.
+ */
+const jsonWriterPutBytes = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean => {
+  const buf: u8[] = w.buf
+  const cap: i32 = toI32(buf.length)
+  let at: i32 = w.end
+  if (at < 0 || at >= cap) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  buf[at] = toU8(JSON_QUOTE)
+  at += 1
+  const stop: i32 = off + len
+  for (let i: i32 = off; i >= 0 && i < stop && i < toI32(bytes.length); i += 1) {
+    const code: i32 = toI32(bytes[i])
     if (jsonIsPlainByte(code)) {
       if (at >= cap) {
         w.failed = JSON_WRITE_FULL

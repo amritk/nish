@@ -4135,6 +4135,7 @@ const LINK_READ_LATER = [
   "std_json_conformance",
   "std_json_tokenizer",
   "std_json_typed",
+  "std_json_value",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -5237,6 +5238,18 @@ const JSON_WRITER_NODE_STACK = [
   "a key after the reset -2",
   JSON.stringify({ a: [1] }),
 ]
+// `keyBytes` and `stringBytes`: the member `node.ts` writes from byte windows,
+// minified, by 2 and by a tab, is `JSON.stringify`'s text for it; a window
+// inside its array is that window's string, and each of the three outside it
+// is `JSON_WRITE_BAD_WINDOW` (-7).
+const JSON_WRITER_NODE_BYTES_MEMBER = { 'k"\n': 'a\t"\u0001/\u007f' }
+const JSON_WRITER_NODE_BYTES = [
+  ...[0, 2, "\t"].map((n) => JSON.stringify(JSON_WRITER_NODE_BYTES_MEMBER, null, n)),
+  JSON.stringify('\t"'),
+  "failed -7",
+  "failed -7",
+  "failed -7",
+]
 if (!only || "std_json_writer".includes(only)) {
   const entry = path.join(linkDir, "std_json_writer", "node.ts")
   const want = [
@@ -5247,12 +5260,13 @@ if (!only || "std_json_writer".includes(only)) {
     ...JSON_WRITER_NODE_STRICT,
     ...JSON_WRITER_NODE_I64,
     ...JSON_WRITER_NODE_STACK,
+    ...JSON_WRITER_NODE_BYTES,
   ]
     .map((line) => `${line}\n`)
     .join("")
   const run = runUnderPrelude(entry, [])
   check(
-    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines, the i64 edges and the kind stack`,
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines, the i64 edges, the kind stack and keyBytes and stringBytes`,
     run.status === 0 && run.stdout === want,
     `--- JSON.stringify\n${want}--- node\n${shown(run)}`
   )
@@ -5377,6 +5391,158 @@ if (!only || "std_json_typed".includes(only)) {
       ),
     shown(run)
   )
+}
+
+// `nish/json-value` against Node's own parser: every y_ file of JSONTestSuite
+// parsed natively under JSON_VALUE_DUPLICATE_LAST and written back minified
+// and indented by two spaces (`app --roundtrip`, the bytes in hex) must be the
+// text a parse here gives once it is laid out as `JSON.stringify(v, null, 0)`
+// and `(v, null, 2)` lay it out: each number as its source text, each string as
+// `JSON.stringify` writes it, and a repeated key where `JSON.parse` keeps it,
+// at the first one's place with the last one's value. The same output must
+// also be `JSON.parse`'s value, so the reference cannot drift from JavaScript.
+if (!only || "std_json_value".includes(only)) {
+  const exe = path.join(buildDir, "link", "std_json_value", "app")
+  if (!HAS_CLANG || !fs.existsSync(exe)) {
+    skip("skipped: link/std_json_value: no native program to hold against JSON.parse")
+  } else {
+    // Valid JSON text laid out again, minified or indented by `indent` spaces
+    // as `JSON.stringify(v, null, indent)` lays it out, keeping every number's
+    // text and keeping a repeated key where JSON.parse keeps it.
+    const relayKeepingNumbers = (text, indent) => {
+      const token =
+        /\s*(?:("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}[\],:]))/y
+      const next = () => {
+        const m = token.exec(text)
+        if (m === null) {
+          throw new Error(`no token at ${token.lastIndex}`)
+        }
+        return m
+      }
+      const value = (m, depth) => {
+        if (m[1] !== undefined) {
+          return JSON.stringify(JSON.parse(m[1]))
+        }
+        if (m[2] !== undefined || m[3] !== undefined) {
+          return m[2] ?? m[3]
+        }
+        const close = m[4] === "{" ? "}" : "]"
+        const parts = new Map()
+        let t = next()
+        while (t[4] !== close) {
+          if (close === "}") {
+            const key = JSON.parse(t[1])
+            next()
+            parts.set(key, `${JSON.stringify(key)}:${indent > 0 ? " " : ""}${value(next(), depth + 1)}`)
+          } else {
+            parts.set(parts.size, value(t, depth + 1))
+          }
+          t = next()
+          if (t[4] === ",") {
+            t = next()
+          }
+        }
+        if (parts.size === 0 || indent === 0) {
+          return `${m[4]}${[...parts.values()].join(",")}${close}`
+        }
+        const inner = `\n${" ".repeat(indent * (depth + 1))}`
+        return `${m[4]}${inner}${[...parts.values()].join(`,${inner}`)}\n${" ".repeat(indent * depth)}${close}`
+      }
+      return value(next(), 0)
+    }
+    const files = new Map()
+    for (const line of fs
+      .readFileSync(path.join(root, "tests", "json-suite", "test-parsing.txt"), "utf8")
+      .split("\n")) {
+      if (line.startsWith("y_")) {
+        const space = line.indexOf(" ")
+        const packed = line.slice(space + 1)
+        files.set(
+          line.slice(0, space),
+          Buffer.from(
+            packed.replace(/%([0-9A-F]{2})/g, (_, h) => String.fromCharCode(Number.parseInt(h, 16))),
+            "latin1"
+          )
+        )
+      }
+    }
+    const run = spawnSync(exe, ["--roundtrip"], { cwd: root, encoding: "utf8" })
+    const problems = []
+    let compared = 0
+    for (const line of String(run.stdout ?? "")
+      .split("\n")
+      .filter((l) => l.length > 0)) {
+      const [name, hex, prettyHex] = line.split(" ")
+      const bytes = files.get(name) ?? null
+      if (bytes === null) {
+        problems.push(`${name}: not in the corpus`)
+        continue
+      }
+      const input = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      const want = relayKeepingNumbers(input, 0)
+      const got = Buffer.from(hex, "hex").toString("utf8")
+      const prettyWant = relayKeepingNumbers(input, 2)
+      const prettyGot = Buffer.from(prettyHex ?? "", "hex").toString("utf8")
+      compared++
+      if (got !== want || JSON.stringify(JSON.parse(got)) !== JSON.stringify(JSON.parse(input))) {
+        problems.push(`${name}\n  native ${got}\n  node   ${want}`)
+      }
+      if (
+        prettyGot !== prettyWant ||
+        JSON.stringify(JSON.parse(prettyGot)) !== JSON.stringify(JSON.parse(input))
+      ) {
+        problems.push(`${name}, indented\n  native ${prettyGot}\n  node   ${prettyWant}`)
+      }
+    }
+    check(
+      `link/std_json_value: each of the ${files.size} y_ files of JSONTestSuite parsed and written natively, minified and indented by 2, is its text laid out as JSON.stringify lays it out, numbers as written`,
+      run.status === 0 && compared === files.size && files.size > 0 && problems.length === 0,
+      run.status !== 0 ? shown(run) : problems.join("\n")
+    )
+  }
+  // `nish/json-value` has to load under Node, as every `std/` module does:
+  // `node.ts` calls every public method of `JsonDocument` once on ASCII text,
+  // `u64` at its edge and past it, a handle kept across a same-size refill and
+  // `maxValues`, and both runs must print these lines.
+  const entry = path.join(linkDir, "std_json_value", "node.ts")
+  const want = [
+    "parseText true kind 6 length 9 keyAt a",
+    'string a"bA stringEquals true false',
+    "boolean true false null 1",
+    "i64 true -9223372036854775808 u64 true 18446744073709551615 wide false false 0 18446744073709551616",
+    "f64 1500 text 1.5e3 at 0",
+    'stringify {"s":"a\\"bA","t":true,"f":false,"z":null,"i":-9223372036854775808,"u":18446744073709551615,"w":18446744073709551616,"x":1.5e3,"a":[1,[],{}]}',
+    "write true [1,[],{}]",
+    "parse true [7] error -3@6",
+    "duplicates -30@7",
+    'last {"a":2,"b":0}',
+    'stale 0 0 "" fresh two',
+    "maxValues -34@3 1",
+    "set 0 0 0",
+    "refused -31 -32 -33 -33",
+    'built {"arr":[null,true,"x",-5,7,0.25,123456789012345678901234567890],"k":"v"}',
+    "",
+  ].join("\n")
+  const run = runUnderPrelude(entry, [])
+  check(
+    "link/std_json_value: every public method of JsonDocument runs under the Node prelude and prints the expected lines",
+    run.status === 0 && run.stdout === want,
+    `--- want\n${want}--- node\n${shown(run)}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "link", "std_json_value_node") + path.sep
+    fs.rmSync(outDir, { recursive: true, force: true })
+    const app = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", app], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_value: the same node.ts, built natively, prints the same lines",
+      native.status === 0 && native.stdout === want,
+      `--- want\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_value: no clang, so node.ts is not built natively")
+  }
 }
 
 // `String.fromBytes` under `runtime/nish.mjs`: each byte is one UTF-16 unit,
