@@ -491,11 +491,16 @@ const tables = (cases, skipped) => {
   // The toolchains the run used, not every one installed.
   const used = new Set(cases.flatMap((c) => c.impls.map((impl) => impl.tool)))
   const names = { nish: "Nish", cc: "C", cxx: "C++", cargo: "Rust", go: "Go" }
-  const toolchains = [...used].map((t) =>
-    t === "cargo"
-      ? `Rust: ${tools.cargo.version}, ${tools.rustc.version}`
+  const toolchain = (t) => {
+    if (t === "cargo") {
+      return `Rust: ${tools.cargo.version}, ${tools.rustc.version}`
+    }
+    // Nish's command is a local path (--compiler or build/nish); its version names it.
+    return t === "nish"
+      ? `Nish: ${tools.nish.version}`
       : `${names[t]}: \`${tools[t].cmd}\` ${tools[t].version}`
-  )
+  }
+  const toolchains = [...used].map(toolchain)
   const lines = [
     "| | |",
     "| --- | --- |",
