@@ -301,8 +301,8 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 
 WP38 S5 adds C to the constant-time surface: `runtime/runtime-aes.c` (anchors
 below at `74c2716`), AES-GCM on AES-NI and PCLMULQDQ or on the ARMv8 AES and
-PMULL instructions, which the compiler is to call in place of four functions
-of `std/crypto/aes.ts`. Unlike every Nish fixture it loops over `length`, so
+PMULL instructions, which the compiler calls in place of four functions of
+`std/crypto/aes.ts` (the lowering, below, since `c29cd40`). Unlike every Nish fixture it loops over `length`, so
 `tests/ct-asm.js`, which refuses every conditional branch, cannot read it.
 `tests/ct-asm-runtime.js` does, on the same taint model: the `Taint` state and
 the per-instruction steps are ct-asm.js's own, so a corner one learns the other
@@ -355,6 +355,23 @@ operations run the kernel or the bitsliced Nish code is a property of the
 machine and its environment, not of the key. `NISH_AES=soft` pins the
 bitsliced path, whose constant time is the Nish code's own (above).
 
+**The lowering** (anchors at `c29cd40`). The compiler asks `nish_aes_hw` again
+in front of each of the four seam calls (`src/emit.ts:1441`,
+`emitAesKernelArm` at `:1473`; the seams are recognised by `isAesSeam`,
+`src/kernels.ts:89`), and branches on its answer: the kernel on one arm, the
+bitsliced walker's own call on the other. The branch is the dispatch above,
+asked once per call rather than once per process, and its answer is the
+stored one after the first call, so it is a branch on the machine and the
+environment, never on a key or data. Every key a process makes is scheduled
+and used under that one answer, which is what keeps the kernel's round-key
+layout and the bitsliced one from meeting in one array. A wasm32 build
+(`--target wasm32…` or `--profile wasi`) emits the call as written and
+references no `nish_aes_` symbol. What the branch does not change: which of
+the two bodies a call runs is read here (the kernel) or by `ct_asm_aes` and
+the discipline in `std/crypto/aes.ts`'s header (the walker), and the
+lowering adds no secret-dependent instruction of its own, only the call, a
+compare of its answer with zero and the branch.
+
 **What it does not model.** The instructions' own timing: AESENC,
 AESENCLAST, AESKEYGENASSIST and PCLMULQDQ, and AESE, AESMC and PMULL, are
 taken as data-independent. Intel lists them among the instructions whose
@@ -389,6 +406,8 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (4 checks, `tests/simd/aes-leaky.c`) |
 | The runtime check's joins and per-instruction flags read loops as they run | `CORNERS` in `tests/ct-asm-runtime.js`, checked when the module loads |
 | A destination-reading vector instruction keeps its destination's taint (CT-17) | `AUDIT_CORNERS` in `tests/ct-asm.js` |
+| The lowered branch runs the kernel and the walker to the same bytes, end to end, and the kernel where the CPU has it (WP38 S5, at `c29cd40`) | `aes kernel: ${program} prints the same bytes with NISH_AES unset and with NISH_AES=soft, and they are its expected.out`, `aes kernel: ${program} under NISH_AES=soft calls no kernel` and `aes kernel: ${program} with NISH_AES unset calls all four kernels, which /proc/cpuinfo says this CPU runs`, each for `crypto_aes` and `crypto_aes_agree` |
+| A wasm32 build references no kernel | `aes kernel: --profile wasi compiles crypto_aes_agree to IR and a .wasm that reference no nish_aes_ symbol, and it prints its expected.out` |
 
 ## Doc corrections for the security-policy stage
 
