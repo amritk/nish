@@ -2,13 +2,25 @@
 // the reply encoded from one, with code the compiler writes from the fields.
 // Each call becomes a call of a function of this module's own, one per class
 // and direction (`.json.decode.Greeting`, `.json.encode.Greeting`), whose body
-// is a call of the decoder's or the writer's method per field.
+// is a call of the decoder's or the writer's method per field, after a switch
+// on the key's length and, for `name` and `mood`, on its first byte.
 import { JsonWriter } from "nish/json"
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
 
+enum Mood {
+  Calm = 1,
+  Glad = 2,
+}
+
 class Greeting {
+  id: u64 = 0
   name: string = ""
   times: i32 = 0
+  mood: Mood
+
+  constructor() {
+    this.mood = Mood.Calm
+  }
 }
 
 export const greet = (d: JsonDecoder, w: JsonWriter): i32 => {

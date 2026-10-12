@@ -1,0 +1,1 @@
+`jsonDecode` cannot handle `Index.byLevel`, which is `Map<Level, string>`

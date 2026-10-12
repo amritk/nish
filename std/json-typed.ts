@@ -189,6 +189,67 @@ export class JsonDecoder {
     return this.tok.keyEquals(name)
   }
 
+  /**
+   * The current key's length in bytes once decoded, or `-1` when the current
+   * token is not a key: what the code written for a class switches on before
+   * it compares a key's bytes with a field's name.
+   */
+  keyLength(): i32 {
+    return this.tok.stringLength()
+  }
+
+  /**
+   * Byte `at` of the current key when the key has no escape, so that its
+   * bytes are the input's, and `-1` otherwise: for a key with an escape, for
+   * an `at` outside it, and when the current token is not a key. A `-1`
+   * matches no byte of a field's name, and the code written for a class then
+   * compares the key with each name of its length through `keyIs`, which
+   * decodes the escapes.
+   */
+  keyByte(at: i32): i32 {
+    const tok: JsonTokenizer = this.tok
+    const n: i32 = tok.stringLength()
+    if (n !== tok.tokEnd - tok.tokStart - 2 || at < 0 || at >= n) {
+      return -1
+    }
+    const src: u8[] = tok.src
+    const i: i32 = tok.tokStart + 1 + at
+    if (i < 0 || i >= toI32(src.length)) {
+      return -1
+    }
+    return toI32(src[i])
+  }
+
+  /** The current key, decoded, as a new string: a `Map` field's key. `""` when the current token is not a key. */
+  key(): string {
+    return this.text()
+  }
+
+  /**
+   * The current key or string as a new string, made by one
+   * `String.fromBytes`: straight from the input when it has no escape, and
+   * from its unescaped bytes when it has one. `""` when the current token is
+   * neither.
+   */
+  text(): string {
+    const tok: JsonTokenizer = this.tok
+    const n: i32 = tok.stringLength()
+    if (n < 0) {
+      return ""
+    }
+    if (n === tok.tokEnd - tok.tokStart - 2) {
+      // No escape, so the bytes between the quotes are the string's, copied
+      // once by `String.fromBytes`.
+      return String.fromBytes(tok.src, tok.tokStart + 1, tok.tokEnd - 1)
+    }
+    // The unescaped bytes are a temporary: a caller that keeps only the string
+    // it answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
+    const bytes: u8[] = new Array<u8>(n)
+    const at: i32 = 0
+    tok.stringInto(bytes, at)
+    return String.fromBytes(bytes, 0, n)
+  }
+
   /** The current key names no field: stepped over with its value, or `JSON_DECODE_UNKNOWN`. */
   unknownField(): void {
     if (this.failed !== JSON_DECODE_OK) {
@@ -314,6 +375,27 @@ export class JsonDecoder {
     return this.integer(toI64(0), toI64(0), false)
   }
 
+  /**
+   * The next value as a `u64`: an integer written in digits alone, with no
+   * sign, fraction or exponent, up to 2^64 - 1, read through the tokenizer's
+   * `numberU64`. A negative number, `-0` included, and one past 2^64 - 1 are
+   * `JSON_DECODE_RANGE`, as a fraction is; `0` with an error.
+   */
+  u64(): u64 {
+    const k: i32 = this.take()
+    if (k !== JSON_TOK_NUMBER) {
+      if (k >= 0) {
+        this.wrongType()
+      }
+      return toU64(0)
+    }
+    if (!this.tok.isU64()) {
+      this.fail(JSON_DECODE_RANGE, this.tok.tokStart)
+      return toU64(0)
+    }
+    return this.tok.numberU64()
+  }
+
   f64(): f64 {
     const k: i32 = this.take()
     if (k === JSON_TOK_NUMBER) {
@@ -349,22 +431,10 @@ export class JsonDecoder {
       }
       return cur
     }
-    const tok: JsonTokenizer = this.tok
-    if (tok.keyEquals(cur)) {
+    if (this.tok.keyEquals(cur)) {
       return cur
     }
-    const n: i32 = tok.stringLength()
-    if (n === tok.tokEnd - tok.tokStart - 2) {
-      // No escape, so the bytes between the quotes are the string's, copied
-      // once by `String.fromBytes`.
-      return String.fromBytes(tok.src, tok.tokStart + 1, tok.tokEnd - 1)
-    }
-    // The unescaped bytes are a temporary: a caller that keeps only the string
-    // it answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
-    const bytes: u8[] = new Array<u8>(n)
-    const at: i32 = 0
-    tok.stringInto(bytes, at)
-    return String.fromBytes(bytes, 0, n)
+    return this.text()
   }
 
   // Arrays of scalars and strings: each element is read into the slot the
@@ -418,6 +488,26 @@ export class JsonDecoder {
     let n: i32 = 0
     while (this.nextElement()) {
       const v: i64 = this.i64()
+      if (n < toI32(xs.length)) {
+        xs[n] = v
+      } else {
+        xs.push(v)
+      }
+      n += 1
+    }
+    while (toI32(xs.length) > n && xs.length > 0) {
+      xs.pop()
+    }
+    return xs
+  }
+
+  u64Array(xs: u64[]): u64[] {
+    if (!this.beginArray()) {
+      return xs
+    }
+    let n: i32 = 0
+    while (this.nextElement()) {
+      const v: u64 = this.u64()
       if (n < toI32(xs.length)) {
         xs[n] = v
       } else {
@@ -529,6 +619,17 @@ export class JsonDecoder {
     return this.i64Array(fresh)
   }
 
+  u64ArrayOrNull(xs: u64[] | null): u64[] | null {
+    if (this.takeNull()) {
+      return null
+    }
+    if (xs !== null) {
+      return this.u64Array(xs)
+    }
+    const fresh: u64[] = []
+    return this.u64Array(fresh)
+  }
+
   f64ArrayOrNull(xs: f64[] | null): f64[] | null {
     if (this.takeNull()) {
       return null
@@ -593,6 +694,29 @@ export const jsonEncodeStringOrNull = (w: JsonWriter, s: string | null): void =>
   }
 }
 
+/**
+ * A `u64`, as its digits: at most 20 of them, written with `raw` from an
+ * array of this call's own that nothing keeps. Every `u64` here is built
+ * with `toU64`, a BigInt under Node, where the writer's own `i64` would mix
+ * one with a number.
+ */
+export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
+  const ten: u64 = toU64(10)
+  const zero: u64 = toU64(0)
+  const digits: u8[] = new Array<u8>(20)
+  let rest: u64 = v
+  let first: i32 = toI32(digits.length)
+  for (let k: i32 = first - 1; k >= 0 && k < toI32(digits.length); k -= 1) {
+    digits[k] = toU8(48 + toI32(rest % ten))
+    rest = rest / ten
+    first = k
+    if (rest === zero) {
+      break
+    }
+  }
+  w.raw(digits, first, toI32(digits.length) - first)
+}
+
 export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {
   w.beginArray()
   for (const x of xs) {
@@ -613,6 +737,14 @@ export const jsonEncodeI64Array = (w: JsonWriter, xs: i64[]): void => {
   w.beginArray()
   for (const x of xs) {
     w.i64(x)
+  }
+  w.endArray()
+}
+
+export const jsonEncodeU64Array = (w: JsonWriter, xs: u64[]): void => {
+  w.beginArray()
+  for (const x of xs) {
+    jsonEncodeU64(w, x)
   }
   w.endArray()
 }
@@ -662,6 +794,14 @@ export const jsonEncodeI64ArrayOrNull = (w: JsonWriter, xs: i64[] | null): void 
     w.nullValue()
   } else {
     jsonEncodeI64Array(w, xs)
+  }
+}
+
+export const jsonEncodeU64ArrayOrNull = (w: JsonWriter, xs: u64[] | null): void => {
+  if (xs === null) {
+    w.nullValue()
+  } else {
+    jsonEncodeU64Array(w, xs)
   }
 }
 

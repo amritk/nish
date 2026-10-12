@@ -29,38 +29,61 @@ import {
   JSON_NONE,
   STRUCT_CLASS,
   StructInfo,
+  StructInstantiation,
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
-import { T_BOOL, T_F64, T_I32, T_I64, T_STRING, T_U32, TypeTable } from "./types"
+import { T_BOOL, T_F64, T_I32, T_I64, T_STRING, T_U32, T_U64, TypeTable } from "./types"
 
-/** A field that is one value: an integer, an `f64`, a `boolean` or a `string`. */
+/** A value that is one scalar: an integer, an `f64`, a `boolean` or a `string`. */
 export const JSON_FIELD_SCALAR: i32 = 1
-/** A field that holds an object of a class. */
+/** An object of a class. */
 export const JSON_FIELD_CLASS: i32 = 2
 /** An array of scalars or strings. */
 export const JSON_FIELD_ARRAY: i32 = 3
 /** An array of objects of a class. */
-const JSON_FIELD_CLASS_ARRAY: i32 = 4
+export const JSON_FIELD_CLASS_ARRAY: i32 = 4
+/** A value of a numeric `enum`: its number, and only a member's. */
+export const JSON_FIELD_ENUM: i32 = 5
+/** An array of values of a numeric `enum`. */
+export const JSON_FIELD_ENUM_ARRAY: i32 = 6
+/** A `Map<string, V>`: a JSON object whose keys are the map's and whose values are each a `V`. */
+export const JSON_FIELD_MAP: i32 = 7
 
-/** One field as the written code reads and writes it. */
+/**
+ * One value as the written code reads and writes it: a field of a class, or
+ * the value type of a `Map` field, which has no field of its own.
+ */
 export class JsonField {
-  field: FieldInfo
+  /** The field, or `null` for a `Map`'s value. */
+  field: FieldInfo | null
+  /** The value's type, `| null` included. */
+  type: i32
   /** One of the `JSON_FIELD_*` kinds. */
   kind: i32
-  /** Whether the field's type is `| null`. */
+  /** Whether the type is `| null`. */
   nullable: boolean
-  /** The scalar type of a scalar field or of an array's element; `0` for a class. */
+  /** The scalar type of a scalar or of an array's element; `0` otherwise. */
   scalar: i32
-  /** The class of a class field or of an array's element; `null` for a scalar. */
+  /** The class of an object or of an array's element; `null` otherwise. */
   cls: StructInfo | null
+  /** The enum of an enum value or of an array's element; `0` otherwise. */
+  enumType: i32
+  /** The `Map` instance of a map value; `null` otherwise. */
+  map: StructInfo | null
+  /** What a map holds; `null` for every other kind. */
+  value: JsonField | null
 
-  constructor(field: FieldInfo, kind: i32, nullable: boolean, scalar: i32, cls: StructInfo | null) {
+  constructor(field: FieldInfo | null, type: i32, kind: i32, nullable: boolean) {
     this.field = field
+    this.type = type
     this.kind = kind
     this.nullable = nullable
-    this.scalar = scalar
-    this.cls = cls
+    this.scalar = 0
+    this.cls = null
+    this.enumType = 0
+    this.map = null
+    this.value = null
   }
 }
 
@@ -84,12 +107,13 @@ export const jsonRouteOf = (sig: FunctionSig | null): i32 => {
   return instance === null ? JSON_NONE : instance.jsonRoute
 }
 
-/** The type a value of the field is read as, when it is one: `i32`, `u32`, `i64`, `f64`, `boolean` or `string`. */
+/** The type a value of the field is read as, when it is one: `i32`, `u32`, `i64`, `u64`, `f64`, `boolean` or `string`. */
 const jsonScalar = (type: i32): i32 => {
   if (
     type === T_I32 ||
     type === T_U32 ||
     type === T_I64 ||
+    type === T_U64 ||
     type === T_F64 ||
     type === T_BOOL ||
     type === T_STRING
@@ -111,36 +135,117 @@ export const jsonClassOf = (program: CheckedProgram, table: TypeTable, type: i32
   return info
 }
 
-/** `field` as the route reads and writes it, or `null` when its type is not one it can. */
-export const jsonFieldOf = (
+/**
+ * The instance of the global `Map` that `type` is, when its keys are
+ * `string`s, the keys a JSON object has; `null` for any other type, a `Map`
+ * with other keys and a `Set` included.
+ */
+const jsonMapOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
+  if (!table.isStruct(type)) {
+    return null
+  }
+  const info = program.struct(table.nameOf(type))
+  const instance: StructInstantiation | null = info === null ? null : info.instance
+  if (
+    info === null ||
+    instance === null ||
+    instance.template.sourceName !== "Map" ||
+    !instance.template.home.program.isCollections() ||
+    instance.typeArgs.length !== 2 ||
+    instance.typeArgs[0] !== T_STRING
+  ) {
+    return null
+  }
+  return info
+}
+
+/** A value of `type` as the route reads and writes it, held in `field` (`null` for a `Map`'s value), or `null` when it cannot. */
+const jsonValueOf = (
   program: CheckedProgram,
   table: TypeTable,
-  field: FieldInfo
+  field: FieldInfo | null,
+  type: i32
 ): JsonField | null => {
-  const nullable = table.isNullable(field.type)
-  const base = table.stripNull(field.type)
+  const nullable = table.isNullable(type)
+  const base = table.stripNull(type)
   const scalar = jsonScalar(base)
   if (scalar !== 0) {
     // Of these only a `string` can be `| null`: a number has no `null` to hold.
-    return new JsonField(field, JSON_FIELD_SCALAR, nullable, scalar, null)
+    const f = new JsonField(field, type, JSON_FIELD_SCALAR, nullable)
+    f.scalar = scalar
+    return f
   }
-  if (table.isArray(base) && !table.isReadonlyArray(base)) {
+  if (table.isEnum(base)) {
+    if (nullable) {
+      return null
+    }
+    const f = new JsonField(field, type, JSON_FIELD_ENUM, nullable)
+    f.enumType = base
+    return f
+  }
+  if (table.isArray(base)) {
+    if (table.isReadonlyArray(base)) {
+      return null
+    }
     const elem = table.refOf(base)
     const inner = jsonScalar(elem)
     if (inner !== 0) {
-      return new JsonField(field, JSON_FIELD_ARRAY, nullable, inner, null)
+      const f = new JsonField(field, type, JSON_FIELD_ARRAY, nullable)
+      f.scalar = inner
+      return f
+    }
+    if (table.isEnum(elem)) {
+      const f = new JsonField(field, type, JSON_FIELD_ENUM_ARRAY, nullable)
+      f.enumType = elem
+      return f
     }
     const cls = jsonClassOf(program, table, elem)
-    return cls === null ? null : new JsonField(field, JSON_FIELD_CLASS_ARRAY, nullable, 0, cls)
+    if (cls === null) {
+      return null
+    }
+    const f = new JsonField(field, type, JSON_FIELD_CLASS_ARRAY, nullable)
+    f.cls = cls
+    return f
+  }
+  const map = jsonMapOf(program, table, base)
+  if (map !== null) {
+    const instance = map.instance
+    const held: JsonField | null =
+      instance === null ? null : jsonValueOf(program, table, null, instance.typeArgs[1])
+    if (held === null) {
+      return null
+    }
+    const f = new JsonField(field, type, JSON_FIELD_MAP, nullable)
+    f.map = map
+    f.value = held
+    return f
   }
   const cls = jsonClassOf(program, table, base)
-  return cls === null ? null : new JsonField(field, JSON_FIELD_CLASS, nullable, 0, cls)
+  if (cls === null) {
+    return null
+  }
+  const f = new JsonField(field, type, JSON_FIELD_CLASS, nullable)
+  f.cls = cls
+  return f
+}
+
+/** `field` as the route reads and writes it, or `null` when its type is not one it can. */
+export const jsonFieldOf = (program: CheckedProgram, table: TypeTable, field: FieldInfo): JsonField | null =>
+  jsonValueOf(program, table, field, field.type)
+
+/** `f` and, for a map, what it holds, and what that holds in turn: every value one field reaches. */
+const jsonValuesOf = (f: JsonField, out: JsonField[]): void => {
+  let at: JsonField | null = f
+  while (at !== null) {
+    out.push(at)
+    at = at.value
+  }
 }
 
 /**
  * Every class a route from `root` reaches, `root` first and each once, in the
- * order the fields name them. A field the route cannot handle reaches nothing;
- * `jsonRefusal` has refused it.
+ * order the fields name them, through arrays and `Map` values alike. A field
+ * the route cannot handle reaches nothing; `jsonRefusal` has refused it.
  */
 export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] => {
   const out: StructInfo[] = []
@@ -153,9 +258,30 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
     at = at + 1
     for (const field of info.fields) {
       const f = jsonFieldOf(program, table, field)
-      const cls: StructInfo | null = f === null ? null : f.cls
-      if (cls !== null && seen.add(cls.name)) {
-        out.push(cls)
+      if (f === null) {
+        continue
+      }
+      const values: JsonField[] = []
+      jsonValuesOf(f, values)
+      for (const v of values) {
+        const cls = v.cls
+        if (cls !== null && seen.add(cls.name)) {
+          out.push(cls)
+        }
+      }
+    }
+  }
+  return out
+}
+
+/** Every value a route from `root` reads or writes: each field of each class it reaches, and what each `Map` holds. */
+const jsonValues = (program: CheckedProgram, table: TypeTable, root: StructInfo): JsonField[] => {
+  const out: JsonField[] = []
+  for (const info of jsonClasses(program, table, root)) {
+    for (const field of info.fields) {
+      const f = jsonFieldOf(program, table, field)
+      if (f !== null) {
+        jsonValuesOf(f, out)
       }
     }
   }
@@ -163,26 +289,45 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
 }
 
 /**
+ * Whether a decoding makes the object or the map `f` holds itself, with
+ * `new`, rather than decoding into the one it finds: a `| null` field's, which
+ * it makes when the field holds `null`, and a `Map`'s value, which is new for
+ * each key. An array's elements past its end are made too; `jsonMadeClasses`
+ * counts those.
+ */
+const jsonMakes = (f: JsonField): boolean => f.nullable || f.field === null
+
+/**
  * The classes of a decode from `root` that the decoder makes itself, with
  * `new C()`: each class an array of objects holds, which it makes past the
- * array's end, and each `| null` field's class, which it makes when the
- * field holds `null`. One pass over the fields `jsonClasses` reaches.
+ * array's end, and each class a `| null` field or a `Map` holds. One pass
+ * over the values `jsonValues` reaches.
  */
 const jsonMadeClasses = (program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] => {
   const out: StructInfo[] = []
   const made = new StringSet()
-  for (const info of jsonClasses(program, table, root)) {
-    for (const field of info.fields) {
-      const f = jsonFieldOf(program, table, field)
-      const cls: StructInfo | null = f === null ? null : f.cls
-      if (
-        f !== null &&
-        cls !== null &&
-        (f.kind === JSON_FIELD_CLASS_ARRAY || f.nullable) &&
-        made.add(cls.name)
-      ) {
-        out.push(cls)
-      }
+  for (const f of jsonValues(program, table, root)) {
+    const cls = f.cls
+    if (cls !== null && (f.kind === JSON_FIELD_CLASS_ARRAY || jsonMakes(f)) && made.add(cls.name)) {
+      out.push(cls)
+    }
+  }
+  return out
+}
+
+/** Every `Map` a route from `root` reaches, each once; `madeOnly` keeps the ones the decoder makes with `new`. */
+const jsonMaps = (
+  program: CheckedProgram,
+  table: TypeTable,
+  root: StructInfo,
+  madeOnly: boolean
+): StructInfo[] => {
+  const out: StructInfo[] = []
+  const seen = new StringSet()
+  for (const f of jsonValues(program, table, root)) {
+    const map = f.map
+    if (map !== null && (!madeOnly || jsonMakes(f)) && seen.add(map.name)) {
+      out.push(map)
     }
   }
   return out
@@ -191,8 +336,8 @@ const jsonMadeClasses = (program: CheckedProgram, table: TypeTable, root: Struct
 /**
  * Why a call of the route `name` (`jsonDecode` or `jsonEncode`) cannot bind
  * its value to `type`, or `""` when it can. Every class the route reaches is
- * held to the same rule, so a nested class, an array's element and a
- * `| null` field's class are refused exactly as `T` is.
+ * held to the same rule, so a nested class, an array's element, a `Map`'s
+ * value and a `| null` field's class are refused exactly as `T` is.
  */
 export const jsonRefusal = (
   program: CheckedProgram,
@@ -212,10 +357,14 @@ export const jsonRefusal = (
   for (const info of classes) {
     for (const field of info.fields) {
       if (jsonFieldOf(program, table, field) === null) {
+        // The words up to `| null` are NL2485's in `src/codes.ts`, and the
+        // kinds added since follow them.
         return (
           `\`${name}\` cannot handle \`${info.name}.${field.name}\`, which is \`${table.typeName(field.type)}\`: ` +
           "a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, " +
-          "an array of one of those, or a `string`, a class or an array with `| null`"
+          "an array of one of those, or a `string`, a class or an array with `| null`; " +
+          "a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` " +
+          "and whose values are any of these, with `| null` or not"
         )
       }
       if (role === JSON_DECODE && field.readonly) {
@@ -230,7 +379,9 @@ export const jsonRefusal = (
       if (ctor !== null && ctor.paramTypes.length > 1) {
         return (
           `\`jsonDecode\` makes a \`${info.name}\` with \`new ${info.name}()\`, and its constructor takes ${ctor.paramTypes.length - 1} parameter(s): ` +
-          "an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none"
+          // The words up to `takes none` are NL2488's in `src/codes.ts`.
+          "an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none" +
+          ", and so is a `Map`'s value, one for each key"
         )
       }
     }
@@ -249,13 +400,16 @@ export const jsonScalarMethod = (type: i32): string => {
   if (type === T_I64) {
     return "i64"
   }
+  if (type === T_U64) {
+    return "u64"
+  }
   if (type === T_F64) {
     return "f64"
   }
   return type === T_BOOL ? "boolean" : "string"
 }
 
-/** The `JsonDecoder` method a scalar or a scalar array field is read with: `i32`, or `i32Array` / `i32ArrayOrNull`. */
+/** The `JsonDecoder` method a scalar or a scalar array is read with: `i32`, or `i32Array` / `i32ArrayOrNull`. */
 export const jsonDecodeMethod = (f: JsonField): string => {
   const scalar = jsonScalarMethod(f.scalar)
   if (f.kind !== JSON_FIELD_ARRAY) {
@@ -272,6 +426,9 @@ const jsonHelperPart = (type: i32): string => {
   if (type === T_I64) {
     return "I64"
   }
+  if (type === T_U64) {
+    return "U64"
+  }
   if (type === T_F64) {
     return "F64"
   }
@@ -282,12 +439,15 @@ const jsonHelperPart = (type: i32): string => {
 }
 
 /**
- * The `nish/json-typed` function a field is written with, when it is not one
- * call of the writer: a `string | null` and an array of scalars or strings.
- * `""` for every other field.
+ * The `nish/json-typed` function a value is written with, when it is not one
+ * call of the writer: a `u64`, a `string | null` and an array of scalars or
+ * strings. `""` for every other value.
  */
 export const jsonEncodeHelper = (f: JsonField): string => {
   if (f.kind === JSON_FIELD_SCALAR) {
+    if (f.scalar === T_U64) {
+      return "jsonEncodeU64"
+    }
     return f.nullable ? "jsonEncodeStringOrNull" : ""
   }
   if (f.kind !== JSON_FIELD_ARRAY) {
@@ -297,6 +457,10 @@ export const jsonEncodeHelper = (f: JsonField): string => {
     ? `jsonEncode${jsonHelperPart(f.scalar)}ArrayOrNull`
     : `jsonEncode${jsonHelperPart(f.scalar)}Array`
 }
+
+/** The `Map` methods the code written for a map calls: to fill one, and to walk one. */
+const jsonMapMethods = (role: i32): string[] =>
+  role === JSON_DECODE ? ["clear", "has", "set"] : ["walkNext", "keyAt", "valueAt"]
 
 /** The names of every method of the receiver and every helper the code for a route from `root` calls. */
 const jsonRouteNames = (
@@ -310,6 +474,8 @@ const jsonRouteNames = (
     for (const name of [
       "beginObject",
       "nextField",
+      "keyLength",
+      "keyByte",
       "keyIs",
       "unknownField",
       "duplicateField",
@@ -323,39 +489,44 @@ const jsonRouteNames = (
       names.add(name)
     }
   }
-  for (const info of jsonClasses(program, table, root)) {
-    for (const field of info.fields) {
-      const f = jsonFieldOf(program, table, field)
-      if (f === null) {
-        continue
+  for (const f of jsonValues(program, table, root)) {
+    const holdsObject =
+      f.kind === JSON_FIELD_CLASS || f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_MAP
+    const isEnum = f.kind === JSON_FIELD_ENUM || f.kind === JSON_FIELD_ENUM_ARRAY
+    const isArray = f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_ENUM_ARRAY
+    if (role === JSON_DECODE) {
+      if (isEnum) {
+        names.add("i32")
+        names.add("wrongType")
+      } else if (!holdsObject) {
+        names.add(jsonDecodeMethod(f))
       }
-      const holdsClass = f.kind === JSON_FIELD_CLASS || f.kind === JSON_FIELD_CLASS_ARRAY
-      if (role === JSON_DECODE) {
-        if (!holdsClass) {
-          names.add(jsonDecodeMethod(f))
-        }
-        if (f.nullable) {
-          names.add("takeNull")
-        }
-        if (f.kind === JSON_FIELD_CLASS_ARRAY) {
-          names.add("beginArray")
-          names.add("nextElement")
-        }
-        continue
+      if (f.nullable) {
+        names.add("takeNull")
       }
-      const helper = jsonEncodeHelper(f)
-      if (helper.length > 0) {
-        names.add(helper)
-      } else if (!holdsClass) {
-        names.add(jsonScalarMethod(f.scalar))
-      }
-      if (f.nullable && holdsClass) {
-        names.add("nullValue")
-      }
-      if (f.kind === JSON_FIELD_CLASS_ARRAY) {
+      if (isArray) {
         names.add("beginArray")
-        names.add("endArray")
+        names.add("nextElement")
       }
+      if (f.kind === JSON_FIELD_MAP) {
+        names.add("key")
+      }
+      continue
+    }
+    const helper = jsonEncodeHelper(f)
+    if (helper.length > 0) {
+      names.add(helper)
+    } else if (isEnum) {
+      names.add("i32")
+    } else if (!holdsObject) {
+      names.add(jsonScalarMethod(f.scalar))
+    }
+    if (f.nullable && holdsObject) {
+      names.add("nullValue")
+    }
+    if (isArray) {
+      names.add("beginArray")
+      names.add("endArray")
     }
   }
   return names
@@ -364,9 +535,10 @@ const jsonRouteNames = (
 /**
  * Everything the code written for `sig` calls, besides its own functions and
  * the runtime's: the receiver's methods (`JsonDecoder`'s or `JsonWriter`'s)
- * and `nish/json-typed`'s helpers that it names, and the constructor of each
- * class a decoding makes. `program` is the module the template is in, which
- * has every layout the instantiation reaches.
+ * and `nish/json-typed`'s helpers that it names, the methods of each `Map` it
+ * fills or walks, and the constructor of each class and map a decoding makes.
+ * `program` is the module the template is in, which has every layout the
+ * instantiation reaches.
  */
 export const jsonRouteCallees = (
   program: CheckedProgram,
@@ -397,9 +569,24 @@ export const jsonRouteCallees = (
       out.push(fn)
     }
   }
-  if (instance.jsonRoute === JSON_DECODE) {
+  const decode = instance.jsonRoute === JSON_DECODE
+  for (const map of jsonMaps(program, table, root, false)) {
+    for (const name of jsonMapMethods(instance.jsonRoute)) {
+      const method = map.method(name)
+      if (method !== null) {
+        out.push(method)
+      }
+    }
+  }
+  if (decode) {
     for (const info of jsonMadeClasses(program, table, root)) {
       const ctor = info.ctor
+      if (ctor !== null) {
+        out.push(ctor)
+      }
+    }
+    for (const map of jsonMaps(program, table, root, true)) {
+      const ctor = map.ctor
       if (ctor !== null) {
         out.push(ctor)
       }
