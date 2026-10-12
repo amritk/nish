@@ -55,6 +55,9 @@ export const main = (): i32 => {
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
   no `console.log` — and **answers a number, a `boolean` or an enum**. It may
+  look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
+  and it may `panic`: if several elements panic at once, only the first
+  prints its message, and the program exits 1. It may
   build strings and arrays on the way to its answer; they are freed after each
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
@@ -149,7 +152,9 @@ export const main = (): i32 => {
   `Channel`, below), answers a number, a `boolean` or an enum, and opens no
   scope of its own. Looking a key up in a shared `Map` or `Set` (`get`,
   `has`, `size`) is a read, so tasks may share a table that way; changing it,
-  or walking it with `for...of`, is a write.
+  or walking it with `for...of`, is a write. A task may `panic`: if several
+  threads panic at once, only the first prints its message, and the program
+  exits 1.
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.

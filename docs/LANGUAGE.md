@@ -2491,7 +2491,15 @@ from the whole-program facts, and each rule is reported there:
   `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
   runtime's `nish_print`). A bounds check, an integer division, the length
   check of `new Array(n)` and `panic` are not writes: each prints and exits,
-  and nothing runs again to see memory. The instance performs every store
+  and nothing runs again to see memory. When several threads panic at once,
+  the first claims the program: it prints its whole message and exits 1, and
+  every later one waits for that exit without printing, so a failing run
+  prints one message, never two or a mix of them
+  (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
+  `console.error` and `process.exit` as much as `console.log`
+  (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
+  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
+  read (`tests/link/par_map_table_reads`). The instance performs every store
   itself, into slots the partitioner has made disjoint, so a function that
   writes nothing cannot race.
 - **A store into an array only this call reaches is not a shared write.** A
@@ -2780,6 +2788,13 @@ element's arena, which a task does not share, and each rule is reported at the
   refused (`reject_thread_task_map_set`, `_map_delete`, `_map_clear`,
   `_map_get_or_insert`, `_set_add`, `_set_delete`, `_set_clear`,
   `_map_walk_keys`, `_map_walk_values`, `_set_walk`, `_map_readback_write`).
+  A task may `panic`, as a parallel body may: the first panic of the program
+  prints and exits 1, and a task that panics after it prints nothing. Output
+  stays a write (`reject_thread_task_console_error`,
+  `reject_thread_task_process_exit`), and so does the parent's: between the
+  first `spawn` and the join it may neither change a table a task reads nor
+  walk one, `for (const k of s)` included (`reject_thread_region_parent_table_set`,
+  `reject_thread_region_parent_set_walk`).
   A store into an array the task allocated and hands to nothing that keeps it
   is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
   sieve may fill its own table, and a helper may fill the array it is handed
