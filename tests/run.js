@@ -4745,8 +4745,9 @@ for (const name of [
 // IR; this names the order itself, so a golden regenerated with the release
 // moved ahead of the value fails here rather than passing as a new golden.
 // In each function below every `ret` with a value opens the block the release
-// falls through to, `unlock.done`, and the value it returns is computed before
-// the release's exchange.
+// falls through to, `unlock.done`, after the release's exchange of 0, its
+// compare of the old value with 2 and its call to `nish_mutex_wake` on the
+// same word, and the value it returns is computed before the exchange.
 if (!only || "thread_mutex".includes(only)) {
   for (const [name, fn] of [
     ["thread_mutex_or_return", "addOk"],
@@ -4770,8 +4771,17 @@ if (!only || "thread_mutex".includes(only)) {
       while (at >= 0 && !/^%\d+ = atomicrmw xchg i32\* %\d+, i32 0 release$/.test(lines[at])) {
         at -= 1
       }
+      // The release's whole shape, from the exchange to the block `ret` opens:
+      // the old value compared with 2, the branch to the wake, the wake on the
+      // same word, and the fall through to `unlock.done`.
+      const xchg = at >= 0 ? /^(%\d+) = atomicrmw xchg i32\* (%\d+), i32 0 release$/.exec(lines[at]) : null
+      const shape =
+        xchg !== null &&
+        new RegExp(`^(%\\d+) = icmp eq i32 ${xchg[1]}, 2$`).test(lines[at + 1] ?? "") &&
+        /^br i1 %\d+, label %unlock\.wake(\.\d+)?, label %unlock\.done(\.\d+)?$/.test(lines[at + 2] ?? "") &&
+        lines.slice(at + 3, i - 1).includes(`call void @nish_mutex_wake(i32* ${xchg[2]})`)
       const computed = lines.slice(0, Math.max(at, 0)).some((l) => l.startsWith(`${ret[1]} = `))
-      if (!/^unlock\.done(\.\d+)?:$/.test(label) || at < 0 || !computed) {
+      if (!/^unlock\.done(\.\d+)?:$/.test(label) || !shape || !computed) {
         bad.push(`${line} (preceded by: ${label})`)
       }
     })
@@ -8918,8 +8928,8 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * subject, and they took a divided region from ~100 us to ~10 us (docs/wp20-threads.md
  * §8e). A program that never divides a region or joins a scope still pays none of it.
  *
- * The futex lock measured **2,745 bytes** on 2026-10-12 with clang 18.1.3 on linux-x64,
- * 85 more, inside the same ceiling: `nish_mutex_wait` marks a held word as having a
+ * The futex lock measured **2,754 bytes** on 2026-10-12 with clang 18.1.3 on linux-x64,
+ * 94 more, inside the same ceiling: `nish_mutex_wait` marks a held word as having a
  * waiter and sleeps on it with `FUTEX_WAIT_PRIVATE` instead of yielding, and
  * `nish_mutex_wake`, which a release that finds a waiter calls, is one
  * `FUTEX_WAKE_PRIVATE`.

@@ -158,7 +158,9 @@ tasks than cores queues the rest, and a thread that finishes one takes the
 next. The core count follows what the process may actually use (its affinity
 mask, a container's CPU quota), and `NISH_NUM_THREADS=2` lowers it to two,
 which is handy on a shared machine; `NISH_NUM_THREADS=1` runs everything on
-the calling thread. It never raises the count, and it never changes an answer.
+the calling thread. It never raises the count. A map's or a reduce's answer
+is the same at any count; what a scope's tasks do under a lock can come out
+in a different order, as the lock section below says.
 
 ## Sharing a value: `Mutex<T>`
 

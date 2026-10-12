@@ -299,9 +299,9 @@ reach of one. **This is still a mechanism for dividing one loop across the
 cores, not for having many tasks.** A region needs about a millisecond of work
 before the old per-region spawns were under a tenth of its cost, and that is
 why the grain matters. P1 first used 2^20 elements per chunk. It now sizes the
-grain per call as `2^22` over a static estimate of one element's cost
-(`mapGrain` in `src/parallel.ts`, calibrated in wp29 §8a against the spawns, and
-to be retuned against the pool). A map within its grain calls its loop
+grain per call as `2^21` over a static estimate of one element's cost
+(`mapGrain` in `src/parallel.ts`; calibrated in wp29 §8a, first against the
+spawns at `2^22` and then against the pool). A map within its grain calls its loop
 directly. A reduce's block width is a separate constant (`BLOCK` in
 `std/threads.ts`, 2^20), because it decides the reduce's answer, while the
 grain only decides how the work is divided. The 3 ns row was 3,734 ns until

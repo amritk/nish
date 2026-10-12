@@ -646,13 +646,16 @@ export const reduceMessage = (
 // elements takes three such loops nested, or two around a hundred operations.
 
 /**
- * The work, in estimate units, that one chunk of a map region should carry:
- * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
- * loop it replaces. On the worker pool 2^19 only breaks even with the loop and
- * 2^20 wins by 1.19x; with a thread started per region 2^20 lost by 12% and
- * 2^22 was needed (docs/wp29-thread-surface.md §8a).
+ * The grain, in estimate units: a map divides once its length passes
+ * `REGION_COST` over the body's estimate, and its first division is two
+ * chunks of half that. The target is what the cheapest body,
+ * `(x) => x * 3 + 1`, needs in each of two chunks to beat the loop it
+ * replaces. On the worker pool, two chunks of 2^19 units only break even with
+ * the loop and two of 2^20 win by 1.19x, so the grain is 2^21; with a thread
+ * started per region two chunks of 2^21 were needed, and the grain was 2^22
+ * (docs/wp29-thread-surface.md §8a).
  */
-const REGION_COST: i32 = 1048576
+const REGION_COST: i32 = 2097152
 
 /** One call: the jump, the frame and the return, beyond the arguments. */
 const CALL_COST: i32 = 4

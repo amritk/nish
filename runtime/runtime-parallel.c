@@ -48,6 +48,10 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
+#ifdef __linux__
+#include <linux/futex.h> /* `FUTEX_WAIT_PRIVATE`, `FUTEX_WAKE_PRIVATE`: the lock's sleep */
+#include <sys/syscall.h>
+#endif
 #endif
 
 /* The ceiling on how many threads one region may use. A fixed bound keeps the
@@ -583,10 +587,10 @@ void nish_scope_join(void *scope) {
  * acquire, the edge the release's exchange pairs with.
  *
  * The look is a plain relaxed load, without the pause the pool's spin makes:
- * a pause is about 140 cycles on the Xeon of docs/wp20-threads.md section 8e,
- * and 64 of them between looks made a waiter late for a word that is free
- * for nanoseconds -- the histogram of tests/link/thread_mutex_contended took
- * 3.2 s with them against 1.8 s without (docs/wp29-thread-surface.md, 8f).
+ * a pause costs on the order of a hundred cycles on a recent Intel core, and
+ * 64 of them between looks made a waiter late for a word that is free for
+ * nanoseconds -- the histogram of tests/link/thread_mutex_contended took 3.2 s
+ * with them against 1.8 s without (docs/wp29-thread-surface.md, 8f).
  *
  * The sleep is `futex` on Linux and `__ulock_wait` on Darwin, each of which
  * returns at once if the word is no longer 2, so a release between the
@@ -606,23 +610,19 @@ extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
 #define NISH_ULOCK_WAIT 0x01000001u /* UL_COMPARE_AND_WAIT | ULF_NO_ERRNO */
 #endif
 
-#if defined(NISH_PAR_REAL) && defined(__linux__)
-#include <linux/futex.h>
-#include <sys/syscall.h>
-#endif
-
 void nish_mutex_wait(int32_t *word) {
 #ifdef NISH_PAR_REAL
   int32_t take = 1;
   for (;;) {
     for (int spins = 0; spins < NISH_MUTEX_SPIN; spins++) {
       int32_t seen = __atomic_load_n(word, __ATOMIC_RELAXED);
-      if (seen == 0 && __atomic_compare_exchange_n(word, &seen, take, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+      if (seen == 0 &&
+          __atomic_compare_exchange_n(word, &seen, take, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
         return;
     }
     if (__atomic_exchange_n(word, 2, __ATOMIC_ACQUIRE) == 0) return;
 #if defined(__linux__)
-    syscall(SYS_futex, word, FUTEX_WAIT_PRIVATE, 2, 0, 0, 0);
+    syscall(SYS_futex, word, FUTEX_WAIT_PRIVATE, 2L, (void *)0, (void *)0, 0L);
 #elif defined(__APPLE__)
     __ulock_wait(NISH_ULOCK_WAIT, word, 2, 0);
 #else
@@ -632,7 +632,8 @@ void nish_mutex_wait(int32_t *word) {
   }
 #else
   int32_t free_word = 0;
-  while (!__atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) free_word = 0;
+  while (!__atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+    free_word = 0;
 #endif
 }
 
@@ -643,7 +644,7 @@ void nish_mutex_wait(int32_t *word) {
  * fallback's waiters never sleep, so there is nobody to wake. */
 void nish_mutex_wake(int32_t *word) {
 #if defined(NISH_PAR_REAL) && defined(__linux__)
-  syscall(SYS_futex, word, FUTEX_WAKE_PRIVATE, 1, 0, 0, 0);
+  syscall(SYS_futex, word, FUTEX_WAKE_PRIVATE, 1L, (void *)0, (void *)0, 0L);
 #elif defined(NISH_PAR_REAL) && defined(__APPLE__)
   __ulock_wake(NISH_ULOCK_WAIT, word, 0);
 #else

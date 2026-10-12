@@ -390,8 +390,9 @@ const taskFinish = (
 // until it changes (runtime/runtime-parallel.c), so the release has to know
 // whether to wake anyone, which a plain store could not tell it. The acquire
 // keeps every guarded access after the swap, and the release every one before
-// the exchange, which is the whole of what the lock has to promise; there is nothing to create or destroy, because the word is a
-// field of the guard and lives where the `Mutex` does.
+// the exchange, which is the whole of what the lock has to promise; there is
+// nothing to create or destroy, because the word is a field of the guard and
+// lives where the `Mutex` does.
 
 /** The guard's lock word, as `field` of its layout, or an internal error when the layout lacks it. */
 const lockWord = (emitter: Emitter, info: StructInfo, name: string): FieldInfo => {

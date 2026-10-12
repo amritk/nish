@@ -107,9 +107,10 @@ const total = parallelReduce(src, (a, b) => a + b, 0);
 - **A body may allocate, and gives the memory back per element.** It gets an
   arena scope of its own (`scopeParallelBodies` in `src/attributes.ts`) and the
   warning NL9012 (§8a). A body that touches `Arena` is refused (NL2351).
-- **The grain is sized from the body**: `2^22` over a static cost estimate
+- **The grain is sized from the body**: `2^21` over a static cost estimate
   (`mapGrain` in `src/parallel.ts`). A map within its grain calls its loop
-  directly. P1 first shipped a constant 2^20.
+  directly. P1 first shipped a constant 2^20, then `2^22` over the estimate
+  until the worker pool (§8a).
 - **`--threads` is implied** by importing the module (wp20 §8c.3). This is a
   soundness requirement: allocation counts as no shared write only because the
   arena is thread-local.
@@ -451,36 +452,41 @@ to the loop at 262,144 elements. With 2^22 it wins 1.54x at 1,677,722. The
 default of 64 trips is what divides n-body four ways.
 [BENCHMARKS.md](BENCHMARKS.md) carries the current numbers.
 
-**Retuned for the pool: 2^20.** Those numbers were taken when every divided
+**Retuned for the pool: 2^21.** Those numbers were taken when every divided
 region started and joined its own threads, about 100 µs a region. The worker
 pool (wp20 §8e) brought that to about 11 µs, so the same body pays for its
 hand-off at far fewer elements, and the target was measured again the same
-way: `(x) => x * 3 + 1` (estimated cost 5) over `n` elements, `n` exactly two
-chunks of the grain, the map called `2^28 / n` times with one input element
-fed from an output element between calls and the outputs folded into a
-printed checksum. The loop and the map are the same binary, the grain written
-into its IR, and the loop is also timed as a byte-identical copy of the binary
-in the same rounds for the noise band. Eleven interleaved rounds, minimum /
-median in ms, on the four-core Xeon of wp20 §8e with clang 18.1.3:
+way. A map whose length passes the grain is divided into
+`ceil(length / grain)` chunks, so its first division is two chunks of half the
+grain; the rows below are therefore two chunks of `c` elements each, and a
+grain of `2c` is the one whose first division they are. The body is
+`(x) => x * 3 + 1` (estimated cost 5) over `n = 2c` elements, the map called
+`2^28 / n` times with one input element fed from an output element between
+calls and the outputs folded into a printed checksum. The loop and the map are
+the same binary, the grain written into its IR, and the loop is also timed as a
+byte-identical copy of the binary in the same rounds for the noise band. Eleven
+interleaved rounds, minimum / median in ms, on a four-core Intel Xeon at
+2.80 GHz, a virtual machine, with clang 18.1.3, on 2026-10-12:
 
-| target (elements per chunk) | loop | loop, the copy | map, two chunks | speedup (min / median) |
-| --- | ---: | ---: | ---: | ---: |
-| 2^17.3 (32,768) | 232.7 / 238.6 | 220.1 / 254.2 | 274.3 / 315.5 | 0.85x / 0.76x |
-| 2^18.3 (65,536) | 219.8 / 231.0 | 222.0 / 239.6 | 220.3 / 255.6 | 1.00x / 0.90x |
-| 2^19 (104,857) | 220.7 / 230.2 | 223.7 / 235.8 | 226.2 / 236.2 | 0.98x / 0.97x |
-| 2^19.3 (131,072) | 228.1 / 240.5 | 230.3 / 251.6 | 208.9 / 230.5 | 1.09x / 1.04x |
-| **2^20 (209,715)** | 231.5 / 262.4 | 232.1 / 257.4 | 195.0 / 226.0 | **1.19x / 1.16x** |
-| 2^21 (419,430) | 244.2 / 268.8 | 255.4 / 289.2 | 194.6 / 220.6 | 1.25x / 1.22x |
-| 2^22 (838,860), the old target | 255.9 / 276.6 | 256.3 / 274.1 | 184.2 / 200.0 | 1.39x / 1.38x |
+| units per chunk (`c` elements) | grain whose first division this is | loop | loop, the copy | map, two chunks | speedup (min / median) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2^17.3 (32,768) | 2^18.3 | 232.7 / 238.6 | 220.1 / 254.2 | 274.3 / 315.5 | 0.85x / 0.76x |
+| 2^18.3 (65,536) | 2^19.3 | 219.8 / 231.0 | 222.0 / 239.6 | 220.3 / 255.6 | 1.00x / 0.90x |
+| 2^19 (104,857) | 2^20 | 220.7 / 230.2 | 223.7 / 235.8 | 226.2 / 236.2 | 0.98x / 0.97x |
+| 2^19.3 (131,072) | 2^20.3 | 228.1 / 240.5 | 230.3 / 251.6 | 208.9 / 230.5 | 1.09x / 1.04x |
+| **2^20 (209,715)** | **2^21** | 231.5 / 262.4 | 232.1 / 257.4 | 195.0 / 226.0 | **1.19x / 1.16x** |
+| 2^21 (419,430) | 2^22, the old grain | 244.2 / 268.8 | 255.4 / 289.2 | 194.6 / 220.6 | 1.25x / 1.22x |
+| 2^22 (838,860) | 2^23 | 255.9 / 276.6 | 256.3 / 274.1 | 184.2 / 200.0 | 1.39x / 1.38x |
 
 The loop against its own copy differs by 1–6% on the minimum, which is the
-noise band. The crossover is between 2^18.3 and 2^19, where the map only
-breaks even, and 2^20 is the first target whose win is outside the band on
-both figures, so `REGION_COST` in `src/parallel.ts` is 2^20: the cheapest body
-is divided past 419,430 elements instead of 1,677,722. The kernel is memory
-bound — the loop vectorises to under a nanosecond an element — which is why
-two chunks win no more than about 1.4x at any size; a body with more work per
-element wins sooner and by more, and its grain is smaller by its estimate.
+noise band. Two chunks break even with the loop between 2^18.3 and 2^19 units
+each, and two chunks of 2^20 are the first whose win is outside the band on
+both figures, so `REGION_COST` in `src/parallel.ts` is 2^21: the cheapest body
+is divided past 419,430 elements, into two chunks of about 209,715, instead of
+past 1,677,722. The kernel is memory bound — the loop vectorises to under a
+nanosecond an element — which is why two chunks win no more than about 1.4x
+at any size; a body with more work per element wins sooner and by more, and
+its grain is smaller by its estimate.
 
 ### 8f. A lock that sleeps
 
@@ -496,19 +502,20 @@ the kernel. It is the third mutex of Drepper's "Futexes Are Tricky".
 
 The spin has no `pause`. A first version paused between looks, as the pool's
 spin does, and the contended histogram below took 3.2 s against 1.8 s for the
-lock it replaced: a pause is about 140 cycles here, and 64 of them made a
-waiter late for a word that is free for nanoseconds at a time. Longer spins
-were slower still (256 paused looks 4.6 s, 1,024 6.0 s). Two yields between
-the looks and the sleep measured within the noise band of none, so the
-simpler loop was kept.
+lock it replaced: a pause costs on the order of a hundred cycles on a recent
+Intel core, and 64 of them made a waiter late for a word that is free for
+nanoseconds at a time. Longer spins were slower still (256 paused looks 4.6 s,
+1,024 6.0 s). Two yields between the looks and the sleep measured within the
+noise band of none, so the simpler loop was kept.
 
-`tests/link/thread_mutex_contended` is the measurement: eight tasks on the four
-cores of wp20 §8e, each binning 20,000 values of a generator into one guarded
-`i32[]`, taking the lock once per value, 200 rounds (`contended 200`), each
-round's values drawn from seeds the round moves and the bins folded into a
-printed checksum. The old lock was timed as two byte-identical binaries in the
-same 21 interleaved rounds, which gives the noise band; minimum / median in ms,
-wall time and the processor time of the whole process (user plus system):
+`tests/link/thread_mutex_contended` is the measurement: eight tasks on four
+cores, each binning 20,000 values of a generator into one guarded `i32[]`,
+taking the lock once per value, 200 rounds (`contended 200`), each round's
+values drawn from seeds the round moves and the bins folded into a printed
+checksum. The old lock was timed as two byte-identical binaries in the same 21
+interleaved rounds, which gives the noise band. Minimum / median in ms, wall
+time and the processor time of the whole process (user plus system), on the
+2.80 GHz Xeon of §8a, on 2026-10-12:
 
 | | wall | processor |
 | --- | ---: | ---: |
@@ -517,15 +524,15 @@ wall time and the processor time of the whole process (user plus system):
 | spin, then sleep (the futex) | 1,826 / 1,893 | 5,332 / 5,667 |
 
 The band is 2% (wall) and 3% (processor) on the minimum and 14% on both
-medians. Processor time falls outside it on both figures: 13% on the minimum
-and 31% or more on the median. Wall time is the honest mixed answer. The
-futex's best run is 10% slower than the old lock's, since a waiter woken from
-the kernel is later for the word than one that never slept, while its median
-is 12% below the better of the two old medians and its spread, 4% between
-minimum and median against 30–48%, has all but gone: the yielding lock is fast
-when its waiters happen to be on the right core and slow when they are not.
-The checksum, `424081`, and the total, 32,000,000 values binned, are the same
-from every binary in every round.
+medians. Against the better of the two old binaries, processor time is 13%
+lower on the minimum and 31% lower on the median, both outside the band. Wall
+time is no faster: the median is 12% lower, which is inside the 14% band, and
+the minimum is 12% higher, which is outside the 2% one, since a waiter woken
+from the kernel is later for the word than one that never slept. The checksum,
+`424081`, and the total, 32,000,000 values binned, are the same from every
+binary in every round. That a waiter really sleeps, and is really woken, is
+pinned by `tests/runtime-test.c`, which holds the word while three threads give
+up spinning and requires it to reach 2 before the release.
 
 ---
 
