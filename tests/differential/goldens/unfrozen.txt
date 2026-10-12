@@ -44,6 +44,13 @@ cases/arr_bounds_returned_rebind added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_shadow added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_shadow_param added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_stored added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_cycle added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_deep added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_memo added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_param added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_return added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_through_store added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
