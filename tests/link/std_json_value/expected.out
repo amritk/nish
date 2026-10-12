@@ -159,16 +159,17 @@ PASS  stale: the new handles read the new document
 PASS  stale: push of a stale value
 PASS  stale: set on a stale object
 PASS  stale: and after a larger refill
-PASS  stale: a failed parse moves the generation too
+PASS  stale: a clear bumps the generation by one, a parse by one, a failed parse by two
 PASS  stale: 510 clears later the handle still names nothing
 PASS  stale: 511 generations later it names the new root, as documented
 PASS  values: the default cap
 PASS  values: three values fit a cap of three
 PASS  values: a fourth is JSON_VALUE_ERR_VALUES at its first byte
 PASS  values: a container past the cap too
-PASS  values: and nothing is kept
+PASS  values: and nothing is kept: no values, slots or bytes
 PASS  values: a builder past the cap
-PASS  values: a cap past JSON_VALUE_MAX_VALUES is held to it, and a small body still parses
+PASS  values: a cap past JSON_VALUE_MAX_VALUES still parses a small body
+PASS  values: the value at index 2^22 - 1 is made, the one at 2^22 is JSON_VALUE_ERR_VALUES whatever maxValues says
 PASS  corpus: tests/json-suite/test-parsing.txt holds 318 files
 PASS  corpus: 95 y_ files
 PASS  corpus: 223 n_ and i_ files
@@ -187,4 +188,4 @@ PASS  alloc: 10,000 reused bodies parse, read and write
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers and the write included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the last body as written
-std/json-value: 189 passed, 0 failed, 0 skipped
+std/json-value: 190 passed, 0 failed, 0 skipped

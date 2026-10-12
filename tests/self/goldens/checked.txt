@@ -83339,139 +83339,139 @@ function JsonDocument.constructor(this: JsonDocument, limits: JsonLimits): void 
   pointer this: size=224 writesThrough=true captured=false
   pointer limits: size=16 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 288:11 capped: JsonLimits (const)
-  callee 288:20 new JsonLimits -> @nish.JsonLimits.constructor
-  callee 293:16 new JsonTokenizer -> @nish.JsonTokenizer.constructor
-  local 294:11 wide: JsonLimits (const)
-  callee 294:18 new JsonLimits -> @nish.JsonLimits.constructor
-  callee 298:20 new JsonTokenizer -> @nish.JsonTokenizer.constructor
+  local 293:11 capped: JsonLimits (const)
+  callee 293:20 new JsonLimits -> @nish.JsonLimits.constructor
+  callee 298:16 new JsonTokenizer -> @nish.JsonTokenizer.constructor
+  local 299:11 wide: JsonLimits (const)
+  callee 299:18 new JsonLimits -> @nish.JsonLimits.constructor
+  callee 303:20 new JsonTokenizer -> @nish.JsonTokenizer.constructor
 function JsonDocument.clear(this: JsonDocument): void -> @nish.JsonDocument.clear [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 303:5
+  sharedWrite: 308:5
   calls: nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JsonDocument.parse(this: JsonDocument, src: u8[], off: i32, len: i32): i32 -> @nish.JsonDocument.parse [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 389:11
+  sharedWrite: 394:11
   escaping: len off
   calls: nish.JsonDocument.clear nish.JsonDocument.close nish.JsonDocument.handle nish.JsonDocument.newNode nish.JsonDocument.parseFailed nish.JsonDocument.storeSource nish.JsonDocument.storeString nish.JsonTokenizer.next nish.JsonTokenizer.reset nish.jsonValueGet nish.jsonValuePut nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.clear#0 nish.JsonDocument.storeString#0 nish.JsonDocument.newNode#0 nish.JsonDocument.parseFailed#0 nish.JsonDocument.close#0 nish.JsonDocument.parseFailed#0 nish.JsonDocument.newNode#0 nish.JsonDocument.storeString#0 nish.JsonDocument.newNode#0 nish.JsonDocument.storeSource#0 nish.JsonDocument.newNode#0 nish.JsonDocument.newNode#0 nish.JsonDocument.parseFailed#0 nish.JsonDocument.parseFailed#0 nish.JsonDocument.handle#0
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   stackSites=0 stackLocals=0
-  callee 321:5 JsonDocument.clear -> @nish.JsonDocument.clear
-  local 322:11 tok: JsonTokenizer (const)
-  callee 323:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
-  local 324:9 depth: i32 (let)
-  local 325:9 root: i32 (let)
-  local 326:9 keyAt: i32 (let)
-  local 327:9 keyLength: i32 (let)
-  local 328:9 keySource: i32 (let)
-  local 329:9 k: i32 (let)
-  callee 329:18 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  local 331:11 v: i32 (let)
-  callee 335:21 JsonDocument.storeString -> @nish.JsonDocument.storeString
-  local 337:15 c: i32 (const)
-  callee 337:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
-  callee 343:18 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
-  callee 345:9 jsonValuePut -> @nish.jsonValuePut
-  callee 346:9 jsonValuePut -> @nish.jsonValuePut
-  callee 347:9 jsonValuePut -> @nish.jsonValuePut
-  callee 348:9 jsonValuePut -> @nish.jsonValuePut
-  callee 349:9 jsonValuePut -> @nish.jsonValuePut
-  local 353:15 c: i32 (const)
-  callee 353:24 jsonValueGet -> @nish.jsonValueGet
-  local 354:15 code: i32 (const)
-  callee 354:27 JsonDocument.close -> @nish.JsonDocument.close
-  callee 354:41 jsonValueGet -> @nish.jsonValueGet
-  callee 356:18 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
-  callee 359:17 jsonValueGet -> @nish.jsonValueGet
-  callee 360:21 jsonValueGet -> @nish.jsonValueGet
-  callee 361:21 jsonValueGet -> @nish.jsonValueGet
-  callee 364:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
-  callee 364:59 JsonDocument.storeString -> @nish.JsonDocument.storeString
-  callee 366:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
-  callee 366:59 JsonDocument.storeSource -> @nish.JsonDocument.storeSource
-  callee 368:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
-  callee 370:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
-  callee 378:16 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
-  local 384:17 p: i32 (const)
-  callee 385:11 jsonValuePut -> @nish.jsonValuePut
-  callee 386:11 jsonValuePut -> @nish.jsonValuePut
-  callee 387:11 jsonValuePut -> @nish.jsonValuePut
-  callee 388:11 jsonValuePut -> @nish.jsonValuePut
-  callee 392:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 395:14 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
-  callee 397:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 326:5 JsonDocument.clear -> @nish.JsonDocument.clear
+  local 327:11 tok: JsonTokenizer (const)
+  callee 328:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  local 329:9 depth: i32 (let)
+  local 330:9 root: i32 (let)
+  local 331:9 keyAt: i32 (let)
+  local 332:9 keyLength: i32 (let)
+  local 333:9 keySource: i32 (let)
+  local 334:9 k: i32 (let)
+  callee 334:18 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  local 336:11 v: i32 (let)
+  callee 340:21 JsonDocument.storeString -> @nish.JsonDocument.storeString
+  local 342:15 c: i32 (const)
+  callee 342:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 348:18 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
+  callee 350:9 jsonValuePut -> @nish.jsonValuePut
+  callee 351:9 jsonValuePut -> @nish.jsonValuePut
+  callee 352:9 jsonValuePut -> @nish.jsonValuePut
+  callee 353:9 jsonValuePut -> @nish.jsonValuePut
+  callee 354:9 jsonValuePut -> @nish.jsonValuePut
+  local 358:15 c: i32 (const)
+  callee 358:24 jsonValueGet -> @nish.jsonValueGet
+  local 359:15 code: i32 (const)
+  callee 359:27 JsonDocument.close -> @nish.JsonDocument.close
+  callee 359:41 jsonValueGet -> @nish.jsonValueGet
+  callee 361:18 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
+  callee 364:17 jsonValueGet -> @nish.jsonValueGet
+  callee 365:21 jsonValueGet -> @nish.jsonValueGet
+  callee 366:21 jsonValueGet -> @nish.jsonValueGet
+  callee 369:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 369:59 JsonDocument.storeString -> @nish.JsonDocument.storeString
+  callee 371:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 371:59 JsonDocument.storeSource -> @nish.JsonDocument.storeSource
+  callee 373:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 375:13 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 383:16 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
+  local 389:17 p: i32 (const)
+  callee 390:11 jsonValuePut -> @nish.jsonValuePut
+  callee 391:11 jsonValuePut -> @nish.jsonValuePut
+  callee 392:11 jsonValuePut -> @nish.jsonValuePut
+  callee 393:11 jsonValuePut -> @nish.jsonValuePut
+  callee 397:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 400:14 JsonDocument.parseFailed -> @nish.JsonDocument.parseFailed
+  callee 402:12 JsonDocument.handle -> @nish.JsonDocument.handle
 function JsonDocument.parseText(this: JsonDocument, s: string): i32 -> @nish.JsonDocument.parseText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 404:5
+  sharedWrite: 409:5
   calls: nish.JsonDocument.parse nish.jsonValueRoom
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.parse#0
   stackSites=0 stackLocals=0
-  local 402:11 n: i32 (const)
-  local 403:11 buf: u8[] (const)
-  callee 403:23 jsonValueRoom -> @nish.jsonValueRoom
-  local 405:14 i: i32 (let)
-  callee 408:12 JsonDocument.parse -> @nish.JsonDocument.parse
+  local 407:11 n: i32 (const)
+  local 408:11 buf: u8[] (const)
+  callee 408:23 jsonValueRoom -> @nish.jsonValueRoom
+  local 410:14 i: i32 (let)
+  callee 413:12 JsonDocument.parse -> @nish.JsonDocument.parse
 function JsonDocument.parseFailed(this: JsonDocument, code: i32, at: i32): i32 -> @nish.JsonDocument.parseFailed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 414:5
+  sharedWrite: 419:5
   escaping: at code
   calls: nish.JsonDocument.clear
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.clear#0
   stackSites=0 stackLocals=0
-  callee 413:5 JsonDocument.clear -> @nish.JsonDocument.clear
+  callee 418:5 JsonDocument.clear -> @nish.JsonDocument.clear
 function JsonDocument.close(this: JsonDocument, c: i32, base: i32): i32 -> @nish.JsonDocument.close [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 448:5
+  sharedWrite: 453:5
   escaping: base c
   calls: nish.JsonDocument.duplicateKeys nish.JsonDocument.kindAt nish.jsonValueGet nish.jsonValuePut nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.kindAt#0 nish.JsonDocument.duplicateKeys#0
   stackSites=0 stackLocals=0
-  local 425:9 n: i32 (let)
-  local 426:11 object: boolean (const)
-  callee 426:29 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  local 428:13 code: i32 (const)
-  callee 428:25 JsonDocument.duplicateKeys -> @nish.JsonDocument.duplicateKeys
-  local 433:11 start: i32 (const)
-  local 434:9 kept: i32 (let)
-  local 435:14 p: i32 (let)
-  local 436:13 v: i32 (const)
-  callee 436:22 jsonValueGet -> @nish.jsonValueGet
-  local 440:13 s: i32 (const)
-  callee 441:7 jsonValuePut -> @nish.jsonValuePut
-  callee 442:7 jsonValuePut -> @nish.jsonValuePut
-  callee 442:39 jsonValueGet -> @nish.jsonValueGet
-  callee 443:7 jsonValuePut -> @nish.jsonValuePut
-  callee 443:43 jsonValueGet -> @nish.jsonValueGet
-  callee 444:7 jsonValuePut -> @nish.jsonValuePut
-  callee 449:5 jsonValuePut -> @nish.jsonValuePut
-  callee 450:5 jsonValuePut -> @nish.jsonValuePut
-  callee 451:5 jsonValuePut -> @nish.jsonValuePut
+  local 430:9 n: i32 (let)
+  local 431:11 object: boolean (const)
+  callee 431:29 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local 433:13 code: i32 (const)
+  callee 433:25 JsonDocument.duplicateKeys -> @nish.JsonDocument.duplicateKeys
+  local 438:11 start: i32 (const)
+  local 439:9 kept: i32 (let)
+  local 440:14 p: i32 (let)
+  local 441:13 v: i32 (const)
+  callee 441:22 jsonValueGet -> @nish.jsonValueGet
+  local 445:13 s: i32 (const)
+  callee 446:7 jsonValuePut -> @nish.jsonValuePut
+  callee 447:7 jsonValuePut -> @nish.jsonValuePut
+  callee 447:39 jsonValueGet -> @nish.jsonValueGet
+  callee 448:7 jsonValuePut -> @nish.jsonValuePut
+  callee 448:43 jsonValueGet -> @nish.jsonValueGet
+  callee 449:7 jsonValuePut -> @nish.jsonValuePut
+  callee 454:5 jsonValuePut -> @nish.jsonValuePut
+  callee 455:5 jsonValuePut -> @nish.jsonValuePut
+  callee 456:5 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.duplicateKeys(this: JsonDocument, base: i32, n: i32): i32 -> @nish.JsonDocument.duplicateKeys [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 489:7
+  sharedWrite: 494:7
   escaping: base n
   calls: nish.JsonDocument.repeat nish.JsonDocument.samePendingKey nish.JsonDocument.sortPending nish.jsonValueGet nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.samePendingKey#0 nish.JsonDocument.repeat#0 nish.JsonDocument.sortPending#0 nish.JsonDocument.samePendingKey#0 nish.JsonDocument.repeat#0
   stackSites=0 stackLocals=0
-  local 465:9 firstRepeat: i32 (let)
-  local 467:16 i: i32 (let)
-  local 468:18 j: i32 (let)
-  callee 469:15 jsonValueGet -> @nish.jsonValueGet
-  callee 469:58 JsonDocument.samePendingKey -> @nish.JsonDocument.samePendingKey
-  callee 470:27 JsonDocument.repeat -> @nish.JsonDocument.repeat
-  local 476:13 order: i32[] (const)
-  callee 476:28 JsonDocument.sortPending -> @nish.JsonDocument.sortPending
-  local 477:11 i: i32 (let)
-  local 479:15 head: i32 (const)
-  callee 479:27 jsonValueGet -> @nish.jsonValueGet
-  local 480:13 j: i32 (let)
-  callee 481:25 JsonDocument.samePendingKey -> @nish.JsonDocument.samePendingKey
-  callee 481:51 jsonValueGet -> @nish.jsonValueGet
-  callee 482:25 JsonDocument.repeat -> @nish.JsonDocument.repeat
-  callee 482:43 jsonValueGet -> @nish.jsonValueGet
+  local 470:9 firstRepeat: i32 (let)
+  local 472:16 i: i32 (let)
+  local 473:18 j: i32 (let)
+  callee 474:15 jsonValueGet -> @nish.jsonValueGet
+  callee 474:58 JsonDocument.samePendingKey -> @nish.JsonDocument.samePendingKey
+  callee 475:27 JsonDocument.repeat -> @nish.JsonDocument.repeat
+  local 481:13 order: i32[] (const)
+  callee 481:28 JsonDocument.sortPending -> @nish.JsonDocument.sortPending
+  local 482:11 i: i32 (let)
+  local 484:15 head: i32 (const)
+  callee 484:27 jsonValueGet -> @nish.jsonValueGet
+  local 485:13 j: i32 (let)
+  callee 486:25 JsonDocument.samePendingKey -> @nish.JsonDocument.samePendingKey
+  callee 486:51 jsonValueGet -> @nish.jsonValueGet
+  callee 487:25 JsonDocument.repeat -> @nish.JsonDocument.repeat
+  callee 487:43 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.repeat(this: JsonDocument, head: i32, later: i32, firstRepeat: i32): i32 -> @nish.JsonDocument.repeat [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.jsonValuePut
@@ -83479,102 +83479,102 @@ function JsonDocument.repeat(this: JsonDocument, head: i32, later: i32, firstRep
   calls: nish.jsonValueGet nish.jsonValuePut
   pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 501:11 source: i32 (const)
-  callee 501:25 jsonValueGet -> @nish.jsonValueGet
-  callee 503:7 jsonValuePut -> @nish.jsonValuePut
-  callee 503:45 jsonValueGet -> @nish.jsonValueGet
-  callee 504:7 jsonValuePut -> @nish.jsonValuePut
+  local 506:11 source: i32 (const)
+  callee 506:25 jsonValueGet -> @nish.jsonValueGet
+  callee 508:7 jsonValuePut -> @nish.jsonValuePut
+  callee 508:45 jsonValueGet -> @nish.jsonValueGet
+  callee 509:7 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.samePendingKey(this: JsonDocument, a: i32, b: i32): boolean -> @nish.JsonDocument.samePendingKey [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish.JsonDocument.comparePending
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.comparePending#0
   stackSites=0 stackLocals=0
-  callee 511:12 JsonDocument.comparePending -> @nish.JsonDocument.comparePending
+  callee 516:12 JsonDocument.comparePending -> @nish.JsonDocument.comparePending
 function JsonDocument.sortPending(this: JsonDocument, base: i32, n: i32): i32[] -> @nish.JsonDocument.sortPending [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 522:5
+  sharedWrite: 527:5
   escaping: n
   calls: nish.JsonDocument.comparePending nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32 nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.comparePending#0
   stackSites=0 stackLocals=0
-  local 520:9 from: i32[] (let)
-  callee 520:23 jsonValueRoomI32 -> @nish.jsonValueRoomI32
-  local 521:9 to: i32[] (let)
-  callee 521:21 jsonValueRoomI32 -> @nish.jsonValueRoomI32
-  local 524:14 i: i32 (let)
-  local 527:9 width: i32 (let)
-  local 529:11 lo: i32 (let)
-  local 531:15 mid: i32 (const)
-  local 532:15 hi: i32 (const)
-  local 533:13 a: i32 (let)
-  local 534:13 b: i32 (let)
-  local 535:13 out: i32 (let)
-  local 537:17 takeA: boolean (const)
-  callee 538:36 JsonDocument.comparePending -> @nish.JsonDocument.comparePending
-  callee 538:56 jsonValueGet -> @nish.jsonValueGet
-  callee 538:79 jsonValueGet -> @nish.jsonValueGet
-  callee 540:13 jsonValuePut -> @nish.jsonValuePut
-  callee 540:35 jsonValueGet -> @nish.jsonValueGet
-  callee 543:13 jsonValuePut -> @nish.jsonValuePut
-  callee 543:35 jsonValueGet -> @nish.jsonValueGet
-  local 550:13 swap: i32[] (const)
+  local 525:9 from: i32[] (let)
+  callee 525:23 jsonValueRoomI32 -> @nish.jsonValueRoomI32
+  local 526:9 to: i32[] (let)
+  callee 526:21 jsonValueRoomI32 -> @nish.jsonValueRoomI32
+  local 529:14 i: i32 (let)
+  local 532:9 width: i32 (let)
+  local 534:11 lo: i32 (let)
+  local 536:15 mid: i32 (const)
+  local 537:15 hi: i32 (const)
+  local 538:13 a: i32 (let)
+  local 539:13 b: i32 (let)
+  local 540:13 out: i32 (let)
+  local 542:17 takeA: boolean (const)
+  callee 543:36 JsonDocument.comparePending -> @nish.JsonDocument.comparePending
+  callee 543:56 jsonValueGet -> @nish.jsonValueGet
+  callee 543:79 jsonValueGet -> @nish.jsonValueGet
+  callee 545:13 jsonValuePut -> @nish.jsonValuePut
+  callee 545:35 jsonValueGet -> @nish.jsonValueGet
+  callee 548:13 jsonValuePut -> @nish.jsonValuePut
+  callee 548:35 jsonValueGet -> @nish.jsonValueGet
+  local 555:13 swap: i32[] (const)
 function JsonDocument.comparePending(this: JsonDocument, a: i32, b: i32): i32 -> @nish.JsonDocument.comparePending [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish.jsonValueCompareBytes nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 560:12 jsonValueCompareBytes -> @nish.jsonValueCompareBytes
-  callee 562:7 jsonValueGet -> @nish.jsonValueGet
-  callee 563:7 jsonValueGet -> @nish.jsonValueGet
-  callee 564:7 jsonValueGet -> @nish.jsonValueGet
-  callee 565:7 jsonValueGet -> @nish.jsonValueGet
+  callee 565:12 jsonValueCompareBytes -> @nish.jsonValueCompareBytes
+  callee 567:7 jsonValueGet -> @nish.jsonValueGet
+  callee 568:7 jsonValueGet -> @nish.jsonValueGet
+  callee 569:7 jsonValueGet -> @nish.jsonValueGet
+  callee 570:7 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.storeString(this: JsonDocument, tok: JsonTokenizer): i32 -> @nish.JsonDocument.storeString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 574:5
+  sharedWrite: 579:5
   calls: nish.JsonTokenizer.stringInto nish.JsonTokenizer.stringLength nish.jsonValueRoom nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false
   pointer tok: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.stringLength#0 nish.JsonTokenizer.stringInto#0
   stackSites=0 stackLocals=0
-  local 571:11 n: i32 (const)
-  callee 571:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
-  local 572:11 at: i32 (const)
-  local 573:11 buf: u8[] (const)
-  callee 573:23 jsonValueRoom -> @nish.jsonValueRoom
-  callee 575:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  local 576:11 n: i32 (const)
+  callee 576:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  local 577:11 at: i32 (const)
+  local 578:11 buf: u8[] (const)
+  callee 578:23 jsonValueRoom -> @nish.jsonValueRoom
+  callee 580:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
 function JsonDocument.storeSource(this: JsonDocument, tok: JsonTokenizer): i32 -> @nish.JsonDocument.storeSource [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 587:5
+  sharedWrite: 592:5
   calls: nish.jsonValueRoom nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false
   pointer tok: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 582:11 src: u8[] (const)
-  local 583:11 start: i32 (const)
-  local 584:11 n: i32 (const)
-  local 585:11 at: i32 (const)
-  local 586:11 buf: u8[] (const)
-  callee 586:23 jsonValueRoom -> @nish.jsonValueRoom
-  local 588:14 i: i32 (let)
+  local 587:11 src: u8[] (const)
+  local 588:11 start: i32 (const)
+  local 589:11 n: i32 (const)
+  local 590:11 at: i32 (const)
+  local 591:11 buf: u8[] (const)
+  callee 591:23 jsonValueRoom -> @nish.jsonValueRoom
+  local 593:14 i: i32 (let)
 function JsonDocument.newNode(this: JsonDocument, kind: i32, first: i32, count: i32): i32 -> @nish.JsonDocument.newNode [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 609:7
+  sharedWrite: 614:7
   escaping: count first
   calls: nish.jsonValuePut nish_array_grow nish_panic_index
   pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 603:11 v: i32 (const)
-  local 604:11 cap: i32 (const)
-  callee 613:5 jsonValuePut -> @nish.jsonValuePut
-  callee 614:5 jsonValuePut -> @nish.jsonValuePut
-  callee 615:5 jsonValuePut -> @nish.jsonValuePut
-  callee 616:5 jsonValuePut -> @nish.jsonValuePut
+  local 608:11 v: i32 (const)
+  local 609:11 cap: i32 (const)
+  callee 618:5 jsonValuePut -> @nish.jsonValuePut
+  callee 619:5 jsonValuePut -> @nish.jsonValuePut
+  callee 620:5 jsonValuePut -> @nish.jsonValuePut
+  callee 621:5 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.index(this: JsonDocument, v: i32): i32 -> @nish.JsonDocument.index [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 628:11 x: i32 (const)
+  local 633:11 x: i32 (const)
 function JsonDocument.handle(this: JsonDocument, x: i32): i32 -> @nish.JsonDocument.handle [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
@@ -83586,137 +83586,137 @@ function JsonDocument.kind(this: JsonDocument, v: i32): i32 -> @nish.JsonDocumen
   calls: nish.JsonDocument.index nish.JsonDocument.kindAt
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.kindAt#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 641:12 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 641:24 JsonDocument.index -> @nish.JsonDocument.index
+  callee 646:12 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 646:24 JsonDocument.index -> @nish.JsonDocument.index
 function JsonDocument.kindAt(this: JsonDocument, x: i32): i32 -> @nish.JsonDocument.kindAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 646:11 kinds: u8[] (const)
+  local 651:11 kinds: u8[] (const)
 function JsonDocument.boolean(this: JsonDocument, v: i32): boolean -> @nish.JsonDocument.boolean [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: v
   calls: nish.JsonDocument.index nish.JsonDocument.kindAt nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0
   stackSites=0 stackLocals=0
-  local 655:11 x: i32 (const)
-  callee 655:20 JsonDocument.index -> @nish.JsonDocument.index
-  callee 656:12 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 656:53 jsonValueGet -> @nish.jsonValueGet
+  local 660:11 x: i32 (const)
+  callee 660:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee 661:12 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 661:53 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.length(this: JsonDocument, v: i32): i32 -> @nish.JsonDocument.length [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: v
   calls: nish.JsonDocument.index nish.JsonDocument.lengthAt
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.lengthAt#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 661:12 JsonDocument.lengthAt -> @nish.JsonDocument.lengthAt
-  callee 661:26 JsonDocument.index -> @nish.JsonDocument.index
+  callee 666:12 JsonDocument.lengthAt -> @nish.JsonDocument.lengthAt
+  callee 666:26 JsonDocument.index -> @nish.JsonDocument.index
 function JsonDocument.lengthAt(this: JsonDocument, x: i32): i32 -> @nish.JsonDocument.lengthAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   calls: nish.JsonDocument.kindAt nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.kindAt#0
   stackSites=0 stackLocals=0
-  local 666:11 k: i32 (const)
-  callee 666:20 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 667:64 jsonValueGet -> @nish.jsonValueGet
+  local 671:11 k: i32 (const)
+  callee 671:20 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 672:64 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.slotAt(this: JsonDocument, x: i32, i: i32): i32 -> @nish.JsonDocument.slotAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   calls: nish.JsonDocument.lengthAt nish.jsonValueGet nish_panic_overflow
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.lengthAt#0
   stackSites=0 stackLocals=0
-  callee 672:23 JsonDocument.lengthAt -> @nish.JsonDocument.lengthAt
-  callee 675:12 jsonValueGet -> @nish.jsonValueGet
+  callee 677:23 JsonDocument.lengthAt -> @nish.JsonDocument.lengthAt
+  callee 680:12 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.at(this: JsonDocument, v: i32, i: i32): i32 -> @nish.JsonDocument.at [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i v
   calls: nish.JsonDocument.handle nish.JsonDocument.index nish.JsonDocument.slotAt nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.slotAt#0 nish.JsonDocument.index#0 nish.JsonDocument.handle#0
   stackSites=0 stackLocals=0
-  local 680:11 s: i32 (const)
-  callee 680:20 JsonDocument.slotAt -> @nish.JsonDocument.slotAt
-  callee 680:32 JsonDocument.index -> @nish.JsonDocument.index
-  callee 681:25 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 681:37 jsonValueGet -> @nish.jsonValueGet
+  local 685:11 s: i32 (const)
+  callee 685:20 JsonDocument.slotAt -> @nish.JsonDocument.slotAt
+  callee 685:32 JsonDocument.index -> @nish.JsonDocument.index
+  callee 686:25 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 686:37 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.keyAt(this: JsonDocument, v: i32, i: i32): string -> @nish.JsonDocument.keyAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i v
   calls: nish.JsonDocument.index nish.JsonDocument.kindAt nish.JsonDocument.slotAt nish.JsonDocument.textOf nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.slotAt#0 nish.JsonDocument.textOf#0
   stackSites=0 stackLocals=0
-  local 686:11 x: i32 (const)
-  callee 686:20 JsonDocument.index -> @nish.JsonDocument.index
-  callee 687:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  local 690:11 s: i32 (const)
-  callee 690:20 JsonDocument.slotAt -> @nish.JsonDocument.slotAt
-  callee 694:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
-  callee 694:24 jsonValueGet -> @nish.jsonValueGet
-  callee 694:57 jsonValueGet -> @nish.jsonValueGet
+  local 691:11 x: i32 (const)
+  callee 691:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee 692:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local 695:11 s: i32 (const)
+  callee 695:20 JsonDocument.slotAt -> @nish.JsonDocument.slotAt
+  callee 699:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
+  callee 699:24 jsonValueGet -> @nish.jsonValueGet
+  callee 699:57 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.get(this: JsonDocument, v: i32, key: string): i32 -> @nish.JsonDocument.get [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key v
   calls: nish.JsonDocument.findKey nish.JsonDocument.handle nish.JsonDocument.index nish.JsonDocument.kindAt nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.findKey#0 nish.JsonDocument.handle#0
   stackSites=0 stackLocals=0
-  local 699:11 x: i32 (const)
-  callee 699:20 JsonDocument.index -> @nish.JsonDocument.index
-  callee 700:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  local 703:11 s: i32 (const)
-  callee 703:20 JsonDocument.findKey -> @nish.JsonDocument.findKey
-  callee 704:25 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 704:37 jsonValueGet -> @nish.jsonValueGet
+  local 704:11 x: i32 (const)
+  callee 704:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee 705:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local 708:11 s: i32 (const)
+  callee 708:20 JsonDocument.findKey -> @nish.JsonDocument.findKey
+  callee 709:25 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 709:37 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.findKey(this: JsonDocument, x: i32, key: string): i32 -> @nish.JsonDocument.findKey [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key x
   calls: nish.JsonDocument.bytesEqual nish.jsonValueGet nish_panic_overflow
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.bytesEqual#0
   stackSites=0 stackLocals=0
-  local 709:11 start: i32 (const)
-  callee 709:24 jsonValueGet -> @nish.jsonValueGet
-  local 710:11 n: i32 (const)
-  callee 710:20 jsonValueGet -> @nish.jsonValueGet
-  local 711:14 s: i32 (let)
-  callee 712:11 JsonDocument.bytesEqual -> @nish.JsonDocument.bytesEqual
-  callee 712:27 jsonValueGet -> @nish.jsonValueGet
-  callee 712:60 jsonValueGet -> @nish.jsonValueGet
+  local 714:11 start: i32 (const)
+  callee 714:24 jsonValueGet -> @nish.jsonValueGet
+  local 715:11 n: i32 (const)
+  callee 715:20 jsonValueGet -> @nish.jsonValueGet
+  local 716:14 s: i32 (let)
+  callee 717:11 JsonDocument.bytesEqual -> @nish.JsonDocument.bytesEqual
+  callee 717:27 jsonValueGet -> @nish.jsonValueGet
+  callee 717:60 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.string(this: JsonDocument, v: i32): string -> @nish.JsonDocument.string [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: v
   calls: nish.JsonDocument.index nish.JsonDocument.kindAt nish.JsonDocument.textOf nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.textOf#0
   stackSites=0 stackLocals=0
-  local 721:11 x: i32 (const)
-  callee 721:20 JsonDocument.index -> @nish.JsonDocument.index
-  callee 722:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 725:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
-  callee 725:24 jsonValueGet -> @nish.jsonValueGet
-  callee 725:53 jsonValueGet -> @nish.jsonValueGet
+  local 726:11 x: i32 (const)
+  callee 726:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee 727:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 730:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
+  callee 730:24 jsonValueGet -> @nish.jsonValueGet
+  callee 730:53 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.stringEquals(this: JsonDocument, v: i32, s: string): boolean -> @nish.JsonDocument.stringEquals [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s v
   calls: nish.JsonDocument.bytesEqual nish.JsonDocument.index nish.JsonDocument.kindAt nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.bytesEqual#0
   stackSites=0 stackLocals=0
-  local 730:11 x: i32 (const)
-  callee 730:20 JsonDocument.index -> @nish.JsonDocument.index
-  callee 732:7 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 733:7 JsonDocument.bytesEqual -> @nish.JsonDocument.bytesEqual
-  callee 733:23 jsonValueGet -> @nish.jsonValueGet
-  callee 733:52 jsonValueGet -> @nish.jsonValueGet
+  local 735:11 x: i32 (const)
+  callee 735:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee 737:7 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 738:7 JsonDocument.bytesEqual -> @nish.JsonDocument.bytesEqual
+  callee 738:23 jsonValueGet -> @nish.jsonValueGet
+  callee 738:52 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.numberText(this: JsonDocument, v: i32): string -> @nish.JsonDocument.numberText [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: v
   calls: nish.JsonDocument.index nish.JsonDocument.kindAt nish.JsonDocument.textOf nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.textOf#0
   stackSites=0 stackLocals=0
-  local 739:11 x: i32 (const)
-  callee 739:20 JsonDocument.index -> @nish.JsonDocument.index
-  callee 740:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 743:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
-  callee 743:24 jsonValueGet -> @nish.jsonValueGet
-  callee 743:53 jsonValueGet -> @nish.jsonValueGet
+  local 744:11 x: i32 (const)
+  callee 744:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee 745:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 748:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
+  callee 748:24 jsonValueGet -> @nish.jsonValueGet
+  callee 748:53 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.isI64(this: JsonDocument, v: i32): boolean -> @nish.JsonDocument.isI64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.readNumber
@@ -83724,9 +83724,9 @@ function JsonDocument.isI64(this: JsonDocument, v: i32): boolean -> @nish.JsonDo
   calls: nish.JsonDocument.index nish.JsonDocument.readNumber nish.JsonTokenizer.isInteger
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.readNumber#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 748:12 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
-  callee 748:28 JsonDocument.index -> @nish.JsonDocument.index
-  callee 748:46 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  callee 753:12 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
+  callee 753:28 JsonDocument.index -> @nish.JsonDocument.index
+  callee 753:46 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
 function JsonDocument.i64(this: JsonDocument, v: i32): i64 -> @nish.JsonDocument.i64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.readNumber
@@ -83734,9 +83734,9 @@ function JsonDocument.i64(this: JsonDocument, v: i32): i64 -> @nish.JsonDocument
   calls: nish.JsonDocument.index nish.JsonDocument.readNumber nish.JsonTokenizer.numberI64
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.readNumber#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 754:12 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
-  callee 754:28 JsonDocument.index -> @nish.JsonDocument.index
-  callee 754:45 JsonTokenizer.numberI64 -> @nish.JsonTokenizer.numberI64
+  callee 759:12 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
+  callee 759:28 JsonDocument.index -> @nish.JsonDocument.index
+  callee 759:45 JsonTokenizer.numberI64 -> @nish.JsonTokenizer.numberI64
 function JsonDocument.isU64(this: JsonDocument, v: i32): boolean -> @nish.JsonDocument.isU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.unsigned
@@ -83744,8 +83744,8 @@ function JsonDocument.isU64(this: JsonDocument, v: i32): boolean -> @nish.JsonDo
   calls: nish.JsonDocument.index nish.JsonDocument.unsigned
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.unsigned#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 759:5 JsonDocument.unsigned -> @nish.JsonDocument.unsigned
-  callee 759:19 JsonDocument.index -> @nish.JsonDocument.index
+  callee 764:5 JsonDocument.unsigned -> @nish.JsonDocument.unsigned
+  callee 764:19 JsonDocument.index -> @nish.JsonDocument.index
 function JsonDocument.u64(this: JsonDocument, v: i32): u64 -> @nish.JsonDocument.u64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.unsigned
@@ -83753,28 +83753,28 @@ function JsonDocument.u64(this: JsonDocument, v: i32): u64 -> @nish.JsonDocument
   calls: nish.JsonDocument.index nish.JsonDocument.unsigned
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.unsigned#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 765:12 JsonDocument.unsigned -> @nish.JsonDocument.unsigned
-  callee 765:26 JsonDocument.index -> @nish.JsonDocument.index
+  callee 770:12 JsonDocument.unsigned -> @nish.JsonDocument.unsigned
+  callee 770:26 JsonDocument.index -> @nish.JsonDocument.index
 function JsonDocument.unsigned(this: JsonDocument, x: i32): u64 -> @nish.JsonDocument.unsigned [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 775:5
+  sharedWrite: 780:5
   escaping: x
   calls: nish.JsonDocument.readNumber nish.jsonValueGet nish_panic_div nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.readNumber#0
   stackSites=0 stackLocals=0
-  callee 776:10 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
-  local 779:11 bytes: u8[] (const)
-  local 780:11 start: i32 (const)
-  callee 780:24 jsonValueGet -> @nish.jsonValueGet
-  local 781:11 end: i32 (const)
-  callee 781:30 jsonValueGet -> @nish.jsonValueGet
-  local 785:11 ten: u64 (const)
-  local 787:11 quarter: u64 (const)
-  local 788:11 half: u64 (const)
-  local 789:11 max: u64 (const)
-  local 790:9 acc: u64 (let)
-  local 791:14 i: i32 (let)
-  local 792:13 digit: u64 (const)
+  callee 781:10 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
+  local 784:11 bytes: u8[] (const)
+  local 785:11 start: i32 (const)
+  callee 785:24 jsonValueGet -> @nish.jsonValueGet
+  local 786:11 end: i32 (const)
+  callee 786:30 jsonValueGet -> @nish.jsonValueGet
+  local 790:11 ten: u64 (const)
+  local 792:11 quarter: u64 (const)
+  local 793:11 half: u64 (const)
+  local 794:11 max: u64 (const)
+  local 795:9 acc: u64 (let)
+  local 796:14 i: i32 (let)
+  local 797:13 digit: u64 (const)
 function JsonDocument.f64(this: JsonDocument, v: i32): f64 -> @nish.JsonDocument.f64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.readNumber
@@ -83782,9 +83782,9 @@ function JsonDocument.f64(this: JsonDocument, v: i32): f64 -> @nish.JsonDocument
   calls: nish.JsonDocument.index nish.JsonDocument.readNumber nish.JsonTokenizer.numberF64
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.readNumber#0 nish.JsonDocument.index#0
   stackSites=0 stackLocals=0
-  callee 804:10 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
-  callee 804:26 JsonDocument.index -> @nish.JsonDocument.index
-  callee 807:12 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
+  callee 809:10 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
+  callee 809:26 JsonDocument.index -> @nish.JsonDocument.index
+  callee 812:12 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
 function JsonDocument.readNumber(this: JsonDocument, x: i32): boolean -> @nish.JsonDocument.readNumber [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.reset
@@ -83792,41 +83792,41 @@ function JsonDocument.readNumber(this: JsonDocument, x: i32): boolean -> @nish.J
   calls: nish.JsonDocument.kindAt nish.JsonTokenizer.next nish.JsonTokenizer.reset nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.kindAt#0
   stackSites=0 stackLocals=0
-  callee 812:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  local 815:11 numbers: JsonTokenizer (const)
-  callee 816:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
-  callee 816:31 jsonValueGet -> @nish.jsonValueGet
-  callee 816:60 jsonValueGet -> @nish.jsonValueGet
-  callee 817:12 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 817:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local 820:11 numbers: JsonTokenizer (const)
+  callee 821:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 821:31 jsonValueGet -> @nish.jsonValueGet
+  callee 821:60 jsonValueGet -> @nish.jsonValueGet
+  callee 822:12 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function JsonDocument.textOf(this: JsonDocument, at: i32, n: i32): string -> @nish.JsonDocument.textOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow nish_panic_slice nish_str_new
   pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 822:11 bytes: u8[] (const)
+  local 827:11 bytes: u8[] (const)
 function JsonDocument.bytesEqual(this: JsonDocument, at: i32, n: i32, s: string): boolean -> @nish.JsonDocument.bytesEqual [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 831:11 bytes: u8[] (const)
-  local 835:14 i: i32 (let)
+  local 836:11 bytes: u8[] (const)
+  local 840:14 i: i32 (let)
 function JsonDocument.newNull(this: JsonDocument): i32 -> @nish.JsonDocument.newNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newNode
   calls: nish.JsonDocument.handle nish.JsonDocument.newNode
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0
   stackSites=0 stackLocals=0
-  callee 848:12 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 848:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 853:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 853:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
 function JsonDocument.newBoolean(this: JsonDocument, b: boolean): i32 -> @nish.JsonDocument.newBoolean [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newNode
   calls: nish.JsonDocument.handle nish.JsonDocument.newNode
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0
   stackSites=0 stackLocals=0
-  callee 852:12 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 853:7 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 857:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 858:7 JsonDocument.newNode -> @nish.JsonDocument.newNode
 function JsonDocument.newString(this: JsonDocument, s: string): i32 -> @nish.JsonDocument.newString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newStored
@@ -83834,61 +83834,61 @@ function JsonDocument.newString(this: JsonDocument, s: string): i32 -> @nish.Jso
   calls: nish.JsonDocument.newStored
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.newStored#0
   stackSites=0 stackLocals=0
-  callee 859:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
+  callee 864:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
 function JsonDocument.newI64(this: JsonDocument, x: i64): i32 -> @nish.JsonDocument.newI64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newStored
   calls: nish.JsonDocument.newStored nish_str_from_i64
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.newStored#0
   stackSites=0 stackLocals=0
-  callee 864:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
+  callee 869:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
 function JsonDocument.newU64(this: JsonDocument, x: u64): i32 -> @nish.JsonDocument.newU64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newStored
   calls: nish.JsonDocument.newStored nish_str_from_u64
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.newStored#0
   stackSites=0 stackLocals=0
-  callee 869:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
+  callee 874:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
 function JsonDocument.newF64(this: JsonDocument, x: f64): i32 -> @nish.JsonDocument.newF64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newStored
   calls: nish.JsonDocument.newStored nish_str_from_f64
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.newStored#0
   stackSites=0 stackLocals=0
-  callee 883:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
+  callee 888:12 JsonDocument.newStored -> @nish.JsonDocument.newStored
 function JsonDocument.newNumber(this: JsonDocument, text: string): i32 -> @nish.JsonDocument.newNumber [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 900:7
+  sharedWrite: 905:7
   escaping: text
   calls: nish.JsonDocument.handle nish.JsonDocument.newNode nish.JsonDocument.storeText nish.JsonTokenizer.next nish.JsonTokenizer.reset nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.storeText#0 nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0
   stackSites=0 stackLocals=0
-  local 892:11 at: i32 (const)
-  local 893:11 n: i32 (const)
-  callee 893:20 JsonDocument.storeText -> @nish.JsonDocument.storeText
-  local 894:11 numbers: JsonTokenizer (const)
-  callee 895:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
-  local 897:11 isNumber: boolean (const)
-  callee 898:7 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 899:22 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 903:12 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 903:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  local 897:11 at: i32 (const)
+  local 898:11 n: i32 (const)
+  callee 898:20 JsonDocument.storeText -> @nish.JsonDocument.storeText
+  local 899:11 numbers: JsonTokenizer (const)
+  callee 900:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  local 902:11 isNumber: boolean (const)
+  callee 903:7 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 904:22 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 908:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 908:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
 function JsonDocument.newArray(this: JsonDocument): i32 -> @nish.JsonDocument.newArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newNode
   calls: nish.JsonDocument.handle nish.JsonDocument.newNode
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0
   stackSites=0 stackLocals=0
-  callee 907:12 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 907:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 912:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 912:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
 function JsonDocument.newObject(this: JsonDocument): i32 -> @nish.JsonDocument.newObject [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newNode
   calls: nish.JsonDocument.handle nish.JsonDocument.newNode
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0
   stackSites=0 stackLocals=0
-  callee 911:12 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 911:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 916:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 916:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
 function JsonDocument.push(this: JsonDocument, a: i32, v: i32): i32 -> @nish.JsonDocument.push [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.append
@@ -83896,14 +83896,14 @@ function JsonDocument.push(this: JsonDocument, a: i32, v: i32): i32 -> @nish.Jso
   calls: nish.JsonDocument.adoptable nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.kindAt
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.adoptable#0 nish.JsonDocument.append#0
   stackSites=0 stackLocals=0
-  local 916:11 ax: i32 (const)
-  callee 916:21 JsonDocument.index -> @nish.JsonDocument.index
-  local 917:11 vx: i32 (const)
-  callee 917:21 JsonDocument.index -> @nish.JsonDocument.index
-  callee 918:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  local 921:11 code: i32 (const)
-  callee 921:23 JsonDocument.adoptable -> @nish.JsonDocument.adoptable
-  callee 925:5 JsonDocument.append -> @nish.JsonDocument.append
+  local 921:11 ax: i32 (const)
+  callee 921:21 JsonDocument.index -> @nish.JsonDocument.index
+  local 922:11 vx: i32 (const)
+  callee 922:21 JsonDocument.index -> @nish.JsonDocument.index
+  callee 923:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local 926:11 code: i32 (const)
+  callee 926:23 JsonDocument.adoptable -> @nish.JsonDocument.adoptable
+  callee 930:5 JsonDocument.append -> @nish.JsonDocument.append
 function JsonDocument.set(this: JsonDocument, o: i32, key: string, v: i32): i32 -> @nish.JsonDocument.set [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.jsonValuePut
@@ -83911,63 +83911,63 @@ function JsonDocument.set(this: JsonDocument, o: i32, key: string, v: i32): i32 
   calls: nish.JsonDocument.adoptable nish.JsonDocument.append nish.JsonDocument.findKey nish.JsonDocument.index nish.JsonDocument.kindAt nish.JsonDocument.storeText nish.jsonValueGet nish.jsonValuePut
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.adoptable#0 nish.JsonDocument.findKey#0 nish.JsonDocument.append#0 nish.JsonDocument.storeText#0
   stackSites=0 stackLocals=0
-  local 937:11 ox: i32 (const)
-  callee 937:21 JsonDocument.index -> @nish.JsonDocument.index
-  local 938:11 vx: i32 (const)
-  callee 938:21 JsonDocument.index -> @nish.JsonDocument.index
-  callee 939:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  local 942:11 code: i32 (const)
-  callee 942:23 JsonDocument.adoptable -> @nish.JsonDocument.adoptable
-  local 946:11 s: i32 (const)
-  callee 946:20 JsonDocument.findKey -> @nish.JsonDocument.findKey
-  callee 948:7 jsonValuePut -> @nish.jsonValuePut
-  callee 948:33 jsonValueGet -> @nish.jsonValueGet
-  callee 949:7 jsonValuePut -> @nish.jsonValuePut
-  callee 950:7 jsonValuePut -> @nish.jsonValuePut
-  callee 953:5 JsonDocument.append -> @nish.JsonDocument.append
-  callee 953:39 JsonDocument.storeText -> @nish.JsonDocument.storeText
+  local 942:11 ox: i32 (const)
+  callee 942:21 JsonDocument.index -> @nish.JsonDocument.index
+  local 943:11 vx: i32 (const)
+  callee 943:21 JsonDocument.index -> @nish.JsonDocument.index
+  callee 944:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local 947:11 code: i32 (const)
+  callee 947:23 JsonDocument.adoptable -> @nish.JsonDocument.adoptable
+  local 951:11 s: i32 (const)
+  callee 951:20 JsonDocument.findKey -> @nish.JsonDocument.findKey
+  callee 953:7 jsonValuePut -> @nish.jsonValuePut
+  callee 953:33 jsonValueGet -> @nish.jsonValueGet
+  callee 954:7 jsonValuePut -> @nish.jsonValuePut
+  callee 955:7 jsonValuePut -> @nish.jsonValuePut
+  callee 958:5 JsonDocument.append -> @nish.JsonDocument.append
+  callee 958:39 JsonDocument.storeText -> @nish.JsonDocument.storeText
 function JsonDocument.adoptable(this: JsonDocument, c: i32, v: i32): i32 -> @nish.JsonDocument.adoptable [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c v
   calls: nish.JsonDocument.kindAt nish.jsonValueGet
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.kindAt#0
   stackSites=0 stackLocals=0
-  callee 964:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 967:9 jsonValueGet -> @nish.jsonValueGet
-  local 970:9 p: i32 (let)
-  callee 975:11 jsonValueGet -> @nish.jsonValueGet
+  callee 969:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 972:9 jsonValueGet -> @nish.jsonValueGet
+  local 975:9 p: i32 (let)
+  callee 980:11 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.append(this: JsonDocument, c: i32, v: i32, keyAt: i32, keyLength: i32): void -> @nish.JsonDocument.append [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1003:7
+  sharedWrite: 1008:7
   escaping: c keyAt keyLength v
   calls: nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32 nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 988:9 start: i32 (let)
-  callee 988:22 jsonValueGet -> @nish.jsonValueGet
-  local 989:11 n: i32 (const)
-  callee 989:20 jsonValueGet -> @nish.jsonValueGet
-  local 990:11 capacity: i32 (const)
-  callee 990:27 jsonValueGet -> @nish.jsonValueGet
-  local 992:13 grown: i32 (const)
-  local 994:15 moved: i32 (const)
-  local 995:18 i: i32 (let)
-  callee 996:11 jsonValuePut -> @nish.jsonValuePut
-  callee 996:51 jsonValueGet -> @nish.jsonValueGet
-  callee 997:11 jsonValuePut -> @nish.jsonValuePut
-  callee 997:51 jsonValueGet -> @nish.jsonValueGet
-  callee 998:11 jsonValuePut -> @nish.jsonValuePut
-  callee 998:55 jsonValueGet -> @nish.jsonValueGet
-  callee 1001:9 jsonValuePut -> @nish.jsonValuePut
-  callee 1004:24 jsonValueRoomI32 -> @nish.jsonValueRoomI32
-  callee 1005:24 jsonValueRoomI32 -> @nish.jsonValueRoomI32
-  callee 1006:28 jsonValueRoomI32 -> @nish.jsonValueRoomI32
-  callee 1007:7 jsonValuePut -> @nish.jsonValuePut
-  callee 1009:5 jsonValuePut -> @nish.jsonValuePut
-  callee 1010:5 jsonValuePut -> @nish.jsonValuePut
-  callee 1011:5 jsonValuePut -> @nish.jsonValuePut
-  callee 1012:5 jsonValuePut -> @nish.jsonValuePut
-  callee 1013:5 jsonValuePut -> @nish.jsonValuePut
+  local 993:9 start: i32 (let)
+  callee 993:22 jsonValueGet -> @nish.jsonValueGet
+  local 994:11 n: i32 (const)
+  callee 994:20 jsonValueGet -> @nish.jsonValueGet
+  local 995:11 capacity: i32 (const)
+  callee 995:27 jsonValueGet -> @nish.jsonValueGet
+  local 997:13 grown: i32 (const)
+  local 999:15 moved: i32 (const)
+  local 1000:18 i: i32 (let)
+  callee 1001:11 jsonValuePut -> @nish.jsonValuePut
+  callee 1001:51 jsonValueGet -> @nish.jsonValueGet
+  callee 1002:11 jsonValuePut -> @nish.jsonValuePut
+  callee 1002:51 jsonValueGet -> @nish.jsonValueGet
+  callee 1003:11 jsonValuePut -> @nish.jsonValuePut
+  callee 1003:55 jsonValueGet -> @nish.jsonValueGet
+  callee 1006:9 jsonValuePut -> @nish.jsonValuePut
+  callee 1009:24 jsonValueRoomI32 -> @nish.jsonValueRoomI32
+  callee 1010:24 jsonValueRoomI32 -> @nish.jsonValueRoomI32
+  callee 1011:28 jsonValueRoomI32 -> @nish.jsonValueRoomI32
+  callee 1012:7 jsonValuePut -> @nish.jsonValuePut
+  callee 1014:5 jsonValuePut -> @nish.jsonValuePut
+  callee 1015:5 jsonValuePut -> @nish.jsonValuePut
+  callee 1016:5 jsonValuePut -> @nish.jsonValuePut
+  callee 1017:5 jsonValuePut -> @nish.jsonValuePut
+  callee 1018:5 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.newStored(this: JsonDocument, kind: i32, s: string): i32 -> @nish.JsonDocument.newStored [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newNode
@@ -83975,20 +83975,20 @@ function JsonDocument.newStored(this: JsonDocument, kind: i32, s: string): i32 -
   calls: nish.JsonDocument.handle nish.JsonDocument.newNode nish.JsonDocument.storeText
   pointer this: size=224 writesThrough=true captured=false passedTo=nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0 nish.JsonDocument.storeText#0
   stackSites=0 stackLocals=0
-  callee 1018:12 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee 1018:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
-  callee 1018:57 JsonDocument.storeText -> @nish.JsonDocument.storeText
+  callee 1023:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee 1023:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+  callee 1023:57 JsonDocument.storeText -> @nish.JsonDocument.storeText
 function JsonDocument.storeText(this: JsonDocument, s: string): i32 -> @nish.JsonDocument.storeText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1026:5
+  sharedWrite: 1031:5
   calls: nish.jsonValueRoom nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1023:11 n: i32 (const)
-  local 1024:11 at: i32 (const)
-  local 1025:11 buf: u8[] (const)
-  callee 1025:23 jsonValueRoom -> @nish.jsonValueRoom
-  local 1027:14 i: i32 (let)
+  local 1028:11 n: i32 (const)
+  local 1029:11 at: i32 (const)
+  local 1030:11 buf: u8[] (const)
+  callee 1030:23 jsonValueRoom -> @nish.jsonValueRoom
+  local 1032:14 i: i32 (let)
 function JsonDocument.write(this: JsonDocument, v: i32, w: JsonWriter): void -> @nish.JsonDocument.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.writeAt
@@ -83997,8 +83997,8 @@ function JsonDocument.write(this: JsonDocument, v: i32, w: JsonWriter): void -> 
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.writeAt#0 nish.JsonDocument.index#0
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonDocument.writeAt#2
   stackSites=0 stackLocals=0
-  callee 1046:5 JsonDocument.writeAt -> @nish.JsonDocument.writeAt
-  callee 1046:18 JsonDocument.index -> @nish.JsonDocument.index
+  callee 1051:5 JsonDocument.writeAt -> @nish.JsonDocument.writeAt
+  callee 1051:18 JsonDocument.index -> @nish.JsonDocument.index
 function JsonDocument.writeAt(this: JsonDocument, x: i32, w: JsonWriter): void -> @nish.JsonDocument.writeAt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -84007,32 +84007,32 @@ function JsonDocument.writeAt(this: JsonDocument, x: i32, w: JsonWriter): void -
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.kindAt#0 nish.JsonDocument.writeAt#0
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.JsonWriter.boolean#0 nish.JsonWriter.raw#0 nish.JsonWriter.stringBytes#0 nish.JsonWriter.beginObject#0 nish.JsonWriter.beginArray#0 nish.JsonWriter.keyBytes#0 nish.JsonDocument.writeAt#2 nish.JsonWriter.endObject#0 nish.JsonWriter.endArray#0
   stackSites=0 stackLocals=0
-  local 1051:11 k: i32 (const)
-  callee 1051:20 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
-  callee 1056:7 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 1058:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
-  callee 1058:17 jsonValueGet -> @nish.jsonValueGet
-  callee 1060:7 JsonWriter.raw -> @nish.JsonWriter.raw
-  callee 1060:25 jsonValueGet -> @nish.jsonValueGet
-  callee 1060:54 jsonValueGet -> @nish.jsonValueGet
-  callee 1062:7 JsonWriter.stringBytes -> @nish.JsonWriter.stringBytes
-  callee 1062:33 jsonValueGet -> @nish.jsonValueGet
-  callee 1062:62 jsonValueGet -> @nish.jsonValueGet
-  local 1065:13 object: boolean (const)
-  local 1066:13 start: i32 (const)
-  callee 1066:26 jsonValueGet -> @nish.jsonValueGet
-  local 1067:13 end: i32 (const)
-  callee 1067:32 jsonValueGet -> @nish.jsonValueGet
-  callee 1069:9 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee 1071:9 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 1073:16 s: i32 (let)
-  callee 1075:11 JsonWriter.keyBytes -> @nish.JsonWriter.keyBytes
-  callee 1075:34 jsonValueGet -> @nish.jsonValueGet
-  callee 1075:67 jsonValueGet -> @nish.jsonValueGet
-  callee 1077:9 JsonDocument.writeAt -> @nish.JsonDocument.writeAt
-  callee 1077:22 jsonValueGet -> @nish.jsonValueGet
-  callee 1080:9 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  callee 1082:9 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  local 1056:11 k: i32 (const)
+  callee 1056:20 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  callee 1061:7 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 1063:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee 1063:17 jsonValueGet -> @nish.jsonValueGet
+  callee 1065:7 JsonWriter.raw -> @nish.JsonWriter.raw
+  callee 1065:25 jsonValueGet -> @nish.jsonValueGet
+  callee 1065:54 jsonValueGet -> @nish.jsonValueGet
+  callee 1067:7 JsonWriter.stringBytes -> @nish.JsonWriter.stringBytes
+  callee 1067:33 jsonValueGet -> @nish.jsonValueGet
+  callee 1067:62 jsonValueGet -> @nish.jsonValueGet
+  local 1070:13 object: boolean (const)
+  local 1071:13 start: i32 (const)
+  callee 1071:26 jsonValueGet -> @nish.jsonValueGet
+  local 1072:13 end: i32 (const)
+  callee 1072:32 jsonValueGet -> @nish.jsonValueGet
+  callee 1074:9 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee 1076:9 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 1078:16 s: i32 (let)
+  callee 1080:11 JsonWriter.keyBytes -> @nish.JsonWriter.keyBytes
+  callee 1080:34 jsonValueGet -> @nish.jsonValueGet
+  callee 1080:67 jsonValueGet -> @nish.jsonValueGet
+  callee 1082:9 JsonDocument.writeAt -> @nish.JsonDocument.writeAt
+  callee 1082:22 jsonValueGet -> @nish.jsonValueGet
+  callee 1085:9 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee 1087:9 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function JsonDocument.stringify(this: JsonDocument, v: i32): string -> @nish.JsonDocument.stringify [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.constructor
@@ -84040,12 +84040,12 @@ function JsonDocument.stringify(this: JsonDocument, v: i32): string -> @nish.Jso
   calls: nish.JsonDocument.write nish.JsonWriter.complete nish.JsonWriter.constructor nish_exit nish_panic_overflow nish_panic_slice nish_str_new nish_write
   pointer this: size=224 writesThrough=false captured=false passedTo=nish.JsonDocument.write#0
   stackSites=1 stackLocals=1
-  local 1096:9 size: i32 (let)
-  local 1098:13 buf: u8[] (const)
-  local 1099:13 w: JsonWriter (const)
-  callee 1099:29 new JsonWriter -> @nish.JsonWriter.constructor
-  callee 1100:7 JsonDocument.write -> @nish.JsonDocument.write
-  callee 1102:16 JsonWriter.complete -> @nish.JsonWriter.complete
+  local 1101:9 size: i32 (let)
+  local 1103:13 buf: u8[] (const)
+  local 1104:13 w: JsonWriter (const)
+  callee 1104:29 new JsonWriter -> @nish.JsonWriter.constructor
+  callee 1105:7 JsonDocument.write -> @nish.JsonDocument.write
+  callee 1107:16 JsonWriter.complete -> @nish.JsonWriter.complete
 function jsonValueGet(a: i32[], i: i32): i32 -> @nish.jsonValueGet
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -84053,39 +84053,39 @@ function jsonValueGet(a: i32[], i: i32): i32 -> @nish.jsonValueGet
   stackSites=0 stackLocals=0
 function jsonValuePut(a: i32[], i: i32, x: i32): void -> @nish.jsonValuePut
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1115:5
+  sharedWrite: 1120:5
   escaping: i x
   calls: nish_array_grow
   pointer a: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function jsonValueRoom(a: u8[], n: i32): u8[] -> @nish.jsonValueRoom
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1132:3
+  sharedWrite: 1137:3
   escaping: a n
   calls: nish_exit nish_panic_overflow nish_panic_slice nish_write
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1127:9 have: i32 (const)
-  local 1131:9 grown: u8[] (const)
+  local 1132:9 have: i32 (const)
+  local 1136:9 grown: u8[] (const)
 function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1143:3
+  sharedWrite: 1148:3
   escaping: a n
   calls: nish_exit nish_panic_overflow nish_panic_slice nish_write
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1138:9 have: i32 (const)
-  local 1142:9 grown: i32[] (const)
+  local 1143:9 have: i32 (const)
+  local 1147:9 grown: i32[] (const)
 function jsonValueCompareBytes(bytes: u8[], a: i32, an: i32, b: i32, bn: i32): i32 -> @nish.jsonValueCompareBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: an bn
   calls: nish_panic_index nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1149:9 n: i32 (const)
-  local 1150:12 i: i32 (let)
-  local 1151:11 x: i32 (const)
-  local 1152:11 y: i32 (const)
+  local 1154:9 n: i32 (const)
+  local 1155:12 i: i32 (let)
+  local 1156:11 x: i32 (const)
+  local 1157:11 y: i32 (const)
 module std/json.ts [package nish]
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9

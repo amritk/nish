@@ -24,6 +24,7 @@ import {
   JSON_VALUE_ERR_HANDLE,
   JSON_VALUE_ERR_NUMBER,
   JSON_VALUE_ERR_VALUES,
+  JSON_VALUE_MAX_VALUES,
   JSON_VALUE_NONE,
   JSON_VALUE_NULL,
   JSON_VALUE_NUMBER,
@@ -419,7 +420,15 @@ const jvStale = (t: Suite): void => {
   doc.parseText("[1,2]");
   const larger = doc.parseText("[[1,2,3,4,5,6],[7,8,9]]");
   t.ok("stale: and after a larger refill", doc.kind(b) === JSON_VALUE_NONE && doc.kind(name) === JSON_VALUE_NONE && doc.length(larger) === 2);
-  t.eqI32("stale: a failed parse moves the generation too", doc.parseText("[") < 0 ? doc.kind(larger) : 99, JSON_VALUE_NONE);
+  // Each step on its own: a clear is one bump of the generation, a parse one, a failed parse two.
+  const g0: i32 = doc.generation;
+  doc.clear();
+  const g1: i32 = doc.generation;
+  doc.parseText("[1]");
+  const g2: i32 = doc.generation;
+  doc.parseText("[");
+  const g3: i32 = doc.generation;
+  t.eqStr("stale: a clear bumps the generation by one, a parse by one, a failed parse by two", `${g1 - g0} ${g2 - g1} ${g3 - g2}`, "1 1 2");
   // The generation wraps after 511 parses and clears: the documented limit of the check.
   const kept = doc.parseText("[7]");
   for (let i: i32 = 0; i < 510; i += 1) {
@@ -438,7 +447,8 @@ const jvValues = (t: Suite): void => {
   t.ok("values: three values fit a cap of three", doc.length(doc.parseText("[1,2]")) === 2);
   t.eqStr("values: a fourth is JSON_VALUE_ERR_VALUES at its first byte", `${doc.parseText("[1,2,3]")}@${doc.errorAt}`, `${JSON_VALUE_ERR_VALUES}@5`);
   t.eqStr("values: a container past the cap too", `${doc.parseText("[1,2,[]]")}@${doc.errorAt}`, `${JSON_VALUE_ERR_VALUES}@5`);
-  t.eqI32("values: and nothing is kept", doc.kind(doc.at(doc.parseText("[1,2,3]"), 0)), JSON_VALUE_NONE);
+  const refused = doc.parseText("[1,2,3]");
+  t.ok("values: and nothing is kept: no values, slots or bytes", refused === JSON_VALUE_ERR_VALUES && doc.top === 0 && doc.slotTop === 0 && doc.byteTop === 0);
   doc.clear();
   doc.newNull();
   doc.newNull();
@@ -446,7 +456,18 @@ const jvValues = (t: Suite): void => {
   t.eqStr("values: a builder past the cap", `${doc.newNull()} ${doc.newString("x")} ${doc.newArray()} ${doc.newNumber("1")}`, `${JSON_VALUE_ERR_VALUES} ${JSON_VALUE_ERR_VALUES} ${JSON_VALUE_ERR_VALUES} ${JSON_VALUE_ERR_VALUES}`);
   doc.maxValues = 2147483647;
   doc.clear();
-  t.ok("values: a cap past JSON_VALUE_MAX_VALUES is held to it, and a small body still parses", doc.length(doc.parseText("[1,2,3]")) === 3);
+  t.ok("values: a cap past JSON_VALUE_MAX_VALUES still parses a small body", doc.length(doc.parseText("[1,2,3]")) === 3);
+  // The clamp to JSON_VALUE_MAX_VALUES, without building four million values:
+  // the count of values in use is set just under it by hand, the way only a
+  // test should, and the next value is refused even though maxValues allows it.
+  // Without the clamp it would be index 2^22, whose handle would spill into the
+  // generation's bits.
+  doc.clear();
+  doc.top = JSON_VALUE_MAX_VALUES - 1;
+  const lastIndex = doc.newNull();
+  const pastIt = doc.newNull();
+  t.eqStr("values: the value at index 2^22 - 1 is made, the one at 2^22 is JSON_VALUE_ERR_VALUES whatever maxValues says", `${lastIndex >= 0} ${pastIt}`, `true ${JSON_VALUE_ERR_VALUES}`);
+  doc.clear();
 };
 
 export const jvUnits = (t: Suite): void => {

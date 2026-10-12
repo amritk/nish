@@ -444,7 +444,8 @@ nesting depth is capped at 64, the writer's own limit, so every document a
 parse accepts can be written back. A document holds at most `doc.maxValues`
 values, 262,144 unless you raise it; one more is `JSON_VALUE_ERR_VALUES`. Each
 value costs the document about 46 bytes, kept for as long as the document is,
-so that cap is what bounds a long-lived server's memory.
+so that cap, with the input's own size limit for the text the document
+copies, is what bounds a long-lived server's memory.
 
 **Duplicate keys are refused.** `{"a":1,"a":2}` is `JSON_VALUE_ERR_DUPLICATE`,
 because two programs that read different members of one text can disagree
@@ -455,7 +456,8 @@ answer: one member, at the place of the first, with the value of the last.
 **One document, many parses.** Each `parse` replaces what the document held,
 and every handle from before it is gone: a handle kept from the last request
 reads as `JSON_VALUE_NONE` in this one, even when the two have the same shape.
-The check counts documents in a cycle of 511, so do not keep handles across
+The check counts in a cycle of 511 steps — one for each `clear`, one for
+each parse, two for a parse that fails — so do not keep handles across
 parses; it is there to catch the mistake. The document keeps its memory, so a
 server that keeps one document and parses each request into it stops
 allocating once it has seen its largest request. `clear()` empties it for

@@ -35,14 +35,17 @@
  * earlier request names nothing in the next one, even when the next one has
  * the same shape: it is `JSON_VALUE_NONE` to `kind`, and every reader answers
  * its empty value for it rather than another document's. The generation has
- * 511 values, so the check misses only a handle kept across exactly a
- * multiple of 511 parses and clears; a program must not keep handles across
+ * 511 values and moves by one at a `clear`, one at a parse and two at a parse
+ * that fails, so the check misses only a handle kept across exactly a
+ * multiple of 511 of those steps; a program must not keep handles across
  * documents, and this catches the mistake rather than licensing it. A
  * negative handle, or one past the last value, is `JSON_VALUE_NONE` too.
  *
  * **The document's size is bounded.** Each value costs about 46 bytes of the
- * arrays the document keeps for its life (`docs/security/json.md`, JSON-10),
- * so `maxValues` caps how many one document holds:
+ * arrays the document keeps for its life, on top of the decoded text of its
+ * strings, keys and numbers, which `JsonLimits.maxTotalBytes` bounds through
+ * the input (`docs/security/json.md`, JSON-10). `maxValues` caps the first
+ * part by capping how many values one document holds:
  * `JSON_VALUE_DEFAULT_MAX_VALUES` unless the program sets it, at most
  * `JSON_VALUE_MAX_VALUES`. A parse that would make one more is
  * `JSON_VALUE_ERR_VALUES` at the byte of the value that does not fit, and a
@@ -174,9 +177,10 @@ export const JSON_VALUE_DUPLICATE_LAST: i32 = 1
 
 /**
  * A handle is `generation << JSON_VALUE_INDEX_BITS | index`. The generation
- * runs from 1 to `JSON_VALUE_LAST_GENERATION` and moves on at every `parse`
- * and `clear`, so a handle kept from an earlier document names nothing in
- * this one, unless exactly a multiple of 511 parses and clears have passed.
+ * runs from 1 to `JSON_VALUE_LAST_GENERATION` and moves on by one at every
+ * `clear` and every parse, two at a parse that fails, so a handle kept from an
+ * earlier document names nothing in this one, unless exactly a multiple of
+ * 511 of those steps have passed.
  */
 const JSON_VALUE_INDEX_BITS: i32 = 22
 const JSON_VALUE_INDEX_MASK: i32 = 4194303
@@ -255,13 +259,14 @@ export class JsonDocument {
   /** How many members are pending. */
   pendingTop: i32 = 0
   /** The most values the document holds; more is `JSON_VALUE_ERR_VALUES`. At most `JSON_VALUE_MAX_VALUES`. */
-  maxValues: i32 = 262144
+  maxValues: i32 = 0
   /** The generation every handle of the current document carries; see `JSON_VALUE_INDEX_BITS`. */
   generation: i32 = 1
   /** Whether the last `unsigned` read a number that fits a `u64`. */
   unsignedFits: boolean = false
 
   constructor(limits: JsonLimits) {
+    this.maxValues = JSON_VALUE_DEFAULT_MAX_VALUES
     this.kinds = []
     this.first = []
     this.count = []
