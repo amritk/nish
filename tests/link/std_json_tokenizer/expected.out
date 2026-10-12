@@ -219,6 +219,12 @@ PASS  isU64(9999999999999999999)
 PASS  numberU64(9999999999999999999)
 PASS  isU64(10000000000000000000)
 PASS  numberU64(10000000000000000000)
+PASS  isU64(9223372036854775807)
+PASS  numberU64(9223372036854775807)
+PASS  isU64(10000000000000000001)
+PASS  numberU64(10000000000000000001)
+PASS  isU64(18446744073709551614)
+PASS  numberU64(18446744073709551614)
 PASS  isU64(18446744073709551615)
 PASS  numberU64(18446744073709551615)
 PASS  isU64(18446744073709551616)
@@ -335,6 +341,26 @@ PASS  scan: the number limit inside a fraction's run
 PASS  scan: a number exactly as long as the number limit
 PASS  scan: numberI64 of an integer the window cuts
 PASS  scan: numberU64 of an integer the window cuts
+PASS  long run: then a two-byte character
+PASS  long run: then a three-byte character
+PASS  long run: then a four-byte character
+PASS  long run: then 0x00 is CONTROL where it stands
+PASS  long run: then 0x1F is CONTROL where it stands
+PASS  long run: then escapes
+PASS  long run: then a \u escape the window cuts after two hex digits
+PASS  long run: then a backslash on the window's last byte
+PASS  long run: then a two-byte character the window cuts after its lead
+PASS  long run: then a four-byte character the window cuts after its third byte
+PASS  long run: then a three-byte character closed past the window
+PASS  shrunk: a blank run stops at the array's end
+PASS  shrunk: a digit run stops at the array's end
+PASS  shrunk: ...and the number is the digits left
+PASS  shrunk: a string run stops at the array's end
+PASS  shrunk: isU64 is false once the token is past the array
+PASS  shrunk: numberU64 is 0
+PASS  shrunk: isInteger is false
+PASS  shrunk: numberF64 is 0, through numberSlow
+PASS  shrunk: stringInto copies only the bytes left
 PASS  an error is answered by next()
 PASS  ...and recorded in failed
 PASS  ...at errorAt
@@ -389,4 +415,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 391 passed, 0 failed, 0 skipped
+std/json-tokenizer: 417 passed, 0 failed, 0 skipped

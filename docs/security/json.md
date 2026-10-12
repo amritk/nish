@@ -12,7 +12,7 @@ with its own scope, anchors and findings.
 **Anchors.** Every `file:line` below is at `4411ea9`, the module's head in this
 change, on top of `main` at `ce9d394`, except where a paragraph names another
 commit: the bulk scans and `numberU64` (#597's tokenizer-scan stage) are
-anchored at `ec1c565d`, and the typed layer's `u64`, enum and `Map` kinds and
+anchored at `2d9a369f`, and the typed layer's `u64`, enum and `Map` kinds and
 its key dispatch (#597's typed-kinds stage) at `014a4c3a`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
@@ -29,7 +29,7 @@ layer, all Low.
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -96,7 +96,7 @@ whose overflow test accumulates negatively and so reaches −2^63 exactly
 significant digits and a decimal exponent within ±22, `strtod` otherwise
 ("numberF64(9007199254740993) rounds to even", "numberF64(5e-324), the
 smallest subnormal", and the Node check's bitwise comparison over the corpus).
-`numberU64` (at `ec1c565d`: `:1102`, and `:1114`, `unsignedScan`) answers
+`numberU64` (at `2d9a369f`: `:1110`, and `:1122`, `unsignedScan`) answers
 only when `isU64` holds: digits alone, with no minus sign, `-0` included, and
 at most 20 of them. RFC 8259 allows no leading zero, so up to 19 digits is
 below 10^19 and always fits; one of 20 fits only when it is a `1` and then 19
@@ -105,12 +105,16 @@ before 10^19 is added, so the sum never wraps ("isU64(18446744073709551615)",
 "isU64(18446744073709551616)", "isU64(28446744073709551615)",
 "isU64(100000000000000000000)", "isU64(-0)").
 
-**Long strings** (`:769`, `string`): the limit counts raw bytes between the
-quotes and is checked before every byte, so an over-long string is refused
-where it crosses `maxStringBytes`, not where it ends ("STRING_LIMIT: the fourth
-byte is refused where it stands"), and a multi-byte step that jumps past the
-limit is caught after the loop ("STRING_LIMIT: a multi-byte character that
-steps past the limit"). The limit is clamped to the window before it is added
+**Long strings** (at `2d9a369f`: `:818`, `string`; `:320`,
+`jsonTokSkipPlain`): the limit counts raw bytes between the quotes. A run of
+plain bytes is stepped over by `jsonTokSkipPlain`, which stops at the limit,
+and every other byte is checked against it before it is read, so an over-long
+string is refused where it crosses `maxStringBytes`, not where it ends
+("STRING_LIMIT: the fourth byte is refused where it stands", "scan: a run
+stops at the string limit", "scan: ...and is refused at its last byte by a
+limit of 999"), and a multi-byte step that jumps past the limit is caught
+after the loop ("STRING_LIMIT: a multi-byte character that steps past the
+limit"). The limit is clamped to the window before it is added
 to an offset, so `maxStringBytes` of 2^31 − 1 cannot overflow.
 
 **Whole bodies** (`:527`, `reset`, at `03a2bee`): a window longer than
@@ -145,9 +149,9 @@ RFC 8259 blanks may follow; anything else, a second document or a NUL
 included, is `JSON_TOK_ERR_TRAILING` at its byte ("TRAILING: a second
 document", "TRAILING: a NUL after the value").
 
-**Nothing outside the window, nothing that panics** (at `ec1c565d`: `:269`,
+**Nothing outside the window, nothing that panics** (at `2d9a369f`: `:269`,
 `jsonTokByteAt`; `:294`, `jsonTokSkipBlank`; `:307`, `jsonTokSkipDigits`;
-`:805`, `string`): a single byte is read through one function that answers −1
+`:320`, `jsonTokSkipPlain`; `:818`, `string`): a single byte is read through one function that answers −1
 outside `[off, end)` or outside the array, and a window outside the array is
 refused in `reset`. A run — a string's plain bytes, the blanks between
 tokens, a number's digits — is read by a loop whose every pass tests the
@@ -158,7 +162,15 @@ window's end, so the byte it stops at is judged exactly as before. The
 readers of a token already scanned (`numberF64`, `integerScan`,
 `unsignedScan`, `stringInto`'s copy of a string with no escape) are bounded
 the same way, and `numberSlow` hands `String.fromBytes` the token's own
-range only after checking it lies in the array. "scan: ..." in
+range only after checking it lies in the array. `reset` already keeps the
+window inside the array, so the array bound matters only when the caller
+shortens `src` after `next()` read it; "shrunk: ..." pins that case, with a
+`pop` that leaves the old bytes in the array's capacity, where a read past
+the length would find them: "shrunk: a blank run stops at the array's end",
+"shrunk: a digit run stops at the array's end", "shrunk: a string run stops
+at the array's end", "shrunk: isU64 is false once the token is past the
+array", "shrunk: isInteger is false", "shrunk: numberF64 is 0, through
+numberSlow" and "shrunk: stringInto copies only the bytes left". "scan: ..." in
 `expected.out` ends each run on the window's edge with a byte past it that
 would change the answer if it were read: a quote ("scan: a run of plain
 bytes the window cuts short is truncated, not closed by the quote past it"),
@@ -173,7 +185,7 @@ padded window, every mutant has one verdict", with the seed's totals pinned
 and where it stopped"). Errors are sticky, and an error leaves the token
 before it readable ("an error in the string after a string token").
 
-**No allocation per body** (`:505`, `reset`; at `ec1c565d`, `:1239`,
+**No allocation per body** (`:505`, `reset`; at `2d9a369f`, `:1250`,
 `numberSlow`): "alloc: Arena.used() is flat across every one, parseFloat's
 numbers included" measures 10,000 bodies through one reused tokenizer, each
 call measured as `tests/link/net_loopback/common.ts`'s `LbMeter` measures a
