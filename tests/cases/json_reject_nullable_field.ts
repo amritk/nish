@@ -3,7 +3,7 @@ import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
 class Score {
-  points: u64 = 0;
+  points: u16 = 0;
 }
 
 class Card {

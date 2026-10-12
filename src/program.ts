@@ -690,6 +690,8 @@ export class FieldInfo {
   offset: i32
   /** `readonly` fields may only be assigned through `this` in the constructor. */
   readonly: boolean
+  /** Named in the class's `json.optional`: a missing key sets the field to its initializer. */
+  jsonOptional: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null
   decl: Node
@@ -706,6 +708,12 @@ export class FieldInfo {
    * in the declaring module for the reason `FunctionSig.returnSpelling` is.
    */
   spelling: string
+  /**
+   * The key typed JSON reads and writes the field under: its name, or the one
+   * the class's `static readonly json` gives it in `rename`
+   * (`src/json-typed.ts`, docs/LANGUAGE.md, "Typed JSON").
+   */
+  wireName: string
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
@@ -717,6 +725,8 @@ export class FieldInfo {
     this.decl = decl
     this.inlineCapacity = -1
     this.spelling = ""
+    this.wireName = name
+    this.jsonOptional = false
   }
 
   /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
@@ -771,6 +781,8 @@ export class StructInfo {
   poisoned: boolean
   /** Pass 1b progress, so a struct is collected once. */
   collected: boolean
+  /** `nish/json-typed`'s `JsonNumber`, which typed JSON reads and writes as one number. */
+  jsonNumber: boolean
   /**
    * The (template, type-argument tuple) this layout was monomorphised from, or
    * `null` for a class or interface somebody declared (WP18 G5).
@@ -783,6 +795,12 @@ export class StructInfo {
    * level down, for the same reason.
    */
   instance: StructInstantiation | null
+  /**
+   * The class's `static readonly json = { ... }`, the typed JSON options it
+   * declares, or `null`. It is not a field: `src/json-typed.ts` reads it once
+   * the fields are collected and writes what it says into each field.
+   */
+  jsonOptions: Node | null
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -805,6 +823,8 @@ export class StructInfo {
     this.exported = false
     this.poisoned = false
     this.collected = false
+    this.jsonOptions = null
+    this.jsonNumber = false
   }
 
   /** The field called `name` on this struct, or `null`. */

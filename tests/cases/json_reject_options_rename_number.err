@@ -1,0 +1,1 @@
+`User.json` renames `id` to a value that is not a string: a field's key on the wire is a string literal

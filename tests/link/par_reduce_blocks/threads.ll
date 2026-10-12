@@ -11,7 +11,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noundef i8 @step(i8 noundef, i8 noundef) #0
+declare noundef i8 @step$(i8 noundef, i8 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
@@ -241,7 +241,7 @@ for.body:
   %43 = bitcast i8* %36 to i8*
   %44 = getelementptr inbounds i8, i8* %43, i64 %42
   %45 = load i8, i8* %44, align 1, !alias.scope !9, !noalias !8, !tbaa !17
-  %46 = call i8 @step(i8 %40, i8 %45)
+  %46 = call i8 @step$(i8 %40, i8 %45)
   store i8 %46, i8* %acc.addr, align 1
   br label %for.inc
 
@@ -384,7 +384,7 @@ for.body:
   %16 = bitcast i8* %3 to i8*
   %17 = getelementptr inbounds i8, i8* %16, i64 %15
   %18 = load i8, i8* %17, align 1, !alias.scope !9, !noalias !8, !tbaa !17
-  %19 = call i8 @step(i8 %13, i8 %18)
+  %19 = call i8 @step$(i8 %13, i8 %18)
   store i8 %19, i8* %acc.addr, align 1
   br label %for.inc
 

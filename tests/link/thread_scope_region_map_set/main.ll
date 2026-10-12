@@ -59,7 +59,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @read(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(4) nocapture %h) #0 {
+define hidden noundef i32 @read$(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(4) nocapture %h) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
