@@ -5296,9 +5296,10 @@ if (!only || "std_json_typed".includes(only)) {
 }
 
 // `nish/json-value` against Node's own parser: every y_ file of JSONTestSuite
-// parsed natively under JSON_VALUE_DUPLICATE_LAST and written back (`app
-// --roundtrip`, the bytes in hex) must be the text a parse here gives once it
-// is minified: each number as its source text, each string as
+// parsed natively under JSON_VALUE_DUPLICATE_LAST and written back minified
+// and indented by two spaces (`app --roundtrip`, the bytes in hex) must be the
+// text a parse here gives once it is laid out as `JSON.stringify(v, null, 0)`
+// and `(v, null, 2)` lay it out: each number as its source text, each string as
 // `JSON.stringify` writes it, and a repeated key where `JSON.parse` keeps it,
 // at the first one's place with the last one's value. The same output must
 // also be `JSON.parse`'s value, so the reference cannot drift from JavaScript.
@@ -5307,8 +5308,10 @@ if (!only || "std_json_value".includes(only)) {
   if (!HAS_CLANG || !fs.existsSync(exe)) {
     skip("skipped: link/std_json_value: no native program to hold against JSON.parse")
   } else {
-    // A minified rewrite of valid JSON text that keeps every number's text.
-    const minifyKeepingNumbers = (text) => {
+    // Valid JSON text laid out again, minified or indented by `indent` spaces
+    // as `JSON.stringify(v, null, indent)` lays it out, keeping every number's
+    // text and keeping a repeated key where JSON.parse keeps it.
+    const relayKeepingNumbers = (text, indent) => {
       const token =
         /\s*(?:("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}[\],:]))/y
       const next = () => {
@@ -5318,7 +5321,7 @@ if (!only || "std_json_value".includes(only)) {
         }
         return m
       }
-      const value = (m) => {
+      const value = (m, depth) => {
         if (m[1] !== undefined) {
           return JSON.stringify(JSON.parse(m[1]))
         }
@@ -5326,27 +5329,28 @@ if (!only || "std_json_value".includes(only)) {
           return m[2] ?? m[3]
         }
         const close = m[4] === "{" ? "}" : "]"
-        const members = new Map()
-        const elements = []
+        const parts = new Map()
         let t = next()
         while (t[4] !== close) {
           if (close === "}") {
             const key = JSON.parse(t[1])
             next()
-            members.set(key, value(next()))
+            parts.set(key, `${JSON.stringify(key)}:${indent > 0 ? " " : ""}${value(next(), depth + 1)}`)
           } else {
-            elements.push(value(t))
+            parts.set(parts.size, value(t, depth + 1))
           }
           t = next()
           if (t[4] === ",") {
             t = next()
           }
         }
-        return close === "}"
-          ? `{${[...members].map(([k, v]) => `${JSON.stringify(k)}:${v}`).join(",")}}`
-          : `[${elements.join(",")}]`
+        if (parts.size === 0 || indent === 0) {
+          return `${m[4]}${[...parts.values()].join(",")}${close}`
+        }
+        const inner = `\n${" ".repeat(indent * (depth + 1))}`
+        return `${m[4]}${inner}${[...parts.values()].join(`,${inner}`)}\n${" ".repeat(indent * depth)}${close}`
       }
-      return value(next())
+      return value(next(), 0)
     }
     const files = new Map()
     for (const line of fs
@@ -5370,22 +5374,30 @@ if (!only || "std_json_value".includes(only)) {
     for (const line of String(run.stdout ?? "")
       .split("\n")
       .filter((l) => l.length > 0)) {
-      const [name, hex] = line.split(" ")
+      const [name, hex, prettyHex] = line.split(" ")
       const bytes = files.get(name) ?? null
       if (bytes === null) {
         problems.push(`${name}: not in the corpus`)
         continue
       }
       const input = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-      const want = minifyKeepingNumbers(input)
+      const want = relayKeepingNumbers(input, 0)
       const got = Buffer.from(hex, "hex").toString("utf8")
+      const prettyWant = relayKeepingNumbers(input, 2)
+      const prettyGot = Buffer.from(prettyHex ?? "", "hex").toString("utf8")
       compared++
       if (got !== want || JSON.stringify(JSON.parse(got)) !== JSON.stringify(JSON.parse(input))) {
         problems.push(`${name}\n  native ${got}\n  node   ${want}`)
       }
+      if (
+        prettyGot !== prettyWant ||
+        JSON.stringify(JSON.parse(prettyGot)) !== JSON.stringify(JSON.parse(input))
+      ) {
+        problems.push(`${name}, indented\n  native ${prettyGot}\n  node   ${prettyWant}`)
+      }
     }
     check(
-      `link/std_json_value: each of the ${files.size} y_ files of JSONTestSuite parsed and written natively is its minified text, numbers as written`,
+      `link/std_json_value: each of the ${files.size} y_ files of JSONTestSuite parsed and written natively, minified and indented by 2, is its text laid out as JSON.stringify lays it out, numbers as written`,
       run.status === 0 && compared === files.size && files.size > 0 && problems.length === 0,
       run.status !== 0 ? shown(run) : problems.join("\n")
     )

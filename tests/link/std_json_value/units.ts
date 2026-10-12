@@ -317,6 +317,33 @@ const jvWriting = (t: Suite): void => {
   t.eqStr("write: and stringify answers empty", dd.stringify(dr), "");
 };
 
+const jvPretty = (t: Suite): void => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText('{"a":[1,{},[],"x",{"k":null}],"é":{"n":1.50e2},"e":""}');
+  const out = new Array<u8>(512);
+  const w = new JsonWriter(out, 0);
+  w.setIndent(2);
+  w.reset(out, 0);
+  doc.write(root, w);
+  t.eqStr(
+    "pretty: two spaces, as JSON.stringify(v, null, 2) lays it out, numbers as written",
+    `${w.complete()} ${jvHexOf(w.text())}`,
+    `true ${jvHexOf('{\n  "a": [\n    1,\n    {},\n    [],\n    "x",\n    {\n      "k": null\n    }\n  ],\n  "é": {\n    "n": 1.50e2\n  },\n  "e": ""\n}')}`
+  );
+  w.setIndentTab();
+  w.reset(out, 0);
+  doc.write(doc.get(root, "é"), w);
+  t.eqStr("pretty: a tab", w.text(), '{\n\t"n": 1.50e2\n}');
+  w.setIndent(0);
+  w.reset(out, 0);
+  doc.write(root, w);
+  t.eqStr("pretty: an indent of 0 is minified again", jvHexOf(w.text()), jvHexOf('{"a":[1,{},[],"x",{"k":null}],"é":{"n":1.50e2},"e":""}'));
+  w.setIndent(4);
+  w.reset(new Array<u8>(9), 0);
+  doc.write(root, w);
+  t.ok("pretty: a full buffer is the writer's code", w.failed < 0 && !w.complete());
+};
+
 const jvClear = (t: Suite): void => {
   const doc = new JsonDocument(new JsonLimits());
   const r = doc.parseText("[1,2,3]");
@@ -335,5 +362,6 @@ export const jvUnits = (t: Suite): void => {
   jvBuilders(t);
   jvUnicode(t);
   jvWriting(t);
+  jvPretty(t);
   jvClear(t);
 };

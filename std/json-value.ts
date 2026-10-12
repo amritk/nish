@@ -944,7 +944,7 @@ export class JsonDocument {
     } else if (k === JSON_VALUE_NUMBER) {
       w.raw(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
     } else if (k === JSON_VALUE_STRING) {
-      this.writeString(v, w)
+      w.stringBytes(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
     } else if (k === JSON_VALUE_ARRAY) {
       w.beginArray()
       const n: i32 = this.length(v)
@@ -956,27 +956,12 @@ export class JsonDocument {
       w.beginObject()
       const n: i32 = this.length(v)
       for (let i: i32 = 0; i < n && w.failed === JSON_WRITE_OK; i += 1) {
-        this.writeKey(v, i, w)
+        const s: i32 = this.slot(v, i)
+        w.keyBytes(this.bytes, jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s))
         this.write(this.at(v, i), w)
       }
       w.endObject()
     }
-  }
-
-  /**
-   * String `v` into `w`. The string `JsonWriter.string` takes is made here,
-   * in a function that returns nothing and keeps nothing, so its automatic
-   * arena scope gives the string back before it returns: the recursion in
-   * `write` gets no scope of its own, and a write would otherwise keep every
-   * string it wrote until its caller's scope ended.
-   */
-  writeString(v: JsonValue, w: JsonWriter): void {
-    w.string(this.string(v))
-  }
-
-  /** Member `i`'s key of object `v` into `w`, for the reason `writeString` gives. */
-  writeKey(v: JsonValue, i: i32, w: JsonWriter): void {
-    w.key(this.keyAt(v, i))
   }
 
   /**
