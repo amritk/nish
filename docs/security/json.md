@@ -12,7 +12,7 @@ with its own scope, anchors and findings.
 **Anchors.** Every `file:line` below is at `4411ea9`, the module's head in this
 change, on top of `main` at `ce9d394`, except where a paragraph names another
 commit: the bulk scans and `numberU64` (#597's tokenizer-scan stage) are
-anchored at `ec1c565d`.
+anchored at `2d9a369f`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
 token stream `JSON.parse` gives it, numbers bit for bit, and every one of its
@@ -28,7 +28,7 @@ layer, all Low.
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -95,7 +95,7 @@ whose overflow test accumulates negatively and so reaches −2^63 exactly
 significant digits and a decimal exponent within ±22, `strtod` otherwise
 ("numberF64(9007199254740993) rounds to even", "numberF64(5e-324), the
 smallest subnormal", and the Node check's bitwise comparison over the corpus).
-`numberU64` (at `ec1c565d`: `:1102`, and `:1114`, `unsignedScan`) answers
+`numberU64` (at `2d9a369f`: `:1110`, and `:1122`, `unsignedScan`) answers
 only when `isU64` holds: digits alone, with no minus sign, `-0` included, and
 at most 20 of them. RFC 8259 allows no leading zero, so up to 19 digits is
 below 10^19 and always fits; one of 20 fits only when it is a `1` and then 19
@@ -144,9 +144,9 @@ RFC 8259 blanks may follow; anything else, a second document or a NUL
 included, is `JSON_TOK_ERR_TRAILING` at its byte ("TRAILING: a second
 document", "TRAILING: a NUL after the value").
 
-**Nothing outside the window, nothing that panics** (at `ec1c565d`: `:269`,
+**Nothing outside the window, nothing that panics** (at `2d9a369f`: `:269`,
 `jsonTokByteAt`; `:294`, `jsonTokSkipBlank`; `:307`, `jsonTokSkipDigits`;
-`:805`, `string`): a single byte is read through one function that answers −1
+`:320`, `jsonTokSkipPlain`; `:818`, `string`): a single byte is read through one function that answers −1
 outside `[off, end)` or outside the array, and a window outside the array is
 refused in `reset`. A run — a string's plain bytes, the blanks between
 tokens, a number's digits — is read by a loop whose every pass tests the
@@ -172,7 +172,7 @@ padded window, every mutant has one verdict", with the seed's totals pinned
 and where it stopped"). Errors are sticky, and an error leaves the token
 before it readable ("an error in the string after a string token").
 
-**No allocation per body** (`:505`, `reset`; at `ec1c565d`, `:1239`,
+**No allocation per body** (`:505`, `reset`; at `2d9a369f`, `:1250`,
 `numberSlow`): "alloc: Arena.used() is flat across every one, parseFloat's
 numbers included" measures 10,000 bodies through one reused tokenizer, each
 call measured as `tests/link/net_loopback/common.ts`'s `LbMeter` measures a
