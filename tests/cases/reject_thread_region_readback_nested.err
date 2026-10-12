@@ -1,0 +1,2 @@
+reject_thread_region_readback_nested.ts:44:9
+`work` writes memory a task of `s` may read, before the scope joins
