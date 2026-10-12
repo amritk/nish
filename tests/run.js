@@ -4703,6 +4703,7 @@ for (const name of [
   "thread_mutex_counter",
   "thread_mutex_exit_paths",
   "thread_mutex_histogram",
+  "thread_mutex_contended",
   "thread_mutex_scalar",
   "thread_mutex_using_mixed",
   "thread_channel_pipeline",
@@ -14384,6 +14385,62 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         text.split("<!-- json-compare:begin -->").length === 2 &&
         !text.includes("stale table"),
       r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+
+    // `--only par` is the other way to write the report: it replaces the
+    // data-parallel table alone and keeps every other section byte for byte,
+    // the marked one included (bench/README.md). The five kernels run at sizes
+    // that take milliseconds, so what is checked is the splice, not a timing.
+    // A subset of the kernels writes nothing and says so.
+    const parOut = path.join(buildDir, "json-compare", "benchmarks-par.md")
+    const parHeading = "## Data parallelism (ms, min / median)"
+    const parBefore = [
+      "# Benchmarks\n\nheader kept\n",
+      "## Wall time (ms, min / median)\n\nwall table kept\n",
+      `${parHeading}\n\nstale par table\n`,
+      `## Checksums\n\nchecksums kept\n\n${section}\n`,
+    ]
+    fs.writeFileSync(parOut, parBefore.join("\n"))
+    const parArgs = [
+      path.join(root, "bench", "run.mjs"),
+      "--compiler",
+      path.relative(root, NISH),
+      "--n",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2",
+      "--runs",
+      "1",
+      "--warmup",
+      "0",
+      "--out",
+      parOut,
+    ]
+    const parRun = spawnSync("node", [...parArgs.slice(0, 3), "--only", "par", ...parArgs.slice(3)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const parText = parRun.status === 0 ? fs.readFileSync(parOut, "utf8") : ""
+    const parSection = parText.slice(parText.indexOf(parHeading), parText.indexOf("## Checksums"))
+    check(
+      "bench: `--only par` rewrites only the data-parallel table of the report and keeps every other section, json-compare's included",
+      parText.startsWith(`${parBefore[0]}\n${parBefore[1]}\n`) &&
+        parText.endsWith(`\n${parBefore[3]}`) &&
+        parText.split("<!-- json-compare:begin -->").length === 2 &&
+        !parText.includes("stale par table") &&
+        parSection.includes("| par-regions |") &&
+        parSection.includes("`node bench/run.mjs --only par`"),
+      parRun.status === 0 ? parText : `${parRun.stdout}${parRun.stderr}`
+    )
+    const parSpliced = parText
+    const subset = spawnSync("node", [...parArgs.slice(0, 3), "--only", "par-short", ...parArgs.slice(3)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "bench: `--only par-short`, a subset of the data-parallel kernels, leaves the report as it was and says so",
+      subset.status === 0 &&
+        fs.readFileSync(parOut, "utf8") === parSpliced &&
+        subset.stdout.includes("unchanged"),
+      `${subset.stdout}${subset.stderr}`
     )
   }
 }

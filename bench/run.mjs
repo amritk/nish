@@ -14,7 +14,9 @@
 //     --validate        build and compare checksums only: no timing, no docs written
 //     --no-rust         skip Rust even when rustc is installed
 //     --no-go           skip Go even when the go tool is installed
-//     --out <file>      where to write the report (default docs/BENCHMARKS.md)
+//     --out <file>      where to write the report (default docs/BENCHMARKS.md);
+//                       a run of the data-parallel kernels alone (--only par)
+//                       rewrites only their table and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
 //     --instructions    count the instructions each of the 21 programs executes
@@ -1279,10 +1281,17 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
   )
 }
 
+// A run of the data-parallel kernels alone rewrites only their table, so the
+// table says where it was measured; every other section keeps the machine and
+// the commit in the header (`spliceSections`).
+const partialNote =
+  opts.only && results.length === 0
+    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at commit ${commit}, by \`node bench/run.mjs --only par\`; the rest of the file was measured on the machine in the header.`
+    : ""
 if (parallelRows.length > 0) {
   lines.push("## Data parallelism (ms, min / median)", "")
   lines.push(
-    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par_*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.`,
+    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par_*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.${partialNote}`,
     ""
   )
   lines.push(
@@ -1354,8 +1363,53 @@ const kept = fs.existsSync(opts.out)
 for (const section of kept) {
   lines.push(section, "")
 }
+
+/**
+ * The `## ` sections of a report, in order, each as the heading line and the
+ * lines up to the next heading; the lines before the first heading are keyed "".
+ */
+const sectionsOf = (text) => {
+  const sections = []
+  for (const line of text.split("\n")) {
+    if (line.startsWith("## ") || sections.length === 0) {
+      sections.push({ heading: line.startsWith("## ") ? line : "", lines: [] })
+    }
+    sections[sections.length - 1].lines.push(line)
+  }
+  return sections
+}
+
+/**
+ * A run of the data-parallel kernels alone (`--only par`) writes their table
+ * into the existing report and leaves every other section as it was, byte for
+ * byte, because a table measured on another day, or another machine, is not
+ * this run's to replace. A subset of the kernels, or a report with no such
+ * table, writes nothing. Any run that measured the benchmark tables rewrites
+ * the report whole, carrying the marked sections over (`kept`, above).
+ */
+const spliceSections = (oldText, newText, headings) => {
+  const fresh = new Map(sectionsOf(newText).map((s) => [s.heading, s.lines]))
+  return sectionsOf(oldText)
+    .flatMap((s) => (headings.includes(s.heading) && fresh.has(s.heading) ? fresh.get(s.heading) : s.lines))
+    .join("\n")
+}
+
 fs.mkdirSync(path.dirname(opts.out), { recursive: true })
-fs.writeFileSync(opts.out, lines.join("\n"))
+const PARALLEL_HEADING = "## Data parallelism (ms, min / median)"
+// Whether the report on disk was rewritten, for the summary's last line: a
+// partial run that measured no whole table leaves it as it was.
+let wrote = true
+if (opts.only && results.length === 0) {
+  const old = fs.existsSync(opts.out) ? fs.readFileSync(opts.out, "utf8") : ""
+  wrote =
+    parallelRows.length === PARALLEL.length &&
+    sectionsOf(old).some((section) => section.heading === PARALLEL_HEADING)
+  if (wrote) {
+    fs.writeFileSync(opts.out, spliceSections(old, lines.join("\n"), [PARALLEL_HEADING]))
+  }
+} else {
+  fs.writeFileSync(opts.out, lines.join("\n"))
+}
 
 // Console summary.
 console.log(
@@ -1375,7 +1429,11 @@ for (const r of parallelRows) {
     `${r.bench.name.padEnd(12)} loop ${fmt(r.seq.min)}/${fmt(r.seq.median)}  map ${fmt(r.par.min)}/${fmt(r.par.median)}  ${(r.seq.min / r.par.min).toFixed(2)}x`
   )
 }
-console.log(`\nwrote ${path.relative(root, opts.out)}`)
+console.log(
+  wrote
+    ? `\nwrote ${path.relative(root, opts.out)}`
+    : `\nleft ${path.relative(root, opts.out)} unchanged: only a run of every data-parallel kernel alone rewrites its table, into a report that has one`
+)
 if (mismatches) {
   console.error(`${mismatches} checksum mismatch(es); the table is not trustworthy`)
   process.exit(1)

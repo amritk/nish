@@ -624,32 +624,41 @@ export const reduceMessage = (
 
 // ---- The grain ---------------------------------------------------------------------------
 //
-// A map region is divided into at most one chunk per `grain` elements, so the
-// grain decides whether a map is worth threads at all. A region divided four
-// ways costs about 125 µs of `pthread_create` and join (docs/wp20-threads.md
-// §8e), and it needs about a millisecond of work in each chunk before that is
-// under a tenth of the chunk. How many elements make a millisecond depends on
-// the body, so the grain is that target over an estimate of one element:
+// A map region is divided into `ceil(length / grain)` chunks, at most one per
+// core, so the grain decides whether a map is worth threads at all. A region divided four
+// ways costs about 11 µs on the worker pool (docs/wp20-threads.md §8e), where
+// it cost about 100 µs of `pthread_create` and join before it, and the chunks
+// also pay for the caches they no longer share. How many elements cover that
+// depends on the body, so the grain is a target over an estimate of one
+// element:
 //
 //     grain = REGION_COST / cost(f), which is in [1, REGION_COST]
 //
 // The estimate is read off the body's syntax, in units of roughly one simple
 // operation, and `REGION_COST` was set by measurement rather than by what a
-// unit is worth: the cheapest body there is has to win at two chunks
-// (docs/wp29-thread-surface.md §8a has the calibration). It is deliberately
-// crude, and it errs both ways. A callee counts as a call and not as its body,
-// so work hidden behind a call is estimated cheap and divided too little. A
-// loop whose trip count the header does not state counts `DEFAULT_TRIPS`, which
-// overestimates a loop over a short array; that costs threads only once the
-// estimate reaches `REGION_COST` over the length, which for a map of eight
-// elements takes three such loops nested, or two around a hundred operations.
+// unit is worth: a body that does one operation on its element has to win
+// at two chunks (docs/wp29-thread-surface.md §8a has the calibration). It is
+// deliberately crude, and it errs both ways. A callee counts as a call and not
+// as its body, so work hidden behind a call is estimated cheap and divided too
+// little. A loop whose trip count the header does not state counts
+// `DEFAULT_TRIPS`, which overestimates a loop over a short array; that costs
+// threads only once the estimate reaches `REGION_COST` over the length, which
+// for a map of eight elements takes three such loops nested, or two around a
+// hundred operations.
 
 /**
- * The work, in estimate units, that one chunk of a map region should carry:
- * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
- * loop it replaces (2^20 lost to it by 12%; 2^22 wins by 1.54x).
+ * The grain, in estimate units: a map divides once its length passes
+ * `REGION_COST` over the body's estimate, and its first division is two
+ * chunks of half that. It was measured with `(x) => x + 1`, estimated at 3:
+ * at two chunks of 2^20 units it beat its loop by 1.31x on the minimum and
+ * 1.19x on the median, more than any difference between the loop and a
+ * byte-identical copy of it (at most 3.3% on a minimum and 9.1% on a median).
+ * At two chunks of 2^19 units the minimum won by 1.16x but the median by only
+ * 1.04x, inside that 9.1%, so the grain is 2^21. With a thread started per
+ * region it was 2^22 (docs/wp29-thread-surface.md §8a). A body estimated
+ * below 3, such as `(x) => x`, divides later.
  */
-const REGION_COST: i32 = 4194304
+const REGION_COST: i32 = 2097152
 
 /** One call: the jump, the frame and the return, beyond the arguments. */
 const CALL_COST: i32 = 4
