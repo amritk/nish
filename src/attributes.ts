@@ -4125,7 +4125,7 @@ const stepsUnder = (prefix: string, steps: string, strict: boolean): boolean => 
     return false
   }
   let i = 0
-  while (i < prefix.length) {
+  while (i < prefix.length && i < steps.length) {
     if (prefix.charCodeAt(i) !== steps.charCodeAt(i)) {
       return false
     }
