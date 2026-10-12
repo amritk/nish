@@ -5142,6 +5142,7 @@ const JSON_WRITER_NODE_PRETTY = [
     deep: { b: { c: [true, false] } },
     s: "x\ny",
     f: 1.5,
+    n: [4294967295, -12345, Number.NaN, Number.POSITIVE_INFINITY],
   },
   [[{}]],
   {},
@@ -5149,12 +5150,22 @@ const JSON_WRITER_NODE_PRETTY = [
   "top",
   -7,
 ]
-const JSON_WRITER_NODE_INDENTS = [2, 4, 1, 10, 11, 0, -3, "\t", 0]
+const JSON_WRITER_NODE_INDENTS = [2, 4, 1, 3, 5, 6, 7, 8, 9, 10, 11, 0, -3, "\t", 0]
 // Strict mode has no `JSON.stringify` twin, so these lines are the rule as
 // `std/json.ts` states it: a finite f64 as ever, each non-finite one
-// `JSON_WRITE_NON_FINITE` (-8) with nothing written after `{"x":`, and NaN
-// `null` again once strict is off.
-const JSON_WRITER_NODE_STRICT = ["[1.5,0]", "failed -8", "failed -8", "written 5", "failed -8", "null"]
+// `JSON_WRITE_NON_FINITE` (-8) with nothing written past what came before it
+// (nothing at the top level, `[1` in an array, `{"x":` in an object), and
+// NaN `null` again once strict is off.
+const JSON_WRITER_NODE_STRICT = [
+  "[1.5,0]",
+  "written 0",
+  "failed -8",
+  "written 2",
+  "failed -8",
+  "written 5",
+  "failed -8",
+  "null",
+]
 // `w.i64` at 0, -1 and both ends of the range. Spelled out, because
 // `JSON.stringify` of a number past 2^53 rounds it; what is pinned is that
 // the i64 arithmetic runs under Node at all, where an i64 is a BigInt and a

@@ -22,7 +22,7 @@ const flush = (w: JsonWriter, out: u8[]): void => {
  * a string and a number, which indent leaves as they are.
  */
 const writePretty = (w: JsonWriter, out: u8[]): void => {
-  // { message: "Hello", empty: {}, none: [], list: [1, [2, []], { a: null }], deep: { b: { c: [true, false] } }, s: "x\ny", f: 1.5 }
+  // { message: "Hello", empty: {}, none: [], list: [1, [2, []], { a: null }], deep: { b: { c: [true, false] } }, s: "x\ny", f: 1.5, n: [...] }
   const half: f64 = 1.5;
   w.beginObject();
   w.key("message");
@@ -61,6 +61,16 @@ const writePretty = (w: JsonWriter, out: u8[]): void => {
   w.string("x\ny");
   w.key("f");
   w.f64(half);
+  // [4294967295, -12345, NaN, Infinity]: the other number kinds, and the
+  // default mode's null for a non-finite f64, on lines of their own.
+  const uMax: u32 = 4294967295;
+  w.key("n");
+  w.beginArray();
+  w.u32(uMax);
+  w.i64(toI64(-12345));
+  w.f64(toF64(0) / toF64(0));
+  w.f64(toF64(1) / toF64(0));
+  w.endArray();
   w.endObject();
   flush(w, out);
   // [[{}]], {}, [], "top", -7
@@ -208,7 +218,7 @@ export const main = (): number => {
   // The indented text: the nested value and the top-level scalars, once per
   // indent of `JSON_WRITER_NODE_INDENTS`, in its order, then the minified
   // text again. 11 is clamped to 10 and -3 is minified, as JSON.stringify does.
-  const spaces: i32[] = [2, 4, 1, 10, 11, 0, -3];
+  const spaces: i32[] = [2, 4, 1, 3, 5, 6, 7, 8, 9, 10, 11, 0, -3];
   for (const n of spaces) {
     w.setIndent(n);
     writePretty(w, out);
@@ -219,7 +229,8 @@ export const main = (): number => {
   writePretty(w, out);
 
   // Strict mode: a finite f64 as ever, and each non-finite one is
-  // JSON_WRITE_NON_FINITE (-8), written as nothing.
+  // JSON_WRITE_NON_FINITE (-8), written as nothing: `written` is what came
+  // before it, at the top level, after an element and after a key.
   w.setStrict(true);
   w.beginArray();
   w.f64(half);
@@ -227,9 +238,12 @@ export const main = (): number => {
   w.endArray();
   flush(w, out);
   w.f64(nan);
+  console.log(`written ${w.written()}`);
   flush(w, out);
   w.beginArray();
+  w.i32(1);
   w.f64(inf);
+  console.log(`written ${w.written()}`);
   flush(w, out);
   w.beginObject();
   w.key("x");

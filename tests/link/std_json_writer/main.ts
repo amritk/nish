@@ -157,19 +157,52 @@ const stuck = (w: JsonWriter): boolean => {
   return w.failed === failed && w.end === end;
 };
 
+/** `{"a":[],"b":{},"c":[1,{"d":true}]}`: empty and full containers, nested both ways. */
+const writeNested = (w: JsonWriter): void => {
+  w.beginObject();
+  w.key("a");
+  w.beginArray();
+  w.endArray();
+  w.key("b");
+  w.beginObject();
+  w.endObject();
+  w.key("c");
+  w.beginArray();
+  w.i32(1);
+  w.beginObject();
+  w.key("d");
+  w.boolean(true);
+  w.endObject();
+  w.endArray();
+  w.endObject();
+};
+
+/** The tab indent, which `prefixAtEveryLength` takes as an `indent` of -1. */
+const TAB: i32 = -1;
+
 /**
- * Every buffer length from 0 to one short of what the hello object needs:
- * the first that fails some other way than `JSON_WRITE_FULL`, that moves the
- * cursor past the buffer, or that leaves bytes that are not a prefix of the
- * object, as one line; `""` when every length fails cleanly.
+ * Every buffer length from 0 to one short of what the value needs — the
+ * hello object, or `writeNested`'s when `nested` — written at `indent`
+ * spaces, or a tab for `TAB`: the first length that fails some other way
+ * than `JSON_WRITE_FULL`, that moves the cursor past the buffer, or that
+ * leaves bytes that are not a prefix of `want`, as one line; `""` when every
+ * length fails cleanly.
  */
-const helloAtEveryLength = (want: string, indent: i32): string => {
+const prefixAtEveryLength = (want: string, indent: i32, nested: boolean): string => {
   const n: i32 = toI32(want.length);
   for (let len: i32 = 0; len < n; len += 1) {
     const buf = new Array<u8>(len);
     const w = new JsonWriter(buf, 0);
-    w.setIndent(indent);
-    writeHello(w, "Hello, World!");
+    if (indent === TAB) {
+      w.setIndentTab();
+    } else {
+      w.setIndent(indent);
+    }
+    if (nested) {
+      writeNested(w);
+    } else {
+      writeHello(w, "Hello, World!");
+    }
     if (w.failed !== JSON_WRITE_FULL) {
       return `length ${len}: failed is ${w.failed}`;
     }
@@ -508,7 +541,7 @@ export const main = (): number => {
   t.eqI32("an object at depth 40 still takes keys after an array inside it closes", w.failed, JSON_WRITE_OK);
   t.ok("and writes the key after the array with its comma", w.text().endsWith(':[],"x":1'));
 
-  t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", helloAtEveryLength(hello, 0), "");
+  t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", prefixAtEveryLength(hello, 0, false), "");
   const short = new Array<u8>(4);
   w.reset(short, 0);
   writeHello(w, "Hello, World!");
@@ -645,9 +678,49 @@ export const main = (): number => {
   t.eqStr("which writes what it wrote before", pw.text(), hello);
   t.eqStr(
     "an indented text too short at every length is JSON_WRITE_FULL and a clean prefix",
-    helloAtEveryLength(prettyHello, 2),
+    prefixAtEveryLength(prettyHello, 2, false),
     ""
   );
+  const nestedTab = '{\n\t"a": [],\n\t"b": {},\n\t"c": [\n\t\t1,\n\t\t{\n\t\t\t"d": true\n\t\t}\n\t]\n}';
+  const nestedThree =
+    '{\n   "a": [],\n   "b": {},\n   "c": [\n      1,\n      {\n         "d": true\n      }\n   ]\n}';
+  pw.setIndentTab();
+  pw.reset(big4, 0);
+  writeNested(pw);
+  t.eqStr("nested containers with a tab are JSON.stringify(v, null, \"\\t\")", pw.text(), nestedTab);
+  pw.setIndent(3);
+  pw.reset(big4, 0);
+  writeNested(pw);
+  t.eqStr("and at three spaces JSON.stringify(v, null, 3)", pw.text(), nestedThree);
+  t.eqStr(
+    "nested containers with a tab, too short at every length, are JSON_WRITE_FULL and a clean prefix",
+    prefixAtEveryLength(nestedTab, TAB, true),
+    ""
+  );
+  t.eqStr(
+    "and at three spaces",
+    prefixAtEveryLength(nestedThree, 3, true),
+    ""
+  );
+
+  // A raw fragment goes where a value would, after its line break and
+  // indent, and is copied as it is: not re-indented.
+  const fragment: u8[] = [123, 34, 120, 34, 58, 49, 125];
+  pw.setIndent(2);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.raw(fragment, 0, 7);
+  pw.endArray();
+  t.eqStr("an indented raw element is on its own line and not re-indented", pw.text(), '[\n  {"x":1}\n]');
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("r");
+  pw.raw(fragment, 0, 7);
+  pw.endObject();
+  t.eqStr("an indented raw member value follows its key's colon and space", pw.text(), '{\n  "r": {"x":1}\n}');
+  pw.reset(big4, 0);
+  pw.raw(fragment, 0, 7);
+  t.eqStr("an indented raw top-level value is the fragment alone", pw.text(), '{"x":1}');
   // A closer's line break with no room: `[\n  1` fits in 5 bytes, and the
   // `\n` before `]` does not.
   const five = new Array<u8>(5);
@@ -718,6 +791,36 @@ export const main = (): number => {
   sw.i32(1);
   sw.f64(nan);
   t.eqI32("an earlier error is kept over a later non-finite f64", sw.failed, JSON_WRITE_KEY_EXPECTED);
+  sw.reset(out, 0);
+  sw.beginObject();
+  sw.f64(nan);
+  t.eqI32(
+    "a non-finite f64 where a key is due is JSON_WRITE_KEY_EXPECTED, as a finite one is",
+    sw.failed,
+    JSON_WRITE_KEY_EXPECTED
+  );
+  sw.reset(out, 0);
+  sw.i32(1);
+  sw.f64(inf);
+  t.eqI32("and after the top-level value it is JSON_WRITE_DONE", sw.failed, JSON_WRITE_DONE);
+  t.eqStr("with the first value all that was written", sw.text(), "1");
+  sw.reset(out, 0);
+  sw.beginObject();
+  sw.key("v");
+  sw.f64(nan);
+  t.eqI32("but after a key it is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  // Strict and indented together: the check comes before the line break, so
+  // a failing value writes neither its comma nor its indent.
+  sw.setIndent(2);
+  sw.reset(out, 0);
+  sw.beginArray();
+  sw.i32(1);
+  const beforeIndented = sw.written();
+  sw.f64(nan);
+  t.eqI32("an indented strict writer fails NaN with JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqI32("and writes no comma, line break or indent for it", sw.written(), beforeIndented);
+  t.eqI32("after the five bytes of [, a line break, its indent and 1", beforeIndented, 5);
+  sw.setIndent(0);
   const reading = new Reading();
   reading.value = inf;
   sw.reset(out, 0);

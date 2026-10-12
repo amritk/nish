@@ -173,7 +173,7 @@ The writer has two modes, both off until you ask for them and both kept by
 null, n)` writes — one member or element a line, a space after each colon, an
 empty `{}` or `[]` left on one line, and `n` clamped to 10 — and
 `w.setIndentTab()` indents with a tab; `w.setIndent(0)` goes back to the
-minified text. `w.setStrict(true)` makes NaN and the infinities an error,
+minified text. A `raw` fragment goes in as it is and is not re-indented. `w.setStrict(true)` makes NaN and the infinities an error,
 `JSON_WRITE_NON_FINITE`, with nothing written, where the default writes
 `null` as `JSON.stringify` does:
 
