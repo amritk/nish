@@ -152,10 +152,11 @@ export const main = (): i32 => {
   bound without `using`.
 
 The first task runs on the thread that opened the scope, which would otherwise
-wait, and the others go to a pool of worker threads, one per core, started the
-first time a program divides work and parked between uses. A scope with more
-tasks than cores queues the rest, and a thread that finishes one takes the
-next. The core count follows what the process may actually use (its affinity
+wait, and the others go to a pool of worker threads, one per core besides the
+calling thread's (at most 63), started the first time a program divides work
+and parked between uses. A Node addon starts threads for each call instead,
+and on WASI everything runs on the one thread. A scope with more tasks than
+cores queues the rest, and a thread that finishes one takes the next. The core count follows what the process may actually use (its affinity
 mask, a container's CPU quota), and `NISH_NUM_THREADS=2` lowers it to two,
 which is handy on a shared machine; `NISH_NUM_THREADS=1` runs everything on
 the calling thread. It never raises the count. A map's or a reduce's answer
@@ -214,8 +215,9 @@ export const main = (): i32 => {
   Node they take it in spawn order; only an order-independent update prints
   the same both ways.
 - **A lock nobody holds is cheap; keep the block short.** Taking a free lock
-  is one atomic instruction. A task that finds the lock held keeps checking,
-  giving its core up between checks, so a long block makes every waiter spend
+  is one atomic instruction. A task that finds the lock held checks again 64
+  times in a tight loop and then keeps checking, giving its core up to
+  another thread before each check, so a long block makes every waiter spend
   processor time waiting for it.
 
 ```ts nish:err NL2465

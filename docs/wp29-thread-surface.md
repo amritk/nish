@@ -458,11 +458,11 @@ pool (wp20 §8e) brought that to about 11 µs, so the same body pays for its
 hand-off at far fewer elements, and the target was measured again. A map whose
 length passes the grain is divided into `ceil(length / grain)` chunks, so its
 first division is two chunks of half the grain; each row below is two chunks of
-`c` elements, and the grain whose first division it is. The body is the
-cheapest there is, `(x) => x + 1` at an estimate of 3 (`x & 255` estimates the
-same), over `n = 2c` elements, the map called `2^28 / n` times with one input
-element fed from an output element between calls and the outputs folded into
-a printed checksum. The loop and the map are the same binary, the grain written
+`c` elements, and the grain whose first division it is. The body is
+`(x) => x + 1`, at an estimate of 3 (`x & 255` estimates the same; `(x) => x`
+estimates 1 and divides later), over `n = 2c` elements, the map called
+`2^28 / n` times with one input element fed from an output element between
+calls and the outputs folded into a printed checksum. The loop and the map are the same binary, the grain written
 into its IR, and the loop is also timed as a byte-identical copy of the binary
 in the same rounds, for the noise band. Eleven interleaved rounds, minimum /
 median in ms, on a four-core Intel Xeon at 2.80 GHz, a virtual machine, with
@@ -475,38 +475,50 @@ clang 18.1.3, on 2026-10-12:
 | 2^19 (174,762) | 2^20 | 174.1 / 184.6 | 179.8 / 189.8 | 150.1 / 177.9 | 1.16x / 1.04x |
 | **2^20 (349,525)** | **2^21** | 178.8 / 191.2 | 181.2 / 191.6 | 136.6 / 161.2 | **1.31x / 1.19x** |
 
-The loop against its own copy differs by 1–3% on the minimum and 3–9% on the
-median, which is the noise band. Below 2^20 units a chunk the median win is
-inside the band or a loss, and two chunks of 2^20 are the first to win outside
-it on both figures, so `REGION_COST` in `src/parallel.ts` is 2^21: the
-cheapest body is divided past 699,050 elements, into two chunks of 349,525,
-instead of past 1,398,101. An earlier sweep with `(x) => x * 3 + 1` (estimate
-5) agreed: 0.98x at two chunks of 2^19 units, 1.19x / 1.16x at two of 2^20,
-1.25x at two of 2^21, against a band of 1–6%. The kernel is memory bound — the
+The loop against its own copy differs by 1.0%, 2.0%, 3.3% and 1.3% on the
+minimum and by 9.1%, 3.4%, 2.8% and 0.2% on the median, row by row, so the
+noise band is up to 3.3% on a minimum and up to 9.1% on a median. Two chunks
+of 2^20 units are the first whose wins, 1.31x and 1.19x, clear both, so
+`REGION_COST` in `src/parallel.ts` is 2^21: `(x) => x + 1` is divided past
+699,050 elements, into two chunks of 349,525, instead of past 1,398,101. Two
+chunks of 2^19 units, a grain of 2^20, were rejected because only their
+minimum's win, 1.16x, is established: the median's 1.04x is more than that
+row's own loop-against-copy difference (2.8%) but less than the table's worst
+(9.1%). An earlier sweep with `(x) => x * 3 + 1` (estimate 5) agreed: 0.98x
+at two chunks of 2^19 units, 1.19x / 1.16x at two of 2^20, 1.25x at two of
+2^21, against a band of up to 6% on a minimum. The kernel is memory bound — the
 loop vectorises to under a nanosecond an element — which is why two chunks win
 no more than about 1.4x at any size; a body with more work per element wins
 sooner and by more, and its grain is smaller by its estimate.
 
-### 8f. A lock that sleeps, measured and declined
+### 8b. A lock that sleeps, measured and declined
 
-The P3 lock spins on its word and then yields the processor between tries, so
-a task that waits on a busy lock keeps a core busy. A futex lock that sleeps
-instead was built and measured (#607), and declined: on this hardware every
-version of it was slower than the spinning lock in some shape, outside the
-noise band. The measurement used `tests/link/thread_mutex_contended` (eight
-tasks binning into one guarded histogram) and a probe that takes a lock with a
-short, a long or no critical section and work between acquisitions, at
-`NISH_NUM_THREADS` 2, 4 and 8, every binary linked the same way, with the
-spinning lock built twice for the noise band (1–5% on most shapes, far wider on
-the contended histogram at 4 and 8 threads). Wall time
-of the futex lock over the spinning one's, on the minimum:
+The P3 lock spins on its word 64 times with relaxed reads and then yields the
+processor between tries, so a task that waits on a busy lock keeps a core
+busy. A futex lock that sleeps instead was built and measured (#607), and
+declined: every version of it was slower than the spinning lock in some shape,
+by more than that shape's noise band.
 
-| design | short sections | long sections, or work between |
+Two programs were timed. One is `tests/link/thread_mutex_contended`: eight
+tasks binning into one guarded histogram, `contended 200`. The other has `N`
+tasks each take one `Mutex` `M` times, running `I` steps of a generator inside
+the critical section and `O` steps between takes; the shapes were short
+(`N = 8`, `M = 500,000`, no steps), long (8, 40,000, `I = 300`), and long with
+work between (2 × 10,000, 8 × 2,500 and 4 × 5,000 with `I = 3,000` and
+`O = 3,000` or `10,000`; 8 × 10,000 with `I = 1,000`). Each ran at
+`NISH_NUM_THREADS` 2, 4 and 8 with every binary linked the same way, the
+spinning lock built twice for the noise band, in 5 to 7 interleaved rounds, on
+the 2.80 GHz Xeon of §8a. The band was 0–5% on the minimum in most shapes,
+but on the contended histogram at 4 and 8 threads it moved between 3% and 76%
+from one run to the next, so each figure below names its own run's band. The
+worst wall time of each design over the spinning lock's, on the minimum:
+
+| design | worst with short sections | worst with long sections, or work between |
 | --- | --- | --- |
-| Drepper's mutex 3: the word goes to 2 at the first sleeper and every release then wakes | up to 4.7x (the reviewer's probe, 2 threads) | up to 2.3x |
-| the word counts sleepers above a held bit; the release subtracts and wakes only on a count | 1.5–4.4x | 1.0–1.8x |
-| the release stays a store; a waiter sleeps in 50–200 µs slices and nobody wakes it | 0.6–1.1x | 0.9–1.11x |
-| the release stays a store, then reads a global count of sleepers and wakes on one | 0.9–1.1x | 1.0–1.25x |
+| Drepper's mutex 3: the word goes to 2 at the first sleeper, and every release then wakes | 4.7x, `contended 200` at 2 threads (measured in #607's review on a 2.10 GHz Xeon, band 1–4%) | 2.3x, long at 2 threads (same) |
+| the word counts sleepers above a held bit; the release subtracts and wakes only on a count | 4.4x, short at 8 threads (band 8%) | 1.78x, long at 2 threads (band 0%) |
+| the release stays a store; a waiter sleeps in 50–200 µs slices and nobody wakes it | none outside its band (at most 1.10x, `contended 200` at 2 threads, band 25%) | 1.11x, 4 × 5,000 with `O = 10,000` at 8 threads (band 1%) |
+| the release stays a store, then reads a global count of sleepers and wakes on one | 1.12x, `contended 200` at 4 threads (band 3%) | 1.25x, long at 2 threads (band 0%) |
 
 The first two make the release a locked read-modify-write, because the release
 has to learn whether anyone sleeps: that instruction alone made the contended

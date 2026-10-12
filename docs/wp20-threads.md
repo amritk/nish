@@ -230,11 +230,11 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
 
 `runtime/runtime-parallel.c` splits `[0, len)` into contiguous chunks that
 differ in size by at most one element. There are at most `nish_cpu_count()`
-chunks and never more than `len / grain`. Chunk 0 runs on the calling thread,
-and the rest go to the worker pool (§8e). A chunk no worker is free for runs
-on the calling thread too, so a shortage of threads costs speed, never
-correctness. A nested call runs on one thread,
-because the nesting guard is thread-local. Without `-DNISH_THREADS`, and on
+chunks and never more than `len / grain` rounded up. Chunk 0 runs on the
+calling thread, and the rest go to the worker pool (§8e). A chunk no worker is
+free for runs on the calling thread too, so a shortage of threads costs speed,
+never correctness. A nested call runs on one thread, because the nesting guard
+is thread-local. Without `-DNISH_THREADS`, and on
 WASI, the same entry point runs the whole range on the calling thread. It is a
 translation unit of its own, with its own `.text*` ceiling in `tests/run.js`.
 

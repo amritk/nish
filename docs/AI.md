@@ -895,8 +895,8 @@ export const main = (): i32 => {
   operator; a named function is trusted.
 - A short array runs on the calling thread at the cost of the loop, so there
   is no reason to guard a call by size. How short is sized from what `f`
-  costs: the cheapest body is divided only past about 700,000 elements, one
-  with a loop far sooner.
+  costs: a body estimated at 3, such as `(x) => x + 1`, is divided only past
+  about 700,000 elements, a cheaper one later, one with a loop far sooner.
 
 ```ts nish:err NL2350
 import { parallelReduce } from "nish/threads";

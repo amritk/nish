@@ -1286,7 +1286,7 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
 // the commit in the header (`spliceSections`).
 const partialNote =
   opts.only && results.length === 0
-    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at commit ${commit}, by \`node bench/run.mjs --only\`; the rest of the file was measured on the machine in the header.`
+    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at commit ${commit}, by \`node bench/run.mjs --only par\`; the rest of the file was measured on the machine in the header.`
     : ""
 if (parallelRows.length > 0) {
   lines.push("## Data parallelism (ms, min / median)", "")
@@ -1383,7 +1383,8 @@ const sectionsOf = (text) => {
  * A run of the data-parallel kernels alone (`--only par`) writes their table
  * into the existing report and leaves every other section as it was, byte for
  * byte, because a table measured on another day, or another machine, is not
- * this run's to replace. Any run that measured the benchmark tables rewrites
+ * this run's to replace. A subset of the kernels, or a report with no such
+ * table, writes nothing. Any run that measured the benchmark tables rewrites
  * the report whole, carrying the marked sections over (`kept`, above).
  */
 const spliceSections = (oldText, newText, headings) => {
@@ -1394,13 +1395,17 @@ const spliceSections = (oldText, newText, headings) => {
 }
 
 fs.mkdirSync(path.dirname(opts.out), { recursive: true })
-if (opts.only && results.length === 0 && fs.existsSync(opts.out)) {
-  const spliced = parallelRows.length === PARALLEL.length ? ["## Data parallelism (ms, min / median)"] : []
-  fs.writeFileSync(opts.out, spliceSections(fs.readFileSync(opts.out, "utf8"), lines.join("\n"), spliced))
-  if (spliced.length === 0) {
-    console.error(
-      `--only: ${opts.out} is unchanged; only a run of every data-parallel kernel rewrites its table`
-    )
+const PARALLEL_HEADING = "## Data parallelism (ms, min / median)"
+// Whether the report on disk was rewritten, for the summary's last line: a
+// partial run that measured no whole table leaves it as it was.
+let wrote = true
+if (opts.only && results.length === 0) {
+  const old = fs.existsSync(opts.out) ? fs.readFileSync(opts.out, "utf8") : ""
+  wrote =
+    parallelRows.length === PARALLEL.length &&
+    sectionsOf(old).some((section) => section.heading === PARALLEL_HEADING)
+  if (wrote) {
+    fs.writeFileSync(opts.out, spliceSections(old, lines.join("\n"), [PARALLEL_HEADING]))
   }
 } else {
   fs.writeFileSync(opts.out, lines.join("\n"))
@@ -1424,7 +1429,11 @@ for (const r of parallelRows) {
     `${r.bench.name.padEnd(12)} loop ${fmt(r.seq.min)}/${fmt(r.seq.median)}  map ${fmt(r.par.min)}/${fmt(r.par.median)}  ${(r.seq.min / r.par.min).toFixed(2)}x`
   )
 }
-console.log(`\nwrote ${path.relative(root, opts.out)}`)
+console.log(
+  wrote
+    ? `\nwrote ${path.relative(root, opts.out)}`
+    : `\nleft ${path.relative(root, opts.out)} unchanged: only a run of every data-parallel kernel alone rewrites its table, into a report that has one`
+)
 if (mismatches) {
   console.error(`${mismatches} checksum mismatch(es); the table is not trustworthy`)
   process.exit(1)

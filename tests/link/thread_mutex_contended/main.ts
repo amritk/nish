@@ -7,7 +7,7 @@
 // the critical sections ran in, and the last line, the bins' total beside the
 // number of values binned, is equal exactly when no guarded increment was lost.
 // `process.argv[1]` sets the rounds: 4 here, more when it is timed
-// (docs/wp29-thread-surface.md §8f).
+// (docs/wp29-thread-surface.md §8b).
 import { Mutex, scope } from "nish/threads";
 
 class Hist {
