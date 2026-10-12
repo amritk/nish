@@ -113,9 +113,12 @@ export const emitParallelRegion = (
   const fieldValues: string[] = []
   let i = 0
   while (i < types.length && i < values.length) {
+    // Both read before either push, which ends the length facts.
+    const type = types[i]
+    const value = values[i]
     if (i < range - 2 || i >= range) {
-      fieldTypes.push(types[i])
-      fieldValues.push(values[i])
+      fieldTypes.push(type)
+      fieldValues.push(value)
     }
     i = i + 1
   }
