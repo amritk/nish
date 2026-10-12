@@ -6478,6 +6478,103 @@ if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_ra
   }
 }
 
+// The length of an array a helper returns (`returnedLength` in
+// `src/bounds.ts`). `arr_bounds_returned` is the positive: `filled(8, 2)`,
+// `sized()`, `grown(3)`, `either(true)` and `this.rows = filledFlags(8)` each
+// start the caller's array with the length the helper built, so no check
+// survives. Each negative breaks one rule the proof rests on and keeps its
+// check: a helper that pops its array, hands it to a function, or stores it;
+// a second return that is shorter; a store whose call rebinds the receiver;
+// and a size whose name the body declares again, shadowing a module constant
+// or a parameter — each panics when run. A size the call does not fix, a size
+// the body computes, a generic helper, an arrow in the body, a method and a
+// `let` receiver are pinned by their counts.
+if (!only || "arr_bounds_returned".includes(only) || only.startsWith("arr_bounds_returned")) {
+  for (const [name, fn, count] of [
+    ["arr_bounds_returned", "sum8", 0],
+    ["arr_bounds_returned", "corners", 0],
+    ["arr_bounds_returned", "Board.reset", 0],
+    ["arr_bounds_returned_pop", "nish_main", 1],
+    ["arr_bounds_returned_passed", "nish_main", 1],
+    ["arr_bounds_returned_stored", "nish_main", 1],
+    ["arr_bounds_returned_least", "nish_main", 1],
+    ["arr_bounds_returned_rebind", "nish_main", 1],
+    ["arr_bounds_returned_shadow", "nish_main", 1],
+    ["arr_bounds_returned_shadow_param", "nish_main", 1],
+    ["arr_bounds_returned_kept", "unknownSize", 1],
+    ["arr_bounds_returned_kept", "computedSize", 1],
+    ["arr_bounds_returned_kept", "shadowedSize", 1],
+    ["arr_bounds_returned_kept", "genericSize", 1],
+    ["arr_bounds_returned_kept", "arrowSize", 1],
+    ["arr_bounds_returned_kept", "methodSize", 1],
+    ["arr_bounds_returned_kept", "letReceiver", 1],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      continue
+    }
+    const got = panicCount(fs.readFileSync(ll, "utf8"), fn)
+    check(
+      `${name}: \`${fn}\` keeps ${count} bounds check${count === 1 ? "" : "s"}`,
+      got === count,
+      `found ${got}`
+    )
+  }
+  if (has("clang")) {
+    for (const [name, rule, stdout, message] of [
+      ["arr_bounds_returned_pop", "a helper that pops its array", "", "3 >= 3"],
+      ["arr_bounds_returned_passed", "a helper that hands its array to a function", "", "3 >= 3"],
+      ["arr_bounds_returned_stored", "a helper that stores its array", "", "3 >= 3"],
+      ["arr_bounds_returned_least", "a shorter second return", "2", "5 >= 2"],
+      ["arr_bounds_returned_rebind", "a call that rebinds the receiver", "", "5 >= 0"],
+      ["arr_bounds_returned_shadow", "a local that shadows the size's constant", "", "7 >= 2"],
+      ["arr_bounds_returned_shadow_param", "a local that shadows the size's parameter", "", "7 >= 1"],
+    ]) {
+      const ll = path.join(buildDir, `${name}.ll`)
+      if (!fs.existsSync(ll)) {
+        continue
+      }
+      const exe = path.join(buildDir, name)
+      const cc = linkNative(exe, ll, { driver: null })
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        `${name}: ${rule} keeps the check, and the access panics`,
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes(`index out of range: ${message}`) &&
+          String(run.stdout).trim() === stdout,
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+}
+
+// The rule's reason for being: AWFY Queens fills its four boards with
+// `filledBooleans(n)` and `filledMinusOne(n)`, and with the lengths those calls
+// return, the call-site ranges of a `--link` build carry them into the
+// recursion, where `c + r` and `c - r + 7` are proved by their ranges
+// (`provesByRange`). Its three hot methods carry no check. `CC=true` stops at
+// the IR, as `range_reference` does.
+if (!only || "arr_bounds_returned_awfy".includes(only) || only.startsWith("arr_bounds_returned")) {
+  const dir = path.join(buildDir, "arr_bounds_returned_awfy")
+  fs.rmSync(dir, { recursive: true, force: true })
+  const r = spawnSync(NISH, [path.join("bench", "awfy", "main.ts"), "--link", path.join(dir, "exe")], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, CC: "true" },
+  })
+  const ll = path.join(dir, "exe.modules", "queens.ll")
+  const ir = r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+  for (const fn of ["Queens.getRowColumn", "Queens.setRowColumn", "Queens.placeQueen"]) {
+    const got = ir === "" ? -1 : panicCount(ir, fn)
+    check(
+      `arr_bounds_returned_awfy: \`${fn}\` keeps no bounds check in a \`--link\` build`,
+      got === 0,
+      ir === "" ? `exit ${r.status}\n${r.stderr}` : `found ${got}`
+    )
+  }
+}
+
 // WP15 §2.4, the build-mode rule (`hostVisible` in `src/visibility.ts`). A
 // `--link` build with no sidecar, no wasm and no C function declared is its own
 // final link, so an exported function takes the facts its call sites prove:

@@ -11853,6 +11853,194 @@ attributes #2 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end arr-bounds-range -->
 
+### A helper's array: the length it was built with
+
+`filled(4)` builds `new Array<i32>(n)`, writes only its elements, and
+returns it, so the call starts `xs` with four elements just as
+`new Array<i32>(4)` written in `span` would, and neither `xs[3]` nor `xs[0]`
+carries a check. The helper's body is read as written, so the rule follows
+the array no further than the body shows it: handing it to a function,
+storing it, or `pop` gives no length, and neither does a method, a generic
+or a body with an arrow in it. A size is a literal, a constant of the same
+module, or a parameter the body never declares again or writes, read from
+the call's argument. A store `this.rows = filled(8)` carries the length into
+the path, which is how AWFY Queens loses every check: the call-site ranges of
+a `--link` build hand `this.rows` with its eight elements to the recursion.
+
+<!-- cookbook:begin arr-bounds-returned -->
+```ts
+const filled = (n: i32): i32[] => {
+  const arr = new Array<i32>(n)
+  for (let i = 0; i < arr.length; i++) {
+    arr[i] = i
+  }
+  return arr
+}
+
+const span = (): i32 => {
+  const xs = filled(4)
+  return xs[3] - xs[0]
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
+declare void @nish_exit(i32 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @filled(i32 noundef %n) #0 {
+entry:
+  %arr.addr = alloca %struct.nish_array*, align 8
+  %i.addr = alloca i32, align 4
+  %0 = sext i32 %n to i64
+  %1 = icmp ule i64 %0, 2147483647
+  br i1 %1, label %len.ok, label %len.fail
+
+len.fail:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+len.ok:
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = mul i64 %0, 4
+  %7 = call i8* @nish_alloc_struct(i64 %6)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %3, %struct.nish_array** %arr.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  %9 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  br label %for.cond
+
+for.cond:
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = trunc i64 %11 to i32
+  %16 = icmp slt i32 %14, %15
+  br i1 %16, label %for.body, label %for.end
+
+for.body:
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = sext i32 %17 to i64
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = bitcast i8* %13 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 %18
+  store i32 %19, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  br label %for.inc
+
+for.inc:
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = add nsw i32 %22, 1
+  store i32 %23, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %24 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
+  ret %struct.nish_array* %24
+}
+
+define internal noundef i32 @span() #0 {
+entry:
+  %xs.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.nish_array* @filled(i32 4)
+  store %struct.nish_array* %0, %struct.nish_array** %xs.addr, align 8
+  %1 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %3 to i32*
+  %5 = getelementptr inbounds i32, i32* %4, i64 3
+  %6 = load i32, i32* %5, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %10 = bitcast i8* %9 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 0
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %13 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %6, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %14
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { noreturn nounwind }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i32", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end arr-bounds-returned -->
+
 ### A hoisted `toI32(s.length)`: the proof in both number modes
 
 Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can
