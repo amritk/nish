@@ -39,7 +39,7 @@ stages:
     title: "?. chains that end in ??"
     goal: Accept `a?.b?.c ?? d`, a chain of member reads and method calls whose only use is the left of a `??`
     verification: The same commands as stage 1, plus the new negative cases for every place a chain may not go
-    status: in_progress
+    status: completed
     todos:
       - id: validator-optional
         content: Keep the Phase 0 refusal in src/validator.ts only for `?.[` and `f?.()` — see Stage 2, Validator

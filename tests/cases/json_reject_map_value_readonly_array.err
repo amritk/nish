@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Series.points`, which is `Map<string, readonly i32[]>`
