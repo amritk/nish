@@ -58,15 +58,15 @@ Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String buildi
 
 ## Data parallelism (ms, min / median)
 
-Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par_*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.
+Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par_*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.80GHz, at commit 04370ef6, by `node bench/run.mjs --only`; the rest of the file was measured on the machine in the header.
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par-compute | 64 square roots per element, 2^21 elements (f64) | 732 / 763 | 221 / 245 | 3.32x | 34,036 / 34,604 |
-| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 155 / 190 | 82.5 / 87.7 | 1.88x | 34,024 / 34,588 |
-| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 135 / 177 | 56.1 / 69.3 | 2.41x | 1,656 / 1,968 |
-| par-short | an 8-element map called 2^20 times, each call fed by the last | 52.1 / 60.5 | 60.3 / 60.5 | 0.86x | 1,384 / 1,384 |
-| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 524 / 561 | 187 / 194 | 2.81x | 2,280 / 2,848 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 1010 / 1030 | 288 / 294 | 3.50x | 33,908 / 34,604 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 226 / 258 | 90.6 / 96.0 | 2.49x | 33,896 / 34,592 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 178 / 189 | 67.4 / 79.2 | 2.64x | 1,528 / 1,968 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 80.9 / 81.0 | 77.8 / 84.3 | 1.04x | 1,256 / 1,256 |
+| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 811 / 897 | 277 / 345 | 2.93x | 2,152 / 2,848 |
 
 ## Map and Set (WP32)
 
