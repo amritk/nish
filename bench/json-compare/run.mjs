@@ -5,8 +5,8 @@
 // citm_catalog.json and canada.json.
 //
 //   npm run build && node bench/json-compare/run.mjs [options]
-//     --rounds N        interleaved rounds (default 5)
-//     --mb N            megabytes of input each run parses (default 64), which
+//     --rounds N        interleaved rounds (default 9)
+//     --mb N            megabytes of input each run parses (default 128), which
 //                       sets each corpus's iteration count
 //     --only a,b        implementations to run (default all): nish, simdjson,
 //                       yyjson, rapidjson, serde, go; nish's copy runs with nish
@@ -15,27 +15,34 @@
 //     --compiler <nish> the compiler under test (default build/nish)
 //
 // It needs the network the first time (fetch.mjs pins the corpora and the C
-// and C++ sources into bench/json-compare/cache/) and clang, clang++, cargo
-// and go; a toolchain that does not answer --version (`go version` for Go)
-// is skipped, loudly, and its rows say so. It never runs in `npm test`:
-// tests/run.js's "json-compare" check builds main.ts and holds it to
-// sample.expected without a network.
+// and C++ sources into bench/json-compare/cache/, fetching only what the
+// selected implementations need) and clang, clang++, cargo and go; a
+// toolchain that does not answer --version (`go version` for Go) is skipped,
+// loudly, and the report names it. It never runs in `npm test`: tests/run.js's
+// "json-compare" checks build main.ts and hold it to sample.expected without a
+// network.
+//
+// The builds: Nish with `--link --profile speed`; C and C++ with
+// `-O3 -DNDEBUG` (RapidJSON asserts otherwise); serde_json with cargo's release
+// profile plus LTO and one codegen unit (serde/cargo.toml); Go with `go build`.
 //
 // The workloads, each a program argument (`<program> <workload> <file>
 // <iterations> <at>`), print a checksum line and then `ns <elapsed>`:
 //
-//   tokenize   every token of the document, on all three corpora; simdjson
-//              On-Demand, yyjson's tree, RapidJSON's Reader (SAX), a serde
-//              Visitor and Go's Decoder.Token
-//   typed      citm_catalog's `performances` decoded into declared classes;
-//              serde derive, Go structs and simdjson On-Demand into structs
-//              (yyjson and RapidJSON have no typed layer). Each decodes the
-//              way its library is used: Nish into the same objects every
-//              iteration, which nish/json-typed reuses (arrays, objects, a
-//              string equal to the one held), the comparators into a fresh
-//              value each time, so the figure compares those two uses
-//   serialize  those classes, decoded once, written back minified; the same
-//              three comparators, every one held to the same bytes
+//   tokenize     every token of the document, on all three corpora; simdjson
+//                On-Demand, yyjson's tree, RapidJSON's Reader (SAX), a serde
+//                Visitor and Go's Decoder.Token
+//   typed        citm_catalog's `performances` decoded into declared classes,
+//                a fresh value every iteration in every language; serde
+//                derive, Go structs and simdjson On-Demand into structs
+//                (yyjson and RapidJSON have no typed layer)
+//   typed-reuse  Nish only: the same decode into one value reused from one
+//                iteration to the next, which nish/json-typed supports
+//                (arrays, objects, a string equal to the one held); it must
+//                print typed's checksum
+//   serialize    those classes, decoded once, written back minified; the same
+//                three comparators, every one held to the same bytes. Only
+//                the writing is timed
 //
 // The checksum is the same fold in every program, `h = h * 31 + v` wrapping
 // in 64 bits:
@@ -45,14 +52,16 @@
 //              or string then its decoded length in bytes and its last byte
 //              (0 when empty); every number is added to an f64 sum. Each
 //              iteration's h is folded into the run's, and its sum added to
-//              the run's. Printed: `tokenize <h> <tokens> <sum>`.
+//              the run's. After the clock stops, one more pass over the last
+//              input folds every byte of every key and string after its
+//              length instead of the last byte alone. Printed:
+//              `tokenize <h> <tokens> <sum> <every-byte h>`.
 //   typed      per performance, in declaration order, each integer field, a
-//              `string | null` as 0 or its length plus one, each array's
-//              length before its elements, venueCode's length; each
+//              string field as 0 for null or its length plus one and then
+//              every byte, each array's length before its elements; each
 //              iteration's h folded into the run's. `typed <h> <count>`.
-//   serialize  per iteration the output's length, then its byte at
-//              `iteration % length`; after the loop, every byte of the last
-//              output. `serialize <h> <length> <bytes>`.
+//   serialize  every byte of each iteration's output, folded from 0 and then
+//              into the run's h, outside the clock. `serialize <h> <length>`.
 //
 // Before each tokenize or typed iteration the byte at `at` is set to the
 // digit `iteration % 10`, so no iteration parses the input the one before
@@ -64,12 +73,13 @@
 // language prints a round-tripping double its own way.
 //
 // Rounds are interleaved: each round runs every implementation once per
-// case, starting one further along the list than the round before, so a
-// slow stretch of a shared machine falls on all of them. Nish runs as two
-// byte-identical binaries, and the gap between them is the noise band
-// (CLAUDE.md, `Measured:`): a difference smaller than it is not a difference.
-// Each program times its own loop with a monotonic clock, so start-up and
-// reading the file are not in the figure.
+// case, starting one further along the list than the round before and in
+// reverse on odd rounds, so a slow stretch of a shared machine falls on all
+// of them. Nish runs as two byte-identical binaries, the copy halfway down the
+// list, and the gap between their minimums is the noise band (CLAUDE.md,
+// `Measured:`): a ratio within it is marked as no difference. Each program
+// times its own loop with a monotonic clock, so start-up and reading the file
+// are not in the figure.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -88,7 +98,7 @@ const fail = (msg) => {
   process.exit(2)
 }
 
-const opts = { rounds: 5, mb: 64, only: null, record: false }
+const opts = { rounds: 9, mb: 128, only: null, record: false }
 for (let i = 0; i < nishc.rest.length; i++) {
   const arg = nishc.rest[i]
   if (arg === "--rounds") {
@@ -96,7 +106,7 @@ for (let i = 0; i < nishc.rest.length; i++) {
   } else if (arg === "--mb") {
     opts.mb = Number(nishc.rest[++i])
   } else if (arg === "--only") {
-    opts.only = new Set(String(nishc.rest[++i]).split(","))
+    opts.only = String(nishc.rest[++i]).split(",")
   } else if (arg === "--record") {
     opts.record = true
   } else {
@@ -109,21 +119,23 @@ if (!(Number.isInteger(opts.rounds) && opts.rounds >= 1 && opts.mb > 0)) {
 
 /**
  * The workloads: the offset of the digit each iteration rewrites (-1 for
- * none), and what a document's bytes are. Serialize is sized by what it
- * writes, the length its checksum line reports, so one uncounted iteration
- * of the first implementation measures it.
+ * none), whether a document's bytes are what it writes rather than reads, and
+ * the case whose checksum it must print, when not its own. Serialize is sized
+ * by the length its checksum line reports, which one uncounted iteration of
+ * the first implementation measures.
  */
 const WORKLOADS = {
   tokenize: { at: (doc) => tokenizeAt(doc), written: false },
   typed: { at: (doc) => startAt(doc), written: false },
+  "typed-reuse": { at: (doc) => startAt(doc), written: false, sameAs: "typed" },
   serialize: { at: () => -1, written: true },
 }
-const ALL = Object.keys(WORKLOADS)
 const CASES = [
   { workload: "tokenize", corpus: "twitter.json" },
   { workload: "tokenize", corpus: "citm_catalog.json" },
   { workload: "tokenize", corpus: "canada.json" },
   { workload: "typed", corpus: "citm_catalog.json" },
+  { workload: "typed-reuse", corpus: "citm_catalog.json" },
   { workload: "serialize", corpus: "citm_catalog.json" },
 ]
 
@@ -154,20 +166,29 @@ const tools = {
   go: tool("go", ["version"]),
 }
 
+const NATIVE_FLAGS = ["-O3", "-DNDEBUG"]
+
 /**
  * A C or C++ comparator: the bench source beside this script compiled with
- * the cached library sources. Rebuilt only when the program is older than
- * one of its sources or than this script, since simdjson's single header
- * alone takes ten seconds at -O3.
+ * the cached library sources. Rebuilt only when the command line or the
+ * compiler's version differs from the stamp the last build left, or a source
+ * is newer than the program, since simdjson's single header alone takes ten
+ * seconds at -O3.
  */
 const native = (name, compiler, flags, include, sources) => () => {
   const exe = path.join(outDir, name)
   const inputs = [path.join(here, `${name}-bench.${compiler === "cc" ? "c" : "cpp"}`), ...sources]
-  const stale =
-    !fs.existsSync(exe) ||
-    [import.meta.filename, ...inputs].some((f) => fs.statSync(f).mtimeMs > fs.statSync(exe).mtimeMs)
-  if (stale) {
-    build(name, tools[compiler].cmd, [...flags, "-O3", `-I${include}`, ...inputs, "-o", exe])
+  const args = [...flags, ...NATIVE_FLAGS, `-I${include}`, ...inputs, "-o", exe]
+  const stamp = JSON.stringify([tools[compiler].cmd, tools[compiler].version, args])
+  const stampFile = `${exe}.stamp`
+  const fresh =
+    fs.existsSync(exe) &&
+    fs.existsSync(stampFile) &&
+    fs.readFileSync(stampFile, "utf8") === stamp &&
+    inputs.every((f) => fs.statSync(f).mtimeMs <= fs.statSync(exe).mtimeMs)
+  if (!fresh) {
+    build(name, tools[compiler].cmd, args)
+    fs.writeFileSync(stampFile, stamp)
   }
   return exe
 }
@@ -181,16 +202,18 @@ const serdeJsonVersion = () => {
 /**
  * Every implementation: its name for --only, its label in the tables (and a
  * label per workload where that workload uses another API), the workloads it
- * has a program for, the toolchain it needs, and `build`, which answers the
- * program's path. Nish's entry also runs as a byte-identical copy, the noise
- * band.
+ * has a program for, the toolchain it needs, the cached sources it needs
+ * (fetch.mjs's directories), and `build`, which answers the program's path.
+ * Nish's entry also runs as a byte-identical copy, the noise band.
  */
 const IMPLS = [
   {
     name: "nish",
     label: "Nish",
-    workloads: ALL,
+    labels: { "typed-reuse": "Nish, decoding into the same objects" },
+    workloads: Object.keys(WORKLOADS),
     tool: "nish",
+    sources: [],
     build: () => {
       const exe = path.join(outDir, "nish", "main")
       build("Nish", nishc.cmd, [
@@ -200,6 +223,8 @@ const IMPLS = [
         `${path.dirname(exe)}${path.sep}`,
         "--link",
         exe,
+        "--profile",
+        "speed",
       ])
       return exe
     },
@@ -208,8 +233,9 @@ const IMPLS = [
     name: "simdjson",
     label: "simdjson 4.4.2 (On-Demand)",
     labels: { serialize: "simdjson 4.4.2 (builder::string_builder)" },
-    workloads: ALL,
+    workloads: ["tokenize", "typed", "serialize"],
     tool: "cxx",
+    sources: ["simdjson"],
     build: native("simdjson", "cxx", ["-std=c++17"], path.join(CACHE, "simdjson"), [
       path.join(CACHE, "simdjson", "simdjson.cpp"),
     ]),
@@ -219,6 +245,7 @@ const IMPLS = [
     label: "yyjson 0.12.0",
     workloads: ["tokenize"],
     tool: "cc",
+    sources: ["yyjson"],
     build: native("yyjson", "cc", [], path.join(CACHE, "yyjson"), [path.join(CACHE, "yyjson", "yyjson.c")]),
   },
   {
@@ -226,13 +253,15 @@ const IMPLS = [
     label: "RapidJSON (Reader, SAX)",
     workloads: ["tokenize"],
     tool: "cxx",
+    sources: ["rapidjson"],
     build: native("rapidjson", "cxx", ["-std=c++17"], path.join(CACHE, "rapidjson", "include"), []),
   },
   {
     name: "serde",
     label: `serde_json ${serdeJsonVersion()}`,
-    workloads: ALL,
+    workloads: ["tokenize", "typed", "serialize"],
     tool: "cargo",
+    sources: [],
     build: () => {
       // Cargo reads only Cargo.toml and Cargo.lock, names the repository's kebab-case rule refuses.
       const dir = path.join(outDir, "serde")
@@ -247,8 +276,9 @@ const IMPLS = [
   {
     name: "go",
     label: "Go encoding/json",
-    workloads: ALL,
+    workloads: ["tokenize", "typed", "serialize"],
     tool: "go",
+    sources: [],
     build: () => {
       const exe = path.join(outDir, "go-bench")
       build("Go", "go", ["build", "-o", exe, path.join(here, "go-bench.go")])
@@ -264,7 +294,7 @@ const copyOf = (nish) => {
   if (!fs.readFileSync(nish.exe).equals(fs.readFileSync(copy))) {
     fail("the copy is not byte-identical to the build")
   }
-  return { ...nish, name: "nish-copy", label: "Nish (byte-identical copy)", exe: copy }
+  return { ...nish, name: "nish-copy", label: "Nish (byte-identical copy)", labels: {}, exe: copy }
 }
 
 // ---- Inputs ---------------------------------------------------------------------------
@@ -309,17 +339,34 @@ const canonical = (line) =>
     .map((t) => (/^\d+$/.test(t) || !Number.isFinite(Number(t)) ? t : String(Number(t))))
     .join(" ")
 
+/** `impls` with Nish's copy put halfway down, so it does not always run straight after Nish. */
+const withCopy = (impls) => {
+  const nish = impls.find((i) => i.name === "nish")
+  if (nish === undefined) {
+    return impls
+  }
+  const at = Math.ceil(impls.length / 2)
+  return [...impls.slice(0, at), copyOf(nish), ...impls.slice(at)]
+}
+
 const main = () => {
+  const unknown = (opts.only ?? []).filter((n) => !IMPLS.some((i) => i.name === n))
+  if (unknown.length > 0) {
+    fail(
+      `--only names no implementation: ${unknown.join(", ")} (known: ${IMPLS.map((i) => i.name).join(", ")})`
+    )
+  }
+  const selected = IMPLS.filter((i) => opts.only === null || opts.only.includes(i.name))
   try {
-    fetchAll()
+    fetchAll(selected.flatMap((i) => i.sources))
   } catch (e) {
     fail(e.message)
   }
   fs.mkdirSync(outDir, { recursive: true })
 
   const skipped = []
-  const ready = []
-  for (const impl of IMPLS.filter((i) => opts.only === null || opts.only.has(i.name))) {
+  const built = []
+  for (const impl of selected) {
     if (tools[impl.tool].version === null) {
       process.stderr.write(
         `SKIP ${impl.label}: ${tools[impl.tool].cmd} is not installed (it did not answer its version)\n`
@@ -328,15 +375,20 @@ const main = () => {
       continue
     }
     process.stderr.write(`building ${impl.label}\n`)
-    const built = { ...impl, exe: impl.build() }
-    ready.push(built, ...(impl.name === "nish" ? [copyOf(built)] : []))
+    built.push({ ...impl, exe: impl.build() })
   }
+  const ready = withCopy(built)
 
   const cases = CASES.map((c) => {
     const file = path.join(CACHE, "corpus", c.corpus)
     const doc = fs.readFileSync(file)
     const impls = ready.filter((impl) => impl.workloads.includes(c.workload))
     const at = WORKLOADS[c.workload].at(doc)
+    if (at < 0 && c.workload !== "serialize") {
+      fail(
+        `${c.corpus} has no digit for ${c.workload} to rewrite, so every iteration would parse the same input`
+      )
+    }
     const bytes =
       WORKLOADS[c.workload].written && impls.length > 0
         ? Number(runOnce(impls[0].exe, [c.workload, file, 1, at]).checksum.split(" ")[2])
@@ -350,29 +402,32 @@ const main = () => {
       impls,
       runs: new Map(impls.map((impl) => [impl.name, []])),
     }
-  })
+  }).filter((c) => c.impls.length > 0)
 
   for (let round = 0; round < opts.rounds; round++) {
     process.stderr.write(`round ${round + 1} of ${opts.rounds}\n`)
     for (const c of cases) {
       const n = c.impls.length
-      for (let k = 0; k < n; k++) {
-        const impl = c.impls[(k + round) % n]
+      const order = c.impls.map((_, k) => c.impls[(k + round) % n])
+      for (const impl of round % 2 === 1 ? order.reverse() : order) {
         c.runs.get(impl.name).push(runOnce(impl.exe, [c.workload, c.file, c.iterations, c.at]))
       }
     }
   }
 
-  let disagreed = false
+  // A case's checksums, with those of every case that must print the same.
+  const group = (c) => WORKLOADS[c.workload].sameAs ?? c.workload
   for (const c of cases) {
-    if (new Set([...c.runs.values()].flat().map((r) => canonical(r.checksum))).size > 1) {
-      disagreed = true
-      const lines = [...c.runs].map(
-        ([name, runs]) => `  ${name}: ${[...new Set(runs.map((r) => r.checksum))].join(" | ")}`
-      )
-      process.stderr.write(`checksums disagree on ${c.workload} ${c.corpus}:\n${lines.join("\n")}\n`)
+    const peers = cases.filter((x) => group(x) === group(c) && x.corpus === c.corpus)
+    const seen = new Set(peers.flatMap((x) => [...x.runs.values()].flat().map((r) => canonical(r.checksum))))
+    if (seen.size > 1) {
+      c.disagreement = [...c.runs]
+        .map(([name, runs]) => `${name}: ${[...new Set(runs.map((r) => r.checksum))].join(" | ")}`)
+        .join("; ")
+      process.stderr.write(`checksums disagree on ${c.workload} ${c.corpus}: ${c.disagreement}\n`)
     }
   }
+  const disagreed = cases.some((c) => c.disagreement !== undefined)
 
   const report = tables(cases, skipped)
   process.stdout.write(`${report}\n`)
@@ -392,9 +447,9 @@ const median = (xs) => {
   return s.length % 2 === 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 const fmt = (x) => Math.round(x).toLocaleString("en-US")
-const band = (a, b) => `${((Math.abs(a - b) / b) * 100).toFixed(1)}%`
+const pct = (x) => `${(x * 100).toFixed(1)}%`
 
-/** The CPU's name as bench/run.mjs reads it for the table above this one: /proc/cpuinfo first. */
+/** The CPU's name as bench/run.mjs reads it for the table at the head of docs/BENCHMARKS.md: /proc/cpuinfo first. */
 const cpuModel = () => {
   try {
     const m = /^model name\s*:\s*(.+)$/m.exec(fs.readFileSync("/proc/cpuinfo", "utf8"))
@@ -407,42 +462,69 @@ const cpuModel = () => {
   return os.cpus()[0]?.model ?? "unknown CPU"
 }
 
+const commit = () => versionOf("git", ["-C", root, "rev-parse", "--short=8", "HEAD"]) ?? "unknown"
+
+/** The command that reproduces this run, without a local --compiler path. */
+const command = () =>
+  [
+    "node bench/json-compare/run.mjs",
+    `--rounds ${opts.rounds}`,
+    `--mb ${opts.mb}`,
+    ...(opts.only === null ? [] : [`--only ${opts.only.join(",")}`]),
+    ...(opts.record ? ["--record"] : []),
+  ].join(" ")
+
 const tables = (cases, skipped) => {
   const versions = [tools.nish, tools.cc, tools.cxx, tools.cargo, tools.go].map((t) => t.version)
   const lines = [
-    `Machine: ${cpuModel()}, ${os.cpus().length} logical cores, ${os.type()} ${os.release()} (${os.arch()}).`,
-    `Toolchains: ${[...new Set(versions.filter((v) => v !== null))].join("; ")}.`,
-    `${opts.rounds} interleaved rounds of ${opts.mb} MB of input per run; ns per document and MB/s, min and median over the rounds.`,
+    "| | |",
+    "| --- | --- |",
+    `| Date | ${new Date().toISOString().slice(0, 10)} |`,
+    `| nish | ${tools.nish.version} (commit ${commit()}) |`,
+    `| CPU | ${cpuModel()}, ${os.cpus().length} logical cores |`,
+    `| OS | ${os.type().toLowerCase()} ${os.release()} (${os.arch()}) |`,
+    `| Toolchains | ${[...new Set(versions.filter((v) => v !== null))].join("; ")} |`,
+    `| Command | \`npm run build && ${command()}\` |`,
+    `| Runs | ${opts.rounds} interleaved rounds of ${opts.mb} MB of input per run; ns per document, min and median over the rounds |`,
   ]
   if (skipped.length > 0) {
-    lines.push(`Skipped, toolchain missing: ${skipped.join(", ")}.`)
+    lines.push(`| Skipped | ${skipped.join(", ")}: toolchain missing |`)
   }
-  for (const c of cases.filter((x) => x.impls.length > 0)) {
+  for (const c of cases) {
     const per = (name) => (c.runs.get(name) ?? []).map((r) => r.ns / c.iterations)
-    const nishMedian = median(per("nish"))
+    const nishMin = Math.min(...per("nish"))
+    const copy = per("nish-copy")
+    const band = copy.length > 0 ? Math.abs(nishMin - Math.min(...copy)) / Math.min(...copy) : Number.NaN
     const what = `${fmt(c.bytes)} bytes${WORKLOADS[c.workload].written ? " written" : ""}`
     lines.push(
       "",
       `### ${c.workload}, ${c.corpus} (${what}, ${c.iterations} per run)`,
       "",
-      `Checksum \`${[...c.runs.values()][0]?.[0]?.checksum}\`, the same from every implementation.`,
+      c.disagreement === undefined
+        ? `Checksum \`${[...c.runs.values()][0][0].checksum}\`, the same from every implementation.`
+        : `**Checksums disagree**: ${c.disagreement}.`,
       "",
-      "| Implementation | ns/doc min | ns/doc median | MB/s (median) | Speed against Nish (median) |",
+      "| Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |",
       "| --- | ---: | ---: | ---: | ---: |"
     )
     for (const impl of c.impls) {
       const xs = per(impl.name)
-      const med = median(xs)
-      const speed = Number.isNaN(nishMedian) ? "-" : `${(nishMedian / med).toFixed(2)}x`
+      const min = Math.min(...xs)
+      const ratio = nishMin / min
+      let cell = "-"
+      if (impl.name === "nish") {
+        cell = "1.00x"
+      } else if (Number.isFinite(ratio)) {
+        cell = Math.abs(ratio - 1) <= band ? `${ratio.toFixed(2)}x, within noise` : `${ratio.toFixed(2)}x`
+      }
       lines.push(
-        `| ${impl.labels?.[c.workload] ?? impl.label} | ${fmt(Math.min(...xs))} | ${fmt(med)} | ${((c.bytes / med) * 1000).toFixed(0)} | ${speed} |`
+        `| ${impl.labels?.[c.workload] ?? impl.label} | ${fmt(min)} | ${fmt(median(xs))} | ${((c.bytes / min) * 1000).toFixed(0)} | ${cell} |`
       )
     }
-    const copy = per("nish-copy")
-    if (copy.length > 0) {
+    if (Number.isFinite(band)) {
       lines.push(
         "",
-        `Noise band, Nish against its byte-identical copy: min ${band(Math.min(...per("nish")), Math.min(...copy))}, median ${band(nishMedian, median(copy))}.`
+        `Noise band, Nish against its byte-identical copy: ${pct(band)} on the minimums (${pct(Math.abs(median(per("nish")) - median(copy)) / median(copy))} on the medians). A ratio within it is no difference.`
       )
     }
   }
@@ -452,6 +534,24 @@ const tables = (cases, skipped) => {
 const BEGIN = "<!-- json-compare:begin -->"
 const END = "<!-- json-compare:end -->"
 
+/** What every recorded section says about the comparison before its tables. */
+const PREAMBLE = [
+  "## JSON against other languages",
+  "",
+  "Written by `node bench/json-compare/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The run is its own, so the host below may not be the one in the table at the head of this file. The workloads, the checksums and the measurement rules are in [that script's header](../bench/json-compare/run.mjs), and the Nish program is [main.ts](../bench/json-compare/main.ts).",
+  "",
+  "The ratio column divides the Nish minimum by that implementation's minimum, as the tables above do: above 1.00x it is faster than Nish. A ratio within the noise band, the gap between Nish and a byte-identical copy of its binary, is marked as no difference.",
+  "",
+  "Builds: Nish `--link --profile speed`; C and C++ `clang -O3 -DNDEBUG`; serde_json cargo `--release` with LTO and one codegen unit; Go `go build`.",
+  "",
+  "What differs between the rows:",
+  "",
+  "- **Tokenize** is each library's own way of visiting every value. Nish's tokenizer copies every key and string out with `stringInto`; yyjson builds a whole tree, reading a copy of the input rather than in place; RapidJSON's Reader (SAX) calls back per value; serde_json drives a Visitor; Go's `Decoder.Token` makes an `interface{}` per token. simdjson On-Demand materialises every value as it is visited.",
+  "- **Typed decode** has no yyjson or RapidJSON row: neither has a typed layer. Every row decodes into a fresh value each iteration. simdjson On-Demand reads `performances` and nothing after it, while serde_json, Go and Nish scan the whole document. The extra Nish row decodes into one value reused across iterations, which nish/json-typed supports and the others' APIs do not.",
+  "- **Serialize** times the writing alone, from the same decoded values, and every implementation's output is the same bytes, checked in full on every iteration.",
+  "",
+]
+
 /**
  * Writes the report into docs/BENCHMARKS.md between the markers, or after the
  * file when they are missing. bench/run.mjs writes the rest of that file and
@@ -460,15 +560,7 @@ const END = "<!-- json-compare:end -->"
 const record = (report) => {
   const file = path.join(root, "docs", "BENCHMARKS.md")
   const text = fs.readFileSync(file, "utf8")
-  const section = [
-    BEGIN,
-    "## JSON against other languages",
-    "",
-    `Written by \`${["node", "bench/json-compare/run.mjs", ...process.argv.slice(2)].join(" ")}\`, not by \`bench/run.mjs\`; the workloads, the checksums and the measurement rules are in [that script's header](../bench/json-compare/run.mjs), and the Nish program is [main.ts](../bench/json-compare/main.ts).`,
-    "",
-    report,
-    END,
-  ].join("\n")
+  const section = [BEGIN, ...PREAMBLE, report, END].join("\n")
   const from = text.indexOf(BEGIN)
   const to = text.indexOf(END)
   const next =

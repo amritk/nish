@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 996 programs, 98172 dump lines.
+# 996 programs, 98176 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -87840,83 +87840,90 @@ function Catalog.constructor(this: Catalog): void -> @Catalog.constructor [const
 function fold(h: u64, v: u64): u64 -> @fold
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function foldText(h: u64, len: i32, last: i32): u64 -> @foldText
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+function foldBytes(h: u64, out: u8[], n: i32): u64 -> @foldBytes
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: h
   calls: fold
+  pointer out: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 85:56 fold -> @fold
-  callee 85:61 fold -> @fold
-function foldOptional(h: u64, s: string | null): u64 -> @foldOptional
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  local 88:7 acc: u64 (let)
+  local 89:12 i: i32 (let)
+  callee 90:11 fold -> @fold
+function foldString(h: u64, s: string | null): u64 -> @foldString
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: h
-  calls: fold nish_panic_overflow
+  calls: fold nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
-  callee 89:16 fold -> @fold
-  callee 89:36 fold -> @fold
-function tokenizeOnce(tok: JsonTokenizer, doc: u8[], out: u8[], sums: TokenSums): void -> @tokenizeOnce
+  callee 98:12 fold -> @fold
+  local 100:7 acc: u64 (let)
+  callee 100:18 fold -> @fold
+  local 101:12 i: i32 (let)
+  callee 102:11 fold -> @fold
+function tokenizeOnce(tok: JsonTokenizer, doc: u8[], out: u8[], sums: TokenSums, full: boolean): void -> @tokenizeOnce
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 118:3
-  calls: fold foldText nish.JsonTokenizer.next nish.JsonTokenizer.numberF64 nish.JsonTokenizer.reset nish.JsonTokenizer.stringInto nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_write
+  sharedWrite: 144:3
+  calls: fold foldBytes nish.JsonTokenizer.next nish.JsonTokenizer.numberF64 nish.JsonTokenizer.reset nish.JsonTokenizer.stringInto nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_write
   pointer tok: size=88 writesThrough=true captured=false passedTo=nish.JsonTokenizer.reset#0 nish.JsonTokenizer.next#0 nish.JsonTokenizer.stringInto#0 nish.JsonTokenizer.numberF64#0 nish.JsonTokenizer.next#0
   pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.JsonTokenizer.stringInto#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.JsonTokenizer.stringInto#1 foldBytes#1
   pointer sums: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 99:3 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
-  local 100:7 h: u64 (let)
-  local 101:7 tokens: i32 (let)
-  local 102:7 numbers: f64 (let)
-  local 103:7 k: i32 (let)
-  callee 103:16 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 105:9 fold -> @fold
-  local 108:13 n: i32 (const)
-  callee 108:22 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
-  callee 109:11 foldText -> @foldText
-  callee 111:18 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
-  callee 113:9 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 120:3 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  local 121:7 h: u64 (let)
+  local 122:7 tokens: i32 (let)
+  local 123:7 numbers: f64 (let)
+  local 124:7 k: i32 (let)
+  callee 124:16 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 126:9 fold -> @fold
+  local 129:13 n: i32 (const)
+  callee 129:22 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  callee 130:11 fold -> @fold
+  callee 132:13 foldBytes -> @foldBytes
+  callee 134:13 fold -> @fold
+  callee 137:18 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
+  callee 139:9 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function foldCatalog(c: Catalog): u64 -> @foldCatalog
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: fold foldOptional
+  calls: fold foldString
   pointer c: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 125:7 h: u64 (let)
-  local 126:14 p: Performance (const)
-  callee 127:9 fold -> @fold
-  callee 127:14 fold -> @fold
-  callee 128:9 foldOptional -> @foldOptional
-  callee 128:22 foldOptional -> @foldOptional
-  callee 129:9 fold -> @fold
-  local 130:16 price: Price (const)
-  callee 131:11 fold -> @fold
-  callee 132:9 fold -> @fold
-  callee 132:14 fold -> @fold
-  callee 136:9 fold -> @fold
-  local 137:16 sc: SeatCategory (const)
-  callee 138:11 fold -> @fold
-  local 139:18 area: Area (const)
-  callee 140:13 fold -> @fold
-  callee 140:18 fold -> @fold
-  local 141:20 b: i64 (const)
-  callee 142:15 fold -> @fold
-  callee 145:11 fold -> @fold
-  callee 147:9 foldOptional -> @foldOptional
-  callee 148:9 fold -> @fold
-  callee 148:14 fold -> @fold
+  local 151:7 h: u64 (let)
+  local 152:14 p: Performance (const)
+  callee 153:9 fold -> @fold
+  callee 153:14 fold -> @fold
+  callee 154:9 foldString -> @foldString
+  callee 154:20 foldString -> @foldString
+  callee 155:9 fold -> @fold
+  local 156:16 price: Price (const)
+  callee 157:11 fold -> @fold
+  callee 158:9 fold -> @fold
+  callee 158:14 fold -> @fold
+  callee 162:9 fold -> @fold
+  local 163:16 sc: SeatCategory (const)
+  callee 164:11 fold -> @fold
+  local 165:18 area: Area (const)
+  callee 166:13 fold -> @fold
+  callee 166:18 fold -> @fold
+  local 167:20 b: i64 (const)
+  callee 168:15 fold -> @fold
+  callee 171:11 fold -> @fold
+  callee 173:9 foldString -> @foldString
+  callee 174:9 foldString -> @foldString
+  callee 174:20 fold -> @fold
 function decodeInto(d: JsonDecoder, doc: u8[], c: Catalog): void -> @decodeInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 155:3
+  sharedWrite: 181:3
   calls: nish.JsonDecoder.reset nish.jsonDecode$$Catalog nish_exit nish_str_concat nish_str_from_i32 nish_write
   pointer d: size=24 writesThrough=true captured=true passedTo=nish.JsonDecoder.reset#0 nish.jsonDecode$$Catalog#0
   pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.reset#1
   pointer c: size=8 writesThrough=true captured=true passedTo=nish.jsonDecode$$Catalog#1
   stackSites=0 stackLocals=0
-  callee 154:3 JsonDecoder.reset -> @nish.JsonDecoder.reset
-  local 156:9 code: i32 (const)
-  callee 156:21 jsonDecode<Catalog> -> @nish.jsonDecode$$Catalog
+  callee 180:3 JsonDecoder.reset -> @nish.JsonDecoder.reset
+  local 182:9 code: i32 (const)
+  callee 182:21 jsonDecode<Catalog> -> @nish.jsonDecode$$Catalog
 function mutate(doc: u8[], at: i32, r: i32): void -> @mutate
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 165:5
+  sharedWrite: 191:5
   escaping: at
   pointer doc: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -87925,88 +87932,85 @@ function runTokenize(doc: u8[], iterations: i32, at: i32): i64 -> @runTokenize
   sharedWrite: via nish_write
   escaping: at
   calls: fold mutate nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_arena_release nish_exit nish_monotonic_nanos nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 nish_write tokenizeOnce
-  pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.constructor#1 mutate#0 tokenizeOnce#1
+  pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.constructor#1 mutate#0 tokenizeOnce#1 tokenizeOnce#1
   stackSites=3 stackLocals=2
-  local 170:9 out: u8[] (const)
-  local 171:9 tok: JsonTokenizer (const)
-  callee 171:15 new JsonTokenizer -> @nish.JsonTokenizer.constructor
-  callee 171:60 new JsonLimits -> @nish.JsonLimits.constructor
-  local 172:9 sums: TokenSums (const)
-  local 173:7 h: u64 (let)
-  local 174:7 numbers: f64 (let)
-  local 175:9 t0: i64 (const)
-  local 176:12 r: i32 (let)
-  callee 177:5 mutate -> @mutate
-  callee 178:5 tokenizeOnce -> @tokenizeOnce
-  callee 179:9 fold -> @fold
-  local 182:9 elapsed: i64 (const)
-function runTyped(doc: u8[], iterations: i32, at: i32): i64 -> @runTyped
+  local 196:9 out: u8[] (const)
+  local 197:9 tok: JsonTokenizer (const)
+  callee 197:15 new JsonTokenizer -> @nish.JsonTokenizer.constructor
+  callee 197:60 new JsonLimits -> @nish.JsonLimits.constructor
+  local 198:9 sums: TokenSums (const)
+  local 199:7 h: u64 (let)
+  local 200:7 numbers: f64 (let)
+  local 201:9 t0: i64 (const)
+  local 202:12 r: i32 (let)
+  callee 203:5 mutate -> @mutate
+  callee 204:5 tokenizeOnce -> @tokenizeOnce
+  callee 205:9 fold -> @fold
+  local 208:9 elapsed: i64 (const)
+  callee 209:3 tokenizeOnce -> @tokenizeOnce
+function runTyped(doc: u8[], iterations: i32, at: i32, reuse: boolean): i64 -> @runTyped
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.constructor
   escaping: at
   calls: Catalog.constructor decodeInto fold foldCatalog mutate nish.JsonDecoder.constructor nish.JsonLimits.constructor nish_alloc_struct nish_monotonic_nanos nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64
   pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.constructor#1 mutate#0 decodeInto#1
   stackSites=1 stackLocals=0
-  local 188:9 d: JsonDecoder (const)
-  callee 188:13 new JsonDecoder -> @nish.JsonDecoder.constructor
-  callee 188:56 new JsonLimits -> @nish.JsonLimits.constructor
-  local 189:9 c: Catalog (const)
-  callee 189:13 new Catalog -> @Catalog.constructor
-  local 190:7 h: u64 (let)
-  local 191:9 t0: i64 (const)
-  local 192:12 r: i32 (let)
-  callee 193:5 mutate -> @mutate
-  callee 194:5 decodeInto -> @decodeInto
-  callee 195:9 fold -> @fold
-  callee 195:17 foldCatalog -> @foldCatalog
-  local 197:9 elapsed: i64 (const)
+  local 216:9 d: JsonDecoder (const)
+  callee 216:13 new JsonDecoder -> @nish.JsonDecoder.constructor
+  callee 216:56 new JsonLimits -> @nish.JsonLimits.constructor
+  local 217:7 c: Catalog (let)
+  callee 217:11 new Catalog -> @Catalog.constructor
+  local 218:7 h: u64 (let)
+  local 219:9 t0: i64 (const)
+  local 220:12 r: i32 (let)
+  callee 221:5 mutate -> @mutate
+  callee 223:11 new Catalog -> @Catalog.constructor
+  callee 225:5 decodeInto -> @decodeInto
+  callee 226:9 fold -> @fold
+  callee 226:17 foldCatalog -> @foldCatalog
+  local 228:9 elapsed: i64 (const)
 function runSerialize(doc: u8[], iterations: i32): i64 -> @runSerialize
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 216:5
-  calls: Catalog.constructor decodeInto fold nish.JsonDecoder.constructor nish.JsonLimits.constructor nish.JsonWriter.complete nish.JsonWriter.constructor nish.JsonWriter.reset nish.JsonWriter.written nish.jsonEncode$$Catalog nish_alloc_struct nish_arena_release nish_exit nish_monotonic_nanos nish_panic_div nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_write
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 248:5
+  calls: Catalog.constructor decodeInto fold foldBytes nish.JsonDecoder.constructor nish.JsonLimits.constructor nish.JsonWriter.complete nish.JsonWriter.constructor nish.JsonWriter.reset nish.JsonWriter.written nish.jsonEncode$$Catalog nish_alloc_struct nish_arena_release nish_exit nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_write
   pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.constructor#1 decodeInto#1
   stackSites=2 stackLocals=1
-  local 203:9 d: JsonDecoder (const)
-  callee 203:13 new JsonDecoder -> @nish.JsonDecoder.constructor
-  callee 203:56 new JsonLimits -> @nish.JsonLimits.constructor
-  local 204:9 c: Catalog (const)
-  callee 204:13 new Catalog -> @Catalog.constructor
-  callee 205:3 decodeInto -> @decodeInto
-  local 206:9 count: i32 (const)
-  local 210:9 out: u8[] (const)
-  local 211:9 w: JsonWriter (const)
-  callee 211:13 new JsonWriter -> @nish.JsonWriter.constructor
-  local 212:7 h: u64 (let)
-  local 213:9 t0: i64 (const)
-  local 214:12 r: i32 (let)
-  local 215:11 p: Performance (const)
-  callee 217:5 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee 218:5 jsonEncode<Catalog> -> @nish.jsonEncode$$Catalog
-  callee 219:10 JsonWriter.complete -> @nish.JsonWriter.complete
-  local 222:11 len: i32 (const)
-  callee 222:22 JsonWriter.written -> @nish.JsonWriter.written
-  callee 223:9 fold -> @fold
-  callee 223:14 fold -> @fold
-  local 225:9 elapsed: i64 (const)
-  local 226:9 len: i32 (const)
-  callee 226:20 JsonWriter.written -> @nish.JsonWriter.written
-  local 227:7 bytes: u64 (let)
-  local 228:12 i: i32 (let)
-  callee 229:13 fold -> @fold
+  local 235:9 d: JsonDecoder (const)
+  callee 235:13 new JsonDecoder -> @nish.JsonDecoder.constructor
+  callee 235:56 new JsonLimits -> @nish.JsonLimits.constructor
+  local 236:9 c: Catalog (const)
+  callee 236:13 new Catalog -> @Catalog.constructor
+  callee 237:3 decodeInto -> @decodeInto
+  local 238:9 count: i32 (const)
+  local 242:9 out: u8[] (const)
+  local 243:9 w: JsonWriter (const)
+  callee 243:13 new JsonWriter -> @nish.JsonWriter.constructor
+  local 244:7 h: u64 (let)
+  local 245:7 elapsed: i64 (let)
+  local 246:12 r: i32 (let)
+  local 247:11 p: Performance (const)
+  local 249:11 t0: i64 (const)
+  callee 250:5 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee 251:5 jsonEncode<Catalog> -> @nish.jsonEncode$$Catalog
+  callee 253:10 JsonWriter.complete -> @nish.JsonWriter.complete
+  callee 256:9 fold -> @fold
+  callee 256:17 foldBytes -> @foldBytes
+  callee 256:42 JsonWriter.written -> @nish.JsonWriter.written
+  callee 258:33 JsonWriter.written -> @nish.JsonWriter.written
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_index nish_parse_number nish_print nish_read_file_bytes nish_str_concat nish_str_eq nish_str_from_i64 nish_write runSerialize runTokenize runTyped
   stackSites=0 stackLocals=0
-  local 240:9 workload: string (const)
-  local 241:9 read: u8[] | null (const)
-  local 246:9 doc: u8[] (const)
-  local 247:9 iterations: i32 (const)
-  local 248:9 at: i32 (const)
-  local 249:7 elapsed: i64 (let)
-  callee 251:15 runTokenize -> @runTokenize
-  callee 253:15 runTyped -> @runTyped
-  callee 255:15 runSerialize -> @runSerialize
+  local 267:9 workload: string (const)
+  local 268:9 read: u8[] | null (const)
+  local 273:9 doc: u8[] (const)
+  local 274:9 iterations: i32 (const)
+  local 275:9 at: i32 (const)
+  local 276:7 elapsed: i64 (let)
+  callee 278:15 runTokenize -> @runTokenize
+  callee 280:15 runTyped -> @runTyped
+  callee 282:15 runSerialize -> @runSerialize
 module std/json.ts [package nish]
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9

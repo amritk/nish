@@ -6,7 +6,8 @@
 //	           below, a fresh value per iteration
 //	serialize  the structs written back with a json.Encoder that does not
 //	           escape HTML, into one reused buffer, without the newline the
-//	           encoder appends
+//	           encoder appends; only the writing is timed, and every byte of
+//	           every output is folded in outside the clock
 //
 // The folds and the mutation of the input are bench/json-compare/run.mjs's.
 //
@@ -61,6 +62,9 @@ type sums struct {
 	h       uint64
 	tokens  int
 	numbers float64
+	// full folds every byte of a key or string after its length, not only
+	// the last: the untimed pass after the loop.
+	full bool
 }
 
 func (s *sums) kind(k uint64) {
@@ -70,11 +74,23 @@ func (s *sums) kind(k uint64) {
 
 func (s *sums) text(k uint64, str string) {
 	s.kind(k)
+	s.h = fold(s.h, uint64(len(str)))
+	if s.full {
+		s.h = foldBytes(s.h, str)
+		return
+	}
 	var last uint64
 	if len(str) > 0 {
 		last = uint64(str[len(str)-1])
 	}
-	s.h = fold(fold(s.h, uint64(len(str))), last)
+	s.h = fold(s.h, last)
+}
+
+func foldBytes[T string | []byte](h uint64, b T) uint64 {
+	for i := 0; i < len(b); i++ {
+		h = fold(h, uint64(b[i]))
+	}
+	return h
 }
 
 // tokenizeOnce tells keys from strings, which Token does not, with a stack
@@ -142,11 +158,13 @@ func tokenizeOnce(doc []byte, s *sums) {
 	}
 }
 
-func foldOptional(h uint64, s *string) uint64 {
+// foldString folds a string field: 0 for null, else its length plus one,
+// then every byte.
+func foldString(h uint64, s *string) uint64 {
 	if s == nil {
 		return fold(h, 0)
 	}
-	return fold(h, uint64(len(*s))+1)
+	return foldBytes(fold(h, uint64(len(*s))+1), *s)
 }
 
 func foldCatalog(c *Catalog) uint64 {
@@ -154,7 +172,7 @@ func foldCatalog(c *Catalog) uint64 {
 	for i := range c.Performances {
 		p := &c.Performances[i]
 		h = fold(fold(h, uint64(p.EventID)), uint64(p.ID))
-		h = foldOptional(foldOptional(h, p.Logo), p.Name)
+		h = foldString(foldString(h, p.Logo), p.Name)
 		h = fold(h, uint64(len(p.Prices)))
 		for _, price := range p.Prices {
 			h = fold(fold(fold(h, uint64(price.Amount)), uint64(price.AudienceSubCategoryID)), uint64(price.SeatCategoryID))
@@ -170,8 +188,8 @@ func foldCatalog(c *Catalog) uint64 {
 			}
 			h = fold(h, uint64(sc.SeatCategoryID))
 		}
-		h = foldOptional(h, p.SeatMapImage)
-		h = fold(fold(h, uint64(p.Start)), uint64(len(p.VenueCode)))
+		h = foldString(h, p.SeatMapImage)
+		h = foldString(fold(h, uint64(p.Start)), &p.VenueCode)
 	}
 	return h
 }
@@ -218,7 +236,9 @@ func main() {
 			numbers += s.numbers
 		}
 		elapsed = time.Since(t0)
-		fmt.Printf("tokenize %d %d %s\n", h, s.tokens, strconv.FormatFloat(numbers, 'g', -1, 64))
+		verify := sums{full: true}
+		tokenizeOnce(doc, &verify)
+		fmt.Printf("tokenize %d %d %s %d\n", h, s.tokens, strconv.FormatFloat(numbers, 'g', -1, 64), verify.h)
 	case "typed":
 		var h uint64
 		count := 0
@@ -243,23 +263,19 @@ func main() {
 		enc.SetEscapeHTML(false)
 		var h uint64
 		var out []byte
-		t0 := time.Now()
 		for r := 0; r < iterations; r++ {
 			c.Performances[r%len(c.Performances)].Start++
+			t0 := time.Now()
 			buf.Reset()
 			if err := enc.Encode(&c); err != nil {
 				fmt.Fprintln(os.Stderr, "serialize:", err)
 				os.Exit(1)
 			}
+			elapsed += time.Since(t0)
 			out = bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
-			h = fold(fold(h, uint64(len(out))), uint64(out[r%len(out)]))
+			h = fold(h, foldBytes(0, out))
 		}
-		elapsed = time.Since(t0)
-		var sum uint64
-		for _, b := range out {
-			sum = fold(sum, uint64(b))
-		}
-		fmt.Printf("serialize %d %d %d\n", h, len(out), sum)
+		fmt.Printf("serialize %d %d\n", h, len(out))
 	default:
 		fmt.Fprintln(os.Stderr, "unknown workload", workload)
 		os.Exit(2)

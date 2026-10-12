@@ -4,20 +4,22 @@
 //
 //   main <workload> <file> <iterations> <at>
 //
-//   tokenize   every token of the document read with `nish/json-tokenizer`,
-//              every key and string copied out with `stringInto`, every
-//              number read with `numberF64`
-//   typed      citm_catalog's `performances` decoded with `nish/json-typed`
-//              into the classes below, reusing them from one iteration to
-//              the next
-//   serialize  the same classes, decoded once, written back minified with
-//              `jsonEncode` into one reused buffer
+//   tokenize     every token of the document read with `nish/json-tokenizer`,
+//                every key and string copied out with `stringInto`, every
+//                number read with `numberF64`
+//   typed        citm_catalog's `performances` decoded with `nish/json-typed`
+//                into a fresh `Catalog` every iteration, as the comparators
+//                decode into a fresh value
+//   typed-reuse  the same, into one `Catalog` reused from one iteration to the
+//                next, as nish/json-typed lets a server do; its own row
+//   serialize    the same classes, decoded once, written back minified with
+//                `jsonEncode` into one reused buffer
 //
 // Before each tokenize or typed iteration the byte at offset `at` (a digit
 // that bench/json-compare/run.mjs picks) is set to the digit `iteration % 10`;
 // before each serialize iteration one performance's `start` moves on by one.
 // The checksum folds are run.mjs's header's, byte for byte, in every program.
-// The first line printed is the checksum, the second the loop's own time.
+// The first line printed is the checksum, the second the time the clock saw.
 import { JsonWriter } from "nish/json"
 import {
   JSON_TOK_END,
@@ -81,12 +83,26 @@ class Catalog {
 /** `h * 31 + v`, wrapping, the one fold every checksum is made of. */
 const fold = (h: u64, v: u64): u64 => h * toU64(31) + v
 
-/** A string's fold: its length in bytes, then its last byte (0 when empty). */
-const foldText = (h: u64, len: i32, last: i32): u64 => fold(fold(h, toU64(len)), toU64(last))
+/** Bytes `out[0 .. n)`, each folded in. */
+const foldBytes = (h: u64, out: u8[], n: i32): u64 => {
+  let acc: u64 = h
+  for (let i: i32 = 0; i < n && i < toI32(out.length); i += 1) {
+    acc = fold(acc, toU64(out[i]))
+  }
+  return acc
+}
 
-/** A `string | null` field's fold: 0 for null, else the length plus one. */
-const foldOptional = (h: u64, s: string | null): u64 =>
-  s === null ? fold(h, toU64(0)) : fold(h, toU64(s.length + 1))
+/** A string field: 0 for null, else its length in bytes plus one, then every byte. */
+const foldString = (h: u64, s: string | null): u64 => {
+  if (s === null) {
+    return fold(h, toU64(0))
+  }
+  let acc: u64 = fold(h, toU64(s.length + 1))
+  for (let i: i32 = 0; i < toI32(s.length); i += 1) {
+    acc = fold(acc, toU64(toI32(s.charCodeAt(i))))
+  }
+  return acc
+}
 
 /** One document's tokens: the fold of kinds and strings, the token count, and the sum of the numbers. */
 class TokenSums {
@@ -95,7 +111,12 @@ class TokenSums {
   numbers: f64 = 0
 }
 
-const tokenizeOnce = (tok: JsonTokenizer, doc: u8[], out: u8[], sums: TokenSums): void => {
+/**
+ * Every token of `doc`. A key or string folds in its decoded length and its
+ * last byte (0 when empty), or with `full` every byte after the length: the
+ * timed loop folds the first, the untimed pass after it the second.
+ */
+const tokenizeOnce = (tok: JsonTokenizer, doc: u8[], out: u8[], sums: TokenSums, full: boolean): void => {
   tok.reset(doc, 0, toI32(doc.length))
   let h: u64 = 0
   let tokens: i32 = 0
@@ -106,7 +127,12 @@ const tokenizeOnce = (tok: JsonTokenizer, doc: u8[], out: u8[], sums: TokenSums)
     tokens += 1
     if (k === JSON_TOK_KEY || k === JSON_TOK_STRING) {
       const n: i32 = tok.stringInto(out, 0)
-      h = foldText(h, n, n > 0 && n <= toI32(out.length) ? toI32(out[n - 1]) : 0)
+      h = fold(h, toU64(n))
+      if (full) {
+        h = foldBytes(h, out, n)
+      } else {
+        h = fold(h, toU64(n > 0 && n <= toI32(out.length) ? toI32(out[n - 1]) : 0))
+      }
     } else if (k === JSON_TOK_NUMBER) {
       numbers += tok.numberF64()
     }
@@ -125,7 +151,7 @@ const foldCatalog = (c: Catalog): u64 => {
   let h: u64 = 0
   for (const p of c.performances) {
     h = fold(fold(h, toU64(p.eventId)), toU64(p.id))
-    h = foldOptional(foldOptional(h, p.logo), p.name)
+    h = foldString(foldString(h, p.logo), p.name)
     h = fold(h, toU64(p.prices.length))
     for (const price of p.prices) {
       h = fold(
@@ -144,8 +170,8 @@ const foldCatalog = (c: Catalog): u64 => {
       }
       h = fold(h, toU64(sc.seatCategoryId))
     }
-    h = foldOptional(h, p.seatMapImage)
-    h = fold(fold(h, toU64(p.start)), toU64(p.venueCode.length))
+    h = foldString(h, p.seatMapImage)
+    h = foldString(fold(h, toU64(p.start)), p.venueCode)
   }
   return h
 }
@@ -175,22 +201,27 @@ const runTokenize = (doc: u8[], iterations: i32, at: i32): i64 => {
   const t0: i64 = monotonicNanos()
   for (let r: i32 = 0; r < iterations; r += 1) {
     mutate(doc, at, r)
-    tokenizeOnce(tok, doc, out, sums)
+    tokenizeOnce(tok, doc, out, sums, false)
     h = fold(h, sums.h)
     numbers += sums.numbers
   }
   const elapsed: i64 = monotonicNanos() - t0
-  console.log(`tokenize ${h} ${sums.tokens} ${numbers}`)
+  tokenizeOnce(tok, doc, out, sums, true)
+  console.log(`tokenize ${h} ${sums.tokens} ${numbers} ${sums.h}`)
   return elapsed
 }
 
-const runTyped = (doc: u8[], iterations: i32, at: i32): i64 => {
+/** Typed decode, into a fresh `Catalog` per iteration or into one reused. */
+const runTyped = (doc: u8[], iterations: i32, at: i32, reuse: boolean): i64 => {
   const d = new JsonDecoder(doc, 0, toI32(doc.length), new JsonLimits())
-  const c = new Catalog()
+  let c = new Catalog()
   let h: u64 = 0
   const t0: i64 = monotonicNanos()
   for (let r: i32 = 0; r < iterations; r += 1) {
     mutate(doc, at, r)
+    if (!reuse) {
+      c = new Catalog()
+    }
     decodeInto(d, doc, c)
     h = fold(h, foldCatalog(c))
   }
@@ -199,6 +230,7 @@ const runTyped = (doc: u8[], iterations: i32, at: i32): i64 => {
   return elapsed
 }
 
+/** Only the encode is timed: every byte of every output is folded in outside the clock. */
 const runSerialize = (doc: u8[], iterations: i32): i64 => {
   const d = new JsonDecoder(doc, 0, toI32(doc.length), new JsonLimits())
   const c = new Catalog()
@@ -210,31 +242,26 @@ const runSerialize = (doc: u8[], iterations: i32): i64 => {
   const out = new Array<u8>(toI32(doc.length) * 2 + 64)
   const w = new JsonWriter(out, 0)
   let h: u64 = 0
-  const t0: i64 = monotonicNanos()
+  let elapsed: i64 = 0
   for (let r: i32 = 0; r < iterations; r += 1) {
     const p: Performance = c.performances[r % count]
     p.start = p.start + toI64(1)
+    const t0: i64 = monotonicNanos()
     w.reset(out, 0)
     jsonEncode(w, c)
+    elapsed += monotonicNanos() - t0
     if (!w.complete()) {
       panic(`serialize: the writer failed with code ${w.failed}`)
     }
-    const len: i32 = w.written()
-    h = fold(fold(h, toU64(len)), toU64(out[r % len]))
+    h = fold(h, foldBytes(toU64(0), out, w.written()))
   }
-  const elapsed: i64 = monotonicNanos() - t0
-  const len: i32 = w.written()
-  let bytes: u64 = 0
-  for (let i: i32 = 0; i < len && i < toI32(out.length); i += 1) {
-    bytes = fold(bytes, toU64(out[i]))
-  }
-  console.log(`serialize ${h} ${len} ${bytes}`)
+  console.log(`serialize ${h} ${w.written()}`)
   return elapsed
 }
 
 export const main = (): number => {
   if (process.argv.length < 5) {
-    console.error("usage: main <tokenize|typed|serialize> <file> <iterations> <at>")
+    console.error("usage: main <tokenize|typed|typed-reuse|serialize> <file> <iterations> <at>")
     return 2
   }
   const workload: string = process.argv[1]
@@ -249,8 +276,8 @@ export const main = (): number => {
   let elapsed: i64 = -1
   if (workload === "tokenize") {
     elapsed = runTokenize(doc, iterations, at)
-  } else if (workload === "typed") {
-    elapsed = runTyped(doc, iterations, at)
+  } else if (workload === "typed" || workload === "typed-reuse") {
+    elapsed = runTyped(doc, iterations, at, workload === "typed-reuse")
   } else if (workload === "serialize") {
     elapsed = runSerialize(doc, iterations)
   } else {

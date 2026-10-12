@@ -20,6 +20,9 @@ struct Sums : rapidjson::BaseReaderHandler<rapidjson::UTF8<>, Sums> {
   uint64_t h = 0;
   long tokens = 0;
   double numbers = 0;
+  // Fold every byte of a key or string after its length, not only the last:
+  // the untimed pass after the loop.
+  bool full = false;
 
   bool kind(uint64_t k) {
     h = fold(h, k);
@@ -28,7 +31,14 @@ struct Sums : rapidjson::BaseReaderHandler<rapidjson::UTF8<>, Sums> {
   }
   bool text(uint64_t k, const char *s, rapidjson::SizeType len) {
     kind(k);
-    h = fold(fold(h, len), len > 0 ? (unsigned char)s[len - 1] : 0);
+    h = fold(h, len);
+    if (full) {
+      for (rapidjson::SizeType i = 0; i < len; i++) {
+        h = fold(h, static_cast<unsigned char>(s[i]));
+      }
+    } else {
+      h = fold(h, len > 0 ? static_cast<unsigned char>(s[len - 1]) : 0);
+    }
     return true;
   }
   bool number(double d) {
@@ -98,6 +108,10 @@ int main(int argc, char **argv) {
     tokens = s.tokens;
   }
   int64_t elapsed = now_ns() - t0;
-  std::printf("tokenize %" PRIu64 " %ld %.17g\nns %" PRId64 "\n", h, tokens, numbers, elapsed);
+  Sums verify;
+  verify.full = true;
+  rapidjson::StringStream ss(doc.data());
+  reader.Parse<rapidjson::kParseFullPrecisionFlag>(ss, verify);
+  std::printf("tokenize %" PRIu64 " %ld %.17g %" PRIu64 "\nns %" PRId64 "\n", h, tokens, numbers, verify.h, elapsed);
   return 0;
 }

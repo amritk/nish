@@ -5,7 +5,12 @@
 //   typed      citm_catalog's `performances` read into the structs below, a
 //              fresh vector per iteration, fields matched by key in any order
 //   serialize  the structs written back minified with simdjson's
-//              builder::string_builder, cleared and reused per iteration
+//              builder::string_builder, cleared and reused per iteration;
+//              only the writing is timed, and every byte of every output
+//              is folded in outside the clock
+//
+// Typed reads `performances` and nothing after it: On-Demand never looks at
+// the members that follow, where the other typed decoders scan to the end.
 //
 // The folds and the mutation of the input are bench/json-compare/run.mjs's.
 //
@@ -60,6 +65,9 @@ struct Sums {
   uint64_t h = 0;
   long tokens = 0;
   double numbers = 0;
+  // Fold every byte of a key or string after its length, not only the last:
+  // the untimed pass after the loop.
+  bool full = false;
 
   void kind(uint64_t k) {
     h = fold(h, k);
@@ -67,7 +75,14 @@ struct Sums {
   }
   void text(uint64_t k, std::string_view s) {
     kind(k);
-    h = fold(fold(h, s.size()), s.empty() ? 0 : static_cast<unsigned char>(s.back()));
+    h = fold(h, s.size());
+    if (full) {
+      for (char c : s) {
+        h = fold(h, static_cast<unsigned char>(c));
+      }
+    } else {
+      h = fold(h, s.empty() ? 0 : static_cast<unsigned char>(s.back()));
+    }
   }
 };
 
@@ -189,15 +204,23 @@ static std::vector<Performance> readCatalog(ondemand::parser &parser, padded_str
   return out;
 }
 
-static uint64_t foldOptional(uint64_t h, const std::optional<std::string> &s) {
-  return fold(h, s ? s->size() + 1 : 0);
+static uint64_t foldBytes(uint64_t h, std::string_view s) {
+  for (char c : s) {
+    h = fold(h, static_cast<unsigned char>(c));
+  }
+  return h;
+}
+
+// A string field: 0 for null, else its length plus one, then every byte.
+static uint64_t foldString(uint64_t h, const std::optional<std::string> &s) {
+  return s ? foldBytes(fold(h, s->size() + 1), *s) : fold(h, 0);
 }
 
 static uint64_t foldCatalog(const std::vector<Performance> &c) {
   uint64_t h = 0;
   for (const Performance &p : c) {
     h = fold(fold(h, p.eventId), p.id);
-    h = foldOptional(foldOptional(h, p.logo), p.name);
+    h = foldString(foldString(h, p.logo), p.name);
     h = fold(h, p.prices.size());
     for (const Price &price : p.prices) {
       h = fold(fold(fold(h, price.amount), price.audienceSubCategoryId), price.seatCategoryId);
@@ -213,8 +236,8 @@ static uint64_t foldCatalog(const std::vector<Performance> &c) {
       }
       h = fold(h, sc.seatCategoryId);
     }
-    h = foldOptional(h, p.seatMapImage);
-    h = fold(fold(h, p.start), p.venueCode.size());
+    h = foldString(h, p.seatMapImage);
+    h = foldString(fold(h, p.start), p.venueCode);
   }
   return h;
 }
@@ -363,7 +386,11 @@ int main(int argc, char **argv) {
       tokens = s.tokens;
     }
     int64_t elapsed = now_ns() - t0;
-    std::printf("tokenize %" PRIu64 " %ld %.17g\nns %" PRId64 "\n", h, tokens, numbers, elapsed);
+    Sums verify;
+    verify.full = true;
+    ondemand::document d = parser.iterate(doc);
+    walk(d.get_value(), verify);
+    std::printf("tokenize %" PRIu64 " %ld %.17g %" PRIu64 "\nns %" PRId64 "\n", h, tokens, numbers, verify.h, elapsed);
   } else if (workload == "typed") {
     uint64_t h = 0;
     size_t count = 0;
@@ -384,21 +411,19 @@ int main(int argc, char **argv) {
     }
     builder::string_builder b(doc.size() * 2 + 64);
     uint64_t h = 0;
-    std::string_view out;
-    t0 = now_ns();
+    size_t len = 0;
+    int64_t elapsed = 0;
     for (long r = 0; r < iterations; r++) {
       c[r % c.size()].start += 1;
+      t0 = now_ns();
       b.clear();
       writeCatalog(b, c);
-      out = b.view();
-      h = fold(fold(h, out.size()), static_cast<unsigned char>(out[r % out.size()]));
+      std::string_view out = b.view();
+      elapsed += now_ns() - t0;
+      h = fold(h, foldBytes(0, out));
+      len = out.size();
     }
-    int64_t elapsed = now_ns() - t0;
-    uint64_t bytes = 0;
-    for (char ch : out) {
-      bytes = fold(bytes, static_cast<unsigned char>(ch));
-    }
-    std::printf("serialize %" PRIu64 " %zu %" PRIu64 "\nns %" PRId64 "\n", h, out.size(), bytes, elapsed);
+    std::printf("serialize %" PRIu64 " %zu\nns %" PRId64 "\n", h, len, elapsed);
   } else {
     std::fprintf(stderr, "unknown workload %s\n", argv[1]);
     return 2;

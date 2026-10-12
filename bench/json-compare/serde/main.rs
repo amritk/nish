@@ -5,7 +5,8 @@
 //   typed      citm_catalog's `performances` deserialized with serde derive
 //              into the structs below, a fresh value per iteration
 //   serialize  the structs written back with serde_json::to_writer into one
-//              reused Vec<u8>
+//              reused Vec<u8>; only the writing is timed, and every byte of
+//              every output is folded in outside the clock
 //
 // The folds and the mutation of the input are bench/json-compare/run.mjs's.
 //
@@ -65,6 +66,13 @@ struct Sums {
     h: u64,
     tokens: u64,
     numbers: f64,
+    /// Fold every byte of a key or string after its length, not only the
+    /// last: the untimed pass after the loop.
+    full: bool,
+}
+
+fn fold_bytes(h: u64, b: &[u8]) -> u64 {
+    b.iter().fold(h, |acc, &x| fold(acc, x as u64))
 }
 
 impl Sums {
@@ -74,8 +82,12 @@ impl Sums {
     }
     fn text(&mut self, k: u64, s: &str) {
         self.kind(k);
-        let last = s.as_bytes().last().copied().unwrap_or(0) as u64;
-        self.h = fold(fold(self.h, s.len() as u64), last);
+        self.h = fold(self.h, s.len() as u64);
+        if self.full {
+            self.h = fold_bytes(self.h, s.as_bytes());
+        } else {
+            self.h = fold(self.h, s.as_bytes().last().copied().unwrap_or(0) as u64);
+        }
     }
     fn number(&mut self, d: f64) {
         self.kind(7);
@@ -167,15 +179,16 @@ fn tokenize_once(doc: &[u8], s: &mut Sums) {
     }
 }
 
-fn fold_optional(h: u64, s: &Option<String>) -> u64 {
-    fold(h, s.as_ref().map_or(0, |s| s.len() as u64 + 1))
+/// A string field: 0 for null, else its length plus one, then every byte.
+fn fold_string(h: u64, s: Option<&String>) -> u64 {
+    s.map_or(fold(h, 0), |s| fold_bytes(fold(h, s.len() as u64 + 1), s.as_bytes()))
 }
 
 fn fold_catalog(c: &Catalog) -> u64 {
     let mut h = 0u64;
     for p in &c.performances {
         h = fold(fold(h, p.event_id as u64), p.id as u64);
-        h = fold_optional(fold_optional(h, &p.logo), &p.name);
+        h = fold_string(fold_string(h, p.logo.as_ref()), p.name.as_ref());
         h = fold(h, p.prices.len() as u64);
         for price in &p.prices {
             h = fold(fold(fold(h, price.amount as u64), price.audience_sub_category_id as u64), price.seat_category_id as u64);
@@ -191,8 +204,8 @@ fn fold_catalog(c: &Catalog) -> u64 {
             }
             h = fold(h, sc.seat_category_id as u64);
         }
-        h = fold_optional(h, &p.seat_map_image);
-        h = fold(fold(h, p.start as u64), p.venue_code.len() as u64);
+        h = fold_string(h, p.seat_map_image.as_ref());
+        h = fold_string(fold(h, p.start as u64), Some(&p.venue_code));
     }
     h
 }
@@ -237,8 +250,10 @@ fn main() {
                 tokens = s.tokens;
             }
             elapsed = t0.elapsed();
+            let mut verify = Sums { full: true, ..Sums::default() };
+            tokenize_once(&doc, &mut verify);
             // {:e} is the shortest representation that round-trips, as Display is.
-            println!("tokenize {h} {tokens} {numbers:e}");
+            println!("tokenize {h} {tokens} {numbers:e} {}", verify.h);
         }
         "typed" => {
             let mut h = 0u64;
@@ -262,16 +277,17 @@ fn main() {
             }
             let mut out: Vec<u8> = Vec::with_capacity(doc.len() * 2 + 64);
             let mut h = 0u64;
-            let t0 = Instant::now();
+            let mut total = std::time::Duration::ZERO;
             for r in 0..iterations {
                 c.performances[r % n].start += 1;
+                let t0 = Instant::now();
                 out.clear();
                 serde_json::to_writer(&mut out, &c).unwrap();
-                h = fold(fold(h, out.len() as u64), out[r % out.len()] as u64);
+                total += t0.elapsed();
+                h = fold(h, fold_bytes(0, &out));
             }
-            elapsed = t0.elapsed();
-            let bytes = out.iter().fold(0u64, |acc, &b| fold(acc, b as u64));
-            println!("serialize {h} {} {bytes}", out.len());
+            elapsed = total;
+            println!("serialize {h} {}", out.len());
         }
         other => {
             eprintln!("unknown workload {other}");

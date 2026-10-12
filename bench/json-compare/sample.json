@@ -8,7 +8,7 @@
     {
       "eventId": 4100001,
       "id": 5200017,
-      "logo": null,
+      "logo": "/img/\"poster\"\\0042-\u00e9\ud83c\udfad.png",
       "name": null,
       "prices": [
         {"amount": 90250, "audienceSubCategoryId": 610, "seatCategoryId": 7001},
@@ -26,12 +26,12 @@
       "eventId": 4100002,
       "id": 5200018,
       "logo": "/img/poster-0042.png",
-      "name": null,
+      "name": "Line\nTab\tCtrl\u0001 caf\u00e9 \u2603 \/ end",
       "prices": [],
       "seatCategories": [{"areas": [{"areaId": 803, "blockIds": []}], "seatCategoryId": 7003}],
       "seatMapImage": null,
       "start": 1700086400000,
-      "venueCode": "HALL_NORTH"
+      "venueCode": "H\u00c5LL_N\u00d8RTH"
     }
   ],
   "venueNames": {"HALL_NORTH": "North Hall"}

@@ -20,6 +20,9 @@ typedef struct {
   uint64_t h;
   long tokens;
   double numbers;
+  // Fold every byte of a key or string after its length, not only the last:
+  // the untimed pass after the loop.
+  int full;
 } sums;
 
 static void kind(sums *s, uint64_t k) {
@@ -29,7 +32,14 @@ static void kind(sums *s, uint64_t k) {
 
 static void text(sums *s, uint64_t k, const char *str, size_t len) {
   kind(s, k);
-  s->h = fold(fold(s->h, len), len > 0 ? (unsigned char)str[len - 1] : 0);
+  s->h = fold(s->h, len);
+  if (s->full) {
+    for (size_t i = 0; i < len; i++) {
+      s->h = fold(s->h, (unsigned char)str[i]);
+    }
+  } else {
+    s->h = fold(s->h, len > 0 ? (unsigned char)str[len - 1] : 0);
+  }
 }
 
 static void walk(yyjson_val *v, sums *s) {
@@ -105,7 +115,7 @@ int main(int argc, char **argv) {
 
   uint64_t h = 0;
   double numbers = 0;
-  sums s = {0, 0, 0};
+  sums s = {0, 0, 0, 0};
   int64_t t0 = now_ns();
   for (long r = 0; r < iterations; r++) {
     if (at >= 0 && (size_t)at < len) {
@@ -116,13 +126,17 @@ int main(int argc, char **argv) {
       fprintf(stderr, "tokenize: the document is not JSON\n");
       return 1;
     }
-    s = (sums){0, 0, 0};
+    s = (sums){0, 0, 0, 0};
     walk(yyjson_doc_get_root(d), &s);
     yyjson_doc_free(d);
     h = fold(h, s.h);
     numbers += s.numbers;
   }
   int64_t elapsed = now_ns() - t0;
-  printf("tokenize %" PRIu64 " %ld %.17g\nns %" PRId64 "\n", h, s.tokens, numbers, elapsed);
+  yyjson_doc *d = yyjson_read_opts(doc, len, 0, &alc, NULL);
+  s = (sums){0, 0, 0, 1};
+  walk(yyjson_doc_get_root(d), &s);
+  yyjson_doc_free(d);
+  printf("tokenize %" PRIu64 " %ld %.17g %" PRIu64 "\nns %" PRId64 "\n", h, s.tokens, numbers, s.h, elapsed);
   return 0;
 }

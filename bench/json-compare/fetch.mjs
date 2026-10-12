@@ -28,7 +28,11 @@ const SIMDJSON_AT = `${RAW}/simdjson/simdjson/b4a0fd3ff4f00c4a5a9ab86046f06daa47
 const YYJSON_AT = `${RAW}/ibireme/yyjson/8b4a38dc994a110abaec8a400615567bd996105f/src` // 0.12.0
 const RAPIDJSON_AT = `${RAW}/Tencent/rapidjson/24b5e7a8b27f42fa16b96fc70aade9106cf7102f/include/rapidjson`
 
-/** Every pinned file: where it lands under the cache, where it comes from, and its sha256. */
+/**
+ * Every pinned file: where it lands under the cache, where it comes from, and
+ * its sha256. The directory before the first slash says who needs it: every
+ * run needs `corpus/`, and each C or C++ comparator its own sources.
+ */
 const PINS = [
   {
     file: "corpus/twitter.json",
@@ -92,9 +96,17 @@ const PINS = [
 
 const sha256Of = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
 
-/** Fetches every pin that is missing from the cache or has the wrong hash; throws on a download that fails or does not match. */
-export const fetchAll = () => {
+/**
+ * Fetches every pin under `corpus/` and under the directories `needs` names
+ * that is missing from the cache or has the wrong hash; throws on a download
+ * that fails or does not match. With no argument, every pin.
+ */
+export const fetchAll = (needs = null) => {
   for (const pin of PINS) {
+    const owner = pin.file.split("/")[0]
+    if (needs !== null && owner !== "corpus" && !needs.includes(owner)) {
+      continue
+    }
     const dest = path.join(CACHE, pin.file)
     if (fs.existsSync(dest) && sha256Of(dest) === pin.sha256) {
       continue

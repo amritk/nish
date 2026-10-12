@@ -1,10 +1,12 @@
 # bench/json-compare/main.ts run on sample.json: `<workload> <iterations> <at>:`
 # and the checksum line it prints. Every comparator (simdjson, yyjson,
-# RapidJSON, serde_json, Go) printed the same line for the same arguments when
-# this was recorded, the f64 sum spelt each language's way; tests/run.js holds
-# the Nish program to it without a network. `at` is the offset run.mjs's
-# rules pick: for tokenize the last digit that follows a digit, for typed the
-# last digit of the first performance's `start`.
-tokenize 7 1239: tokenize 17122537640947015359 161 7.000092727189358e+22
-typed 7 915: typed 958994639683837840 2
-serialize 7 -1: serialize 6303663964400974667 674 9256961296423755170
+# RapidJSON, serde_json, Go) that has the workload printed the same line for
+# the same arguments when this was recorded, the f64 sum spelt each language's
+# way; tests/run.js holds the Nish program to it without a network. `at` is
+# the offset run.mjs's rules pick: for tokenize the last digit that follows a
+# digit, for typed the last digit of the first performance's `start`.
+# typed-reuse is Nish's alone, and must print typed's line.
+tokenize 7 1361: tokenize 6981962826702482149 161 7.000092727189358e+22 3672931878305861320
+typed 7 957: typed 645623151590338983 2
+typed-reuse 7 957: typed 645623151590338983 2
+serialize 7 -1: serialize 11183316248078939317 741

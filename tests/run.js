@@ -13639,21 +13639,27 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       )
     }
     // The fold run.mjs's header gives, over what JSON.stringify writes for the
-    // performances after the serialize workload's 7 iterations.
+    // performances on each of the serialize workload's 7 iterations, so that
+    // the escapes and the non-ASCII in sample.json are held to Node's own.
     const catalog = { performances: JSON.parse(fs.readFileSync(sample, "utf8")).performances }
+    const mask = 0xffffffffffffffffn
+    let folded = 0n
+    let length = 0
     for (let r = 0; r < 7; r++) {
       catalog.performances[r % catalog.performances.length].start += 1
-    }
-    const text = Buffer.from(JSON.stringify(catalog))
-    let bytes = 0n
-    for (const b of text) {
-      bytes = (bytes * 31n + BigInt(b)) & 0xffffffffffffffffn
+      const text = Buffer.from(JSON.stringify(catalog))
+      let bytes = 0n
+      for (const b of text) {
+        bytes = (bytes * 31n + BigInt(b)) & mask
+      }
+      folded = (folded * 31n + bytes) & mask
+      length = text.length
     }
     const serialize = expected.find((e) => e.args[0] === "serialize")
     check(
       "json-compare: the serialize checksum in sample.expected is the fold of JSON.stringify's bytes",
-      serialize !== undefined && serialize.want.endsWith(` ${text.length} ${bytes}`),
-      `${serialize?.want}\nJSON.stringify: ${text.length} bytes, fold ${bytes}`
+      serialize !== undefined && serialize.want === `serialize ${folded} ${length}`,
+      `${serialize?.want}\nJSON.stringify: serialize ${folded} ${length}`
     )
   } else {
     skip("json-compare: bench/json-compare/main.ts native run (no clang)")
