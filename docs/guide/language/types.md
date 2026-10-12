@@ -136,7 +136,6 @@ A few rules shape how narrowing works:
   loop that assigns the variable.
 - `if (p === null) { return …; }` narrows `p` for the rest of the block,
   because the `if` cannot fall through.
-- `?.` is not available on a nullable; write the test.
 - Two nullable values cannot be compared with each other — compare each with
   `null`.
 
@@ -181,6 +180,49 @@ Nish checks the index and stops the program instead. Test the index against
 const names = new Array<string | null>(2);
 console.log(names[5] ?? "none");
 ```
+
+### Reaching through with `?.`
+
+To read through several nullable links, write a `?.` chain and end it with a
+default. Each `?.` stops the chain when the value before it is `null`, and
+the whole expression is then the default:
+
+```ts nish:ok
+class Address {
+  city: string;
+  constructor(city: string) {
+    this.city = city;
+  }
+}
+
+class Customer {
+  address: Address | null = null;
+}
+
+const cityOf = (c: Customer | null): string => c?.address?.city ?? "unknown";
+
+export const main = (): i32 => {
+  const c = new Customer();
+  console.log(cityOf(null));        // unknown
+  console.log(cityOf(c));           // unknown
+  c.address = new Address("Lyon");
+  console.log(cityOf(c));           // Lyon
+  return 0;
+};
+```
+
+The chain can end in a field of any type, a number included, or in a method
+call, and anything after a `null` link, an argument included, does not run.
+Three rules keep it honest:
+
+- **A chain must end in `??`.** On its own `c?.address` would be
+  `undefined` when `c` is `null`, and Nish has no `undefined`, so
+  `const a = c?.address` is refused. Use the chain where you want the
+  value, with its default.
+- **Only `?.` skips a `null`.** In `c?.address.city`, the `.city` reads
+  `address` as it is, so if `address` may be `null` it needs a `?.` too.
+- **`?.` needs something that can be `null`.** On a value that never is,
+  write `.`.
 
 The reference's [Nullable types](../../LANGUAGE.md#nullable-types) section
 has every form a test may take. A function that can *fail*, rather than find

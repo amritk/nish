@@ -16785,6 +16785,165 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end mem-nullish -->
 
+### `a?.b?.c ?? d`: a chain that ends in a default
+
+A `?.` link tests its receiver for `null` as soon as it is evaluated and
+branches to `nullish.default`, which every link of the chain shares, so the
+default runs exactly where some link was `null` and nothing after that link
+runs. The links are otherwise the plain field read, `length` or call they would
+be with `.`, and the chain's value meets the default in a `phi` at
+`nullish.end`. There is no `undefined` anywhere: the chain is the left operand
+of `??` or it does not compile. A nullable parameter keeps `readonly` and
+`nocapture` but, as any nullable, not `nonnull`.
+
+<!-- cookbook:begin mem-optional-chain -->
+```ts
+class Address {
+  city: string
+
+  constructor(city: string) {
+    this.city = city
+  }
+}
+
+class Customer {
+  name: string
+  address: Address | null = null
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  greeting(): string {
+    return `hi ${this.name}`
+  }
+}
+
+// One `icmp eq` and one branch per `?.`, all to the shared default.
+export const cityOf = (c: Customer | null): string => c?.address?.city ?? "unknown"
+
+// A scalar at the end: the chain is the `i32` its last link reads.
+export const nameLength = (c: Customer | null): i32 => c?.name.length ?? 0
+
+// A method call is a link, made only where the receiver is not `null`.
+export const greet = (c: Customer | null): string => c?.greeting() ?? "nobody"
+```
+
+```llvm
+%struct.Address = type { i8* }
+%struct.Customer = type { i8*, %struct.Address* }
+
+@.str.0 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"hi \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"unknown\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"nobody\00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #0
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+
+define internal void @Address.constructor(%struct.Address* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %city) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Address, %struct.Address* %this, i32 0, i32 0
+  store i8* %city, i8** %0, align 8, !tbaa !4
+  ret void
+}
+
+define internal void @Customer.constructor(%struct.Customer* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Customer, %struct.Customer* %this, i32 0, i32 1
+  store %struct.Address* null, %struct.Address** %0, align 8, !tbaa !6
+  %1 = getelementptr inbounds %struct.Customer, %struct.Customer* %this, i32 0, i32 0
+  store i8* %name, i8** %1, align 8, !tbaa !7
+  ret void
+}
+
+define internal noundef nonnull align 8 i8* @Customer.greeting(%struct.Customer* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Customer, %struct.Customer* %this, i32 0, i32 0
+  %1 = load i8*, i8** %0, align 8, !tbaa !7
+  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8* %1)
+  ret i8* %2
+}
+
+define noundef nonnull align 8 i8* @cityOf(%struct.Customer* noundef readonly align 8 nocapture %c) #2 {
+entry:
+  %0 = icmp eq %struct.Customer* %c, null
+  br i1 %0, label %nullish.default, label %chain.next
+
+chain.next:
+  %1 = getelementptr inbounds %struct.Customer, %struct.Customer* %c, i32 0, i32 1
+  %2 = load %struct.Address*, %struct.Address** %1, align 8, !tbaa !6
+  %3 = icmp eq %struct.Address* %2, null
+  br i1 %3, label %nullish.default, label %chain.next.1
+
+chain.next.1:
+  %4 = getelementptr inbounds %struct.Address, %struct.Address* %2, i32 0, i32 0
+  %5 = load i8*, i8** %4, align 8, !tbaa !4
+  br label %nullish.end
+
+nullish.default:
+  br label %nullish.end
+
+nullish.end:
+  %6 = phi i8* [ %5, %chain.next.1 ], [ bitcast ({ i64, [8 x i8] }* @.str.1 to i8*), %nullish.default ]
+  ret i8* %6
+}
+
+define noundef i32 @nameLength(%struct.Customer* noundef readonly align 8 nocapture %c) #2 {
+entry:
+  %0 = icmp eq %struct.Customer* %c, null
+  br i1 %0, label %nullish.default, label %chain.next
+
+chain.next:
+  %1 = getelementptr inbounds %struct.Customer, %struct.Customer* %c, i32 0, i32 0
+  %2 = load i8*, i8** %1, align 8, !tbaa !7
+  %3 = bitcast i8* %2 to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = trunc i64 %4 to i32
+  br label %nullish.end
+
+nullish.default:
+  br label %nullish.end
+
+nullish.end:
+  %6 = phi i32 [ %5, %chain.next ], [ 0, %nullish.default ]
+  ret i32 %6
+}
+
+define noundef nonnull align 8 i8* @greet(%struct.Customer* noundef readonly align 8 nocapture %c) #1 {
+entry:
+  %0 = icmp eq %struct.Customer* %c, null
+  br i1 %0, label %nullish.default, label %chain.next
+
+chain.next:
+  %1 = call i64 @nish_arena_mark()
+  %2 = call i8* @Customer.greeting(%struct.Customer* %c)
+  %3 = call i8* @nish_arena_keep(i64 %1, i8* %2)
+  br label %nullish.end
+
+nullish.default:
+  br label %nullish.end
+
+nullish.end:
+  %4 = phi i8* [ %3, %chain.next ], [ bitcast ({ i64, [7 x i8] }* @.str.2 to i8*), %nullish.default ]
+  ret i8* %4
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readonly }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Address", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"Customer", !2, i64 0, !2, i64 8}
+!6 = !{!5, !2, i64 8}
+!7 = !{!5, !2, i64 0}
+```
+<!-- cookbook:end mem-optional-chain -->
+
 ## Builtins
 
 ### `Math.*` on `f64`

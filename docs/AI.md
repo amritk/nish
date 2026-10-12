@@ -143,7 +143,7 @@ rejects. This table is the highest-value part of the page.
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
 | `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
-| `a?.b`, `a ?? b` | `?.` forbidden; `??` only on a `T \| null` or `m.get(k)` | `a ?? d`, or `if (a !== null)` first |
+| `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
 | `typeof x`, `x instanceof C`, `"k" in o`, `delete o.k`, `void 0`, `a, b` | each refused by name (`` `typeof` is forbidden ``, …) | there is no runtime type information: a value's type is its declared one |
 | `a ** b`, `[...xs]`, `[1, , 2]` | `` Unsupported binary operator `**` `` / `Spread in array literals is not supported` / `Holes in array literals are not supported` | `Math.pow` on `f64`, a loop, every element written out |
@@ -470,7 +470,7 @@ export const main = (): i32 => {
 ```
 
 - Reading anything off an un-narrowed nullable is an error: narrow with
-  `!== null` first. `?.` is forbidden outright.
+  `!== null` first, or read it through a `?.` chain that ends in `??`.
 - `a ?? d` defaults a nullable: it is `a` where that is not `null`, `d` where
   it is, and its type is `T` when `d` is a `T`, so it needs no narrowing. It
   reads `a` once, so a property path works: `cur = cur.next ?? cur`. `d` that
@@ -500,6 +500,40 @@ export const main = (): i32 => {
 ```ts nish:err-body NL2489
 const names = new Array<string | null>(2);
 console.log(names[2] ?? "none");
+```
+
+- `a?.b?.c ?? d` reads each link only where the receiver before its `?.` is
+  not `null`, and is `d` where one is. A `?.` is allowed **only in a chain
+  that is the left operand of `??`** (NL1062): `const x = a?.b`, `f(a?.b)` and
+  `` `${a?.b}` `` are refused, because on its own a chain answers
+  `undefined`. The last link may be any type, a number included
+  (`o?.next?.id ?? -1` is an `i32`), and a method call is a link
+  (`c?.greeting() ?? ""`). Only a `?.` skips: `a?.next.v` with a nullable
+  `next` needs `a?.next?.v`. `?.` on something that cannot be `null` is
+  NL2490; `?.[i]` and `f?.()` are refused.
+
+```ts nish:ok
+class Order {
+  id: i32;
+  next: Order | null = null;
+  constructor(id: i32) {
+    this.id = id;
+  }
+}
+
+const nextId = (o: Order | null): i32 => o?.next?.id ?? -1;
+
+export const main = (): i32 => {
+  const a = new Order(1);
+  a.next = new Order(2);
+  console.log(`${nextId(a)} ${nextId(null)}`);   // 2 -1
+  return 0;
+};
+```
+
+```ts nish:err-body NL1062
+const s: string | null = "x";
+const n = s?.length;
 ```
 - Narrowing applies to a **local or parameter**, never a property path. `if
   (n.next !== null) n.next.v` is rejected — copy into a local first.
@@ -1419,9 +1453,10 @@ export const main = (): i32 => {
 - `++` / `--` work on **numeric mutable locals only**, not fields or elements.
 - Compound assignment `+= -= *= /= %=` requires a numeric target (so `+=` never
   concatenates strings); the bitwise forms need an integer target.
-- **Forbidden**: `,` `?.` `in` `instanceof` `typeof` `delete` `void expr`
-  `==` `!=` `**` unary `+`, and `??` on anything but a `T | null` or a
-  `Map.get` result.
+- **Forbidden**: `,` `in` `instanceof` `typeof` `delete` `void expr` `==`
+  `!=` `**` unary `+`, `?.[i]` and `f?.()`, `?.` outside a chain that ends in
+  `??`, and `??` on anything but a `T | null`, a `?.` chain or a `Map.get`
+  result.
 - Element access `a[i]` needs an array and a numeric index, and is
   bounds-checked (negative indices fail too). String-keyed access is forbidden.
   The check comes off where the compiler proves the index in range — a loop
@@ -2004,7 +2039,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    in an object-literal property or a method argument expecting a width?
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
-8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null` or `Map.get`), `?.`, a cast, a
+8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null`, a chain or `Map.get`), `?.` without a `??`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
 9. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
    caps.json` lists every capability each function can reach — files, processes,

@@ -6,7 +6,7 @@ stages:
     title: "?? on T | null"
     goal: Accept `a ?? d` for a nullable left operand, typed by its default, with no new run-time cost
     verification: npm run check, an undegraded npm test, node tests/run.js wasi and node tests/run.js performance green, with the new goldens read
-    status: in_progress
+    status: completed
     todos:
       - id: checker-coalesce-nullable
         content: Widen checkCoalesce in src/expressions.ts to a nullable left operand, typed by its default — see Stage 1, Checker
@@ -39,32 +39,32 @@ stages:
     title: "?. chains that end in ??"
     goal: Accept `a?.b?.c ?? d`, a chain of member reads and method calls whose only use is the left of a `??`
     verification: The same commands as stage 1, plus the new negative cases for every place a chain may not go
-    status: pending
+    status: in_progress
     todos:
       - id: validator-optional
         content: Keep the Phase 0 refusal in src/validator.ts only for `?.[` and `f?.()` — see Stage 2, Validator
-        status: pending
+        status: completed
       - id: checker-chain
         content: Type a `?.` link and every link after it as a maybe, welcome only under WANT_MAYBE from checkCoalesce — see Stage 2, Checker
-        status: pending
+        status: completed
       - id: refuse-never-null
         content: Refuse `?.` on a receiver that is never null, with a new NL2 code — see Stage 2, Checker
-        status: pending
+        status: completed
       - id: emit-chain
         content: Lower a chain in emitCoalesce as one null test per link that branches to the default block — see Stage 2, Lowering
-        status: pending
+        status: completed
       - id: chain-call-rules
         content: Pin with negative cases that a method call inside a chain is seen by the lock, region and secret walks — see Stage 2, Calls inside a chain
-        status: pending
+        status: completed
       - id: tests-chain
         content: Add positive and negative chain cases and flip reject_optional_chain — see Tests
-        status: pending
+        status: completed
       - id: docs-chain
         content: Update LANGUAGE.md, AI.md, IR_COOKBOOK.md, the guide and add the reversal note to wp23-language-surface.md section 9 — see Docs
-        status: pending
+        status: completed
       - id: goldens-chain
         content: Regenerate tests/self/goldens and the differential goldens and read the diff — see Verification
-        status: pending
+        status: completed
 ---
 
 # Null-only `??` and `?.` chains
@@ -174,6 +174,18 @@ Each `?.` is one null test, with all of them branching to the same default block
 - the region rule: a channel send from a method reached by `a?.send(x) ?? …` inside a spawn scope;
 - the secret rule: a `Secret` reached through `holder?.key ?? …`.
 
+### As built
+
+Three decisions differ from the sketch above, each for a reason found while building it.
+
+- **Phase 0 decides which `?.` is admitted, not the checker.** A chain does not reuse the maybe type: an unannotated `const` welcomes any maybe, and the emitter lowers a maybe only from `get`, so `const v = a?.b` would have compiled to nothing sound. Instead the validator, on reaching a `??`, marks the receiver of every `?.` link on its left operand's spine in `nodeNullTests` (`admitChain`), and refuses every other `?.` (NL1062). That one syntactic rule covers every way in at once: a `const`, an argument, a template hole, an assignment target, an increment, a parenthesis that ends the chain.
+- **The receiver is recorded as `T`.** `linkReceiver` (`src/members.ts`) reads a `?.` link's receiver as its `T` and records it so, because by the time the link runs the emitter has tested it, and the emitter finds a field or a method by that type.
+- **The null test is one hook in `emitEntering`**, made for every node `nodeNullTests` marks, so no lowering of a field, `length` or call needed to change. Each chain counts its tests against its `?.` links and stops with an internal error on a mismatch, so a lowering that ever evaluates a receiver another way cannot read through `null` silently.
+
+Two more passes assumed the left of `??` always runs, and both were wrong for a chain: `guardStatement` (`src/checker.ts`, where `--fix` places a bounds guard) and `walkBinary` (`src/bounds.ts`). The second was a real soundness hole, measured: without the change `h?.pick(xs[i]) ?? 0` proved the later `xs[i]` in range, and with `h` null and `i` past the end the read went unchecked and printed garbage. The chain is now walked in a copy of the state, and what reaches the default is what `forgetAcross` leaves of the state before it (`optional_chain_bounds`).
+
+A chain that ends in `Map.get` is refused (NL2491) rather than lowered, because one `??` would default a `null` link and a missing key at once.
+
 ## Docs
 
 The rule in each document moves with the stage that changes it.
@@ -203,7 +215,7 @@ Mirror the `map_get_*` and `reject_nullish_*` families in [`tests/cases/`](../..
 | Stage | Positive | Negative |
 | --- | --- | --- |
 | 1 (landed) | `nullish_nullable` (select and branch shapes, string and class), `nullish_nullable_field` (`n.next ?? d`), `nullish_nullable_default_null` (a nullable default, an interface left), `nullish_nullable_default_context` (`xs ?? []`, an object literal, a ternary with `null`), `nullish_nullable_escapes` (after `churn()`), cookbook `mem-nullish` | `reject_nullish_nullable` (a nullable narrowed to `T`), `reject_nullish_element` and wording `nl2489_nullish_element`, `reject_nullish_nullable_default_type`, `reject_using_arena_nullish`, `reject_secret_nullish` |
-| 2 | `optional_chain_field`, `optional_chain_scalar` (`a?.count ?? 0`), `optional_chain_deep`, `optional_chain_method`, `optional_chain_nullable_last`, `optional_chain_paren` (`(a?.b) ?? d`) | `reject_optional_chain` (the `s?.length` never-null case), `reject_optional_chain_bare` (`const x = a?.b`), `..._return`, `..._argument`, `..._template`, `..._arithmetic`, `..._index` (`a?.[i]`), `reject_optional_call` unchanged, `..._statement`, the three call-walk cases above |
+| 2 (as built) | `optional_chain_field`, `optional_chain_order` (evaluation order, interfaces, `length`, a method answering a nullable, a parenthesised `??` receiver), `optional_chain_generic`, `optional_chain_bounds`, cookbook `mem-optional-chain` | `reject_optional_chain` (no `??`), `_paren`, `_argument`, `_assign`, `_template`, `_never_null`, `_narrowed`, `_this`, `_namespace`, `_element` (`?.[i]`), `_link_nullable`, `_element_last`, `_map_get`, `_lock`, `_channel`, `_secret`; `reject_optional_call` unchanged; wordings `nl1062`, `nl2490`, `nl2491` |
 
 ## Verification
 

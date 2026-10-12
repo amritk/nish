@@ -133,8 +133,9 @@ type or value, union types other than `T | null`, `eval`, `Function`, `Proxy`,
 WP16), labelled statements, generators and `yield`, `async`/`await` (WP24),
 decorators, enum members that are not numeric literals, namespaces and
 `declare global`, computed property names, object spread, prototype access,
-`Object.assign` and its relatives, string-keyed element access, `?.`, `??`
-except on a `T | null` or a `Map.get` result, regex literals, dynamic `import()`,
+`Object.assign` and its relatives, string-keyed element access, `?.` outside a
+chain that ends in `??`, `?.[i]` and `f?.()`, `??` except on a `T | null`, a
+`?.` chain or a `Map.get` result, regex literals, dynamic `import()`,
 `import.meta`, and type parameters on a type alias or a constructor.
 [LANGUAGE.md](LANGUAGE.md#forbidden-constructs-phase-0-validator) has the
 table with each message and the idiom to write instead.
@@ -466,5 +467,7 @@ major. Whether it happens at all is still wp22 §10's open question.
   ([wp25-inheritance.md](wp25-inheritance.md)).
 - **The rest of the surface a corpus review asked for** is answered row by row
   in [wp23-language-surface.md](wp23-language-surface.md): aliases, `enum` and
-  `Pair<A, B>` landed, module-level mutable state is *no*, and `?.`, a string
-  `switch` and `for...of` over a string are declined.
+  `Pair<A, B>` landed, module-level mutable state is *no*, and a string
+  `switch` and `for...of` over a string are declined. `?.` was declined
+  there too, and landed later in the one form that needs no `undefined`, a
+  chain that ends in `??` (§9's reversal note).
