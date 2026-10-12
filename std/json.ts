@@ -917,19 +917,13 @@ export class JsonWriter {
   objectsLow: i32 = 0
   objectsHigh: i32 = 0
   /**
-   * Whether the innermost open container is an object: bit `depth - 1` of
-   * the two words, kept here as well. It is written when a container opens
-   * or closes, and read by `key`, `jsonWriterValueDue` and `jsonWriterClose`,
-   * so the per-value check is a load rather than the shift and word choice
-   * that read the bit.
+   * What goes before the next key or element of the innermost container,
+   * one `JSON_WRITER_SEP_*`: nothing, a comma, and in an indented text a
+   * line break or a comma and a line break. The minified text tests it only
+   * where it would test a "comma due" flag, against 0 and 1, so the indented
+   * states cost it nothing; bit 1 is the indent and every step keeps it.
    */
-  inObject: boolean = false
-  /** Whether a comma goes before the next key or element of the innermost container. */
-  needComma: boolean = false
-  /** Whether a key has been written in the innermost object and its value is due. */
-  afterKey: boolean = false
-  /** Whether the top-level value has been written whole. */
-  done: boolean = false
+  sep: i32 = 0
   /**
    * How many `indentByte`s each level of nesting puts at the start of a line,
    * or `0` for the minified text. A mode, not a part of the text: `reset`
@@ -938,6 +932,19 @@ export class JsonWriter {
   indentWidth: i32 = 0
   /** The byte an indent is made of: a space, or a tab after `setIndentTab`. */
   indentByte: i32 = 32
+  /**
+   * Whether the innermost open container is an object: bit `depth - 1` of
+   * the two words, kept here as well so that the check before every value
+   * is a load rather than the shift and word choice that read the bit.
+   * `reset`, `jsonWriterOpen` and `jsonWriterClose` write it; `key`,
+   * `jsonWriterValueDue`, `jsonWriterValueAllowed`, `jsonWriterClose` and
+   * `jsonWriterIndented` read it.
+   */
+  inObject: boolean = false
+  /** Whether a key has been written in the innermost object and its value is due. */
+  afterKey: boolean = false
+  /** Whether the top-level value has been written whole. */
+  done: boolean = false
   /** Whether a NaN or infinite `f64` is `JSON_WRITE_NON_FINITE` rather than `null`. Kept by `reset`. */
   strict: boolean = false
 
@@ -957,7 +964,7 @@ export class JsonWriter {
     this.end = start
     this.depth = 0
     this.inObject = false
-    this.needComma = false
+    this.sep = this.indentWidth !== 0 ? JSON_WRITER_SEP_INDENTED : JSON_WRITER_SEP_NONE
     this.afterKey = false
     this.done = false
     this.failed = start < 0 || start > toI32(buf.length) ? JSON_WRITE_BAD_WINDOW : JSON_WRITE_OK
@@ -980,12 +987,15 @@ export class JsonWriter {
     }
     this.indentWidth = width
     this.indentByte = JSON_SPACE
+    this.sep =
+      (this.sep & JSON_WRITER_SEP_COMMA) | (width !== 0 ? JSON_WRITER_SEP_INDENTED : JSON_WRITER_SEP_NONE)
   }
 
   /** Indents the text by one tab a level, as `JSON.stringify(v, null, "\t")` does. */
   setIndentTab(): void {
     this.indentWidth = 1
     this.indentByte = JSON_TAB
+    this.sep = this.sep | JSON_WRITER_SEP_INDENTED
   }
 
   /**
@@ -1028,7 +1038,7 @@ export class JsonWriter {
   }
 
   endObject(): void {
-    if (this.indentWidth !== 0) {
+    if (this.sep === JSON_WRITER_SEP_COMMA_BREAK) {
       jsonWriterCloseIndented(this, true, JSON_CLOSE_BRACE)
     } else {
       jsonWriterClose(this, true, JSON_CLOSE_BRACE)
@@ -1040,7 +1050,7 @@ export class JsonWriter {
   }
 
   endArray(): void {
-    if (this.indentWidth !== 0) {
+    if (this.sep === JSON_WRITER_SEP_COMMA_BREAK) {
       jsonWriterCloseIndented(this, false, JSON_CLOSE_BRACKET)
     } else {
       jsonWriterClose(this, false, JSON_CLOSE_BRACKET)
@@ -1060,12 +1070,15 @@ export class JsonWriter {
       this.failed = JSON_WRITE_VALUE_EXPECTED
       return
     }
-    if (this.indentWidth !== 0) {
-      jsonWriterIndented(this, JSON_WRITER_STEP_KEY, name)
-      return
-    }
-    if (this.needComma && !jsonWriterPutByte(this, JSON_COMMA)) {
-      return
+    const sep: i32 = this.sep
+    if (sep !== JSON_WRITER_SEP_NONE) {
+      if (sep !== JSON_WRITER_SEP_COMMA) {
+        jsonWriterIndented(this, this.depth, name)
+        return
+      }
+      if (!jsonWriterPutByte(this, JSON_COMMA)) {
+        return
+      }
     }
     if (jsonWriterPutString(this, name) && jsonWriterPutByte(this, JSON_COLON)) {
       this.afterKey = true
@@ -1218,10 +1231,13 @@ const jsonWriterValueDue = (w: JsonWriter): boolean => {
     w.failed = JSON_WRITE_KEY_EXPECTED
     return false
   }
-  if (w.indentWidth !== 0) {
-    return jsonWriterIndented(w, JSON_WRITER_STEP_ELEMENT, "")
+  // A comma is the common case, every element but the first, so it is
+  // tested first and costs the one compare a "comma due" flag would.
+  const sep: i32 = w.sep
+  if (sep === JSON_WRITER_SEP_COMMA) {
+    return jsonWriterPutByte(w, JSON_COMMA)
   }
-  return !w.needComma || jsonWriterPutByte(w, JSON_COMMA)
+  return sep === JSON_WRITER_SEP_NONE || jsonWriterIndented(w, w.depth, "")
 }
 
 /**
@@ -1249,7 +1265,7 @@ const jsonWriterValueAllowed = (w: JsonWriter): boolean => {
 
 /** After a whole value: the next element needs a comma, and at the top level the text is done. */
 const jsonWriterValueDone = (w: JsonWriter): void => {
-  w.needComma = true
+  w.sep = w.sep | JSON_WRITER_SEP_COMMA
   if (w.depth === 0) {
     w.done = true
   }
@@ -1273,7 +1289,7 @@ const jsonWriterOpen = (w: JsonWriter, object: boolean, opener: i32): void => {
   }
   w.depth = d + 1
   w.inObject = object
-  w.needComma = false
+  w.sep = w.sep & JSON_WRITER_SEP_INDENTED
 }
 
 /** `endObject` and `endArray`: the closer, when the innermost container is of that kind and not waiting on a value. */
@@ -1297,12 +1313,12 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
 }
 
 /**
- * `endObject` and `endArray` in an indented text: a line break one level
- * out before the closer of a container that holds anything, after the
- * checks `jsonWriterClose` makes, which it then makes again before it
- * writes the closer. A separate entry rather than a branch inside
- * `jsonWriterClose`, which stays the minified text's code and small enough
- * for LLVM to inline into every `end*`.
+ * `endObject` and `endArray` for an indented container that holds anything,
+ * the one state whose closer goes on a line of its own: the line break one
+ * level out, after the checks `jsonWriterClose` makes, which it then makes
+ * again before it writes the closer. A separate entry, chosen by the `sep`
+ * test `end*` makes, rather than a branch inside `jsonWriterClose`, which
+ * stays `main`'s code and small enough for LLVM to inline into every `end*`.
  */
 const jsonWriterCloseIndented = (w: JsonWriter, object: boolean, closer: i32): void => {
   if (
@@ -1310,7 +1326,7 @@ const jsonWriterCloseIndented = (w: JsonWriter, object: boolean, closer: i32): v
     w.depth !== 0 &&
     w.inObject === object &&
     !w.afterKey &&
-    !jsonWriterIndented(w, JSON_WRITER_STEP_CLOSE, "")
+    !jsonWriterIndented(w, w.depth - 1, "")
   ) {
     return
   }
@@ -1330,23 +1346,35 @@ const jsonWriterPutByte = (w: JsonWriter, code: i32): boolean => {
   return true
 }
 
-/** `jsonWriterIndented`'s step before an array's element: its comma when one is due, then a line break. */
-const JSON_WRITER_STEP_ELEMENT: i32 = 0
-/** Before an object's key: its comma when one is due, a line break, then the key itself and `": "`. */
-const JSON_WRITER_STEP_KEY: i32 = 1
-/** Before a closer: a line break one level out, unless the container is empty and closes on its own line. */
-const JSON_WRITER_STEP_CLOSE: i32 = 2
+/** `JsonWriter.sep` when nothing goes before the next key or element: the first in a minified container. */
+const JSON_WRITER_SEP_NONE: i32 = 0
+/** A comma goes first: the minified text after a key's value or an element. */
+const JSON_WRITER_SEP_COMMA: i32 = 1
+/** The indent bit, set in every state of an indented text; alone, a line break goes first. */
+const JSON_WRITER_SEP_INDENTED: i32 = 2
+/**
+ * A comma and a line break go first: an indented container after it holds
+ * anything, which is also when its closer goes on a line of its own, since
+ * an empty `{}` or `[]` closes on the line it opened on.
+ */
+const JSON_WRITER_SEP_COMMA_BREAK: i32 = 3
 
 /**
- * Everything the indented text writes that the minified one does not, for
- * one `step` — before an element, a key (`name`, which is written too), or
- * a closer — and whether the caller may go on to write its own bytes.
+ * Everything the indented text writes that the minified one does not: at
+ * `level` — the container's own depth before an element or a key, one less
+ * before its closer — the comma when one is due (never before a closer), a
+ * line break and the indent, then, before a key, the key `name` and `": "`.
+ * It answers whether the caller goes on to write its own bytes: yes for an
+ * element or a closer, no for a key, whose bytes are all written here.
  *
- * It is one function on purpose. The minified text is the hot one, and each
- * of `key`, `jsonWriterValueDue` and `jsonWriterClose` pays only a test of
- * `indentWidth` and this call; were the work in each caller, LLVM would
- * inline it there and grow them past what it inlines in turn, which made
- * every minified write slower.
+ * It is one function, reached only from the indented `JsonWriter.sep`
+ * states, and the minified text never calls it: `key`, `jsonWriterValueDue`
+ * and `jsonWriterClose` test `sep` where they tested a "comma due" flag.
+ * Whether it is placing a closer or a key is read from `level` and the
+ * innermost container rather than passed as a constant, so LLVM cannot fold
+ * the other cases away at a call and inline what is left there, which would
+ * grow those callers past what LLVM inlines into theirs and slow every
+ * minified write.
  *
  * The line break and its indent go in whole or, with `JSON_WRITE_FULL`, not
  * at all; a comma before them may already be written when they do not fit,
@@ -1355,17 +1383,9 @@ const JSON_WRITER_STEP_CLOSE: i32 = 2
  * level` times with one `fill`, so a break allocates nothing however deep it
  * is.
  */
-const jsonWriterIndented = (w: JsonWriter, step: i32, name: string): boolean => {
-  let level: i32 = w.depth
-  if (step === JSON_WRITER_STEP_CLOSE) {
-    // `needComma` is whether anything was written inside: an empty
-    // container closes on the line it opened on, as `JSON.stringify`
-    // writes `{}` and `[]`.
-    if (!w.needComma) {
-      return true
-    }
-    level = w.depth - 1
-  } else if (w.needComma && !jsonWriterPutByte(w, JSON_COMMA)) {
+const jsonWriterIndented = (w: JsonWriter, level: i32, name: string): boolean => {
+  const closing: boolean = level !== w.depth
+  if (!closing && w.sep === JSON_WRITER_SEP_COMMA_BREAK && !jsonWriterPutByte(w, JSON_COMMA)) {
     return false
   }
   const buf: u8[] = w.buf
@@ -1378,7 +1398,8 @@ const jsonWriterIndented = (w: JsonWriter, step: i32, name: string): boolean => 
   buf[at] = toU8(JSON_NEWLINE)
   buf.fill(toU8(w.indentByte), at + 1, stop)
   w.end = stop
-  if (step !== JSON_WRITER_STEP_KEY) {
+  // A key is the one step that is neither a closer nor an array's element.
+  if (closing || !w.inObject) {
     return true
   }
   if (jsonWriterPutString(w, name) && jsonWriterPutByte(w, JSON_COLON) && jsonWriterPutByte(w, JSON_SPACE)) {
