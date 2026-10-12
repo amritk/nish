@@ -36,7 +36,7 @@ const build = (cmd, prefix, name) => {
   const app = path.join(dir, "app")
   execFileSync(cmd, [...prefix, program, "-o", `${dir}/`, "--link", app], {
     cwd: root,
-    stdio: ["ignore", "ignore", "inherit"],
+    stdio: ["ignore", "ignore", "pipe"],
   })
   return app
 }
