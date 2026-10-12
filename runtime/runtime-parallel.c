@@ -8,10 +8,10 @@
  * and raising the syscall half's ceiling to make room would move the number a
  * reader sees for "the operating-system surface" for a reason that has nothing
  * to do with the operating-system surface. So this file carries its own
- * measured ceiling in tests/run.js beside the other two, and a program that
- * runs nothing in parallel pays nothing for it: `-ffunction-sections
- * -Wl,--gc-sections` drops every function no program calls, whichever
- * translation unit defined it.
+ * measured ceiling in tests/runtime-budgets.js beside the other two,
+ * and a program that runs nothing in parallel pays nothing for it:
+ * `-ffunction-sections -Wl,--gc-sections` drops every function no program
+ * calls, whichever translation unit defined it.
  *
  * It compiles in both configurations on purpose. With `-DNISH_THREADS` it
  * spawns; without it, and on WASI where there are no threads to spawn, the same

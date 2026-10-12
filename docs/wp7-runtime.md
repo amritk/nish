@@ -158,7 +158,10 @@ as `size -A` reports it, with clang 18.1.3 on linux-x64. It covers every
 `text` column of plain `size` are not limits: they count comments, `.eh_frame`
 and the Ryu tables. **The gate is `tests/run.js`** (`node tests/run.js
 budget`). Each failure names its file, the measurement, the budget and the
-constant to raise. The gate is a counted skip off linux-x64 or without `size`,
+constant to raise. The constants live in `tests/runtime-budgets.js`, which
+`scripts/size-report.sh` reads too, so the report CI attaches prints one row
+per line of the table below with the same ceiling, and the gate fails if it
+does not. The gate is a counted skip off linux-x64 or without `size`,
 because a byte-exact ceiling is a fact about one target and one compiler.
 
 **The rule.** Each ceiling is set at the next 256-byte boundary above a fresh

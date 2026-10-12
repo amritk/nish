@@ -200,7 +200,7 @@ predates #423's capabilities audit, so its `CAP_NONE` row came later.
   rows, or a row for a name the checker no longer accepts — before any program
   calls it.
 - **`runtime/nish.h`** and a runtime unit, when the builtin needs a new runtime
-  function, inside that unit's `.text*` ceiling in `tests/run.js` (#417 raised
+  function, inside that unit's `.text*` ceiling in `tests/runtime-budgets.js` (#417 raised
   `runtime.c`'s by the measured 21 bytes, with its reason beside the number).
 - **`runtime/shim.mjs`** (the Node twin, answering what the C answers),
   **`runtime/nish.mjs`** (its `provide` line), and **`runtime/nish.d.ts`** (the

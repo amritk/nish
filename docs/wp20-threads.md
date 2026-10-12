@@ -96,7 +96,7 @@ Thread support must be pay-for-what-you-use, as `nish_spawn` is.
 not call, and a program that never spawns must link the same binary it did
 before. That is an acceptance test. The live `.text*` ceilings are in
 [wp7-runtime.md](wp7-runtime.md) §"Runtime additions and budget" and
-`tests/run.js`.
+`tests/runtime-budgets.js`.
 
 ### 3.6 Every rule lands twice
 
@@ -236,7 +236,7 @@ free for runs on the calling thread too, so a shortage of threads costs speed,
 never correctness. A nested call runs on one thread, because the nesting guard
 is thread-local. Without `-DNISH_THREADS`, and on
 WASI, the same entry point runs the whole range on the calling thread. It is a
-translation unit of its own, with its own `.text*` ceiling in `tests/run.js`.
+translation unit of its own, with its own `.text*` ceiling in `tests/runtime-budgets.js`.
 
 ### 8e. What a region costs, and why it is not a goroutine
 

@@ -5,9 +5,9 @@
  * `spawnSync` starts inherits none of them.
  *
  * A translation unit of its own for the reason runtime-host.c is one: each
- * file carries its own measured `.text*` ceiling in tests/run.js, and sockets
- * are a surface that grows, which would push another unit past its ceiling
- * rather than into a new one. Section GC
+ * file carries its own measured `.text*` ceiling in tests/runtime-budgets.js,
+ * and sockets are a surface that grows, which would push another unit past its
+ * ceiling rather than into a new one. Section GC
  * means a program that calls none of these pays for none of them, and
  * scripts/build.sh pairs this file with runtime.c like the other halves, so a
  * link line still names one runtime.
