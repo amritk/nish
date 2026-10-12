@@ -1,0 +1,1 @@
+`last` refers to an element of `ps`, and `ps.pop()` may move or reuse that storage

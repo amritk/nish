@@ -116,11 +116,12 @@ import {
   StructInfo,
   StructInstantiation,
   TemplateInfo,
+  capturedReads,
 } from "./program"
 import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
-import { Local, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
@@ -282,7 +283,13 @@ export const recordParallelCall = (program: CheckedProgram, node: Node, sig: Fun
       return
     }
   }
-  calls.push(new ParallelCall(node, sig))
+  // `dst` is read now, while the tables of the body that holds the call are
+  // the ones installed: an instantiation of a generic caller has its own.
+  let dst: Local | null = null
+  if (parallelRoleOf(sig) === PAR_MAP && node.kind === N_CALL && node.children[1].children.length > 1) {
+    dst = namedLocal(program, node.children[1].children[1])
+  }
+  calls.push(new ParallelCall(node, sig, dst))
 }
 
 // ---- The rules ---------------------------------------------------------------------------
@@ -809,6 +816,26 @@ export const captureTypeMessage = (
   )
 }
 
+/** A `const` whose initialiser allocated an array of its own (`Local.fresh`). */
+const isFreshConst = (local: Local): boolean =>
+  local.fresh && !local.mutable && local.storage !== STORAGE_PARAM
+
+/**
+ * Whether the captured array `captured` and `dst` are two arrays: two
+ * different bindings, one of them a `const` that allocated its own array and
+ * the other that or a parameter. A fresh array is memory no binding held
+ * before it was made, a parameter's value was fixed before the function ran,
+ * and neither name can be bound again, so nothing makes them one array.
+ */
+const knownApart = (captured: Local, dst: Local | null): boolean => {
+  if (dst === null || dst === captured) {
+    return false
+  }
+  const capturedParam = captured.storage === STORAGE_PARAM && captured.name !== "this"
+  const dstParam = dst.storage === STORAGE_PARAM && dst.name !== "this"
+  return (isFreshConst(captured) && (isFreshConst(dst) || dstParam)) || (isFreshConst(dst) && capturedParam)
+}
+
 /**
  * A captured value through which the body could read `dst` while another
  * thread writes it: the capture's form of `reachesDstMessage`. A capture is a
@@ -823,30 +850,26 @@ export const captureReachesDstMessage = (
   program: CheckedProgram,
   sig: FunctionSig,
   fn: FunctionSig,
-  call: Node
+  dstLocal: Local | null
 ): string => {
   const instance = sig.instance
   if (instance === null || instance.parallel !== PAR_MAP || instance.typeArgs.length < 2) {
     return ""
   }
-  const args = call.children[1].children
-  const dstArg = args.length > 1 ? unwrapParens(args[1]) : call
-  const dstLocal: Local | null = dstArg.kind === N_IDENT ? program.nodeLocals[dstArg.id] : null
   const target = instance.typeArgs[1]
   for (const captured of fn.captures) {
     const path = reachingPath(table, program, captured.type, target, captured.name, new StringSet())
     if (path.length === 0) {
       continue
     }
-    const distinct = dstLocal !== null && dstLocal !== captured && dstLocal.fresh && !dstLocal.mutable
-    if (path === captured.name && captured.fresh && distinct) {
+    if (path === captured.name && knownApart(captured, dstLocal)) {
       continue
     }
     return (
       `\`${fn.sourceName}\` reads \`${captured.name}\`, and can reach a \`${table.typeName(target)}[]\` through ` +
       `\`${path}\`, which could be the array \`parallelMapInto\` is writing: another thread would be writing it ` +
-      "while this one reads; a captured array is known not to be `dst` only when both are `const`s bound to arrays " +
-      "of their own, such as a literal or a `new Array`"
+      "while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound " +
+      "to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter"
     )
   }
   return ""
@@ -1168,7 +1191,8 @@ const walkScopes = (
   if (isArenaCall(program, node) && !isUsingInitialiser(at, parents, depth)) {
     out.push(new ScopeFinding(node, arenaNotUsingMessage()))
   }
-  const named: Local | null = node.kind === N_IDENT && !declaresName ? program.nodeLocals[node.id] : null
+  const named: Local | null =
+    node.kind === N_IDENT && !declaresName ? sourceLocal(program.nodeLocals[node.id]) : null
   if (named !== null && arenas.indexOf(named) >= 0) {
     out.push(new ScopeFinding(node, arenaBindingMessage(named.name)))
   }
@@ -1355,7 +1379,8 @@ const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null =>
 /** The local `node` names, when it is an identifier (parenthesised or not); `null` otherwise. */
 const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
   const e = unwrapParens(node)
-  return e.kind === N_IDENT ? program.nodeLocals[e.id] : null
+  // A data-parallel arrow's capture is the local it was made from (WP29).
+  return e.kind === N_IDENT ? sourceLocal(program.nodeLocals[e.id]) : null
 }
 
 /**
@@ -1407,7 +1432,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
     }
   }
   if (node.kind === N_IDENT && parent !== null) {
-    const local = program.nodeLocals[node.id]
+    const local = sourceLocal(program.nodeLocals[node.id])
     if (local !== null) {
       const at = uses.add(local)
       const base =
@@ -1698,7 +1723,12 @@ const walkRegion = (
   out: ScopeFinding[]
 ): void => {
   if (node.kind === N_ARROW) {
-    return // a lifted function of its own; it runs only when called
+    // A lifted function of its own, which runs only when called — but an arrow
+    // given to a data-parallel form runs here, and reads what it captures.
+    if (state.live()) {
+      regionCaptureReads(program, node, state, out)
+    }
+    return
   }
   if (node.kind === N_RETURN) {
     return // every scope joins before a `return` computes its value
@@ -1762,6 +1792,27 @@ const walkRegion = (
   }
   for (const child of node.children) {
     walkRegion(program, table, facts, uses, child, state, out)
+  }
+}
+
+/**
+ * WP29: the captures an arrow given to a data-parallel form reads, judged as
+ * reads where the call runs it. Any use of a destination is one: the body may
+ * index it, walk it, or hand it to a call, and it runs before the scope joins.
+ */
+const regionCaptureReads = (
+  program: CheckedProgram,
+  arrow: Node,
+  state: RegionState,
+  out: ScopeFinding[]
+): void => {
+  const reads: Node[] = []
+  capturedReads(program, arrow, reads)
+  for (const read of reads) {
+    if (state.isDestination(sourceLocal(program.nodeLocals[read.id]))) {
+      out.push(new ScopeFinding(read, regionReadMessage(state, read.text)))
+      return
+    }
   }
 }
 

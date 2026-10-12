@@ -854,11 +854,9 @@ export const main = (): i32 => {
 
 ### Data parallelism: `nish/threads`
 
-`parallelMapInto(src, dst, f)` writes `f(src[i])` into `dst[i]`,
-`parallelMap(src, f)` answers a new array of `f(src[i])`, `parallelFrom(n, f)`
-a new array of `f(i)` for `i` in `[0, n)`, and `parallelReduce(src, f,
-identity)` folds `src` with `f` — each on as many threads as the array is long
-enough for. `f` is a [function parameter](#function-parameters).
+`parallelMapInto(src, dst, f)` writes `f(src[i])` into `dst[i]`, and
+`parallelReduce(src, f, identity)` folds `src` with `f` — each on as many
+threads as the array is long enough for. `f` is a [function parameter](#function-parameters).
 Importing the module compiles the program with `--threads`; there is nothing
 else to switch on and no thread count to choose. (A plain block: a program
 importing `nish/threads` writes two `.ll` files, so this one is compiled by
@@ -899,29 +897,11 @@ export const main = (): i32 => {
   is no reason to guard a call by size. How short is sized from what `f`
   costs: a body estimated at 3, such as `(x) => x + 1`, is divided only past
   about 700,000 elements, a cheaper one later, one with a loop far sooner.
-- **An arrow given to one of the four reads the function's `const` locals
-  and parameters**, the one exception to "an arrow captures nothing":
-  `const k = 3; parallelMap(xs, (x) => x * k)`. Each is read-only in the body
-  — no assignment to it, no store through it, no helper that writes it — and a
-  `let`, `this`, a `Mutex`, a `Channel` or a `Result` is refused, as is an
-  arrow inside the arrow reading from outside itself. In `parallelMapInto`, a
-  captured array that could be `dst` is refused too, unless both are `const`s
-  bound to arrays of their own (`const t = [1, 2]`, `const dst = new Array<i32>(n)`).
 
 ```ts nish:err NL2350
 import { parallelReduce } from "nish/threads";
 
 export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   // `+` folds from 0
-```
-
-```ts nish:err NL2492
-import { parallelMap } from "nish/threads";
-
-export const main = (): i32 => {
-  let k = 3;
-  k = k + 1;
-  return parallelMap([1, 2], (x) => x * k)[0];   // a `let` could change: bind a `const`
-};
 ```
 
 ### Scoped tasks: `using s = scope()`

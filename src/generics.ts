@@ -2140,6 +2140,7 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   const inner = new Local(name, type, false, STORAGE_PARAM)
   inner.origin = outer.origin
   inner.typedArray = outer.typedArray
+  inner.captureOf = outer
   if (!ctx.arrowScopes[depth - 1].declare(inner)) {
     refuseOnce(ctx, expr, capturedMessage(name))
     return null

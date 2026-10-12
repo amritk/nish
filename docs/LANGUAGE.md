@@ -2597,8 +2597,9 @@ export const main = (): i32 => {
   field, `push`, `pop`, `fill` or `set`, through a second name the body binds
   to it, or through an object or an array of the body's own that holds it — is
   a store into memory the caller owns, and is refused as any shared write is
-  (`reject_par_capture_element_write`, `_field_write`, `_push`, `_alias`,
-  `_alias_object`, `_alias_literal`, `_nested_array`, `_param_write`, and
+  (`reject_par_capture_element_write`, `_field_write`, `_push`, `_pop`,
+  `_fill`, `_set`, `_map_set`, `_alias`, `_alias_object`, `_alias_literal`,
+  `_nested_array`, `_param_write`, and
   `_reduce_write` and `_into_write` for the other forms). So is handing it to a
   function or a method that writes it (`_helper`, `_method`). Assigning to the
   name itself is
@@ -2617,22 +2618,42 @@ export const main = (): i32 => {
 - **`this` is not captured**, nor a field through it; bind what the body needs
   to a `const` first:
   `` The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, but not `this` or a field through it; bind what it needs to a `const` before the call (`const k = this.k`) ``
-  (`reject_par_capture_this`).
+  (`reject_par_capture_this`). This is a matter of spelling, not of safety: a
+  capture becomes a parameter of the arrow, and a parameter named `this` is
+  what makes a function a method to every analysis that reads one. A `const`
+  bound to `this` is captured as the object reference it is, read-only like
+  any other (`const self = this`, in `tests/link/par_capture`).
+- **A captured name is read at the call.** The body runs where the call is,
+  so every rule about a local of the function reads a capture as a read of
+  that local there: a destination of a scope's task read through a capture
+  before the scope joins (`reject_par_capture_scope_dst_index`, `_indexof`,
+  `_for_of`, `_large`), an element reference read through a capture after a
+  `push` or a `pop` may have moved its storage
+  (`reject_par_capture_stale_record`, `_into`, `_loop`, `_pop`, `_for_of`,
+  `_helper`), and an array read through a capture after `secret(raw)` took it
+  (`reject_par_capture_secret_moved`) are each refused with the rule's own
+  message.
 - **Some values are never captured**: a `Mutex`, its guard, a `Channel` or a
   scope, which are shared only by their own block's rules, a `Result`, a value
   that may be absent, a `Secret`, or anything that reaches one of them:
   `` The arrow reads `m`, which is `Mutex<i32>`, and a data-parallel body cannot capture it: a scope, a lock, a guard or a channel is shared only by the rules of its own block ``
-  (`reject_par_capture_mutex`, `_guard`, `_channel`, `_scope`, `_result`).
+  (`reject_par_capture_mutex`, `_guard`, `_channel`, `_scope`, `_result`,
+  `_maybe`, `_secret`). A body that runs a data-parallel form of its own is
+  refused as a shared write, captures or not (`reject_par_capture_nested_parallel`).
 - **`dst` is not reachable from a capture either.** A captured array of `dst`'s
   element type, or a captured value that reaches one, could be `dst`, which
   other threads are writing while the body reads it:
-  `` `(x) => ...` reads `dst`, and can reach a `i32[]` through `dst`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when both are `const`s bound to arrays of their own, such as a literal or a `new Array` ``
+  `` `(x) => ...` reads `dst`, and can reach a `i32[]` through `dst`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter ``
   (`reject_par_capture_dst`, `_dst_alias`, `_dst_field`, `_dst_param`). A
   capture is a binding the call can name, so one case is admitted by
-  identity: a captured array that is a `const` bound to an array of its own,
-  beside a `dst` that is a different such `const`, as `table` and `dst` are
-  above. `parallelMap` and `parallelFrom` allocate their own `dst`, which no
-  capture can reach.
+  identity: a captured array and a `dst` that are two different bindings, one
+  of them a `const` bound to an array of its own and the other another such
+  `const` or a parameter of the function, as `table` and `dst` are above. A
+  fresh array is memory no binding held before it was made, and a parameter's
+  value was fixed before the function ran (`tests/link/par_capture`, where a
+  parameter table, and two fresh `const`s in a generic function, are
+  admitted). Two parameters may be one array and are refused. `parallelMap`
+  and `parallelFrom` allocate their own `dst`, which no capture can reach.
 
 ### Scoped tasks: `using s = scope()`
 

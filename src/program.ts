@@ -21,7 +21,7 @@ import { CheckContext } from "./context"
 import { SourceFile } from "./diagnostics"
 import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
-import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes"
+import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
 import { isCollectionsModule, isJsonTypedModule, isMapExtrasModule, isSecretModule } from "./std-modules"
@@ -342,10 +342,37 @@ export class ParallelCall {
   node: Node
   /** The instantiation it calls, whose `functionArgs[0]` is the body. */
   sig: FunctionSig
+  /**
+   * The local a `parallelMapInto`'s `dst` names, or `null`: read when the call
+   * is checked, in the tables of the body that holds it (an instantiation's
+   * own, for a generic caller), because the rules run once the fixpoint has,
+   * outside every body (`captureReachesDstMessage`).
+   */
+  dst: Local | null
 
-  constructor(node: Node, sig: FunctionSig) {
+  constructor(node: Node, sig: FunctionSig, dst: Local | null) {
     this.node = node
     this.sig = sig
+    this.dst = dst
+  }
+}
+
+/**
+ * Every name under `node` that an arrow passed to a data-parallel form reads
+ * as a capture (`Local.captureOf`), in source order. The arrow is a function
+ * of its own, so a walk over the function around it passes over its body; a
+ * rule that tracks a local of that function reads these instead, at the
+ * arrow, which is where the call runs the body (WP29).
+ */
+export const capturedReads = (program: CheckedProgram, node: Node, out: Node[]): void => {
+  if (node.kind === N_IDENT) {
+    const local = program.nodeLocals[node.id]
+    if (local !== null && local.captureOf !== null) {
+      out.push(node)
+    }
+  }
+  for (const child of node.children) {
+    capturedReads(program, child, out)
   }
 }
 

@@ -7,3 +7,4 @@ call void @nish.mapRange$i32$i32$fn.16.nish_main$arrow1(%struct.nish_array* %2, 
 %22 = call i32 @nish_main$arrow1(i32 %21, %struct.nish_array* %cap.0, i32 %cap.1)
 %par.ctx = alloca { %struct.nish_array*, i32 }, align 8
 %14 = call i32 @nish_main$arrow0(i32 %13, i32 %cap.0)
+%par.ctx = alloca { %struct.nish_array*, i32, %struct.nish_array*, i32, %struct.nish_array* }, align 8

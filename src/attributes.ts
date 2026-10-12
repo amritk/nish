@@ -155,7 +155,7 @@ import {
   RuntimeFunction,
   RuntimeTable,
 } from "./runtime"
-import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_LOCAL, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { checksOverflow } from "./bounds"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
@@ -1399,7 +1399,8 @@ const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Nod
  */
 const namedInArrow = (program: CheckedProgram, node: Node, local: Local, inside: boolean): boolean => {
   if (inside && node.kind === N_IDENT) {
-    const named = program.nodeLocals[node.id]
+    // A data-parallel arrow's capture names the local it was made from (WP29).
+    const named = sourceLocal(program.nodeLocals[node.id])
     if (named !== null && named === local) {
       return true
     }
