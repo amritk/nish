@@ -168,7 +168,7 @@ The checks in `tests/run.js` that hold the above:
 whose code the compiler writes at each call from the class's fields, over the
 tokenizer above and `JsonWriter`.
 
-**Anchors.** Every `file:line` in this section is at `7b496c1d` on
+**Anchors.** Every `file:line` in this section is at `d6373ec1` on
 `feature/json-complete/typed`, after `main` at `035aba5` was merged into it and the tokenizer at `4fdc9d7`.
 
 **Result.** Every key of every object the code reads is matched against the
@@ -203,7 +203,7 @@ chooses the class, the limits and `ignoreUnknown`.
 | --- | --- | --- | --- | --- |
 | JSON-4 | Low | `std/json-typed.ts:193` (`unknownField`) | With `ignoreUnknown` set, a key that names no field is stepped over without being remembered, so a duplicate of such a key is not refused. Its value is checked by the tokenizer and never read, so no reading of it can differ between two components of this program. | **Accepted.** Remembering every unknown key would cost an allocation per key; a program that forwards the raw body to another parser leaves `ignoreUnknown` off. |
 | JSON-5 | Low | `src/emit-json.ts:454` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
-| JSON-6 | Low | `std/json-typed.ts:342` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
+| JSON-6 | Low | `std/json-typed.ts:344` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
 | JSON-7 | Low | `src/emit-json.ts:275` (`emitJsonDecodeBody`), `:532` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
@@ -247,7 +247,7 @@ for an i32", "2^31 for an i32", "-2^31 - 1 for an i32", "-1 for a u32", "2^32
 for a u32", "2^63 for an i64", "-2^63 - 1 for an i64". `null` inside an array
 is a type error too ("null in an array of i32: code", "null in an array of
 objects: code", "null in an array of strings: code"). Which field types may be read at all is the compiler's rule, held at
-the call over every class the call reaches (`src/json-typed.ts:201`), with a
+the call over every class the call reaches (`src/json-typed.ts:197`), with a
 negative case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_nested_field`, `json_reject_nullable_field`,
 `json_reject_nested_array`, `json_reject_generic_field`,
