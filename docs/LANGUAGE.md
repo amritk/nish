@@ -4935,11 +4935,11 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
     names it), it is not a `for...of` binding, which names an element, and no
     other use of it leaves a second name. Reading an integer element or field,
     `.length`, an array method on it, `===`, iterating over it, `wipe`, and
-    handing it to a builtin or to a function whose facts say it keeps nothing
-    of that parameter (the whole-program facts say which; `this`, for a method) are
-    all such uses. An initialiser, an assignment's value, a field or element
-    store, a literal's element, a ternary arm, a `return`, an argument of a
-    method of another value (`rows.push(raw)`, `m.set(k, raw)`), and a
+    handing it to a builtin, or to a function or method the whole-program
+    facts say keeps nothing of it, are all such uses. An initialiser, an
+    assignment's value, a field or element store, a literal's element, a
+    ternary arm, either side of `??`, a `return`, an argument of a method of
+    another value (`rows.push(raw)`, `m.set(k, raw)`), and a
     function or constructor that keeps it each leave one.
 
   Each is `` `secret` takes a value nothing else holds, and `raw` has a second
@@ -4949,8 +4949,9 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   `reject_secret_alias_reassigned`, `reject_secret_alias_field`,
   `reject_secret_alias_element`, `reject_secret_alias_param`,
   `reject_secret_alias_return`, `reject_secret_alias_ternary`,
-  `reject_secret_alias_constructor`, `reject_secret_alias_receiver`,
-  `reject_secret_alias_pop`, `reject_secret_alias_for_of`). Pass a fresh value
+  `reject_secret_alias_nullish`, `reject_secret_alias_constructor`,
+  `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
+  `reject_secret_alias_for_of`). Pass a fresh value
   instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
   copy.set(raw)`, then `secret(copy)`.
 - A `Secret` parameter is borrowed. The callee may read it through `expose`,

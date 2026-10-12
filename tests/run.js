@@ -14950,66 +14950,58 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
 // is built by the seed, and it compiles every one of them. Each edit finds its
 // line by exact text, so those lines in `src/secret.ts` stay byte-identical.
 if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_secret_alias")) {
-  if (seed.error !== undefined) {
-    skip(`nish:secret: the reverted sole-reference rule: ${seed.error}`)
-  } else {
-    const mutDir = path.join(buildDir, "secret-alias-mutation")
-    fs.rmSync(mutDir, { recursive: true, force: true })
-    fs.cpSync(path.join(root, "src"), path.join(mutDir, "src"), { recursive: true })
-    const secretTs = path.join(mutDir, "src", "secret.ts")
-    const live = fs.readFileSync(secretTs, "utf8")
-    const edits = [
-      ["    checkSoleReferences(ctx, body)\n", ""],
-      ["  const ref = results.refOf(need)\n", "  const ref = results.refOf(need).substring(0, 0)\n"],
-      [
-        "    if (named.kind === N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
-        "    if (named.kind === N_CONDITIONAL && named.kind !== N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
-      ],
-    ]
-    let mutated = live
-    const missed = edits.filter(([from]) => !mutated.includes(from))
-    for (const [from, to] of edits) {
-      mutated = mutated.replace(from, to)
-    }
-    fs.writeFileSync(secretTs, mutated)
-    const reverted = path.join(mutDir, "nish")
-    const built = spawnSync(
-      seed.cmd,
-      [...seed.prefix, path.join(mutDir, "src", "compile.ts"), "--link", reverted, "--profile", "debug"],
-      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
-    )
-    const aliasCases = fs
-      .readdirSync(casesDir)
-      .filter((f) => f.startsWith("reject_secret_alias_") && f.endsWith(".ts"))
-      .sort()
-    const refused = []
-    if (built.status === 0) {
-      for (const name of aliasCases) {
-        const r = spawnSync(
-          reverted,
-          [path.join(casesDir, name), "-o", path.join(mutDir, "out") + path.sep],
-          {
-            cwd: root,
-            encoding: "utf8",
-          }
-        )
-        if (r.status !== 0) {
-          refused.push(`${name}: ${r.stderr.split("\n")[0]}`)
-        }
+  const mutDir = path.join(buildDir, "secret-alias-mutation")
+  fs.rmSync(mutDir, { recursive: true, force: true })
+  fs.cpSync(path.join(root, "src"), path.join(mutDir, "src"), { recursive: true })
+  const secretTs = path.join(mutDir, "src", "secret.ts")
+  const live = fs.readFileSync(secretTs, "utf8")
+  const edits = [
+    ["    checkSoleReferences(ctx, body, flow.sites)\n", ""],
+    ["  const ref = results.refOf(need)\n", "  const ref = results.refOf(need).substring(0, 0)\n"],
+    [
+      "    if (named.kind === N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+      "    if (named.kind === N_CONDITIONAL && named.kind !== N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+    ],
+  ]
+  let mutated = live
+  const missed = edits.filter(([from]) => !live.includes(from))
+  for (const [from, to] of edits) {
+    mutated = mutated.replace(from, to)
+  }
+  fs.writeFileSync(secretTs, mutated)
+  const reverted = path.join(mutDir, "nish")
+  const built = spawnSeed(seed, [
+    path.join(mutDir, "src", "compile.ts"),
+    "--link",
+    reverted,
+    "--profile",
+    "debug",
+  ])
+  const aliasCases = fs
+    .readdirSync(casesDir)
+    .filter((f) => f.startsWith("reject_secret_alias_") && f.endsWith(".ts"))
+    .sort()
+  const refused = []
+  if (built.status === 0) {
+    for (const name of aliasCases) {
+      const out = path.join(mutDir, "out") + path.sep
+      const r = spawnSync(reverted, [path.join(casesDir, name), "-o", out], { cwd: root, encoding: "utf8" })
+      if (r.status !== 0) {
+        refused.push(`${name}: ${r.stderr.split("\n")[0]}`)
       }
     }
-    let detail = refused.join("\n")
-    if (missed.length > 0) {
-      detail = `the mutation did not apply: ${missed.map(([from]) => JSON.stringify(from)).join(", ")}`
-    } else if (built.status !== 0) {
-      detail = built.stdout + built.stderr
-    }
-    check(
-      `nish:secret: reverting the sole-reference rule lets every reject_secret_alias_* case compile (${aliasCases.length} cases)`,
-      missed.length === 0 && built.status === 0 && aliasCases.length > 0 && refused.length === 0,
-      detail
-    )
   }
+  let detail = refused.join("\n")
+  if (missed.length > 0) {
+    detail = `the mutation did not apply: ${missed.map(([from]) => JSON.stringify(from)).join(", ")}`
+  } else if (built.status !== 0) {
+    detail = built.stdout + built.stderr
+  }
+  check(
+    `nish:secret: reverting the sole-reference rule lets every reject_secret_alias_* case compile (${aliasCases.length} cases)`,
+    missed.length === 0 && built.status === 0 && aliasCases.length > 0 && refused.length === 0,
+    detail
+  )
 }
 
 // ---- WP35: the capability report ---------------------------------------------------
