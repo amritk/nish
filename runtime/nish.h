@@ -163,8 +163,13 @@ void nish_write(const nish_str *s, int32_t fd, bool newline);
    a thread that panics after it parks until that exit (`nish_panic_claim`). */
 __attribute__((noreturn)) void nish_panic(const nish_str *s);
 /* Called by every panic path before it prints: answers for the first caller
-   and parks every later one forever. */
+   and parks every later one forever. Without threads no second caller can
+   exist, so it is empty there. */
+#ifdef NISH_THREADS
 void nish_panic_claim(void);
+#else
+static inline void nish_panic_claim(void) {}
+#endif
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);

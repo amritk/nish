@@ -9128,8 +9128,14 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  * Raised by 1 more, to 3,606, by checked signed arithmetic: `nish_panic_overflow` sits
  * beside the division panic and the two share one table of messages, which measured 3,606
  * against 3,604 the same day (docs/wp7-runtime.md, "Checked arithmetic").
+ *
+ * Raised by 16, to 3,622, for `nish_panic` (#611): `panic`, `expect` and a failed range
+ * entry call it where they called `nish_write` and then `nish_exit`, so that the runtime
+ * owns the message and the exit together and only the first of several panicking threads
+ * prints. Measured 3,622 on 2026-10-12 with clang 18 on linux-x64. The claim that parks a
+ * second panic is compiled only into the threads build below; here it is empty.
  */
-const RUNTIME_TEXT_BUDGET = 3606
+const RUNTIME_TEXT_BUDGET = 3622
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *

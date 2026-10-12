@@ -89,8 +89,11 @@ _Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI")
    that exit ends the process, so exactly one message is printed and the exit
    code is the first panic's. `_exit` rather than `exit`: atexit handlers run
    by two threads at once are undefined behaviour, and a panic has nothing to
-   flush. Under wasi, where nothing runs beside the panicking thread, a second
-   claim cannot happen, and the trap is the defensive answer. */
+   flush. Only a threads build (`-DNISH_THREADS`) can have two threads panic,
+   so only it pays for the claim; everywhere else it is the empty inline
+   function nish.h declares. Under wasi with threads, the trap is the
+   defensive answer: no host there gives a parked thread a way to wait. */
+#ifdef NISH_THREADS
 static int nish_panicked;
 void nish_panic_claim(void) {
   if (__atomic_exchange_n(&nish_panicked, 1, __ATOMIC_ACQ_REL)) {
@@ -101,6 +104,9 @@ void nish_panic_claim(void) {
 #endif
   }
 }
+#else
+static inline void nish_panic_claim(void) {}
+#endif
 
 /* `fputs` rather than one `write`: libc's own loop finishes a short write,
    which a bare `write` would cut off (docs/security/runtime.md, RT-11), and

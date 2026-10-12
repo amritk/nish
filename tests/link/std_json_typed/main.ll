@@ -113,12 +113,11 @@ declare void @nish_arena_release(i64 noundef) #1
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_exit(i32 noundef) #5
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #1
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
 declare i32 @llvm.fptosi.sat.i32.f64(double) #6
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
@@ -238,8 +237,7 @@ if.end.1:
   br i1 %48, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*))
   unreachable
 
 len.ok:
@@ -444,7 +442,7 @@ attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { noreturn nounwind }
+attributes #5 = { nounwind noreturn cold }
 attributes #6 = { nounwind willreturn readnone }
 attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 

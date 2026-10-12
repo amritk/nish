@@ -21,9 +21,9 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_exit(i32 noundef) #2
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -51,8 +51,7 @@ entry:
   br i1 %7, label %if.then, label %if.else
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [51 x i8] }* @.str.12 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [51 x i8] }* @.str.12 to i8*))
   unreachable
 
 if.else:
@@ -80,4 +79,4 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
+attributes #2 = { nounwind noreturn cold }
