@@ -174,9 +174,8 @@ because a squash merge does not keep the branch's own commits.
   spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
   and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
   System time is not the whole story, though: Rust's futex lock spends about
-  as much (0.46 s), and in the table's runs it is slower than Nish on the
-  minimum and level with it on the median, so parking on a futex is not shown
-  to be the cure. The sign is not even stable across machines: the table's
+  as much (0.46 s), and in the table's runs it comes out about level with
+  Nish, so parking on a futex is not shown to be the cure. The sign is not even stable across machines: the table's
   runs put Nish behind Go on every median, while a probe on another VM of the
   same kind found Nish ahead of Go outside the band in four interleaved runs.
 
