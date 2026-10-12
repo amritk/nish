@@ -49,7 +49,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+define hidden noundef i32 @add$(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b)
   %1 = extractvalue { i32, i1 } %0, 0
