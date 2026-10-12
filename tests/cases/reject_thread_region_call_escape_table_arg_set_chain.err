@@ -1,2 +1,2 @@
-reject_thread_region_call_escape_table_arg_set_chain.ts:39:5
+reject_thread_region_call_escape_table_arg_set_chain.ts:40:5
 `bump` writes memory a task of `s` may read, before the scope joins
