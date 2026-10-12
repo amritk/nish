@@ -1,0 +1,1 @@
+`(x) => ...` answers `Pair`, and `parallelMap` hands back only a number, a `boolean` or an enum

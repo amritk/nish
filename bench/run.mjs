@@ -14,9 +14,13 @@
 //     --validate        build and compare checksums only: no timing, no docs written
 //     --no-rust         skip Rust even when rustc is installed
 //     --no-go           skip Go even when the go tool is installed
+//     --no-rayon        skip the Rayon twins of the data-parallel kernels
+//                       even when cargo is installed and crates.io answers
+//     --twin-runs N     how many times the twins' comparison is run whole
+//                       (default 3), so its table can say how far apart runs fall
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md);
 //                       a run of the data-parallel kernels alone (--only par)
-//                       rewrites only their table and keeps the rest
+//                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
 //     --instructions    count the instructions each of the 21 programs executes
@@ -36,11 +40,15 @@
 // `--only maps` prints them instead. `--n maps=<power of two>` picks one size.
 // See bench/README.md.
 //
-// The data-parallel kernels (bench/par_*.ts) are not twins: each is one Nish
-// binary run twice, as the loop (`seq`) and as `parallelMapInto` (`par`), and
-// the two runs must print the same checksum. They run with the rest, or when
-// `--only` names one (`par` names all five), and are left out of
-// --instructions: see bench/README.md.
+// The data-parallel kernels (bench/par-*.ts) are one Nish binary each, run
+// twice, as the loop (`seq`) and as the parallel form (`par`), and the two runs
+// must print the same checksum. Four of them also have Rust twins
+// (`std::thread::scope`, and Rayon through cargo) and Go twins (goroutines and
+// a sync.WaitGroup), timed against the Nish `par` run in interleaved rounds,
+// each beside a byte-identical copy of itself for the noise band; every twin
+// must print Nish's checksum. They run with the rest, or when `--only` names
+// one (`par` names all six), and are left out of --instructions: see
+// bench/README.md.
 //
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
 // are compared token by token; numeric tokens must agree to 1e-9 relative so
@@ -55,6 +63,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { compilerFrom } from "./compiler.mjs"
+import { BAND_EDGE, cgroupCpus, judge, readAcross, spreadOf, times3 } from "./par-reading.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const benchDir = path.join(root, "bench")
@@ -111,20 +120,33 @@ const AWFY = [
 const AWFY_ITERATIONS = 30
 
 /**
- * The wp29 P1 kernels in bench/par_*.ts: one binary each, timed as the loop
- * (`seq`) and as `parallelMapInto` (`par`) on every core the machine has.
+ * The wp29 kernels in bench/par-*.ts: one binary each, timed as the loop
+ * (`seq`) and as `parallelMapInto` or a scope (`par`) on every core the
+ * machine has. `twins` marks the ones ported to Rust and Go
+ * (bench/par-<name>.rs, par-<name>-rayon.rs and par-<name>.go), which the
+ * cross-language table times against the `par` run.
  */
 const PARALLEL = [
-  { name: "par-compute", what: "64 square roots per element, 2^21 elements (f64)" },
+  { name: "par-compute", what: "64 square roots per element, 2^21 elements (f64)", twins: true },
   {
     name: "par-alloc",
     what: "a string formatted and summed per element, 2^22 elements; the body allocates (NL9012)",
   },
-  { name: "par-nbody", what: "n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step" },
+  {
+    name: "par-nbody",
+    what: "n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step",
+    twins: true,
+  },
   { name: "par-short", what: "an 8-element map called 2^20 times, each call fed by the last" },
   {
     name: "par-regions",
     what: "a 2^17-element map called 1,000 times, each call fed by the last: what a region costs",
+    twins: true,
+  },
+  {
+    name: "par-histogram",
+    what: "4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock",
+    twins: true,
   },
 ]
 const AWFY_KEPT = 20
@@ -179,6 +201,8 @@ const opts = {
   update: false,
   rust: true,
   go: true,
+  rayon: true,
+  twinRuns: 3,
   out: path.join(root, "docs", "BENCHMARKS.md"),
 }
 const fail = (msg) => {
@@ -223,6 +247,13 @@ for (let i = 2; i < argv.length; i++) {
     opts.rust = false
   } else if (a === "--no-go") {
     opts.go = false
+  } else if (a === "--no-rayon") {
+    opts.rayon = false
+  } else if (a === "--twin-runs") {
+    opts.twinRuns = Number(next())
+    if (!Number.isInteger(opts.twinRuns) || opts.twinRuns < 1) {
+      fail("--twin-runs expects a positive integer")
+    }
   } else if (a === "--out") {
     opts.out = path.resolve(next())
   } else if (a === "-h" || a === "--help") {
@@ -256,6 +287,7 @@ if (opts.check && opts.update) {
 if (opts.instructions) {
   opts.rust = false
   opts.go = false
+  opts.rayon = false
 }
 
 // ---- Toolchain ------------------------------------------------------------------------
@@ -285,6 +317,12 @@ const RUSTC = opts.rust
 const GO = opts.go
   ? process.env.GO || which("go", ["/usr/local/go/bin", path.join(os.homedir(), "go", "bin")])
   : null
+// Rayon is a crate, so its twins are built by cargo, which fetches it from
+// crates.io on the first run; `rustc` alone builds the `std::thread::scope` twins.
+const CARGO =
+  opts.rust && opts.rayon
+    ? process.env.CARGO || which("cargo", [path.join(os.homedir(), ".cargo", "bin")])
+    : null
 // Peak RSS of a child comes from bench/rss.c (fork, exec, wait4): `/usr/bin/time`
 // is not installed everywhere and an interpreter's fork would count its own pages.
 const RSS_HELPER = (() => {
@@ -404,9 +442,9 @@ const build = (bench) => {
 // ---- Run and compare ------------------------------------------------------------------
 
 /** Run once; returns { ms, stdout }. Exit status other than 0 is a failure. */
-const timeOnce = (exe, args = []) => {
+const timeOnce = (exe, args = [], env = process.env) => {
   const t0 = process.hrtime.bigint()
-  const r = spawnSync(exe, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+  const r = spawnSync(exe, args, { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] })
   const ms = Number(process.hrtime.bigint() - t0) / 1e6
   if (r.status !== 0) {
     console.error(`${exe} exited with ${r.status}\n${r.stderr}`)
@@ -1113,7 +1151,7 @@ const runParallel = () => {
         `\nCHECKSUM MISMATCH ${bench.name}:\n--- seq\n${modes.seq.stdout}--- par\n${modes.par.stdout}`
       )
     }
-    rows.push({ bench, cmd: `nish ${args.join(" ")}`, ...modes })
+    rows.push({ bench, exe, cmd: `nish ${args.join(" ")}`, ...modes })
     process.stderr.write("\n")
   }
   if (disagree > 0) {
@@ -1123,6 +1161,212 @@ const runParallel = () => {
   return rows
 }
 const parallelRows = runParallel()
+
+// ---- Nish against Rust and Go on the data-parallel kernels ------------------------------
+
+/**
+ * The interleaved rounds the cross-language table times when `--runs` is not
+ * given. Eleven is the floor docs/BENCHMARKS.md promises for it, so that the
+ * median is the sixth run and not the average of two.
+ */
+const TWIN_ROUNDS = 11
+
+/** The columns of the cross-language table, in order; a twin that did not build is left out. */
+const TWIN_COLUMNS = [
+  ["nish", "Nish"],
+  ["rust", "Rust `thread::scope`"],
+  ["rayon", "Rust Rayon"],
+  ["go", "Go"],
+]
+
+/**
+ * Build the Rayon twins as one cargo package in build/bench/rayon, with the
+ * profile the rustc twins get on the command line. Answers { exes, version,
+ * cmd }, or null after saying why, so that a machine with no cargo, or no way
+ * to reach crates.io, still times the other columns.
+ */
+const buildRayon = (kernels) => {
+  if (!CARGO) {
+    if (opts.rust && opts.rayon) {
+      console.error("note: cargo not found; the Rayon column is skipped (set CARGO=<path> or install rustup)")
+    }
+    return null
+  }
+  const dir = path.join(outDir, "rayon")
+  fs.mkdirSync(path.join(dir, "src"), { recursive: true })
+  const bins = kernels.map((k) => {
+    prepare(`${k.name}-rayon.rs`, opts.sizes.get(k.name), path.join(dir, "src"))
+    return `[[bin]]\nname = "${k.name}-rayon"\npath = "src/${k.name}-rayon.rs"\n`
+  })
+  const manifest = path.join(dir, "Cargo.toml")
+  fs.writeFileSync(
+    manifest,
+    [
+      '[package]\nname = "nish-par-rayon"\nversion = "0.0.0"\nedition = "2021"\npublish = false\n',
+      // An empty workspace keeps cargo from looking above build/ for one.
+      "[workspace]\n",
+      // Pinned, so a rerun next year builds the Rayon the table was measured with.
+      '[dependencies]\nrayon = "=1.12.0"\n',
+      '[profile.release]\nopt-level = 3\npanic = "abort"\ncodegen-units = 1\nstrip = "symbols"\n',
+      ...bins,
+    ].join("\n")
+  )
+  const args = ["build", "--release", "--quiet", "--manifest-path", path.relative(root, manifest)]
+  const r = spawnSync(CARGO, args, { cwd: root, encoding: "utf8" })
+  if (r.status !== 0) {
+    const why =
+      r.stderr
+        .trim()
+        .split("\n")
+        .find((l) => l.includes("error")) ?? `exit ${r.status}`
+    console.error(`note: the Rayon twins did not build (${why}); the Rayon column is skipped`)
+    return null
+  }
+  const lock = fs.readFileSync(path.join(dir, "Cargo.lock"), "utf8")
+  const rayonVersion = lock.match(/name = "rayon"\nversion = "([^"]+)"/)?.[1] ?? "unknown"
+  return {
+    exes: new Map(kernels.map((k) => [k.name, path.join(dir, "target", "release", `${k.name}-rayon`)])),
+    version: rayonVersion,
+    cmd: `cargo ${args.join(" ")}`,
+  }
+}
+
+/** `n` as a percentage with one decimal. */
+const pct1 = (n) => `${(n * 100).toFixed(1)}%`
+
+/**
+ * The threads Nish's runtime divides over on this machine: the CPUs this
+ * process may run on, lowered by the cgroup v2 quota of its cgroup or any
+ * above it (`nish_cpu_count` in runtime/runtime-parallel.c), and at most 64,
+ * its 63 workers and the caller. Every twin is handed the same count, so no
+ * column wins by using more threads than Nish does.
+ */
+const THREADS = cgroupCpus(Math.min(os.availableParallelism(), 64))
+
+/**
+ * Time every kernel with twins against its Rust and Go ports, `--twin-runs`
+ * times over. Each binary is copied byte for byte, and in each round every
+ * binary and every copy runs once, in an order rotated by one per round, so
+ * that a slow stretch of the machine lands on all of them alike. A run times
+ * every kernel before the next run starts, so the runs are minutes apart and
+ * their spread is the machine's run-to-run variation. Every binary is handed
+ * THREADS, and every twin must print the checksum the Nish `par` run prints.
+ * Answers null when there is nothing to compare with.
+ */
+const runParallelTwins = () => {
+  const kernels = parallelRows.filter((r) => r.bench.twins)
+  if (kernels.length === 0) {
+    return null
+  }
+  if (!RUSTC && !GO) {
+    console.error(
+      "note: no rustc and no go (looked on PATH, in ~/.cargo/bin and in /usr/local/go/bin, unless --no-rust and --no-go were given); the table of Nish against Rust and Go is not measured, and a report that has one keeps it"
+    )
+    return null
+  }
+  const rayon = RUSTC ? buildRayon(kernels.map((r) => r.bench)) : null
+  const rounds = opts.runsGiven ? opts.runs : TWIN_ROUNDS
+  const passes = opts.validate ? 1 : opts.twinRuns
+  const count = String(THREADS)
+  const env = {
+    ...process.env,
+    NISH_NUM_THREADS: count,
+    RAYON_NUM_THREADS: count,
+    GOMAXPROCS: count,
+    PAR_THREADS: count,
+  }
+  const rel = (p) => path.relative(root, p)
+  const built = kernels.map((kernel) => {
+    const name = kernel.bench.name
+    const size = opts.sizes.get(name)
+    process.stderr.write(`${name}: building the Rust and Go twins`)
+    const variants = [{ id: "nish", exe: kernel.exe, args: ["par"], cmd: kernel.cmd }]
+    if (RUSTC) {
+      const exe = path.join(outDir, `${name}-rust`)
+      const args = [...SPEED, "--edition", "2021", rel(prepare(`${name}.rs`, size)), "-o", rel(exe)]
+      run(RUSTC, args, `${name}/rust`)
+      variants.push({ id: "rust", exe, args: [], cmd: `rustc ${args.join(" ")}` })
+    }
+    if (rayon) {
+      variants.push({ id: "rayon", exe: rayon.exes.get(name), args: [], cmd: rayon.cmd })
+    }
+    if (GO) {
+      const exe = path.join(outDir, `${name}-go`)
+      const args = ["build", "-trimpath", "-ldflags=-s -w", "-o", rel(exe), rel(prepare(`${name}.go`, size))]
+      run(GO, args, `${name}/go`)
+      variants.push({ id: "go", exe, args: [], cmd: `go ${args.join(" ")}` })
+    }
+    const binaries = variants.flatMap((v) => {
+      const copy = `${v.exe}-copy`
+      fs.copyFileSync(v.exe, copy)
+      return [
+        { key: v.id, exe: v.exe, args: v.args },
+        { key: `${v.id}-copy`, exe: copy, args: v.args },
+      ]
+    })
+    process.stderr.write(" ok\n")
+    return {
+      bench: kernel.bench,
+      ids: variants.map((v) => v.id),
+      cmds: variants.map((v) => v.cmd),
+      checksum: "",
+      binaries,
+      all: new Map(binaries.map((b) => [b.key, []])),
+      passes: [],
+    }
+  })
+  let disagree = 0
+  for (let pass = 0; pass < passes; pass++) {
+    for (const k of built) {
+      process.stderr.write(`${k.bench.name}: run ${pass + 1} of ${passes}`)
+      const times = new Map(k.binaries.map((b) => [b.key, []]))
+      const outputs = new Map()
+      const warmup = opts.validate ? 0 : opts.warmup
+      const total = opts.validate ? 1 : warmup + rounds
+      for (let round = 0; round < total; round++) {
+        for (let i = 0; i < k.binaries.length; i++) {
+          const b = k.binaries[(i + round) % k.binaries.length]
+          const t = timeOnce(b.exe, b.args, env)
+          outputs.set(b.key, t.stdout)
+          if (round >= warmup) {
+            times.get(b.key).push(t.ms)
+            k.all.get(b.key).push(t.ms)
+          }
+        }
+        process.stderr.write(".")
+      }
+      process.stderr.write("\n")
+      const want = outputs.get("nish")
+      k.checksum = want
+      for (const [key, got] of outputs) {
+        if (!sameOutput(got, want)) {
+          disagree++
+          console.error(`CHECKSUM MISMATCH ${k.bench.name}/${key}:\n--- Nish\n${want}--- ${key}\n${got}`)
+        }
+      }
+      const stats = new Map(
+        [...times].map(([key, ms]) => [key, { min: Math.min(...ms), median: median(ms) }])
+      )
+      k.passes.push({ min: judge(stats, k.ids, "min"), median: judge(stats, k.ids, "median") })
+    }
+  }
+  if (disagree > 0) {
+    console.error(`${disagree} twin binaries print a different checksum from the Nish kernel they port`)
+    process.exit(1)
+  }
+  const rows = built.map((k) => ({
+    bench: k.bench,
+    ids: k.ids,
+    cmds: k.cmds,
+    checksum: k.checksum,
+    pooled: new Map(
+      k.ids.map((id) => [id, { min: Math.min(...k.all.get(id)), median: median(k.all.get(id)) }])
+    ),
+    passes: k.passes,
+  }))
+  return { rows, rounds, passes, rayon }
+}
+const twins = runParallelTwins()
 
 const results = [] // { bench, variants: [{ ...variant, min, median, bytes, rss, stdout }], reference }
 let mismatches = 0
@@ -1163,6 +1407,13 @@ if (opts.validate) {
   }
   for (const r of parallelRows) {
     console.log(`  ${r.bench.name}: ${r.seq.stdout.trim().split("\n").join(" ")}  [seq, par]`)
+  }
+  if (twins !== null) {
+    const binaries = twins.rows.reduce((sum, r) => sum + r.ids.length, 0)
+    console.log(`twins: ${binaries} binaries over ${twins.rows.length} kernel(s) print the Nish checksum`)
+    for (const r of twins.rows) {
+      console.log(`  ${r.bench.name}: [${r.ids.join(", ")}]`)
+    }
   }
   process.exit(0)
 }
@@ -1207,6 +1458,24 @@ const commit = (() => {
   } catch {
     return "unknown"
   }
+})()
+
+/**
+ * Where on `main` a measurement was taken. A commit on a branch is orphaned
+ * when the branch is squash-merged, so a run off `main` names the `main`
+ * commit its branch grew from, and the branch commit beside it.
+ */
+const mainStamp = (() => {
+  const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" })
+  if (git("merge-base", "--is-ancestor", "HEAD", "origin/main").status === 0) {
+    return `commit ${commit} on \`main\``
+  }
+  const base = git("merge-base", "HEAD", "origin/main")
+  if (base.status !== 0) {
+    return `commit ${commit}`
+  }
+  const short = git("rev-parse", "--short", base.stdout.trim()).stdout.trim()
+  return `\`main\` at ${short}, the base of the branch it was measured on (branch commit ${commit}, which a squash merge does not keep)`
 })()
 
 lines.push("# Benchmarks", "")
@@ -1286,12 +1555,12 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
 // the commit in the header (`spliceSections`).
 const partialNote =
   opts.only && results.length === 0
-    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at commit ${commit}, by \`node bench/run.mjs --only par\`; the rest of the file was measured on the machine in the header.`
+    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at ${mainStamp}, by \`node bench/run.mjs --only par\`; the rest of the file was measured on the machine in the header.`
     : ""
 if (parallelRows.length > 0) {
   lines.push("## Data parallelism (ms, min / median)", "")
   lines.push(
-    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par_*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.${partialNote}`,
+    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores, par-histogram as a scope of four tasks sharing a \`Mutex\`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par-*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.${partialNote}`,
     ""
   )
   lines.push(
@@ -1308,6 +1577,73 @@ if (parallelRows.length > 0) {
     )
   }
   lines.push("")
+}
+
+/** A column's label in the twins' tables. */
+const twinLabel = (id) => TWIN_COLUMNS.find(([c]) => c === id)[1]
+
+const TWINS_HEADING = "## Data parallelism against Rust and Go (ms, min / median)"
+if (twins !== null) {
+  const present = TWIN_COLUMNS.filter(([id]) => twins.rows.some((r) => r.ids.includes(id)))
+  const tool = (cmd, args) => (cmd ? version(cmd, args) : "not installed (column skipped)")
+  const rayonNote = twins.rayon
+    ? `Rayon ${twins.rayon.version}, built by cargo with the same profile`
+    : "Rayon not built (no cargo, or crates.io out of reach: column skipped)"
+  const n = twins.passes
+  lines.push(TWINS_HEADING, "")
+  lines.push(
+    `Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, since Nish has no atomic counter to compare with.`,
+    "",
+    `**The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (\`nish_panic_overflow\` and \`nish_panic_index\` are reached from par-histogram's \`binStream\`, for one). The Rust twins build as \`--release\` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's \`--profile speed\` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.`,
+    "",
+    `**How it is timed.** Every binary divides over ${THREADS} threads, the count Nish's runtime chooses on this machine: \`NISH_NUM_THREADS\`, \`RAYON_NUM_THREADS\`, \`GOMAXPROCS\` and \`PAR_THREADS\` (read by the scope twins) are all set to it. The comparison is run ${n} time(s), minutes apart, each run ${twins.rounds} interleaved rounds after ${opts.warmup} warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round. The times below are process wall time, min / median in ms over every round of every run. In each run, and separately for the minimum and the median, Nish is divided by the fastest other column on that statistic, and the band is the larger of the gaps between Nish and its copy and between that column and its copy. A ratio reads as faster or slower only outside the band, and within ${(BAND_EDGE * 100).toFixed(1)}% of its edge as at the edge. The reading takes every run together: runs that fall on both sides of the band make no claim. The Nish column is the \`par\` run of the table above, timed again here beside seven other binaries rather than in that table's alternation with its loop, so the two tables' Nish figures differ by about as much as this machine moves between runs: compare within a table, not across.`,
+    "",
+    `Measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, ${os.cpus().length} logical cores, ${THREADS} threads, ${os.platform()} ${os.release()}, by \`node bench/run.mjs --only par\` at ${mainStamp}. ${version(nishc.cmd, [...nishc.prefix, "--version"])}; ${tool(RUSTC)}; ${rayonNote}; ${tool(GO, ["version"])}.`,
+    ""
+  )
+  lines.push(
+    `| Kernel | ${present.map(([, l]) => l).join(" | ")} | Nish / fastest, min, over ${n} run(s) | Nish / fastest, median | Reading, min | Reading, median |`,
+    `| --- | ${present.map(() => "---:").join(" | ")} | ---: | ---: | --- | --- |`
+  )
+  for (const r of twins.rows) {
+    const cell = (id) => {
+      const v = r.pooled.get(id)
+      return v ? `${fmt(v.min)} / ${fmt(v.median)}` : ""
+    }
+    const onMin = r.passes.map((p) => p.min)
+    const onMedian = r.passes.map((p) => p.median)
+    lines.push(
+      `| ${r.bench.name} | ${present.map(([id]) => cell(id)).join(" | ")} | ${spreadOf(onMin)} | ${spreadOf(onMedian)} | ${readAcross(onMin)} | ${readAcross(onMedian)} |`
+    )
+  }
+  lines.push(
+    "",
+    "Each run on its own: the fastest other column on each statistic, Nish over it, and that row's band.",
+    "",
+    "| Kernel | Run | Fastest, min | Nish / it | Band | Fastest, median | Nish / it | Band |",
+    "| --- | ---: | --- | ---: | ---: | --- | ---: | ---: |"
+  )
+  for (const r of twins.rows) {
+    r.passes.forEach((p, i) => {
+      lines.push(
+        `| ${r.bench.name} | ${i + 1} | ${twinLabel(p.min.fastest)} | ${times3(p.min.ratio)} | ${pct1(p.min.band)} | ${twinLabel(p.median.fastest)} | ${times3(p.median.ratio)} | ${pct1(p.median.band)} |`
+      )
+    })
+  }
+  lines.push(
+    "",
+    `Rust flags: \`${SPEED.join(" ")} --edition 2021\`, without \`target-cpu=native\` or LTO; Nish's \`--profile speed\` has no \`-march\` either. Go: \`go build -trimpath -ldflags=-s -w\`. bench/README.md says what each kernel measures and, where Nish loses, what has been measured of why.`,
+    "",
+    "The Checksums and Commands sections below are written by a full run, which `--only par` leaves as they were, so a kernel added since the last full run is missing there. Every binary of this table printed its kernel's checksum, and was built so:",
+    ""
+  )
+  for (const r of twins.rows) {
+    lines.push(`- **${r.bench.name}**: \`${r.checksum.trim().split("\n").join(" ")}\``, "", "  ```")
+    for (const cmd of r.cmds) {
+      lines.push(`  ${cmd}`)
+    }
+    lines.push("  ```", "")
+  }
 }
 
 if (mapLines.length > 0) {
@@ -1389,8 +1725,19 @@ const sectionsOf = (text) => {
  */
 const spliceSections = (oldText, newText, headings) => {
   const fresh = new Map(sectionsOf(newText).map((s) => [s.heading, s.lines]))
-  return sectionsOf(oldText)
-    .flatMap((s) => (headings.includes(s.heading) && fresh.has(s.heading) ? fresh.get(s.heading) : s.lines))
+  const old = sectionsOf(oldText)
+  const had = new Set(old.map((s) => s.heading))
+  return old
+    .flatMap((s) => {
+      const own = headings.includes(s.heading) && fresh.has(s.heading) ? fresh.get(s.heading) : s.lines
+      // A heading the report does not have yet goes in after the one listed
+      // before it, so the first `--only par` run that measures the twins puts
+      // their table under the data-parallel one.
+      const added = headings
+        .filter((h, i) => i > 0 && headings[i - 1] === s.heading && !had.has(h) && fresh.has(h))
+        .flatMap((h) => fresh.get(h))
+      return [...own, ...added]
+    })
     .join("\n")
 }
 
@@ -1405,7 +1752,10 @@ if (opts.only && results.length === 0) {
     parallelRows.length === PARALLEL.length &&
     sectionsOf(old).some((section) => section.heading === PARALLEL_HEADING)
   if (wrote) {
-    fs.writeFileSync(opts.out, spliceSections(old, lines.join("\n"), [PARALLEL_HEADING]))
+    // The twins' table is replaced only when this run measured it, so a
+    // machine without rustc or go keeps the one the report has.
+    const headings = twins !== null ? [PARALLEL_HEADING, TWINS_HEADING] : [PARALLEL_HEADING]
+    fs.writeFileSync(opts.out, spliceSections(old, lines.join("\n"), headings))
   }
 } else {
   fs.writeFileSync(opts.out, lines.join("\n"))
@@ -1426,7 +1776,14 @@ for (const r of results) {
 }
 for (const r of parallelRows) {
   console.log(
-    `${r.bench.name.padEnd(12)} loop ${fmt(r.seq.min)}/${fmt(r.seq.median)}  map ${fmt(r.par.min)}/${fmt(r.par.median)}  ${(r.seq.min / r.par.min).toFixed(2)}x`
+    `${r.bench.name.padEnd(14)} loop ${fmt(r.seq.min)}/${fmt(r.seq.median)}  map ${fmt(r.par.min)}/${fmt(r.par.median)}  ${(r.seq.min / r.par.min).toFixed(2)}x`
+  )
+}
+for (const r of twins?.rows ?? []) {
+  const onMin = r.passes.map((p) => p.min)
+  const onMedian = r.passes.map((p) => p.median)
+  console.log(
+    `${r.bench.name.padEnd(14)} min ${spreadOf(onMin)}: ${readAcross(onMin).replace(/\*/g, "")}; median ${spreadOf(onMedian)}: ${readAcross(onMedian).replace(/\*/g, "")}`
   )
 }
 console.log(

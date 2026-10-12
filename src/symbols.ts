@@ -54,6 +54,15 @@ export class Local {
    * may copy with `memcpy` (`disjointCopy` in `src/arrays.ts`).
    */
   fresh: boolean
+  /**
+   * WP29: on the parameter an arrow passed to a data-parallel form gets for a
+   * name of the function it is written in, that function's local
+   * (`captureOuter` in `src/generics.ts`), and `null` everywhere else. The
+   * arrow's own analyses read the parameter; every rule about the enclosing
+   * function reads a captured name as the local itself (`sourceLocal`), because
+   * the body reads it during the call.
+   */
+  captureOf: Local | null
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name
@@ -63,7 +72,21 @@ export class Local {
     this.origin = null
     this.typedArray = ""
     this.fresh = false
+    this.captureOf = null
   }
+}
+
+/**
+ * The local a name denotes to a rule about the function it is written in: a
+ * data-parallel arrow's capture is the enclosing function's local it was made
+ * from (`Local.captureOf`), read where the call runs the body (WP29).
+ */
+export const sourceLocal = (local: Local | null): Local | null => {
+  if (local === null) {
+    return null
+  }
+  const outer = local.captureOf
+  return outer === null ? local : outer
 }
 
 /**

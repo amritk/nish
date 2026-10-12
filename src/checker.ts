@@ -124,7 +124,7 @@ import { isAssignmentOperator, isOptionalChain, unwrapParens } from "./emit-util
 import { checkResultLocalsHandled } from "./result"
 import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
-import { Local, STORAGE_PARAM, Scope } from "./symbols"
+import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   checkImplements,
   collectStructMembers,
@@ -2453,7 +2453,8 @@ const usedOnlyWithinIteration = (ctx: CheckContext, root: Node, local: Local, ow
     )
   }
   if (root.kind === N_IDENT) {
-    const bound = ctx.program.nodeLocals[root.id]
+    // A data-parallel arrow's capture is the local it was made from (WP29).
+    const bound = sourceLocal(ctx.program.nodeLocals[root.id])
     return bound === null || bound !== local
   }
   for (const child of root.children) {
