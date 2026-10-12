@@ -18,6 +18,7 @@
 import { secretFieldMessage } from "./secret"
 import { DISPOSE_METHOD, disposeElsewhereMessage, isIteratorMethod, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
+import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
@@ -476,6 +477,11 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`)
     return
   }
+  // Typed JSON's options: the one `static` a class may declare, and not a field.
+  if ((decl.flags & FLAG_STATIC) !== 0 && name === JSON_OPTIONS && owner.kind === STRUCT_CLASS) {
+    noteJsonOptions(ctx, owner, decl)
+    return
+  }
   if ((decl.flags & FLAG_STATIC) !== 0) {
     ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function or const)`)
     return
@@ -797,6 +803,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       }
     }
   }
+  checkJsonOptions(ctx, info)
   const floor = computeLayout(ctx, info)
   info.collected = true
   reportWastefulPadding(ctx, info, floor, prefix)

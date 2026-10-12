@@ -1,0 +1,1 @@
+`User.json` gives `id` and `name` one key, `name`: each field is renamed and made optional at most once, and no two fields share a key on the wire

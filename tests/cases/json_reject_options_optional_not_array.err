@@ -1,0 +1,1 @@
+`User.json`'s `optional` is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals

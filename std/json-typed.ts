@@ -23,13 +23,22 @@
  * straight-line calls into the methods of `JsonDecoder` and the functions
  * here for each field, and into `JsonWriter`'s, so all of the parsing is the
  * tokenizer's and all of the writing is the writer's. A field may be an
- * `i32`, `u32`, `i64`, `f64` (or `number`), `boolean` or `string`, a class
- * decoded the same way, an array of any of those, or any of those `| null`;
- * anything else is refused at the call, naming the field
- * (docs/LANGUAGE.md, "Typed JSON").
+ * `i32`, `u32`, `i64`, `u64`, `f64` (or `number`), `boolean` or `string`, a
+ * numeric enum, a class decoded the same way, a `JsonNumber`, an array or a
+ * `Map<string, V>` of any of those, or any of those `| null`; anything else is
+ * refused at the call, naming the field (docs/LANGUAGE.md, "Typed JSON").
  *
  * **The decoding rules.** A JSON object's keys are the class's field names,
- * byte for byte. Every field is required, a key may appear once, and a key
+ * byte for byte, or the keys its options give them:
+ *
+ *     class Account {
+ *       static readonly json = { rename: { userId: "user_id" }, optional: ["tags"] };
+ *       ...
+ *     }
+ *
+ * The compiler reads that literal; it is not a field. Every field is required
+ * but an optional one, whose missing key sets it to its initializer, a key may
+ * appear once, and a key
  * that names no field is an error unless `ignoreUnknown` is set, when its
  * value is stepped over. A number must fit its field: an integer field takes
  * an integer written without a fraction or an exponent and in the field's
@@ -95,6 +104,100 @@ export const JSON_DECODE_MISSING: i32 = -24
 /** What a program running under Node is told, where the compiler would have written the code. */
 const JSON_TYPED_ERASED: string =
   "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+
+/**
+ * A JSON number kept as the text it was written in, so that no digit is lost:
+ * an integer wider than a `u64` and a fraction with more digits than an `f64`
+ * holds are decoded and encoded again byte for byte. A field of this class is
+ * read and written as one number, not as an object: `jsonDecode` copies the
+ * number's text into it, and `jsonEncode` writes that text back unchanged.
+ *
+ * It reads its text as `nish/json-value` reads a number (`numberText`,
+ * `isI64`, `i64`, `isU64`, `u64`, `f64`), through a tokenizer of its own, so
+ * the two answer alike; the two are separate types until the typed layer
+ * can name a `JsonValue`'s number directly.
+ *
+ * A new one holds `0`. Decoding into one reuses its bytes, so an object
+ * decoded again with numbers no longer than before allocates nothing for
+ * them.
+ */
+export class JsonNumber {
+  /** The text is `bytes[0, count)`, one JSON number; the bytes past it are room. */
+  bytes: u8[]
+  count: i32 = 1
+
+  constructor() {
+    this.bytes = [48]
+  }
+
+  /** The number's text, exactly as it was written or set. */
+  text(): string {
+    return String.fromBytes(this.bytes, 0, this.count)
+  }
+
+  /**
+   * A tokenizer over the text, read to its one token. It may open no
+   * container and take a number of any length, so it allocates no stack.
+   */
+  reader(): JsonTokenizer {
+    const limits: JsonLimits = new JsonLimits()
+    limits.maxDepth = 0
+    limits.maxNumberBytes = this.count
+    const tok: JsonTokenizer = new JsonTokenizer(this.bytes, 0, this.count, limits)
+    tok.next()
+    return tok
+  }
+
+  /** Whether the number is written without a fraction or an exponent and its value fits an `i64`. */
+  isI64(): boolean {
+    return this.reader().isInteger()
+  }
+
+  /** The value as an `i64` when `isI64()` holds, and `0` otherwise. */
+  i64(): i64 {
+    return this.reader().numberI64()
+  }
+
+  /** Whether the number is written in digits alone, with no sign, fraction or exponent, and fits a `u64`. */
+  isU64(): boolean {
+    return this.reader().isU64()
+  }
+
+  /** The value as a `u64` when `isU64()` holds, and `0` otherwise. */
+  u64(): u64 {
+    return this.reader().numberU64()
+  }
+
+  /** The nearest `f64`, ties to even, as `JSON.parse` reads it. */
+  f64(): f64 {
+    return this.reader().numberF64()
+  }
+
+  /**
+   * Sets the text to `text` when it is one JSON number and nothing else, and
+   * answers whether it was; any other text leaves the number as it was.
+   */
+  setText(text: string): boolean {
+    const n: i32 = toI32(text.length)
+    const bytes: u8[] = new Array<u8>(n)
+    for (let k: i32 = 0; k < n && k < toI32(bytes.length); k += 1) {
+      const c: i32 = toI32(text.charCodeAt(k))
+      // A number is ASCII; anything wider fails the check below as `~` does.
+      bytes[k] = toU8(c < 128 ? c : 126)
+    }
+    const limits: JsonLimits = new JsonLimits()
+    limits.maxDepth = 0
+    limits.maxNumberBytes = n
+    const tok: JsonTokenizer = new JsonTokenizer(bytes, 0, n, limits)
+    const isNumber: boolean = tok.next() === JSON_TOK_NUMBER && tok.tokStart === 0 && tok.tokEnd === n
+    if (!isNumber || tok.next() !== JSON_TOK_END) {
+      return false
+    }
+    this.bytes = bytes
+    this.count = n
+    return true
+  }
+}
 
 /**
  * One decoding: a tokenizer over the input and the sticky error. Make one per
@@ -394,6 +497,38 @@ export class JsonDecoder {
       return toU64(0)
     }
     return this.tok.numberU64()
+  }
+
+  /**
+   * The next value as a `JsonNumber`: its text, copied into `n`'s bytes
+   * exactly as the input writes it. Anything but a number is
+   * `JSON_DECODE_TYPE`, and `n` keeps the number it held.
+   */
+  number(n: JsonNumber): void {
+    const k: i32 = this.take()
+    if (k !== JSON_TOK_NUMBER) {
+      if (k >= 0) {
+        this.wrongType()
+      }
+      return
+    }
+    const tok: JsonTokenizer = this.tok
+    const src: u8[] = tok.src
+    const bytes: u8[] = n.bytes
+    const start: i32 = tok.tokStart
+    const end: i32 = tok.tokEnd
+    let copied: i32 = 0
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(src.length); i += 1) {
+      // Read into a local first: a push ends what the guard proved about `i`.
+      const b: u8 = src[i]
+      if (copied < toI32(bytes.length)) {
+        bytes[copied] = b
+      } else {
+        bytes.push(b)
+      }
+      copied += 1
+    }
+    n.count = copied
   }
 
   f64(): f64 {
@@ -715,6 +850,11 @@ export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
     }
   }
   w.raw(digits, first, toI32(digits.length) - first)
+}
+
+/** A `JsonNumber`, as the text it holds, byte for byte. */
+export const jsonEncodeNumber = (w: JsonWriter, n: JsonNumber): void => {
+  w.raw(n.bytes, 0, n.count)
 }
 
 export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {

@@ -3,9 +3,12 @@
 // Each call becomes a call of a function of this module's own, one per class
 // and direction (`.json.decode.Greeting`, `.json.encode.Greeting`), whose body
 // is a call of the decoder's or the writer's method per field, after a switch
-// on the key's length and, for `name` and `mood`, on its first byte.
+// on the key's length and, for `name` and `mood`, on its first byte. The
+// class's options give `times` the key `visits`, and make it optional, so a
+// missing `visits` stores `0`; `amount` is a `JsonNumber`, read and written
+// whole as its text.
 import { JsonWriter } from "nish/json"
-import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
+import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed"
 
 enum Mood {
   Calm = 1,
@@ -13,12 +16,15 @@ enum Mood {
 }
 
 class Greeting {
+  static readonly json = { rename: { times: "visits" }, optional: ["times"] }
   id: u64 = 0
   name: string = ""
+  amount: JsonNumber
   times: i32 = 0
   mood: Mood
 
   constructor() {
+    this.amount = new JsonNumber()
     this.mood = Mood.Calm
   }
 }

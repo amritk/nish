@@ -29,6 +29,12 @@
 //       if (!seen.id) d.missingField() else if (!seen.name) d.missingField()
 //     }
 //
+// A field's key is its name, or the one its class's `static readonly json`
+// gives it (`FieldInfo.wireName`), and a field the options make optional
+// stores its initializer where any other missing field calls `missingField`.
+// `JsonNumber` is not decoded field by field: its parts are one call of
+// `d.number` and of `jsonEncodeNumber` (`emitJsonNumberBody`).
+//
 // The key's length picks the fields it can be, so a key is compared with the
 // name of a field of its own length and no other. When several fields share a
 // length, one byte of the key (`d.keyByte(at)`, at the position where their
@@ -48,7 +54,13 @@
 
 import { Emitter } from "./emit"
 import { emitElementAt, emitEmptyArray, emitPushValue, loadLength, storeHeaderField } from "./emit-arrays"
-import { emitNewWithoutArguments, loadField, storeField, structInfoOf } from "./emit-classes"
+import {
+  emitNewWithoutArguments,
+  initializerConstant,
+  loadField,
+  storeField,
+  structInfoOf,
+} from "./emit-classes"
 import { emitLibraryCopies, libraryReach, mapIntrinsicOf } from "./emit-map"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
@@ -507,7 +519,10 @@ const emitJsonPart = (emitter: Emitter, part: JsonPart): IRFunction => {
   if (isArray) {
     emitter.declareType(ARRAY_TYPE)
   }
-  if (part.kind === PART_DECODE) {
+  const subject = part.info
+  if (subject !== null && subject.jsonNumber && (part.kind === PART_DECODE || part.kind === PART_ENCODE)) {
+    emitJsonNumberBody(emitter, part)
+  } else if (part.kind === PART_DECODE) {
     emitJsonDecodeBody(emitter, part)
   } else if (part.kind === PART_DECODE_ARRAY) {
     emitJsonDecodeArrayBody(emitter, part)
@@ -524,6 +539,23 @@ const emitJsonPart = (emitter: Emitter, part: JsonPart): IRFunction => {
     emitJsonEncodeArrayBody(emitter, part)
   }
   return emitter.fn
+}
+
+/**
+ * `JsonNumber`'s decoding and encoding, which are not its fields': the number
+ * is read whole, as the text it was written in (`JsonDecoder.number`), and
+ * written back byte for byte (`jsonEncodeNumber`).
+ */
+const emitJsonNumberBody = (emitter: Emitter, part: JsonPart): void => {
+  const info = jsonPartInfo(emitter, part)
+  const self = `${jsonObjectType(part.receiver)} %r`
+  const value = `${jsonObjectType(info)} %v`
+  if (part.kind === PART_DECODE) {
+    jsonCallMethod(emitter, part.receiver, "number", "%r", [value])
+  } else {
+    jsonCallSig(emitter, jsonHelper(emitter, part, "jsonEncodeNumber"), [self, value])
+  }
+  emitter.fn.emit("ret void")
 }
 
 // ---- Decoding -----------------------------------------------------------------------------
@@ -546,10 +578,10 @@ class JsonDispatch {
   }
 }
 
-/** The name of field `k`, which is its key. */
+/** The key of field `k`: its name, or the one the class's `json.rename` gives it. */
 const jsonKeyOf = (d: JsonDispatch, k: i32): string => {
   const field: FieldInfo | null = k >= 0 && k < d.fields.length ? d.fields[k].field : null
-  return field === null ? "" : field.name
+  return field === null ? "" : field.wireName
 }
 
 /** Whether `x` is one of `xs`. */
@@ -782,14 +814,27 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
   jsonCallMethod(emitter, part.receiver, "duplicateField", "%r", [])
   fn.emit(`br label %${loop.label}`)
 
-  // The object has closed, or the decoding failed and the calls below do nothing.
+  // The object has closed, or the decoding failed and the calls below do
+  // nothing. A missing optional field is set to its initializer, so an object
+  // decoded into again does not keep what an earlier input gave it.
   fn.placeBlock(check)
   const missing = fn.newBlock("json.missing")
   k = 0
-  while (k < seen.length) {
-    const given = fn.emitValue(`load i1, i1* ${seen[k]}, align 1`)
+  while (k < seen.length && k < fields.length) {
+    // Both read before any call, which ends what the loop's test proved.
+    const slot = seen[k]
+    const field = fields[k].field
+    const given = fn.emitValue(`load i1, i1* ${slot}, align 1`)
     const next = fn.newBlock("json.given")
-    jsonBranch(emitter, given, next.label, missing.label)
+    if (field !== null && field.jsonOptional) {
+      const absent = fn.newBlock("json.default")
+      jsonBranch(emitter, given, next.label, absent.label)
+      fn.placeBlock(absent)
+      storeField(emitter, info, "%v", field, initializerConstant(emitter, field))
+      fn.emit(`br label %${next.label}`)
+    } else {
+      jsonBranch(emitter, given, next.label, missing.label)
+    }
     fn.placeBlock(next)
     k = k + 1
   }
@@ -1163,7 +1208,7 @@ const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   for (const f of fields) {
     const field = f.field
     if (field !== null) {
-      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.name)}`])
+      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
       emitJsonEncodeValue(emitter, part, f, loadField(emitter, info, "%v", field))
     }
   }

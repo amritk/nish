@@ -75,7 +75,8 @@ the record that found it. The notes below the table name each such finding.
    listener read the first Initial in place and answer into scratch, so a
    handshake through a reused slot keeps 0 bytes of arena memory.
 10. JSON-1, JSON-4, JSON-5, JSON-6 and JSON-7 (Low) are accepted, with the reason in
-    their record, and are not counted. JSON-2 is open. JSON-3, duplicate keys
+    their record, and are not counted, and so is JSON-9 (Low), a `JsonNumber`'s
+    bytes written raw. JSON-2 is open. JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed for
     `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
     of a field; it is counted as a fixed Low. The tokenizer is unchanged, a

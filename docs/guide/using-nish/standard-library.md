@@ -26,7 +26,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
-| [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back |
+| [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
@@ -247,7 +247,8 @@ register and no schema to write: the compiler writes the code from the class's
 fields at each call. A field can be an `i32`, `u32`, `i64`, `u64`, `f64`,
 `boolean`, `string`, a numeric `enum`, another class, an array of any of those,
 a `Map` with `string` keys whose values are any of those, or a `string`, a
-class, an array or a map with `| null`.
+class, an array or a map with `| null`; and a `JsonNumber`, which keeps a
+number's text exactly.
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
@@ -363,6 +364,56 @@ export const main = (): i32 => {
 
 A key is matched to a field by its length first and then by one of its bytes,
 so a class with many fields decodes about as fast per key as a class with few.
+
+When the JSON's keys are not the names you want for your fields, or some keys
+may be left out, say so in one `static readonly json` object literal in the
+class. `rename` gives a field the key it has on the wire, and `optional` lists
+the fields whose key may be missing: a missing one sets the field back to its
+initializer, so an optional field needs one. Every other key is still
+required. The literal is read by the compiler and is not a field. A name that
+is not one of the class's fields, two fields with the same key, or anything
+that is not written out as a literal, is a compile error.
+
+A `JsonNumber` field keeps a number exactly as it was written, so a number
+wider than a `u64` or with more digits than an `f64` comes back byte for byte.
+Read it with `text()`, `isI64()` and `i64()`, `isU64()` and `u64()`, or
+`f64()`, and set it with `setText`.
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
+
+class Payment {
+  static readonly json = { rename: { userId: "user_id" }, optional: ["note"] };
+  amount: JsonNumber;
+  note: string = "";
+  userId: i32 = 0;
+
+  constructor() {
+    this.amount = new JsonNumber();
+  }
+}
+
+const bytesOf = (text: string): u8[] => {
+  const out = new Array<u8>(toI32(text.length));
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(text.length); i += 1) {
+    out[i] = toU8(text.charCodeAt(i));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const body = bytesOf(`{"user_id":7,"amount":12345678901234567890.123456789}`);
+  const p = new Payment();
+  const code = jsonDecode(new JsonDecoder(body, 0, toI32(body.length), new JsonLimits()), p);
+  const w = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(w, p);
+  console.log(w.text()); // {"amount":12345678901234567890.123456789,"note":"","user_id":7}
+  console.log(`${p.userId} ${p.amount.isU64()}`); // 7 false
+  return code;
+};
+```
 
 Both calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in

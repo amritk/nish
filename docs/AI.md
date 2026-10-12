@@ -1752,7 +1752,16 @@ its number, and a number that is no member's value is `JSON_DECODE_TYPE`; a
 `u64` is exact to 2^64 - 1, and negative is `JSON_DECODE_RANGE`; a map is
 emptied and filled in the input's key order, a repeated key an error. A class
 the decoder makes (an array's element, a `| null` field's object, a map's
-value) has a constructor with no parameters (NL2488).
+value) has a constructor with no parameters (NL2488). A class's options are
+one `static readonly json = { rename: { field: "key" }, optional: ["field"] }`
+literal, the only `static` a class may have: `rename` gives a field its key on
+the wire, and a missing `optional` key sets its field to the initializer, so
+an optional field has one (NL2498). Each misuse is its own code where the class
+is declared: not `static readonly` or on a generic class (NL2492), not a
+literal (NL2493), an unknown option (NL2494), a name that is no field (NL2495),
+a rename to a non-string (NL2496), two fields with one key (NL2497). A
+`JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
+`f64`, `setText`).
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
@@ -1789,6 +1798,43 @@ class Reading {
 export const main = (): i32 => {
   const w = new JsonWriter(new Array<u8>(16), 0);
   jsonEncode(w, new Reading());
+  return w.failed;
+};
+```
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
+
+class Order {
+  static readonly json = { rename: { orderId: "order_id" }, optional: ["note"] };
+  orderId: i32 = 0;
+  note: string = "";                    // missing key: back to ""
+  total: JsonNumber;                    // any number, kept as written
+  constructor() {
+    this.total = new JsonNumber();
+  }
+}
+
+export const read = (d: JsonDecoder, o: Order): i32 => jsonDecode(d, o);
+
+export const write = (w: JsonWriter, o: Order): void => {
+  jsonEncode(w, o);                     // {"order_id":..,"note":..,"total":..}
+};
+```
+
+```ts nish:err NL2495
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+class Order {
+  static readonly json = { optional: ["notes"] };   // no field `notes`
+  note: string = "";
+}
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, new Order());
   return w.failed;
 };
 ```
