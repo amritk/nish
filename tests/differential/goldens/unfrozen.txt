@@ -35,6 +35,15 @@ cases/arr_bounds_range_new added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_past added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_wrap added after R6: no rewriter to freeze it with
 cases/arr_bounds_ranged added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_kept added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_least added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_passed added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_pop added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_rebind added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_shadow added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_shadow_param added after R6: no rewriter to freeze it with
+cases/arr_bounds_returned_stored added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
