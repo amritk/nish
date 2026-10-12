@@ -20,7 +20,7 @@
     "map-presize": { "n": 16384, "instructions": 59089023, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
     "map-vs-stringmap": { "n": 16384, "instructions": 334610686, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
     "Permute": { "inner": 1000, "instructions": 222327926, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
-    "Queens": { "inner": 1000, "instructions": 191116467 },
+    "Queens": { "inner": 1000, "instructions": 70748234, "commit": "e17bd67a", "valgrind": "valgrind-3.22.0" },
     "Towers": { "inner": 600, "instructions": 232295927, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
     "List": { "inner": 1500, "instructions": 298271727 },
     "Bounce": { "inner": 1500, "instructions": 229216076, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
