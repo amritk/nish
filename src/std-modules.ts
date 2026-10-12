@@ -151,6 +151,16 @@ const TEXT_SPECIFIER: string = "nish/text"
 export const isTextModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(TEXT_SPECIFIER)
 
+/**
+ * `nish/crypto/aes`: ordinary Nish but for four calls, the seams the emitter
+ * puts behind a branch to the runtime's AES kernels (`src/kernels.ts`).
+ */
+const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
+
+/** Whether a module is the standard library's `std/crypto/aes.ts`: the package is part of the test, as for `isTextModule`. */
+export const isCryptoAesModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(CRYPTO_AES_SPECIFIER)
+
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SECRET_STD_SPECIFIER)
