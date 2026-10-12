@@ -436,8 +436,8 @@ By function rather than by caller, fiat's field multiply `p256FiatMul` is
 
 Natively, the same server built without `-g` used 2.0 to 2.1 ms of user CPU
 and 0.55 to 0.75 ms of system CPU a handshake, read from `/proc/<pid>/stat`
-over two runs of 200 handshakes (30 ms in all over ten, at the clock tick's
-10 ms). An instruction is not a cycle: the bench below puts the signature at
+over two runs of 200 handshakes; ten handshakes alone came to 30 ms of CPU,
+read at the clock tick's 10 ms. An instruction is not a cycle: the bench below puts the signature at
 about 0.75 ms, about 37% of that user time, where its share of the Ir is 69%.
 That suggests fiat's straight-line multiplies retire far more instructions a
 cycle than the rest of the server does. Either way, it is the largest single
@@ -484,9 +484,9 @@ additions (Renes–Costello–Batina Algorithm 5: 11 field multiplies to the ful
 addition's 12) and 64 table reads of two coordinates rather than three. At
 this profile's 25,383 Ir an addition, that is about 1.66 M Ir for `k·G`
 instead of 8.03 M, 4.8x fewer. The rest of the signature does not move: the
-two inversions and the hashing are 1,473,325 Ir, 15.5% of the signature
+two inversions, the hashing and the rest are 1,473,325 Ir, 15.5% of the signature
 today. So the signature comes to about 3.14 M Ir, **about 3.0x** fewer than
-9.50 M, and could not pass 6.4x even if `k·G` cost nothing. `p256PublicKey`
+9.50 M, and could not pass about 6.4x even if `k·G` cost nothing. `p256PublicKey`
 keeps only the field inversion, so it comes to about 3.9x.
 
 **The bar, set before anything is built.** Both of:

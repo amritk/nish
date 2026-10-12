@@ -91,7 +91,8 @@ if (build.status !== 0) {
 
 /**
  * One run of `bin`: `{ answer, times }`, the checksum line and a Map from
- * workload to `{ ns, calls }`. `args` is `[scale]` or `[scale, workload]`.
+ * workload to `{ ns, calls }`. `args` is `[scale]` or `[scale, workload]`, and
+ * `want` names the workloads the run must time.
  */
 const runOnce = (bin, args, want) => {
   const r = spawnSync(bin, args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
@@ -105,14 +106,16 @@ const runOnce = (bin, args, want) => {
       times.set(m[1], { ns: Number(m[2]), calls: Number(m[3]) })
     }
   }
-  if (times.size !== want) {
-    fail(`${rel(bin)} ${args.join(" ")} timed ${times.size} workloads, not ${want}\n${r.stderr}`)
+  if (times.size !== want.length || !want.every((name) => times.has(name))) {
+    fail(
+      `${rel(bin)} ${args.join(" ")} timed ${[...times.keys()].join(", ")}, not ${want.join(", ")}\n${r.stderr}`
+    )
   }
   return { answer: r.stdout.trim(), times }
 }
 
 if (check) {
-  const r = runOnce(exe, [String(CHECK_SCALE)], WORKLOADS.length)
+  const r = runOnce(exe, [String(CHECK_SCALE)], WORKLOADS)
   console.log(r.answer)
   if (r.answer !== CHECK_SUM) {
     console.error(`bench/p256.mjs: printed ${JSON.stringify(r.answer)}, not ${JSON.stringify(CHECK_SUM)}`)
@@ -153,21 +156,19 @@ for (let i = 0; i <= rounds; i++) {
   for (const name of WORKLOADS) {
     for (let j = 0; j < n; j++) {
       const k = (i + 1 + j) % n
-      const r = runOnce(columns[k].bin, ["1", name], 1)
-      const first = answers.get(name) ?? r.answer
-      if (r.answer !== first) {
+      const r = runOnce(columns[k].bin, ["1", name], [name])
+      if (!answers.has(name)) {
+        answers.set(name, r.answer)
+      }
+      if (r.answer !== answers.get(name)) {
         fail(
-          `${columns[k].label}, ${name}, round ${i}, printed ${JSON.stringify(r.answer)}, not ${JSON.stringify(first)}`
+          `${columns[k].label}, ${name}, round ${i}, printed ${JSON.stringify(r.answer)}, not ${JSON.stringify(answers.get(name))}`
         )
       }
-      answers.set(name, first)
       if (i === 0) {
         continue
       }
       const t = r.times.get(name)
-      if (t === undefined) {
-        fail(`${columns[k].label} ran ${name} but timed ${[...r.times.keys()].join(", ")}`)
-      }
       const list = samples[k].get(name) ?? []
       list.push(t.ns / t.calls)
       samples[k].set(name, list)
