@@ -523,8 +523,8 @@ void nish_panic_overflow(uint32_t op);
  * One region of work, divided. `nish_parallel_range` calls `body(lo, hi, ctx)`
  * once per chunk of a partition of `[0, len)`: contiguous chunks, at most one
  * element apart in size, at most `nish_cpu_count()` of them and never more than
- * `len / grain`, with chunk 0 running on the calling thread. It returns when
- * every chunk has run.
+ * `len / grain` rounded up, with chunk 0 running on the calling thread. It
+ * returns when every chunk has run.
  *
  * Under `-DNISH_THREADS` the other chunks run on the worker pool: threads
  * started on the first region or join that divides, one per CPU but the
