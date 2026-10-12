@@ -4667,6 +4667,9 @@ if (!only || "par_alloc".includes(only)) {
 // writes an object of its own between a spawn and the join, and
 // `thread_scope_region_kept_own` builds objects whose constructors keep what
 // they are handed there, writing nothing of the task's.
+// `thread_scope_region_own_handoff` hands the task's argument to a function
+// that returns a fresh object of its own, and to a method that writes a fresh
+// counter from it: neither keeps the task's memory where a write reaches it.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4688,6 +4691,7 @@ for (const name of [
   "thread_channel_ctor_reads",
   "thread_scope_region_fresh_object",
   "thread_scope_region_kept_own",
+  "thread_scope_region_own_handoff",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue

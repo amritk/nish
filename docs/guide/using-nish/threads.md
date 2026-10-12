@@ -136,7 +136,11 @@ export const main = (): i32 => {
   fresh array (`[0]`, `new Array<i32>(n)`) that you only index; never pass it
   on. Inside the block, don't read a destination, and don't write memory a
   task could read — through a constructor either: `new Bump(counter)` whose
-  constructor writes `counter` is refused like a call that does.
+  constructor writes `counter` is refused like a call that does. An object
+  you make in the block is yours to write, until anything a task reads may
+  have got into it: stored in a field or an element, pushed, put in a literal,
+  or handed to a function that keeps it. A field or an element of it counts
+  as much as the object itself.
 - **A task is a named top-level function**, not an arrow, so a debugger or a
   profiler can name its thread. It follows the rules of a parallel `f` above:
   it writes nothing another thread can see (except through a `Mutex` or a

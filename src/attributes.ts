@@ -110,6 +110,8 @@ import {
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
+  N_PROPERTY,
+  N_RETURN,
   N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
@@ -222,6 +224,12 @@ export class PointerParamFacts {
   writesDeep: boolean
   /** A constructor's: memory the parameter reaches is stored into what `this` reaches (fixpoint). */
   keptInThis: boolean
+  /**
+   * Memory that may not be the caller's own is stored somewhere the parameter
+   * reaches, directly or by a callee (fixpoint): after the call, an object of
+   * the caller's own handed here may hold anything (`DIRT_CALL`).
+   */
+  polluted: boolean
   /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
   passedToCallees: string[]
   passedToIndices: i32[]
@@ -235,6 +243,7 @@ export class PointerParamFacts {
     this.writesReach = false
     this.writesDeep = false
     this.keptInThis = false
+    this.polluted = false
     this.passedToCallees = []
     this.passedToIndices = []
   }
@@ -428,6 +437,17 @@ export class DirtMark {
   }
 }
 
+/** A value stored somewhere a parameter reaches (`name`), or somewhere unknown (`name` ""): what may pollute it (`PointerParamFacts.polluted`). */
+class ParamStore {
+  name: string
+  value: ValueDesc
+
+  constructor(name: string, value: ValueDesc) {
+    this.name = name
+    this.value = value
+  }
+}
+
 /** A `const` of this function and the path its name resolves to, cached (`FactCollector.pathOf`). */
 class LocalPath {
   local: Local
@@ -572,6 +592,8 @@ export class FunctionFacts {
   localPaths: LocalPath[]
   /** What may hold memory a parameter reaches below this call's own objects (`DirtMark`). */
   dirt: DirtMark[]
+  /** The stores this body makes somewhere a parameter, or something unknown, reaches (`ParamStore`). */
+  paramStores: ParamStore[]
   /**
    * A constructor that keeps in `this` memory it cannot name the parameter
    * of: `this` handed to a call, used as a value, or a value of unknown origin
@@ -778,6 +800,7 @@ export class FunctionFacts {
     this.ownLocals = []
     this.localPaths = []
     this.dirt = []
+    this.paramStores = []
     this.keepsUnknown = false
     this.wholeCallees = new StringSet()
     this.privateArrays = []
@@ -1962,9 +1985,11 @@ class FactCollector {
       return
     }
     if (init.kind === N_OBJECT) {
+      // An N_PROPERTY keeps its key in `text` and its value, a name for the
+      // shorthand `{ k }` included, in its one child.
       for (const property of init.children) {
-        if (property.children.length > 1) {
-          this.noteStore(key, `.${property.children[0].text}`, property.children[1])
+        if (property.kind === N_PROPERTY && property.children.length > 0) {
+          this.noteStore(key, `.${property.text}`, property.children[0])
         }
       }
       return
@@ -1983,6 +2008,25 @@ class FactCollector {
       }
     }
     this.facts.dirt.push(mark)
+  }
+
+  /**
+   * `value` stored into the slot `slot` names: into an object of this call's
+   * own a `DIRT_STORE`, anywhere a parameter or something unknown reaches a
+   * `ParamStore`, unless the value is plainly clean.
+   */
+  noteSlotStore(slot: MemPath, value: Node): void {
+    if (slot.kind === ROOT_OWN) {
+      this.noteStore(slot.name, slot.steps, value)
+      return
+    }
+    if (slot.kind === ROOT_NONE) {
+      return
+    }
+    const desc = this.valueOf(value)
+    if (desc.params.length > 0 || desc.owns.length > 0 || desc.ctors.length > 0 || desc.unknown) {
+      this.facts.paramStores.push(new ParamStore(slot.kind === ROOT_PARAM ? slot.name : "", desc))
+    }
   }
 
   /** `value` stored into the slot `steps` of the object `key`: a `DIRT_STORE` unless it is plainly clean. */
@@ -2038,8 +2082,10 @@ class FactCollector {
     }
     if (v.kind === N_OBJECT) {
       for (const property of v.children) {
-        if (property.children.length > 1) {
-          this.describe(property.children[1], desc)
+        if (property.kind === N_PROPERTY && property.children.length > 0) {
+          this.describe(property.children[0], desc)
+        } else {
+          desc.unknown = true // a spread, which the validator refuses, or anything else
         }
       }
       return
@@ -2062,10 +2108,7 @@ class FactCollector {
     if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
       const target = unwrapParens(node.children[0])
       if (target.kind === N_MEMBER || target.kind === N_INDEX) {
-        const slot = this.pathOf(target)
-        if (slot.kind === ROOT_OWN) {
-          this.noteStore(slot.name, slot.steps, node.children[1])
-        }
+        this.noteSlotStore(this.pathOf(target), node.children[1])
       }
       return
     }
@@ -2073,43 +2116,53 @@ class FactCollector {
     const receiver = methodReceiver(node)
     if ((method === "push" || method === "fill") && receiver !== null) {
       const array = this.pathOf(receiver)
-      if (array.kind === ROOT_OWN) {
-        for (const arg of node.children[1].children) {
-          this.noteStore(array.name, `${array.steps}[]`, arg)
-        }
+      const slot = new MemPath(array.kind, array.name, `${array.steps}[]`)
+      for (const arg of node.children[1].children) {
+        this.noteSlotStore(slot, arg)
       }
     }
   }
 
   /**
-   * A name for an object of this call's own, used as a value the analysis
-   * does not follow — stored, returned, an element of a literal, an arm of a
-   * `?:` — so whatever holds it now may put anything in it: everything below
-   * it may be anything (`DIRT_ESCAPE`). The base of a field or an element, a
-   * `const`'s initialiser (followed by `pathOf`), the iterable of a
-   * `for...of`, and an argument (`DIRT_CALL`, composed with the callee) are
-   * the uses it follows.
+   * The one rule for an object of this call's own (or a part of one) used as
+   * a value: every path expression — a name, `this`, a field or an element
+   * chain — of a type that is not a number, a `boolean` or a string, rooted at
+   * such an object, makes everything below what it names may-be-anything
+   * (`DIRT_ESCAPE`), unless where it stands is one the analysis follows: the
+   * target of an assignment or of `++`/`--`, the initialiser of a `const`
+   * (which `pathOf` follows), an argument of a user function or a `new`
+   * (composed with the callee, `DIRT_CALL`), the callee of a call, an operand
+   * of a comparison, a `return` (what the caller does with it is the
+   * caller's), or a statement of its own. Every other place — the right side
+   * of an assignment, an element of an array literal, a property of an object
+   * literal, an argument of `push` or any builtin, an arm of a `?:`, the
+   * iterable of a `for...of` — hands the object on to something the analysis
+   * does not follow.
    */
   noteEscape(node: Node): void {
-    if (node.kind !== N_THIS && node.kind !== N_IDENT) {
+    if (node.kind !== N_IDENT && node.kind !== N_THIS && node.kind !== N_MEMBER && node.kind !== N_INDEX) {
+      return
+    }
+    const program = this.unit.program
+    const above = this.unit.parents.parentOf(node)
+    if (above !== null && (above.kind === N_MEMBER || above.kind === N_INDEX) && above.children[0] === node) {
+      return // part of a longer path, which is judged where it ends
+    }
+    if (above !== null && above.kind === N_VAR_DECL && above.children[0] === node) {
+      return // the name a declaration binds
+    }
+    const type = program.nodeTypes[node.id]
+    if (type < 0 || type === T_STRING || isScalarArgument(this.table, this.table.stripNull(type))) {
       return
     }
     if (node.kind === N_THIS && !this.facts.freshThis) {
       return
     }
     if (node.kind === N_IDENT) {
-      const local: Local | null = this.unit.program.nodeLocals[node.id]
+      const local: Local | null = program.nodeLocals[node.id]
       if (local === null || local.storage === STORAGE_PARAM) {
         return
       }
-      const declares = this.unit.parents.parentOf(node)
-      if (declares !== null && declares.kind === N_VAR_DECL && declares.children[0] === node) {
-        return
-      }
-    }
-    const path = this.pathOf(node)
-    if (path.kind !== ROOT_OWN) {
-      return
     }
     let at = node
     let parent = this.unit.parents.parentOf(at)
@@ -2117,32 +2170,43 @@ class FactCollector {
       at = parent
       parent = this.unit.parents.parentOf(at)
     }
-    if (parent === null) {
+    if (parent !== null && this.followsUse(parent, at)) {
       return
     }
-    if ((parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at) {
-      return
+    const path = this.pathOf(node)
+    if (path.kind === ROOT_OWN) {
+      this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
     }
-    if (parent.kind === N_FOR_OF && parent.children[1] === at) {
-      return
+  }
+
+  /** Whether `at`, a path expression under `parent`, stands where the analysis follows it (`noteEscape`). */
+  followsUse(parent: Node, at: Node): boolean {
+    const program = this.unit.program
+    if (parent.kind === N_BINARY) {
+      if (isAssignmentOperator(parent.text)) {
+        return parent.children[0] === at
+      }
+      return parent.text !== "??"
+    }
+    if (parent.kind === N_UNARY || parent.kind === N_RETURN || parent.kind === N_EXPR_STMT) {
+      return true
+    }
+    if (parent.kind === N_CALL) {
+      return parent.children[0] === at
     }
     if (parent.kind === N_VAR_DECL && parent.children[2] === at) {
-      const bound: Local | null = this.unit.program.nodeLocals[parent.id]
-      if (bound !== null && !bound.mutable) {
-        return
-      }
+      const bound: Local | null = program.nodeLocals[parent.id]
+      return bound !== null && !bound.mutable
     }
     if (parent.kind === N_LIST) {
       const call = this.unit.parents.parentOf(parent)
-      if (
+      return (
         call !== null &&
         (call.kind === N_CALL || call.kind === N_NEW) &&
-        this.unit.program.nodeCallees[call.id] !== null
-      ) {
-        return
-      }
+        program.nodeCallees[call.id] !== null
+      )
     }
-    this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
+    return false
   }
 
   /** The private array `e` names (`FunctionFacts.privateArrays`), or null. */
@@ -4250,6 +4314,33 @@ const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
   return false
 }
 
+/** Whether `value` is clean as `f` now sees it: no parameter's memory, nothing of unknown origin. */
+const valueClean = (facts: FactsTable, f: FunctionFacts, value: ValueDesc): boolean =>
+  value.params.length === 0 && !valueUnknown(facts, f, value)
+
+/** Mark the parameter `name` of `f` as polluted, or every pointer parameter when `name` is ""; answers whether that moved anything. */
+const polluteName = (f: FunctionFacts, name: string): boolean => {
+  let changed = false
+  for (const pp of f.pointerParams) {
+    if ((name.length === 0 || pp.name === name) && !pp.polluted) {
+      pp.polluted = true
+      changed = true
+    }
+  }
+  return changed
+}
+
+/** A callee may store memory not the caller's into what `path` names: pollute the parameter it is rooted at, or every one for an unknown root. */
+const pollutePath = (f: FunctionFacts, path: MemPath): boolean => {
+  if (path.kind === ROOT_PARAM) {
+    return polluteName(f, path.name)
+  }
+  if (path.kind === ROOT_UNKNOWN) {
+    return polluteName(f, "")
+  }
+  return false
+}
+
 /** Whether `f` has an active `DirtMark` on its object `key`. */
 const isDirty = (f: FunctionFacts, key: string): boolean => {
   for (const d of f.dirt) {
@@ -4339,18 +4430,7 @@ const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
  * writes what the argument names, and an argument of the caller's own may
  * hold anything from then on (`DIRT_CALL`).
  */
-const callWrites = (f: FunctionFacts, edge: ArgEdge, deep: boolean): boolean => {
-  let changed = false
-  const mark = edge.dirt
-  if (mark !== null && !mark.active) {
-    mark.active = true
-    changed = true
-  }
-  if (markPath(f, edge.path, deep)) {
-    changed = true
-  }
-  return changed
-}
+const callWrites = (f: FunctionFacts, edge: ArgEdge, deep: boolean): boolean => markPath(f, edge.path, deep)
 
 /**
  * An object of the caller's own handed to a callee that keeps it: whatever
@@ -4367,11 +4447,22 @@ const keepsOwn = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): boolean =
   }
   const g = facts.get(edge.callee)
   const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
-  let keeps = g === null || target === null
-  if (g !== null && target !== null) {
-    keeps = g.freshThis ? g.keepsUnknown || target.keptInThis : target.captured
+  if (edge.index < 0) {
+    // A receiver of a callee taken whole: what it may store is unknown.
+    if (g !== null && !g.sharedWrite) {
+      return false
+    }
+    mark.active = true
+    return true
   }
-  if (!keeps || (edge.heldBy.length > 0 && !isDirty(f, edge.heldBy))) {
+  // A callee that may store memory not the caller's into what it is handed.
+  const polluted = g === null || target === null || target.polluted
+  let keeps = polluted
+  if (g !== null && target !== null) {
+    const held = g.freshThis ? g.keepsUnknown || target.keptInThis : target.captured
+    keeps = keeps || (held && (edge.heldBy.length === 0 || isDirty(f, edge.heldBy)))
+  }
+  if (!keeps) {
     return false
   }
   mark.active = true
@@ -4430,7 +4521,19 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   }
   for (const edge of f.wholeReaches) {
     const g = facts.get(edge.callee)
-    if ((g === null || g.sharedWrite) && callWrites(f, edge, true)) {
+    const writes = g === null || g.sharedWrite
+    if (writes && callWrites(f, edge, true)) {
+      changed = true
+    }
+    if (keepsOwn(facts, f, edge)) {
+      changed = true
+    }
+    if (writes && pollutePath(f, edge.path)) {
+      changed = true
+    }
+  }
+  for (const store of f.paramStores) {
+    if (!valueClean(facts, f, store.value) && polluteName(f, store.name)) {
       changed = true
     }
   }
@@ -4445,6 +4548,13 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     const reached = g === null || (target !== null && target.writesReach && g.sharedWrite)
     if (reached && callWrites(f, edge, target === null || target.writesDeep)) {
+      changed = true
+    }
+    if (
+      (g === null || target === null || target.polluted) &&
+      edge.owner === null &&
+      pollutePath(f, edge.path)
+    ) {
       changed = true
     }
     const owner = edge.owner

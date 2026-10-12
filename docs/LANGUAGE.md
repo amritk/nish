@@ -2547,9 +2547,23 @@ export const main = (): i32 => {
     against nothing, until memory an argument reaches may have got into it:
     stored into a field or an element at any depth, pushed, put there by a
     method or a function it was handed to, kept by its constructor from an
-    argument, or the object itself (or a constructor's `this`) used as a value
-    the checker does not follow — stored elsewhere, an element of a literal,
-    an arm of a `?:`. A write below such a slot counts against the arguments
+    argument, or any non-number value rooted at it — the object, a field or
+    an element of it at any depth, a constructor's `this` or `this.f` — used
+    as a value anywhere but a read, a comparison or an argument the checker
+    follows into its callee: the right side of an assignment, a `const`'s
+    initialiser, an element of an array literal, a property of an object
+    literal, `{ k: v }` or `{ k }`, an argument of `push` or of a call, an arm
+    of a `?:`. Each position is refused for each form of the value, a local,
+    a field, an element and `this.f`
+    (`reject_thread_region_escape_<position>_<form>`, with positions
+    `assign`, `alias`, `array`, `object`, `shorthand`, `push`, `call`,
+    `ternary` and `element`, forms `local`, `member`, `index` and
+    `this_field`, and `_this` for the bare `this`), and an object literal
+    whose property is an argument's memory carries it however it is written
+    (`reject_thread_region_literal_object_param`, `_shorthand_param`,
+    `_array_object_param`, `_field_object_param`, `_push_object_param`,
+    `_new_object_param`, `_object_const_param`, `_object_method_param`). A
+    write below such a slot counts against the arguments
     whose memory may be there, or against all of them when that cannot be
     told (`reject_thread_region_new_alias_field`, `_alias_push`,
     `_alias_element`, `_alias_const`, `_alias_helper`, `_alias_method`,
@@ -2562,7 +2576,11 @@ export const main = (): i32 => {
     handed keeps it per argument, so one that keeps the caller's own array, or
     pushes an argument's object onto an array it made, writes nothing of the
     task's (`tests/link/thread_scope_region_fresh_object`,
-    `thread_scope_region_kept_own`). A task argument read out of a
+    `thread_scope_region_kept_own`), and a call that only writes its argument,
+    or returns an object of its own, keeps nothing of the caller's in it:
+    `w = build(h)` on a function that returns a fresh object, and
+    `c.reset(h.nums[0])` on a fresh counter followed by writes into `c`
+    (`thread_scope_region_own_handoff`). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the
