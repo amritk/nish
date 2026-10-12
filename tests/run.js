@@ -14381,10 +14381,12 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
     )
 
     // `--only par` is the other way to write the report: it replaces the
-    // data-parallel table alone and keeps every other section byte for byte,
-    // the marked one included (bench/README.md). The five kernels run at sizes
-    // that take milliseconds, so what is checked is the splice, not a timing.
-    // A subset of the kernels writes nothing and says so.
+    // data-parallel table, and the table of Nish against its Rust and Go
+    // twins, and keeps every other section byte for byte, the marked one
+    // included (bench/README.md). The six kernels run at sizes that take
+    // milliseconds, so what is checked is the splice, not a timing. A subset
+    // of the kernels writes nothing and says so. Rayon is left out
+    // (`--no-rayon`): its twins need crates.io, and a check needs no network.
     const parOut = path.join(buildDir, "json-compare", "benchmarks-par.md")
     const parHeading = "## Data parallelism (ms, min / median)"
     const parBefore = [
@@ -14399,7 +14401,8 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
+      "--no-rayon",
       "--runs",
       "1",
       "--warmup",
@@ -14423,7 +14426,42 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         parSection.includes("`node bench/run.mjs --only par`"),
       parRun.status === 0 ? parText : `${parRun.stdout}${parRun.stderr}`
     )
-    const parSpliced = parText
+    // The report the check builds has no twins' table, so the first run that
+    // measures one puts it under the data-parallel table, once; and a run
+    // that cannot measure it (no rustc, no go) keeps the one there is and says
+    // why. Without either toolchain on this machine there is no twin to run.
+    const twinsHeading = "## Data parallelism against Rust and Go (ms, min / median)"
+    if (parRun.stderr.includes("the table of Nish against Rust and Go is not measured")) {
+      skip("bench: `--only par` and the Rust and Go twins (neither rustc nor go on PATH)")
+    } else {
+      const twinsAt = parText.indexOf(twinsHeading)
+      const twinsTable = parText.slice(twinsAt, parText.indexOf("## Checksums"))
+      check(
+        "bench: `--only par` puts the table of Nish against its Rust and Go twins under the data-parallel one, once, every twin printing the Nish checksum",
+        parRun.status === 0 &&
+          twinsAt > parText.indexOf(parHeading) &&
+          parText.split(twinsHeading).length === 2 &&
+          ["par-compute", "par-nbody", "par-regions", "par-histogram"].every((k) =>
+            twinsTable.includes(`| ${k} |`)
+          ) &&
+          twinsTable.includes("every binary below printed the Nish `par` run's output"),
+        parRun.status === 0 ? parText : `${parRun.stdout}${parRun.stderr}`
+      )
+      const bare = spawnSync(
+        "node",
+        [...parArgs.slice(0, 3), "--only", "par", "--no-rust", "--no-go", ...parArgs.slice(3)],
+        { cwd: root, encoding: "utf8" }
+      )
+      const bareText = bare.status === 0 ? fs.readFileSync(parOut, "utf8") : ""
+      check(
+        "bench: `--only par` without rustc or go keeps the twins' table it cannot measure, and says so",
+        bare.status === 0 &&
+          bare.stderr.includes("the table of Nish against Rust and Go is not measured") &&
+          bareText.slice(bareText.indexOf(twinsHeading)) === parText.slice(twinsAt),
+        bare.status === 0 ? bareText : `${bare.stdout}${bare.stderr}`
+      )
+    }
+    const parSpliced = fs.readFileSync(parOut, "utf8")
     const subset = spawnSync("node", [...parArgs.slice(0, 3), "--only", "par-short", ...parArgs.slice(3)], {
       cwd: root,
       encoding: "utf8",

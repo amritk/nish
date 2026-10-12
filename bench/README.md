@@ -18,6 +18,7 @@ node bench/run.mjs --n fib=30,sieve=1000000   # other sizes (rewrites the `bench
 node bench/run.mjs --validate --only fib,sieve --n fib=25,sieve=100000   # what CI runs: checksums only
 node bench/run.mjs --no-rust              # skip Rust even when rustc is installed
 node bench/run.mjs --no-go                # skip Go even when the go tool is installed
+node bench/run.mjs --no-rayon             # skip the Rayon twins of the parallel kernels
 ```
 
 The report's header describes the **run**, not the checkout that happens to
@@ -80,13 +81,13 @@ a garbage collector, not `free` or an arena, reclaims the intermediates — so
 
 ## Data parallelism
 
-Five more programs measure `parallelMapInto` from `nish/threads`
-([wp29](../docs/wp29-thread-surface.md) §4.1) against the loop it replaces.
-They have no twins. Each is one Nish binary that runs the loop when its first
-argument is `seq` and the map when it is `par`, and the two runs must print the
-same checksum. The table in `docs/BENCHMARKS.md` gives the loop's time, the
-map's time on every core the machine has, the ratio and the peak memory of
-both.
+Six more programs measure `nish/threads`
+([wp29](../docs/wp29-thread-surface.md) §4): five `parallelMapInto` against the
+loop it replaces, and one scope whose tasks share a `Mutex`. Each is one Nish
+binary that runs the loop when its first argument is `seq` and the parallel
+form when it is `par`, and the two runs must print the same checksum. The
+first table in `docs/BENCHMARKS.md` gives the loop's time, the parallel time on
+every core the machine has, the ratio and the peak memory of both.
 
 | Name | What it measures | Size (`bench:n`) |
 | --- | --- | --- |
@@ -95,17 +96,58 @@ both.
 | `par-nbody` | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body | 1024 bodies, 16 steps |
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 | `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
+| `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
 
 ```bash
-node bench/run.mjs --only par            # the five; `--only par-nbody` names one
-node bench/run.mjs --validate --only par # both runs of each, checksums only
+node bench/run.mjs --only par            # the six and their twins; `--only par-nbody` names one
+node bench/run.mjs --validate --only par # both runs of each and every twin, checksums only
 ```
 
-`--only par` rewrites the data-parallel table of `docs/BENCHMARKS.md` and
-nothing else: every other section, the header and json-compare's marked
-section included, stays byte for byte, and the table says the date, the CPU
-and the commit it was measured at, since those may differ from the header's.
-It does so only when all five kernels ran and nothing else was timed. A subset
+### Against Rust and Go
+
+`par-compute`, `par-nbody`, `par-regions` and `par-histogram` have twins, so
+the second table in `docs/BENCHMARKS.md` compares the Nish `par` run with the
+same program in Rust and in Go:
+
+| File | Threads |
+| --- | --- |
+| `par-<kernel>.rs` | `std::thread::scope`, built by `rustc` with the flags of the main table |
+| `par-<kernel>-rayon.rs` | Rayon's global pool (`par_iter_mut`, `rayon::scope` for the histogram), built by cargo as one package in `build/bench/rayon` with the same profile |
+| `par-<kernel>.go` | goroutines and a `sync.WaitGroup`, built by `go build` |
+
+Each twin does the same work at the same size (its `bench:n` line follows
+`--n`) and must print the checksum the Nish `par` run prints, or the run fails.
+The map twins cut the array into one contiguous chunk per core and run the
+first on the calling thread, which is how Nish's partitioner divides these
+kernels; the Rayon twins split as Rayon does. `par-regions`' scope twin starts
+its threads on every call, because a scope cannot outlive it; the Rayon twin
+and the Go twin are the ones with a pool to compare with Nish's workers. The
+histogram takes a lock per value in every language (`Mutex`,
+`std::sync::Mutex`, `sync.Mutex`): Nish has no atomic counter yet, and a lock in
+one language against an atomic in another would not be the same program.
+
+The binaries are timed in interleaved rounds, eleven unless `--runs` says
+otherwise, after `--warmup`. In each round every binary *and a byte-identical
+copy of it* runs once, in an order that rotates by one each round. The noise
+band of a kernel is the widest gap between a binary and its copy over the
+kernel's binaries, on the minimum and on the median. The table divides Nish's
+minimum (median) by the fastest other column's, and reads the ratio as faster
+or slower only outside the band; where Nish loses by more than 1.10x, it says
+so. The section stamps the date, the CPU, the core count, every compiler's
+version and the commit: a run on a branch names the `main` commit the branch
+grew from, because a squash merge does not keep the branch's own commits.
+
+A missing toolchain is a skipped column, never a failure: without `rustc` the
+Rust columns go, without cargo or without crates.io the Rayon column goes, and
+with neither `rustc` nor `go` the table is not measured and the report keeps
+the one it has. Each says so on stderr.
+
+`--only par` rewrites these two tables of `docs/BENCHMARKS.md` and nothing
+else: every other section, the header and json-compare's marked section
+included, stays byte for byte, and each table says the date, the CPU and the
+commit it was measured at, since those may differ from the header's. A report
+with no twins' table gets one under the data-parallel table. It writes only
+when all six kernels ran and nothing else was timed. A subset
 (`--only par-nbody`), a report with no data-parallel table, and the map half of
 `--only maps,par` leave the file as it was, and the run says so; any run that
 times the benchmark tables rewrites the whole report, as a full run does.
