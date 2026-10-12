@@ -1,0 +1,114 @@
+0 Hello, World! {"message":"Hello, World!"}
+PASS  full: decodes
+PASS  full: encodes back to the same text
+PASS  full: two players
+PASS  full: the captain is an object of its own
+PASS  any order: decodes
+PASS  any order: declaration order
+PASS  escapes: decodes
+PASS  escapes: the name is its UTF-8 bytes
+PASS  escapes: encoded as JSON.stringify writes it
+PASS  1e400: Infinity, written as null
+PASS  reuse: decodes into the same object
+PASS  reuse: what is left is the new text
+PASS  reuse: the array of players shrank
+PASS  reuse: the first player is the same object
+PASS  reuse: the home team is the same object
+PASS  reuse: and back
+PASS  reuse: back to the first text
+PASS  reuse: 1,000 decodes all succeed
+PASS  reuse: Arena.used() is flat over 1,000 decodes into one object
+PASS  reuse: 100 changed strings keep only the strings (21600 bytes)
+PASS  a string for an i32: code
+PASS  a string for an i32: errorAt
+PASS  a fraction for an i32: code
+PASS  a fraction for an i32: errorAt
+PASS  an exponent for an i32: code
+PASS  an exponent for an i32: errorAt
+PASS  2^31 for an i32: code
+PASS  2^31 for an i32: errorAt
+PASS  -2^31 - 1 for an i32: code
+PASS  -2^31 - 1 for an i32: errorAt
+PASS  -2^63 - 1 for an i64: code
+PASS  -2^63 - 1 for an i64: errorAt
+PASS  -1 for a u32: code
+PASS  -1 for a u32: errorAt
+PASS  2^32 for a u32: code
+PASS  2^32 for a u32: errorAt
+PASS  2^63 for an i64: code
+PASS  2^63 for an i64: errorAt
+PASS  true for an f64: code
+PASS  true for an f64: errorAt
+PASS  1 for a boolean: code
+PASS  1 for a boolean: errorAt
+PASS  a number for a string: code
+PASS  a number for a string: errorAt
+PASS  null for a string that is not | null: code
+PASS  null for a string that is not | null: errorAt
+PASS  an array for an i32: code
+PASS  an array for an i32: errorAt
+PASS  an unknown key: code
+PASS  an unknown key: errorAt
+PASS  a duplicate key: code
+PASS  a duplicate key: errorAt
+PASS  a missing key: code
+PASS  a missing key: errorAt
+PASS  an empty object: code
+PASS  an empty object: errorAt
+PASS  an array at the top: code
+PASS  an array at the top: errorAt
+PASS  null at the top: code
+PASS  null at the top: errorAt
+PASS  a syntax error: code
+PASS  a syntax error: errorAt
+PASS  a truncated object: code
+PASS  a truncated object: errorAt
+PASS  a second value after the object: code
+PASS  a second value after the object: errorAt
+PASS  an empty input: code
+PASS  an empty input: errorAt
+PASS  nested: an unknown key in an element
+PASS  nested: a duplicate key in an element
+PASS  nested: a missing key in an element
+PASS  nested: a wrong type in an element
+PASS  nested: a missing key in a | null object
+PASS  nested: an element that is not an object
+PASS  nested: an object where the array is
+PASS  nested: a string in an array of strings that is a number
+PASS  nested: null for an array that is not | null
+PASS  sticky: the first decode fails
+PASS  sticky: a second decode answers the same code
+PASS  sticky: at the same byte
+PASS  sticky: reset clears it
+PASS  ignoreUnknown: unknown keys and their values are stepped over
+PASS  ignoreUnknown: a duplicate field is still refused
+PASS  ignoreUnknown: what is stepped over is still checked
+PASS  limits: depth
+PASS  limits: a string's bytes
+PASS  limits: a number's bytes
+PASS  limits: the whole input
+PASS  limits: a depth bomb
+PASS  limits: invalid UTF-8
+PASS  encode: a chain
+PASS  encode: a buffer too small is the writer's code
+PASS  encode: an object that holds itself ends at the writer's depth
+PASS  encode: and through an array
+PASS  encode: a new Match
+PASS  encode: inside a using arena() block, every pass writes the same text
+PASS  | null array of objects: null decodes
+PASS  | null array of objects: null encodes
+PASS  | null array of objects: an array decodes into the null field
+PASS  | null array of objects: and encodes
+PASS  | null array of objects: a shorter array decodes into the array it holds
+PASS  | null array of objects: what is left is the shorter one
+PASS  | null array of objects: and back to null
+PASS  | null array of objects: null again
+PASS  null in an array of i32: code
+PASS  null in an array of i32: errorAt
+PASS  null in an array of objects: code
+PASS  null in an array of objects: errorAt
+PASS  null in an array of strings: code
+PASS  null in an array of strings: errorAt
+PASS  ignoreUnknown: keys stepped over in an element and in a | null object
+PASS  ignoreUnknown: every key after a skipped one is still read
+std_json_typed: 112 passed, 0 failed, 0 skipped

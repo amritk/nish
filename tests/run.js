@@ -4117,6 +4117,8 @@ const LINK_READ_LATER = [
   "range_export_napi_async",
   "range_export_unproven",
   ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  "std_json_tokenizer",
+  "std_json_typed",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -4824,6 +4826,176 @@ for (const name of [
   }
 }
 
+// `nish/json-tokenizer` against Node's own parser: the token stream the native
+// tokenizer gives every y_ file of JSONTestSuite (`app --tokens`, strings as the
+// hex of their UTF-8 and numbers as the bits of `numberF64`) is rebuilt into a
+// value with plain objects, so that a duplicate key and an integer-like key land
+// where `JSON.parse` puts them, and both values are walked into the same token
+// words. A number compares by its bits, so `numberF64` must be correctly rounded
+// for every number in the corpus, and `-0` must stay negative.
+if (!only || "std_json_tokenizer".includes(only)) {
+  const corpusFile = path.join(root, "tests", "json-suite", "test-parsing.txt")
+  const exe = path.join(buildDir, "link", "std_json_tokenizer", "app")
+  if (!HAS_CLANG) {
+    skip(
+      "skipped: link/std_json_tokenizer: no clang, so there is no native tokenizer to hold against JSON.parse"
+    )
+  } else {
+    const bits = (x) => {
+      const view = new DataView(new ArrayBuffer(8))
+      view.setFloat64(0, x)
+      return String(view.getBigInt64(0))
+    }
+    const hex = (s) => Buffer.from(s, "utf8").toString("hex")
+    const walk = (v, out) => {
+      if (Array.isArray(v)) {
+        out.push("[")
+        for (const e of v) {
+          walk(e, out)
+        }
+        out.push("]")
+      } else if (v === null) {
+        out.push("z")
+      } else if (typeof v === "object") {
+        out.push("{")
+        for (const k of Object.keys(v)) {
+          out.push(`k:${hex(k)}`)
+          walk(v[k], out)
+        }
+        out.push("}")
+      } else if (typeof v === "string") {
+        out.push(`s:${hex(v)}`)
+      } else if (typeof v === "number") {
+        out.push(`n:${bits(v)}`)
+      } else {
+        out.push(v ? "t" : "f")
+      }
+      return out
+    }
+    // The native words back into a value: the inverse of `walk`, with JSON.parse's
+    // rule for a repeated key (the last value, at the first one's place).
+    const rebuild = (words) => {
+      let at = 0
+      const value = () => {
+        const w = words[at++]
+        if (w === "[") {
+          const a = []
+          while (words[at] !== "]") {
+            a.push(value())
+          }
+          at++
+          return a
+        }
+        if (w === "{") {
+          const o = {}
+          while (words[at] !== "}") {
+            const k = Buffer.from(words[at++].slice(2), "hex").toString("utf8")
+            o[k] = value()
+          }
+          at++
+          return o
+        }
+        if (w.startsWith("s:")) {
+          return Buffer.from(w.slice(2), "hex").toString("utf8")
+        }
+        if (w.startsWith("n:")) {
+          const view = new DataView(new ArrayBuffer(8))
+          view.setBigInt64(0, BigInt(w.slice(2)))
+          return view.getFloat64(0)
+        }
+        if (w === "z") {
+          return null
+        }
+        return w === "t"
+      }
+      return value()
+    }
+    const files = new Map()
+    for (const line of fs.readFileSync(corpusFile, "utf8").split("\n")) {
+      if (line.startsWith("y_")) {
+        const space = line.indexOf(" ")
+        const packed = line.slice(space + 1)
+        files.set(
+          line.slice(0, space),
+          Buffer.from(
+            packed.replace(/%([0-9A-F]{2})/g, (_, h) => String.fromCharCode(Number.parseInt(h, 16))),
+            "latin1"
+          )
+        )
+      }
+    }
+    const run = spawnSync(exe, ["--tokens"], { cwd: root, encoding: "utf8" })
+    const problems = []
+    let compared = 0
+    const seen = new Set()
+    for (const line of String(run.stdout ?? "")
+      .split("\n")
+      .filter((l) => l.length > 0)) {
+      const words = line.split(" ")
+      const name = words[0]
+      const bytes = files.get(name) ?? null
+      seen.add(name)
+      if (bytes === null || words[words.length - 1] !== "END") {
+        problems.push(`${name}: ${bytes === null ? "not in the corpus" : words[words.length - 1]}`)
+        continue
+      }
+      const native = words.slice(1, -1)
+      const want = walk(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), []).join(" ")
+      const got = walk(rebuild(native), []).join(" ")
+      compared++
+      if (got !== want) {
+        problems.push(`${name}\n  native ${got}\n  node   ${want}`)
+      }
+    }
+    for (const name of files.keys()) {
+      if (!seen.has(name)) {
+        problems.push(`${name}: no token stream`)
+      }
+    }
+    check(
+      `link/std_json_tokenizer: the token stream of each of the ${files.size} y_ files of JSONTestSuite is JSON.parse's value, numbers bit for bit`,
+      run.status === 0 && compared === files.size && files.size > 0 && problems.length === 0,
+      run.status !== 0 ? shown(run) : problems.join("\n")
+    )
+  }
+}
+
+// `nish/json-tokenizer` has to load under Node, because the typed layer's Node
+// differential imports it: a construct Node 22 cannot parse (a `using`
+// declaration) or an `i64` built from a bare literal (a double where `toI64`
+// gives a BigInt) breaks it there and nowhere natively. `node.ts` tokenizes a
+// small ASCII input under the plain prelude, through the parseFloat path,
+// `numberI64` at the i64 edges, an escaped surrogate pair's decoded bytes and
+// `keyEquals` both ways, and prints the line the native build prints.
+if (!only || "std_json_tokenizer".includes(only)) {
+  const entry = path.join(linkDir, "std_json_tokenizer", "node.ts")
+  const want = [
+    "1 5:6162= 3 7:1/1 7:-25 6:780a41f09f9880 8 9 10 1 2 4 5:6163! 7:1e+23 5:6c6f6e67! 7:0.12345678901234566 2 0@-1",
+    "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000 7:0/0 4 0@-1",
+    "3 7:1/1 -1@3",
+    "",
+  ].join("\n")
+  const run = runUnderPrelude(entry, [])
+  check(
+    "link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively",
+    run.status === 0 && run.stdout === want,
+    shown(run)
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "json_tokenizer_node") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to",
+      native.status === 0 && native.stdout === want,
+      shown(native)
+    )
+  } else {
+    skip("skipped: link/std_json_tokenizer: no clang, so node.ts is not built natively")
+  }
+}
+
 // WP38 S1: `indexOfAny` from `nish/text` is the runtime kernel natively and
 // the walker `std/text.ts` writes under Node, so the four programs that call it
 // print the same and exit the same both ways: the edges, and the three sets it
@@ -4974,6 +5146,101 @@ if (!only || "std_json_writer".includes(only)) {
   } else {
     skip("skipped: link/std_json_writer: no clang, so node.ts is not built natively")
   }
+}
+
+// Typed JSON (`nish/json-typed`) against Node's own parser and writer: each
+// line of `round-trip.txt` decoded into a `Match` and encoded back by the
+// native program must be `JSON.stringify(JSON.parse(line))`, computed here.
+// The lines are ASCII, hold no integer past 2^53, and list each object's keys
+// in the class's declaration order, the order the encoding writes. Under Node
+// the program cannot run that half at all: the types are erased, so
+// `jsonDecode` and `jsonEncode` panic with the sentence below, the class C
+// divergence docs/LANGUAGE.md ("Typed JSON") records, and that is held too.
+if (!only || "std_json_typed".includes(only)) {
+  const dir = path.join(linkDir, "std_json_typed")
+  const inputs = path.join(dir, "round-trip.txt")
+  const lines = fs
+    .readFileSync(inputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  check(
+    "link/std_json_typed: round-trip.txt is ASCII",
+    lines.every((l) => /^[\x20-\x7e]*$/.test(l)),
+    lines.join("\n")
+  )
+  const want = lines.map((l) => `${JSON.stringify(JSON.parse(l))}\n`).join("")
+  const exe = path.join(buildDir, "link", "std_json_typed", "app")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip", inputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${lines.length} lines decoded and encoded natively is JSON.stringify(JSON.parse(line))`,
+      native.status === 0 && native.stdout === want,
+      `--- JSON.stringify(JSON.parse(line))\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
+  }
+  // What `jsonDecode` calls does run under Node: `readers.ts` drives the
+  // decoder's readers directly, at both ends of each integer range, and both
+  // runs must print these lines: every reader once, and each integer reader
+  // at both ends of its range. An `i64` is a BigInt there, so a reader that
+  // mixed one with a number throws.
+  const readerLines = [
+    "i32 2147483647 -2147483648",
+    "u32 4294967295 0",
+    "i64 9223372036854775807 -9223372036854775808",
+    "string abc",
+    "i32Array 2 1 -2",
+    "i64Array 2 -9223372036854775808 9223372036854775807",
+    "failed 0",
+    "i32 below its range -21 at 1",
+    "i64 below its range -21 at 1",
+    "u32 below its range -21 at 1",
+    "u32 above its range -21 at 1",
+    "u32Array 2 7 4294967295",
+    "f64 2.5",
+    "f64Array 2 1.5 -0.25",
+    "boolean true",
+    "booleanArray 2 true false",
+    "stringArray 2 a bc",
+    "i32ArrayOrNull null true",
+    "i32ArrayOrNull present 1",
+    "failed 0",
+  ]
+  const readersWant = readerLines.map((l) => `${l}\n`).join("")
+  const readers = path.join(dir, "readers.ts")
+  const underNode = runUnderPrelude(readers, [])
+  check(
+    "link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines",
+    underNode.status === 0 && underNode.stdout === readersWant,
+    `--- want\n${readersWant}--- node\n${shown(underNode)}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "link", "std_json_typed_readers")
+    fs.rmSync(outDir, { recursive: true, force: true })
+    const app = path.join(outDir, "app")
+    const built = spawnSync(NISH, [readers, "-o", `${outDir}${path.sep}`, "--link", app], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_typed: readers.ts built natively prints the same lines",
+      native.status === 0 && native.stdout === readersWant,
+      `--- want\n${readersWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no clang, so readers.ts is not built natively")
+  }
+  const run = runUnderPrelude(path.join(dir, "node.ts"), [])
+  check(
+    "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
+    run.status === 1 &&
+      run.stderr.includes(
+        "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+      ),
+    shown(run)
+  )
 }
 
 // One file named twice on a command line is one module, whichever way the

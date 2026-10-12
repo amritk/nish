@@ -1,0 +1,1 @@
+`Ticket.serial` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into
