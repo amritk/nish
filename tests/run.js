@@ -723,6 +723,9 @@ const buildRuntimeTestThreads = () => {
  * `limit` is a parameter for the "native run limit" self-check, which holds
  * this to its promise in under a second rather than in two minutes.
  */
+/** How many times a link program with an expected.stderr runs at each pool size. */
+const PANIC_ONCE_RUNS = 50
+
 const runNative = async (name, exe, argv, opts = {}, limit = NATIVE_RUN_LIMIT) => {
   const started = Date.now()
   const run = await spawnAsync(exe, argv, { ...opts, ...limit })
@@ -4358,6 +4361,33 @@ for (const name of linkTests) {
       )
     }
   }
+  // A program whose threads all panic prints exactly one whole message: the
+  // first panic claims the process, prints and `_exit`s, and every later one
+  // parks (`nish_panic_claim`, runtime/runtime.c). Each thread's message is the
+  // same, so a second print, or two interleaved, is a stderr that differs from
+  // expected.stderr. Run often, at two pool sizes: a race shows as some runs
+  // differing, never as a slow one.
+  if (fs.existsSync(side("expected.stderr"))) {
+    const wantErr = read("expected.stderr")
+    const bad = []
+    for (let i = 0; i < PANIC_ONCE_RUNS && bad.length === 0; i++) {
+      for (const threads of ["2", "8"]) {
+        const once = await runNative(`link/${name} (run ${i}, NISH_NUM_THREADS=${threads})`, exe, [], {
+          env: envWithThreads(threads),
+        })
+        if (once.death !== null || once.status !== wantCode || String(once.stderr) !== wantErr) {
+          bad.push(
+            `run ${i}, NISH_NUM_THREADS=${threads}: exit ${once.status}, stderr ${JSON.stringify(String(once.stderr))}`
+          )
+        }
+      }
+    }
+    check(
+      `link/${name}: every one of ${PANIC_ONCE_RUNS} runs at 2 and 8 threads prints expected.stderr once and exits ${wantCode}`,
+      bad.length === 0,
+      `--- expected stderr ${JSON.stringify(wantErr)}\n${bad.join("\n")}`
+    )
+  }
 }
 
 // The end of a sharded run's split: shard 1 names the link programs it dealt
@@ -4692,7 +4722,8 @@ if (!only || "par_alloc".includes(only)) {
 // own, and `thread_scope_region_read_back` writes through what it reads back
 // out of its own containers, each a fresh object it made.
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
-// `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`.
+// `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
+// and `par_map_table_reads` has a parallel map's body read them.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4723,6 +4754,7 @@ for (const name of [
   "thread_scope_region_read_back",
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
+  "par_map_table_reads",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue

@@ -547,9 +547,11 @@ export class FunctionFacts {
    * needs to know whether two calls can run at once.
    *
    * Why each is safe to leave out:
-   *   - A panic (`nish_panic_index`, `_slice`, `_div`) prints to fd 2 and
-   *     `_exit`s (runtime/runtime.c): no user memory is written, and no caller
-   *     runs again to observe any.
+   *   - A panic (`nish_panic` for `panic`, `expect` and a range entry,
+   *     `nish_panic_index`, `_slice`, `_div`, `_overflow`) claims the process,
+   *     prints to fd 2 and `_exit`s (runtime/runtime.c): no user memory is
+   *     written, no caller runs again to observe any, and when two threads
+   *     panic at once only the first prints and exits (`nish_panic_claim`).
    *   - A `throw` lowers to `llvm.trap`, which writes nothing and never returns.
    *   - An arena allocation writes the arena's bump state and the fresh block.
    *     The block is unreachable until the function hands it out, and the bump
@@ -574,9 +576,9 @@ export class FunctionFacts {
    */
   writesPastParams: boolean
   /**
-   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`
-   * reached other than as the tail of a `new Array` whose length is checked,
-   * which prints to fd 2 and `_exit`s as every panic does
+   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`,
+   * which `console.log`, `console.error`, `write`, `writeError` and
+   * `process.exit` call. A panic calls `nish_panic` instead
    * (`FunctionFacts.sharedWrite`).
    */
   writesOutput: boolean
@@ -2706,22 +2708,6 @@ class FactCollector {
     }
   }
 
-  /**
-   * The callees of the builtin `name`. `panic` prints to fd 2 and `_exit`s as
-   * every runtime check's panic does, so its `nish_write` and `nish_exit` are
-   * a panic's tail, not output (`FunctionFacts.writesOutput`): a function
-   * that can only fail that way writes nothing another thread reads.
-   */
-  addBuiltinCallees(name: string, names: string[]): void {
-    if (name !== "panic") {
-      this.addCallees(names)
-      return
-    }
-    for (const callee of names) {
-      this.facts.callees.add(callee)
-    }
-  }
-
   addCallees(names: string[]): void {
     for (const name of names) {
       this.facts.callees.add(name)
@@ -3242,11 +3228,11 @@ class FactCollector {
         imported.indexOf(".") < 0
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
-      this.addBuiltinCallees(imported, named)
+      this.addCallees(named)
       this.noteWorld(node, named, imported)
     } else {
       const plain = identifierBuiltinCallees(this.unit.program, this.table, node, unchecked)
-      this.addBuiltinCallees(node.children[0].text, plain)
+      this.addCallees(plain)
       this.noteWorld(node, plain, node.children[0].text)
     }
     if (isArenaCall(this.unit.program, node)) {

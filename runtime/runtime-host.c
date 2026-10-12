@@ -57,6 +57,7 @@ double nish_date_now(void) {
 }
 
 static NISH_COLD void nish_entropy_fail(uint64_t asked) {
+  nish_panic_claim();
   if (asked > 65536) {
     dprintf(2, "crypto.getRandomValues: %llu bytes asked for, and one call fills at most 65536\n",
             (unsigned long long)asked);

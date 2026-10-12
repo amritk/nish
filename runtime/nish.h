@@ -158,6 +158,13 @@ int64_t nish_str_index_of_any(const nish_str *s, const nish_str *set, int64_t fr
 void nish_print(const nish_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
 void nish_write(const nish_str *s, int32_t fd, bool newline);
+/* `panic(message)`, `expect` and a failed range entry: the message and a
+   newline on stderr, then `_exit(1)`. Only the first panic of a process prints;
+   a thread that panics after it parks until that exit (`nish_panic_claim`). */
+__attribute__((noreturn)) void nish_panic(const nish_str *s);
+/* Called by every panic path before it prints: answers for the first caller
+   and parks every later one forever. */
+void nish_panic_claim(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);

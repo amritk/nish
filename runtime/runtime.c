@@ -79,11 +79,35 @@ _Static_assert(offsetof(struct nish_arena, off) == 8, "the inlined allocator bum
 _Static_assert(offsetof(struct nish_arena, cap) == 16, "the inlined allocator reads field 2");
 _Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI");
 
+/* ---- Panics: the first one wins.
+
+   Every way a program fails -- a failed check, `panic`, out of memory -- calls
+   `nish_panic_claim` before it prints. Two tasks of a scope, or two workers of
+   a parallel map, can fail at once, and without the claim both messages would
+   reach stderr interleaved and both threads would race to the exit. The first
+   to claim prints its whole message and `_exit`s; any later one parks until
+   that exit ends the process, so exactly one message is printed and the exit
+   code is the first panic's. `_exit` rather than `exit`: atexit handlers run
+   by two threads at once are undefined behaviour, and a panic has nothing to
+   flush. Under wasi, where nothing runs beside the panicking thread, a second
+   claim cannot happen, and the trap is the defensive answer. */
+static int nish_panicked;
+void nish_panic_claim(void) {
+  if (__atomic_exchange_n(&nish_panicked, 1, __ATOMIC_ACQ_REL)) {
+#if defined(__wasi__)
+    __builtin_trap();
+#else
+    for (;;) pause();
+#endif
+  }
+}
+
 /* `fputs` rather than one `write`: libc's own loop finishes a short write,
    which a bare `write` would cut off (docs/security/runtime.md, RT-11), and
    stderr is unbuffered, so the message leaves before `_exit`. A C host that
    gives stderr a buffer of its own would lose it here. */
 static NISH_COLD void nish_die(const char *msg) {
+  nish_panic_claim();
   fputs(msg, stderr);
   _exit(1);
 }
@@ -296,6 +320,13 @@ void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
 }
 /* console.log(s) */
 void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
+/* `panic(message)`, `r.expect(message)` and a failed range entry: the message
+   and a newline on stderr, then exit 1, the first panic only. */
+void nish_panic(const nish_str *s) {
+  nish_panic_claim();
+  nish_write(s, 2, 1);
+  _exit(1);
+}
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
    widest a uint64_t can be, plus the sign. */
@@ -1245,6 +1276,7 @@ __attribute__((noinline)) void nish_wipe(nish_array *bytes) {
 }
 
 void nish_panic_index(uint64_t idx, uint64_t len) {
+  nish_panic_claim();
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
   _exit(1);
 }
@@ -1258,6 +1290,7 @@ void nish_panic_index(uint64_t idx, uint64_t len) {
    a reader who wrote `s.slice(i - 1)` wants to be told `-1` rather than
    18446744073709551615. The length cannot be negative either way. */
 void nish_panic_slice(int64_t start, int64_t end, int64_t len) {
+  nish_panic_claim();
   dprintf(2, "slice out of range: [%" PRId64 ", %" PRId64 ") of length %" PRId64 "\n", start, end, len);
   _exit(1);
 }

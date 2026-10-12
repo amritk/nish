@@ -496,6 +496,7 @@ static void nish_task_run(nish_job *j) {
  * task list and a channel's buffer are the two, and neither has a way to go on
  * without the memory. */
 static void nish_par_oom(void) {
+  nish_panic_claim();
   (void)!write(2, "nish: out of memory\n", 20);
   _exit(1);
 }
