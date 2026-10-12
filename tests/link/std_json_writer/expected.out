@@ -167,6 +167,24 @@ PASS  indented, a second top-level value is JSON_WRITE_DONE
 PASS  and the first is all that was written
 PASS  and so is a key after the value is whole
 PASS  leaving the empty object
+PASS  31 levels of mixed kinds open and close in order
+PASS  and are complete at 31
+PASS  32 levels of mixed kinds open and close in order
+PASS  and are complete at 32
+PASS  33 levels of mixed kinds open and close in order
+PASS  and are complete at 33
+PASS  63 levels of mixed kinds open and close in order
+PASS  and are complete at 63
+PASS  64 levels of mixed kinds open and close in order
+PASS  and are complete at 64
+PASS  after every number of closes from 64 levels, the wrong closer is JSON_WRITE_UNBALANCED and writes nothing
+PASS  an opener reaching exactly JSON_WRITER_MAX_DEPTH is accepted
+PASS  and one past it is JSON_WRITE_TOO_DEEP
+PASS  writing nothing
+PASS  a reset after 64 open levels clears the stack: a key at the top level is JSON_WRITE_VALUE_EXPECTED
+PASS  and a text after it is written as from new
+PASS  and is complete
+PASS  a reset after a failed text writes a whole value too
 PASS  a strict writer writes a finite f64 as ever
 PASS  and completes
 PASS  reset keeps strict mode
@@ -195,4 +213,4 @@ PASS  and keep nothing in the arena
 PASS  an f64 write started at the head of a chunk keeps nothing either
 PASS  10,000 indented writes into a reused buffer all complete
 PASS  and keep nothing in the arena
-json-writer: 197 passed, 0 failed, 0 skipped
+json-writer: 215 passed, 0 failed, 0 skipped

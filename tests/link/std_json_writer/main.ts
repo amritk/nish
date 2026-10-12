@@ -217,6 +217,75 @@ const prefixAtEveryLength = (want: string, indent: i32, nested: boolean): string
   return "";
 };
 
+/**
+ * The kind of the container opened at depth `d` (from 0) by `openMixed`: an
+ * array when `d % 3 === 1`, an object otherwise. The kinds then differ on
+ * either side of the 32nd level, where the kind stack moves from one word
+ * to the next, and at every level something other than a neighbour's kind
+ * has to come back off it.
+ */
+const objectAt = (d: i32): boolean => d % 3 !== 1;
+
+/** Opens `n` containers of `objectAt`'s kinds, each object with the key `k` before its child. */
+const openMixed = (w: JsonWriter, n: i32): void => {
+  for (let d: i32 = 0; d < n; d += 1) {
+    if (objectAt(d)) {
+      w.beginObject();
+      w.key("k");
+    } else {
+      w.beginArray();
+    }
+  }
+};
+
+/** Closes the containers `openMixed` opened, from depth `from` back to depth `to`, each with its own closer. */
+const closeMixed = (w: JsonWriter, from: i32, to: i32): void => {
+  for (let d: i32 = from - 1; d >= to; d -= 1) {
+    if (objectAt(d)) {
+      w.endObject();
+    } else {
+      w.endArray();
+    }
+  }
+};
+
+/** `openMixed(n)`, the value `1`, then `closeMixed(n, 0)`: the text `JSON.stringify` writes for that value. */
+const writeMixed = (w: JsonWriter, n: i32): void => {
+  openMixed(w, n);
+  w.i32(1);
+  closeMixed(w, n, 0);
+};
+
+/**
+ * For each depth `t` from 1 to `JSON_WRITER_MAX_DEPTH`: the writer opens the
+ * full 64 levels, writes a value, closes back to depth `t` with the right
+ * closer each time, and is then given the wrong closer for depth `t`, which
+ * must be `JSON_WRITE_UNBALANCED` and write nothing. That reads the innermost
+ * kind after every number of pops, across the words' boundary both ways.
+ * Answers the first depth that went wrong, or 0.
+ */
+const mixedKindsAtEveryDepth = (w: JsonWriter, buf: u8[]): i32 => {
+  for (let t: i32 = 1; t <= JSON_WRITER_MAX_DEPTH; t += 1) {
+    w.reset(buf, 0);
+    openMixed(w, JSON_WRITER_MAX_DEPTH);
+    w.i32(1);
+    closeMixed(w, JSON_WRITER_MAX_DEPTH, t);
+    if (w.failed !== 0 || w.depth !== t) {
+      return t;
+    }
+    const before: i32 = w.written();
+    if (objectAt(t - 1)) {
+      w.endArray();
+    } else {
+      w.endObject();
+    }
+    if (w.failed !== -3 || w.written() !== before) {
+      return t;
+    }
+  }
+  return 0;
+};
+
 /** `JSON_WRITER_MAX_DEPTH` empty arrays, each inside the last, opened and closed. */
 const nestArrays = (w: JsonWriter): void => {
   for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
@@ -880,6 +949,66 @@ export const main = (): number => {
   pw.key("a");
   t.eqI32("and so is a key after the value is whole", pw.failed, JSON_WRITE_DONE);
   t.eqStr("leaving the empty object", pw.text(), "{}");
+
+  // ---- The kind stack ---------------------------------------------------------------
+  // The kinds of the open containers are a stack that shifts across two
+  // words: mixed kinds at every level, the boundary at 32 crossed both ways,
+  // the limit at 64, and a reset after a deep text that left it full.
+  const stackBuf = new Array<u8>(1024);
+  const kw = new JsonWriter(stackBuf, 0);
+  const depths: i32[] = [31, 32, 33, 63, 64];
+  for (const n of depths) {
+    kw.reset(stackBuf, 0);
+    writeMixed(kw, n);
+    const parts: string[] = [];
+    for (let d: i32 = 0; d < n; d += 1) {
+      parts.push(objectAt(d) ? '{"k":' : "[");
+    }
+    parts.push("1");
+    for (let d: i32 = n - 1; d >= 0; d -= 1) {
+      parts.push(objectAt(d) ? "}" : "]");
+    }
+    t.eqStr(`${n} levels of mixed kinds open and close in order`, kw.text(), parts.join(""));
+    t.ok(`and are complete at ${n}`, kw.complete());
+  }
+  t.eqI32(
+    "after every number of closes from 64 levels, the wrong closer is JSON_WRITE_UNBALANCED and writes nothing",
+    mixedKindsAtEveryDepth(kw, stackBuf),
+    0
+  );
+  kw.reset(stackBuf, 0);
+  openMixed(kw, JSON_WRITER_MAX_DEPTH - 1);
+  kw.beginArray();
+  t.eqI32("an opener reaching exactly JSON_WRITER_MAX_DEPTH is accepted", kw.failed, JSON_WRITE_OK);
+  const atLimit: i32 = kw.written();
+  kw.beginObject();
+  t.eqI32("and one past it is JSON_WRITE_TOO_DEEP", kw.failed, JSON_WRITE_TOO_DEEP);
+  t.eqI32("writing nothing", kw.written(), atLimit);
+  kw.reset(stackBuf, 0);
+  openMixed(kw, JSON_WRITER_MAX_DEPTH);
+  kw.reset(stackBuf, 0);
+  kw.key("a");
+  t.eqI32(
+    "a reset after 64 open levels clears the stack: a key at the top level is JSON_WRITE_VALUE_EXPECTED",
+    kw.failed,
+    JSON_WRITE_VALUE_EXPECTED
+  );
+  kw.reset(stackBuf, 0);
+  kw.beginObject();
+  kw.key("a");
+  kw.beginArray();
+  kw.i32(1);
+  kw.endArray();
+  kw.endObject();
+  t.eqStr("and a text after it is written as from new", kw.text(), '{"a":[1]}');
+  t.ok("and is complete", kw.complete());
+  kw.reset(stackBuf, 0);
+  kw.beginArray();
+  kw.endArray();
+  kw.endArray();
+  kw.reset(stackBuf, 0);
+  kw.i32(1);
+  t.ok("a reset after a failed text writes a whole value too", kw.complete());
 
   // ---- Strict --------------------------------------------------------------------
   const sw = new JsonWriter(out, 0);

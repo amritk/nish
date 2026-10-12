@@ -6,7 +6,8 @@
 // this repository wrote. The order
 // of the lines is the order of `JSON_WRITER_NODE_VALUES` in `tests/run.js`,
 // then `JSON_WRITER_NODE_PRETTY` once per indent of `JSON_WRITER_NODE_INDENTS`,
-// then `JSON_WRITER_NODE_STRICT` and `JSON_WRITER_NODE_I64`.
+// then `JSON_WRITER_NODE_STRICT`, `JSON_WRITER_NODE_I64` and the kind stack's
+// lines, `JSON_WRITER_NODE_STACK`.
 import { JsonWriter, jsonStringifyString } from "nish/json";
 
 /** Prints what `w` wrote, then starts it over on the same buffer. */
@@ -91,6 +92,75 @@ const writePretty = (w: JsonWriter, out: u8[]): void => {
   flush(w, out);
   w.i32(-7);
   flush(w, out);
+};
+
+/**
+ * The kind of the container opened at depth `d` (from 0) by `openMixed`: an
+ * array when `d % 3 === 1`, an object otherwise. The kinds then differ on
+ * either side of the 32nd level, where the kind stack moves from one word
+ * to the next, and at every level something other than a neighbour's kind
+ * has to come back off it.
+ */
+const objectAt = (d: i32): boolean => d % 3 !== 1;
+
+/** Opens `n` containers of `objectAt`'s kinds, each object with the key `k` before its child. */
+const openMixed = (w: JsonWriter, n: i32): void => {
+  for (let d: i32 = 0; d < n; d += 1) {
+    if (objectAt(d)) {
+      w.beginObject();
+      w.key("k");
+    } else {
+      w.beginArray();
+    }
+  }
+};
+
+/** Closes the containers `openMixed` opened, from depth `from` back to depth `to`, each with its own closer. */
+const closeMixed = (w: JsonWriter, from: i32, to: i32): void => {
+  for (let d: i32 = from - 1; d >= to; d -= 1) {
+    if (objectAt(d)) {
+      w.endObject();
+    } else {
+      w.endArray();
+    }
+  }
+};
+
+/** `openMixed(n)`, the value `1`, then `closeMixed(n, 0)`: the text `JSON.stringify` writes for that value. */
+const writeMixed = (w: JsonWriter, n: i32): void => {
+  openMixed(w, n);
+  w.i32(1);
+  closeMixed(w, n, 0);
+};
+
+/**
+ * For each depth `t` from 1 to `64`: the writer opens the
+ * full 64 levels, writes a value, closes back to depth `t` with the right
+ * closer each time, and is then given the wrong closer for depth `t`, which
+ * must be `JSON_WRITE_UNBALANCED` and write nothing. That reads the innermost
+ * kind after every number of pops, across the words' boundary both ways.
+ * Answers the first depth that went wrong, or 0.
+ */
+const mixedKindsAtEveryDepth = (w: JsonWriter, buf: u8[]): i32 => {
+  for (let t: i32 = 1; t <= 64; t += 1) {
+    w.reset(buf, 0);
+    openMixed(w, 64);
+    w.i32(1);
+    closeMixed(w, 64, t);
+    if (w.failed !== 0 || w.depth !== t) {
+      return t;
+    }
+    const before: i32 = w.written();
+    if (objectAt(t - 1)) {
+      w.endArray();
+    } else {
+      w.endObject();
+    }
+    if (w.failed !== -3 || w.written() !== before) {
+      return t;
+    }
+  }
+  return 0;
 };
 
 export const main = (): number => {
@@ -266,6 +336,32 @@ export const main = (): number => {
   w.i64(lo);
   w.i64(-(lo + toI64(1)));
   w.endArray();
+  flush(w, out);
+
+  // The kind stack under Node, where the shifts are on numbers: mixed kinds
+  // at 31, 32, 33, 63 and 64 levels, each `JSON.stringify` of the same
+  // value; then the wrong closer after every number of closes; then the
+  // limit, and a reset after a deep text.
+  const depths: i32[] = [31, 32, 33, 63, 64];
+  for (const n of depths) {
+    writeMixed(w, n);
+    flush(w, out);
+  }
+  console.log(`every depth ${mixedKindsAtEveryDepth(w, out)}`);
+  w.reset(out, 0);
+  openMixed(w, 64);
+  w.beginArray();
+  console.log(`past the limit ${w.failed}`);
+  w.reset(out, 0);
+  w.key("a");
+  console.log(`a key after the reset ${w.failed}`);
+  w.reset(out, 0);
+  w.beginObject();
+  w.key("a");
+  w.beginArray();
+  w.i32(1);
+  w.endArray();
+  w.endObject();
   flush(w, out);
   return 0;
 };

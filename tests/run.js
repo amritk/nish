@@ -5205,6 +5205,27 @@ const JSON_WRITER_NODE_STRICT = [
 // the i64 arithmetic runs under Node at all, where an i64 is a BigInt and a
 // bare number literal mixed into it throws.
 const JSON_WRITER_NODE_I64 = ["[0,-1,-9223372036854775808,9223372036854775807]"]
+// The kind stack: `node.ts` opens n containers, an array at each depth
+// d with d % 3 === 1 and an object with the key "k" at every other, holding
+// 1 at the bottom, so the kinds differ across the stack's 32-bit boundary.
+// Then the wrong closer after every number of closes (0 when none went
+// wrong), one opener past the limit (`JSON_WRITE_TOO_DEEP`, -4), a key
+// straight after a reset of 64 open levels (`JSON_WRITE_VALUE_EXPECTED`, -2),
+// and a whole text after that reset.
+const jsonWriterMixed = (n) => {
+  let v = 1
+  for (let d = n - 1; d >= 0; d--) {
+    v = d % 3 === 1 ? [v] : { k: v }
+  }
+  return v
+}
+const JSON_WRITER_NODE_STACK = [
+  ...[31, 32, 33, 63, 64].map((n) => JSON.stringify(jsonWriterMixed(n))),
+  "every depth 0",
+  "past the limit -4",
+  "a key after the reset -2",
+  JSON.stringify({ a: [1] }),
+]
 if (!only || "std_json_writer".includes(only)) {
   const entry = path.join(linkDir, "std_json_writer", "node.ts")
   const want = [
@@ -5214,12 +5235,13 @@ if (!only || "std_json_writer".includes(only)) {
     ),
     ...JSON_WRITER_NODE_STRICT,
     ...JSON_WRITER_NODE_I64,
+    ...JSON_WRITER_NODE_STACK,
   ]
     .map((line) => `${line}\n`)
     .join("")
   const run = runUnderPrelude(entry, [])
   check(
-    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines and the i64 edges`,
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, strict mode's lines, the i64 edges and the kind stack`,
     run.status === 0 && run.stdout === want,
     `--- JSON.stringify\n${want}--- node\n${shown(run)}`
   )
