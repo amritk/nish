@@ -38,6 +38,7 @@
 
 import { WIPE_MEMSET } from "./emit-secret"
 import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
+import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import {
   builtinCalleesNamed,
   checksRangesInPrologue,
@@ -133,7 +134,15 @@ import {
   recyclesPerElement,
 } from "./parallel"
 import { ParentTable } from "./parents"
-import { CheckedProgram, FunctionSig, inlineElementStruct, PAR_MAP, ROLE_CONSTRUCTOR } from "./program"
+import {
+  CheckedProgram,
+  FunctionSig,
+  inlineElementStruct,
+  JSON_DECODE,
+  JSON_NONE,
+  PAR_MAP,
+  ROLE_CONSTRUCTOR,
+} from "./program"
 import {
   EFFECT_NONE,
   EFFECT_READ,
@@ -3046,7 +3055,7 @@ const collectFacts = (
   facts.returnAlign = pointerAlign(program, table, sig.returnType)
   // WP29 P3: what a channel's `send` allocates in its source body is Node's
   // (`markChannelSend`), so its escape analysis is not this instance's.
-  if (memory !== null && !isChannelSend(sig)) {
+  if (memory !== null && !isChannelSend(sig) && jsonRouteOf(sig) === JSON_NONE) {
     facts.stackSites = memory.stackSites
     facts.stackLocals = memory.stackLocals
     facts.stackParams = memory.stackParams
@@ -3087,6 +3096,12 @@ const collectFacts = (
       )
     }
     i = i + 1
+  }
+
+  // Typed JSON: a call of `jsonDecode` or `jsonEncode`, whose code the emitter writes at the call.
+  if (jsonRouteOf(sig) !== JSON_NONE) {
+    markJsonRoute(program, table, sig, facts)
+    return facts
   }
 
   // WP29 P3: a channel's `send`, whose body the emitter writes.
@@ -3307,6 +3322,58 @@ const markChannelSend = (facts: FunctionFacts): void => {
   facts.callees.add("nish_channel_send")
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
+  }
+}
+
+/**
+ * Typed JSON: an instantiation of `jsonDecode` or `jsonEncode` is never called
+ * and never defined. Every call of it is lowered in place to code written from
+ * the class's fields (`src/emit-json.ts`), and its source body is Node's, so
+ * nothing is read off it: the instance says what that code does.
+ *
+ *   - Both call the receiver's methods and `nish/json-typed`'s helpers that
+ *     `jsonRouteCallees` names, each with the receiver as its first argument,
+ *     so the fixpoint gives the receiver what those callees do with theirs and
+ *     the instance their effects, allocations and termination. Both recurse
+ *     as the data does and loop over arrays, so neither is `willreturn`.
+ *   - An encoding only reads `value`: it loads fields and hands what they hold
+ *     to the writer, so `value` keeps the facts of a parameter nothing writes
+ *     or keeps, and the encoding allocates only what its callees do.
+ *   - A decoding writes into `out` and stores into it every string, array and
+ *     object it makes, constructors included, so it says the worst of every
+ *     parameter, as a parallel entry does, and that what it allocates escapes:
+ *     no loop, arena scope or `using a = arena()` block around a call
+ *     reclaims it (NL2424 refuses the block).
+ */
+const markJsonRoute = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  facts: FunctionFacts
+): void => {
+  facts.readsMemory = true
+  facts.hasLoops = true
+  facts.loopsBounded = false
+  facts.willReturn = false
+  const receiver: PointerParamFacts | null =
+    sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null
+  for (const callee of jsonRouteCallees(program, table, sig)) {
+    facts.callees.add(callee.name)
+    if (receiver !== null && callee.role !== ROLE_CONSTRUCTOR) {
+      receiver.passedToCallees.push(callee.name)
+      receiver.passedToIndices.push(0)
+    }
+  }
+  if (jsonRouteOf(sig) === JSON_DECODE) {
+    facts.effect = EFFECT_WRITE
+    facts.sharedWrite = true
+    facts.allocates = true
+    facts.allocatesItself = true
+    facts.allocLeaks = true
+    facts.allocEscapes = true
+    facts.resizesArray = true
+    facts.callees.add("nish_array_grow")
+    markParallelEntry(facts, "nish_alloc_struct")
   }
 }
 

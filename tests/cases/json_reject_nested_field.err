@@ -1,0 +1,1 @@
+`jsonDecode` cannot handle `Leaf.weight`, which is `u8`

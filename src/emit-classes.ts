@@ -81,7 +81,7 @@ export const loadField = (emitter: Emitter, info: StructInfo, receiver: string, 
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
 }
 
-const storeField = (
+export const storeField = (
   emitter: Emitter,
   info: StructInfo,
   receiver: string,
@@ -103,6 +103,11 @@ const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
   if (emitter.isStackSite(site)) {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8)
   }
+  return arenaObject(emitter, info)
+}
+
+/** `info.size` bytes from the arena, as a `%struct.X*`. */
+const arenaObject = (emitter: Emitter, info: StructInfo): string => {
   const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`)
 }
@@ -212,6 +217,21 @@ export const emitNew = (emitter: Emitter, expr: Node): string => {
   const obj = allocate(emitter, info, expr)
   initInlineArrays(emitter, info, obj)
   constructObject(emitter, info, obj, expr.children[2].children, expr)
+  return obj
+}
+
+/**
+ * `new C()` with no arguments, for code that has no `new` node behind it
+ * (typed JSON, `src/emit-json.ts`): arena storage, since nothing proves it
+ * could be a stack slot, then the constructor, or the literal initializers
+ * when there is none. `site` stands in for the node; with no arguments it is
+ * never read.
+ */
+export const emitNewWithoutArguments = (emitter: Emitter, info: StructInfo, site: Node): string => {
+  const obj = arenaObject(emitter, info)
+  initInlineArrays(emitter, info, obj)
+  const none: Node[] = []
+  constructObject(emitter, info, obj, none, site)
   return obj
 }
 

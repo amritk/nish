@@ -32,6 +32,8 @@
 
 import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
+import { emitJsonParts, emitJsonRoute, JsonPart } from "./emit-json"
+import { jsonRouteOf } from "./json-typed"
 import {
   functionAttributes,
   paramAttributes,
@@ -158,7 +160,15 @@ import {
 } from "./nodes"
 import { Options } from "./options"
 
-import { CheckedProgram, FUSE_NONE, FunctionSig, MAP_NONE, MAP_STORED_KEY, ROLE_CONSTRUCTOR } from "./program"
+import {
+  CheckedProgram,
+  FUSE_NONE,
+  FunctionSig,
+  JSON_NONE,
+  MAP_NONE,
+  MAP_STORED_KEY,
+  ROLE_CONSTRUCTOR,
+} from "./program"
 import {
   ARENA_GLOBAL,
   ARENA_GLOBAL_TLS,
@@ -277,6 +287,9 @@ export class Emitter {
    * its own.
    */
   libraries: CheckedProgram[]
+  /** Typed JSON: the functions this module's calls of `jsonDecode` and `jsonEncode` asked for, and their symbols (`src/emit-json.ts`). */
+  jsonParts: JsonPart[]
+  jsonPartNames: StringSet
 
   constructor(
     unit: AnalysisUnit,
@@ -317,6 +330,8 @@ export class Emitter {
     this.stringRefs = []
     this.debug = null
     this.libraries = []
+    this.jsonParts = []
+    this.jsonPartNames = new StringSet()
     for (const library of libraries) {
       this.libraries.push(library.program)
     }
@@ -340,7 +355,9 @@ export class Emitter {
       this.module.addTypeDecl(decl)
     }
     for (const sig of this.program.functions) {
-      if (sig.definedIn(this.program.source)) {
+      // Typed JSON: an instantiation of `jsonDecode` or `jsonEncode` is never
+      // called, because every call of one is written out where it stands.
+      if (sig.definedIn(this.program.source) && jsonRouteOf(sig) === JSON_NONE) {
         // WP27 S1: a declared C function is a `declare`, not a `define`. It is
         // never an instantiation either — a foreign declaration cannot be
         // generic — so it needs none of the side-table installing below.
@@ -370,6 +387,7 @@ export class Emitter {
     for (const library of this.libraries) {
       emitLibraryCopies(this, library, libraryReach(this, library))
     }
+    emitJsonParts(this)
     this.emitImportDeclarations()
     this.emitRuntimePrelude()
     return this.module.toText()
@@ -1406,6 +1424,10 @@ export class Emitter {
     const tail = this.marksTailCall(expr)
     if (tail) {
       this.emitScopeExit()
+    }
+    // Typed JSON: the code written from the class's fields (`src/emit-json.ts`).
+    if (jsonRouteOf(sig) !== JSON_NONE) {
+      return emitJsonRoute(this, sig, operandValues)
     }
     // WP38 S1: `nish/text`'s walk is the runtime kernel (`src/kernels.ts`),
     // which allocates nothing, so there is no bracket to open.
