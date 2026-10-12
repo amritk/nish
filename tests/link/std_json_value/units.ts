@@ -2,7 +2,7 @@
 // answer: kinds and handles, lossless numbers at every integer edge, the
 // duplicate-key policy both ways, the builders' refusals, non-ASCII text and a
 // window that ends on a string's last byte.
-import { JSON_WRITE_OK, JSON_WRITE_TOO_DEEP, JsonWriter } from "nish/json";
+import { JSON_WRITE_FULL, JSON_WRITE_OK, JSON_WRITE_TOO_DEEP, JsonWriter } from "nish/json";
 import {
   JSON_TOK_ERR_DEPTH,
   JSON_TOK_ERR_NUMBER_LIMIT,
@@ -16,12 +16,14 @@ import {
 import {
   JSON_VALUE_ARRAY,
   JSON_VALUE_BOOLEAN,
+  JSON_VALUE_DEFAULT_MAX_VALUES,
   JSON_VALUE_DUPLICATE_LAST,
   JSON_VALUE_DUPLICATE_REFUSE,
   JSON_VALUE_ERR_ATTACHED,
   JSON_VALUE_ERR_DUPLICATE,
   JSON_VALUE_ERR_HANDLE,
   JSON_VALUE_ERR_NUMBER,
+  JSON_VALUE_ERR_VALUES,
   JSON_VALUE_NONE,
   JSON_VALUE_NULL,
   JSON_VALUE_NUMBER,
@@ -32,6 +34,28 @@ import {
 } from "nish/json-value";
 import { Suite } from "nish/testing";
 import { jvBytes, jvHexOf } from "./common";
+
+/** `n` arrays, each inside the last. */
+const jvNested = (n: i32): string => {
+  const parts: string[] = [];
+  for (let i: i32 = 0; i < n; i += 1) {
+    parts.push("[");
+  }
+  for (let i: i32 = 0; i < n; i += 1) {
+    parts.push("]");
+  }
+  return parts.join("");
+};
+
+/** An object of `n` members `"k0":0` to `"k<n-1>":<n-1>`, then `"k<n-2>":"last"`: a repeat at the last pair. */
+const jvRepeatAtLast = (n: i32): string => {
+  const parts: string[] = [];
+  for (let i: i32 = 0; i < n; i += 1) {
+    parts.push(`"k${i}":${i}`);
+  }
+  parts.push(`"k${n - 1}":"last"`);
+  return `{${parts.join(",")}}`;
+};
 
 /** `text` parsed and written straight back. */
 const jvRound = (doc: JsonDocument, text: string): string => {
@@ -76,6 +100,13 @@ const jvReaders = (t: Suite): void => {
   t.ok("readers: f64 of a string is 0", doc.f64(doc.get(root, "name")) === 0);
   t.eqStr("readers: stringify of no value is empty", doc.stringify(-1), "");
   t.eqStr("readers: an empty string", jvRound(doc, '[""]'), '[""]');
+  // Thirty control bytes, six bytes each when escaped: past stringify's first buffer, so it doubles.
+  const controls: string[] = [];
+  for (let i: i32 = 0; i < 30; i += 1) {
+    controls.push("\\u0001");
+  }
+  const escaped = `"${controls.join("")}"`;
+  t.eqStr("readers: stringify doubles its buffer for a text longer than its first guess", jvRound(doc, escaped), escaped);
   t.eqStr("readers: a scalar root", jvRound(doc, " 42 "), "42");
   t.eqStr("readers: a string root", jvRound(doc, '"x"'), '"x"');
   t.eqStr("readers: escapes are decoded and written as JSON.stringify writes them", jvRound(doc, '["\\/\\u0041\\b\\f\\n\\r\\t\\"\\\\\\u001f\\u007f"]'), '["/A\\b\\f\\n\\r\\t\\"\\\\\\u001f\u007f"]');
@@ -112,6 +143,8 @@ const jvNumbers = (t: Suite): void => {
     doc.stringify(root),
     "[-0,9223372036854775807,-9223372036854775808,9223372036854775808,-9223372036854775809,18446744073709551615,18446744073709551616,1.0,1e2,0.1000000000000000055511151231257827,-1,0,123456789012345678901234567890,1E400,5e-324]"
   );
+  const tie = doc.parseText("[9007199254740993]");
+  t.eqStr("numbers: 2^53 + 1 reads as 2^53, ties to even, and keeps its text", `${doc.f64(doc.at(tie, 0))} ${doc.numberText(doc.at(tie, 0))}`, "9007199254740992 9007199254740993");
   t.ok("numbers: i64 of a string is 0", doc.i64(doc.newString("1")) === toI64(0) && !doc.isI64(doc.newString("1")));
   t.ok("numbers: u64 of null is 0", doc.u64(doc.newNull()) === toU64(0) && !doc.isU64(doc.newNull()));
 };
@@ -182,6 +215,17 @@ const jvDuplicates = (t: Suite): void => {
     `${doc.length(merged)} ${doc.keyAt(merged, 0)}=${doc.numberText(doc.at(merged, 0))} ${doc.keyAt(merged, 1)}=${doc.numberText(doc.at(merged, 1))} ${doc.numberText(doc.get(merged, "k17"))}`,
     "40 k5=-5 k0=99 1"
   );
+  doc.duplicates = JSON_VALUE_DUPLICATE_REFUSE;
+
+  // The pairwise check takes up to eight members and the sort nine or more:
+  // a repeat of the last pair on each side of the boundary.
+  const eight = jvRepeatAtLast(7);
+  const nine = jvRepeatAtLast(8);
+  t.eqStr("duplicates: eight members, the last repeating the one before, pairwise", `${doc.parseText(eight)}@${doc.errorAt}`, `${JSON_VALUE_ERR_DUPLICATE}@${toI32(eight.length) - 12}`);
+  t.eqStr("duplicates: nine members, the last repeating the one before, sorted", `${doc.parseText(nine)}@${doc.errorAt}`, `${JSON_VALUE_ERR_DUPLICATE}@${toI32(nine.length) - 12}`);
+  doc.duplicates = JSON_VALUE_DUPLICATE_LAST;
+  t.eqStr("duplicates: LAST at eight", doc.stringify(doc.parseText(eight)), '{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":"last"}');
+  t.eqStr("duplicates: LAST at nine", doc.stringify(doc.parseText(nine)), '{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":6,"k7":"last"}');
   doc.duplicates = JSON_VALUE_DUPLICATE_REFUSE;
 };
 
@@ -297,24 +341,28 @@ const jvWriting = (t: Suite): void => {
   t.ok("write: no value writes nothing and fails nothing", w.failed === JSON_WRITE_OK && w.written() === 0);
   const tiny = new JsonWriter(new Array<u8>(5), 0);
   doc.write(root, tiny);
-  t.ok("write: a full buffer is the writer's sticky code", tiny.failed < 0 && !tiny.complete());
-  // Deeper than the writer nests: the parse takes it, the write stops.
-  const limits = new JsonLimits();
-  const deep: string[] = [];
-  for (let i: i32 = 0; i < 100; i += 1) {
-    deep.push("[");
+  t.eqI32("write: a full buffer is JSON_WRITE_FULL exactly", tiny.failed, JSON_WRITE_FULL);
+  // The document's depth is the writer's: 64 parses and writes back, 65 and 128 are the tokenizer's DEPTH.
+  const deep = new JsonDocument(new JsonLimits());
+  const d64 = deep.parseText(jvNested(64));
+  t.ok("depth: 64 nested arrays parse and write back whole", d64 >= 0 && deep.stringify(d64) === jvNested(64));
+  t.eqStr("depth: 65 is the tokenizer's DEPTH at the 65th bracket", `${deep.parseText(jvNested(65))}@${deep.errorAt}`, `${JSON_TOK_ERR_DEPTH}@64`);
+  t.eqStr("depth: 128, the tokenizer's own default, is refused at the same bracket", `${deep.parseText(jvNested(128))}@${deep.errorAt}`, `${JSON_TOK_ERR_DEPTH}@64`);
+  const shallow = new JsonLimits();
+  shallow.maxDepth = 3;
+  t.eqStr("depth: a lower limit is kept", `${new JsonDocument(shallow).parseText(jvNested(4))}`, `${JSON_TOK_ERR_DEPTH}`);
+  // A built tree has no parse to stop it: past 64 the write is the writer's TOO_DEEP.
+  const built = new JsonDocument(new JsonLimits());
+  let inner = built.newArray();
+  for (let i: i32 = 1; i < 65; i += 1) {
+    const outer = built.newArray();
+    built.push(outer, inner);
+    inner = outer;
   }
-  for (let i: i32 = 0; i < 100; i += 1) {
-    deep.push("]");
-  }
-  const d = new JsonDocument(limits).parseText(deep.join(""));
-  t.ok("write: a 100-deep array parses", d >= 0);
-  const dd = new JsonDocument(limits);
-  const dr = dd.parseText(deep.join(""));
   const big = new JsonWriter(new Array<u8>(512), 0);
-  dd.write(dr, big);
-  t.eqI32("write: past the writer's depth is JSON_WRITE_TOO_DEEP", big.failed, JSON_WRITE_TOO_DEEP);
-  t.eqStr("write: and stringify answers empty", dd.stringify(dr), "");
+  built.write(inner, big);
+  t.eqI32("depth: a built tree 65 deep writes JSON_WRITE_TOO_DEEP", big.failed, JSON_WRITE_TOO_DEEP);
+  t.eqStr("depth: and stringify answers empty for it", built.stringify(inner), "");
 };
 
 const jvPretty = (t: Suite): void => {
@@ -341,7 +389,7 @@ const jvPretty = (t: Suite): void => {
   w.setIndent(4);
   w.reset(new Array<u8>(9), 0);
   doc.write(root, w);
-  t.ok("pretty: a full buffer is the writer's code", w.failed < 0 && !w.complete());
+  t.eqI32("pretty: a full buffer is JSON_WRITE_FULL", w.failed, JSON_WRITE_FULL);
 };
 
 const jvClear = (t: Suite): void => {
@@ -351,7 +399,54 @@ const jvClear = (t: Suite): void => {
   doc.clear();
   t.ok("clear: every handle names nothing", doc.kind(r) === JSON_VALUE_NONE && doc.kind(last) === JSON_VALUE_NONE);
   const fresh = doc.newArray();
-  t.ok("clear: building starts again from the first handle", fresh === 0 && doc.stringify(fresh) === "[]");
+  t.ok("clear: building starts again", doc.kind(fresh) === JSON_VALUE_ARRAY && doc.stringify(fresh) === "[]");
+  t.ok("clear: the new handle is not the old one", fresh !== r && doc.kind(r) === JSON_VALUE_NONE);
+};
+
+const jvStale = (t: Suite): void => {
+  // A handle kept across a refill of the same shape must not read the new document.
+  const doc = new JsonDocument(new JsonLimits());
+  const a = doc.parseText('{"user":"alice","admin":false}');
+  const name = doc.get(a, "user");
+  const admin = doc.get(a, "admin");
+  const b = doc.parseText('{"user":"mallory","admin":true}');
+  t.eqI32("stale: the old root names nothing after a same-size refill", doc.kind(a), JSON_VALUE_NONE);
+  t.eqStr("stale: an old member reads nothing, not the new one", `${doc.string(name)}|${doc.boolean(admin)}|${doc.kind(name)}`, "|false|0");
+  t.ok("stale: every reader refuses it", doc.length(a) === -1 && doc.get(a, "user") === -1 && doc.at(a, 0) === -1 && doc.keyAt(a, 0) === "" && !doc.stringEquals(name, "mallory") && doc.stringify(a) === "");
+  t.eqStr("stale: the new handles read the new document", `${doc.string(doc.get(b, "user"))} ${doc.boolean(doc.get(b, "admin"))}`, "mallory true");
+  t.eqI32("stale: push of a stale value", doc.push(doc.newArray(), name), JSON_VALUE_ERR_HANDLE);
+  t.eqI32("stale: set on a stale object", doc.set(a, "k", doc.newNull()), JSON_VALUE_ERR_HANDLE);
+  doc.parseText("[1,2]");
+  const larger = doc.parseText("[[1,2,3,4,5,6],[7,8,9]]");
+  t.ok("stale: and after a larger refill", doc.kind(b) === JSON_VALUE_NONE && doc.kind(name) === JSON_VALUE_NONE && doc.length(larger) === 2);
+  t.eqI32("stale: a failed parse moves the generation too", doc.parseText("[") < 0 ? doc.kind(larger) : 99, JSON_VALUE_NONE);
+  // The generation wraps after 511 parses and clears: the documented limit of the check.
+  const kept = doc.parseText("[7]");
+  for (let i: i32 = 0; i < 510; i += 1) {
+    doc.clear();
+  }
+  t.eqI32("stale: 510 clears later the handle still names nothing", doc.kind(kept), JSON_VALUE_NONE);
+  // The parse clears once more: the 511th move of the generation.
+  doc.parseText("[8]");
+  t.eqI32("stale: 511 generations later it names the new root, as documented", doc.kind(kept), JSON_VALUE_ARRAY);
+};
+
+const jvValues = (t: Suite): void => {
+  const doc = new JsonDocument(new JsonLimits());
+  t.eqI32("values: the default cap", doc.maxValues, JSON_VALUE_DEFAULT_MAX_VALUES);
+  doc.maxValues = 3;
+  t.ok("values: three values fit a cap of three", doc.length(doc.parseText("[1,2]")) === 2);
+  t.eqStr("values: a fourth is JSON_VALUE_ERR_VALUES at its first byte", `${doc.parseText("[1,2,3]")}@${doc.errorAt}`, `${JSON_VALUE_ERR_VALUES}@5`);
+  t.eqStr("values: a container past the cap too", `${doc.parseText("[1,2,[]]")}@${doc.errorAt}`, `${JSON_VALUE_ERR_VALUES}@5`);
+  t.eqI32("values: and nothing is kept", doc.kind(doc.at(doc.parseText("[1,2,3]"), 0)), JSON_VALUE_NONE);
+  doc.clear();
+  doc.newNull();
+  doc.newNull();
+  doc.newNull();
+  t.eqStr("values: a builder past the cap", `${doc.newNull()} ${doc.newString("x")} ${doc.newArray()} ${doc.newNumber("1")}`, `${JSON_VALUE_ERR_VALUES} ${JSON_VALUE_ERR_VALUES} ${JSON_VALUE_ERR_VALUES} ${JSON_VALUE_ERR_VALUES}`);
+  doc.maxValues = 2147483647;
+  doc.clear();
+  t.ok("values: a cap past JSON_VALUE_MAX_VALUES is held to it, and a small body still parses", doc.length(doc.parseText("[1,2,3]")) === 3);
 };
 
 export const jvUnits = (t: Suite): void => {
@@ -364,4 +459,6 @@ export const jvUnits = (t: Suite): void => {
   jvWriting(t);
   jvPretty(t);
   jvClear(t);
+  jvStale(t);
+  jvValues(t);
 };

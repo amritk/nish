@@ -439,7 +439,12 @@ writer's, as in [`nish/json`](#nishjson).
 **Errors and limits are the tokenizer's.** `parse(bytes, off, len)` and
 `parseText(s)` answer the root, or a negative code: one of the
 [`nish/json-tokenizer`](#nishjson-tokenizer) codes, with the same `JsonLimits`
-and the byte in `doc.errorAt`. Nothing in the input can make it panic.
+and the byte in `doc.errorAt`. Nothing in the input can make it panic. The
+nesting depth is capped at 64, the writer's own limit, so every document a
+parse accepts can be written back. A document holds at most `doc.maxValues`
+values, 262,144 unless you raise it; one more is `JSON_VALUE_ERR_VALUES`. Each
+value costs the document about 46 bytes, kept for as long as the document is,
+so that cap is what bounds a long-lived server's memory.
 
 **Duplicate keys are refused.** `{"a":1,"a":2}` is `JSON_VALUE_ERR_DUPLICATE`,
 because two programs that read different members of one text can disagree
@@ -448,14 +453,20 @@ about what it says. If you need to accept what `JSON.parse` accepts, set
 answer: one member, at the place of the first, with the value of the last.
 
 **One document, many parses.** Each `parse` replaces what the document held,
-and every handle from before it is gone. The document keeps its memory, so a
+and every handle from before it is gone: a handle kept from the last request
+reads as `JSON_VALUE_NONE` in this one, even when the two have the same shape.
+The check counts documents in a cycle of 511, so do not keep handles across
+parses; it is there to catch the mistake. The document keeps its memory, so a
 server that keeps one document and parses each request into it stops
 allocating once it has seen its largest request. `clear()` empties it for
 building from scratch.
 
 Objects keep their members in order, and `get` looks a key up by scanning
 them, so walk a large object once with `keyAt` and `at` rather than calling
-`get` for each of many keys. Its security record is
+`get` for each of many keys. Under Node, where a string is UTF-16,
+`parseText` and the builders take one byte per character, so non-ASCII text
+differs from the native build there; `parse` over bytes reads the same both
+ways. Its security record is
 [docs/security/json.md](../../security/json.md).
 
 ## `nish/pair`

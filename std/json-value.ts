@@ -21,16 +21,32 @@
  *     doc.numberText(id)                   // "18446744073709551615", as written
  *     doc.stringify(root)                  // the same text back, byte for byte
  *
- * **A value is a handle.** `JsonValue` is an `i32`, an index into the document
- * that made it, and every reader and builder is a method of that document. A
- * handle stays valid until the document parses again or is `clear`ed, which
- * forgets every value at once and keeps the memory: the nodes, the member
- * slots and the bytes of every string and number live in a handful of arrays
- * the document owns and reuses. A server keeps one document and parses each
- * request into it, and once the arrays have grown to the largest request seen,
- * parsing allocates nothing. A handle that names nothing (a negative one, one
- * from before a `clear`, one past the end) is `JSON_VALUE_NONE` to `kind`, and
- * every reader answers its empty value for it rather than panicking.
+ * **A value is a handle.** `JsonValue` is an `i32` naming one value of the
+ * document that made it, and every reader and builder is a method of that
+ * document. A handle stays valid until the document parses again or is
+ * `clear`ed, which forgets every value at once and keeps the memory: the
+ * nodes, the member slots and the bytes of every string and number live in a
+ * handful of arrays the document owns and reuses. A server keeps one document
+ * and parses each request into it, and once the arrays have grown to the
+ * largest request seen, parsing allocates nothing.
+ *
+ * A handle carries the generation of the document's contents it was made in,
+ * which moves on at every `parse` and `clear`, so a handle kept from an
+ * earlier request names nothing in the next one, even when the next one has
+ * the same shape: it is `JSON_VALUE_NONE` to `kind`, and every reader answers
+ * its empty value for it rather than another document's. The generation has
+ * 511 values, so the check misses only a handle kept across exactly a
+ * multiple of 511 parses and clears; a program must not keep handles across
+ * documents, and this catches the mistake rather than licensing it. A
+ * negative handle, or one past the last value, is `JSON_VALUE_NONE` too.
+ *
+ * **The document's size is bounded.** Each value costs about 46 bytes of the
+ * arrays the document keeps for its life (`docs/security/json.md`, JSON-10),
+ * so `maxValues` caps how many one document holds:
+ * `JSON_VALUE_DEFAULT_MAX_VALUES` unless the program sets it, at most
+ * `JSON_VALUE_MAX_VALUES`. A parse that would make one more is
+ * `JSON_VALUE_ERR_VALUES` at the byte of the value that does not fit, and a
+ * builder answers the same code.
  *
  * **Numbers are lossless.** A number keeps its source text, and is read as
  * whatever the caller asks for when it asks: `i64` and `u64` when the text is
@@ -58,26 +74,39 @@
  *
  * **Every limit and every parse error is the tokenizer's.** `parse` runs a
  * `JsonTokenizer` with the `JsonLimits` the document was made with, and
- * answers its `JSON_TOK_ERR_*` code and offset unchanged. Nothing an input
- * holds panics, and the tree's depth is the tokenizer's depth limit, because
- * the parse keeps its own stack of open containers rather than recursing.
+ * answers its `JSON_TOK_ERR_*` code and offset unchanged. The depth limit is
+ * capped at `JSON_WRITER_MAX_DEPTH`, 64, so that every document a parse
+ * accepts can be written back; a deeper one is the tokenizer's
+ * `JSON_TOK_ERR_DEPTH`. Nothing an input holds panics, and the parse keeps its
+ * own stack of open containers rather than recursing.
  *
  * **Writing goes through `JsonWriter`.** `write(v, w)` writes a value into a
  * writer the caller set up, so its buffer, its reuse and its sticky
  * `JSON_WRITE_*` codes are the writer's own, and `stringify` is a convenience
  * that sizes a buffer and answers a string. Strings come out as `JsonWriter`
  * escapes them, which is `JSON.stringify`'s rule, numbers as their text, and
- * members in order. A tree deeper than `JSON_WRITER_MAX_DEPTH` is the writer's
+ * members in order. Only a built tree can be deeper than
+ * `JSON_WRITER_MAX_DEPTH`, and writing one is the writer's
  * `JSON_WRITE_TOO_DEEP`.
  *
  * **Building a tree** is a `new*` call per value, then `push` onto an array or
  * `set` on an object, each answering `JSON_VALUE_OK` or a negative code. A
- * value lives in at most one container, so a tree can never contain itself:
- * adding a value that is already in a container, or a container to itself or
- * to anything inside it, is `JSON_VALUE_ERR_ATTACHED`, and writing always ends.
+ * value lives in at most one container, so a tree built through `push` and
+ * `set` can never contain itself: adding a value that is already in a
+ * container, or a container to itself or to anything inside it, is
+ * `JSON_VALUE_ERR_ATTACHED`, and writing always ends.
  * Strings handed to a builder are taken as their bytes, as `JsonWriter` takes
  * them, and a string read back is made from the stored bytes in one
- * allocation (`String.fromBytes`).
+ * allocation (`String.fromBytes`). Under Node a string is UTF-16, and
+ * `parseText` and the builders take one byte per code unit, so non-ASCII text
+ * is stored differently there than natively, where a string is its UTF-8
+ * bytes; `parse` over a `u8[]` reads the same bytes both ways.
+ *
+ * **Public is not the whole API.** Nish has no private members, so the
+ * methods marked "Internal" in their comments, and the fields, are reachable
+ * by a program; the guarantees above hold only through the methods that are
+ * not marked so. `append` with indices of the program's choosing, for
+ * example, skips the check that keeps a tree finite.
  *
  * Every name here is `json`-prefixed, because a `std/` module is compiled into
  * the program that imports it and the symbol namespace is flat
@@ -85,7 +114,7 @@
  * the same under `--number-mode f64`, and it runs under the Node prelude, where
  * `tests/run.js` holds every method to the native answers.
  */
-import { JSON_WRITE_FULL, JSON_WRITE_OK, JsonWriter } from "nish/json"
+import { JSON_WRITE_FULL, JSON_WRITE_OK, JSON_WRITER_MAX_DEPTH, JsonWriter } from "nish/json"
 import {
   JSON_TOK_ARRAY_BEGIN,
   JSON_TOK_ARRAY_END,
@@ -124,12 +153,34 @@ export const JSON_VALUE_ERR_HANDLE: i32 = -31
 export const JSON_VALUE_ERR_ATTACHED: i32 = -32
 /** Text that is not one JSON number, for `newNumber`, or an `f64` that is NaN or an infinity, for `newF64`. */
 export const JSON_VALUE_ERR_NUMBER: i32 = -33
+/** One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at its first byte) or a builder. */
+export const JSON_VALUE_ERR_VALUES: i32 = -34
+
+/**
+ * The most values one document holds by default: a parse that would make
+ * more is `JSON_VALUE_ERR_VALUES`. Each value costs the document about 46
+ * bytes of arrays it keeps (`docs/security/json.md`, JSON-10), so this caps
+ * them near 12 MB; a program raises `maxValues` up to
+ * `JSON_VALUE_MAX_VALUES` for larger documents.
+ */
+export const JSON_VALUE_DEFAULT_MAX_VALUES: i32 = 262144
+/** The most `maxValues` can be: a handle keeps a value's index in its low 22 bits. */
+export const JSON_VALUE_MAX_VALUES: i32 = 4194304
 
 /** The default: a repeated key is `JSON_VALUE_ERR_DUPLICATE`. */
 export const JSON_VALUE_DUPLICATE_REFUSE: i32 = 0
 /** `JSON.parse`'s rule: one member, at the first key's place, with the last key's value. */
 export const JSON_VALUE_DUPLICATE_LAST: i32 = 1
 
+/**
+ * A handle is `generation << JSON_VALUE_INDEX_BITS | index`. The generation
+ * runs from 1 to `JSON_VALUE_LAST_GENERATION` and moves on at every `parse`
+ * and `clear`, so a handle kept from an earlier document names nothing in
+ * this one, unless exactly a multiple of 511 parses and clears have passed.
+ */
+const JSON_VALUE_INDEX_BITS: i32 = 22
+const JSON_VALUE_INDEX_MASK: i32 = 4194303
+const JSON_VALUE_LAST_GENERATION: i32 = 511
 /** At most this many members are checked for duplicates pair by pair; a larger object is sorted. */
 const JSON_VALUE_PAIRWISE: i32 = 8
 /** How many member slots a built container gets when it first grows. */
@@ -145,7 +196,8 @@ const JSON_VALUE_MINUS: i32 = 45
 /**
  * A JSON tree, and the memory every value of it lives in. Make one, then
  * `parse` into it or build with the `new*` methods; the module header has the
- * rules. Nothing it holds is reachable from outside but through its methods.
+ * rules. Its fields and its "Internal" methods are reachable, as every
+ * member in Nish is; use the others.
  */
 export class JsonDocument {
   /** Per value: its `JSON_VALUE_*` kind. */
@@ -202,6 +254,10 @@ export class JsonDocument {
   byteTop: i32 = 0
   /** How many members are pending. */
   pendingTop: i32 = 0
+  /** The most values the document holds; more is `JSON_VALUE_ERR_VALUES`. At most `JSON_VALUE_MAX_VALUES`. */
+  maxValues: i32 = 262144
+  /** The generation every handle of the current document carries; see `JSON_VALUE_INDEX_BITS`. */
+  generation: i32 = 1
   /** Whether the last `unsigned` read a number that fits a `u64`. */
   unsignedFits: boolean = false
 
@@ -227,7 +283,14 @@ export class JsonDocument {
     this.sortA = []
     this.sortB = []
     this.textBytes = []
-    this.tok = new JsonTokenizer(this.bytes, 0, 0, limits)
+    // The writer nests 64 deep, so a parsed document is held to that too:
+    // every document a parse accepts can be written back.
+    const capped = new JsonLimits()
+    capped.maxDepth = limits.maxDepth < JSON_WRITER_MAX_DEPTH ? limits.maxDepth : JSON_WRITER_MAX_DEPTH
+    capped.maxStringBytes = limits.maxStringBytes
+    capped.maxNumberBytes = limits.maxNumberBytes
+    capped.maxTotalBytes = limits.maxTotalBytes
+    this.tok = new JsonTokenizer(this.bytes, 0, 0, capped)
     const wide = new JsonLimits()
     wide.maxDepth = 0
     wide.maxNumberBytes = JSON_VALUE_I32_MAX
@@ -237,6 +300,7 @@ export class JsonDocument {
 
   /** Forgets every value, keeping the memory for the next parse or build. Every handle is invalid afterwards. */
   clear(): void {
+    this.generation = this.generation >= JSON_VALUE_LAST_GENERATION ? 1 : this.generation + 1
     this.top = 0
     this.slotTop = 0
     this.byteTop = 0
@@ -275,6 +339,9 @@ export class JsonDocument {
           JSON_VALUE_NO_WORD,
           JSON_VALUE_NO_WORD
         )
+        if (c < 0) {
+          return this.parseFailed(c, tok.tokStart)
+        }
         jsonValuePut(this.openValue, depth, c)
         jsonValuePut(this.openBase, depth, this.pendingTop)
         jsonValuePut(this.openKeyAt, depth, keyAt)
@@ -306,6 +373,10 @@ export class JsonDocument {
           JSON_VALUE_NO_WORD
         )
       }
+      // `-1` is a key or an opener, which place no value yet; below it, the value was refused.
+      if (v < -1) {
+        return this.parseFailed(v, tok.tokStart)
+      }
       if (v >= 0) {
         if (depth === 0) {
           root = v
@@ -323,7 +394,7 @@ export class JsonDocument {
     if (k < 0 || root < 0) {
       return this.parseFailed(k < 0 ? k : JSON_VALUE_ERR_HANDLE, tok.errorAt)
     }
-    return root
+    return this.handle(root)
   }
 
   /** `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. */
@@ -337,7 +408,7 @@ export class JsonDocument {
     return this.parse(buf, JSON_VALUE_NO_WORD, n)
   }
 
-  /** Records a failed parse and forgets what it built. */
+  /** Internal: Records a failed parse and forgets what it built. */
   parseFailed(code: i32, at: i32): i32 {
     this.clear()
     this.failed = code
@@ -346,13 +417,13 @@ export class JsonDocument {
   }
 
   /**
-   * Places the members pending from `base` into container `c` as one run of
+   * Internal: Places the members pending from `base` into container `c` as one run of
    * slots, checking an object's keys for duplicates first. Answers `0`, or
    * `JSON_VALUE_ERR_DUPLICATE` with `errorAt` set.
    */
   close(c: i32, base: i32): i32 {
     let n: i32 = this.pendingTop - base
-    const object: boolean = this.kind(c) === JSON_VALUE_OBJECT
+    const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
     if (object && n > 1) {
       const code: i32 = this.duplicateKeys(base, n)
       if (code < 0) {
@@ -383,7 +454,7 @@ export class JsonDocument {
   }
 
   /**
-   * The duplicate check over the `n` members pending from `base`. Under
+   * Internal: The duplicate check over the `n` members pending from `base`. Under
    * `JSON_VALUE_DUPLICATE_LAST`, a repeated key's later members are marked
    * gone (their pending value set to `-1`) and the first one takes the last
    * one's value. Small objects compare every pair; larger ones are sorted by
@@ -422,7 +493,7 @@ export class JsonDocument {
   }
 
   /**
-   * Pending member `later` repeats the key of the earlier `head`: under
+   * Internal: Pending member `later` repeats the key of the earlier `head`: under
    * `JSON_VALUE_DUPLICATE_LAST` `head` takes its value and it is marked gone.
    * Answers the smallest source offset of a repeating key seen so far.
    */
@@ -435,13 +506,13 @@ export class JsonDocument {
     return firstRepeat < 0 || source < firstRepeat ? source : firstRepeat
   }
 
-  /** Whether pending members `a` and `b` have the same key bytes. */
+  /** Internal: Whether pending members `a` and `b` have the same key bytes. */
   samePendingKey(a: i32, b: i32): boolean {
     return this.comparePending(a, b) === 0
   }
 
   /**
-   * The pending indices `base .. base + n - 1` sorted by key, ties in index
+   * Internal: The pending indices `base .. base + n - 1` sorted by key, ties in index
    * order: a bottom-up merge sort between the two sort arrays, which answers
    * whichever of them holds the result.
    */
@@ -484,7 +555,7 @@ export class JsonDocument {
     return from
   }
 
-  /** Pending members `a` and `b` ordered by key bytes. */
+  /** Internal: Pending members `a` and `b` ordered by key bytes. */
   comparePending(a: i32, b: i32): i32 {
     return jsonValueCompareBytes(
       this.bytes,
@@ -495,7 +566,7 @@ export class JsonDocument {
     )
   }
 
-  /** The tokenizer's current string or key, decoded onto the end of `bytes`; answers its length. */
+  /** Internal: The tokenizer's current string or key, decoded onto the end of `bytes`; answers its length. */
   storeString(tok: JsonTokenizer): i32 {
     const n: i32 = tok.stringLength()
     const at: i32 = this.byteTop
@@ -506,7 +577,7 @@ export class JsonDocument {
     return n
   }
 
-  /** The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. */
+  /** Internal: The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. */
   storeSource(tok: JsonTokenizer): i32 {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
@@ -523,9 +594,17 @@ export class JsonDocument {
     return n
   }
 
-  /** A new value of `kind` with its two words, in no container. */
-  newNode(kind: i32, first: i32, count: i32): JsonValue {
+  /**
+   * Internal: a new value of `kind` with its two words, in no container, and
+   * its index; `JSON_VALUE_ERR_VALUES` when the document already holds
+   * `maxValues`.
+   */
+  newNode(kind: i32, first: i32, count: i32): i32 {
     const v: i32 = this.top
+    const cap: i32 = this.maxValues < JSON_VALUE_MAX_VALUES ? this.maxValues : JSON_VALUE_MAX_VALUES
+    if (v >= cap) {
+      return JSON_VALUE_ERR_VALUES
+    }
     if (v < toI32(this.kinds.length)) {
       this.kinds[v] = toU8(kind)
     } else {
@@ -539,48 +618,76 @@ export class JsonDocument {
     return v
   }
 
+  // ---- Handles ----------------------------------------------------------------
+
+  /** Internal: the index handle `v` names in this document, or `-1` when it names nothing here. */
+  index(v: JsonValue): i32 {
+    if (v < 0 || v >> JSON_VALUE_INDEX_BITS !== this.generation) {
+      return -1
+    }
+    const x: i32 = v & JSON_VALUE_INDEX_MASK
+    return x < this.top ? x : -1
+  }
+
+  /** Internal: the handle of index `x` in this document's generation; a negative `x` is answered as it is. */
+  handle(x: i32): JsonValue {
+    return x < 0 ? x : (this.generation << JSON_VALUE_INDEX_BITS) | x
+  }
+
   // ---- Reading ----------------------------------------------------------------
 
-  /** `v`'s `JSON_VALUE_*` kind, or `JSON_VALUE_NONE` when `v` names no value. */
+  /** `v`'s `JSON_VALUE_*` kind, or `JSON_VALUE_NONE` when `v` names no value of this document's current contents. */
   kind(v: JsonValue): i32 {
+    return this.kindAt(this.index(v))
+  }
+
+  /** Internal: the kind of index `x`, or `JSON_VALUE_NONE`. */
+  kindAt(x: i32): i32 {
     const kinds: u8[] = this.kinds
-    if (v < 0 || v >= this.top || v >= toI32(kinds.length)) {
+    if (x < 0 || x >= this.top || x >= toI32(kinds.length)) {
       return JSON_VALUE_NONE
     }
-    return toI32(kinds[v])
+    return toI32(kinds[x])
   }
 
   /** A boolean's value; `false` for any other value. */
   boolean(v: JsonValue): boolean {
-    return this.kind(v) === JSON_VALUE_BOOLEAN && jsonValueGet(this.first, v) === JSON_VALUE_TRUE_WORD
+    const x: i32 = this.index(v)
+    return this.kindAt(x) === JSON_VALUE_BOOLEAN && jsonValueGet(this.first, x) === JSON_VALUE_TRUE_WORD
   }
 
   /** How many elements an array has, or members an object has; `-1` for any other value. */
   length(v: JsonValue): i32 {
-    const k: i32 = this.kind(v)
-    return k === JSON_VALUE_ARRAY || k === JSON_VALUE_OBJECT ? jsonValueGet(this.count, v) : -1
+    return this.lengthAt(this.index(v))
   }
 
-  /** The slot of member or element `i` of container `v`, or `-1`. */
-  slot(v: JsonValue, i: i32): i32 {
-    if (i < 0 || i >= this.length(v)) {
+  /** Internal: `length` of index `x`. */
+  lengthAt(x: i32): i32 {
+    const k: i32 = this.kindAt(x)
+    return k === JSON_VALUE_ARRAY || k === JSON_VALUE_OBJECT ? jsonValueGet(this.count, x) : -1
+  }
+
+  /** Internal: the slot of member or element `i` of the container at index `x`, or `-1`. */
+  slotAt(x: i32, i: i32): i32 {
+    if (i < 0 || i >= this.lengthAt(x)) {
       return -1
     }
-    return jsonValueGet(this.first, v) + i
+    return jsonValueGet(this.first, x) + i
   }
 
   /** Element `i` of an array, or the value of member `i` of an object, in order; `-1` when there is none. */
   at(v: JsonValue, i: i32): JsonValue {
-    const s: i32 = this.slot(v, i)
-    return s < 0 ? -1 : jsonValueGet(this.slotValue, s)
+    const s: i32 = this.slotAt(this.index(v), i)
+    return s < 0 ? -1 : this.handle(jsonValueGet(this.slotValue, s))
   }
 
   /** The key of member `i` of an object, decoded; `""` when `v` is not an object or has no member `i`. */
   keyAt(v: JsonValue, i: i32): string {
-    if (this.kind(v) !== JSON_VALUE_OBJECT) {
+    const x: i32 = this.index(v)
+    if (this.kindAt(x) !== JSON_VALUE_OBJECT) {
       return ""
     }
-    const s: i32 = this.slot(v, i)
+    const s: i32 = this.slotAt(x, i)
     if (s < 0) {
       return ""
     }
@@ -589,17 +696,18 @@ export class JsonDocument {
 
   /** The value of the member of object `v` whose key is `key`'s bytes; `-1` when there is none. */
   get(v: JsonValue, key: string): JsonValue {
-    if (this.kind(v) !== JSON_VALUE_OBJECT) {
+    const x: i32 = this.index(v)
+    if (this.kindAt(x) !== JSON_VALUE_OBJECT) {
       return -1
     }
-    const s: i32 = this.findKey(v, key)
-    return s < 0 ? -1 : jsonValueGet(this.slotValue, s)
+    const s: i32 = this.findKey(x, key)
+    return s < 0 ? -1 : this.handle(jsonValueGet(this.slotValue, s))
   }
 
-  /** The slot of the member of object `v` whose key is `key`'s bytes, or `-1`. */
-  findKey(v: JsonValue, key: string): i32 {
-    const start: i32 = jsonValueGet(this.first, v)
-    const n: i32 = jsonValueGet(this.count, v)
+  /** Internal: the slot of the member of the object at index `x` whose key is `key`'s bytes, or `-1`. */
+  findKey(x: i32, key: string): i32 {
+    const start: i32 = jsonValueGet(this.first, x)
+    const n: i32 = jsonValueGet(this.count, x)
     for (let s: i32 = start; s < start + n; s += 1) {
       if (this.bytesEqual(jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s), key)) {
         return s
@@ -610,64 +718,67 @@ export class JsonDocument {
 
   /** A string's decoded bytes as a string; `""` for any other value. */
   string(v: JsonValue): string {
-    if (this.kind(v) !== JSON_VALUE_STRING) {
+    const x: i32 = this.index(v)
+    if (this.kindAt(x) !== JSON_VALUE_STRING) {
       return ""
     }
-    return this.textOf(jsonValueGet(this.first, v), jsonValueGet(this.count, v))
+    return this.textOf(jsonValueGet(this.first, x), jsonValueGet(this.count, x))
   }
 
   /** Whether `v` is a string whose decoded bytes are `s`'s. Allocates nothing. */
   stringEquals(v: JsonValue, s: string): boolean {
+    const x: i32 = this.index(v)
     return (
-      this.kind(v) === JSON_VALUE_STRING &&
-      this.bytesEqual(jsonValueGet(this.first, v), jsonValueGet(this.count, v), s)
+      this.kindAt(x) === JSON_VALUE_STRING &&
+      this.bytesEqual(jsonValueGet(this.first, x), jsonValueGet(this.count, x), s)
     )
   }
 
   /** A number's text, exactly as it was written or built; `""` for any other value. */
   numberText(v: JsonValue): string {
-    if (this.kind(v) !== JSON_VALUE_NUMBER) {
+    const x: i32 = this.index(v)
+    if (this.kindAt(x) !== JSON_VALUE_NUMBER) {
       return ""
     }
-    return this.textOf(jsonValueGet(this.first, v), jsonValueGet(this.count, v))
+    return this.textOf(jsonValueGet(this.first, x), jsonValueGet(this.count, x))
   }
 
   /** Whether `v` is a number written without a fraction or an exponent whose value fits an `i64`. */
   isI64(v: JsonValue): boolean {
-    return this.readNumber(v) && this.numbers.isInteger()
+    return this.readNumber(this.index(v)) && this.numbers.isInteger()
   }
 
   /** A number's value as an `i64` when `isI64(v)` holds, and `0` otherwise. */
   i64(v: JsonValue): i64 {
     // `numberI64` is already `0` for a number that is not an `i64`.
-    return this.readNumber(v) ? this.numbers.numberI64() : toI64(0)
+    return this.readNumber(this.index(v)) ? this.numbers.numberI64() : toI64(0)
   }
 
   /** Whether `v` is a number written without a sign, a fraction or an exponent whose value fits a `u64`. */
   isU64(v: JsonValue): boolean {
-    this.unsigned(v)
+    this.unsigned(this.index(v))
     return this.unsignedFits
   }
 
   /** A number's value as a `u64` when `isU64(v)` holds, and `0` otherwise. */
   u64(v: JsonValue): u64 {
-    return this.unsigned(v)
+    return this.unsigned(this.index(v))
   }
 
   /**
-   * The digits of number `v` as a `u64`, setting `unsignedFits` to whether
-   * it is a `u64` at all: no sign, no fraction or exponent, and at most
-   * 2^64 - 1. Every `u64` comes from `toU64`, which is a BigInt under Node,
-   * and nothing here wraps, so it means the same there.
+   * Internal: the digits of the number at index `x` as a `u64`, setting
+   * `unsignedFits` to whether it is a `u64` at all: no sign, no fraction or
+   * exponent, and at most 2^64 - 1. Every `u64` comes from `toU64`, which is
+   * a BigInt under Node, and nothing here wraps, so it means the same there.
    */
-  unsigned(v: JsonValue): u64 {
+  unsigned(x: i32): u64 {
     this.unsignedFits = false
-    if (!this.readNumber(v) || !this.numbers.integral) {
+    if (!this.readNumber(x) || !this.numbers.integral) {
       return toU64(0)
     }
     const bytes: u8[] = this.bytes
-    const start: i32 = jsonValueGet(this.first, v)
-    const end: i32 = start + jsonValueGet(this.count, v)
+    const start: i32 = jsonValueGet(this.first, x)
+    const end: i32 = start + jsonValueGet(this.count, x)
     if (start < 0 || start >= toI32(bytes.length) || toI32(bytes[start]) === JSON_VALUE_MINUS) {
       return toU64(0)
     }
@@ -690,23 +801,23 @@ export class JsonDocument {
 
   /** A number's nearest `f64`, ties to even, as `JSON.parse` reads it; `0` for any other value. */
   f64(v: JsonValue): f64 {
-    if (!this.readNumber(v)) {
+    if (!this.readNumber(this.index(v))) {
       return 0
     }
     return this.numbers.numberF64()
   }
 
-  /** Points the number tokenizer at number `v`'s text and reads its one token; `false` when `v` is not a number. */
-  readNumber(v: JsonValue): boolean {
-    if (this.kind(v) !== JSON_VALUE_NUMBER) {
+  /** Internal: points the number tokenizer at index `x`'s text and reads its one token; `false` when it is not a number. */
+  readNumber(x: i32): boolean {
+    if (this.kindAt(x) !== JSON_VALUE_NUMBER) {
       return false
     }
     const numbers: JsonTokenizer = this.numbers
-    numbers.reset(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
+    numbers.reset(this.bytes, jsonValueGet(this.first, x), jsonValueGet(this.count, x))
     return numbers.next() === JSON_TOK_NUMBER
   }
 
-  /** `bytes[at, at + n)` as a string, in one allocation. */
+  /** Internal: `bytes[at, at + n)` as a string, in one allocation. */
   textOf(at: i32, n: i32): string {
     const bytes: u8[] = this.bytes
     if (at < 0 || n <= 0 || at > toI32(bytes.length) - n) {
@@ -715,7 +826,7 @@ export class JsonDocument {
     return String.fromBytes(bytes, at, at + n)
   }
 
-  /** Whether `bytes[at, at + n)` are exactly `s`'s bytes. */
+  /** Internal: whether `bytes[at, at + n)` are exactly `s`'s bytes. */
   bytesEqual(at: i32, n: i32, s: string): boolean {
     const bytes: u8[] = this.bytes
     if (toI32(s.length) !== n || at < 0 || at > toI32(bytes.length) - n) {
@@ -730,13 +841,17 @@ export class JsonDocument {
   }
 
   // ---- Building ---------------------------------------------------------------
+  // Each `new*` answers a handle, or `JSON_VALUE_ERR_VALUES` when the document
+  // already holds `maxValues`.
 
   newNull(): JsonValue {
-    return this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
+    return this.handle(this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD))
   }
 
   newBoolean(b: boolean): JsonValue {
-    return this.newNode(JSON_VALUE_BOOLEAN, b ? JSON_VALUE_TRUE_WORD : JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
+    return this.handle(
+      this.newNode(JSON_VALUE_BOOLEAN, b ? JSON_VALUE_TRUE_WORD : JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
+    )
   }
 
   /** A string holding `s`'s bytes. */
@@ -785,27 +900,29 @@ export class JsonDocument {
       this.byteTop = at
       return JSON_VALUE_ERR_NUMBER
     }
-    return this.newNode(JSON_VALUE_NUMBER, at, n)
+    return this.handle(this.newNode(JSON_VALUE_NUMBER, at, n))
   }
 
   newArray(): JsonValue {
-    return this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD)
+    return this.handle(this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
   newObject(): JsonValue {
-    return this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD)
+    return this.handle(this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
   /** Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. */
   push(a: JsonValue, v: JsonValue): i32 {
-    if (this.kind(a) !== JSON_VALUE_ARRAY) {
+    const ax: i32 = this.index(a)
+    const vx: i32 = this.index(v)
+    if (this.kindAt(ax) !== JSON_VALUE_ARRAY) {
       return JSON_VALUE_ERR_HANDLE
     }
-    const code: i32 = this.adoptable(a, v)
+    const code: i32 = this.adoptable(ax, vx)
     if (code < 0) {
       return code
     }
-    this.append(a, v, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
+    this.append(ax, vx, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
     return JSON_VALUE_OK
   }
 
@@ -817,31 +934,34 @@ export class JsonDocument {
    * `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`.
    */
   set(o: JsonValue, key: string, v: JsonValue): i32 {
-    if (this.kind(o) !== JSON_VALUE_OBJECT) {
+    const ox: i32 = this.index(o)
+    const vx: i32 = this.index(v)
+    if (this.kindAt(ox) !== JSON_VALUE_OBJECT) {
       return JSON_VALUE_ERR_HANDLE
     }
-    const code: i32 = this.adoptable(o, v)
+    const code: i32 = this.adoptable(ox, vx)
     if (code < 0) {
       return code
     }
-    const s: i32 = this.findKey(o, key)
+    const s: i32 = this.findKey(ox, key)
     if (s >= 0) {
       jsonValuePut(this.parent, jsonValueGet(this.slotValue, s), -1)
-      jsonValuePut(this.slotValue, s, v)
-      jsonValuePut(this.parent, v, o)
+      jsonValuePut(this.slotValue, s, vx)
+      jsonValuePut(this.parent, vx, ox)
       return JSON_VALUE_OK
     }
-    this.append(o, v, this.byteTop, this.storeText(key))
+    this.append(ox, vx, this.byteTop, this.storeText(key))
     return JSON_VALUE_OK
   }
 
   /**
-   * Whether `v` may go into container `c`: it names a value, it is in no
-   * container, and it is not `c` or a container `c` is inside, which is what
-   * keeps every tree finite.
+   * Internal: whether the value at index `v` may go into the container at
+   * index `c`: it is a value, it is in no container, and it is not `c` or a
+   * container `c` is inside. Through `push` and `set`, that is what keeps
+   * every tree finite.
    */
-  adoptable(c: JsonValue, v: JsonValue): i32 {
-    if (this.kind(v) === JSON_VALUE_NONE) {
+  adoptable(c: i32, v: i32): i32 {
+    if (this.kindAt(v) === JSON_VALUE_NONE) {
       return JSON_VALUE_ERR_HANDLE
     }
     if (jsonValueGet(this.parent, v) >= 0) {
@@ -858,12 +978,13 @@ export class JsonDocument {
   }
 
   /**
-   * Adds `v`, with the key `bytes[keyAt, keyAt + keyLength)`, after the last
-   * member of `c`. A container whose slots are full moves them to the end of
-   * the slot arrays with twice the room, unless they are at the end already,
-   * where they grow in place; the slots it leaves are not reused until `clear`.
+   * Internal: adds index `v`, with the key `bytes[keyAt, keyAt + keyLength)`,
+   * after the last member of index `c`, unchecked: `push` and `set` check
+   * first. A container whose slots are full moves them to the end of the slot
+   * arrays with twice the room, unless they are at the end already, where they
+   * grow in place; the slots it leaves are not reused until `clear`.
    */
-  append(c: JsonValue, v: JsonValue, keyAt: i32, keyLength: i32): void {
+  append(c: i32, v: i32, keyAt: i32, keyLength: i32): void {
     let start: i32 = jsonValueGet(this.first, c)
     const n: i32 = jsonValueGet(this.count, c)
     const capacity: i32 = jsonValueGet(this.room, c)
@@ -892,12 +1013,12 @@ export class JsonDocument {
     jsonValuePut(this.parent, v, c)
   }
 
-  /** A new value of `kind` holding `s`'s bytes. */
+  /** Internal: a new value of `kind` holding `s`'s bytes, as a handle. */
   newStored(kind: i32, s: string): JsonValue {
-    return this.newNode(kind, this.byteTop, this.storeText(s))
+    return this.handle(this.newNode(kind, this.byteTop, this.storeText(s)))
   }
 
-  /** `s`'s bytes onto the end of `bytes`; answers how many. */
+  /** Internal: `s`'s bytes onto the end of `bytes`; answers how many. */
   storeText(s: string): i32 {
     const n: i32 = toI32(s.length)
     const at: i32 = this.byteTop
@@ -917,28 +1038,33 @@ export class JsonDocument {
   /**
    * Writes `v` into `w` as one value, members in order and numbers as their
    * text; the outcome is the writer's, in `w.failed`. A value that names
-   * nothing writes nothing and fails nothing. The recursion stops at the
-   * first failure, so a tree deeper than the writer allows ends at
-   * `JSON_WRITE_TOO_DEEP`.
+   * nothing writes nothing and fails nothing. A parsed tree is never deeper
+   * than the writer nests; a built one deeper than `JSON_WRITER_MAX_DEPTH`
+   * ends at `JSON_WRITE_TOO_DEEP`, where the recursion stops.
    */
   write(v: JsonValue, w: JsonWriter): void {
-    const k: i32 = this.kind(v)
+    this.writeAt(this.index(v), w)
+  }
+
+  /** Internal: `write` of index `x`. */
+  writeAt(x: i32, w: JsonWriter): void {
+    const k: i32 = this.kindAt(x)
     if (k === JSON_VALUE_NONE || w.failed !== JSON_WRITE_OK) {
       return
     }
     if (k === JSON_VALUE_NULL) {
       w.nullValue()
     } else if (k === JSON_VALUE_BOOLEAN) {
-      w.boolean(jsonValueGet(this.first, v) === JSON_VALUE_TRUE_WORD)
+      w.boolean(jsonValueGet(this.first, x) === JSON_VALUE_TRUE_WORD)
     } else if (k === JSON_VALUE_NUMBER) {
-      w.raw(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
+      w.raw(this.bytes, jsonValueGet(this.first, x), jsonValueGet(this.count, x))
     } else if (k === JSON_VALUE_STRING) {
-      w.stringBytes(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
+      w.stringBytes(this.bytes, jsonValueGet(this.first, x), jsonValueGet(this.count, x))
     } else {
       // A container: its members are the slots from `first`, read directly.
       const object: boolean = k === JSON_VALUE_OBJECT
-      const start: i32 = jsonValueGet(this.first, v)
-      const end: i32 = start + jsonValueGet(this.count, v)
+      const start: i32 = jsonValueGet(this.first, x)
+      const end: i32 = start + jsonValueGet(this.count, x)
       if (object) {
         w.beginObject()
       } else {
@@ -948,7 +1074,7 @@ export class JsonDocument {
         if (object) {
           w.keyBytes(this.bytes, jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s))
         }
-        this.write(jsonValueGet(this.slotValue, s), w)
+        this.writeAt(jsonValueGet(this.slotValue, s), w)
       }
       if (object) {
         w.endObject()
@@ -961,7 +1087,8 @@ export class JsonDocument {
   /**
    * `v` as minified JSON text: written into a buffer that doubles until it
    * fits, then made into one string. `""` when `v` names nothing or the
-   * writer refuses it (a tree past `JSON_WRITER_MAX_DEPTH`).
+   * writer refuses it, which only a built tree deeper than
+   * `JSON_WRITER_MAX_DEPTH` makes it do; `write` gives the code.
    */
   stringify(v: JsonValue): string {
     // Every byte stored and a few of punctuation per value: one pass fits most

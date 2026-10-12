@@ -14,7 +14,7 @@ import {
   JsonWriter,
 } from "nish/json";
 import { Suite } from "nish/testing";
-import { jvBytes } from "../std_json_value/common";
+import { jvBytes, jvHex } from "../std_json_value/common";
 
 /** What `w` wrote, or `failed <code> after <written>`; then `w` starts over on `out`. */
 const took = (w: JsonWriter, out: u8[]): string => {
@@ -58,6 +58,14 @@ const bothWays = (s: string, indent: i32): string => {
   return viaString === viaBytes ? "same" : `string ${viaString}\nbytes  ${viaBytes}`;
 };
 
+/**
+ * Every byte 0x00 to 0xFF, in order, quoted as JSON: the seven short escapes,
+ * `\u00xx` for the rest below 0x20, and every other byte as itself, 0x80 to
+ * 0xFF raw. Written down from the rule, not from a run of the writer.
+ */
+const ALL_BYTES_QUOTED: string =
+  "225c75303030305c75303030315c75303030325c75303030335c75303030345c75303030355c75303030365c75303030375c625c745c6e5c75303030625c665c725c75303030655c75303030665c75303031305c75303031315c75303031325c75303031335c75303031345c75303031355c75303031365c75303031375c75303031385c75303031395c75303031615c75303031625c75303031635c75303031645c75303031655c753030316620215c22232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff22";
+
 export const writerBytesChecks = (t: Suite): void => {
   // Every byte value once, 0x00 to 0xFF: the short escapes, \u00xx, `/`, 0x7f and the raw high bytes.
   const every: string[] = [];
@@ -71,6 +79,23 @@ export const writerBytesChecks = (t: Suite): void => {
   t.eqStr("bytes: 2-, 3- and 4-byte UTF-8, as string and key write it", bothWays("é日本😀€", 0), "same");
   t.eqStr("bytes: the escape set", bothWays('"\\/\b\f\n\r\t\u0001\u001f\u007f', 4), "same");
   t.eqStr("bytes: an empty text", bothWays("", 0), "same");
+
+  // The raw bytes 0x00 to 0xFF, made as bytes rather than from a string, so
+  // nothing but the writer decides what comes out.
+  const raw = new Array<u8>(256);
+  for (let c: i32 = 0; c < 256 && c < toI32(raw.length); c += 1) {
+    raw[c] = toU8(c);
+  }
+  const wide = new Array<u8>(2048);
+  const ww = new JsonWriter(wide, 0);
+  ww.stringBytes(raw, 0, 256);
+  t.eqStr("bytes: stringBytes over every raw byte 0x00 to 0xFF is the pinned text, byte for byte", jvHex(wide, ww.end), ALL_BYTES_QUOTED);
+  ww.reset(wide, 0);
+  ww.beginObject();
+  ww.keyBytes(raw, 0, 256);
+  ww.stringBytes(raw, 0, 256);
+  ww.endObject();
+  t.eqStr("bytes: keyBytes and stringBytes over every raw byte, as one member", jvHex(wide, ww.end), `7b${ALL_BYTES_QUOTED}3a${ALL_BYTES_QUOTED}7d`);
 
   const out = new Array<u8>(256);
   const w = new JsonWriter(out, 0);
@@ -137,29 +162,38 @@ export const writerBytesChecks = (t: Suite): void => {
   const text = 'a"\u0001é';
   const tb = jvBytes(text);
   let mismatches: i32 = 0;
-  for (let room: i32 = 0; room < 24; room += 1) {
+  let fulls: i32 = 0;
+  for (let room: i32 = 0; room < 40; room += 1) {
     for (let indent: i32 = 0; indent < 3; indent += 2) {
       const small = new Array<u8>(room);
       const sw = new JsonWriter(small, 0);
       sw.setIndent(indent);
       sw.reset(small, 0);
       sw.beginObject();
+      sw.key("first");
+      sw.i32(1);
       sw.key(text);
       sw.string(text);
       sw.endObject();
       const viaString = `${sw.failed} ${sw.written()} ${sw.failed === JSON_WRITE_OK || sw.failed === JSON_WRITE_FULL ? sw.text() : ""}`;
       sw.reset(small, 0);
       sw.beginObject();
+      sw.key("first");
+      sw.i32(1);
       sw.keyBytes(tb, 0, toI32(tb.length));
       sw.stringBytes(tb, 0, toI32(tb.length));
       sw.endObject();
       const viaBytes = `${sw.failed} ${sw.written()} ${sw.failed === JSON_WRITE_OK || sw.failed === JSON_WRITE_FULL ? sw.text() : ""}`;
-      if (viaString !== viaBytes) {
+      if (viaString !== viaBytes || (sw.failed !== JSON_WRITE_OK && sw.failed !== JSON_WRITE_FULL)) {
         mismatches += 1;
+      }
+      if (sw.failed === JSON_WRITE_FULL) {
+        fulls += 1;
       }
     }
   }
-  t.eqI32("bytes: a full buffer at every length from 0 to 23 stops where string and key stop", mismatches, 0);
+  t.eqI32("bytes: after an earlier member, a full buffer at every length from 0 to 39 stops where string and key stop, with JSON_WRITE_FULL", mismatches, 0);
+  t.ok("bytes: and the lengths that are too short are JSON_WRITE_FULL", fulls > 20);
 
   // No allocation: 10,000 writes from a reused buffer of bytes.
   const body = jvBytes("message\tHello, World! é");

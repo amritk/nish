@@ -3,7 +3,7 @@
 // already), the two with a repeated key are refused by default and merged as
 // JSON.parse merges them under JSON_VALUE_DUPLICATE_LAST, and every other file
 // gets the tokenizer's own verdict, code and offset.
-import { JsonWriter } from "nish/json";
+import { JSON_WRITER_MAX_DEPTH, JsonWriter } from "nish/json";
 import { JSON_TOK_KEY, JSON_TOK_STRING, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 import { JSON_VALUE_DUPLICATE_LAST, JSON_VALUE_ERR_DUPLICATE, JsonDocument } from "nish/json-value";
 import { Suite } from "nish/testing";
@@ -23,6 +23,8 @@ export const jvCorpusChecks = (t: Suite): void => {
   const strict = new JsonDocument(new JsonLimits());
   const lenient = new JsonDocument(new JsonLimits());
   lenient.duplicates = JSON_VALUE_DUPLICATE_LAST;
+  const writerDepth = new JsonLimits();
+  writerDepth.maxDepth = JSON_WRITER_MAX_DEPTH;
   let ys: i32 = 0;
   let minified: i32 = 0;
   let others: i32 = 0;
@@ -48,7 +50,8 @@ export const jvCorpusChecks = (t: Suite): void => {
       continue;
     }
     others += 1;
-    const tok = jvTokVerdict(c.bytes, 0, n, new JsonLimits());
+    // The document's depth is the writer's 64, so the tokenizer is asked with that limit too.
+    const tok = jvTokVerdict(c.bytes, 0, n, writerDepth);
     const r = lenient.parse(c.bytes, 0, n);
     const mine = r >= 0 ? "0@-1" : `${r}@${lenient.errorAt}`;
     if (mine !== tok || (c.name.startsWith("n_") && r >= 0)) {

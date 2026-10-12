@@ -221,6 +221,8 @@ PASS  bytes: every byte value, indented by a tab
 PASS  bytes: 2-, 3- and 4-byte UTF-8, as string and key write it
 PASS  bytes: the escape set
 PASS  bytes: an empty text
+PASS  bytes: stringBytes over every raw byte 0x00 to 0xFF is the pinned text, byte for byte
+PASS  bytes: keyBytes and stringBytes over every raw byte, as one member
 PASS  bytes: a window in the middle, ending on a 2-byte character's last byte
 PASS  bytes: an empty window at the end
 PASS  bytes: a key and a value from windows
@@ -239,7 +241,8 @@ PASS  bytes: stringBytes where a key is due
 PASS  bytes: a second top-level stringBytes
 PASS  bytes: keyBytes after the top-level value
 PASS  bytes: a failed writer ignores a bad window too
-PASS  bytes: a full buffer at every length from 0 to 23 stops where string and key stop
+PASS  bytes: after an earlier member, a full buffer at every length from 0 to 39 stops where string and key stop, with JSON_WRITE_FULL
+PASS  bytes: and the lengths that are too short are JSON_WRITE_FULL
 PASS  bytes: 10,000 writes of a key and a string from bytes complete
 PASS  bytes: and keep nothing in the arena
-json-writer: 244 passed, 0 failed, 0 skipped
+json-writer: 247 passed, 0 failed, 0 skipped

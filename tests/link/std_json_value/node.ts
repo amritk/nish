@@ -12,7 +12,7 @@ export const main = (): number => {
   const root = doc.parseText(
     '{"s":"a\\"b\\u0041","t":true,"f":false,"z":null,"i":-9223372036854775808,"u":18446744073709551615,"w":18446744073709551616,"x":1.5e3,"a":[1,[],{}]}'
   );
-  console.log(`parseText ${root} kind ${doc.kind(root)} length ${doc.length(root)} keyAt ${doc.keyAt(root, 8)}`);
+  console.log(`parseText ${root >= 0} kind ${doc.kind(root)} length ${doc.length(root)} keyAt ${doc.keyAt(root, 8)}`);
   const s = doc.get(root, "s");
   console.log(`string ${doc.string(s)} stringEquals ${doc.stringEquals(s, 'a"bA')} ${doc.stringEquals(s, "ab")}`);
   console.log(`boolean ${doc.boolean(doc.get(root, "t"))} ${doc.boolean(doc.get(root, "f"))} null ${doc.kind(doc.get(root, "z"))}`);
@@ -33,10 +33,19 @@ export const main = (): number => {
     bytes[k] = toU8(text.charCodeAt(k));
   }
   const p = doc.parse(bytes, 1, 5);
-  console.log(`parse ${p} ${doc.stringify(p)} error ${doc.parse(bytes, 0, 8)}@${doc.errorAt}`);
+  console.log(`parse ${p >= 0} ${doc.stringify(p)} error ${doc.parse(bytes, 0, 8)}@${doc.errorAt}`);
   console.log(`duplicates ${doc.parseText('{"a":1,"a":2}')}@${doc.errorAt}`);
   doc.duplicates = JSON_VALUE_DUPLICATE_LAST;
   console.log(`last ${doc.stringify(doc.parseText('{"a":1,"b":0,"a":2}'))}`);
+
+  doc.duplicates = 0;
+  const kept = doc.parseText('{"a":"one"}');
+  const member = doc.get(kept, "a");
+  const next = doc.parseText('{"a":"two"}');
+  console.log(`stale ${doc.kind(kept)} ${doc.kind(member)} "${doc.string(member)}" fresh ${doc.string(doc.get(next, "a"))}`);
+  doc.maxValues = 2;
+  console.log(`maxValues ${doc.parseText("[1,2]")}@${doc.errorAt} ${doc.length(doc.parseText("[1]"))}`);
+  doc.maxValues = 1000;
 
   doc.clear();
   const o = doc.newObject();

@@ -5501,19 +5501,22 @@ if (!only || "std_json_value".includes(only)) {
   }
   // `nish/json-value` has to load under Node, as every `std/` module does:
   // `node.ts` calls every public method of `JsonDocument` once on ASCII text,
-  // `u64` at its edge and past it, and both runs must print these lines.
+  // `u64` at its edge and past it, a handle kept across a same-size refill and
+  // `maxValues`, and both runs must print these lines.
   const entry = path.join(linkDir, "std_json_value", "node.ts")
   const want = [
-    "parseText 0 kind 6 length 9 keyAt a",
+    "parseText true kind 6 length 9 keyAt a",
     'string a"bA stringEquals true false',
     "boolean true false null 1",
     "i64 true -9223372036854775808 u64 true 18446744073709551615 wide false false 0 18446744073709551616",
     "f64 1500 text 1.5e3 at 0",
     'stringify {"s":"a\\"bA","t":true,"f":false,"z":null,"i":-9223372036854775808,"u":18446744073709551615,"w":18446744073709551616,"x":1.5e3,"a":[1,[],{}]}',
     "write true [1,[],{}]",
-    "parse 0 [7] error -3@6",
+    "parse true [7] error -3@6",
     "duplicates -30@7",
     'last {"a":2,"b":0}',
+    'stale 0 0 "" fresh two',
+    "maxValues -34@3 1",
     "set 0 0 0",
     "refused -31 -32 -33 -33",
     'built {"arr":[null,true,"x",-5,7,0.25,123456789012345678901234567890],"k":"v"}',
