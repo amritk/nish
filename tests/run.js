@@ -5015,14 +5015,16 @@ if (!only || "std_json_tokenizer".includes(only)) {
 // declaration) or an `i64` built from a bare literal (a double where `toI64`
 // gives a BigInt) breaks it there and nowhere natively. `node.ts` tokenizes a
 // small ASCII input under the plain prelude, through the parseFloat path,
-// `numberI64` at the i64 edges, an escaped surrogate pair's decoded bytes and
-// `keyEquals` both ways, and prints the line the native build prints.
+// `numberI64` at the i64 edges, `numberU64` at the u64 edges, an escaped
+// surrogate pair's decoded bytes and `keyEquals` both ways, and prints the
+// lines the native build prints.
 if (!only || "std_json_tokenizer".includes(only)) {
   const entry = path.join(linkDir, "std_json_tokenizer", "node.ts")
   const want = [
-    "1 5:6162= 3 7:1/1 7:-25 6:780a41f09f9880 8 9 10 1 2 4 5:6163! 7:1e+23 5:6c6f6e67! 7:0.12345678901234566 2 0@-1",
-    "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000 7:0/0 4 0@-1",
-    "3 7:1/1 -1@3",
+    "1 5:6162= 3 7:1/1+1 7:-25 6:780a41f09f9880 8 9 10 1 2 4 5:6163! 7:1e+23 5:6c6f6e67! 7:0.12345678901234566 2 0@-1",
+    "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000+9223372036854775808 7:0/0 4 0@-1",
+    "3 7:1/1+1 -1@3",
+    "3 7:18446744073709552000+18446744073709551615 7:18446744073709552000 7:10000000000000000000+10000000000000000000 7:10000000000000000000+9999999999999999999 7:0/0+0 4 0@-1",
     "",
   ].join("\n")
   const run = runUnderPrelude(entry, [])
