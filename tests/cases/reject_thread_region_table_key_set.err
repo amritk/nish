@@ -1,0 +1,2 @@
+reject_thread_region_table_key_set.ts:36:9
+`work` writes memory a task of `s` may read, before the scope joins
