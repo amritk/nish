@@ -1,7 +1,8 @@
 // `JsonWriter` from `nish/json`: every value kind, every escape, the number
 // edges `JSON.stringify` decides, every `JSON_WRITE_*` code, a full buffer at
 // every length, the two portability edges, and an arena that stays flat over
-// 10,000 writes into one reused buffer.
+// 10,000 writes into one reused buffer; and the two modes, indented and
+// strict, with the same edges.
 //
 // The expected texts are the ones `JSON.stringify` answers for the same value.
 // `node.ts` beside this file is the ASCII, i64-free half of them, which
@@ -12,6 +13,7 @@ import {
   JSON_WRITE_DONE,
   JSON_WRITE_FULL,
   JSON_WRITE_KEY_EXPECTED,
+  JSON_WRITE_NON_FINITE,
   JSON_WRITE_OK,
   JSON_WRITE_TOO_DEEP,
   JSON_WRITE_UNBALANCED,
@@ -19,8 +21,23 @@ import {
   JSON_WRITER_MAX_DEPTH,
   JsonWriter,
   jsonStringifyString,
-} from "../../../std/json";
-import { Suite } from "../../../std/testing";
+} from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+import { Suite } from "nish/testing";
+
+/** A class `jsonEncode` writes, to show that the code it writes goes through the writer's modes. */
+class Pair {
+  name: string = "a";
+  values: i32[];
+  constructor() {
+    this.values = [1, 2];
+  }
+}
+
+/** A class with an `f64` field, for `jsonEncode` through a strict writer. */
+class Reading {
+  value: f64 = 0;
+}
 
 /** The arena's chunk, which `Arena.used()` counts within (runtime/runtime.c, `nish_arena_grow`). */
 const LB_CHUNK: i64 = 65536;
@@ -151,6 +168,32 @@ const helloAtEveryLength = (want: string): string => {
   for (let len: i32 = 0; len < n; len += 1) {
     const buf = new Array<u8>(len);
     const w = new JsonWriter(buf, 0);
+    writeHello(w, "Hello, World!");
+    if (w.failed !== JSON_WRITE_FULL) {
+      return `length ${len}: failed is ${w.failed}`;
+    }
+    if (w.end < 0 || w.end > len) {
+      return `length ${len}: the cursor is at ${w.end}`;
+    }
+    const got = w.text();
+    if (got !== want.substring(0, toI32(got.length))) {
+      return `length ${len}: wrote ${got}`;
+    }
+  }
+  return "";
+};
+
+/**
+ * `helloAtEveryLength` for the indented hello object, `{\n  "message": "…"\n}`
+ * at two spaces, so a line break and the space after a colon are each cut
+ * short at every byte too.
+ */
+const prettyHelloAtEveryLength = (want: string): string => {
+  const n: i32 = toI32(want.length);
+  for (let len: i32 = 0; len < n; len += 1) {
+    const buf = new Array<u8>(len);
+    const w = new JsonWriter(buf, 0);
+    w.setIndent(2);
     writeHello(w, "Hello, World!");
     if (w.failed !== JSON_WRITE_FULL) {
       return `length ${len}: failed is ${w.failed}`;
@@ -576,6 +619,143 @@ export const main = (): number => {
   t.eqI32("a text from start 5 counts only its own bytes", w.written(), 16);
   t.eqStr("and is read from start", w.text(), '{"message":"hi"}');
 
+  // ---- Indented ------------------------------------------------------------------
+  // The spellings are JSON.stringify(v, null, indent)'s; `node.ts` holds a
+  // larger value to JSON.stringify itself under Node and natively.
+  const big4 = new Array<u8>(256);
+  const pw = new JsonWriter(big4, 0);
+  pw.setIndent(2);
+  writeHello(pw, "Hello, World!");
+  const prettyHello = '{\n  "message": "Hello, World!"\n}';
+  t.eqStr("the hello object at two spaces", pw.text(), prettyHello);
+  t.ok("is complete", pw.complete());
+  pw.reset(big4, 0);
+  t.eqI32("reset keeps the indent", pw.indentWidth, 2);
+  pw.beginArray();
+  pw.beginObject();
+  pw.endObject();
+  pw.beginArray();
+  pw.endArray();
+  pw.string(accented);
+  pw.endArray();
+  t.eqStr("empty containers stay on one line, and UTF-8 goes through", pw.text(), `[\n  {},\n  [],\n  "${accented}"\n]`);
+  pw.reset(big4, 0);
+  pw.i32(5);
+  t.eqStr("a top-level number is not indented", pw.text(), "5");
+  pw.setIndentTab();
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.beginArray();
+  pw.i32(1);
+  pw.endArray();
+  pw.endObject();
+  t.eqStr("a tab a level", pw.text(), '{\n\t"a": [\n\t\t1\n\t]\n}');
+  pw.setIndent(11);
+  t.eqI32("an indent past 10 is clamped to 10", pw.indentWidth, 10);
+  pw.setIndent(-1);
+  t.eqI32("and one below 0 is the minified text", pw.indentWidth, 0);
+  pw.reset(big4, 0);
+  writeHello(pw, "Hello, World!");
+  t.eqStr("which writes what it wrote before", pw.text(), hello);
+  t.eqStr(
+    "an indented text too short at every length is JSON_WRITE_FULL and a clean prefix",
+    prettyHelloAtEveryLength(prettyHello),
+    ""
+  );
+  // A closer's line break with no room: `[\n  1` fits in 5 bytes, and the
+  // `\n` before `]` does not.
+  const five = new Array<u8>(5);
+  pw.setIndent(2);
+  pw.reset(five, 0);
+  pw.beginArray();
+  pw.i32(1);
+  t.eqI32("an element and its indent fill the buffer", pw.failed, JSON_WRITE_OK);
+  pw.endArray();
+  t.eqI32("a closer whose line break has no room is JSON_WRITE_FULL", pw.failed, JSON_WRITE_FULL);
+  t.eqI32("and writes none of it", pw.written(), 5);
+  t.ok("and the writer holds still after it", stuck(pw));
+  // The deepest line at the widest indent: 64 nested arrays at 10 spaces,
+  // JSON.stringify's 39,944 bytes. Every opener but the outermost and every
+  // closer but the innermost's starts a line indented 10 a level, and the
+  // buffer is exactly that long, so the last `]` fills it.
+  const deepest: i32 = 39944;
+  const widest = new Array<u8>(deepest);
+  pw.setIndent(10);
+  pw.reset(widest, 0);
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    pw.beginArray();
+  }
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    pw.endArray();
+  }
+  t.ok("JSON_WRITER_MAX_DEPTH empty arrays at 10 spaces close back to complete", pw.complete());
+  t.eqI32("in JSON.stringify's 39,944 bytes", pw.written(), deepest);
+  pw.reset(widest, 1);
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    pw.beginArray();
+  }
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    pw.endArray();
+  }
+  t.eqI32("and one byte less is JSON_WRITE_FULL", pw.failed, JSON_WRITE_FULL);
+  t.eqI32("at the last closer, whose line break fits and whose ] does not", pw.written(), deepest - 1);
+
+  // jsonEncode is calls of the writer's methods, so it writes in the writer's mode.
+  pw.setIndent(2);
+  pw.reset(big4, 0);
+  jsonEncode(pw, new Pair());
+  t.eqStr(
+    "jsonEncode through an indented writer is JSON.stringify(v, null, 2)",
+    pw.text(),
+    '{\n  "name": "a",\n  "values": [\n    1,\n    2\n  ]\n}'
+  );
+
+  // ---- Strict --------------------------------------------------------------------
+  const sw = new JsonWriter(out, 0);
+  sw.setStrict(true);
+  sw.beginArray();
+  sw.f64(one);
+  sw.f64(negZero);
+  sw.f64(huge);
+  sw.endArray();
+  t.eqStr("a strict writer writes a finite f64 as ever", sw.text(), "[1.5,0,1.7976931348623157e+308]");
+  t.ok("and completes", sw.complete());
+  sw.reset(out, 0);
+  t.ok("reset keeps strict mode", sw.strict);
+  sw.beginArray();
+  sw.i32(1);
+  const beforeNan = sw.end;
+  sw.f64(nan);
+  t.eqI32("NaN in strict mode is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqI32("and writes nothing, not even its comma", sw.end, beforeNan);
+  t.ok("and the writer holds still after it", stuck(sw));
+  t.ok("and is not complete", !sw.complete());
+  sw.reset(out, 0);
+  sw.f64(inf);
+  t.eqI32("Infinity in strict mode is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqI32("with nothing written", sw.written(), 0);
+  sw.reset(out, 0);
+  sw.f64(-inf);
+  t.eqI32("-Infinity in strict mode is JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  sw.reset(out, 0);
+  sw.beginObject();
+  sw.i32(1);
+  sw.f64(nan);
+  t.eqI32("an earlier error is kept over a later non-finite f64", sw.failed, JSON_WRITE_KEY_EXPECTED);
+  const reading = new Reading();
+  reading.value = inf;
+  sw.reset(out, 0);
+  jsonEncode(sw, reading);
+  t.eqI32("jsonEncode through a strict writer fails an infinite field with JSON_WRITE_NON_FINITE", sw.failed, JSON_WRITE_NON_FINITE);
+  t.eqStr("after the bytes before the value", sw.text(), '{"value":');
+  sw.setStrict(false);
+  sw.reset(out, 0);
+  sw.f64(nan);
+  t.eqStr("off again, NaN is null", sw.text(), "null");
+  t.ok("a writer is not strict until it is asked to be", !new JsonWriter(out, 0).strict);
+  t.eqI32("nor indented", new JsonWriter(out, 0).indentWidth, 0);
+
   // ---- The arena -----------------------------------------------------------------
   // Every write into the one buffer, reset each round, with a message, an i32
   // and an f64 that change each round so no two neighbouring rounds write the
@@ -613,6 +793,36 @@ export const main = (): number => {
     fresh.end();
   }
   t.eqI64("an f64 write started at the head of a chunk keeps nothing either", fresh.kept, toI64(0));
+
+  // The same rounds indented, at 4 spaces and with a tab, so every line break
+  // is measured too: an indent is stored, never built.
+  const prettyOut = new Array<u8>(256);
+  const pretty = new LbMeter(false);
+  let prettyFinished: i32 = 0;
+  for (let round: i32 = 0; round < 10000; round += 1) {
+    if (round % 2 === 0) {
+      pw.setIndent(4);
+    } else {
+      pw.setIndentTab();
+    }
+    pretty.begin();
+    pw.reset(prettyOut, 0);
+    const pick: i32 = round % 64;
+    pw.beginArray();
+    writeHello(pw, pick < toI32(messages.length) ? messages[pick] : "");
+    pw.beginArray();
+    pw.endArray();
+    pw.i32(round);
+    pw.f64(toF64(round) / toF64(8));
+    pw.i64(lo);
+    pw.endArray();
+    pretty.end();
+    if (pw.complete()) {
+      prettyFinished += 1;
+    }
+  }
+  t.eqI32("10,000 indented writes into a reused buffer all complete", prettyFinished, 10000);
+  t.eqI64("and keep nothing in the arena", pretty.kept, toI64(0));
 
   return t.done();
 };

@@ -117,7 +117,44 @@ PASS  a start at the end of the buffer is not
 PASS  but it has no room
 PASS  a text from start 5 counts only its own bytes
 PASS  and is read from start
+PASS  the hello object at two spaces
+PASS  is complete
+PASS  reset keeps the indent
+PASS  empty containers stay on one line, and UTF-8 goes through
+PASS  a top-level number is not indented
+PASS  a tab a level
+PASS  an indent past 10 is clamped to 10
+PASS  and one below 0 is the minified text
+PASS  which writes what it wrote before
+PASS  an indented text too short at every length is JSON_WRITE_FULL and a clean prefix
+PASS  an element and its indent fill the buffer
+PASS  a closer whose line break has no room is JSON_WRITE_FULL
+PASS  and writes none of it
+PASS  and the writer holds still after it
+PASS  JSON_WRITER_MAX_DEPTH empty arrays at 10 spaces close back to complete
+PASS  in JSON.stringify's 39,944 bytes
+PASS  and one byte less is JSON_WRITE_FULL
+PASS  at the last closer, whose line break fits and whose ] does not
+PASS  jsonEncode through an indented writer is JSON.stringify(v, null, 2)
+PASS  a strict writer writes a finite f64 as ever
+PASS  and completes
+PASS  reset keeps strict mode
+PASS  NaN in strict mode is JSON_WRITE_NON_FINITE
+PASS  and writes nothing, not even its comma
+PASS  and the writer holds still after it
+PASS  and is not complete
+PASS  Infinity in strict mode is JSON_WRITE_NON_FINITE
+PASS  with nothing written
+PASS  -Infinity in strict mode is JSON_WRITE_NON_FINITE
+PASS  an earlier error is kept over a later non-finite f64
+PASS  jsonEncode through a strict writer fails an infinite field with JSON_WRITE_NON_FINITE
+PASS  after the bytes before the value
+PASS  off again, NaN is null
+PASS  a writer is not strict until it is asked to be
+PASS  nor indented
 PASS  10,000 writes into a reused buffer all complete
 PASS  and keep nothing in the arena
 PASS  an f64 write started at the head of a chunk keeps nothing either
-json-writer: 122 passed, 0 failed, 0 skipped
+PASS  10,000 indented writes into a reused buffer all complete
+PASS  and keep nothing in the arena
+json-writer: 159 passed, 0 failed, 0 skipped

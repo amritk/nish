@@ -168,6 +168,55 @@ panic: it sets a negative `JSON_WRITE_*` code in `w.failed`, and every later
 call does nothing, so you write the whole value and check once at the end.
 `jsonStringifyString(s)` answers one string as a JSON string literal.
 
+The writer has two modes, both off until you ask for them and both kept by
+`reset`, so you set them once. `w.setIndent(n)` writes what `JSON.stringify(v,
+null, n)` writes — one member or element a line, a space after each colon, an
+empty `{}` or `[]` left on one line, and `n` clamped to 10 — and
+`w.setIndentTab()` indents with a tab; `w.setIndent(0)` goes back to the
+minified text. `w.setStrict(true)` makes NaN and the infinities an error,
+`JSON_WRITE_NON_FINITE`, with nothing written, where the default writes
+`null` as `JSON.stringify` does:
+
+```ts nish:ok
+import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";
+
+export const main = (): i32 => {
+  const out = new Array<u8>(256);
+  const w = new JsonWriter(out, 0);
+  w.setIndent(2);
+  w.beginObject();
+  w.key("tags");
+  w.beginArray();
+  w.string("a");
+  w.endArray();
+  w.key("none");
+  w.beginObject();
+  w.endObject();
+  w.endObject();
+  console.log(w.text());
+  w.setIndent(0);
+  w.setStrict(true);
+  w.reset(out, 0);
+  w.f64(toF64(0) / toF64(0));
+  console.log(`${w.failed === JSON_WRITE_NON_FINITE}`);
+  return 0;
+};
+```
+
+```console
+$ nish run pretty.ts
+{
+  "tags": [
+    "a"
+  ],
+  "none": {}
+}
+true
+```
+
+`jsonEncode` from `nish/json-typed` writes through the writer you give it, so
+an indented or strict writer encodes a class indented or strictly too.
+
 ## `nish/json-tokenizer`
 
 `jsonField` trusts its input. When the JSON comes from someone else — a

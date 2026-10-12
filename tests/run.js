@@ -5127,12 +5127,47 @@ const JSON_WRITER_NODE_VALUES = [
   { 'k"\n': "v" },
   'a\t"\x01',
 ]
+// The indented half: `node.ts` writes these values through `setIndent(n)` for
+// each `n` here and then `setIndentTab()`, and the answer is
+// `JSON.stringify(v, null, n)`, whose clamping of 11 to 10 and of 0 and -3 to
+// the minified text the writer copies. The last run is `setIndent(0)` again,
+// back to the minified text.
+const JSON_WRITER_NODE_PRETTY = [
+  {
+    message: "Hello",
+    empty: {},
+    none: [],
+    list: [1, [2, []], { a: null }],
+    deep: { b: { c: [true, false] } },
+    s: "x\ny",
+    f: 1.5,
+  },
+  [[{}]],
+  {},
+  [],
+  "top",
+  -7,
+]
+const JSON_WRITER_NODE_INDENTS = [2, 4, 1, 10, 11, 0, -3, "\t", 0]
+// Strict mode has no `JSON.stringify` twin, so these lines are the rule as
+// `std/json.ts` states it: a finite f64 as ever, each non-finite one
+// `JSON_WRITE_NON_FINITE` (-8) with nothing written after `{"x":`, and NaN
+// `null` again once strict is off.
+const JSON_WRITER_NODE_STRICT = ["[1.5,0]", "failed -8", "failed -8", "written 5", "failed -8", "null"]
 if (!only || "std_json_writer".includes(only)) {
   const entry = path.join(linkDir, "std_json_writer", "node.ts")
-  const want = JSON_WRITER_NODE_VALUES.map((v) => `${JSON.stringify(v)}\n`).join("")
+  const want = [
+    ...JSON_WRITER_NODE_VALUES.map((v) => JSON.stringify(v)),
+    ...JSON_WRITER_NODE_INDENTS.flatMap((n) =>
+      JSON_WRITER_NODE_PRETTY.map((v) => JSON.stringify(v, null, n))
+    ),
+    ...JSON_WRITER_NODE_STRICT,
+  ]
+    .map((line) => `${line}\n`)
+    .join("")
   const run = runUnderPrelude(entry, [])
   check(
-    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values`,
+    `link/std_json_writer: node.ts under Node prints JSON.stringify of each of its ${JSON_WRITER_NODE_VALUES.length} values, indented ${JSON_WRITER_NODE_INDENTS.length} ways, and strict mode's lines`,
     run.status === 0 && run.stdout === want,
     `--- JSON.stringify\n${want}--- node\n${shown(run)}`
   )

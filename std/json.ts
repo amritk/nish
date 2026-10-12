@@ -70,16 +70,26 @@
  * infinities as `null`. `jsonStringifyString` is the same string rule
  * answered as a string.
  *
+ * **Two modes**, both off by default and both kept across `reset`, so a
+ * server sets them once. `setIndent(n)` and `setIndentTab()` write what
+ * `JSON.stringify(v, null, n)` and `JSON.stringify(v, null, "\t")` write:
+ * one member or element a line, `": "` after a key, an empty `{}` or `[]` on
+ * one line, and `n` clamped to 10. The indent is one byte stored as many times
+ * as the depth asks, so the indented text allocates no more than the minified
+ * one. `setStrict(true)` makes NaN and the infinities, which JSON cannot
+ * spell, the sticky `JSON_WRITE_NON_FINITE` instead of `null`: for a caller
+ * to whom a `null` where a number was due would be a silently corrupt record.
+ *
  * **Misuse is a sticky code**, as in `nish/net/hpack`: never a panic, and no
  * `Result` to carry on the hot path. The first call that cannot be honoured
  * sets `failed` to a negative `JSON_WRITE_*` code — a value where a key is
  * due, a key where a value is due, an unbalanced or mismatched `end*`,
  * nesting past `JSON_WRITER_MAX_DEPTH`, a buffer with no room, a second
- * top-level value, a bad `raw` window or `start` — and every later call does
- * nothing. A call that fails writes nothing past `buf.length` (a full buffer
- * is checked before the bytes go in, never by the bounds check), so the
- * caller writes the whole value, reads `failed` once at the end, and grows
- * the buffer and retries or answers a 500. `complete()` says whether one
+ * top-level value, a bad `raw` window or `start`, a non-finite `f64` in strict
+ * mode — and every later call does nothing. A call that fails writes nothing
+ * past `buf.length` (a full buffer is checked before the bytes go in, never
+ * by the bounds check), so the caller writes the whole value, reads `failed`
+ * once at the end, and grows the buffer and retries or answers a 500. `complete()` says whether one
  * whole value was written with every container closed.
  *
  * **A string is its bytes** (WP33 class C, `docs/wp33-round-trip.md` §3.2,
@@ -789,6 +799,8 @@ export const JSON_WRITE_FULL: i32 = -5
 export const JSON_WRITE_DONE: i32 = -6
 /** A `raw` window outside its array, or a `start` outside the writer's buffer. */
 export const JSON_WRITE_BAD_WINDOW: i32 = -7
+/** An `f64` that is NaN or an infinity, written by a writer `setStrict(true)` made strict. */
+export const JSON_WRITE_NON_FINITE: i32 = -8
 
 /**
  * How deep a writer nests objects and arrays. The kind of each open container
@@ -800,6 +812,12 @@ export const JSON_WRITER_MAX_DEPTH: i32 = 64
 const JSON_WRITER_WORD_BITS: i32 = 32
 /** The lowest bit, spelled `i32` so that `<<` has an `i32` on its left under `--number-mode f64` too. */
 const JSON_WRITER_BIT: i32 = 1
+/**
+ * The widest indent, in spaces: `JSON.stringify` clamps its `space` argument
+ * to 10, so a wider one writes what 10 writes. At `JSON_WRITER_MAX_DEPTH` it
+ * puts 640 bytes before a line's value, which is the most a line break costs.
+ */
+const JSON_WRITER_MAX_INDENT: i32 = 10
 
 const JSON_SLASH_B: i32 = 98
 const JSON_SLASH_F: i32 = 102
@@ -897,12 +915,30 @@ export class JsonWriter {
    */
   objectsLow: i32 = 0
   objectsHigh: i32 = 0
+  /**
+   * Whether the innermost open container is an object: bit `depth - 1` of
+   * the two words, read when a container opens or closes rather than on
+   * every value. `jsonWriterValueDue` runs before every value, and reading
+   * the bit there made it too large for LLVM to inline once the indented
+   * text's line break was added to it, which slowed the minified text too.
+   */
+  inObject: boolean = false
   /** Whether a comma goes before the next key or element of the innermost container. */
   needComma: boolean = false
   /** Whether a key has been written in the innermost object and its value is due. */
   afterKey: boolean = false
   /** Whether the top-level value has been written whole. */
   done: boolean = false
+  /**
+   * How many `indentByte`s each level of nesting puts at the start of a line,
+   * or `0` for the minified text. A mode, not a part of the text: `reset`
+   * keeps it, so a writer set up once writes every text the same way.
+   */
+  indentWidth: i32 = 0
+  /** The byte an indent is made of: a space, or a tab after `setIndentTab`. */
+  indentByte: i32 = 32
+  /** Whether an `f64` that is NaN or an infinity is `JSON_WRITE_NON_FINITE` rather than `null`. Kept by `reset`. */
+  strict: boolean = false
 
   constructor(buf: u8[], start: i32) {
     this.buf = buf
@@ -919,10 +955,47 @@ export class JsonWriter {
     this.start = start
     this.end = start
     this.depth = 0
+    this.inObject = false
     this.needComma = false
     this.afterKey = false
     this.done = false
     this.failed = start < 0 || start > toI32(buf.length) ? JSON_WRITE_BAD_WINDOW : JSON_WRITE_OK
+  }
+
+  /**
+   * Indents the text by `spaces` spaces a level, as `JSON.stringify(v, null,
+   * spaces)` does: each member and element on a line of its own, one space
+   * after a key's colon, and an empty `{}` or `[]` left on one line. `spaces`
+   * is clamped to 10 as `JSON.stringify` clamps it, and below 1 is the
+   * minified text, the default. A mode that `reset` keeps; set it before the
+   * text, since a change in the middle of one applies from the next byte.
+   */
+  setIndent(spaces: i32): void {
+    let width: i32 = spaces
+    if (width < 0) {
+      width = 0
+    } else if (width > JSON_WRITER_MAX_INDENT) {
+      width = JSON_WRITER_MAX_INDENT
+    }
+    this.indentWidth = width
+    this.indentByte = JSON_SPACE
+  }
+
+  /** Indents the text by one tab a level, as `JSON.stringify(v, null, "\t")` does. */
+  setIndentTab(): void {
+    this.indentWidth = 1
+    this.indentByte = JSON_TAB
+  }
+
+  /**
+   * Whether an `f64` that is NaN or an infinity fails the text with
+   * `JSON_WRITE_NON_FINITE`, writing nothing, rather than being written as
+   * the `null` `JSON.stringify` writes. Off by default; a mode that `reset`
+   * keeps. Strict is for a caller to whom a `null` where a number was due is
+   * a corrupt record rather than a missing one.
+   */
+  setStrict(strict: boolean): void {
+    this.strict = strict
   }
 
   /** How many bytes have been written since `reset`. */
@@ -974,14 +1047,16 @@ export class JsonWriter {
       this.failed = JSON_WRITE_DONE
       return
     }
-    if (!jsonWriterInObject(this) || this.afterKey) {
+    if (!this.inObject || this.afterKey) {
       this.failed = JSON_WRITE_VALUE_EXPECTED
       return
     }
     if (this.needComma && !jsonWriterPutByte(this, JSON_COMMA)) {
       return
     }
-    if (jsonWriterPutString(this, name) && jsonWriterPutByte(this, JSON_COLON)) {
+    if (this.indentWidth !== 0) {
+      jsonWriterKeyIndented(this, name)
+    } else if (jsonWriterPutString(this, name) && jsonWriterPutByte(this, JSON_COLON)) {
       this.afterKey = true
     }
   }
@@ -1032,12 +1107,17 @@ export class JsonWriter {
   /**
    * `v` as `String(v)` spells it, which is `JSON.stringify`'s rule: the
    * shortest digits that read back as `v`, `-0` as `0`, and `null` for NaN
-   * and both infinities, which JSON cannot spell.
+   * and both infinities, which JSON cannot spell — or, once `setStrict(true)`,
+   * `JSON_WRITE_NON_FINITE` for those three, with nothing written.
    */
   f64(v: f64): void {
     // `v - v` is `0` for every finite `v`, and NaN for NaN and both infinities.
     if (v - v !== toF64(0)) {
-      this.nullValue()
+      if (!this.strict) {
+        this.nullValue()
+      } else if (this.failed === JSON_WRITE_OK) {
+        this.failed = JSON_WRITE_NON_FINITE
+      }
     } else if (jsonWriterValueDue(this) && jsonWriterPutF64(this, v)) {
       jsonWriterValueDone(this)
     }
@@ -1090,7 +1170,7 @@ export class JsonWriter {
   }
 }
 
-/** Whether the innermost open container is an object; `false` at the top level. */
+/** Whether the innermost open container is an object, read from its bit; `false` at the top level. */
 const jsonWriterInObject = (w: JsonWriter): boolean => {
   const d: i32 = w.depth - 1
   if (d < 0) {
@@ -1120,11 +1200,26 @@ const jsonWriterValueDue = (w: JsonWriter): boolean => {
     w.afterKey = false
     return true
   }
-  if (jsonWriterInObject(w)) {
+  if (w.inObject) {
     w.failed = JSON_WRITE_KEY_EXPECTED
     return false
   }
+  if (w.indentWidth !== 0) {
+    return jsonWriterPutBreak(w, w.needComma, w.depth)
+  }
   return !w.needComma || jsonWriterPutByte(w, JSON_COMMA)
+}
+
+/** `key` in an indented text, after its comma: the line break, the key, and `": "`. */
+const jsonWriterKeyIndented = (w: JsonWriter, name: string): void => {
+  if (
+    jsonWriterPutBreak(w, false, w.depth) &&
+    jsonWriterPutString(w, name) &&
+    jsonWriterPutByte(w, JSON_COLON) &&
+    jsonWriterPutByte(w, JSON_SPACE)
+  ) {
+    w.afterKey = true
+  }
 }
 
 /** After a whole value: the next element needs a comma, and at the top level the text is done. */
@@ -1152,6 +1247,7 @@ const jsonWriterOpen = (w: JsonWriter, object: boolean, opener: i32): void => {
     w.objectsHigh = object ? w.objectsHigh | bit : w.objectsHigh & ~bit
   }
   w.depth = d + 1
+  w.inObject = object
   w.needComma = false
 }
 
@@ -1160,7 +1256,7 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
   if (w.failed !== JSON_WRITE_OK) {
     return
   }
-  if (w.depth === 0 || jsonWriterInObject(w) !== object) {
+  if (w.depth === 0 || w.inObject !== object) {
     w.failed = JSON_WRITE_UNBALANCED
     return
   }
@@ -1168,8 +1264,14 @@ const jsonWriterClose = (w: JsonWriter, object: boolean, closer: i32): void => {
     w.failed = JSON_WRITE_VALUE_EXPECTED
     return
   }
+  // `needComma` is whether anything was written inside: an empty container
+  // closes on the line it opened on, as `JSON.stringify` writes `{}` and `[]`.
+  if (w.indentWidth !== 0 && w.needComma && !jsonWriterPutBreak(w, false, w.depth - 1)) {
+    return
+  }
   if (jsonWriterPutByte(w, closer)) {
     w.depth -= 1
+    w.inObject = jsonWriterInObject(w)
     jsonWriterValueDone(w)
   }
 }
@@ -1184,6 +1286,36 @@ const jsonWriterPutByte = (w: JsonWriter, code: i32): boolean => {
   }
   buf[at] = toU8(code)
   w.end = at + 1
+  return true
+}
+
+/**
+ * In an indented text, the comma when `comma` says one is due, then a line
+ * break and `level` indents at the cursor. The break and its indent go in
+ * whole or, with `JSON_WRITE_FULL`, not at all, so a full buffer still leaves
+ * a prefix of the text. The indent is `indentByte` stored `indentWidth *
+ * level` times, so a break allocates nothing however deep it is. Its callers
+ * test `indentWidth` first, so the minified text never makes the call.
+ */
+const jsonWriterPutBreak = (w: JsonWriter, comma: boolean, level: i32): boolean => {
+  if (comma && !jsonWriterPutByte(w, JSON_COMMA)) {
+    return false
+  }
+  const buf: u8[] = w.buf
+  const at: i32 = w.end
+  const stop: i32 = at + 1 + w.indentWidth * level
+  if (at < 0 || stop > toI32(buf.length)) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  buf[at] = toU8(JSON_NEWLINE)
+  const fill: u8 = toU8(w.indentByte)
+  for (let k: i32 = at + 1; k < stop && k < toI32(buf.length); k += 1) {
+    if (k >= 0) {
+      buf[k] = fill
+    }
+  }
+  w.end = stop
   return true
 }
 
