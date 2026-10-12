@@ -134,6 +134,21 @@ and `fiat-c/src/p256_scalar_32.c` at commit
 Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
 ```
 
+### `tests/json-suite/LICENSE-jsontestsuite`
+
+[JSONTestSuite](https://github.com/nst/JSONTestSuite)'s parsing corpus,
+Copyright (c) 2016 Nicolas Seriot, under the MIT licence. The licence text is
+upstream's `LICENSE`, verbatim. The 318 files of `test_parsing/` at commit
+`1ef36fa01286573e846ac449e8683f8833c5b26a` are packed, byte for byte, into one
+file, one line per file, by [`tests/json-suite/pack.js`](tests/json-suite/pack.js),
+so that their upstream names stay what they are without 318 paths that are not
+kebab-case; nothing in them is changed. The pack ships in no package:
+`tests/link/std_json_tokenizer` and the Node check in `tests/run.js` read it.
+
+```notice
+Test files from JSONTestSuite (https://github.com/nst/JSONTestSuite), test_parsing/. Copyright (c) 2016 Nicolas Seriot. Used under the MIT licence; see tests/json-suite/LICENSE-jsontestsuite.
+```
+
 ## Files
 
 | File | Derived from | Licence | Licence text |
@@ -159,6 +174,7 @@ Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p25
 | `tests/link/crypto_wycheproof/x25519.ts` | Wycheproof `testvectors_v1/x25519_test.json` at `3fa63dd`: all 518 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_aead/chacha20_poly1305.ts` | Wycheproof `testvectors_v1/chacha20_poly1305_test.json` at `3fa63dd`: all 325 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_aead/aes_gcm_192.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 103 cases with a 192-bit key, which `tests/link/crypto_wycheproof/aes_gcm.ts` leaves out, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
+| `tests/json-suite/test-parsing.txt` | JSONTestSuite `test_parsing/` at `1ef36fa`: all 318 files (95 `y_`, 188 `n_`, 35 `i_`), packed one per line by `tests/json-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-suite/LICENSE-jsontestsuite` |
 
 ## Public-domain algorithms
 
