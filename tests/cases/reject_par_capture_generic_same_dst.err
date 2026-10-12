@@ -1,0 +1,2 @@
+reads `dst`, and can reach a `i32[]` through `dst`, which could be the array `parallelMapInto` is writing
+reads `dst`, and can reach a `f64[]` through `dst`, which could be the array `parallelMapInto` is writing

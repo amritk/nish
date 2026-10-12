@@ -227,7 +227,10 @@ const localFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding
  * constructor has its parameters first and no return type, and every other
  * function — a method, a declaration, an arrow — has a name, the parameters
  * and then the return type. The receiver of a method is `paramTypes[0]` with
- * no node, which is why the two lists are aligned from the end.
+ * no node, which is why the two lists are aligned from the end — the end of
+ * the written ones: an arrow handed to a data-parallel form has the names it
+ * captures appended after them (WP29), and they are its function's locals,
+ * reported where that function declares them.
  */
 const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   const decl = walk.sig.decl
@@ -235,7 +238,7 @@ const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): vo
   const at: i32 = ctor ? 0 : 1
   const params = decl.children[at].children
   const types = walk.sig.paramTypes
-  const skip = types.length - params.length
+  const skip = types.length - walk.sig.captures.length - params.length
   let i: i32 = 0
   while (i < params.length) {
     const name = params[i].children[0]
