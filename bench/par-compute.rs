@@ -12,6 +12,16 @@ fn settle(x: f64) -> f64 {
     v
 }
 
+/// The threads to divide over: `PAR_THREADS`, which bench/run.mjs sets to the
+/// count Nish divides over, or every core the process may use.
+fn threads() -> usize {
+    std::env::var("PAR_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+}
+
 fn main() {
     let mut src = vec![0.0f64; N];
     let mut x = 0.0f64;
@@ -20,7 +30,7 @@ fn main() {
         x += 0.000001;
     }
     let mut dst = vec![0.0f64; N];
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let threads = threads();
     let chunk = N.div_ceil(threads);
     std::thread::scope(|s| {
         let mut parts = src.chunks(chunk).zip(dst.chunks_mut(chunk));

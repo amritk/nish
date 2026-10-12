@@ -22,10 +22,20 @@ fn map_chunk(src: &[i32], dst: &mut [i32]) {
     }
 }
 
+/// The threads to divide over: `PAR_THREADS`, which bench/run.mjs sets to the
+/// count Nish divides over, or every core the process may use.
+fn threads() -> usize {
+    std::env::var("PAR_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+}
+
 fn main() {
     let mut src: Vec<i32> = (0..N as i32).collect();
     let mut dst = vec![0i32; N];
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let threads = threads();
     let chunk = N.div_ceil(threads);
     let mut check: i32 = 0;
     for r in 0..ROUNDS {

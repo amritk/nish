@@ -35,7 +35,8 @@ func main() {
 		x += 0.000001
 	}
 	dst := make([]float64, N)
-	threads := runtime.NumCPU()
+	// GOMAXPROCS, which bench/run.mjs sets to the count Nish divides over.
+	threads := runtime.GOMAXPROCS(0)
 	chunk := (N + threads - 1) / threads
 	var wg sync.WaitGroup
 	for lo := chunk; lo < N; lo += chunk {

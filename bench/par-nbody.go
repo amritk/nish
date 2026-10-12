@@ -81,7 +81,8 @@ func main() {
 		bodies = append(bodies, body{x: x, y: y, z: z, mass: 1.0 + seed})
 	}
 	acc := make([]float64, 3*n)
-	threads := runtime.NumCPU()
+	// GOMAXPROCS, which bench/run.mjs sets to the count Nish divides over.
+	threads := runtime.GOMAXPROCS(0)
 	chunk := (len(acc) + threads - 1) / threads
 	fmt.Println(energy(bodies))
 	var wg sync.WaitGroup

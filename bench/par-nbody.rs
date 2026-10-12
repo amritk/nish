@@ -56,6 +56,16 @@ fn energy(bodies: &[Body]) -> f64 {
     e
 }
 
+/// The threads to divide over: `PAR_THREADS`, which bench/run.mjs sets to the
+/// count Nish divides over, or every core the process may use.
+fn threads() -> usize {
+    std::env::var("PAR_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+}
+
 fn main() {
     let dt = 0.001f64;
     let mut bodies: Vec<Body> = Vec::with_capacity(N);
@@ -71,7 +81,7 @@ fn main() {
         bodies.push(Body { x, y, z, vx: 0.0, vy: 0.0, vz: 0.0, mass: 1.0 + seed });
     }
     let mut acc = vec![0.0f64; 3 * N];
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let threads = threads();
     let chunk = acc.len().div_ceil(threads);
     println!("{}", energy(&bodies));
     for _ in 0..STEPS {

@@ -16,6 +16,8 @@
 //     --no-go           skip Go even when the go tool is installed
 //     --no-rayon        skip the Rayon twins of the data-parallel kernels
 //                       even when cargo is installed and crates.io answers
+//     --twin-runs N     how many times the twins' comparison is run whole
+//                       (default 3), so its table can say how far apart runs fall
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md);
 //                       a run of the data-parallel kernels alone (--only par)
 //                       rewrites only their two tables and keeps the rest
@@ -199,6 +201,7 @@ const opts = {
   rust: true,
   go: true,
   rayon: true,
+  twinRuns: 3,
   out: path.join(root, "docs", "BENCHMARKS.md"),
 }
 const fail = (msg) => {
@@ -245,6 +248,11 @@ for (let i = 2; i < argv.length; i++) {
     opts.go = false
   } else if (a === "--no-rayon") {
     opts.rayon = false
+  } else if (a === "--twin-runs") {
+    opts.twinRuns = Number(next())
+    if (!Number.isInteger(opts.twinRuns) || opts.twinRuns < 1) {
+      fail("--twin-runs expects a positive integer")
+    }
   } else if (a === "--out") {
     opts.out = path.resolve(next())
   } else if (a === "-h" || a === "--help") {
@@ -433,9 +441,9 @@ const build = (bench) => {
 // ---- Run and compare ------------------------------------------------------------------
 
 /** Run once; returns { ms, stdout }. Exit status other than 0 is a failure. */
-const timeOnce = (exe, args = []) => {
+const timeOnce = (exe, args = [], env = process.env) => {
   const t0 = process.hrtime.bigint()
-  const r = spawnSync(exe, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+  const r = spawnSync(exe, args, { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] })
   const ms = Number(process.hrtime.bigint() - t0) / 1e6
   if (r.status !== 0) {
     console.error(`${exe} exited with ${r.status}\n${r.stderr}`)
@@ -1196,7 +1204,8 @@ const buildRayon = (kernels) => {
       '[package]\nname = "nish-par-rayon"\nversion = "0.0.0"\nedition = "2021"\npublish = false\n',
       // An empty workspace keeps cargo from looking above build/ for one.
       "[workspace]\n",
-      '[dependencies]\nrayon = "1"\n',
+      // Pinned, so a rerun next year builds the Rayon the table was measured with.
+      '[dependencies]\nrayon = "=1.12.0"\n',
       '[profile.release]\nopt-level = 3\npanic = "abort"\ncodegen-units = 1\nstrip = "symbols"\n',
       ...bins,
     ].join("\n")
@@ -1225,13 +1234,62 @@ const buildRayon = (kernels) => {
 const pct1 = (n) => `${(n * 100).toFixed(1)}%`
 
 /**
- * Time every kernel with twins against its Rust and Go ports. Each binary is
- * copied byte for byte, and in each round every binary and every copy runs
- * once, in an order rotated by one per round, so that a slow stretch of the
- * machine lands on all of them alike. The band is the widest gap between a
- * binary and its copy over the kernel's binaries, which is how far apart two
- * runs of the same code came out in these rounds; a ratio inside it says
- * nothing. Every twin must print the checksum the Nish `par` run prints.
+ * The threads Nish's runtime divides over on this machine: the cores the
+ * process may use, lowered by a cgroup v2 `cpu.max` quota rounded up, at most
+ * 64 (runtime/runtime-parallel.c). Every twin is handed the same count, so no
+ * column wins by using more threads than another.
+ */
+const THREADS = (() => {
+  let n = Math.min(os.availableParallelism(), 64)
+  try {
+    const [quota, period] = fs.readFileSync("/sys/fs/cgroup/cpu.max", "utf8").trim().split(/\s+/)
+    if (quota !== "max" && Number(period) > 0) {
+      n = Math.min(n, Math.max(1, Math.ceil(Number(quota) / Number(period))))
+    }
+  } catch {
+    // No cgroup v2 quota to read: the cores are the count.
+  }
+  return n
+})()
+
+/** How close to its band a ratio may fall and still be read as at the band's edge rather than past it. */
+const BAND_EDGE = 0.005
+
+/** Where a ratio falls against its band: "slower", "faster", "within", or "edge" when it clears the band by less than BAND_EDGE. */
+const sideOf = (quotient, band) => {
+  const past = Math.abs(quotient - 1) - band
+  if (past <= 0) {
+    return "within"
+  }
+  if (past < BAND_EDGE) {
+    return "edge"
+  }
+  return quotient > 1 ? "slower" : "faster"
+}
+
+/**
+ * One run's verdict on one statistic (`min` or `median`): the fastest other
+ * column on that statistic, Nish's value over its, and the band, which is the
+ * larger of the two binaries' gaps to their byte-identical copies.
+ */
+const judge = (stats, ids, field) => {
+  const fastest = ids
+    .filter((id) => id !== "nish")
+    .reduce((a, b) => (stats.get(b)[field] < stats.get(a)[field] ? b : a))
+  const gap = (id) => Math.abs(stats.get(id)[field] / stats.get(`${id}-copy`)[field] - 1)
+  const quotient = stats.get("nish")[field] / stats.get(fastest)[field]
+  const band = Math.max(gap("nish"), gap(fastest))
+  return { fastest, ratio: quotient, band, side: sideOf(quotient, band) }
+}
+
+/**
+ * Time every kernel with twins against its Rust and Go ports, `--twin-runs`
+ * times over. Each binary is copied byte for byte, and in each round every
+ * binary and every copy runs once, in an order rotated by one per round, so
+ * that a slow stretch of the machine lands on all of them alike. A run times
+ * every kernel before the next run starts, so the runs are minutes apart and
+ * their spread is the machine's run-to-run variation. Every binary is handed
+ * THREADS, and every twin must print the checksum the Nish `par` run prints.
  * Answers null when there is nothing to compare with.
  */
 const runParallelTwins = () => {
@@ -1241,16 +1299,23 @@ const runParallelTwins = () => {
   }
   if (!RUSTC && !GO) {
     console.error(
-      "note: no rustc and no go (not found, or --no-rust and --no-go); the table of Nish against Rust and Go is not measured, and a report that has one keeps it"
+      "note: no rustc and no go (looked on PATH, in ~/.cargo/bin and in /usr/local/go/bin, unless --no-rust and --no-go were given); the table of Nish against Rust and Go is not measured, and a report that has one keeps it"
     )
     return null
   }
   const rayon = RUSTC ? buildRayon(kernels.map((r) => r.bench)) : null
   const rounds = opts.runsGiven ? opts.runs : TWIN_ROUNDS
+  const passes = opts.validate ? 1 : opts.twinRuns
+  const count = String(THREADS)
+  const env = {
+    ...process.env,
+    NISH_NUM_THREADS: count,
+    RAYON_NUM_THREADS: count,
+    GOMAXPROCS: count,
+    PAR_THREADS: count,
+  }
   const rel = (p) => path.relative(root, p)
-  const rows = []
-  let disagree = 0
-  for (const kernel of kernels) {
+  const built = kernels.map((kernel) => {
     const name = kernel.bench.name
     const size = opts.sizes.get(name)
     process.stderr.write(`${name}: building the Rust and Go twins`)
@@ -1270,7 +1335,7 @@ const runParallelTwins = () => {
       run(GO, args, `${name}/go`)
       variants.push({ id: "go", exe, args: [], cmd: `go ${args.join(" ")}` })
     }
-    const runs = variants.flatMap((v) => {
+    const binaries = variants.flatMap((v) => {
       const copy = `${v.exe}-copy`
       fs.copyFileSync(v.exe, copy)
       return [
@@ -1278,53 +1343,62 @@ const runParallelTwins = () => {
         { key: `${v.id}-copy`, exe: copy, args: v.args },
       ]
     })
-    process.stderr.write(" ok; running")
-    const times = new Map(runs.map((r) => [r.key, []]))
-    const outputs = new Map()
-    const warmup = opts.validate ? 0 : opts.warmup
-    const total = opts.validate ? 1 : warmup + rounds
-    for (let round = 0; round < total; round++) {
-      for (let k = 0; k < runs.length; k++) {
-        const r = runs[(k + round) % runs.length]
-        const t = timeOnce(r.exe, r.args)
-        outputs.set(r.key, t.stdout)
-        if (round >= warmup) {
-          times.get(r.key).push(t.ms)
+    process.stderr.write(" ok\n")
+    return {
+      bench: kernel.bench,
+      ids: variants.map((v) => v.id),
+      binaries,
+      all: new Map(binaries.map((b) => [b.key, []])),
+      passes: [],
+    }
+  })
+  let disagree = 0
+  for (let pass = 0; pass < passes; pass++) {
+    for (const k of built) {
+      process.stderr.write(`${k.bench.name}: run ${pass + 1} of ${passes}`)
+      const times = new Map(k.binaries.map((b) => [b.key, []]))
+      const outputs = new Map()
+      const warmup = opts.validate ? 0 : opts.warmup
+      const total = opts.validate ? 1 : warmup + rounds
+      for (let round = 0; round < total; round++) {
+        for (let i = 0; i < k.binaries.length; i++) {
+          const b = k.binaries[(i + round) % k.binaries.length]
+          const t = timeOnce(b.exe, b.args, env)
+          outputs.set(b.key, t.stdout)
+          if (round >= warmup) {
+            times.get(b.key).push(t.ms)
+            k.all.get(b.key).push(t.ms)
+          }
+        }
+        process.stderr.write(".")
+      }
+      process.stderr.write("\n")
+      const want = outputs.get("nish")
+      for (const [key, got] of outputs) {
+        if (!sameOutput(got, want)) {
+          disagree++
+          console.error(`CHECKSUM MISMATCH ${k.bench.name}/${key}:\n--- Nish\n${want}--- ${key}\n${got}`)
         }
       }
-      process.stderr.write(".")
+      const stats = new Map(
+        [...times].map(([key, ms]) => [key, { min: Math.min(...ms), median: median(ms) }])
+      )
+      k.passes.push({ min: judge(stats, k.ids, "min"), median: judge(stats, k.ids, "median") })
     }
-    process.stderr.write("\n")
-    const want = outputs.get("nish")
-    for (const [key, got] of outputs) {
-      if (!sameOutput(got, want)) {
-        disagree++
-        console.error(`CHECKSUM MISMATCH ${name}/${key}:\n--- Nish\n${want}--- ${key}\n${got}`)
-      }
-    }
-    const stats = (key) => ({ min: Math.min(...times.get(key)), median: median(times.get(key)) })
-    for (const v of variants) {
-      Object.assign(v, stats(v.id), { copy: stats(`${v.id}-copy`) })
-    }
-    const gap = (field) => Math.max(...variants.map((v) => Math.abs(v[field] / v.copy[field] - 1)))
-    const others = variants.filter((v) => v.id !== "nish")
-    const fastest = others.reduce((a, b) => (b.min < a.min ? b : a))
-    rows.push({
-      bench: kernel.bench,
-      checksum: want,
-      variants,
-      fastest,
-      bandMin: gap("min"),
-      bandMedian: gap("median"),
-      ratioMin: variants[0].min / fastest.min,
-      ratioMedian: variants[0].median / fastest.median,
-    })
   }
   if (disagree > 0) {
     console.error(`${disagree} twin binaries print a different checksum from the Nish kernel they port`)
     process.exit(1)
   }
-  return { rows, rounds, rayon }
+  const rows = built.map((k) => ({
+    bench: k.bench,
+    ids: k.ids,
+    pooled: new Map(
+      k.ids.map((id) => [id, { min: Math.min(...k.all.get(id)), median: median(k.all.get(id)) }])
+    ),
+    passes: k.passes,
+  }))
+  return { rows, rounds, passes, rayon }
 }
 const twins = runParallelTwins()
 
@@ -1369,10 +1443,10 @@ if (opts.validate) {
     console.log(`  ${r.bench.name}: ${r.seq.stdout.trim().split("\n").join(" ")}  [seq, par]`)
   }
   if (twins !== null) {
-    const binaries = twins.rows.reduce((sum, r) => sum + r.variants.length, 0)
+    const binaries = twins.rows.reduce((sum, r) => sum + r.ids.length, 0)
     console.log(`twins: ${binaries} binaries over ${twins.rows.length} kernel(s) print the Nish checksum`)
     for (const r of twins.rows) {
-      console.log(`  ${r.bench.name}: [${r.variants.map((v) => v.id).join(", ")}]`)
+      console.log(`  ${r.bench.name}: [${r.ids.join(", ")}]`)
     }
   }
   process.exit(0)
@@ -1539,71 +1613,108 @@ if (parallelRows.length > 0) {
   lines.push("")
 }
 
-/** Which side of its band a ratio falls: 1 slower, -1 faster, 0 inside it. */
-const sideOf = (quotient, band) => {
-  if (quotient > 1 + band) {
-    return 1
-  }
-  return quotient < 1 - band ? -1 : 0
-}
-const SIDE_WORDS = new Map([
-  [1, "slower, outside the band"],
-  [-1, "faster, outside the band"],
-  [0, "within the band"],
-])
+/** A ratio as the twins' tables print it: three decimals, so that a reading made on the unrounded value never contradicts its figure. */
+const times3 = (n) => `${n.toFixed(3)}x`
+
+/** A column's label in the twins' tables. */
+const twinLabel = (id) => TWIN_COLUMNS.find(([c]) => c === id)[1]
 
 /**
- * What a twins row says, read against its band on the minimum and on the
- * median separately: faster or slower only outside the band, and a loss past
- * the 1.10x target named as one, on either statistic.
+ * What every run of a kernel says on one statistic, together: a side the runs
+ * agree on, how many runs it held in, and a loss past the 1.10x target named
+ * as one. Runs that land on both sides of the band make no claim.
  */
-const twinReading = (r) => {
-  const label = TWIN_COLUMNS.find(([id]) => id === r.fastest.id)[1]
-  const onMin = sideOf(r.ratioMin, r.bandMin)
-  const onMedian = sideOf(r.ratioMedian, r.bandMedian)
-  const text =
-    onMin === onMedian
-      ? `Nish against ${label}: ${SIDE_WORDS.get(onMin)}`
-      : `Nish against ${label}: minimum ${SIDE_WORDS.get(onMin)}, median ${SIDE_WORDS.get(onMedian)}`
-  if (onMin !== 1 && onMedian !== 1) {
-    return text
+const readAcross = (verdicts) => {
+  const n = verdicts.length
+  const runs = n === 1 ? "the one run" : `all ${n} runs`
+  const tally = (side) => verdicts.filter((v) => v.side === side).length
+  const slower = tally("slower")
+  const faster = tally("faster")
+  const edge = tally("edge")
+  if (slower > 0 && faster > 0) {
+    return "noisy, machine-dependent; no claim"
   }
-  const loses = (onMin === 1 && r.ratioMin > 1.1) || (onMedian === 1 && r.ratioMedian > 1.1)
-  return `${text}; ${loses ? "**loses by more than 1.10x**" : "within 1.10x"}`
+  if (slower === 0 && faster === 0) {
+    return edge > 0 ? `within the band in ${runs}, at its edge in ${edge}` : `within the band in ${runs}`
+  }
+  const word = slower > 0 ? "slower" : "faster"
+  const k = Math.max(slower, faster)
+  let text =
+    k === n
+      ? `${word} in ${runs}`
+      : `${word} in ${k} of ${n} runs, within the band or at its edge in the rest`
+  if (word === "slower") {
+    const past = verdicts.filter((v) => v.side === "slower" && v.ratio > 1.1).length
+    if (past === n) {
+      text = `${text}; **loses by more than 1.10x in ${runs}**`
+    } else if (past > 0) {
+      text = `${text}; **past 1.10x in ${past} of ${n} runs**`
+    } else {
+      text = `${text}; within 1.10x`
+    }
+  }
+  return text
+}
+
+/** The lowest and highest of a statistic's ratio over the runs, as the spread column prints them. */
+const spreadOf = (verdicts) => {
+  const quotients = verdicts.map((v) => v.ratio)
+  const lo = Math.min(...quotients)
+  const hi = Math.max(...quotients)
+  return lo === hi ? times3(lo) : `${times3(lo)} to ${times3(hi)}`
 }
 
 const TWINS_HEADING = "## Data parallelism against Rust and Go (ms, min / median)"
 if (twins !== null) {
-  const present = TWIN_COLUMNS.filter(([id]) => twins.rows.some((r) => r.variants.some((v) => v.id === id)))
+  const present = TWIN_COLUMNS.filter(([id]) => twins.rows.some((r) => r.ids.includes(id)))
   const tool = (cmd, args) => (cmd ? version(cmd, args) : "not installed (column skipped)")
   const rayonNote = twins.rayon
     ? `Rayon ${twins.rayon.version}, built by cargo with the same profile`
     : "Rayon not built (no cargo, or crates.io out of reach: column skipped)"
+  const n = twins.passes
   lines.push(TWINS_HEADING, "")
   lines.push(
-    `Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map kernels cut the array into one contiguous chunk per core, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, since Nish has no atomic counter to compare with.`,
+    `Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, since Nish has no atomic counter to compare with.`,
     "",
-    `Process wall time over ${twins.rounds} interleaved rounds after ${opts.warmup} warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round; min / median in ms. The noise band is the widest gap, over a kernel's binaries, between a binary and its copy, on the minimum and on the median. Nish / fastest divides Nish's minimum (median) by the minimum (median) of the fastest other column by minimum, and a ratio reads as faster or slower only outside the band.`,
+    `**The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (\`nish_panic_overflow\` and \`nish_panic_index\` are reached from par-histogram's \`binStream\`, for one). The Rust twins build as \`--release\` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's \`--profile speed\` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.`,
     "",
-    `Measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, ${os.cpus().length} logical cores, ${os.platform()} ${os.release()}, by \`node bench/run.mjs --only par\` at ${mainStamp}. ${version(nishc.cmd, [...nishc.prefix, "--version"])}; ${tool(RUSTC)}; ${rayonNote}; ${tool(GO, ["version"])}.`,
+    `**How it is timed.** Every binary divides over ${THREADS} threads, the count Nish's runtime chooses on this machine: \`NISH_NUM_THREADS\`, \`RAYON_NUM_THREADS\`, \`GOMAXPROCS\` and \`PAR_THREADS\` (read by the scope twins) are all set to it. The comparison is run ${n} time(s), minutes apart, each run ${twins.rounds} interleaved rounds after ${opts.warmup} warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round. The times below are process wall time, min / median in ms over every round of every run. In each run, and separately for the minimum and the median, Nish is divided by the fastest other column on that statistic, and the band is the larger of the gaps between Nish and its copy and between that column and its copy. A ratio reads as faster or slower only outside the band, and within ${(BAND_EDGE * 100).toFixed(1)}% of its edge as at the edge. The reading takes every run together: runs that fall on both sides of the band make no claim. The Nish column is the \`par\` run of the table above, timed again here beside seven other binaries rather than in that table's alternation with its loop, so the two tables' Nish figures differ by about as much as this machine moves between runs: compare within a table, not across.`,
+    "",
+    `Measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, ${os.cpus().length} logical cores, ${THREADS} threads, ${os.platform()} ${os.release()}, by \`node bench/run.mjs --only par\` at ${mainStamp}. ${version(nishc.cmd, [...nishc.prefix, "--version"])}; ${tool(RUSTC)}; ${rayonNote}; ${tool(GO, ["version"])}.`,
     ""
   )
   lines.push(
-    `| Kernel | ${present.map(([, l]) => l).join(" | ")} | Nish / fastest, min (median) | Band, min (median) | Reading |`,
-    `| --- | ${present.map(() => "---:").join(" | ")} | ---: | ---: | --- |`
+    `| Kernel | ${present.map(([, l]) => l).join(" | ")} | Nish / fastest, min, over ${n} run(s) | Nish / fastest, median | Reading, min | Reading, median |`,
+    `| --- | ${present.map(() => "---:").join(" | ")} | ---: | ---: | --- | --- |`
   )
   for (const r of twins.rows) {
     const cell = (id) => {
-      const v = r.variants.find((x) => x.id === id)
+      const v = r.pooled.get(id)
       return v ? `${fmt(v.min)} / ${fmt(v.median)}` : ""
     }
+    const onMin = r.passes.map((p) => p.min)
+    const onMedian = r.passes.map((p) => p.median)
     lines.push(
-      `| ${r.bench.name} | ${present.map(([id]) => cell(id)).join(" | ")} | ${r.ratioMin.toFixed(2)}x (${r.ratioMedian.toFixed(2)}x) | ${pct1(r.bandMin)} (${pct1(r.bandMedian)}) | ${twinReading(r)} |`
+      `| ${r.bench.name} | ${present.map(([id]) => cell(id)).join(" | ")} | ${spreadOf(onMin)} | ${spreadOf(onMedian)} | ${readAcross(onMin)} | ${readAcross(onMedian)} |`
     )
   }
   lines.push(
     "",
-    `Rust flags: \`${SPEED.join(" ")} --edition 2021\`, without \`target-cpu=native\`, as Nish's \`--profile speed\` has no \`-march\`. Go: \`go build -trimpath -ldflags=-s -w\`. bench/README.md says what each kernel measures, how to read the table and, where Nish loses, what is known of why.`,
+    "Each run on its own: the fastest other column on each statistic, Nish over it, and that row's band.",
+    "",
+    "| Kernel | Run | Fastest, min | Nish / it | Band | Fastest, median | Nish / it | Band |",
+    "| --- | ---: | --- | ---: | ---: | --- | ---: | ---: |"
+  )
+  for (const r of twins.rows) {
+    r.passes.forEach((p, i) => {
+      lines.push(
+        `| ${r.bench.name} | ${i + 1} | ${twinLabel(p.min.fastest)} | ${times3(p.min.ratio)} | ${pct1(p.min.band)} | ${twinLabel(p.median.fastest)} | ${times3(p.median.ratio)} | ${pct1(p.median.band)} |`
+      )
+    })
+  }
+  lines.push(
+    "",
+    `Rust flags: \`${SPEED.join(" ")} --edition 2021\`, without \`target-cpu=native\` or LTO; Nish's \`--profile speed\` has no \`-march\` either. Go: \`go build -trimpath -ldflags=-s -w\`. bench/README.md says what each kernel measures and, where Nish loses, what has been measured of why.`,
     ""
   )
 }
@@ -1742,9 +1853,10 @@ for (const r of parallelRows) {
   )
 }
 for (const r of twins?.rows ?? []) {
-  const cells = r.variants.map((v) => `${v.id} ${fmt(v.min)}/${fmt(v.median)}`).join("  ")
+  const onMin = r.passes.map((p) => p.min)
+  const onMedian = r.passes.map((p) => p.median)
   console.log(
-    `${r.bench.name.padEnd(14)} ${cells}  nish/${r.fastest.id} ${r.ratioMin.toFixed(2)}x (${r.ratioMedian.toFixed(2)}x)  band ${pct1(r.bandMin)} (${pct1(r.bandMedian)})  ${twinReading(r).replace(/\*/g, "")}`
+    `${r.bench.name.padEnd(14)} min ${spreadOf(onMin)}: ${readAcross(onMin).replace(/\*/g, "")}; median ${spreadOf(onMedian)}: ${readAcross(onMedian).replace(/\*/g, "")}`
   )
 }
 console.log(

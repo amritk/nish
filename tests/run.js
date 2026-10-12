@@ -14513,7 +14513,9 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
     // why. Without either toolchain on this machine there is no twin to run.
     const twinsHeading = "## Data parallelism against Rust and Go (ms, min / median)"
     if (parRun.stderr.includes("the table of Nish against Rust and Go is not measured")) {
-      skip("bench: `--only par` and the Rust and Go twins (neither rustc nor go on PATH)")
+      skip(
+        "bench: `--only par` and the Rust and Go twins (no rustc and no go on PATH, in ~/.cargo/bin or in /usr/local/go/bin)"
+      )
     } else {
       const twinsAt = parText.indexOf(twinsHeading)
       const twinsTable = parText.slice(twinsAt, parText.indexOf("## Checksums"))

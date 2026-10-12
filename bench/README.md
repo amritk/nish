@@ -117,7 +117,7 @@ same program in Rust and in Go:
 
 Each twin does the same work at the same size (its `bench:n` line follows
 `--n`) and must print the checksum the Nish `par` run prints, or the run fails.
-The map twins cut the array into one contiguous chunk per core and run the
+The map twins cut the array into one contiguous chunk per thread and run the
 first on the calling thread, which is how Nish's partitioner divides these
 kernels; the Rayon twins split as Rayon does. `par-regions`' scope twin starts
 its threads on every call, because a scope cannot outlive it; the Rayon twin
@@ -126,37 +126,56 @@ histogram takes a lock per value in every language (`Mutex`,
 `std::sync::Mutex`, `sync.Mutex`): Nish has no atomic counter yet, and a lock in
 one language against an atomic in another would not be the same program.
 
-The binaries are timed in interleaved rounds, eleven unless `--runs` says
-otherwise, after `--warmup`. In each round every binary *and a byte-identical
-copy of it* runs once, in an order that rotates by one each round. The noise
-band of a kernel is the widest gap between a binary and its copy over the
-kernel's binaries, on the minimum and on the median. The table divides Nish's
-minimum (median) by the fastest other column's, and reads the ratio as faster
-or slower only outside the band; where Nish loses by more than 1.10x, it says
-so. The section stamps the date, the CPU, the core count, every compiler's
-version and the commit: a run on a branch names the `main` commit the branch
-grew from, because a squash merge does not keep the branch's own commits.
+**The same work is not the same checks or the same build**, and the table
+says so. Nish keeps its default overflow and bounds checks
+(`nish_panic_overflow` and `nish_panic_index` are reached from
+`par-histogram`'s `binStream`); the Rust twins build as `--release` does,
+bounds-checked and without overflow checks, and Go checks bounds only. Nish's
+`--profile speed` links with LTO and neither Rust build does, a small edge to
+Nish. In `par-nbody` a Nish probe reaches the bodies through class references
+where the twins index an array of structs, which slightly favours Rust and Go.
 
-**Where Nish loses**, as far as it is known; each is a follow-up, not something
-the benchmark tunes away:
+**How it is timed.** Every binary divides over the same number of threads, the
+count Nish's runtime picks here (the cores the process may use, lowered by a
+cgroup quota): `bench/run.mjs` sets `NISH_NUM_THREADS`, `RAYON_NUM_THREADS`,
+`GOMAXPROCS` and `PAR_THREADS` (which the scope twins read) to it, and the
+table records it. The comparison runs whole `--twin-runs` times, three by
+default, minutes apart. Each run is eleven interleaved rounds unless `--runs`
+says otherwise, after `--warmup`: in each round every binary *and a
+byte-identical copy of it* runs once, in an order that rotates by one each
+round. In each run, separately for the minimum and the median, Nish is divided
+by the fastest other column on that statistic, and the row's band is the
+larger of Nish's gap to its copy and that column's gap to its copy. A ratio
+reads as faster or slower only outside its band, and as at the band's edge
+within half a percent of it. Ratios are printed to three decimals and judged
+unrounded. The reading takes every run together: a kernel whose runs fall on
+both sides of the band is "noisy, machine-dependent; no claim", and a loss past
+1.10x says in how many runs it held. The table prints the spread of the ratios
+over the runs and a second table prints every run, because this machine moves
+between runs by more than the band inside one run shows. The section stamps
+the date, the CPU, the cores, the threads, every compiler's version and the
+commit: a run on a branch names the `main` commit the branch grew from,
+because a squash merge does not keep the branch's own commits.
 
-- `par-regions`: the loop each chunk runs, not the pool. On one thread
-  (`NISH_NUM_THREADS=1` against `RAYON_NUM_THREADS=1`) Nish takes 586 ms and
-  Rayon 247 ms, on 2026-10-12 on the machine of the table. Rust vectorises
-  `scramble` four lanes wide (its binary has `pslld` and `psrad`; Nish's has
-  neither). `mapRange` in `std/threads.ts` stores each element under
-  `if (i < dst.length)`, a conditional store that keeps LLVM's loop vectoriser
-  off, although `dstTooShort` has already proved `dst` long enough. Nish's own
-  `seq` loop has the same guard and the same speed.
-- `par-histogram`: the lock's wait. Past 64 spins `nish_mutex_wait` calls
-  `sched_yield`, a system call per look, and the Nish run spends 0.6 to 0.8 s
-  of system time against Go's 0.02 to 0.04 s: Go's `sync.Mutex` spins and
-  parks the goroutine in user space. Rust's futex lock lands between the two.
-- `par-nbody` and `par-compute` are within 1.10x of Rayon, and how close
-  moves from run to run by more than the band inside one run: three runs on
-  2026-10-12 read par-nbody's median as 1.06x, 1.23x and 1.01x of Rayon's,
-  and par-compute's as 1.12x, 1.08x and 1.08x. Read a median past 1.10x on
-  those two as this machine's noise until a quieter one says otherwise.
+**Where Nish loses**, and what has been measured of why. Neither is tuned here:
+
+- `par-regions`: the loop each chunk runs, not the pool. `mapRange` in
+  `std/threads.ts` stores each element under `if (i < dst.length)`, though
+  `dstTooShort` has already proved `dst` long enough, and that conditional
+  store keeps LLVM's loop vectoriser off: the Nish binary has no `pslld` or
+  `psrad`, and Rust's vectorised `scramble` has both. A probe that clamped the
+  end of the range once and stored unconditionally took Nish from 602.6 to
+  192.2 ms on one thread (Rust's scope twin: 185.5 ms) and from 176.8 to
+  60.9 ms on four (Rayon: 76.4 ms), and its loop gained `pslld` and `psrad`.
+  The fix is [#619](https://github.com/amritk/nish/issues/619); the table is
+  measured without it.
+- `par-histogram`: a contended lock, and the most machine- and load-sensitive
+  of the four; read its spread before its reading. What is measured: past 64
+  spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
+  and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
+  System time is not the whole story, though: Rust's futex lock spends about
+  as much (0.46 s) and is not faster than Nish, so parking on a futex is not
+  shown to be the cure.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
