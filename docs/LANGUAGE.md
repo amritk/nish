@@ -2632,7 +2632,12 @@ export const main = (): i32 => {
     container (`_readback_get`, `_readback_get_or_insert`,
     `_readback_nested`, `_readback_store_alias`, `_table_param_store`,
     `_walk_array_param`, `_walk_array_twice`, `_walk_values`, `_walk_keys`,
-    `_walk_set_param`, `_walk_array_store`, `_walk_set_store`). Two values
+    `_walk_set_param`, `_walk_array_store`, `_walk_set_store`). So a call
+    that answers a table or what one holds — `getOrInsert(m, …)`, `m.set(…)`,
+    `s.add(…)` — is a value rooted at that table, and escapes it wherever a
+    name would (`reject_thread_region_call_escape_<position>_<form>`, with
+    positions `push`, `field`, `index`, `array` and `object`, forms `goi`,
+    `set_chain` and `add_chain`). Two values
     stay unknown: an `x ?? y`, and the variable of a walk of anything else —
     a `Channel`'s messages are another task's. An object literal
     whose property is an argument's memory carries it however it is written

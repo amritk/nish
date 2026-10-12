@@ -2192,8 +2192,9 @@ class FactCollector {
 
   /**
    * The one rule for an object of this call's own (or a part of one) used as
-   * a value: every path expression — a name, `this`, a field or an element
-   * chain — of a type that is not a number, a `boolean` or a string, rooted at
+   * a value: every expression with a path (`pathOf`) — a name, `this`, a
+   * field or an element chain, a call that answers a table or reads one back
+   * — of a type that is not a number, a `boolean` or a string, rooted at
    * such an object, makes everything below what it names may-be-anything
    * (`DIRT_ESCAPE`), unless where it stands is one the analysis follows: the
    * target of an assignment or of `++`/`--`, the initialiser of a `const`
@@ -2208,8 +2209,8 @@ class FactCollector {
    * variable names is judged where that is used.
    */
   noteEscape(node: Node): void {
-    if (node.kind !== N_IDENT && node.kind !== N_THIS && node.kind !== N_MEMBER && node.kind !== N_INDEX) {
-      return
+    if (node.kind === N_PAREN) {
+      return // what it wraps is judged where the parentheses stand
     }
     const program = this.unit.program
     let at = node
@@ -2244,6 +2245,8 @@ class FactCollector {
     if (parent !== null && this.followsUse(parent, at)) {
       return
     }
+    // Whatever the expression's form, its path decides: a name, a field or an
+    // element chain, `this`, or a call that answers a table or what one holds.
     const path = this.pathOf(node)
     if (path.kind === ROOT_OWN) {
       this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
