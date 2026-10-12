@@ -42,7 +42,7 @@
 import { Emitter, LoopTarget } from "./emit"
 import { FactsTable } from "./attributes"
 import { internalErrorFor } from "./ice"
-import { intrinsicType, unwrapParens } from "./emit-util"
+import { coalescesMaybe, intrinsicType, unwrapParens } from "./emit-util"
 import { StringSet } from "./map"
 import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_STRING, N_TRUE, Node } from "./nodes"
 import {
@@ -539,6 +539,9 @@ const testsUndefined = (emitter: Emitter, operand: Node): boolean =>
  * one `select`.
  */
 export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
+  if (!coalescesMaybe(emitter.program, emitter.table, expr)) {
+    return emitNullableCoalesce(emitter, expr)
+  }
   const fn = emitter.fn
   const type = intrinsicType(emitter.program, expr) // before an interface coercion, which `emitExpression` adds
   const ty = emitter.llvm(type)
@@ -569,6 +572,33 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   fn.emit(`br label %${done.label}`)
   fn.placeBlock(done)
   return fn.emitValue(`phi ${ty} [ ${value}, %${foundEdge} ], [ ${fallback}, %${missingEdge} ]`)
+}
+
+/**
+ * `a ?? d`, where `a` is a `T | null`: `a` once, then `d` only where `a` is
+ * `null`. With a default that cannot have an effect it is one `select`, as a
+ * `const`'s maybe is; otherwise it is a branch to the default and a `phi`,
+ * the blocks a `!== null` test written out by hand makes.
+ */
+const emitNullableCoalesce = (emitter: Emitter, expr: Node): string => {
+  const fn = emitter.fn
+  const ty = emitter.llvm(intrinsicType(emitter.program, expr))
+  const value = emitter.emitExpression(expr.children[0])
+  const present = isSet(emitter, ty, value)
+  if (isPlainOperand(emitter, expr.children[1])) {
+    const fallback = emitter.emitExpression(expr.children[1])
+    return fn.emitValue(`select i1 ${present}, ${ty} ${value}, ${ty} ${fallback}`)
+  }
+  const valueEdge = fn.currentBlock().label
+  const missing = fn.newBlock("nullish.default")
+  const done = fn.newBlock("nullish.end")
+  fn.emit(`br i1 ${present}, label %${done.label}, label %${missing.label}`)
+  fn.placeBlock(missing)
+  const fallback = emitter.emitExpression(expr.children[1])
+  const missingEdge = fn.currentBlock().label
+  fn.emit(`br label %${done.label}`)
+  fn.placeBlock(done)
+  return fn.emitValue(`phi ${ty} [ ${value}, %${valueEdge} ], [ ${fallback}, %${missingEdge} ]`)
 }
 
 /** Whether `value`, a found value of the nullable LLVM type `ty`, is not the stored `null` that `??` replaces too. */

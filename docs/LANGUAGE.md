@@ -170,7 +170,7 @@ same `i32`).
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. A receiver spelled with one of the names has no `push` or `pop`, as in TypeScript ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)). They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
 | `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
-| `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
+| `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, narrowing, and a `??` default: [Nullable types](#nullable-types). |
 | `(x: T) => U`, only on a parameter of a top-level function | none: no LLVM parameter, no value | — | (not representable) | Names a callee chosen at each call and compiled into the instantiation's body as a direct call: [Function parameters](#function-parameters). |
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
@@ -607,6 +607,30 @@ value, so nothing is boxed; `null` takes its type from context.
 - **Access** to a field, method, element, or `.length` on an un-narrowed
   nullable is `` Cannot read property `value` of `Node | null`; check for null first ``
   (`tests/cases/reject_null_field_access`).
+- **A default**: `a ?? d` on a `T | null` answers `a` where it is not `null`
+  and `d` where it is, and runs `d` only then, as TypeScript does: `null` is
+  nullish, so no `undefined` is involved. Its type is `T` when `d` is a `T`,
+  as `tsc` types it, so the result needs no narrowing; a `d` that may itself
+  be `null` keeps the `T | null` (`nullish_nullable`,
+  `nullish_nullable_default_null`). `d` takes its context from `T`, so
+  `xs ?? []` and an object literal need no annotation; a bare `null`, or a
+  ternary that may answer one, is checked into `T | null`
+  (`nullish_nullable_default_context`). The left operand is read once, so a
+  property path works here although it never narrows: `cur = cur.next ?? cur`
+  (`nullish_nullable_field`). A default that cannot have an effect, a literal
+  or a name, is one `select`; any other is a branch to `nullish.default` and
+  a `phi`. A `new` in the default goes wherever the `??` goes, as a ternary's
+  arm does (`nullish_nullable_escapes`), and an arena block is held to both
+  operands (`reject_using_arena_nullish`). `d` must be a `T` or a `T | null`:
+  `` The right operand of `??` stands in for a missing value, so it must be `string`, the type of the value on its left; got `i32` ``
+  (`reject_nullish_nullable_default_type`). The left operand may not be an
+  element read, because past the end of the array Node reads `undefined` and
+  answers `d` while the bounds check panics:
+  `` `??` cannot default an element read: past the end of the array, JavaScript answers the default and Nish panics (test the index against `length`, or read the element into a `const` first) ``
+  (`reject_nullish_element`). A left operand that cannot be `null` (a scalar,
+  or a nullable already narrowed to `T`) keeps Phase 0's refusal,
+  `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
+  (`reject_nullish`, `reject_nullish_nullable`). `?.` stays forbidden.
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
   rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
@@ -3490,6 +3514,7 @@ under [Semantics decisions](#semantics-decisions).
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch`, `reject_cf_ternary_void` |
 | `a ?? d` | `a` a `Map.get` result (`V \| undefined`), `d` a `V`; the level of `\|\|`, not mixed with `\|\|` or `&&` unparenthesised | `V` | `br` to `valueAt` or `d`, then `phi`; `select` for a `const` with a literal or a name as `d` | `map_get_nullish`, `map_get_narrow`, `map_get_pointer_value`; `reject_nullish`, `reject_nullish_default_type`, `reject_nullish_mixed_or` ([`Map` and `Set`](#map-and-set)) |
+| `a ?? d` | `a` a `T \| null` that is not an element read, `d` a `T` or a `T \| null`; the same precedence | `T`, or `T \| null` for a nullable `d` | `icmp ne` against `null`, then `select` for a literal or a name as `d`; otherwise `br` to `d` and `phi` | `nullish_nullable`, `nullish_nullable_field`, `nullish_nullable_default_null`, `nullish_nullable_default_context`, `nullish_nullable_escapes`; `reject_nullish_nullable`, `reject_nullish_element`, `reject_nullish_nullable_default_type` ([Nullable types](#nullable-types)) |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
@@ -5864,8 +5889,10 @@ export const main = (): i32 => {
     (`reject_nullish_default_type`). When `V` is nullable, `??` replaces a
     stored `null` as well, as JavaScript's does, and the result is still `V`;
     `!== undefined` narrows to `V`, keeping the `null`
-    (`map_get_pointer_value`). A `??` whose left operand is not a maybe is
-    refused in the words Phase 0 always used,
+    (`map_get_pointer_value`). A `??` whose left operand is a `T | null`
+    rather than a maybe is [Nullable types](#nullable-types)' default, and
+    one whose left operand is neither is refused in the words Phase 0 always
+    used,
     `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
     (`reject_nullish`, `reject_nullish_nullable`).
   - **Everywhere else a maybe is refused**, and the message names the place,
@@ -7565,7 +7592,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
 | `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain`, `reject_optional_call` |
-| `a ?? b`, unless `a` is a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
+| `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |
