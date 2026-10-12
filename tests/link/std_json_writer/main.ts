@@ -163,11 +163,12 @@ const stuck = (w: JsonWriter): boolean => {
  * cursor past the buffer, or that leaves bytes that are not a prefix of the
  * object, as one line; `""` when every length fails cleanly.
  */
-const helloAtEveryLength = (want: string): string => {
+const helloAtEveryLength = (want: string, indent: i32): string => {
   const n: i32 = toI32(want.length);
   for (let len: i32 = 0; len < n; len += 1) {
     const buf = new Array<u8>(len);
     const w = new JsonWriter(buf, 0);
+    w.setIndent(indent);
     writeHello(w, "Hello, World!");
     if (w.failed !== JSON_WRITE_FULL) {
       return `length ${len}: failed is ${w.failed}`;
@@ -183,30 +184,14 @@ const helloAtEveryLength = (want: string): string => {
   return "";
 };
 
-/**
- * `helloAtEveryLength` for the indented hello object, `{\n  "message": "…"\n}`
- * at two spaces, so a line break and the space after a colon are each cut
- * short at every byte too.
- */
-const prettyHelloAtEveryLength = (want: string): string => {
-  const n: i32 = toI32(want.length);
-  for (let len: i32 = 0; len < n; len += 1) {
-    const buf = new Array<u8>(len);
-    const w = new JsonWriter(buf, 0);
-    w.setIndent(2);
-    writeHello(w, "Hello, World!");
-    if (w.failed !== JSON_WRITE_FULL) {
-      return `length ${len}: failed is ${w.failed}`;
-    }
-    if (w.end < 0 || w.end > len) {
-      return `length ${len}: the cursor is at ${w.end}`;
-    }
-    const got = w.text();
-    if (got !== want.substring(0, toI32(got.length))) {
-      return `length ${len}: wrote ${got}`;
-    }
+/** `JSON_WRITER_MAX_DEPTH` empty arrays, each inside the last, opened and closed. */
+const nestArrays = (w: JsonWriter): void => {
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    w.beginArray();
   }
-  return "";
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    w.endArray();
+  }
 };
 
 /**
@@ -523,7 +508,7 @@ export const main = (): number => {
   t.eqI32("an object at depth 40 still takes keys after an array inside it closes", w.failed, JSON_WRITE_OK);
   t.ok("and writes the key after the array with its comma", w.text().endsWith(':[],"x":1'));
 
-  t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", helloAtEveryLength(hello), "");
+  t.eqStr("a buffer too short at every length is JSON_WRITE_FULL and a clean prefix", helloAtEveryLength(hello, 0), "");
   const short = new Array<u8>(4);
   w.reset(short, 0);
   writeHello(w, "Hello, World!");
@@ -660,7 +645,7 @@ export const main = (): number => {
   t.eqStr("which writes what it wrote before", pw.text(), hello);
   t.eqStr(
     "an indented text too short at every length is JSON_WRITE_FULL and a clean prefix",
-    prettyHelloAtEveryLength(prettyHello),
+    helloAtEveryLength(prettyHello, 2),
     ""
   );
   // A closer's line break with no room: `[\n  1` fits in 5 bytes, and the
@@ -683,21 +668,11 @@ export const main = (): number => {
   const widest = new Array<u8>(deepest);
   pw.setIndent(10);
   pw.reset(widest, 0);
-  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
-    pw.beginArray();
-  }
-  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
-    pw.endArray();
-  }
+  nestArrays(pw);
   t.ok("JSON_WRITER_MAX_DEPTH empty arrays at 10 spaces close back to complete", pw.complete());
   t.eqI32("in JSON.stringify's 39,944 bytes", pw.written(), deepest);
   pw.reset(widest, 1);
-  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
-    pw.beginArray();
-  }
-  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
-    pw.endArray();
-  }
+  nestArrays(pw);
   t.eqI32("and one byte less is JSON_WRITE_FULL", pw.failed, JSON_WRITE_FULL);
   t.eqI32("at the last closer, whose line break fits and whose ] does not", pw.written(), deepest - 1);
 

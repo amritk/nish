@@ -937,7 +937,7 @@ export class JsonWriter {
   indentWidth: i32 = 0
   /** The byte an indent is made of: a space, or a tab after `setIndentTab`. */
   indentByte: i32 = 32
-  /** Whether an `f64` that is NaN or an infinity is `JSON_WRITE_NON_FINITE` rather than `null`. Kept by `reset`. */
+  /** Whether a NaN or infinite `f64` is `JSON_WRITE_NON_FINITE` rather than `null`. Kept by `reset`. */
   strict: boolean = false
 
   constructor(buf: u8[], start: i32) {
@@ -1051,12 +1051,14 @@ export class JsonWriter {
       this.failed = JSON_WRITE_VALUE_EXPECTED
       return
     }
+    if (this.indentWidth !== 0) {
+      jsonWriterKeyIndented(this, name)
+      return
+    }
     if (this.needComma && !jsonWriterPutByte(this, JSON_COMMA)) {
       return
     }
-    if (this.indentWidth !== 0) {
-      jsonWriterKeyIndented(this, name)
-    } else if (jsonWriterPutString(this, name) && jsonWriterPutByte(this, JSON_COLON)) {
+    if (jsonWriterPutString(this, name) && jsonWriterPutByte(this, JSON_COLON)) {
       this.afterKey = true
     }
   }
@@ -1210,10 +1212,10 @@ const jsonWriterValueDue = (w: JsonWriter): boolean => {
   return !w.needComma || jsonWriterPutByte(w, JSON_COMMA)
 }
 
-/** `key` in an indented text, after its comma: the line break, the key, and `": "`. */
+/** `key` in an indented text: its comma when one is due, the line break, the key, and `": "`. */
 const jsonWriterKeyIndented = (w: JsonWriter, name: string): void => {
   if (
-    jsonWriterPutBreak(w, false, w.depth) &&
+    jsonWriterPutBreak(w, w.needComma, w.depth) &&
     jsonWriterPutString(w, name) &&
     jsonWriterPutByte(w, JSON_COLON) &&
     jsonWriterPutByte(w, JSON_SPACE)
@@ -1309,12 +1311,7 @@ const jsonWriterPutBreak = (w: JsonWriter, comma: boolean, level: i32): boolean 
     return false
   }
   buf[at] = toU8(JSON_NEWLINE)
-  const fill: u8 = toU8(w.indentByte)
-  for (let k: i32 = at + 1; k < stop && k < toI32(buf.length); k += 1) {
-    if (k >= 0) {
-      buf[k] = fill
-    }
-  }
+  buf.fill(toU8(w.indentByte), at + 1, stop)
   w.end = stop
   return true
 }
