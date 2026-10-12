@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1019 programs, 102723 dump lines.
+# 1019 programs, 102729 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -59357,30 +59357,32 @@ function aesGcmLengthFits(length: i32): boolean -> @nish.aesGcmLengthFits
   stackSites=0 stackLocals=0
 function aesCtrInto(rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesCtrInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 1015:9
+  sharedWrite: 1016:9
   escaping: rounds
-  calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
+  calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish.wipe$arr.u64 nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
   pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 990:9 counter: u32 (const)
-  callee 990:24 aesLoad32 -> @nish.aesLoad32
-  local 991:9 buf: u8[] (const)
-  local 992:9 q: u64[] (const)
-  local 993:9 srcLength: i32 (const)
-  local 994:9 dstLength: i32 (const)
-  local 995:9 bufLength: i32 (const)
-  local 997:9 batches: i32 (const)
-  local 998:12 batch: i32 (let)
-  local 999:11 base: i32 (const)
-  local 1000:14 k: i32 (let)
-  local 1001:16 i: i32 (let)
-  callee 1004:7 aesStore32 -> @nish.aesStore32
-  callee 1006:5 aesEncryptBatch -> @nish.aesEncryptBatch
-  local 1012:14 at: i32 (let)
-  local 1013:13 j: i32 (const)
+  local 991:9 counter: u32 (const)
+  callee 991:24 aesLoad32 -> @nish.aesLoad32
+  local 992:9 buf: u8[] (const)
+  local 993:9 q: u64[] (const)
+  local 994:9 srcLength: i32 (const)
+  local 995:9 dstLength: i32 (const)
+  local 996:9 bufLength: i32 (const)
+  local 998:9 batches: i32 (const)
+  local 999:12 batch: i32 (let)
+  local 1000:11 base: i32 (const)
+  local 1001:14 k: i32 (let)
+  local 1002:16 i: i32 (let)
+  callee 1005:7 aesStore32 -> @nish.aesStore32
+  callee 1007:5 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 1013:14 at: i32 (let)
+  local 1014:13 j: i32 (const)
+  callee 1021:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 1022:3 wipe<u64[]> -> @nish.wipe$arr.u64
 function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesCtrInto
@@ -59391,27 +59393,28 @@ function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesCtrInto#3
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesCtrInto#4
   stackSites=0 stackLocals=0
-  callee 1029:6 aesKeyUsable -> @nish.aesKeyUsable
-  callee 1037:3 aesCtrInto -> @nish.aesCtrInto
+  callee 1033:6 aesKeyUsable -> @nish.aesKeyUsable
+  callee 1041:3 aesCtrInto -> @nish.aesCtrInto
 function aesGcmTag(y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void -> @nish.aesGcmTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 1052:3
+  sharedWrite: 1057:3
   escaping: textLength
-  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_write
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_write
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashUpdate#0 nish.ghashUpdate#0 nish.ghashLengths#0
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashUpdate#1 nish.ghashLengths#1 nish.aesEncryptOne#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   pointer text: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   stackSites=0 stackLocals=0
-  local 1046:9 aadLength: i32 (const)
-  callee 1047:3 ghashUpdate -> @nish.ghashUpdate
-  callee 1048:3 ghashUpdate -> @nish.ghashUpdate
-  callee 1049:3 ghashLengths -> @nish.ghashLengths
-  local 1050:9 mask: u8[] (const)
-  callee 1051:3 aesEncryptOne -> @nish.aesEncryptOne
-  callee 1052:17 aesLoad64 -> @nish.aesLoad64
-  callee 1053:17 aesLoad64 -> @nish.aesLoad64
+  local 1051:9 aadLength: i32 (const)
+  callee 1052:3 ghashUpdate -> @nish.ghashUpdate
+  callee 1053:3 ghashUpdate -> @nish.ghashUpdate
+  callee 1054:3 ghashLengths -> @nish.ghashLengths
+  local 1055:9 mask: u8[] (const)
+  callee 1056:3 aesEncryptOne -> @nish.aesEncryptOne
+  callee 1057:17 aesLoad64 -> @nish.aesLoad64
+  callee 1058:17 aesLoad64 -> @nish.aesLoad64
+  callee 1059:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @nish.aesGcmTagMask [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -59424,18 +59427,18 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 1074:9 length: i32 (const)
-  local 1077:9 longest: i32 (const)
-  callee 1078:8 aesKeyUsable -> @nish.aesKeyUsable
-  callee 1078:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 1081:9 j0: u8[] (const)
-  callee 1081:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 1082:9 out: u8[] (const)
-  callee 1083:3 aesGcmCtr -> @nish.aesGcmCtr
-  local 1084:9 tag: u64[] (const)
-  callee 1085:3 aesGcmTag -> @nish.aesGcmTag
-  callee 1086:3 aesStore64 -> @nish.aesStore64
-  callee 1087:3 aesStore64 -> @nish.aesStore64
+  local 1080:9 length: i32 (const)
+  local 1083:9 longest: i32 (const)
+  callee 1084:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 1084:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1087:9 j0: u8[] (const)
+  callee 1087:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1088:9 out: u8[] (const)
+  callee 1089:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1090:9 tag: u64[] (const)
+  callee 1091:3 aesGcmTag -> @nish.aesGcmTag
+  callee 1092:3 aesStore64 -> @nish.aesStore64
+  callee 1093:3 aesStore64 -> @nish.aesStore64
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesGcmJ0
@@ -59445,21 +59448,21 @@ function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#4 nish.aesLoad64#0 nish.aesLoad64#0 nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 1100:9 total: i32 (const)
-  callee 1101:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 1106:9 length: i32 (const)
-  callee 1107:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 1110:9 j0: u8[] (const)
-  callee 1110:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 1111:9 tag: u64[] (const)
-  callee 1112:3 aesGcmTag -> @nish.aesGcmTag
-  local 1113:9 same: u64 (const)
-  callee 1113:21 aesGcmTagMask -> @nish.aesGcmTagMask
-  callee 1116:5 aesLoad64 -> @nish.aesLoad64
-  callee 1117:5 aesLoad64 -> @nish.aesLoad64
-  local 1123:9 hashKeySet: u64 (const)
-  local 1127:9 out: u8[] (const)
-  callee 1128:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1106:9 total: i32 (const)
+  callee 1107:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 1112:9 length: i32 (const)
+  callee 1113:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1116:9 j0: u8[] (const)
+  callee 1116:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1117:9 tag: u64[] (const)
+  callee 1118:3 aesGcmTag -> @nish.aesGcmTag
+  local 1119:9 same: u64 (const)
+  callee 1119:21 aesGcmTagMask -> @nish.aesGcmTagMask
+  callee 1122:5 aesLoad64 -> @nish.aesLoad64
+  callee 1123:5 aesLoad64 -> @nish.aesLoad64
+  local 1129:9 hashKeySet: u64 (const)
+  local 1133:9 out: u8[] (const)
+  callee 1134:3 aesGcmCtr -> @nish.aesGcmCtr
 module std/crypto/chacha20poly1305.ts [package nish]
 import wipe from "nish:secret" -> generic function wipe
 const CHACHA20_KEY_SIZE: i32 = 32 [exported]
@@ -90241,30 +90244,32 @@ function aesGcmLengthFits(length: i32): boolean -> @nish.aesGcmLengthFits
   stackSites=0 stackLocals=0
 function aesCtrInto(rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesCtrInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 1015:9
+  sharedWrite: 1016:9
   escaping: rounds
-  calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
+  calls: nish.aesEncryptBatch nish.aesLoad32 nish.aesStore32 nish.wipe$arr.u64 nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_panic_overflow nish_write
   pointer rk: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptBatch#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesLoad32#0
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 990:9 counter: u32 (const)
-  callee 990:24 aesLoad32 -> @nish.aesLoad32
-  local 991:9 buf: u8[] (const)
-  local 992:9 q: u64[] (const)
-  local 993:9 srcLength: i32 (const)
-  local 994:9 dstLength: i32 (const)
-  local 995:9 bufLength: i32 (const)
-  local 997:9 batches: i32 (const)
-  local 998:12 batch: i32 (let)
-  local 999:11 base: i32 (const)
-  local 1000:14 k: i32 (let)
-  local 1001:16 i: i32 (let)
-  callee 1004:7 aesStore32 -> @nish.aesStore32
-  callee 1006:5 aesEncryptBatch -> @nish.aesEncryptBatch
-  local 1012:14 at: i32 (let)
-  local 1013:13 j: i32 (const)
+  local 991:9 counter: u32 (const)
+  callee 991:24 aesLoad32 -> @nish.aesLoad32
+  local 992:9 buf: u8[] (const)
+  local 993:9 q: u64[] (const)
+  local 994:9 srcLength: i32 (const)
+  local 995:9 dstLength: i32 (const)
+  local 996:9 bufLength: i32 (const)
+  local 998:9 batches: i32 (const)
+  local 999:12 batch: i32 (let)
+  local 1000:11 base: i32 (const)
+  local 1001:14 k: i32 (let)
+  local 1002:16 i: i32 (let)
+  callee 1005:7 aesStore32 -> @nish.aesStore32
+  callee 1007:5 aesEncryptBatch -> @nish.aesEncryptBatch
+  local 1013:14 at: i32 (let)
+  local 1014:13 j: i32 (const)
+  callee 1021:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 1022:3 wipe<u64[]> -> @nish.wipe$arr.u64
 function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): void -> @nish.aesGcmCtr
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesCtrInto
@@ -90275,27 +90280,28 @@ function aesGcmCtr(key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.aesCtrInto#3
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.aesCtrInto#4
   stackSites=0 stackLocals=0
-  callee 1029:6 aesKeyUsable -> @nish.aesKeyUsable
-  callee 1037:3 aesCtrInto -> @nish.aesCtrInto
+  callee 1033:6 aesKeyUsable -> @nish.aesKeyUsable
+  callee 1041:3 aesCtrInto -> @nish.aesCtrInto
 function aesGcmTag(y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void -> @nish.aesGcmTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 1052:3
+  sharedWrite: 1057:3
   escaping: textLength
-  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_write
+  calls: nish.aesEncryptOne nish.aesLoad64 nish.ghashLengths nish.ghashUpdate nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_write
   pointer y: size=0 writesThrough=true captured=false passedTo=nish.ghashUpdate#0 nish.ghashUpdate#0 nish.ghashLengths#0
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashUpdate#1 nish.ghashLengths#1 nish.aesEncryptOne#0
   pointer j0: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   pointer text: size=0 writesThrough=false captured=false passedTo=nish.ghashUpdate#2
   stackSites=0 stackLocals=0
-  local 1046:9 aadLength: i32 (const)
-  callee 1047:3 ghashUpdate -> @nish.ghashUpdate
-  callee 1048:3 ghashUpdate -> @nish.ghashUpdate
-  callee 1049:3 ghashLengths -> @nish.ghashLengths
-  local 1050:9 mask: u8[] (const)
-  callee 1051:3 aesEncryptOne -> @nish.aesEncryptOne
-  callee 1052:17 aesLoad64 -> @nish.aesLoad64
-  callee 1053:17 aesLoad64 -> @nish.aesLoad64
+  local 1051:9 aadLength: i32 (const)
+  callee 1052:3 ghashUpdate -> @nish.ghashUpdate
+  callee 1053:3 ghashUpdate -> @nish.ghashUpdate
+  callee 1054:3 ghashLengths -> @nish.ghashLengths
+  local 1055:9 mask: u8[] (const)
+  callee 1056:3 aesEncryptOne -> @nish.aesEncryptOne
+  callee 1057:17 aesLoad64 -> @nish.aesLoad64
+  callee 1058:17 aesLoad64 -> @nish.aesLoad64
+  callee 1059:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @nish.aesGcmTagMask [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -90308,18 +90314,18 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 1074:9 length: i32 (const)
-  local 1077:9 longest: i32 (const)
-  callee 1078:8 aesKeyUsable -> @nish.aesKeyUsable
-  callee 1078:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 1081:9 j0: u8[] (const)
-  callee 1081:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 1082:9 out: u8[] (const)
-  callee 1083:3 aesGcmCtr -> @nish.aesGcmCtr
-  local 1084:9 tag: u64[] (const)
-  callee 1085:3 aesGcmTag -> @nish.aesGcmTag
-  callee 1086:3 aesStore64 -> @nish.aesStore64
-  callee 1087:3 aesStore64 -> @nish.aesStore64
+  local 1080:9 length: i32 (const)
+  local 1083:9 longest: i32 (const)
+  callee 1084:8 aesKeyUsable -> @nish.aesKeyUsable
+  callee 1084:76 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1087:9 j0: u8[] (const)
+  callee 1087:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1088:9 out: u8[] (const)
+  callee 1089:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1090:9 tag: u64[] (const)
+  callee 1091:3 aesGcmTag -> @nish.aesGcmTag
+  callee 1092:3 aesStore64 -> @nish.aesStore64
+  callee 1093:3 aesStore64 -> @nish.aesStore64
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesGcmJ0
@@ -90329,21 +90335,21 @@ function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#3
   pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#4 nish.aesLoad64#0 nish.aesLoad64#0 nish.aesGcmCtr#2
   stackSites=1 stackLocals=1
-  local 1100:9 total: i32 (const)
-  callee 1101:8 aesKeyUsable -> @nish.aesKeyUsable
-  local 1106:9 length: i32 (const)
-  callee 1107:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
-  local 1110:9 j0: u8[] (const)
-  callee 1110:20 aesGcmJ0 -> @nish.aesGcmJ0
-  local 1111:9 tag: u64[] (const)
-  callee 1112:3 aesGcmTag -> @nish.aesGcmTag
-  local 1113:9 same: u64 (const)
-  callee 1113:21 aesGcmTagMask -> @nish.aesGcmTagMask
-  callee 1116:5 aesLoad64 -> @nish.aesLoad64
-  callee 1117:5 aesLoad64 -> @nish.aesLoad64
-  local 1123:9 hashKeySet: u64 (const)
-  local 1127:9 out: u8[] (const)
-  callee 1128:3 aesGcmCtr -> @nish.aesGcmCtr
+  local 1106:9 total: i32 (const)
+  callee 1107:8 aesKeyUsable -> @nish.aesKeyUsable
+  local 1112:9 length: i32 (const)
+  callee 1113:8 aesGcmLengthFits -> @nish.aesGcmLengthFits
+  local 1116:9 j0: u8[] (const)
+  callee 1116:20 aesGcmJ0 -> @nish.aesGcmJ0
+  local 1117:9 tag: u64[] (const)
+  callee 1118:3 aesGcmTag -> @nish.aesGcmTag
+  local 1119:9 same: u64 (const)
+  callee 1119:21 aesGcmTagMask -> @nish.aesGcmTagMask
+  callee 1122:5 aesLoad64 -> @nish.aesLoad64
+  callee 1123:5 aesLoad64 -> @nish.aesLoad64
+  local 1129:9 hashKeySet: u64 (const)
+  local 1133:9 out: u8[] (const)
+  callee 1134:3 aesGcmCtr -> @nish.aesGcmCtr
 module std/secret.ts [package nish]
 function wipe<u64[]>(_target: u64[]): void -> @nish.wipe$arr.u64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true

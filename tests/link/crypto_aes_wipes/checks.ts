@@ -8,7 +8,7 @@
 //
 // The working copies the module and `nish/crypto/chacha20poly1305` wipe inside
 // a call (the bitsliced schedule's words and batch, the block H passes
-// through, the ChaCha20 state and keystream, the Poly1305 key and
+// through, GCTR's keystream batch and E(K, J0)'s block, the ChaCha20 state and keystream, the Poly1305 key and
 // accumulators) are dead when the call returns, so no program can read them
 // back; `tests/wipes/crypto.js` counts their wipes after `opt -O2` instead,
 // compiling this program. What this checks of them is that the answers are

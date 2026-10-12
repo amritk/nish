@@ -976,7 +976,8 @@ const aesGcmLengthFits = (length: i32): boolean =>
  * under the round keys `rk`. The counter is the last four bytes of J0 as a
  * big-endian `u32` and wraps modulo 2^32, as inc32 does, while the first
  * twelve bytes stay as they are. `dst` may be `src`: each byte is read before
- * it is written.
+ * it is written. The batch of keystream and the bitsliced state are wiped
+ * before it returns.
  *
  * Its one caller, `aesGcmCtr`, has checked that `rk` is a schedule of
  * `rounds` rounds, that `j0` is 16 bytes and that `0 <= length` and `length`
@@ -1016,6 +1017,9 @@ const aesCtrInto = (rk: u64[], rounds: i32, j0: u8[], src: u8[], dst: u8[], leng
       }
     }
   }
+  // The last batch's keystream and its bitsliced state, both secret.
+  wipe(buf)
+  wipe(q)
 }
 
 /**
@@ -1040,7 +1044,8 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
 /**
  * E(K, J0) ⊕ S, GCM's tag (SP 800-38D §7.1 step 6), into `y` (zero, two
  * words) as two big-endian words: S is the GHASH of the AAD and the
- * ciphertext `text[0 .. textLength)`.
+ * ciphertext `text[0 .. textLength)`. E(K, J0)'s block is wiped once it is
+ * folded in.
  */
 const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void => {
   const aadLength: i32 = toI32(aad.length)
@@ -1051,6 +1056,7 @@ const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textL
   aesEncryptOne(key, j0, mask)
   y[0] = y[0] ^ aesLoad64(mask, 0, 16)
   y[1] = y[1] ^ aesLoad64(mask, 8, 16)
+  wipe(mask)
 }
 
 /**

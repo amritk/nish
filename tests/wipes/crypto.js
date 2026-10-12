@@ -61,7 +61,11 @@ export const wipeChecks = [
   // and the batch it packed), and the block H and E(K, J0) pass through, 2
   // (the batch and the bitsliced state), so `aesKeyInto` and `aesKey` 6 (the
   // schedule's 3, the block's 2 and the bytes of H) and every function that
-  // encrypts one block 2. On a CPU with the AES instructions the seams call
+  // encrypts one block 2. GCTR wipes its last batch of keystream and its
+  // bitsliced state, 2, counted at `aesGcmCtr` because `opt` inlines the
+  // seam's body into its one caller; the tag wipes E(K, J0)'s block besides
+  // the block's 2, 3; so seal and open 5 (open runs GCTR only once the tag
+  // has verified). On a CPU with the AES instructions the seams call
   // the runtime's kernels instead, and the counts are the bitsliced arm's,
   // which the branch keeps. ChaCha20-Poly1305: a keystream block, 1, wiped
   // by every run of the keystream; Poly1305's `r` and accumulator, 2; so the
@@ -80,8 +84,9 @@ export const wipeChecks = [
       ["nish.aesKeyInto", 6],
       ["nish.aesEncryptBlock", 2],
       ["nish.aesHeaderMask", 2],
-      ["nish.aesGcmSeal", 2],
-      ["nish.aesGcmOpen", 2],
+      ["nish.aesGcmCtr", 2],
+      ["nish.aesGcmSeal", 5],
+      ["nish.aesGcmOpen", 5],
       ["nish.chacha20XorInto", 1],
       ["nish.chacha20Block", 2],
       ["nish.chacha20", 2],

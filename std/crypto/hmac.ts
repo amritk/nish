@@ -31,7 +31,7 @@
  * the inner digest and both keyed hashers (chaining value, pending block and
  * message schedule) before it answers, so a finished `HmacSha256` holds
  * nothing of the key. The wipes are `wipe`'s volatile stores, which `-O2`
- * keeps (`tests/run.js`, "crypto_hmac crypto_hkdf: the wipes survive -O2").
+ * keeps (`tests/wipes/crypto.js`, "crypto_hmac crypto_hkdf: the wipes survive -O2").
  * What no wipe here reaches is the caller's own key array, and an
  * `HmacSha256` that is keyed and then dropped without a `digest` keeps its
  * keyed hashers (docs/security/crypto-k1.md, K1-7).
