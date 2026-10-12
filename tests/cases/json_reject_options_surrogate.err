@@ -1,0 +1,1 @@
+`User.json` renames `id` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it

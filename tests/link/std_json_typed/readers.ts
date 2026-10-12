@@ -8,6 +8,8 @@ import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import {
   JsonDecoder,
+  JsonNumber,
+  jsonEncodeNumber,
   jsonEncodeU64,
   jsonEncodeU64Array,
   jsonEncodeU64ArrayOrNull,
@@ -185,7 +187,54 @@ export const main = (): i32 => {
   room.beginObject();
   room.nextField();
   console.log(`mapRoom ${room.mapRoom()} ${room.mapRoom()} ${room.mapRoom()} ${room.mapKeys} ${room.failed} at ${room.errorAt}`);
+  numbers();
   return 0;
+};
+
+/**
+ * `JsonNumber`: read whole by `number`, kept as written, read back as each
+ * type `nish/json-value` reads a number as, set from text, and written byte
+ * for byte by `jsonEncodeNumber`.
+ */
+const numbers = (): void => {
+  const d = opened(`[123456789012345678901234567890,-0,18446744073709551615,-9223372036854775808,2.5e-3,"7",1]`);
+  const n = new JsonNumber();
+  console.log(`number new ${n.text()} ${n.isI64()} ${n.i64()} ${n.isU64()} ${n.u64()}`);
+  d.number(n);
+  console.log(`number ${n.text()} ${n.isI64()} ${n.isU64()} ${n.f64() > 1.2e29 && n.f64() < 1.3e29}`);
+  d.nextElement();
+  d.number(n);
+  console.log(`number ${n.text()} ${n.isI64()} ${n.i64()} ${n.isU64()}`);
+  d.nextElement();
+  d.number(n);
+  console.log(`number ${n.text()} ${n.isI64()} ${n.isU64()} ${n.u64()}`);
+  d.nextElement();
+  d.number(n);
+  console.log(`number ${n.text()} ${n.isI64()} ${n.i64()} ${n.isU64()} ${n.u64()}`);
+  d.nextElement();
+  d.number(n);
+  console.log(`number ${n.text()} ${n.isI64()} ${n.f64() === 0.0025}`);
+  d.nextElement();
+  d.number(n);
+  console.log(`number a string ${d.failed} at ${d.errorAt}, keeps ${n.text()}`);
+  const shorter = opened(`[123456,7]`);
+  shorter.number(n);
+  shorter.nextElement();
+  shorter.number(n);
+  console.log(`number shorter ${n.text()} ${n.count} ${shorter.failed}`);
+  const set: string[] = [];
+  for (const text of ["1e5", "01", " 1", "1 ", "-", "\u00e9", "", "-1.5E-7"]) {
+    set.push(`${n.setText(text)}:${n.text()}`);
+  }
+  console.log(`setText ${set.join(" ")}`);
+  const out = new JsonWriter(new Array<u8>(128), 0);
+  out.beginArray();
+  jsonEncodeNumber(out, n);
+  const wide = new JsonNumber();
+  wide.setText("-123456789012345678901234567890.000000000000000000001e-99999");
+  jsonEncodeNumber(out, wide);
+  out.endArray();
+  console.log(`number encoded ${out.text()} ${out.failed}`);
 };
 
 /** A string's byte length and the sum of its codes: the same native and under Node. */

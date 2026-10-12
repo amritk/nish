@@ -75,7 +75,8 @@ the record that found it. The notes below the table name each such finding.
    listener read the first Initial in place and answer into scratch, so a
    handshake through a reused slot keeps 0 bytes of arena memory.
 10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9, JSON-11 and JSON-12 (Low) are accepted, with the reason in
-    their record, and are not counted. JSON-2 is open, and so is JSON-13
+    their record, and are not counted, and so is JSON-14 (Low), a `JsonNumber`'s
+    bytes written raw. JSON-2 is open, and so is JSON-13
     (Medium), the map keys a body can make collide: `jsonDecode` (#622)
     bounds the keys of one decoding with `maxMapKeys`, which mitigates it,
     and a seeded string hash for the global `Map` is what would close it. JSON-3, duplicate keys
