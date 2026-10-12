@@ -9192,25 +9192,54 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       report.status === 0 && disagreements.length === 0,
       report.status === 0 ? disagreements.join("\n") : shown(report)
     )
-    // The two ways the report drifted, fed back to the comparison: a row whose ceiling
-    // is not the gate's, and a row the gate measures and the report leaves out.
+    // Each way a report can disagree, fed back to the comparison by rewriting one row
+    // of the real report: the two ways it drifted (a ceiling that is not the gate's, a
+    // row the gate measures and the report leaves out), and the other four the
+    // comparison names (a row printed twice, a row for a unit the gate does not
+    // measure, another constant, another byte count), those on a middle row rather
+    // than only the ends of the table.
     const [first] = RUNTIME_BUDGETS
+    const middle = RUNTIME_BUDGETS[Math.floor(RUNTIME_BUDGETS.length / 2)]
     const last = RUNTIME_BUDGETS[RUNTIME_BUDGETS.length - 1]
-    const ceiling = `budget ${first.budget}, ${first.constant})`
-    const stale = report.stdout.replace(ceiling, `budget ${first.budget - 22}, ${first.constant})`)
-    const lastKey = `-c ${last.src} && `
-    const missing = report.stdout
-      .split("\n")
-      .filter((line) => !line.includes(lastKey))
-      .join("\n")
-    for (const [what, text] of [
-      [`a stale ceiling for ${budgetLabel(first)}`, stale],
-      [`no row for ${budgetLabel(last)}`, missing],
+    const isRow = (entry) => (line) =>
+      line.includes(`clang -Oz ${entry.flags.map((flag) => `${flag} `).join("")}-c ${entry.src} && `)
+    const rewrite = (entry, edit) =>
+      report.stdout
+        .split("\n")
+        .flatMap((line) => (isRow(entry)(line) ? edit(line) : [line]))
+        .join("\n")
+    const middleLine = report.stdout.split("\n").find(isRow(middle)) ?? ""
+    for (const [what, text, expected] of [
+      [
+        `a stale ceiling for ${budgetLabel(first)}`,
+        rewrite(first, (line) => [line.replace(`budget ${first.budget},`, `budget ${first.budget - 22},`)]),
+        `says budget ${first.budget - 22} (`,
+      ],
+      [`no row for ${budgetLabel(last)}`, rewrite(last, () => []), "prints 0 rows"],
+      [`the row for ${budgetLabel(middle)} twice`, rewrite(middle, (line) => [line, line]), "prints 2 rows"],
+      [
+        "a row for a unit the gate does not measure",
+        `${report.stdout}${middleLine.replace(`-c ${middle.src} `, "-c runtime/runtime-extra.c ")}\n`,
+        `${["runtime/runtime-extra.c", ...middle.flags].join(" ")}: the report has a row the gate does not measure`,
+      ],
+      [
+        `another constant for ${budgetLabel(middle)}`,
+        rewrite(middle, (line) => [line.replace(`, ${middle.constant})`, ", RUNTIME_STALE_TEXT_BUDGET)")]),
+        "(RUNTIME_STALE_TEXT_BUDGET), the gate applies",
+      ],
+      [
+        `another byte count for ${budgetLabel(middle)}`,
+        rewrite(middle, (line) => [
+          line.replace(/^(.*?\s)(\d+)(\s+clang )/, (_, a, n, b) => `${a}${Number(n) + 1}${b}`),
+        ]),
+        "the report measured",
+      ],
     ]) {
+      // Exactly the one disagreement the rewrite introduced, of the kind it introduced.
       const found = sizeReportDisagreements(text, RUNTIME_BUDGETS, measured)
       check(
         `size report: a report with ${what} disagrees with the gate`,
-        report.status === 0 && text !== report.stdout && found.length === 1,
+        report.status === 0 && text !== report.stdout && found.length === 1 && found[0].includes(expected),
         report.status === 0 ? `found: ${found.join("; ") || "nothing"}` : shown(report)
       )
     }
