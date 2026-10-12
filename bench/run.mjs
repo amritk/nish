@@ -1515,7 +1515,7 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
 // the commit in the header (`spliceSections`).
 const partialNote =
   opts.only && results.length === 0
-    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at commit ${commit}, by \`node bench/run.mjs --only par\`; the rest of the file was measured on the machine in the header.`
+    ? ` This table alone was measured on ${new Date().toISOString().slice(0, 10)}, on ${cpu}, at ${mainStamp}, by \`node bench/run.mjs --only par\`; the rest of the file was measured on the machine in the header.`
     : ""
 if (parallelRows.length > 0) {
   lines.push("## Data parallelism (ms, min / median)", "")
@@ -1603,7 +1603,7 @@ if (twins !== null) {
   }
   lines.push(
     "",
-    `Rust flags: \`${SPEED.join(" ")} --edition 2021\`, without \`target-cpu=native\`, as Nish's \`--profile speed\` has no \`-march\`. Go: \`go build -trimpath -ldflags=-s -w\`. bench/README.md says what each kernel measures and how to read the table.`,
+    `Rust flags: \`${SPEED.join(" ")} --edition 2021\`, without \`target-cpu=native\`, as Nish's \`--profile speed\` has no \`-march\`. Go: \`go build -trimpath -ldflags=-s -w\`. bench/README.md says what each kernel measures, how to read the table and, where Nish loses, what is known of why.`,
     ""
   )
 }

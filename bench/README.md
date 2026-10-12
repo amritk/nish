@@ -137,6 +137,25 @@ so. The section stamps the date, the CPU, the core count, every compiler's
 version and the commit: a run on a branch names the `main` commit the branch
 grew from, because a squash merge does not keep the branch's own commits.
 
+**Where Nish loses**, as far as it is known; each is a follow-up, not something
+the benchmark tunes away:
+
+- `par-regions`: the loop each chunk runs, not the pool. On one thread
+  (`NISH_NUM_THREADS=1` against `RAYON_NUM_THREADS=1`) Nish takes 586 ms and
+  Rayon 247 ms, on 2026-10-12 on the machine of the table. Rust vectorises
+  `scramble` four lanes wide (its binary has `pslld` and `psrad`; Nish's has
+  neither). `mapRange` in `std/threads.ts` stores each element under
+  `if (i < dst.length)`, a conditional store that keeps LLVM's loop vectoriser
+  off, although `dstTooShort` has already proved `dst` long enough. Nish's own
+  `seq` loop has the same guard and the same speed.
+- `par-histogram`: the lock's wait. Past 64 spins `nish_mutex_wait` calls
+  `sched_yield`, a system call per look, and the Nish run spends 0.6 to 0.8 s
+  of system time against Go's 0.02 to 0.04 s: Go's `sync.Mutex` spins and
+  parks the goroutine in user space. Rust's futex lock lands between the two.
+- `par-nbody` and `par-compute` lose on the median and not on the minimum,
+  by less than run-to-run variation on this machine: a second run of the
+  same commit read par-nbody's median as 1.06x where the table reads 1.23x.
+
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
 with neither `rustc` nor `go` the table is not measured and the report keeps
