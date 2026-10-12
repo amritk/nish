@@ -230,11 +230,11 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
 
 `runtime/runtime-parallel.c` splits `[0, len)` into contiguous chunks that
 differ in size by at most one element. There are at most `nish_cpu_count()`
-chunks and never more than `len / grain`. Chunk 0 runs on the calling thread,
-and the rest go to the worker pool (§8e). A chunk no worker is free for runs
-on the calling thread too, so a shortage of threads costs speed, never
-correctness. A nested call runs on one thread,
-because the nesting guard is thread-local. Without `-DNISH_THREADS`, and on
+chunks and never more than `len / grain` rounded up. Chunk 0 runs on the
+calling thread, and the rest go to the worker pool (§8e). A chunk no worker is
+free for runs on the calling thread too, so a shortage of threads costs speed,
+never correctness. A nested call runs on one thread, because the nesting guard
+is thread-local. Without `-DNISH_THREADS`, and on
 WASI, the same entry point runs the whole range on the calling thread. It is a
 translation unit of its own, with its own `.text*` ceiling in `tests/run.js`.
 
@@ -299,9 +299,9 @@ reach of one. **This is still a mechanism for dividing one loop across the
 cores, not for having many tasks.** A region needs about a millisecond of work
 before the old per-region spawns were under a tenth of its cost, and that is
 why the grain matters. P1 first used 2^20 elements per chunk. It now sizes the
-grain per call as `2^22` over a static estimate of one element's cost
-(`mapGrain` in `src/parallel.ts`, calibrated in wp29 §8a against the spawns, and
-to be retuned against the pool). A map within its grain calls its loop
+grain per call as `2^21` over a static estimate of one element's cost
+(`mapGrain` in `src/parallel.ts`; calibrated in wp29 §8a, first against the
+spawns at `2^22` and then against the pool). A map within its grain calls its loop
 directly. A reduce's block width is a separate constant (`BLOCK` in
 `std/threads.ts`, 2^20), because it decides the reduce's answer, while the
 grain only decides how the work is divided. The 3 ns row was 3,734 ns until

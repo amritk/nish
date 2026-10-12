@@ -80,7 +80,7 @@ a garbage collector, not `free` or an arena, reclaims the intermediates — so
 
 ## Data parallelism
 
-Four more programs measure `parallelMapInto` from `nish/threads`
+Five more programs measure `parallelMapInto` from `nish/threads`
 ([wp29](../docs/wp29-thread-surface.md) §4.1) against the loop it replaces.
 They have no twins. Each is one Nish binary that runs the loop when its first
 argument is `seq` and the map when it is `par`, and the two runs must print the
@@ -94,11 +94,21 @@ both.
 | `par-alloc` | a string formatted and its bytes summed per element: the body allocates, the compiler says so (NL9012) and each element gives its bytes back | 2^22 elements |
 | `par-nbody` | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body | 1024 bodies, 16 steps |
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
+| `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
 
 ```bash
-node bench/run.mjs --only par            # the four; `--only par-nbody` names one
+node bench/run.mjs --only par            # the five; `--only par-nbody` names one
 node bench/run.mjs --validate --only par # both runs of each, checksums only
 ```
+
+`--only par` rewrites the data-parallel table of `docs/BENCHMARKS.md` and
+nothing else: every other section, the header and json-compare's marked
+section included, stays byte for byte, and the table says the date, the CPU
+and the commit it was measured at, since those may differ from the header's.
+It does so only when all five kernels ran and nothing else was timed. A subset
+(`--only par-nbody`), a report with no data-parallel table, and the map half of
+`--only maps,par` leave the file as it was, and the run says so; any run that
+times the benchmark tables rewrites the whole report, as a full run does.
 
 **They are not in the instruction-count gate.** It counts under valgrind,
 which runs a program's threads one at a time, so a count would say nothing

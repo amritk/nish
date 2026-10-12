@@ -1159,7 +1159,7 @@ test against the grain, a direct call when the range is within it, and
 otherwise a context block on the stack and a call to the partitioner,
 
 ```llvm
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 699050
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -1168,13 +1168,13 @@ par.seq:
 
 par.region:
   ; ... src and dst stored into %par.ctx ...
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 699050)
   br label %par.done
 ```
 
 and `@...$chunk(lo, hi, ctx)` loads them back and calls the chunk loop,
-`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 1,398,101,
-is 2^22 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
+`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 699,050,
+is 2^21 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
 parallelism"). A reduce divides its blocks rather than its elements, with a
 grain of one block. The whole of both
 modules is `tests/link/par_map`'s golden (docs/LANGUAGE.md, "Data
@@ -7077,6 +7077,11 @@ nothing in `helloBody` allocates.
 // the text over, the writer puts in the comma and colon and allocates
 // nothing, and a buffer that is too short is reported through `failed`
 // rather than a panic, so the answer is the body's length or `-1`.
+// `prettyBody` is the same body indented by two spaces, as
+// `JSON.stringify(v, null, 2)` writes it: the line breaks and indents are
+// bytes the writer stores, so it allocates nothing more. The indent is a
+// mode that `reset` keeps, so `prettyBody` sets it back to the minified text
+// before it returns, and the next `helloBody` on the same writer is minified.
 import { JsonWriter } from "nish/json"
 
 export const helloBody = (w: JsonWriter, out: u8[], message: string): i32 => {
@@ -7087,34 +7092,44 @@ export const helloBody = (w: JsonWriter, out: u8[], message: string): i32 => {
   w.endObject()
   return w.complete() ? w.written() : -1
 }
+
+export const prettyBody = (w: JsonWriter, out: u8[], message: string): i32 => {
+  w.setIndent(2)
+  const written = helloBody(w, out, message)
+  w.setIndent(0)
+  return written
+}
 ```
 
 ```llvm
-%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
+%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.nish_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"message\00" }, align 8
 
-declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare void @nish.JsonWriter.reset(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare noundef i32 @nish.JsonWriter.written(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #0
-declare noundef zeroext i1 @nish.JsonWriter.complete(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #2
-declare noundef nonnull align 8 i8* @nish.JsonWriter.text(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #0
-declare void @nish.JsonWriter.beginObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #0
-declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #0
-declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #0
-declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #0
-declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
-declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
-declare void @nish.JsonWriter.i32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef) #0
-declare void @nish.JsonWriter.u32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef) #0
-declare void @nish.JsonWriter.i64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i64 noundef) #0
-declare void @nish.JsonWriter.f64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, double noundef) #0
-declare void @nish.JsonWriter.boolean(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i1 noundef zeroext) #0
-declare void @nish.JsonWriter.nullValue(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #0
-declare void @nish.JsonWriter.raw(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
+declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.JsonWriter.reset(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.JsonWriter.setIndent(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #1
+declare void @nish.JsonWriter.setIndentTab(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #1
+declare void @nish.JsonWriter.setStrict(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i1 noundef zeroext) #1
+declare noundef i32 @nish.JsonWriter.written(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(48) nocapture) #0
+declare noundef zeroext i1 @nish.JsonWriter.complete(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(48) nocapture) #2
+declare noundef nonnull align 8 i8* @nish.JsonWriter.text(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.beginObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.i32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #0
+declare void @nish.JsonWriter.u32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #0
+declare void @nish.JsonWriter.i64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i64 noundef) #0
+declare void @nish.JsonWriter.f64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, double noundef) #0
+declare void @nish.JsonWriter.boolean(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i1 noundef zeroext) #0
+declare void @nish.JsonWriter.nullValue(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.raw(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
 
-define noundef i32 @helloBody(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture %w, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out, i8* noundef nonnull noalias readonly align 8 %message) #0 {
+define noundef i32 @helloBody(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture %w, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out, i8* noundef nonnull noalias readonly align 8 %message) #0 {
 entry:
   call void @nish.JsonWriter.reset(%struct.JsonWriter* %w, %struct.nish_array* %out, i32 0)
   call void @nish.JsonWriter.beginObject(%struct.JsonWriter* %w)
@@ -7134,6 +7149,17 @@ cond.false:
 cond.end:
   %2 = phi i32 [ %1, %cond.true ], [ -1, %cond.false ]
   ret i32 %2
+}
+
+define noundef i32 @prettyBody(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture %w, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out, i8* noundef nonnull noalias readonly align 8 %message) #0 {
+entry:
+  %written.addr = alloca i32, align 4
+  call void @nish.JsonWriter.setIndent(%struct.JsonWriter* %w, i32 2)
+  %0 = call i32 @helloBody(%struct.JsonWriter* %w, %struct.nish_array* %out, i8* %message)
+  store i32 %0, i32* %written.addr, align 4
+  call void @nish.JsonWriter.setIndent(%struct.JsonWriter* %w, i32 0)
+  %1 = load i32, i32* %written.addr, align 4
+  ret i32 %1
 }
 
 attributes #0 = { nounwind }
@@ -7180,43 +7206,40 @@ export const messageInto = (tok: JsonTokenizer, body: u8[], out: u8[]): i32 => {
 ```
 
 ```llvm
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"message\00" }, align 8
 
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(88) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
 declare void @nish.JsonLimits.constructor(%struct.JsonLimits* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #1
 
-define noundef i32 @messageInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture %tok, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %body, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #0 {
+define noundef i32 @messageInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture %tok, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %body, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #0 {
 entry:
   %length.addr = alloca i32, align 4
   %k.addr = alloca i32, align 4
@@ -7240,7 +7263,7 @@ while.body:
   br i1 %7, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %8 = getelementptr inbounds %struct.JsonTokenizer, %struct.JsonTokenizer* %tok, i32 0, i32 11
+  %8 = getelementptr inbounds %struct.JsonTokenizer, %struct.JsonTokenizer* %tok, i32 0, i32 10
   %9 = load i32, i32* %8, align 4, !tbaa !16
   %10 = icmp eq i32 %9, 1
   br label %land.end.1
@@ -7334,8 +7357,8 @@ attributes #2 = { nounwind willreturn readonly }
 !12 = !{!"i64", !6, i64 0}
 !13 = !{!"i32", !6, i64 0}
 !14 = !{!"i1", !6, i64 0}
-!15 = !{!"JsonTokenizer", !11, i64 0, !12, i64 8, !12, i64 16, !11, i64 24, !13, i64 32, !13, i64 36, !13, i64 40, !13, i64 44, !13, i64 48, !13, i64 52, !13, i64 56, !13, i64 60, !13, i64 64, !13, i64 68, !13, i64 72, !13, i64 76, !13, i64 80, !13, i64 84, !13, i64 88, !14, i64 92}
-!16 = !{!15, !13, i64 60}
+!15 = !{!"JsonTokenizer", !11, i64 0, !12, i64 8, !11, i64 16, !13, i64 24, !13, i64 28, !13, i64 32, !13, i64 36, !13, i64 40, !13, i64 44, !13, i64 48, !13, i64 52, !13, i64 56, !13, i64 60, !13, i64 64, !13, i64 68, !13, i64 72, !13, i64 76, !13, i64 80, !14, i64 84}
+!16 = !{!15, !13, i64 52}
 ```
 <!-- cookbook:end json-tokenizer -->
 
@@ -7364,25 +7387,13 @@ that holds itself (docs/LANGUAGE.md, "Typed JSON").
 // the reply encoded from one, with code the compiler writes from the fields.
 // Each call becomes a call of a function of this module's own, one per class
 // and direction (`.json.decode.Greeting`, `.json.encode.Greeting`), whose body
-// is a call of the decoder's or the writer's method per field, after a switch
-// on the key's length and, for `name` and `mood`, on its first byte.
+// is a call of the decoder's or the writer's method per field.
 import { JsonWriter } from "nish/json"
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
 
-enum Mood {
-  Calm = 1,
-  Glad = 2,
-}
-
 class Greeting {
-  id: u64 = 0
   name: string = ""
   times: i32 = 0
-  mood: Mood
-
-  constructor() {
-    this.mood = Mood.Calm
-  }
 }
 
 export const greet = (d: JsonDecoder, w: JsonWriter): i32 => {
@@ -7396,113 +7407,103 @@ export const greet = (d: JsonDecoder, w: JsonWriter): i32 => {
 ```
 
 ```llvm
-%struct.Greeting = type { i64, i8*, i32, i32 }
-%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
+%struct.Greeting = type { i8*, i32 }
+%struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i1, i1 }
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
-@.str.1 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"id\00" }, align 8
-@.str.2 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"name\00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"mood\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"times\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"name\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"times\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare void @nish.JsonWriter.reset(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
-declare noundef i32 @nish.JsonWriter.written(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #1
-declare noundef zeroext i1 @nish.JsonWriter.complete(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #2
-declare noundef nonnull align 8 i8* @nish.JsonWriter.text(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(40) nocapture) #1
-declare void @nish.JsonWriter.beginObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #1
-declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #1
-declare void @nish.JsonWriter.i32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef) #1
-declare void @nish.JsonWriter.u32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef) #1
-declare void @nish.JsonWriter.i64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i64 noundef) #1
-declare void @nish.JsonWriter.f64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, double noundef) #1
-declare void @nish.JsonWriter.boolean(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i1 noundef zeroext) #1
-declare void @nish.JsonWriter.nullValue(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture) #1
-declare void @nish.JsonWriter.raw(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #1
-declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull noalias align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
-declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #1
-declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #0
-declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
-declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i8* noundef nonnull noalias readonly align 8) #1
-declare noundef i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #2
-declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef) #1
-declare noundef nonnull align 8 i8* @nish.JsonDecoder.key(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #1
-declare noundef nonnull align 8 i8* @nish.JsonDecoder.text(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #1
-declare void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare void @nish.JsonDecoder.duplicateField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
-declare void @nish.JsonDecoder.missingField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
-declare noundef i32 @nish.JsonDecoder.finish(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.takeNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.beginArray(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.nextElement(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef i64 @nish.JsonDecoder.integer(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i64 noundef, i64 noundef, i1 noundef zeroext) #1
-declare noundef i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef i32 @nish.JsonDecoder.u32(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef i64 @nish.JsonDecoder.i64(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef i64 @nish.JsonDecoder.u64(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef double @nish.JsonDecoder.f64(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef zeroext i1 @nish.JsonDecoder.boolean(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
-declare noundef nonnull align 8 i8* @nish.JsonDecoder.string(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i8* noundef nonnull noalias readonly align 8) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.i32Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.u32Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.i64Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.u64Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.f64Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.booleanArray(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.stringArray(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.i32ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.u32ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.i64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.u64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.f64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.booleanArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.stringArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #1
-declare void @nish.jsonEncodeU64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture, i64 noundef) #1
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare void @nish.JsonLimits.constructor(%struct.JsonLimits* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.JsonWriter.reset(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.JsonWriter.setIndent(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #1
+declare void @nish.JsonWriter.setIndentTab(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #1
+declare void @nish.JsonWriter.setStrict(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i1 noundef zeroext) #1
+declare noundef i32 @nish.JsonWriter.written(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(48) nocapture) #0
+declare noundef zeroext i1 @nish.JsonWriter.complete(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(48) nocapture) #2
+declare noundef nonnull align 8 i8* @nish.JsonWriter.text(%struct.JsonWriter* noundef nonnull readonly align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.beginObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.i32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #0
+declare void @nish.JsonWriter.u32(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #0
+declare void @nish.JsonWriter.i64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i64 noundef) #0
+declare void @nish.JsonWriter.f64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, double noundef) #0
+declare void @nish.JsonWriter.boolean(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i1 noundef zeroext) #0
+declare void @nish.JsonWriter.nullValue(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
+declare void @nish.JsonWriter.raw(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
+declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull noalias align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef, i32 noundef) #1
+declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
+declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare void @nish.JsonDecoder.duplicateField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
+declare void @nish.JsonDecoder.missingField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
+declare noundef i32 @nish.JsonDecoder.finish(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.takeNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.beginArray(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.nextElement(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef i64 @nish.JsonDecoder.integer(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i64 noundef, i64 noundef, i1 noundef zeroext) #0
+declare noundef i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef i32 @nish.JsonDecoder.u32(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef i64 @nish.JsonDecoder.i64(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef double @nish.JsonDecoder.f64(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.boolean(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #0
+declare noundef nonnull align 8 i8* @nish.JsonDecoder.string(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.i32Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.u32Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.i64Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.f64Array(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.booleanArray(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDecoder.stringArray(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.i32ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #0
+declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.u32ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #0
+declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.i64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #0
+declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.f64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #0
+declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.booleanArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #0
+declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.stringArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, %struct.nish_array* noundef align 8) #0
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(88) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(88) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(88) nocapture) #0
+declare void @nish.JsonLimits.constructor(%struct.JsonLimits* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
-declare noundef i64 @nish_arena_mark() #0
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noundef i64 @nish_arena_mark() #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
@@ -7528,55 +7529,41 @@ slow:
   ret i8* %grown
 }
 
-define internal void @Greeting.constructor(%struct.Greeting* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this) #0 {
-entry:
-  %0 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %this, i32 0, i32 0
-  store i64 0, i64* %0, align 8, !tbaa !6
-  %1 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %this, i32 0, i32 1
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %1, align 8, !tbaa !7
-  %2 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %this, i32 0, i32 2
-  store i32 0, i32* %2, align 4, !tbaa !8
-  %3 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %this, i32 0, i32 3
-  store i32 1, i32* %3, align 4, !tbaa !9
-  ret void
-}
-
-define noundef i32 @greet(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) %d, %struct.JsonWriter* noundef nonnull align 8 dereferenceable(40) nocapture %w) #1 {
+define noundef i32 @greet(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) %d, %struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture %w) #0 {
 entry:
   %g.addr = alloca %struct.Greeting*, align 8
   %code.addr = alloca i32, align 4
-  %0 = call i8* @nish_alloc_struct(i64 24)
+  %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Greeting*
-  call void @Greeting.constructor(%struct.Greeting* %1)
+  %2 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %1, i32 0, i32 0
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %2, align 8, !tbaa !5
+  %3 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %1, i32 0, i32 1
+  store i32 0, i32* %3, align 4, !tbaa !6
   store %struct.Greeting* %1, %struct.Greeting** %g.addr, align 8
-  %2 = load %struct.Greeting*, %struct.Greeting** %g.addr, align 8
-  call void @.json.decode.Greeting(%struct.JsonDecoder* %d, %struct.Greeting* %2)
-  %3 = call i32 @nish.JsonDecoder.finish(%struct.JsonDecoder* %d)
-  store i32 %3, i32* %code.addr, align 4
-  %4 = load i32, i32* %code.addr, align 4
-  %5 = icmp eq i32 %4, 0
-  br i1 %5, label %if.then, label %if.end
+  %4 = load %struct.Greeting*, %struct.Greeting** %g.addr, align 8
+  call void @.json.decode.Greeting(%struct.JsonDecoder* %d, %struct.Greeting* %4)
+  %5 = call i32 @nish.JsonDecoder.finish(%struct.JsonDecoder* %d)
+  store i32 %5, i32* %code.addr, align 4
+  %6 = load i32, i32* %code.addr, align 4
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %if.then, label %if.end
 
 if.then:
-  %6 = load %struct.Greeting*, %struct.Greeting** %g.addr, align 8
-  call void @.json.encode.Greeting(%struct.JsonWriter* %w, %struct.Greeting* %6)
+  %8 = load %struct.Greeting*, %struct.Greeting** %g.addr, align 8
+  call void @.json.encode.Greeting(%struct.JsonWriter* %w, %struct.Greeting* %8)
   br label %if.end
 
 if.end:
-  %7 = load i32, i32* %code.addr, align 4
-  ret i32 %7
+  %9 = load i32, i32* %code.addr, align 4
+  ret i32 %9
 }
 
 define internal void @.json.decode.Greeting(%struct.JsonDecoder* %r, %struct.Greeting* %v) {
 entry:
   %seen = alloca i1, align 1
   %seen.1 = alloca i1, align 1
-  %seen.2 = alloca i1, align 1
-  %seen.3 = alloca i1, align 1
   store i1 false, i1* %seen, align 1
   store i1 false, i1* %seen.1, align 1
-  store i1 false, i1* %seen.2, align 1
-  store i1 false, i1* %seen.3, align 1
   %0 = call i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* %r)
   br i1 %0, label %json.loop, label %json.done
 
@@ -7585,96 +7572,40 @@ json.loop:
   br i1 %1, label %json.key, label %json.check
 
 json.key:
-  %2 = call i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* %r)
-  switch i32 %2, label %json.unknown [ i32 2, label %json.length i32 4, label %json.length.1 i32 5, label %json.length.2 ]
-
-json.length:
-  %3 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*))
-  br i1 %3, label %json.field, label %json.unknown
-
-json.length.1:
-  %4 = call i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* %r, i32 0)
-  switch i32 %4, label %json.unknown [ i32 110, label %json.byte i32 109, label %json.byte.1 i32 -1, label %json.escaped ]
-
-json.byte:
-  %5 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*))
-  br i1 %5, label %json.field.1, label %json.unknown
-
-json.byte.1:
-  %6 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*))
-  br i1 %6, label %json.field.3, label %json.unknown
-
-json.escaped:
-  %7 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*))
-  br i1 %7, label %json.field.1, label %json.next
-
-json.next:
-  %8 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*))
-  br i1 %8, label %json.field.3, label %json.unknown
-
-json.length.2:
-  %9 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*))
-  br i1 %9, label %json.field.2, label %json.unknown
+  %2 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*))
+  br i1 %2, label %json.field, label %json.next
 
 json.field:
-  %10 = load i1, i1* %seen, align 1
-  br i1 %10, label %json.duplicate, label %json.take
+  %3 = load i1, i1* %seen, align 1
+  br i1 %3, label %json.duplicate, label %json.take
 
 json.take:
   store i1 true, i1* %seen, align 1
-  %11 = call i64 @nish.JsonDecoder.u64(%struct.JsonDecoder* %r)
-  %12 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 0
-  store i64 %11, i64* %12, align 8, !tbaa !6
+  %4 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 0
+  %5 = load i8*, i8** %4, align 8, !tbaa !5
+  %6 = call i64 @nish_arena_mark()
+  %7 = call i8* @nish.JsonDecoder.string(%struct.JsonDecoder* %r, i8* %5)
+  %8 = call i8* @nish_arena_keep(i64 %6, i8* %7)
+  %9 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 0
+  store i8* %8, i8** %9, align 8, !tbaa !5
   br label %json.loop
 
+json.next:
+  %10 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
+  br i1 %10, label %json.field.1, label %json.next.1
+
 json.field.1:
-  %13 = load i1, i1* %seen.1, align 1
-  br i1 %13, label %json.duplicate, label %json.take.1
+  %11 = load i1, i1* %seen.1, align 1
+  br i1 %11, label %json.duplicate, label %json.take.1
 
 json.take.1:
   store i1 true, i1* %seen.1, align 1
-  %14 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 1
-  %15 = load i8*, i8** %14, align 8, !tbaa !7
-  %16 = call i64 @nish_arena_mark()
-  %17 = call i8* @nish.JsonDecoder.string(%struct.JsonDecoder* %r, i8* %15)
-  %18 = call i8* @nish_arena_keep(i64 %16, i8* %17)
-  %19 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 1
-  store i8* %18, i8** %19, align 8, !tbaa !7
+  %12 = call i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* %r)
+  %13 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 1
+  store i32 %12, i32* %13, align 4, !tbaa !6
   br label %json.loop
 
-json.field.2:
-  %20 = load i1, i1* %seen.2, align 1
-  br i1 %20, label %json.duplicate, label %json.take.2
-
-json.take.2:
-  store i1 true, i1* %seen.2, align 1
-  %21 = call i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* %r)
-  %22 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 2
-  store i32 %21, i32* %22, align 4, !tbaa !8
-  br label %json.loop
-
-json.field.3:
-  %23 = load i1, i1* %seen.3, align 1
-  br i1 %23, label %json.duplicate, label %json.take.3
-
-json.take.3:
-  store i1 true, i1* %seen.3, align 1
-  %24 = call i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* %r)
-  switch i32 %24, label %json.other [ i32 1, label %json.member i32 2, label %json.member ]
-
-json.member:
-  %25 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 3
-  store i32 %24, i32* %25, align 4, !tbaa !9
-  br label %json.stored
-
-json.other:
-  call void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* %r)
-  br label %json.stored
-
-json.stored:
-  br label %json.loop
-
-json.unknown:
+json.next.1:
   call void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* %r)
   br label %json.loop
 
@@ -7683,22 +7614,14 @@ json.duplicate:
   br label %json.loop
 
 json.check:
-  %26 = load i1, i1* %seen, align 1
-  br i1 %26, label %json.given, label %json.missing
+  %14 = load i1, i1* %seen, align 1
+  br i1 %14, label %json.given, label %json.missing
 
 json.given:
-  %27 = load i1, i1* %seen.1, align 1
-  br i1 %27, label %json.given.1, label %json.missing
+  %15 = load i1, i1* %seen.1, align 1
+  br i1 %15, label %json.given.1, label %json.missing
 
 json.given.1:
-  %28 = load i1, i1* %seen.2, align 1
-  br i1 %28, label %json.given.2, label %json.missing
-
-json.given.2:
-  %29 = load i1, i1* %seen.3, align 1
-  br i1 %29, label %json.given.3, label %json.missing
-
-json.given.3:
   br label %json.done
 
 json.missing:
@@ -7712,7 +7635,7 @@ json.done:
 define internal void @.json.encode.Greeting(%struct.JsonWriter* %r, %struct.Greeting* %v) {
 entry:
   %0 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %r, i32 0, i32 3
-  %1 = load i32, i32* %0, align 4, !tbaa !12
+  %1 = load i32, i32* %0, align 4, !tbaa !9
   %2 = icmp eq i32 %1, 0
   br i1 %2, label %json.write, label %json.stop
 
@@ -7721,45 +7644,34 @@ json.stop:
 
 json.write:
   call void @nish.JsonWriter.beginObject(%struct.JsonWriter* %r)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*))
+  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*))
   %3 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 0
-  %4 = load i64, i64* %3, align 8, !tbaa !6
-  call void @nish.jsonEncodeU64(%struct.JsonWriter* %r, i64 %4)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*))
+  %4 = load i8*, i8** %3, align 8, !tbaa !5
+  call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* %4)
+  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
   %5 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 1
-  %6 = load i8*, i8** %5, align 8, !tbaa !7
-  call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* %6)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*))
-  %7 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 2
-  %8 = load i32, i32* %7, align 4, !tbaa !8
-  call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %8)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*))
-  %9 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 3
-  %10 = load i32, i32* %9, align 4, !tbaa !9
-  call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %10)
+  %6 = load i32, i32* %5, align 4, !tbaa !6
+  call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %6)
   call void @nish.JsonWriter.endObject(%struct.JsonWriter* %r)
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
-!2 = !{!"i64", !1, i64 0}
-!3 = !{!"ptr", !1, i64 0}
-!4 = !{!"i32", !1, i64 0}
-!5 = !{!"Greeting", !2, i64 0, !3, i64 8, !4, i64 16, !4, i64 20}
-!6 = !{!5, !2, i64 0}
-!7 = !{!5, !3, i64 8}
-!8 = !{!5, !4, i64 16}
-!9 = !{!5, !4, i64 20}
-!10 = !{!"i1", !1, i64 0}
-!11 = !{!"JsonWriter", !3, i64 0, !4, i64 8, !4, i64 12, !4, i64 16, !4, i64 20, !4, i64 24, !4, i64 28, !10, i64 32, !10, i64 33, !10, i64 34}
-!12 = !{!11, !4, i64 16}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"i32", !1, i64 0}
+!4 = !{!"Greeting", !2, i64 0, !3, i64 8}
+!5 = !{!4, !2, i64 0}
+!6 = !{!4, !3, i64 8}
+!7 = !{!"i1", !1, i64 0}
+!8 = !{!"JsonWriter", !2, i64 0, !3, i64 8, !3, i64 12, !3, i64 16, !3, i64 20, !3, i64 24, !3, i64 28, !3, i64 32, !3, i64 36, !3, i64 40, !7, i64 44, !7, i64 45, !7, i64 46}
+!9 = !{!8, !3, i64 16}
 ```
 <!-- cookbook:end json-typed -->
 
