@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 613
+export const RULE_COUNT: i32 = 614
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -327,6 +327,8 @@ const diagnosticRules = (): string[] => [
   "NL2123",
   "` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once",
   "NL3036",
+  "`??` cannot default an element read: past the end of the array, JavaScript answers the default and ",
+  "NL2489",
   " compiles one copy of a package per program, so every import of it has to reach the same directory",
   "NL3029",
   "; if (r.isErr()) { ... }`), propagate it with `.orReturn()`, or end on it with `.expect(message)`",

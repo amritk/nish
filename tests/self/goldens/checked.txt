@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 979 programs, 95626 dump lines.
+# 985 programs, 95851 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -46153,6 +46153,210 @@ function echoOnce(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @echoOnce
   pointer meta: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local 5:9 n: i32 (const)
+program tests/cases/nullish_nullable.ts
+module tests/cases/nullish_nullable.ts (entry)
+struct Node (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Node.constructor
+struct Count (class) size=4 align=4
+  field made: i32 index=0 offset=0 initialized
+function Node.constructor(this: Node, value: i32): void -> @Node.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function make(count: Count, value: i32): Node -> @make
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=4
+  sharedWrite: 18:3
+  escaping: value
+  calls: Node.constructor nish_alloc_struct nish_panic_overflow
+  pointer count: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 19:10 new Node -> @Node.constructor
+function orFallback(n: Node | null, fallback: Node): Node -> @orFallback
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  escaping: fallback n
+  pointer n: size=4 writesThrough=true captured=true
+  pointer fallback: size=4 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function orMade(n: Node | null, count: Count): Node -> @orMade
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=4
+  sharedWrite: via make
+  escaping: n
+  calls: make
+  pointer n: size=4 writesThrough=true captured=true
+  pointer count: size=4 writesThrough=true captured=false passedTo=make#0
+  stackSites=0 stackLocals=0
+  callee 24:61 make -> @make
+function nameOr(name: string | null): string -> @nameOr
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Node.constructor nameOr nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 orFallback orMade
+  stackSites=1 stackLocals=1
+  local 29:9 one: Node (const)
+  callee 29:15 new Node -> @Node.constructor
+  local 30:9 fallback: Node (const)
+  callee 30:20 new Node -> @Node.constructor
+  callee 31:18 orFallback -> @orFallback
+  callee 31:53 orFallback -> @orFallback
+  local 32:9 count: Count (const)
+  callee 33:18 orMade -> @orMade
+  callee 34:18 orMade -> @orMade
+  callee 35:18 nameOr -> @nameOr
+  callee 35:35 nameOr -> @nameOr
+program tests/cases/nullish_nullable_default_context.ts
+module tests/cases/nullish_nullable_default_context.ts (entry)
+struct Named (interface) size=8 align=8
+  field name: string index=0 offset=0
+function firstOrEmpty(xs: i32[] | null): i32[] -> @firstOrEmpty
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: xs
+  pointer xs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function named(n: Named | null): Named -> @named
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  escaping: n
+  calls: nish_alloc_struct
+  pointer n: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function either(a: string | null, b: string | null, c: boolean): string | null -> @either
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b
+  stackSites=0 stackLocals=0
+function orNull(a: string | null): string | null -> @orNull
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 19:3
+  calls: either firstOrEmpty named nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_concat nish_str_from_i32 orNull
+  stackSites=0 stackLocals=0
+  local 18:9 ys: i32[] (const)
+  callee 18:14 firstOrEmpty -> @firstOrEmpty
+  local 20:9 e: string | null (const)
+  callee 20:13 either -> @either
+  local 21:9 f: string | null (const)
+  callee 21:13 either -> @either
+  local 22:9 g: string | null (const)
+  callee 22:13 orNull -> @orNull
+  callee 23:31 named -> @named
+program tests/cases/nullish_nullable_default_null.ts
+module tests/cases/nullish_nullable_default_null.ts (entry)
+struct Named (interface) size=8 align=8
+  field name: string index=0 offset=0
+struct Person (class) size=8 align=8
+  implements Named
+  field name: string index=0 offset=0
+  constructor -> @Person.constructor
+function Person.constructor(this: Person, name: string): void -> @Person.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: name
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function firstOf(a: string | null, b: string | null): string | null -> @firstOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b
+  stackSites=0 stackLocals=0
+function nameOf(n: Named | null, fallback: Person): string -> @nameOf
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer n: size=8 writesThrough=false captured=false
+  pointer fallback: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Person.constructor firstOf nameOf nish_arena_mark nish_arena_release nish_print nish_str_concat
+  stackSites=3 stackLocals=0
+  local 20:9 x: string | null (const)
+  callee 20:13 firstOf -> @firstOf
+  local 21:9 y: string | null (const)
+  callee 21:13 firstOf -> @firstOf
+  callee 23:18 nameOf -> @nameOf
+  callee 23:31 new Person -> @Person.constructor
+  callee 23:58 nameOf -> @nameOf
+  callee 23:65 new Person -> @Person.constructor
+  callee 23:84 new Person -> @Person.constructor
+program tests/cases/nullish_nullable_escapes.ts
+module tests/cases/nullish_nullable_escapes.ts (entry)
+struct Node (class) size=16 align=8
+  field label: string index=0 offset=0
+  field next: Node | null index=1 offset=8 initialized
+  constructor -> @Node.constructor
+function Node.constructor(this: Node, label: string): void -> @Node.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: label
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pick(n: Node | null, k: string): Node -> @pick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: n
+  calls: Node.constructor nish_alloc_struct nish_str_concat
+  pointer n: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee 13:56 new Node -> @Node.constructor
+function link(n: Node, k: string): void -> @link
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:3
+  calls: Node.constructor nish_alloc_struct nish_str_concat
+  pointer n: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 16:22 new Node -> @Node.constructor
+function churn(): i32 -> @churn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 20:9 junk: string[] (const)
+  local 21:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via link
+  calls: Node.constructor churn link nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pick
+  stackSites=0 stackLocals=0
+  local 28:9 root: Node (const)
+  callee 28:16 new Node -> @Node.constructor
+  callee 29:3 link -> @link
+  callee 30:3 link -> @link
+  local 31:9 p: Node (const)
+  callee 31:13 pick -> @pick
+  local 32:9 q: Node (const)
+  callee 32:13 pick -> @pick
+  local 33:9 n: i32 (const)
+  callee 33:13 churn -> @churn
+  local 34:9 next: Node (const)
+program tests/cases/nullish_nullable_field.ts
+module tests/cases/nullish_nullable_field.ts (entry)
+struct Node (class) size=16 align=8
+  field value: i32 index=0 offset=0
+  field next: Node | null index=1 offset=8 initialized
+  constructor -> @Node.constructor
+function Node.constructor(this: Node, value: i32): void -> @Node.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function last(head: Node): Node -> @last
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: head
+  pointer head: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 13:7 cur: Node (let)
+  local 14:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 22:3
+  calls: Node.constructor last nish_alloc_struct nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 21:9 head: Node (const)
+  callee 21:16 new Node -> @Node.constructor
+  callee 22:15 new Node -> @Node.constructor
+  local 23:9 second: Node (const)
+  callee 24:17 new Node -> @Node.constructor
+  callee 25:18 last -> @last
 program tests/cases/obj_lit_nullable_arrow.ts
 module tests/cases/obj_lit_nullable_arrow.ts (entry)
 struct E (interface) size=4 align=4
@@ -84086,6 +84290,33 @@ function firstValue(slots: Node | null[]): i32 -> @firstValue
   pointer slots: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 26:9 head: Node | null (const)
+program docs/cookbook/mem-nullish.ts
+module docs/cookbook/mem-nullish.ts (entry)
+struct Node (class) size=16 align=8
+  field value: i32 index=0 offset=0
+  field next: Node | null index=1 offset=8 initialized
+  constructor -> @Node.constructor
+function Node.constructor(this: Node, value: i32): void -> @Node.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function nameOr(name: string | null): string -> @nameOr [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  stackSites=0 stackLocals=0
+function nextOrNew(n: Node): Node -> @nextOrNew [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: Node.constructor nish_alloc_struct
+  pointer n: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 15:55 new Node -> @Node.constructor
+function last(head: Node): Node -> @last [exported]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: head
+  pointer head: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 19:7 cur: Node (let)
 program docs/cookbook/mem-reclaim.ts
 module docs/cookbook/mem-reclaim.ts (entry)
 struct Box (class) size=8 align=8

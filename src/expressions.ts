@@ -1558,13 +1558,17 @@ const maybeOperand = (ctx: CheckContext, operand: Node, scope: Scope): i32 => {
 /**
  * `a ?? d`, where `a` is a maybe: `d` stands in for a missing value, so it is
  * `V`, and so is the whole expression. When `V` is itself nullable, JavaScript's
- * `??` replaces a stored `null` too, and so does this one. Any other `??` is
- * the one Phase 0 always refused, in the words it always used.
+ * `??` replaces a stored `null` too, and so does this one. A `T | null` on the
+ * left is `checkNullableCoalesce`'s. Any other `??` is the one Phase 0 always
+ * refused, in the words it always used.
  */
 const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const left = maybeOperand(ctx, expr.children[0], scope)
   if (left === T_ERROR) {
     return T_ERROR
+  }
+  if (ctx.table.isNullable(left)) {
+    return checkNullableCoalesce(ctx, expr, scope, left)
   }
   if (!ctx.table.isMaybe(left)) {
     return ctx.errorType(
@@ -1584,6 +1588,50 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     )
   }
   return value
+}
+
+/**
+ * `a ?? d`, where `a` is a `T | null`: `null` is nullish, so TypeScript answers
+ * `d` exactly where `a` is `null`, and no `undefined` is involved. The result
+ * is `T` when `d` is a `T`, as `tsc` types it, which is the point: the
+ * defaulted value needs no narrowing. A `d` that may itself be `null` keeps
+ * the `T | null`.
+ *
+ * The left operand is evaluated once, so a property path such as `n.next`
+ * works here although it never narrows. An element read does not: past the
+ * end of the array, JavaScript reads `undefined` and answers `d`, while the
+ * bounds check panics, so `xs[i] ?? d`, TypeScript's idiom for a default past
+ * the end, would mean two different things.
+ */
+const checkNullableCoalesce = (ctx: CheckContext, expr: Node, scope: Scope, left: i32): i32 => {
+  if (unwrapParens(expr.children[0]).kind === N_INDEX) {
+    return ctx.errorType(
+      expr.children[0],
+      "`??` cannot default an element read: past the end of the array, JavaScript answers the default and " +
+        LANGUAGE +
+        " panics (test the index against `length`, or read the element into a `const` first)"
+    )
+  }
+  const value = ctx.table.stripNull(left)
+  // The default is checked into `T`, so `xs ?? []` and an object literal take
+  // their type from it. A bare `null`, or a ternary that may answer one, needs
+  // the `T | null` to have a type at all.
+  const fallbackKind = unwrapParens(expr.children[1]).kind
+  const mayBeNull = fallbackKind === N_NULL || fallbackKind === N_CONDITIONAL
+  const fallback = checkExpression(ctx, expr.children[1], scope, mayBeNull ? left : value)
+  if (fallback === T_ERROR) {
+    return T_ERROR
+  }
+  if (ctx.table.assignable(fallback, value)) {
+    return value
+  }
+  if (!ctx.table.assignable(fallback, left)) {
+    return ctx.errorType(
+      expr.children[1],
+      `The right operand of \`??\` stands in for a missing value, so it must be \`${ctx.table.typeName(value)}\`, the type of the value on its left; got \`${ctx.table.typeName(fallback)}\``
+    )
+  }
+  return left
 }
 
 /**

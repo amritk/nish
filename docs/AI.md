@@ -143,7 +143,7 @@ rejects. This table is the highest-value part of the page.
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
 | `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
-| `a?.b`, `a ?? b` | forbidden, except `m.get(k) ?? d` | `if (a !== null)` first |
+| `a?.b`, `a ?? b` | `?.` forbidden; `??` only on a `T \| null` or `m.get(k)` | `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
 | `typeof x`, `x instanceof C`, `"k" in o`, `delete o.k`, `void 0`, `a, b` | each refused by name (`` `typeof` is forbidden ``, …) | there is no runtime type information: a value's type is its declared one |
 | `a ** b`, `[...xs]`, `[1, , 2]` | `` Unsupported binary operator `**` `` / `Spread in array literals is not supported` / `Holes in array literals are not supported` | `Math.pow` on `f64`, a loop, every element written out |
@@ -470,8 +470,37 @@ export const main = (): i32 => {
 ```
 
 - Reading anything off an un-narrowed nullable is an error: narrow with
-  `!== null` first. `?.` is forbidden outright, and so is `??`, except after
-  `Map.get` (see [Map and Set](#map-and-set)).
+  `!== null` first. `?.` is forbidden outright.
+- `a ?? d` defaults a nullable: it is `a` where that is not `null`, `d` where
+  it is, and its type is `T` when `d` is a `T`, so it needs no narrowing. It
+  reads `a` once, so a property path works: `cur = cur.next ?? cur`. `d` that
+  may be `null` keeps the `T | null`. An element read (`xs[i] ?? d`) is
+  refused, because Node answers `d` past the end where Nish panics. `??` also
+  defaults a `Map.get` result (see [Map and Set](#map-and-set)).
+
+```ts nish:ok
+class Node {
+  value: i32;
+  next: Node | null = null;
+  constructor(value: i32) {
+    this.value = value;
+  }
+}
+
+const label = (name: string | null): string => name ?? "anonymous";
+
+export const main = (): i32 => {
+  const a = new Node(1);
+  const after = a.next ?? a;     // `Node`, no narrowing needed
+  console.log(`${label(null)} ${after.value}`);   // anonymous 1
+  return 0;
+};
+```
+
+```ts nish:err-body NL2489
+const names = new Array<string | null>(2);
+console.log(names[2] ?? "none");
+```
 - Narrowing applies to a **local or parameter**, never a property path. `if
   (n.next !== null) n.next.v` is rejected — copy into a local first.
 - A narrowing ends at any assignment to the variable, including one in an
@@ -1391,7 +1420,8 @@ export const main = (): i32 => {
 - Compound assignment `+= -= *= /= %=` requires a numeric target (so `+=` never
   concatenates strings); the bitwise forms need an integer target.
 - **Forbidden**: `,` `?.` `in` `instanceof` `typeof` `delete` `void expr`
-  `==` `!=` `**` unary `+`, and `??` on anything but a `Map.get` result.
+  `==` `!=` `**` unary `+`, and `??` on anything but a `T | null` or a
+  `Map.get` result.
 - Element access `a[i]` needs an array and a numeric index, and is
   bounds-checked (negative indices fail too). String-keyed access is forbidden.
   The check comes off where the compiler proves the index in range — a loop
@@ -1974,7 +2004,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    in an object-literal property or a method argument expecting a width?
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
-8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside `Map.get`), `?.`, a cast, a
+8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null` or `Map.get`), `?.`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
 9. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
    caps.json` lists every capability each function can reach — files, processes,
