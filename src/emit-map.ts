@@ -42,9 +42,21 @@
 import { Emitter, LoopTarget } from "./emit"
 import { FactsTable } from "./attributes"
 import { internalErrorFor } from "./ice"
-import { coalescesMaybe, intrinsicType, unwrapParens } from "./emit-util"
+import { coalescesMaybe, intrinsicType, isOptionalChain, unwrapParens } from "./emit-util"
 import { StringSet } from "./map"
-import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_STRING, N_TRUE, Node } from "./nodes"
+import {
+  FLAG_OPTIONAL,
+  N_CALL,
+  N_FALSE,
+  N_IDENT,
+  N_INDEX,
+  N_MEMBER,
+  N_NULL,
+  N_NUMBER,
+  N_STRING,
+  N_TRUE,
+  Node,
+} from "./nodes"
 import {
   CheckedProgram,
   FUSE_NONE,
@@ -539,6 +551,9 @@ const testsUndefined = (emitter: Emitter, operand: Node): boolean =>
  * one `select`.
  */
 export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
+  if (isOptionalChain(unwrapParens(expr.children[0]))) {
+    return emitChainCoalesce(emitter, expr)
+  }
   if (!coalescesMaybe(emitter.program, emitter.table, expr)) {
     return emitNullableCoalesce(emitter, expr)
   }
@@ -599,6 +614,84 @@ const emitNullableCoalesce = (emitter: Emitter, expr: Node): string => {
   fn.emit(`br label %${done.label}`)
   fn.placeBlock(done)
   return fn.emitValue(`phi ${ty} [ ${value}, %${valueEdge} ], [ ${fallback}, %${missingEdge} ]`)
+}
+
+/**
+ * `a?.b?.c ?? d`: the chain's links in order, each `?.` link's receiver
+ * tested for `null` the moment it is evaluated (`emitChainTest`) and branched
+ * to `nullish.default`, which every test shares; the last link's value is
+ * tested too when it is itself nullable. The blocks are the ones a
+ * `!== null` test written out at each link makes, and the default runs only
+ * where a link was `null`, as JavaScript's does.
+ *
+ * Each receiver is evaluated once, through `emitExpression`, which is where
+ * the test is made. The count of tests is checked against the chain's `?.`
+ * links, so a lowering that reached a receiver some other way stops the
+ * compilation instead of reading through `null`.
+ */
+const emitChainCoalesce = (emitter: Emitter, expr: Node): string => {
+  const fn = emitter.fn
+  const chain = expr.children[0]
+  const ty = emitter.llvm(intrinsicType(emitter.program, expr))
+  const missing = fn.newBlock("nullish.default")
+  const done = fn.newBlock("nullish.end")
+  emitter.chainDefaults.push(missing.label)
+  emitter.chainTests.push(0)
+  const value = emitter.emitExpression(chain)
+  const tested = emitter.chainTests.pop()
+  emitter.chainDefaults.pop()
+  if (tested !== optionalLinks(unwrapParens(chain))) {
+    process.exit(
+      internalErrorFor("emitter: a `?.` link whose receiver was not tested for null", emitter.opts.json)
+    )
+  }
+  if (emitter.table.isNullable(emitter.typeOf(chain))) {
+    fn.emit(`br i1 ${isSet(emitter, ty, value)}, label %${done.label}, label %${missing.label}`)
+  } else {
+    fn.emit(`br label %${done.label}`)
+  }
+  const valueEdge = fn.currentBlock().label
+  fn.placeBlock(missing)
+  const fallback = emitter.emitExpression(expr.children[1])
+  const missingEdge = fn.currentBlock().label
+  fn.emit(`br label %${done.label}`)
+  fn.placeBlock(done)
+  return fn.emitValue(`phi ${ty} [ ${value}, %${valueEdge} ], [ ${fallback}, %${missingEdge} ]`)
+}
+
+/** How many `?.` links `chain` has, each of which tests its receiver once. */
+const optionalLinks = (chain: Node): i32 => {
+  let count = 0
+  let node = chain
+  while (node.kind === N_MEMBER || node.kind === N_CALL || node.kind === N_INDEX) {
+    if (node.kind === N_MEMBER && (node.flags & FLAG_OPTIONAL) !== 0) {
+      count = count + 1
+    }
+    node = node.children[0]
+  }
+  return count
+}
+
+/**
+ * The receiver of a `?.` link, just evaluated to `value`: where it is `null`,
+ * branch to the default of the innermost chain being emitted, and go on in a
+ * block where it is not. Called by `emitExpression` for every node Phase 0
+ * marked (`nodeNullTests`).
+ */
+export const emitChainTest = (emitter: Emitter, receiver: Node, value: string): void => {
+  const fn = emitter.fn
+  const at = emitter.chainDefaults.length - 1
+  if (at < 0 || emitter.chainTests.length !== emitter.chainDefaults.length) {
+    process.exit(
+      internalErrorFor("emitter: a `?.` receiver outside the `??` of its chain", emitter.opts.json)
+    )
+  }
+  const ty = emitter.llvm(emitter.typeOf(receiver))
+  const isNull = fn.emitValue(`icmp eq ${ty} ${value}, null`)
+  const next = fn.newBlock("chain.next")
+  fn.emit(`br i1 ${isNull}, label %${emitter.chainDefaults[at]}, label %${next.label}`)
+  fn.placeBlock(next)
+  emitter.chainTests[at] = emitter.chainTests[at] + 1
 }
 
 /** Whether `value`, a found value of the nullable LLVM type `ty`, is not the stored `null` that `??` replaces too. */

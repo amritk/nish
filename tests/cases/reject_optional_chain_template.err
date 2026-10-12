@@ -1,0 +1,1 @@
+`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`

@@ -14,9 +14,11 @@
 import { isNetWrittenLetter, netSignature } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import {
+  FLAG_OPTIONAL,
   N_BINARY,
   N_CALL,
   N_IDENT,
+  N_INDEX,
   N_MEMBER,
   N_PAREN,
   N_TEMPLATE,
@@ -47,6 +49,24 @@ export const coalescesMaybe = (program: CheckedProgram, table: TypeTable, coales
   const left = unwrapParens(coalesce.children[0])
   const local: Local | null = left.kind === N_IDENT ? program.nodeLocals[left.id] : null
   return table.isMaybe(local !== null ? local.type : program.nodeTypes[left.id])
+}
+
+/**
+ * Whether `expr` is an optional chain: a member read, a call or an element
+ * read whose receivers, followed down until a parenthesis ends the chain as
+ * TypeScript ends it, include a link written with `?.`. Phase 0, the checker,
+ * the emitter and the analyses that ask whether the left operand of a `??`
+ * always runs all read this one definition.
+ */
+export const isOptionalChain = (expr: Node): boolean => {
+  let node = expr
+  while (node.kind === N_MEMBER || node.kind === N_CALL || node.kind === N_INDEX) {
+    if ((node.flags & FLAG_OPTIONAL) !== 0) {
+      return true
+    }
+    node = node.children[0]
+  }
+  return false
 }
 
 /**
