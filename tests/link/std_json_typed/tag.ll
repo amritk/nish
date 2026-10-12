@@ -1,6 +1,6 @@
 %struct.Tag = type { i64, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
-%struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i1, i1 }
+%struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i32, i1, i1 }
 %struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
@@ -43,6 +43,7 @@ declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noun
 declare noundef zeroext i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i8* noundef nonnull noalias readonly align 8) #1
 declare noundef i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #2
 declare noundef i32 @nish.JsonDecoder.keyByte(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture, i32 noundef) #1
+declare noundef zeroext i1 @nish.JsonDecoder.mapRoom(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.key(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #1
 declare noundef nonnull align 8 i8* @nish.JsonDecoder.text(%struct.JsonDecoder* noundef nonnull readonly align 8 dereferenceable(24) nocapture) #1
 declare void @nish.JsonDecoder.unknownField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(24) nocapture) #1
@@ -267,11 +268,17 @@ json.field.3:
 json.take.3:
   store i1 true, i1* %seen.3, align 1
   %24 = call i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* %r)
+  %25 = getelementptr inbounds %struct.JsonDecoder, %struct.JsonDecoder* %r, i32 0, i32 1
+  %26 = load i32, i32* %25, align 4, !tbaa !23
+  %27 = icmp eq i32 %26, 0
+  br i1 %27, label %json.read, label %json.stored
+
+json.read:
   switch i32 %24, label %json.other [ i32 0, label %json.member i32 5, label %json.member i32 9, label %json.member ]
 
 json.member:
-  %25 = getelementptr inbounds %struct.Tag, %struct.Tag* %v, i32 0, i32 3
-  store i32 %24, i32* %25, align 4, !tbaa !20
+  %28 = getelementptr inbounds %struct.Tag, %struct.Tag* %v, i32 0, i32 3
+  store i32 %24, i32* %28, align 4, !tbaa !20
   br label %json.stored
 
 json.other:
@@ -290,20 +297,20 @@ json.duplicate:
   br label %json.loop
 
 json.check:
-  %26 = load i1, i1* %seen, align 1
-  br i1 %26, label %json.given, label %json.missing
+  %29 = load i1, i1* %seen, align 1
+  br i1 %29, label %json.given, label %json.missing
 
 json.given:
-  %27 = load i1, i1* %seen.1, align 1
-  br i1 %27, label %json.given.1, label %json.missing
+  %30 = load i1, i1* %seen.1, align 1
+  br i1 %30, label %json.given.1, label %json.missing
 
 json.given.1:
-  %28 = load i1, i1* %seen.2, align 1
-  br i1 %28, label %json.given.2, label %json.missing
+  %31 = load i1, i1* %seen.2, align 1
+  br i1 %31, label %json.given.2, label %json.missing
 
 json.given.2:
-  %29 = load i1, i1* %seen.3, align 1
-  br i1 %29, label %json.given.3, label %json.missing
+  %32 = load i1, i1* %seen.3, align 1
+  br i1 %32, label %json.given.3, label %json.missing
 
 json.given.3:
   br label %json.done
@@ -319,7 +326,7 @@ json.done:
 define internal void @.json.encode.Tag(%struct.JsonWriter* %r, %struct.Tag* %v) {
 entry:
   %0 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %r, i32 0, i32 3
-  %1 = load i32, i32* %0, align 4, !tbaa !23
+  %1 = load i32, i32* %0, align 4, !tbaa !25
   %2 = icmp eq i32 %1, 0
   br i1 %2, label %json.write, label %json.stop
 
@@ -364,28 +371,34 @@ json.loop:
 
 json.element:
   %3 = call i32 @nish.JsonDecoder.i32(%struct.JsonDecoder* %r)
+  %4 = getelementptr inbounds %struct.JsonDecoder, %struct.JsonDecoder* %r, i32 0, i32 1
+  %5 = load i32, i32* %4, align 4, !tbaa !23
+  %6 = icmp eq i32 %5, 0
+  br i1 %6, label %json.read, label %json.loop
+
+json.read:
   switch i32 %3, label %json.other [ i32 0, label %json.member i32 5, label %json.member i32 9, label %json.member ]
 
 json.member:
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 0
-  %5 = load i64, i64* %4, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 1
-  %7 = load i64, i64* %6, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %8 = icmp eq i64 %5, %7
-  br i1 %8, label %push.grow, label %push.store
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 0
+  %8 = load i64, i64* %7, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 1
+  %10 = load i64, i64* %9, align 8, !alias.scope !10, !noalias !11, !tbaa !16
+  %11 = icmp eq i64 %8, %10
+  br i1 %11, label %push.grow, label %push.store
 
 push.grow:
   call void @nish_array_grow(%struct.nish_array* %v, i64 4)
   br label %push.store
 
 push.store:
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 2
-  %10 = load i8*, i8** %9, align 8, !alias.scope !10, !noalias !11, !tbaa !17
-  %11 = bitcast i8* %10 to i32*
-  %12 = getelementptr inbounds i32, i32* %11, i64 %5
-  store i32 %3, i32* %12, align 4, !alias.scope !11, !noalias !10, !tbaa !25
-  %13 = add i64 %5, 1
-  store i64 %13, i64* %4, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !10, !noalias !11, !tbaa !17
+  %14 = bitcast i8* %13 to i32*
+  %15 = getelementptr inbounds i32, i32* %14, i64 %8
+  store i32 %3, i32* %15, align 4, !alias.scope !11, !noalias !10, !tbaa !27
+  %16 = add i64 %8, 1
+  store i64 %16, i64* %7, align 8, !alias.scope !10, !noalias !11, !tbaa !15
   br label %json.loop
 
 json.other:
@@ -415,7 +428,7 @@ json.element:
   %5 = load i8*, i8** %4, align 8, !alias.scope !10, !noalias !11, !tbaa !17
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4, !alias.scope !11, !noalias !10, !tbaa !25
+  %8 = load i32, i32* %7, align 4, !alias.scope !11, !noalias !10, !tbaa !27
   call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %8)
   %9 = add i64 %0, 1
   store i64 %9, i64* %at, align 8
@@ -454,7 +467,9 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !19 = !{!5, !3, i64 16}
 !20 = !{!5, !4, i64 24}
 !21 = !{!"i1", !1, i64 0}
-!22 = !{!"JsonWriter", !3, i64 0, !4, i64 8, !4, i64 12, !4, i64 16, !4, i64 20, !4, i64 24, !4, i64 28, !4, i64 32, !4, i64 36, !4, i64 40, !21, i64 44, !21, i64 45, !21, i64 46}
-!23 = !{!22, !4, i64 16}
-!24 = !{!"element i32", !1, i64 0}
-!25 = !{!24, !24, i64 0}
+!22 = !{!"JsonDecoder", !3, i64 0, !4, i64 8, !4, i64 12, !4, i64 16, !21, i64 20, !21, i64 21}
+!23 = !{!22, !4, i64 8}
+!24 = !{!"JsonWriter", !3, i64 0, !4, i64 8, !4, i64 12, !4, i64 16, !4, i64 20, !4, i64 24, !4, i64 28, !4, i64 32, !4, i64 36, !4, i64 40, !21, i64 44, !21, i64 45, !21, i64 46}
+!25 = !{!24, !4, i64 16}
+!26 = !{!"element i32", !1, i64 0}
+!27 = !{!26, !26, i64 0}

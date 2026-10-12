@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1016 programs, 99514 dump lines.
+# 1016 programs, 99534 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -81857,13 +81857,15 @@ const JSON_DECODE_RANGE: i32 = -21 [exported]
 const JSON_DECODE_UNKNOWN: i32 = -22 [exported]
 const JSON_DECODE_DUPLICATE: i32 = -23 [exported]
 const JSON_DECODE_MISSING: i32 = -24 [exported]
+const JSON_DECODE_MAP_LIMIT: i32 = -25 [exported]
 const JSON_TYPED_ERASED: string = "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
 struct JsonDecoder (class) size=24 align=8 exported
   field tok: JsonTokenizer index=0 offset=0
   field failed: i32 index=1 offset=8 initialized
   field errorAt: i32 index=2 offset=12 initialized
-  field ignoreUnknown: boolean index=3 offset=16 initialized
-  field held: boolean index=4 offset=17 initialized
+  field maxMapKeys: i32 index=3 offset=16 initialized
+  field ignoreUnknown: boolean index=4 offset=20 initialized
+  field held: boolean index=5 offset=21 initialized
   constructor -> @nish.JsonDecoder.constructor
   method reset -> @nish.JsonDecoder.reset
   method fail -> @nish.JsonDecoder.fail
@@ -81874,6 +81876,7 @@ struct JsonDecoder (class) size=24 align=8 exported
   method keyIs -> @nish.JsonDecoder.keyIs
   method keyLength -> @nish.JsonDecoder.keyLength
   method keyByte -> @nish.JsonDecoder.keyByte
+  method mapRoom -> @nish.JsonDecoder.mapRoom
   method key -> @nish.JsonDecoder.key
   method text -> @nish.JsonDecoder.text
   method unknownField -> @nish.JsonDecoder.unknownField
@@ -81914,19 +81917,19 @@ function JsonDecoder.constructor(this: JsonDecoder, src: u8[], off: i32, len: i3
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.constructor#1
   pointer limits: size=16 writesThrough=false captured=false passedTo=nish.JsonTokenizer.constructor#4
   stackSites=0 stackLocals=0
-  callee 120:16 new JsonTokenizer -> @nish.JsonTokenizer.constructor
+  callee 129:16 new JsonTokenizer -> @nish.JsonTokenizer.constructor
 function JsonDecoder.reset(this: JsonDecoder, src: u8[], off: i32, len: i32): void -> @nish.JsonDecoder.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 126:5
+  sharedWrite: 135:5
   escaping: len off
   calls: nish.JsonTokenizer.reset
   pointer this: size=24 writesThrough=true captured=false
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   stackSites=0 stackLocals=0
-  callee 125:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 134:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
 function JsonDecoder.fail(this: JsonDecoder, code: i32, at: i32): void -> @nish.JsonDecoder.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 134:7
+  sharedWrite: 143:7
   escaping: at code
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -81936,34 +81939,34 @@ function JsonDecoder.wrongType(this: JsonDecoder): void -> @nish.JsonDecoder.wro
   calls: nish.JsonDecoder.fail
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 141:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 150:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.take(this: JsonDecoder): i32 -> @nish.JsonDecoder.take [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 150:7
+  sharedWrite: 159:7
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 153:11 k: i32 (const)
-  callee 153:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 155:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 162:11 k: i32 (const)
+  callee 162:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 164:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.beginObject(this: JsonDecoder): boolean -> @nish.JsonDecoder.beginObject [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 162:11 k: i32 (const)
-  callee 162:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 167:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 171:11 k: i32 (const)
+  callee 171:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 176:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.nextField(this: JsonDecoder): boolean -> @nish.JsonDecoder.nextField [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 177:11 k: i32 (const)
-  callee 177:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 182:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 186:11 k: i32 (const)
+  callee 186:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 191:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.keyIs(this: JsonDecoder, name: string): boolean -> @nish.JsonDecoder.keyIs [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.keyEquals
@@ -81971,172 +81974,179 @@ function JsonDecoder.keyIs(this: JsonDecoder, name: string): boolean -> @nish.Js
   calls: nish.JsonTokenizer.keyEquals
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 189:12 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee 198:12 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
 function JsonDecoder.keyLength(this: JsonDecoder): i32 -> @nish.JsonDecoder.keyLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.stringLength
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 198:12 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  callee 207:12 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
 function JsonDecoder.keyByte(this: JsonDecoder, at: i32): i32 -> @nish.JsonDecoder.keyByte [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.stringLength nish_panic_overflow
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 210:11 tok: JsonTokenizer (const)
-  local 211:11 n: i32 (const)
-  callee 211:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
-  local 215:11 src: u8[] (const)
-  local 216:11 i: i32 (const)
+  local 219:11 tok: JsonTokenizer (const)
+  local 220:11 n: i32 (const)
+  callee 220:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  local 224:11 src: u8[] (const)
+  local 225:11 i: i32 (const)
+function JsonDecoder.mapRoom(this: JsonDecoder, count: i32): boolean -> @nish.JsonDecoder.mapRoom [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDecoder.fail
+  calls: nish.JsonDecoder.fail
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
+  stackSites=0 stackLocals=0
+  callee 240:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.key(this: JsonDecoder): string -> @nish.JsonDecoder.key [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.text
   calls: nish.JsonDecoder.text
   pointer this: size=24 writesThrough=false captured=false passedTo=nish.JsonDecoder.text#0
   stackSites=0 stackLocals=0
-  callee 225:12 JsonDecoder.text -> @nish.JsonDecoder.text
+  callee 246:12 JsonDecoder.text -> @nish.JsonDecoder.text
 function JsonDecoder.text(this: JsonDecoder): string -> @nish.JsonDecoder.text [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.stringInto
   calls: nish.JsonTokenizer.stringInto nish.JsonTokenizer.stringLength nish_exit nish_panic_overflow nish_panic_slice nish_str_new nish_write
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 235:11 tok: JsonTokenizer (const)
-  local 236:11 n: i32 (const)
-  callee 236:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
-  local 247:11 bytes: u8[] (const)
-  local 248:11 at: i32 (const)
-  callee 249:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  local 256:11 tok: JsonTokenizer (const)
+  local 257:11 n: i32 (const)
+  callee 257:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  local 268:11 bytes: u8[] (const)
+  local 269:11 at: i32 (const)
+  callee 270:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
 function JsonDecoder.unknownField(this: JsonDecoder): void -> @nish.JsonDecoder.unknownField [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.skipValue
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 259:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  local 262:11 k: i32 (const)
-  callee 262:20 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
-  callee 264:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 280:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 283:11 k: i32 (const)
+  callee 283:20 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
+  callee 285:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.duplicateField(this: JsonDecoder): void -> @nish.JsonDecoder.duplicateField [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
   calls: nish.JsonDecoder.fail
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 270:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 291:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.missingField(this: JsonDecoder): void -> @nish.JsonDecoder.missingField [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
   calls: nish.JsonDecoder.fail
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 275:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 296:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.finish(this: JsonDecoder): i32 -> @nish.JsonDecoder.finish [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonDecoder.fail nish.JsonDecoder.wrongType nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 281:13 k: i32 (const)
-  callee 281:22 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 283:9 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  callee 285:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 302:13 k: i32 (const)
+  callee 302:22 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 304:9 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 306:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.takeNull(this: JsonDecoder): boolean -> @nish.JsonDecoder.takeNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 298:7
+  sharedWrite: 319:7
   calls: nish.JsonDecoder.take
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0
   stackSites=0 stackLocals=0
-  local 293:11 k: i32 (const)
-  callee 293:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  local 314:11 k: i32 (const)
+  callee 314:20 JsonDecoder.take -> @nish.JsonDecoder.take
 function JsonDecoder.beginArray(this: JsonDecoder): boolean -> @nish.JsonDecoder.beginArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 305:11 k: i32 (const)
-  callee 305:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 310:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 326:11 k: i32 (const)
+  callee 326:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 331:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.nextElement(this: JsonDecoder): boolean -> @nish.JsonDecoder.nextElement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 328:5
+  sharedWrite: 349:5
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 320:11 k: i32 (const)
-  callee 320:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 325:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 341:11 k: i32 (const)
+  callee 341:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 346:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.integer(this: JsonDecoder, lo: i64, hi: i64, bounded: boolean): i64 -> @nish.JsonDecoder.integer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.fail nish.JsonDecoder.take nish.JsonDecoder.wrongType nish.JsonTokenizer.isInteger nish.JsonTokenizer.numberI64
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0 nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 339:11 k: i32 (const)
-  callee 339:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 342:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
-  callee 346:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
-  callee 347:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  local 350:11 v: i64 (const)
-  callee 350:20 JsonTokenizer.numberI64 -> @nish.JsonTokenizer.numberI64
-  callee 352:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 360:11 k: i32 (const)
+  callee 360:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 363:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  callee 367:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  callee 368:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 371:11 v: i64 (const)
+  callee 371:20 JsonTokenizer.numberI64 -> @nish.JsonTokenizer.numberI64
+  callee 373:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.i32(this: JsonDecoder): i32 -> @nish.JsonDecoder.i32 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.integer
   calls: nish.JsonDecoder.integer
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.integer#0
   stackSites=0 stackLocals=0
-  local 359:11 lo: i64 (const)
-  local 360:11 hi: i64 (const)
-  callee 361:18 JsonDecoder.integer -> @nish.JsonDecoder.integer
+  local 380:11 lo: i64 (const)
+  local 381:11 hi: i64 (const)
+  callee 382:18 JsonDecoder.integer -> @nish.JsonDecoder.integer
 function JsonDecoder.u32(this: JsonDecoder): u32 -> @nish.JsonDecoder.u32 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.integer
   calls: llvm.fptoui.sat.i32.f64 nish.JsonDecoder.integer
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.integer#0
   stackSites=0 stackLocals=0
-  local 366:11 lo: i64 (const)
-  local 367:11 hi: i64 (const)
-  callee 370:24 JsonDecoder.integer -> @nish.JsonDecoder.integer
+  local 387:11 lo: i64 (const)
+  local 388:11 hi: i64 (const)
+  callee 391:24 JsonDecoder.integer -> @nish.JsonDecoder.integer
 function JsonDecoder.i64(this: JsonDecoder): i64 -> @nish.JsonDecoder.i64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.integer
   calls: nish.JsonDecoder.integer
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.integer#0
   stackSites=0 stackLocals=0
-  callee 375:12 JsonDecoder.integer -> @nish.JsonDecoder.integer
+  callee 396:12 JsonDecoder.integer -> @nish.JsonDecoder.integer
 function JsonDecoder.u64(this: JsonDecoder): u64 -> @nish.JsonDecoder.u64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.fail nish.JsonDecoder.take nish.JsonDecoder.wrongType nish.JsonTokenizer.isU64 nish.JsonTokenizer.numberU64
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0 nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 385:11 k: i32 (const)
-  callee 385:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 388:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
-  callee 392:10 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
-  callee 393:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  callee 396:12 JsonTokenizer.numberU64 -> @nish.JsonTokenizer.numberU64
+  local 406:11 k: i32 (const)
+  callee 406:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 409:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  callee 413:10 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
+  callee 414:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 417:12 JsonTokenizer.numberU64 -> @nish.JsonTokenizer.numberU64
 function JsonDecoder.f64(this: JsonDecoder): f64 -> @nish.JsonDecoder.f64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType nish.JsonTokenizer.numberF64
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 400:11 k: i32 (const)
-  callee 400:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 402:14 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
-  callee 405:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 421:11 k: i32 (const)
+  callee 421:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 423:14 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
+  callee 426:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.boolean(this: JsonDecoder): boolean -> @nish.JsonDecoder.boolean [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 411:11 k: i32 (const)
-  callee 411:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 416:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 432:11 k: i32 (const)
+  callee 432:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 437:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.string(this: JsonDecoder, cur: string): string -> @nish.JsonDecoder.string [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
@@ -82144,103 +82154,103 @@ function JsonDecoder.string(this: JsonDecoder, cur: string): string -> @nish.Jso
   calls: nish.JsonDecoder.take nish.JsonDecoder.text nish.JsonDecoder.wrongType nish.JsonTokenizer.keyEquals
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0 nish.JsonDecoder.text#0
   stackSites=0 stackLocals=0
-  local 427:11 k: i32 (const)
-  callee 427:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 430:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
-  callee 434:9 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
-  callee 437:12 JsonDecoder.text -> @nish.JsonDecoder.text
+  local 448:11 k: i32 (const)
+  callee 448:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 451:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  callee 455:9 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee 458:12 JsonDecoder.text -> @nish.JsonDecoder.text
 function JsonDecoder.i32Array(this: JsonDecoder, xs: i32[]): i32[] -> @nish.JsonDecoder.i32Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 452:9
+  sharedWrite: 473:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.i32 nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.i32#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 445:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 448:9 n: i32 (let)
-  callee 449:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 450:13 v: i32 (const)
-  callee 450:22 JsonDecoder.i32 -> @nish.JsonDecoder.i32
+  callee 466:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 469:9 n: i32 (let)
+  callee 470:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 471:13 v: i32 (const)
+  callee 471:22 JsonDecoder.i32 -> @nish.JsonDecoder.i32
 function JsonDecoder.u32Array(this: JsonDecoder, xs: u32[]): u32[] -> @nish.JsonDecoder.u32Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 472:9
+  sharedWrite: 493:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.nextElement nish.JsonDecoder.u32 nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.u32#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 465:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 468:9 n: i32 (let)
-  callee 469:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 470:13 v: u32 (const)
-  callee 470:22 JsonDecoder.u32 -> @nish.JsonDecoder.u32
+  callee 486:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 489:9 n: i32 (let)
+  callee 490:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 491:13 v: u32 (const)
+  callee 491:22 JsonDecoder.u32 -> @nish.JsonDecoder.u32
 function JsonDecoder.i64Array(this: JsonDecoder, xs: i64[]): i64[] -> @nish.JsonDecoder.i64Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 492:9
+  sharedWrite: 513:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.i64 nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.i64#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 485:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 488:9 n: i32 (let)
-  callee 489:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 490:13 v: i64 (const)
-  callee 490:22 JsonDecoder.i64 -> @nish.JsonDecoder.i64
+  callee 506:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 509:9 n: i32 (let)
+  callee 510:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 511:13 v: i64 (const)
+  callee 511:22 JsonDecoder.i64 -> @nish.JsonDecoder.i64
 function JsonDecoder.u64Array(this: JsonDecoder, xs: u64[]): u64[] -> @nish.JsonDecoder.u64Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 512:9
+  sharedWrite: 533:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.nextElement nish.JsonDecoder.u64 nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.u64#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 505:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 508:9 n: i32 (let)
-  callee 509:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 510:13 v: u64 (const)
-  callee 510:22 JsonDecoder.u64 -> @nish.JsonDecoder.u64
+  callee 526:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 529:9 n: i32 (let)
+  callee 530:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 531:13 v: u64 (const)
+  callee 531:22 JsonDecoder.u64 -> @nish.JsonDecoder.u64
 function JsonDecoder.f64Array(this: JsonDecoder, xs: f64[]): f64[] -> @nish.JsonDecoder.f64Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 532:9
+  sharedWrite: 553:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.f64 nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.f64#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 525:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 528:9 n: i32 (let)
-  callee 529:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 530:13 v: f64 (const)
-  callee 530:22 JsonDecoder.f64 -> @nish.JsonDecoder.f64
+  callee 546:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 549:9 n: i32 (let)
+  callee 550:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 551:13 v: f64 (const)
+  callee 551:22 JsonDecoder.f64 -> @nish.JsonDecoder.f64
 function JsonDecoder.booleanArray(this: JsonDecoder, xs: boolean[]): boolean[] -> @nish.JsonDecoder.booleanArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 552:9
+  sharedWrite: 573:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.boolean nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.boolean#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 545:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 548:9 n: i32 (let)
-  callee 549:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 550:13 v: boolean (const)
-  callee 550:26 JsonDecoder.boolean -> @nish.JsonDecoder.boolean
+  callee 566:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 569:9 n: i32 (let)
+  callee 570:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 571:13 v: boolean (const)
+  callee 571:26 JsonDecoder.boolean -> @nish.JsonDecoder.boolean
 function JsonDecoder.stringArray(this: JsonDecoder, xs: string[]): string[] -> @nish.JsonDecoder.stringArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 577:9
+  sharedWrite: 598:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.nextElement nish.JsonDecoder.string nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.string#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 565:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 568:9 n: i32 (let)
-  callee 569:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 570:11 cur: string (let)
-  local 575:13 v: string (const)
-  callee 575:25 JsonDecoder.string -> @nish.JsonDecoder.string
+  callee 586:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 589:9 n: i32 (let)
+  callee 590:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 591:11 cur: string (let)
+  local 596:13 v: string (const)
+  callee 596:25 JsonDecoder.string -> @nish.JsonDecoder.string
 function JsonDecoder.i32ArrayOrNull(this: JsonDecoder, xs: i32[] | null): i32[] | null -> @nish.JsonDecoder.i32ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82248,10 +82258,10 @@ function JsonDecoder.i32ArrayOrNull(this: JsonDecoder, xs: i32[] | null): i32[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.i32Array#0 nish.JsonDecoder.i32Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.i32Array#1
   stackSites=0 stackLocals=0
-  callee 590:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 594:14 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
-  local 596:11 fresh: i32[] (const)
-  callee 597:12 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
+  callee 611:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 615:14 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
+  local 617:11 fresh: i32[] (const)
+  callee 618:12 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
 function JsonDecoder.u32ArrayOrNull(this: JsonDecoder, xs: u32[] | null): u32[] | null -> @nish.JsonDecoder.u32ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82259,10 +82269,10 @@ function JsonDecoder.u32ArrayOrNull(this: JsonDecoder, xs: u32[] | null): u32[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.u32Array#0 nish.JsonDecoder.u32Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.u32Array#1
   stackSites=0 stackLocals=0
-  callee 601:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 605:14 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
-  local 607:11 fresh: u32[] (const)
-  callee 608:12 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
+  callee 622:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 626:14 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
+  local 628:11 fresh: u32[] (const)
+  callee 629:12 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
 function JsonDecoder.i64ArrayOrNull(this: JsonDecoder, xs: i64[] | null): i64[] | null -> @nish.JsonDecoder.i64ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82270,10 +82280,10 @@ function JsonDecoder.i64ArrayOrNull(this: JsonDecoder, xs: i64[] | null): i64[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.i64Array#0 nish.JsonDecoder.i64Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.i64Array#1
   stackSites=0 stackLocals=0
-  callee 612:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 616:14 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
-  local 618:11 fresh: i64[] (const)
-  callee 619:12 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
+  callee 633:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 637:14 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
+  local 639:11 fresh: i64[] (const)
+  callee 640:12 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
 function JsonDecoder.u64ArrayOrNull(this: JsonDecoder, xs: u64[] | null): u64[] | null -> @nish.JsonDecoder.u64ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82281,10 +82291,10 @@ function JsonDecoder.u64ArrayOrNull(this: JsonDecoder, xs: u64[] | null): u64[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.u64Array#0 nish.JsonDecoder.u64Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.u64Array#1
   stackSites=0 stackLocals=0
-  callee 623:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 627:14 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
-  local 629:11 fresh: u64[] (const)
-  callee 630:12 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
+  callee 644:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 648:14 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
+  local 650:11 fresh: u64[] (const)
+  callee 651:12 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
 function JsonDecoder.f64ArrayOrNull(this: JsonDecoder, xs: f64[] | null): f64[] | null -> @nish.JsonDecoder.f64ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82292,10 +82302,10 @@ function JsonDecoder.f64ArrayOrNull(this: JsonDecoder, xs: f64[] | null): f64[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.f64Array#0 nish.JsonDecoder.f64Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.f64Array#1
   stackSites=0 stackLocals=0
-  callee 634:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 638:14 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
-  local 640:11 fresh: f64[] (const)
-  callee 641:12 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
+  callee 655:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 659:14 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
+  local 661:11 fresh: f64[] (const)
+  callee 662:12 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
 function JsonDecoder.booleanArrayOrNull(this: JsonDecoder, xs: boolean[] | null): boolean[] | null -> @nish.JsonDecoder.booleanArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82303,10 +82313,10 @@ function JsonDecoder.booleanArrayOrNull(this: JsonDecoder, xs: boolean[] | null)
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.booleanArray#0 nish.JsonDecoder.booleanArray#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.booleanArray#1
   stackSites=0 stackLocals=0
-  callee 645:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 649:14 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
-  local 651:11 fresh: boolean[] (const)
-  callee 652:12 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
+  callee 666:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 670:14 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
+  local 672:11 fresh: boolean[] (const)
+  callee 673:12 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
 function JsonDecoder.stringArrayOrNull(this: JsonDecoder, xs: string[] | null): string[] | null -> @nish.JsonDecoder.stringArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -82314,10 +82324,10 @@ function JsonDecoder.stringArrayOrNull(this: JsonDecoder, xs: string[] | null): 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.stringArray#0 nish.JsonDecoder.stringArray#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.stringArray#1
   stackSites=0 stackLocals=0
-  callee 656:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 660:14 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
-  local 662:11 fresh: string[] (const)
-  callee 663:12 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
+  callee 677:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 681:14 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
+  local 683:11 fresh: string[] (const)
+  callee 684:12 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
 function jsonEncodeStringOrNull(w: JsonWriter, s: string | null): void -> @nish.jsonEncodeStringOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82325,8 +82335,8 @@ function jsonEncodeStringOrNull(w: JsonWriter, s: string | null): void -> @nish.
   calls: nish.JsonWriter.nullValue nish.JsonWriter.string
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.JsonWriter.string#0
   stackSites=0 stackLocals=0
-  callee 691:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 693:5 JsonWriter.string -> @nish.JsonWriter.string
+  callee 712:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 714:5 JsonWriter.string -> @nish.JsonWriter.string
 function jsonEncodeU64(w: JsonWriter, v: u64): void -> @nish.jsonEncodeU64 [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.raw
@@ -82334,13 +82344,13 @@ function jsonEncodeU64(w: JsonWriter, v: u64): void -> @nish.jsonEncodeU64 [expo
   calls: nish.JsonWriter.raw nish_panic_div nish_panic_overflow
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.raw#0
   stackSites=1 stackLocals=1
-  local 704:9 ten: u64 (const)
-  local 705:9 zero: u64 (const)
-  local 706:9 digits: u8[] (const)
-  local 707:7 rest: u64 (let)
-  local 708:7 first: i32 (let)
-  local 709:12 k: i32 (let)
-  callee 717:3 JsonWriter.raw -> @nish.JsonWriter.raw
+  local 725:9 ten: u64 (const)
+  local 726:9 zero: u64 (const)
+  local 727:9 digits: u8[] (const)
+  local 728:7 rest: u64 (let)
+  local 729:7 first: i32 (let)
+  local 730:12 k: i32 (let)
+  callee 738:3 JsonWriter.raw -> @nish.JsonWriter.raw
 function jsonEncodeI32Array(w: JsonWriter, xs: i32[]): void -> @nish.jsonEncodeI32Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82348,10 +82358,10 @@ function jsonEncodeI32Array(w: JsonWriter, xs: i32[]): void -> @nish.jsonEncodeI
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.i32#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 721:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 722:14 x: i32 (const)
-  callee 723:5 JsonWriter.i32 -> @nish.JsonWriter.i32
-  callee 725:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 742:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 743:14 x: i32 (const)
+  callee 744:5 JsonWriter.i32 -> @nish.JsonWriter.i32
+  callee 746:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeU32Array(w: JsonWriter, xs: u32[]): void -> @nish.jsonEncodeU32Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82359,10 +82369,10 @@ function jsonEncodeU32Array(w: JsonWriter, xs: u32[]): void -> @nish.jsonEncodeU
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.u32#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 729:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 730:14 x: u32 (const)
-  callee 731:5 JsonWriter.u32 -> @nish.JsonWriter.u32
-  callee 733:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 750:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 751:14 x: u32 (const)
+  callee 752:5 JsonWriter.u32 -> @nish.JsonWriter.u32
+  callee 754:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeI64Array(w: JsonWriter, xs: i64[]): void -> @nish.jsonEncodeI64Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82370,10 +82380,10 @@ function jsonEncodeI64Array(w: JsonWriter, xs: i64[]): void -> @nish.jsonEncodeI
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.i64#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 737:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 738:14 x: i64 (const)
-  callee 739:5 JsonWriter.i64 -> @nish.JsonWriter.i64
-  callee 741:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 758:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 759:14 x: i64 (const)
+  callee 760:5 JsonWriter.i64 -> @nish.JsonWriter.i64
+  callee 762:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeU64Array(w: JsonWriter, xs: u64[]): void -> @nish.jsonEncodeU64Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82381,10 +82391,10 @@ function jsonEncodeU64Array(w: JsonWriter, xs: u64[]): void -> @nish.jsonEncodeU
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.jsonEncodeU64#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 745:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 746:14 x: u64 (const)
-  callee 747:5 jsonEncodeU64 -> @nish.jsonEncodeU64
-  callee 749:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 766:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 767:14 x: u64 (const)
+  callee 768:5 jsonEncodeU64 -> @nish.jsonEncodeU64
+  callee 770:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeF64Array(w: JsonWriter, xs: f64[]): void -> @nish.jsonEncodeF64Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82392,10 +82402,10 @@ function jsonEncodeF64Array(w: JsonWriter, xs: f64[]): void -> @nish.jsonEncodeF
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.f64#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 753:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 754:14 x: f64 (const)
-  callee 755:5 JsonWriter.f64 -> @nish.JsonWriter.f64
-  callee 757:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 774:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 775:14 x: f64 (const)
+  callee 776:5 JsonWriter.f64 -> @nish.JsonWriter.f64
+  callee 778:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeBooleanArray(w: JsonWriter, xs: boolean[]): void -> @nish.jsonEncodeBooleanArray [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82403,10 +82413,10 @@ function jsonEncodeBooleanArray(w: JsonWriter, xs: boolean[]): void -> @nish.jso
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.boolean#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 761:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 762:14 x: boolean (const)
-  callee 763:5 JsonWriter.boolean -> @nish.JsonWriter.boolean
-  callee 765:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 782:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 783:14 x: boolean (const)
+  callee 784:5 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee 786:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeStringArray(w: JsonWriter, xs: string[]): void -> @nish.jsonEncodeStringArray [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -82414,10 +82424,10 @@ function jsonEncodeStringArray(w: JsonWriter, xs: string[]): void -> @nish.jsonE
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.string#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 769:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 770:14 x: string (const)
-  callee 771:5 JsonWriter.string -> @nish.JsonWriter.string
-  callee 773:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 790:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 791:14 x: string (const)
+  callee 792:5 JsonWriter.string -> @nish.JsonWriter.string
+  callee 794:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeI32ArrayOrNull(w: JsonWriter, xs: i32[] | null): void -> @nish.jsonEncodeI32ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82425,8 +82435,8 @@ function jsonEncodeI32ArrayOrNull(w: JsonWriter, xs: i32[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeI32Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeI32Array#1
   stackSites=0 stackLocals=0
-  callee 778:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 780:5 jsonEncodeI32Array -> @nish.jsonEncodeI32Array
+  callee 799:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 801:5 jsonEncodeI32Array -> @nish.jsonEncodeI32Array
 function jsonEncodeU32ArrayOrNull(w: JsonWriter, xs: u32[] | null): void -> @nish.jsonEncodeU32ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82434,8 +82444,8 @@ function jsonEncodeU32ArrayOrNull(w: JsonWriter, xs: u32[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeU32Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeU32Array#1
   stackSites=0 stackLocals=0
-  callee 786:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 788:5 jsonEncodeU32Array -> @nish.jsonEncodeU32Array
+  callee 807:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 809:5 jsonEncodeU32Array -> @nish.jsonEncodeU32Array
 function jsonEncodeI64ArrayOrNull(w: JsonWriter, xs: i64[] | null): void -> @nish.jsonEncodeI64ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82443,8 +82453,8 @@ function jsonEncodeI64ArrayOrNull(w: JsonWriter, xs: i64[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeI64Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeI64Array#1
   stackSites=0 stackLocals=0
-  callee 794:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 796:5 jsonEncodeI64Array -> @nish.jsonEncodeI64Array
+  callee 815:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 817:5 jsonEncodeI64Array -> @nish.jsonEncodeI64Array
 function jsonEncodeU64ArrayOrNull(w: JsonWriter, xs: u64[] | null): void -> @nish.jsonEncodeU64ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82452,8 +82462,8 @@ function jsonEncodeU64ArrayOrNull(w: JsonWriter, xs: u64[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeU64Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeU64Array#1
   stackSites=0 stackLocals=0
-  callee 802:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 804:5 jsonEncodeU64Array -> @nish.jsonEncodeU64Array
+  callee 823:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 825:5 jsonEncodeU64Array -> @nish.jsonEncodeU64Array
 function jsonEncodeF64ArrayOrNull(w: JsonWriter, xs: f64[] | null): void -> @nish.jsonEncodeF64ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82461,8 +82471,8 @@ function jsonEncodeF64ArrayOrNull(w: JsonWriter, xs: f64[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeF64Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeF64Array#1
   stackSites=0 stackLocals=0
-  callee 810:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 812:5 jsonEncodeF64Array -> @nish.jsonEncodeF64Array
+  callee 831:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 833:5 jsonEncodeF64Array -> @nish.jsonEncodeF64Array
 function jsonEncodeBooleanArrayOrNull(w: JsonWriter, xs: boolean[] | null): void -> @nish.jsonEncodeBooleanArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82470,8 +82480,8 @@ function jsonEncodeBooleanArrayOrNull(w: JsonWriter, xs: boolean[] | null): void
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeBooleanArray#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeBooleanArray#1
   stackSites=0 stackLocals=0
-  callee 818:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 820:5 jsonEncodeBooleanArray -> @nish.jsonEncodeBooleanArray
+  callee 839:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 841:5 jsonEncodeBooleanArray -> @nish.jsonEncodeBooleanArray
 function jsonEncodeStringArrayOrNull(w: JsonWriter, xs: string[] | null): void -> @nish.jsonEncodeStringArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -82479,8 +82489,8 @@ function jsonEncodeStringArrayOrNull(w: JsonWriter, xs: string[] | null): void -
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeStringArray#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeStringArray#1
   stackSites=0 stackLocals=0
-  callee 826:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 828:5 jsonEncodeStringArray -> @nish.jsonEncodeStringArray
+  callee 847:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 849:5 jsonEncodeStringArray -> @nish.jsonEncodeStringArray
 function jsonDecode<Greeting>(_d: JsonDecoder, _out: Greeting): i32 -> @nish.jsonDecode$$Greeting [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.beginObject
@@ -90350,13 +90360,15 @@ const JSON_DECODE_RANGE: i32 = -21 [exported]
 const JSON_DECODE_UNKNOWN: i32 = -22 [exported]
 const JSON_DECODE_DUPLICATE: i32 = -23 [exported]
 const JSON_DECODE_MISSING: i32 = -24 [exported]
+const JSON_DECODE_MAP_LIMIT: i32 = -25 [exported]
 const JSON_TYPED_ERASED: string = "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
 struct JsonDecoder (class) size=24 align=8 exported
   field tok: JsonTokenizer index=0 offset=0
   field failed: i32 index=1 offset=8 initialized
   field errorAt: i32 index=2 offset=12 initialized
-  field ignoreUnknown: boolean index=3 offset=16 initialized
-  field held: boolean index=4 offset=17 initialized
+  field maxMapKeys: i32 index=3 offset=16 initialized
+  field ignoreUnknown: boolean index=4 offset=20 initialized
+  field held: boolean index=5 offset=21 initialized
   constructor -> @nish.JsonDecoder.constructor
   method reset -> @nish.JsonDecoder.reset
   method fail -> @nish.JsonDecoder.fail
@@ -90367,6 +90379,7 @@ struct JsonDecoder (class) size=24 align=8 exported
   method keyIs -> @nish.JsonDecoder.keyIs
   method keyLength -> @nish.JsonDecoder.keyLength
   method keyByte -> @nish.JsonDecoder.keyByte
+  method mapRoom -> @nish.JsonDecoder.mapRoom
   method key -> @nish.JsonDecoder.key
   method text -> @nish.JsonDecoder.text
   method unknownField -> @nish.JsonDecoder.unknownField
@@ -90407,19 +90420,19 @@ function JsonDecoder.constructor(this: JsonDecoder, src: u8[], off: i32, len: i3
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.constructor#1
   pointer limits: size=16 writesThrough=false captured=false passedTo=nish.JsonTokenizer.constructor#4
   stackSites=0 stackLocals=0
-  callee 120:16 new JsonTokenizer -> @nish.JsonTokenizer.constructor
+  callee 129:16 new JsonTokenizer -> @nish.JsonTokenizer.constructor
 function JsonDecoder.reset(this: JsonDecoder, src: u8[], off: i32, len: i32): void -> @nish.JsonDecoder.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 126:5
+  sharedWrite: 135:5
   escaping: len off
   calls: nish.JsonTokenizer.reset
   pointer this: size=24 writesThrough=true captured=false
   pointer src: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.reset#1
   stackSites=0 stackLocals=0
-  callee 125:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
+  callee 134:5 JsonTokenizer.reset -> @nish.JsonTokenizer.reset
 function JsonDecoder.fail(this: JsonDecoder, code: i32, at: i32): void -> @nish.JsonDecoder.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 134:7
+  sharedWrite: 143:7
   escaping: at code
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -90429,34 +90442,34 @@ function JsonDecoder.wrongType(this: JsonDecoder): void -> @nish.JsonDecoder.wro
   calls: nish.JsonDecoder.fail
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 141:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 150:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.take(this: JsonDecoder): i32 -> @nish.JsonDecoder.take [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 150:7
+  sharedWrite: 159:7
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 153:11 k: i32 (const)
-  callee 153:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 155:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 162:11 k: i32 (const)
+  callee 162:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 164:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.beginObject(this: JsonDecoder): boolean -> @nish.JsonDecoder.beginObject [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 162:11 k: i32 (const)
-  callee 162:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 167:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 171:11 k: i32 (const)
+  callee 171:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 176:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.nextField(this: JsonDecoder): boolean -> @nish.JsonDecoder.nextField [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 177:11 k: i32 (const)
-  callee 177:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 182:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 186:11 k: i32 (const)
+  callee 186:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 191:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.keyIs(this: JsonDecoder, name: string): boolean -> @nish.JsonDecoder.keyIs [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.keyEquals
@@ -90464,172 +90477,179 @@ function JsonDecoder.keyIs(this: JsonDecoder, name: string): boolean -> @nish.Js
   calls: nish.JsonTokenizer.keyEquals
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 189:12 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee 198:12 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
 function JsonDecoder.keyLength(this: JsonDecoder): i32 -> @nish.JsonDecoder.keyLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.stringLength
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 198:12 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  callee 207:12 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
 function JsonDecoder.keyByte(this: JsonDecoder, at: i32): i32 -> @nish.JsonDecoder.keyByte [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.stringLength nish_panic_overflow
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 210:11 tok: JsonTokenizer (const)
-  local 211:11 n: i32 (const)
-  callee 211:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
-  local 215:11 src: u8[] (const)
-  local 216:11 i: i32 (const)
+  local 219:11 tok: JsonTokenizer (const)
+  local 220:11 n: i32 (const)
+  callee 220:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  local 224:11 src: u8[] (const)
+  local 225:11 i: i32 (const)
+function JsonDecoder.mapRoom(this: JsonDecoder, count: i32): boolean -> @nish.JsonDecoder.mapRoom [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDecoder.fail
+  calls: nish.JsonDecoder.fail
+  pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
+  stackSites=0 stackLocals=0
+  callee 240:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.key(this: JsonDecoder): string -> @nish.JsonDecoder.key [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.text
   calls: nish.JsonDecoder.text
   pointer this: size=24 writesThrough=false captured=false passedTo=nish.JsonDecoder.text#0
   stackSites=0 stackLocals=0
-  callee 225:12 JsonDecoder.text -> @nish.JsonDecoder.text
+  callee 246:12 JsonDecoder.text -> @nish.JsonDecoder.text
 function JsonDecoder.text(this: JsonDecoder): string -> @nish.JsonDecoder.text [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.stringInto
   calls: nish.JsonTokenizer.stringInto nish.JsonTokenizer.stringLength nish_exit nish_panic_overflow nish_panic_slice nish_str_new nish_write
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 235:11 tok: JsonTokenizer (const)
-  local 236:11 n: i32 (const)
-  callee 236:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
-  local 247:11 bytes: u8[] (const)
-  local 248:11 at: i32 (const)
-  callee 249:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  local 256:11 tok: JsonTokenizer (const)
+  local 257:11 n: i32 (const)
+  callee 257:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
+  local 268:11 bytes: u8[] (const)
+  local 269:11 at: i32 (const)
+  callee 270:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
 function JsonDecoder.unknownField(this: JsonDecoder): void -> @nish.JsonDecoder.unknownField [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.skipValue
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 259:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  local 262:11 k: i32 (const)
-  callee 262:20 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
-  callee 264:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 280:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 283:11 k: i32 (const)
+  callee 283:20 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
+  callee 285:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.duplicateField(this: JsonDecoder): void -> @nish.JsonDecoder.duplicateField [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
   calls: nish.JsonDecoder.fail
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 270:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 291:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.missingField(this: JsonDecoder): void -> @nish.JsonDecoder.missingField [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
   calls: nish.JsonDecoder.fail
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  callee 275:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 296:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.finish(this: JsonDecoder): i32 -> @nish.JsonDecoder.finish [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next
   calls: nish.JsonDecoder.fail nish.JsonDecoder.wrongType nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 281:13 k: i32 (const)
-  callee 281:22 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 283:9 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  callee 285:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 302:13 k: i32 (const)
+  callee 302:22 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 304:9 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 306:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.takeNull(this: JsonDecoder): boolean -> @nish.JsonDecoder.takeNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 298:7
+  sharedWrite: 319:7
   calls: nish.JsonDecoder.take
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0
   stackSites=0 stackLocals=0
-  local 293:11 k: i32 (const)
-  callee 293:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  local 314:11 k: i32 (const)
+  callee 314:20 JsonDecoder.take -> @nish.JsonDecoder.take
 function JsonDecoder.beginArray(this: JsonDecoder): boolean -> @nish.JsonDecoder.beginArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 305:11 k: i32 (const)
-  callee 305:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 310:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 326:11 k: i32 (const)
+  callee 326:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 331:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.nextElement(this: JsonDecoder): boolean -> @nish.JsonDecoder.nextElement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 328:5
+  sharedWrite: 349:5
   calls: nish.JsonDecoder.fail nish.JsonTokenizer.next
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 320:11 k: i32 (const)
-  callee 320:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
-  callee 325:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 341:11 k: i32 (const)
+  callee 341:20 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee 346:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.integer(this: JsonDecoder, lo: i64, hi: i64, bounded: boolean): i64 -> @nish.JsonDecoder.integer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.fail nish.JsonDecoder.take nish.JsonDecoder.wrongType nish.JsonTokenizer.isInteger nish.JsonTokenizer.numberI64
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0 nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 339:11 k: i32 (const)
-  callee 339:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 342:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
-  callee 346:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
-  callee 347:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  local 350:11 v: i64 (const)
-  callee 350:20 JsonTokenizer.numberI64 -> @nish.JsonTokenizer.numberI64
-  callee 352:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 360:11 k: i32 (const)
+  callee 360:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 363:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  callee 367:10 JsonTokenizer.isInteger -> @nish.JsonTokenizer.isInteger
+  callee 368:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local 371:11 v: i64 (const)
+  callee 371:20 JsonTokenizer.numberI64 -> @nish.JsonTokenizer.numberI64
+  callee 373:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.i32(this: JsonDecoder): i32 -> @nish.JsonDecoder.i32 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.integer
   calls: nish.JsonDecoder.integer
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.integer#0
   stackSites=0 stackLocals=0
-  local 359:11 lo: i64 (const)
-  local 360:11 hi: i64 (const)
-  callee 361:18 JsonDecoder.integer -> @nish.JsonDecoder.integer
+  local 380:11 lo: i64 (const)
+  local 381:11 hi: i64 (const)
+  callee 382:18 JsonDecoder.integer -> @nish.JsonDecoder.integer
 function JsonDecoder.u32(this: JsonDecoder): u32 -> @nish.JsonDecoder.u32 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.integer
   calls: llvm.fptoui.sat.i32.f64 nish.JsonDecoder.integer
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.integer#0
   stackSites=0 stackLocals=0
-  local 366:11 lo: i64 (const)
-  local 367:11 hi: i64 (const)
-  callee 370:24 JsonDecoder.integer -> @nish.JsonDecoder.integer
+  local 387:11 lo: i64 (const)
+  local 388:11 hi: i64 (const)
+  callee 391:24 JsonDecoder.integer -> @nish.JsonDecoder.integer
 function JsonDecoder.i64(this: JsonDecoder): i64 -> @nish.JsonDecoder.i64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.integer
   calls: nish.JsonDecoder.integer
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.integer#0
   stackSites=0 stackLocals=0
-  callee 375:12 JsonDecoder.integer -> @nish.JsonDecoder.integer
+  callee 396:12 JsonDecoder.integer -> @nish.JsonDecoder.integer
 function JsonDecoder.u64(this: JsonDecoder): u64 -> @nish.JsonDecoder.u64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.fail nish.JsonDecoder.take nish.JsonDecoder.wrongType nish.JsonTokenizer.isU64 nish.JsonTokenizer.numberU64
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0 nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
-  local 385:11 k: i32 (const)
-  callee 385:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 388:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
-  callee 392:10 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
-  callee 393:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
-  callee 396:12 JsonTokenizer.numberU64 -> @nish.JsonTokenizer.numberU64
+  local 406:11 k: i32 (const)
+  callee 406:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 409:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  callee 413:10 JsonTokenizer.isU64 -> @nish.JsonTokenizer.isU64
+  callee 414:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee 417:12 JsonTokenizer.numberU64 -> @nish.JsonTokenizer.numberU64
 function JsonDecoder.f64(this: JsonDecoder): f64 -> @nish.JsonDecoder.f64 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType nish.JsonTokenizer.numberF64
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 400:11 k: i32 (const)
-  callee 400:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 402:14 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
-  callee 405:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 421:11 k: i32 (const)
+  callee 421:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 423:14 JsonTokenizer.numberF64 -> @nish.JsonTokenizer.numberF64
+  callee 426:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.boolean(this: JsonDecoder): boolean -> @nish.JsonDecoder.boolean [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
   calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
   stackSites=0 stackLocals=0
-  local 411:11 k: i32 (const)
-  callee 411:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 416:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  local 432:11 k: i32 (const)
+  callee 432:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 437:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.string(this: JsonDecoder, cur: string): string -> @nish.JsonDecoder.string [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
@@ -90637,103 +90657,103 @@ function JsonDecoder.string(this: JsonDecoder, cur: string): string -> @nish.Jso
   calls: nish.JsonDecoder.take nish.JsonDecoder.text nish.JsonDecoder.wrongType nish.JsonTokenizer.keyEquals
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0 nish.JsonDecoder.text#0
   stackSites=0 stackLocals=0
-  local 427:11 k: i32 (const)
-  callee 427:20 JsonDecoder.take -> @nish.JsonDecoder.take
-  callee 430:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
-  callee 434:9 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
-  callee 437:12 JsonDecoder.text -> @nish.JsonDecoder.text
+  local 448:11 k: i32 (const)
+  callee 448:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee 451:9 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
+  callee 455:9 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee 458:12 JsonDecoder.text -> @nish.JsonDecoder.text
 function JsonDecoder.i32Array(this: JsonDecoder, xs: i32[]): i32[] -> @nish.JsonDecoder.i32Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 452:9
+  sharedWrite: 473:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.i32 nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.i32#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 445:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 448:9 n: i32 (let)
-  callee 449:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 450:13 v: i32 (const)
-  callee 450:22 JsonDecoder.i32 -> @nish.JsonDecoder.i32
+  callee 466:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 469:9 n: i32 (let)
+  callee 470:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 471:13 v: i32 (const)
+  callee 471:22 JsonDecoder.i32 -> @nish.JsonDecoder.i32
 function JsonDecoder.u32Array(this: JsonDecoder, xs: u32[]): u32[] -> @nish.JsonDecoder.u32Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 472:9
+  sharedWrite: 493:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.nextElement nish.JsonDecoder.u32 nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.u32#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 465:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 468:9 n: i32 (let)
-  callee 469:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 470:13 v: u32 (const)
-  callee 470:22 JsonDecoder.u32 -> @nish.JsonDecoder.u32
+  callee 486:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 489:9 n: i32 (let)
+  callee 490:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 491:13 v: u32 (const)
+  callee 491:22 JsonDecoder.u32 -> @nish.JsonDecoder.u32
 function JsonDecoder.i64Array(this: JsonDecoder, xs: i64[]): i64[] -> @nish.JsonDecoder.i64Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 492:9
+  sharedWrite: 513:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.i64 nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.i64#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 485:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 488:9 n: i32 (let)
-  callee 489:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 490:13 v: i64 (const)
-  callee 490:22 JsonDecoder.i64 -> @nish.JsonDecoder.i64
+  callee 506:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 509:9 n: i32 (let)
+  callee 510:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 511:13 v: i64 (const)
+  callee 511:22 JsonDecoder.i64 -> @nish.JsonDecoder.i64
 function JsonDecoder.u64Array(this: JsonDecoder, xs: u64[]): u64[] -> @nish.JsonDecoder.u64Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 512:9
+  sharedWrite: 533:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.nextElement nish.JsonDecoder.u64 nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.u64#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 505:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 508:9 n: i32 (let)
-  callee 509:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 510:13 v: u64 (const)
-  callee 510:22 JsonDecoder.u64 -> @nish.JsonDecoder.u64
+  callee 526:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 529:9 n: i32 (let)
+  callee 530:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 531:13 v: u64 (const)
+  callee 531:22 JsonDecoder.u64 -> @nish.JsonDecoder.u64
 function JsonDecoder.f64Array(this: JsonDecoder, xs: f64[]): f64[] -> @nish.JsonDecoder.f64Array [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 532:9
+  sharedWrite: 553:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.f64 nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.f64#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 525:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 528:9 n: i32 (let)
-  callee 529:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 530:13 v: f64 (const)
-  callee 530:22 JsonDecoder.f64 -> @nish.JsonDecoder.f64
+  callee 546:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 549:9 n: i32 (let)
+  callee 550:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 551:13 v: f64 (const)
+  callee 551:22 JsonDecoder.f64 -> @nish.JsonDecoder.f64
 function JsonDecoder.booleanArray(this: JsonDecoder, xs: boolean[]): boolean[] -> @nish.JsonDecoder.booleanArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 552:9
+  sharedWrite: 573:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.boolean nish.JsonDecoder.nextElement nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.boolean#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 545:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 548:9 n: i32 (let)
-  callee 549:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 550:13 v: boolean (const)
-  callee 550:26 JsonDecoder.boolean -> @nish.JsonDecoder.boolean
+  callee 566:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 569:9 n: i32 (let)
+  callee 570:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 571:13 v: boolean (const)
+  callee 571:26 JsonDecoder.boolean -> @nish.JsonDecoder.boolean
 function JsonDecoder.stringArray(this: JsonDecoder, xs: string[]): string[] -> @nish.JsonDecoder.stringArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 577:9
+  sharedWrite: 598:9
   escaping: xs
   calls: nish.JsonDecoder.beginArray nish.JsonDecoder.nextElement nish.JsonDecoder.string nish_array_grow nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginArray#0 nish.JsonDecoder.nextElement#0 nish.JsonDecoder.string#0
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 565:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
-  local 568:9 n: i32 (let)
-  callee 569:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
-  local 570:11 cur: string (let)
-  local 575:13 v: string (const)
-  callee 575:25 JsonDecoder.string -> @nish.JsonDecoder.string
+  callee 586:10 JsonDecoder.beginArray -> @nish.JsonDecoder.beginArray
+  local 589:9 n: i32 (let)
+  callee 590:12 JsonDecoder.nextElement -> @nish.JsonDecoder.nextElement
+  local 591:11 cur: string (let)
+  local 596:13 v: string (const)
+  callee 596:25 JsonDecoder.string -> @nish.JsonDecoder.string
 function JsonDecoder.i32ArrayOrNull(this: JsonDecoder, xs: i32[] | null): i32[] | null -> @nish.JsonDecoder.i32ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90741,10 +90761,10 @@ function JsonDecoder.i32ArrayOrNull(this: JsonDecoder, xs: i32[] | null): i32[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.i32Array#0 nish.JsonDecoder.i32Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.i32Array#1
   stackSites=0 stackLocals=0
-  callee 590:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 594:14 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
-  local 596:11 fresh: i32[] (const)
-  callee 597:12 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
+  callee 611:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 615:14 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
+  local 617:11 fresh: i32[] (const)
+  callee 618:12 JsonDecoder.i32Array -> @nish.JsonDecoder.i32Array
 function JsonDecoder.u32ArrayOrNull(this: JsonDecoder, xs: u32[] | null): u32[] | null -> @nish.JsonDecoder.u32ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90752,10 +90772,10 @@ function JsonDecoder.u32ArrayOrNull(this: JsonDecoder, xs: u32[] | null): u32[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.u32Array#0 nish.JsonDecoder.u32Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.u32Array#1
   stackSites=0 stackLocals=0
-  callee 601:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 605:14 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
-  local 607:11 fresh: u32[] (const)
-  callee 608:12 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
+  callee 622:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 626:14 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
+  local 628:11 fresh: u32[] (const)
+  callee 629:12 JsonDecoder.u32Array -> @nish.JsonDecoder.u32Array
 function JsonDecoder.i64ArrayOrNull(this: JsonDecoder, xs: i64[] | null): i64[] | null -> @nish.JsonDecoder.i64ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90763,10 +90783,10 @@ function JsonDecoder.i64ArrayOrNull(this: JsonDecoder, xs: i64[] | null): i64[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.i64Array#0 nish.JsonDecoder.i64Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.i64Array#1
   stackSites=0 stackLocals=0
-  callee 612:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 616:14 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
-  local 618:11 fresh: i64[] (const)
-  callee 619:12 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
+  callee 633:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 637:14 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
+  local 639:11 fresh: i64[] (const)
+  callee 640:12 JsonDecoder.i64Array -> @nish.JsonDecoder.i64Array
 function JsonDecoder.u64ArrayOrNull(this: JsonDecoder, xs: u64[] | null): u64[] | null -> @nish.JsonDecoder.u64ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90774,10 +90794,10 @@ function JsonDecoder.u64ArrayOrNull(this: JsonDecoder, xs: u64[] | null): u64[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.u64Array#0 nish.JsonDecoder.u64Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.u64Array#1
   stackSites=0 stackLocals=0
-  callee 623:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 627:14 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
-  local 629:11 fresh: u64[] (const)
-  callee 630:12 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
+  callee 644:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 648:14 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
+  local 650:11 fresh: u64[] (const)
+  callee 651:12 JsonDecoder.u64Array -> @nish.JsonDecoder.u64Array
 function JsonDecoder.f64ArrayOrNull(this: JsonDecoder, xs: f64[] | null): f64[] | null -> @nish.JsonDecoder.f64ArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90785,10 +90805,10 @@ function JsonDecoder.f64ArrayOrNull(this: JsonDecoder, xs: f64[] | null): f64[] 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.f64Array#0 nish.JsonDecoder.f64Array#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.f64Array#1
   stackSites=0 stackLocals=0
-  callee 634:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 638:14 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
-  local 640:11 fresh: f64[] (const)
-  callee 641:12 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
+  callee 655:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 659:14 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
+  local 661:11 fresh: f64[] (const)
+  callee 662:12 JsonDecoder.f64Array -> @nish.JsonDecoder.f64Array
 function JsonDecoder.booleanArrayOrNull(this: JsonDecoder, xs: boolean[] | null): boolean[] | null -> @nish.JsonDecoder.booleanArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90796,10 +90816,10 @@ function JsonDecoder.booleanArrayOrNull(this: JsonDecoder, xs: boolean[] | null)
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.booleanArray#0 nish.JsonDecoder.booleanArray#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.booleanArray#1
   stackSites=0 stackLocals=0
-  callee 645:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 649:14 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
-  local 651:11 fresh: boolean[] (const)
-  callee 652:12 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
+  callee 666:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 670:14 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
+  local 672:11 fresh: boolean[] (const)
+  callee 673:12 JsonDecoder.booleanArray -> @nish.JsonDecoder.booleanArray
 function JsonDecoder.stringArrayOrNull(this: JsonDecoder, xs: string[] | null): string[] | null -> @nish.JsonDecoder.stringArrayOrNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.takeNull
@@ -90807,10 +90827,10 @@ function JsonDecoder.stringArrayOrNull(this: JsonDecoder, xs: string[] | null): 
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.JsonDecoder.takeNull#0 nish.JsonDecoder.stringArray#0 nish.JsonDecoder.stringArray#0
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.stringArray#1
   stackSites=0 stackLocals=0
-  callee 656:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
-  callee 660:14 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
-  local 662:11 fresh: string[] (const)
-  callee 663:12 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
+  callee 677:9 JsonDecoder.takeNull -> @nish.JsonDecoder.takeNull
+  callee 681:14 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
+  local 683:11 fresh: string[] (const)
+  callee 684:12 JsonDecoder.stringArray -> @nish.JsonDecoder.stringArray
 function jsonEncodeStringOrNull(w: JsonWriter, s: string | null): void -> @nish.jsonEncodeStringOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90818,8 +90838,8 @@ function jsonEncodeStringOrNull(w: JsonWriter, s: string | null): void -> @nish.
   calls: nish.JsonWriter.nullValue nish.JsonWriter.string
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.JsonWriter.string#0
   stackSites=0 stackLocals=0
-  callee 691:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 693:5 JsonWriter.string -> @nish.JsonWriter.string
+  callee 712:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 714:5 JsonWriter.string -> @nish.JsonWriter.string
 function jsonEncodeU64(w: JsonWriter, v: u64): void -> @nish.jsonEncodeU64 [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.raw
@@ -90827,13 +90847,13 @@ function jsonEncodeU64(w: JsonWriter, v: u64): void -> @nish.jsonEncodeU64 [expo
   calls: nish.JsonWriter.raw nish_panic_div nish_panic_overflow
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.raw#0
   stackSites=1 stackLocals=1
-  local 704:9 ten: u64 (const)
-  local 705:9 zero: u64 (const)
-  local 706:9 digits: u8[] (const)
-  local 707:7 rest: u64 (let)
-  local 708:7 first: i32 (let)
-  local 709:12 k: i32 (let)
-  callee 717:3 JsonWriter.raw -> @nish.JsonWriter.raw
+  local 725:9 ten: u64 (const)
+  local 726:9 zero: u64 (const)
+  local 727:9 digits: u8[] (const)
+  local 728:7 rest: u64 (let)
+  local 729:7 first: i32 (let)
+  local 730:12 k: i32 (let)
+  callee 738:3 JsonWriter.raw -> @nish.JsonWriter.raw
 function jsonEncodeI32Array(w: JsonWriter, xs: i32[]): void -> @nish.jsonEncodeI32Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90841,10 +90861,10 @@ function jsonEncodeI32Array(w: JsonWriter, xs: i32[]): void -> @nish.jsonEncodeI
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.i32#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 721:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 722:14 x: i32 (const)
-  callee 723:5 JsonWriter.i32 -> @nish.JsonWriter.i32
-  callee 725:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 742:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 743:14 x: i32 (const)
+  callee 744:5 JsonWriter.i32 -> @nish.JsonWriter.i32
+  callee 746:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeU32Array(w: JsonWriter, xs: u32[]): void -> @nish.jsonEncodeU32Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90852,10 +90872,10 @@ function jsonEncodeU32Array(w: JsonWriter, xs: u32[]): void -> @nish.jsonEncodeU
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.u32#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 729:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 730:14 x: u32 (const)
-  callee 731:5 JsonWriter.u32 -> @nish.JsonWriter.u32
-  callee 733:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 750:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 751:14 x: u32 (const)
+  callee 752:5 JsonWriter.u32 -> @nish.JsonWriter.u32
+  callee 754:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeI64Array(w: JsonWriter, xs: i64[]): void -> @nish.jsonEncodeI64Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90863,10 +90883,10 @@ function jsonEncodeI64Array(w: JsonWriter, xs: i64[]): void -> @nish.jsonEncodeI
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.i64#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 737:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 738:14 x: i64 (const)
-  callee 739:5 JsonWriter.i64 -> @nish.JsonWriter.i64
-  callee 741:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 758:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 759:14 x: i64 (const)
+  callee 760:5 JsonWriter.i64 -> @nish.JsonWriter.i64
+  callee 762:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeU64Array(w: JsonWriter, xs: u64[]): void -> @nish.jsonEncodeU64Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90874,10 +90894,10 @@ function jsonEncodeU64Array(w: JsonWriter, xs: u64[]): void -> @nish.jsonEncodeU
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.jsonEncodeU64#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 745:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 746:14 x: u64 (const)
-  callee 747:5 jsonEncodeU64 -> @nish.jsonEncodeU64
-  callee 749:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 766:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 767:14 x: u64 (const)
+  callee 768:5 jsonEncodeU64 -> @nish.jsonEncodeU64
+  callee 770:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeF64Array(w: JsonWriter, xs: f64[]): void -> @nish.jsonEncodeF64Array [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90885,10 +90905,10 @@ function jsonEncodeF64Array(w: JsonWriter, xs: f64[]): void -> @nish.jsonEncodeF
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.f64#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 753:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 754:14 x: f64 (const)
-  callee 755:5 JsonWriter.f64 -> @nish.JsonWriter.f64
-  callee 757:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 774:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 775:14 x: f64 (const)
+  callee 776:5 JsonWriter.f64 -> @nish.JsonWriter.f64
+  callee 778:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeBooleanArray(w: JsonWriter, xs: boolean[]): void -> @nish.jsonEncodeBooleanArray [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90896,10 +90916,10 @@ function jsonEncodeBooleanArray(w: JsonWriter, xs: boolean[]): void -> @nish.jso
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.boolean#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 761:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 762:14 x: boolean (const)
-  callee 763:5 JsonWriter.boolean -> @nish.JsonWriter.boolean
-  callee 765:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 782:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 783:14 x: boolean (const)
+  callee 784:5 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee 786:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeStringArray(w: JsonWriter, xs: string[]): void -> @nish.jsonEncodeStringArray [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.beginArray
@@ -90907,10 +90927,10 @@ function jsonEncodeStringArray(w: JsonWriter, xs: string[]): void -> @nish.jsonE
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginArray#0 nish.JsonWriter.string#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 769:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local 770:14 x: string (const)
-  callee 771:5 JsonWriter.string -> @nish.JsonWriter.string
-  callee 773:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee 790:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local 791:14 x: string (const)
+  callee 792:5 JsonWriter.string -> @nish.JsonWriter.string
+  callee 794:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function jsonEncodeI32ArrayOrNull(w: JsonWriter, xs: i32[] | null): void -> @nish.jsonEncodeI32ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90918,8 +90938,8 @@ function jsonEncodeI32ArrayOrNull(w: JsonWriter, xs: i32[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeI32Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeI32Array#1
   stackSites=0 stackLocals=0
-  callee 778:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 780:5 jsonEncodeI32Array -> @nish.jsonEncodeI32Array
+  callee 799:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 801:5 jsonEncodeI32Array -> @nish.jsonEncodeI32Array
 function jsonEncodeU32ArrayOrNull(w: JsonWriter, xs: u32[] | null): void -> @nish.jsonEncodeU32ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90927,8 +90947,8 @@ function jsonEncodeU32ArrayOrNull(w: JsonWriter, xs: u32[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeU32Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeU32Array#1
   stackSites=0 stackLocals=0
-  callee 786:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 788:5 jsonEncodeU32Array -> @nish.jsonEncodeU32Array
+  callee 807:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 809:5 jsonEncodeU32Array -> @nish.jsonEncodeU32Array
 function jsonEncodeI64ArrayOrNull(w: JsonWriter, xs: i64[] | null): void -> @nish.jsonEncodeI64ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90936,8 +90956,8 @@ function jsonEncodeI64ArrayOrNull(w: JsonWriter, xs: i64[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeI64Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeI64Array#1
   stackSites=0 stackLocals=0
-  callee 794:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 796:5 jsonEncodeI64Array -> @nish.jsonEncodeI64Array
+  callee 815:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 817:5 jsonEncodeI64Array -> @nish.jsonEncodeI64Array
 function jsonEncodeU64ArrayOrNull(w: JsonWriter, xs: u64[] | null): void -> @nish.jsonEncodeU64ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90945,8 +90965,8 @@ function jsonEncodeU64ArrayOrNull(w: JsonWriter, xs: u64[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeU64Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeU64Array#1
   stackSites=0 stackLocals=0
-  callee 802:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 804:5 jsonEncodeU64Array -> @nish.jsonEncodeU64Array
+  callee 823:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 825:5 jsonEncodeU64Array -> @nish.jsonEncodeU64Array
 function jsonEncodeF64ArrayOrNull(w: JsonWriter, xs: f64[] | null): void -> @nish.jsonEncodeF64ArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90954,8 +90974,8 @@ function jsonEncodeF64ArrayOrNull(w: JsonWriter, xs: f64[] | null): void -> @nis
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeF64Array#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeF64Array#1
   stackSites=0 stackLocals=0
-  callee 810:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 812:5 jsonEncodeF64Array -> @nish.jsonEncodeF64Array
+  callee 831:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 833:5 jsonEncodeF64Array -> @nish.jsonEncodeF64Array
 function jsonEncodeBooleanArrayOrNull(w: JsonWriter, xs: boolean[] | null): void -> @nish.jsonEncodeBooleanArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90963,8 +90983,8 @@ function jsonEncodeBooleanArrayOrNull(w: JsonWriter, xs: boolean[] | null): void
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeBooleanArray#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeBooleanArray#1
   stackSites=0 stackLocals=0
-  callee 818:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 820:5 jsonEncodeBooleanArray -> @nish.jsonEncodeBooleanArray
+  callee 839:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 841:5 jsonEncodeBooleanArray -> @nish.jsonEncodeBooleanArray
 function jsonEncodeStringArrayOrNull(w: JsonWriter, xs: string[] | null): void -> @nish.jsonEncodeStringArrayOrNull [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.nullValue
@@ -90972,8 +90992,8 @@ function jsonEncodeStringArrayOrNull(w: JsonWriter, xs: string[] | null): void -
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonEncodeStringArray#0
   pointer xs: size=0 writesThrough=false captured=false passedTo=nish.jsonEncodeStringArray#1
   stackSites=0 stackLocals=0
-  callee 826:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee 828:5 jsonEncodeStringArray -> @nish.jsonEncodeStringArray
+  callee 847:5 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee 849:5 jsonEncodeStringArray -> @nish.jsonEncodeStringArray
 function jsonDecode<Catalog>(_d: JsonDecoder, _out: Catalog): i32 -> @nish.jsonDecode$$Catalog [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.beginObject

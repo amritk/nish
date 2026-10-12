@@ -168,7 +168,8 @@ export const main = (): i32 => {
   console.log(`key escaped ${codes(k.key())} ${k.keyLength()} ${k.keyByte(0)}`);
   console.log(`text ${codes(k.text())} ${k.failed}`);
 
-  // The `u64` encoders: below 2^63 through `i64`, past it as digits.
+  // The `u64` encoders, every value through the one digit loop: 0, 2^64 - 1
+  // and 2^63, alone and in arrays. Then `mapRoom` at either side of a limit.
   const out = new JsonWriter(new Array<u8>(256), 0);
   out.beginArray();
   jsonEncodeU64(out, n0);
@@ -179,6 +180,11 @@ export const main = (): i32 => {
   jsonEncodeU64ArrayOrNull(out, n5);
   out.endArray();
   console.log(`encoded ${out.text()} ${out.failed}`);
+  const room = new JsonDecoder(keys, 0, toI32(keys.length), new JsonLimits());
+  room.maxMapKeys = 2;
+  room.beginObject();
+  room.nextField();
+  console.log(`mapRoom ${room.mapRoom(1)} ${room.mapRoom(2)} ${room.failed} at ${room.errorAt}`);
   return 0;
 };
 

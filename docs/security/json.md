@@ -23,7 +23,8 @@ one verdict, alone, after a `reset` and inside a window padded with bytes that
 would change the verdict if a read strayed. Every limit has its own code, and
 each is checked before the work it bounds. A reused tokenizer keeps the arena
 flat. One finding is open, one is accepted, and JSON-3 is fixed by the typed
-layer, all Low.
+layer, all Low; the typed layer's own findings follow in its section, JSON-9
+(Medium) mitigated and open.
 
 ## Scope
 
@@ -254,6 +255,7 @@ chooses the class, the limits and `ignoreUnknown`.
 | JSON-5 | Low | `src/emit-json.ts:454` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
 | JSON-6 | Low | `std/json-typed.ts:344` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
 | JSON-8 | Low | `src/emit-json.ts` (`emitJsonDecodeMapBody`), at `014a4c3a` | A `Map` field is emptied and filled anew on every decode, so its keys are new strings and its values new objects, arrays or maps each time: a server decoding a stream of bodies into one object grows the arena by the entries it keeps, bounded by the bodies' size under `maxTotalBytes`, as JSON-6's strings are. | **Accepted.** Reusing an entry would need its key found before the entry is kept or dropped, and would keep the old order where the input gives a new one; docs/LANGUAGE.md ("Typed JSON") says a map's entries are made anew. |
+| JSON-9 | Medium | `src/emit-json.ts` (`emitJsonDecodeMapBody`), `std/json-typed.ts` (`mapRoom`); the hash in `std/collections.ts` and `src/emit-map.ts` | A `Map<string, V>` field takes its keys from the body, and the global `Map` hashes a string with unseeded FNV-1a and probes linearly, so a body can choose keys that all land on one probe chain and make each insert walk every key before it. Measured in review at `a336c929`, before the limit: a 278 KB body of 20,000 colliding keys decoded in 657 ms, against 2.4 ms for 20,000 ordinary keys (274x). | **Mitigated; open for the real fix.** The decoder takes at most `maxMapKeys` keys per map, 4,096 unless the program sets it, and refuses the next with `JSON_DECODE_MAP_LIMIT` before the key is read (`mapRoom`), so one map's inserts cost at most about 4,096²/2 probes whatever the keys are. The fix is a seeded string hash in `src/emit-map.ts` and `std/collections.ts`, outside the typed layer; until it lands, a program that raises `maxMapKeys` raises this bound with it. |
 | JSON-7 | Low | `src/emit-json.ts:275` (`emitJsonDecodeBody`), `:532` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
@@ -332,6 +334,16 @@ each way ("map: escaped non-ASCII keys decode"). `tests/run.js` holds
 `round-trip-kinds.txt`, decoded and encoded natively, to
 `JSON.stringify(JSON.parse(line))` with each integer past 2^53 kept exact
 (`check("link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact")`).
+
+**A map's keys are bounded** (JSON-9): a key past `maxMapKeys` is
+`JSON_DECODE_MAP_LIMIT` at its own byte, each map of a map of maps on its own
+("map limit: one key past it: code", "map limit: one key past it: errorAt",
+"map limit: each map of a map of maps has its own", "map limit: 4,096 keys by
+default", "map limit: and not 4,097"), and `mapRoom` answers the same under
+Node (`check("link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines")`).
+An enum read that fails stores and pushes nothing, so a failed `5.5`, `2^31`
+or `"x"` does not leave the member `0` behind ("enum: and the field keeps
+High, not Low, after 5.5", "enum array: nothing is pushed for 5.5").
 
 **Key dispatch.** A key is sent to a field by its decoded length, then by one
 raw byte where names of that length differ, and `keyIs` compares the whole key

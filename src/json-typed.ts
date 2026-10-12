@@ -509,6 +509,7 @@ const jsonRouteNames = (
         names.add("nextElement")
       }
       if (f.kind === JSON_FIELD_MAP) {
+        names.add("mapRoom")
         names.add("key")
       }
       continue
