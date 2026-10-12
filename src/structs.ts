@@ -18,6 +18,7 @@
 import { secretFieldMessage } from "./secret"
 import { DISPOSE_METHOD, disposeElsewhereMessage, isIteratorMethod, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
+import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
@@ -446,6 +447,13 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
   const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``
+  // Typed JSON's options: the one `static` a class may declare, and not a
+  // member, so an instance field or a method called `json` before it is no
+  // duplicate, as in TypeScript, whose statics have a namespace of their own.
+  if ((decl.flags & FLAG_STATIC) !== 0 && name === JSON_OPTIONS && owner.kind === STRUCT_CLASS) {
+    noteJsonOptions(ctx, owner, decl)
+    return
+  }
   if (owner.hasMember(name)) {
     ctx.error(
       decl.children[0],
@@ -797,6 +805,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       }
     }
   }
+  checkJsonOptions(ctx, info)
   const floor = computeLayout(ctx, info)
   info.collected = true
   reportWastefulPadding(ctx, info, floor, prefix)

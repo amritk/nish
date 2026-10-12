@@ -5362,6 +5362,42 @@ if (!only || "std_json_typed".includes(only)) {
       "skipped: link/std_json_typed: no native program to hold the kinds against JSON.parse and JSON.stringify"
     )
   }
+  // The same for `round-trip-options.txt` decoded into a `Reading`, whose
+  // numbers are `JsonNumber`s: every number comes back as its source text, so
+  // each is kept as `JSON.rawJSON` of its source, wide or long or not. The
+  // fields come back in declaration order and the optional `backup` as `null`
+  // where a line leaves it out; a line that is not a `Reading` is
+  // `JSON_DECODE_TYPE`.
+  const optionsInputs = path.join(dir, "round-trip-options.txt")
+  const optionsLines = fs
+    .readFileSync(optionsInputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  const isNumber = (v) => typeof v === "object" && v !== null && JSON.isRawJSON(v)
+  const reading = (line) => {
+    const o = JSON.parse(line, (_key, value, context) =>
+      typeof value === "number" ? JSON.rawJSON(context.source) : value
+    )
+    const backup = o.backup ?? null
+    const ok =
+      isNumber(o.value) &&
+      (backup === null || isNumber(backup)) &&
+      Array.isArray(o.series) &&
+      o.series.every(isNumber) &&
+      Object.values(o.named).every(isNumber)
+    return ok ? JSON.stringify({ value: o.value, backup, series: o.series, named: o.named }) : "error -20"
+  }
+  const optionsWant = optionsLines.map((l) => `${reading(l)}\n`).join("")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip-options", optionsInputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${optionsLines.length} lines of JsonNumber fields decoded and encoded natively keeps every number's source text`,
+      native.status === 0 && native.stdout === optionsWant,
+      `--- JSON.stringify(JSON.parse(line)), numbers as their source\n${optionsWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no native program to hold JsonNumber fields against JSON.parse")
+  }
   // What `jsonDecode` calls does run under Node: `readers.ts` drives the
   // decoder's readers directly, at both ends of each integer range, and both
   // runs must print these lines: every reader once, and each integer reader
@@ -5412,6 +5448,16 @@ if (!only || "std_json_typed".includes(only)) {
     "text 9 1571 0",
     "encoded [0,18446744073709551615,9223372036854775808,[1,18446744073709551615],null,[7]] 0",
     "mapRoom true true false 2 -25 at 1",
+    "number new 0 true 0 true 0",
+    "number 123456789012345678901234567890 false false true",
+    "number -0 true 0 false",
+    "number 18446744073709551615 false true 18446744073709551615",
+    "number -9223372036854775808 true -9223372036854775808 false 0",
+    "number 2.5e-3 false true",
+    "number a string -20 at 84, keeps 2.5e-3",
+    "number shorter 7 1 0",
+    "setText true:1e5 false:1e5 false:1e5 false:1e5 false:1e5 false:1e5 false:1e5 true:-1.5E-7",
+    "number encoded [-1.5E-7,-123456789012345678901234567890.000000000000000000001e-99999] 0",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")

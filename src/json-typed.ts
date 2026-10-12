@@ -13,6 +13,10 @@
 //   - `jsonRefusal` is the rule a call is checked against, over every class
 //     the route reaches: `T` itself, a nested class, an array's element and a
 //     `| null` field's class alike, so the rule covers each way in;
+//   - `noteJsonOptions` and `checkJsonOptions` read a class's
+//     `static readonly json = { rename: { ... }, optional: [ ... ] }` once its
+//     fields are collected, and write what it says into each field
+//     (`FieldInfo.wireName`, `jsonOptional`), which is all the emitter reads;
 //   - `jsonRouteCallees` is everything the written code calls, which the
 //     attribute pass counts as the instance's callees (`markJsonRoute`) and
 //     the checker declares in the calling module (`noteJsonRoute` in
@@ -33,6 +37,25 @@ import {
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
+import { CheckContext } from "./context"
+import {
+  FLAG_COMPUTED,
+  FLAG_DEFINITE,
+  FLAG_OPTIONAL,
+  FLAG_READONLY,
+  N_ARRAY,
+  N_EMPTY,
+  N_FALSE,
+  N_NULL,
+  N_NUMBER,
+  N_OBJECT,
+  N_PROPERTY,
+  N_STRING,
+  N_TEMPLATE,
+  N_TRUE,
+  N_UNARY,
+  Node,
+} from "./nodes"
 import { T_BOOL, T_F64, T_I32, T_I64, T_STRING, T_U32, T_U64, TypeTable } from "./types"
 
 /** A value that is one scalar: an integer, an `f64`, a `boolean` or a `string`. */
@@ -84,6 +107,310 @@ export class JsonField {
     this.enumType = 0
     this.map = null
     this.value = null
+  }
+}
+
+// ---- The class's options ------------------------------------------------------------------
+
+/** The name of the `static readonly` member that holds a class's typed JSON options. */
+export const JSON_OPTIONS: string = "json"
+
+/**
+ * The class's `static readonly json`, kept for `checkJsonOptions`, which
+ * reads it once every field is collected. It is not a field and has no slot:
+ * the class's layout is what it would be without it.
+ */
+export const noteJsonOptions = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  if (owner.jsonOptions !== null) {
+    ctx.error(decl.children[0], `Duplicate member \`${JSON_OPTIONS}\` in class \`${owner.name}\``)
+    return
+  }
+  owner.jsonOptions = decl
+}
+
+/**
+ * NL2492's sentence, for options written in a shape the compiler does not
+ * read: shared by `checkJsonOptions` and the pass 1 sweep, which refuses
+ * them on a generic class whether or not anything instantiates it.
+ */
+export const jsonOptionsShapeMessage = (shown: string): string =>
+  // The words after the class's name are NL2492's.
+  `\`static\` member \`${JSON_OPTIONS}\` of class \`${shown}\` is written \`static readonly json = { ... }\`, ` +
+  "with no type annotation, in a class that is not generic: it holds the class's typed JSON options and is not a field"
+
+/** A string written as a literal: `"a"`, or a template with no holes. */
+const jsonIsStringLiteral = (node: Node): boolean =>
+  node.kind === N_STRING || (node.kind === N_TEMPLATE && node.children.length <= 1)
+
+/** The text of a string literal `jsonIsStringLiteral` accepted. */
+const jsonStringLiteral = (node: Node): string => {
+  if (node.kind === N_STRING) {
+    return node.text
+  }
+  return node.children.length > 0 ? node.children[0].text : ""
+}
+
+/**
+ * Whether the bytes of `s` are well-formed UTF-8, as the tokenizer holds every
+ * key to: no stray continuation byte, no overlong form, no surrogate (a lone
+ * `"\ud800"` in the source is stored as its three bytes) and nothing past
+ * U+10FFFF.
+ */
+const jsonIsUtf8 = (s: string): boolean => {
+  const n = s.length
+  let i = 0
+  while (i < n) {
+    const b = toI32(s.charCodeAt(i))
+    let more = 0
+    let lo = 128
+    let hi = 191
+    if (b < 128) {
+      more = 0
+    } else if (b >= 194 && b <= 223) {
+      more = 1
+    } else if (b >= 224 && b <= 239) {
+      more = 2
+      if (b === 224) {
+        lo = 160
+      } else if (b === 237) {
+        hi = 159
+      }
+    } else if (b >= 240 && b <= 244) {
+      more = 3
+      if (b === 240) {
+        lo = 144
+      } else if (b === 244) {
+        hi = 143
+      }
+    } else {
+      return false
+    }
+    i = i + 1
+    while (more > 0) {
+      if (i >= n) {
+        return false
+      }
+      const c = toI32(s.charCodeAt(i))
+      if (c < lo || c > hi) {
+        return false
+      }
+      lo = 128
+      hi = 191
+      more = more - 1
+      i = i + 1
+    }
+  }
+  return true
+}
+
+/** Any other literal: a number, `true`, `false`, `null`, an object or an array. */
+const jsonIsOtherLiteral = (node: Node): boolean =>
+  node.kind === N_NUMBER ||
+  node.kind === N_TRUE ||
+  node.kind === N_FALSE ||
+  node.kind === N_NULL ||
+  node.kind === N_OBJECT ||
+  node.kind === N_ARRAY ||
+  (node.kind === N_UNARY && node.children.length > 0 && node.children[0].kind === N_NUMBER)
+
+/** `where` in the class's options is not written as the literal it must be. */
+const jsonNotLiteral = (ctx: CheckContext, info: StructInfo, node: Node, where: string): void => {
+  // The words after `where` are NL2493's in `src/codes.ts`.
+  ctx.error(
+    node,
+    `\`${info.name}.${JSON_OPTIONS}\`${where} is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, ` +
+      "so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals"
+  )
+}
+
+/** The field `name` of `info` that an option names, or `null`, reported as not one of its fields. */
+const jsonOptionField = (
+  ctx: CheckContext,
+  info: StructInfo,
+  node: Node,
+  option: string,
+  name: string
+): FieldInfo | null => {
+  const field = info.field(name)
+  if (field === null) {
+    // The words after the class's name are NL2495's.
+    ctx.error(
+      node,
+      `\`${info.name}.${JSON_OPTIONS}\` names \`${name}\` in \`${option}\`, which is not a field of \`${info.name}\`: ` +
+        "an option names one of the class's own fields, spelled as it is declared"
+    )
+  }
+  return field
+}
+
+/** Two options name one field, or two fields would share a key: NL2497's words after the detail. */
+const jsonDuplicate = (ctx: CheckContext, info: StructInfo, node: Node, detail: string): void => {
+  ctx.error(
+    node,
+    `\`${info.name}.${JSON_OPTIONS}\` ${detail}: each field is renamed and made optional at most once, ` +
+      "and no two fields share a key on the wire"
+  )
+}
+
+/** `rename: { field: "key", ... }`: each field's key on the wire. */
+const jsonReadRename = (ctx: CheckContext, info: StructInfo, value: Node): void => {
+  if (value.kind !== N_OBJECT) {
+    jsonNotLiteral(ctx, info, value, "'s `rename`")
+    return
+  }
+  const renamed = new StringSet()
+  for (const prop of value.children) {
+    if (ctx.errored) {
+      return
+    }
+    // A spread and a computed key were refused by Phase 0 (NL1061, NL1041).
+    if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
+      continue
+    }
+    const to = prop.children[0]
+    const field = jsonOptionField(ctx, info, prop, "rename", prop.text)
+    if (field === null) {
+      return
+    }
+    if (!renamed.add(field.name)) {
+      jsonDuplicate(ctx, info, prop, `renames \`${field.name}\` twice`)
+      return
+    }
+    if (jsonIsStringLiteral(to) && !jsonIsUtf8(jsonStringLiteral(to))) {
+      // The words after the field's name are NL2499's.
+      ctx.error(
+        to,
+        `\`${info.name}.${JSON_OPTIONS}\` renames \`${field.name}\` to a key that is not valid UTF-8: ` +
+          "the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it"
+      )
+    } else if (jsonIsStringLiteral(to)) {
+      field.wireName = jsonStringLiteral(to)
+    } else if (jsonIsOtherLiteral(to)) {
+      // The words after the field's name are NL2496's.
+      ctx.error(
+        to,
+        `\`${info.name}.${JSON_OPTIONS}\` renames \`${field.name}\` to a value that is not a string: ` +
+          "a field's key on the wire is a string literal"
+      )
+    } else {
+      jsonNotLiteral(ctx, info, to, `'s \`rename.${field.name}\``)
+    }
+  }
+}
+
+/** `optional: ["field", ...]`: the fields a missing key sets to their initializer. */
+const jsonReadOptional = (ctx: CheckContext, info: StructInfo, value: Node): void => {
+  if (value.kind !== N_ARRAY) {
+    jsonNotLiteral(ctx, info, value, "'s `optional`")
+    return
+  }
+  for (const element of value.children) {
+    if (ctx.errored) {
+      return
+    }
+    if (!jsonIsStringLiteral(element)) {
+      jsonNotLiteral(ctx, info, element, "'s `optional`")
+      return
+    }
+    const field = jsonOptionField(ctx, info, element, "optional", jsonStringLiteral(element))
+    if (field === null) {
+      return
+    }
+    if (field.jsonOptional) {
+      jsonDuplicate(ctx, info, element, `makes \`${field.name}\` optional twice`)
+      return
+    }
+    if (field.initializer === null) {
+      // The words after the field's name are NL2498's.
+      ctx.error(
+        element,
+        `\`${info.name}.${JSON_OPTIONS}\` makes \`${field.name}\` optional, and the field has no initializer: ` +
+          "a missing optional key sets its field to the field's initializer, so an optional field declares one"
+      )
+      return
+    }
+    field.jsonOptional = true
+  }
+}
+
+/**
+ * Read the class's `static readonly json`, now that its fields are known, and
+ * write what it says into them: a renamed field's `wireName`, and an optional
+ * field's `jsonOptional`. Every misuse is refused here, with the class, so a
+ * class that no call decodes is held to the same rule as one that is.
+ * `nish/json-typed`'s own `JsonNumber` is marked here too.
+ */
+export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
+  if (info.kind === STRUCT_CLASS && info.name === "JsonNumber" && ctx.program.isJsonTyped()) {
+    info.jsonNumber = true
+  }
+  const decl = info.jsonOptions
+  if (decl === null || ctx.errored) {
+    return
+  }
+  if (
+    (decl.flags & FLAG_READONLY) === 0 ||
+    (decl.flags & (FLAG_OPTIONAL | FLAG_DEFINITE)) !== 0 ||
+    decl.children[1].kind !== N_EMPTY ||
+    info.instance !== null
+  ) {
+    ctx.error(decl, jsonOptionsShapeMessage(ctx.table.typeName(info.type)))
+    return
+  }
+  const literal = decl.children[2]
+  if (literal.kind !== N_OBJECT) {
+    jsonNotLiteral(ctx, info, literal.kind === N_EMPTY ? decl : literal, "")
+    return
+  }
+  const given = new StringSet()
+  for (const prop of literal.children) {
+    if (ctx.errored) {
+      return
+    }
+    if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
+      continue
+    }
+    const option = prop.text
+    if (option !== "rename" && option !== "optional") {
+      // The words after the option's name are NL2494's.
+      ctx.error(
+        prop,
+        `\`${info.name}.${JSON_OPTIONS}\` has no option \`${option}\`: typed JSON's options are \`rename\` and \`optional\``
+      )
+      return
+    }
+    if (!given.add(option)) {
+      jsonDuplicate(ctx, info, prop, `gives \`${option}\` twice`)
+      return
+    }
+    if (option === "rename") {
+      jsonReadRename(ctx, info, prop.children[0])
+    } else {
+      jsonReadOptional(ctx, info, prop.children[0])
+    }
+  }
+  if (ctx.errored) {
+    return
+  }
+  // A key names one field: no two fields' keys may be equal, a renamed one's
+  // and another's own name included.
+  const keys = new StringSet()
+  for (const field of info.fields) {
+    if (!keys.add(field.wireName)) {
+      let other = ""
+      for (const f of info.fields) {
+        if (other.length === 0 && f !== field && f.wireName === field.wireName) {
+          other = f.name
+        }
+      }
+      jsonDuplicate(
+        ctx,
+        info,
+        decl,
+        `gives \`${other}\` and \`${field.name}\` one key, \`${field.wireName}\``
+      )
+      return
+    }
   }
 }
 
@@ -258,6 +585,10 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
   while (at < out.length) {
     const info = out[at]
     at = at + 1
+    // `JsonNumber` is read and written whole, as the number it holds.
+    if (info.jsonNumber) {
+      continue
+    }
     for (const field of info.fields) {
       const f = jsonFieldOf(program, table, field)
       if (f === null) {
@@ -280,6 +611,9 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
 const jsonValues = (program: CheckedProgram, table: TypeTable, root: StructInfo): JsonField[] => {
   const out: JsonField[] = []
   for (const info of jsonClasses(program, table, root)) {
+    if (info.jsonNumber) {
+      continue
+    }
     for (const field of info.fields) {
       const f = jsonFieldOf(program, table, field)
       if (f !== null) {
@@ -357,6 +691,9 @@ export const jsonRefusal = (
   }
   const classes = jsonClasses(program, table, root)
   for (const info of classes) {
+    if (info.jsonNumber) {
+      continue
+    }
     for (const field of info.fields) {
       if (jsonFieldOf(program, table, field) === null) {
         // The words up to `| null` are NL2485's in `src/codes.ts`, and the
@@ -491,7 +828,14 @@ const jsonRouteNames = (
       names.add(name)
     }
   }
+  if (root.jsonNumber) {
+    names.add(role === JSON_DECODE ? "number" : "jsonEncodeNumber")
+  }
   for (const f of jsonValues(program, table, root)) {
+    const cls = f.cls
+    if (cls !== null && cls.jsonNumber) {
+      names.add(role === JSON_DECODE ? "number" : "jsonEncodeNumber")
+    }
     const holdsObject =
       f.kind === JSON_FIELD_CLASS || f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_MAP
     const isEnum = f.kind === JSON_FIELD_ENUM || f.kind === JSON_FIELD_ENUM_ARRAY
