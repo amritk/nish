@@ -1,0 +1,45 @@
+== contended 200 (NISH_NUM_THREADS=4, 11 rounds) outputs=['424081\n32000000 32000000'] codes=[0]
+  main       wall min/med   1662.4 /   1984.6 ms   cpu min/med   6197.4 /   7525.4 ms
+  main-copy  wall min/med   1700.0 /   1931.1 ms   cpu min/med   6468.3 /   7292.8 ms
+  pr         wall min/med   2258.8 /   2361.2 ms   cpu min/med   6663.2 /   6972.6 ms
+== stress short 8x500000 (NISH_NUM_THREADS=4, 11 rounds) outputs=['OK count=4000000 n=4000000 want=4000000'] codes=[0]
+  main       wall min/med    539.7 /    596.3 ms   cpu min/med   2077.7 /   2312.9 ms
+  main-copy  wall min/med    533.1 /    606.2 ms   cpu min/med   2071.1 /   2392.4 ms
+  pr         wall min/med    500.1 /    522.3 ms   cpu min/med   1723.7 /   1838.0 ms
+== stress long 8x40000 inner300 (NISH_NUM_THREADS=4, 11 rounds) outputs=['OK count=320000 n=320000 want=320000'] codes=[0]
+  main       wall min/med    438.7 /    455.5 ms   cpu min/med   1531.2 /   1673.1 ms
+  main-copy  wall min/med    432.1 /    461.7 ms   cpu min/med   1522.2 /   1632.8 ms
+  pr         wall min/med    729.5 /    792.6 ms   cpu min/med   1537.0 /   1716.4 ms
+  main       wall min/med    179.3 /    189.6 ms   cpu min/med    178.8 /    189.0 ms
+  main-copy  wall min/med    181.5 /    215.9 ms   cpu min/med    181.1 /    211.2 ms
+  pr         wall min/med    130.5 /    167.4 ms   cpu min/med    249.1 /    305.1 ms
+== contended 200 (NISH_NUM_THREADS=2, 11 rounds) outputs=['424081\n32000000 32000000'] codes=[0]
+  main       wall min/med    554.6 /    627.8 ms   cpu min/med   1094.9 /   1214.3 ms
+  main-copy  wall min/med    596.3 /    627.9 ms   cpu min/med   1166.3 /   1224.9 ms
+  pr         wall min/med   2615.9 /   2861.3 ms   cpu min/med   4991.1 /   5563.9 ms
+== stress short 8x500000 (NISH_NUM_THREADS=2, 11 rounds) outputs=['OK count=4000000 n=4000000 want=4000000'] codes=[0]
+  main       wall min/med    233.3 /    256.1 ms   cpu min/med    454.8 /    493.8 ms
+  main-copy  wall min/med    206.4 /    219.7 ms   cpu min/med    401.2 /    432.9 ms
+  pr         wall min/med    318.1 /    355.4 ms   cpu min/med    602.7 /    681.9 ms
+== stress long 8x40000 inner300 (NISH_NUM_THREADS=2, 11 rounds) outputs=['OK count=320000 n=320000 want=320000'] codes=[0]
+  main       wall min/med    454.3 /    462.2 ms   cpu min/med    871.8 /    891.0 ms
+  main-copy  wall min/med    458.3 /    469.5 ms   cpu min/med    863.2 /    902.5 ms
+  pr         wall min/med   1025.2 /   1102.6 ms   cpu min/med   1181.6 /   1275.0 ms
+  main       wall min/med    184.8 /    220.5 ms   cpu min/med    184.0 /    215.8 ms
+  main-copy  wall min/med    188.4 /    220.2 ms   cpu min/med    187.9 /    215.9 ms
+  pr         wall min/med    103.7 /    137.4 ms   cpu min/med    198.4 /    247.2 ms
+== contended 200 (NISH_NUM_THREADS=8, 11 rounds) outputs=['424081\n32000000 32000000'] codes=[0]
+  main       wall min/med   1599.4 /   1865.6 ms   cpu min/med   5963.9 /   7034.0 ms
+  main-copy  wall min/med   1461.8 /   1916.8 ms   cpu min/med   5558.2 /   7315.8 ms
+  pr         wall min/med   2305.2 /   2392.7 ms   cpu min/med   6876.2 /   7053.7 ms
+== stress short 8x500000 (NISH_NUM_THREADS=8, 11 rounds) outputs=['OK count=4000000 n=4000000 want=4000000'] codes=[0]
+  main       wall min/med    502.7 /    583.1 ms   cpu min/med   1923.7 /   2264.0 ms
+  main-copy  wall min/med    505.8 /    551.5 ms   cpu min/med   1846.0 /   2149.4 ms
+  pr         wall min/med    492.1 /    522.2 ms   cpu min/med   1728.0 /   1812.0 ms
+== stress long 8x40000 inner300 (NISH_NUM_THREADS=8, 11 rounds) outputs=['OK count=320000 n=320000 want=320000'] codes=[0]
+  main       wall min/med    442.9 /    455.1 ms   cpu min/med   1593.9 /   1624.2 ms
+  main-copy  wall min/med    447.8 /    459.5 ms   cpu min/med   1575.2 /   1661.3 ms
+  pr         wall min/med    726.4 /    806.3 ms   cpu min/med   1576.8 /   1715.3 ms
+  main       wall min/med    177.1 /    207.8 ms   cpu min/med    176.6 /    203.6 ms
+  main-copy  wall min/med    177.1 /    213.0 ms   cpu min/med    176.5 /    212.2 ms
+  pr         wall min/med    134.9 /    160.6 ms   cpu min/med    256.8 /    294.2 ms

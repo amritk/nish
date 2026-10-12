@@ -1,0 +1,16 @@
+== contended 200 (NISH_NUM_THREADS=4, 11 rounds) outputs=['424081\n32000000 32000000'] codes=[0]
+  main       wall min/med   1617.6 /   1759.6 ms   cpu min/med   6117.6 /   6667.2 ms
+  main-copy  wall min/med   1600.7 /   1849.3 ms   cpu min/med   6051.4 /   6990.7 ms
+  pr         wall min/med   2245.7 /   2433.3 ms   cpu min/med   6693.1 /   7141.2 ms
+== stress short 8x500000 (NISH_NUM_THREADS=4, 11 rounds) outputs=['OK count=4000000 n=4000000 want=4000000'] codes=[0]
+  main       wall min/med    530.8 /    561.5 ms   cpu min/med   2034.3 /   2188.1 ms
+  main-copy  wall min/med    549.0 /    581.3 ms   cpu min/med   2121.2 /   2265.1 ms
+  pr         wall min/med    486.2 /    498.0 ms   cpu min/med   1718.8 /   1767.7 ms
+== stress long 8x40000 inner300 (NISH_NUM_THREADS=4, 11 rounds) outputs=['OK count=320000 n=320000 want=320000'] codes=[0]
+  main       wall min/med    438.5 /    461.2 ms   cpu min/med   1575.1 /   1653.9 ms
+  main-copy  wall min/med    446.4 /    461.6 ms   cpu min/med   1587.4 /   1645.6 ms
+  pr         wall min/med    721.2 /    782.3 ms   cpu min/med   1549.8 /   1676.5 ms
+== grain_time n=300000 (NISH_NUM_THREADS=4, 11 rounds) outputs=['300000 894 997498 370174'] codes=[0]
+  main       wall min/med    177.8 /    196.2 ms   cpu min/med    177.5 /    194.5 ms
+  main-copy  wall min/med    175.9 /    207.7 ms   cpu min/med    174.0 /    205.5 ms
+  pr         wall min/med    114.0 /    154.8 ms   cpu min/med    216.6 /    277.5 ms
