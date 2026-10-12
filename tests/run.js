@@ -66,6 +66,7 @@ import {
   sitsOnChange,
   verdict,
 } from "../scripts/arrow-verify.mjs"
+import { canonical as jsonCompareCanonical, roundOrder } from "../bench/json-compare/rounds.mjs"
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
@@ -14106,6 +14107,47 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 // arguments (bench/json-compare/sample.expected). The serialize bytes are also
 // held to Node's own JSON.stringify of the same values.
 if (!only || "json-compare".includes(only) || "bench".includes(only)) {
+  // The order a round runs its implementations in: over 2n rounds each takes
+  // every position twice, and Nish and its copy take turns going first, for
+  // the two of typed-reuse as for the seven of tokenize. Reversing every
+  // other round instead undid the rotation when n was 2.
+  // The copy sits where run.mjs's withCopy puts it: halfway down the others.
+  for (const [n, copyAt] of [
+    [2, 1],
+    [7, 3],
+  ]) {
+    const impls = Array.from({ length: n }, (_, k) => k)
+    const counts = impls.map(() => new Array(n).fill(0))
+    let nishFirst = 0
+    for (let round = 0; round < 2 * n; round++) {
+      const order = roundOrder(impls, round)
+      order.forEach((impl, position) => {
+        counts[impl][position] += 1
+      })
+      nishFirst += order.indexOf(0) < order.indexOf(copyAt) ? 1 : 0
+    }
+    check(
+      `json-compare: over ${2 * n} rounds of ${n} implementations each runs in every position twice, and Nish and its copy take turns going first`,
+      counts.every((row) => row.every((c) => c === 2)) && nishFirst === n,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${2 * n} rounds`
+    )
+  }
+  // How two checksum lines compare: tokenize's f64 sum as the double it
+  // spells, whatever its spelling, and each non-finite value as itself.
+  const same = (a, b) => jsonCompareCanonical(a) === jsonCompareCanonical(b)
+  check(
+    "json-compare: checksum lines compare tokenize's sum as a double, %.17g's integral spelling and inf/nan included",
+    same("tokenize 1 2 26602007581164608 3", "tokenize 1 2 26602007581164610 3") &&
+      same("tokenize 1 2 26602007581164608 3", "tokenize 1 2 2.660200758116461e16 3") &&
+      same("tokenize 1 2 -3796593.3266518079 3", "tokenize 1 2 -3796593.326651808 3") &&
+      same("tokenize 1 2 inf 3", "tokenize 1 2 +Inf 3") &&
+      same("tokenize 1 2 -inf 3", "tokenize 1 2 -Inf 3") &&
+      same("tokenize 1 2 nan 3", "tokenize 1 2 NaN 3") &&
+      !same("tokenize 1 2 inf 3", "tokenize 1 2 nan 3") &&
+      !same("tokenize 1 2 inf 3", "tokenize 1 2 -inf 3") &&
+      !same("tokenize 1 2 1.5 3", "tokenize 1 2 1.5 4") &&
+      !same("typed 18446744073709551615 2", "typed 18446744073709551614 2")
+  )
   const dir = path.join(root, "bench", "json-compare")
   const exe = path.join(buildDir, "json-compare", "main")
   if (HAS_CLANG) {

@@ -41,8 +41,8 @@
 //                (arrays, objects, a string equal to the one held); it must
 //                print typed's checksum
 //   serialize    those classes, decoded once, written back minified; the same
-//                three comparators, every one held to the same bytes. Only
-//                the writing is timed
+//                three comparators, every one held to the same fold of every
+//                byte of every output (below). Only the writing is timed
 //
 // The checksum is the same fold in every program, `h = h * 31 + v` wrapping
 // in 64 bits:
@@ -73,9 +73,8 @@
 // language prints a round-tripping double its own way.
 //
 // Rounds are interleaved: each round runs every implementation once per
-// case, starting one further along the list than the round before and in
-// reverse on odd rounds, so a slow stretch of a shared machine falls on all
-// of them. Nish runs as two byte-identical binaries, the copy halfway down the
+// case, in rounds.mjs's order (rotated each round, reversed every other block
+// of rounds), so a slow stretch of a shared machine falls on all of them. Nish runs as two byte-identical binaries, the copy halfway down the
 // list, and the gap between their minimums is the noise band (CLAUDE.md,
 // `Measured:`): a ratio within it is marked as no difference. Each program
 // times its own loop with a monotonic clock, so start-up and reading the file
@@ -87,6 +86,7 @@ import path from "node:path"
 
 import { compilerFrom } from "../compiler.mjs"
 import { CACHE, fetchAll } from "./fetch.mjs"
+import { canonical, roundOrder } from "./rounds.mjs"
 
 const here = import.meta.dirname
 const root = path.resolve(here, "..", "..")
@@ -232,7 +232,10 @@ const IMPLS = [
   {
     name: "simdjson",
     label: "simdjson 4.4.2 (On-Demand)",
-    labels: { serialize: "simdjson 4.4.2 (builder::string_builder)" },
+    labels: {
+      typed: "simdjson 4.4.2 (On-Demand; reads only `performances`, MB/s over the whole document)",
+      serialize: "simdjson 4.4.2 (builder::string_builder, written by hand field by field)",
+    },
     workloads: ["tokenize", "typed", "serialize"],
     tool: "cxx",
     sources: ["simdjson"],
@@ -332,19 +335,6 @@ const runOnce = (exe, args) => {
   return { checksum: lines[0], ns: Number(ns[1]) }
 }
 
-/**
- * A checksum line with its f64 sum, tokenize's fourth field, written as
- * JavaScript writes the double it spells: each language prints a
- * round-tripping double its own way, and a sum with no fraction can be all
- * digits (`%.17g`'s 26602007581164608 is 26602007581164610 elsewhere), so the
- * field is known by its place rather than by its look.
- */
-const canonical = (line) =>
-  line
-    .split(" ")
-    .map((t, i) => (line.startsWith("tokenize ") && i === 3 ? String(Number(t)) : t))
-    .join(" ")
-
 /** `impls` with Nish's copy put halfway down, so it does not always run straight after Nish. */
 const withCopy = (impls) => {
   const nish = impls.find((i) => i.name === "nish")
@@ -413,9 +403,7 @@ const main = () => {
   for (let round = 0; round < opts.rounds; round++) {
     process.stderr.write(`round ${round + 1} of ${opts.rounds}\n`)
     for (const c of cases) {
-      const n = c.impls.length
-      const order = c.impls.map((_, k) => c.impls[(k + round) % n])
-      for (const impl of round % 2 === 1 ? order.reverse() : order) {
+      for (const impl of roundOrder(c.impls, round)) {
         c.runs.get(impl.name).push(runOnce(impl.exe, [c.workload, c.file, c.iterations, c.at]))
       }
     }
@@ -468,7 +456,18 @@ const cpuModel = () => {
   return os.cpus()[0]?.model ?? "unknown CPU"
 }
 
-const commit = () => versionOf("git", ["-C", root, "rev-parse", "--short=8", "HEAD"]) ?? "unknown"
+/**
+ * The commit the measured code is at: the last one that changes anything but
+ * docs/BENCHMARKS.md, so that committing the recorded section afterwards does
+ * not make it name a commit it was not measured at, with a note when the
+ * working tree has other changes.
+ */
+const commit = () => {
+  const outside = ["--", ".", ":(exclude)docs/BENCHMARKS.md"]
+  const at = versionOf("git", ["-C", root, "log", "-1", "--format=%h", "--abbrev=8", ...outside]) ?? "unknown"
+  const dirty = versionOf("git", ["-C", root, "status", "--porcelain", ...outside])
+  return dirty === null || dirty === "" ? at : `${at} with uncommitted changes`
+}
 
 /** The command that reproduces this run, without a local --compiler path. */
 const command = () =>
@@ -481,7 +480,9 @@ const command = () =>
   ].join(" ")
 
 const tables = (cases, skipped) => {
-  const versions = [tools.nish, tools.cc, tools.cxx, tools.cargo, tools.go].map((t) => t.version)
+  // The toolchains the run used, not every one installed.
+  const used = [...new Set(cases.flatMap((c) => c.impls.map((impl) => impl.tool)))]
+  const versions = used.map((t) => tools[t].version)
   const lines = [
     "| | |",
     "| --- | --- |",
@@ -543,20 +544,20 @@ const BEGIN = "<!-- json-compare:begin -->"
 const END = "<!-- json-compare:end -->"
 
 /** What every recorded section says about the comparison before its tables. */
-const PREAMBLE = [
+const preamble = () => [
   "## JSON against other languages",
   "",
   "Written by `node bench/json-compare/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The run is its own, so the host below may not be the one in the table at the head of this file. The workloads, the checksums and the measurement rules are in [that script's header](../bench/json-compare/run.mjs), and the Nish program is [main.ts](../bench/json-compare/main.ts).",
   "",
   "The ratio column divides the Nish minimum by that implementation's minimum, as the tables above do: above 1.00x it is faster than Nish. A ratio within the noise band, the gap between Nish and a byte-identical copy of its binary, is marked as no difference.",
   "",
-  "Builds: Nish `--link --profile speed`; C and C++ `clang -O3 -DNDEBUG`; serde_json cargo `--release` with LTO and one codegen unit; Go `go build`.",
+  `Builds: Nish \`--link --profile speed\`; C \`${tools.cc.cmd} -O3 -DNDEBUG\` and C++ \`${tools.cxx.cmd} -O3 -DNDEBUG\`; serde_json cargo \`--release\` with LTO and one codegen unit; Go \`go build\`.`,
   "",
   "What differs between the rows:",
   "",
   "- **Tokenize** is each library's own way of visiting every value. Nish's tokenizer copies every key and string out with `stringInto`; yyjson builds a whole tree, reading a copy of the input rather than in place; RapidJSON's Reader (SAX) calls back per value; serde_json drives a Visitor; Go's `Decoder.Token` makes an `interface{}` per token. simdjson On-Demand materialises every value as it is visited.",
-  "- **Typed decode** has no yyjson or RapidJSON row: neither has a typed layer. Every row decodes into a fresh value each iteration. simdjson On-Demand reads `performances` and nothing after it, while serde_json, Go and Nish scan the whole document. The extra Nish row decodes into one value reused across iterations, which nish/json-typed supports and the others' APIs do not.",
-  "- **Serialize** times the writing alone, from the same decoded values, and every implementation's output is the same bytes, checked in full on every iteration.",
+  "- **Typed decode** has no yyjson or RapidJSON row: neither has a typed layer. Every row decodes into a fresh value each iteration. simdjson On-Demand reads `performances` and nothing after it, while serde_json, Go and Nish scan the whole document, so simdjson's MB/s divides the whole document's bytes by a time that did not read all of them. The extra Nish row decodes into one value reused across iterations, which nish/json-typed supports and the others' APIs do not.",
+  "- **Serialize** times the writing alone, from the same decoded values. Nish (`jsonEncode`) and serde_json (derive) write from the type, Go by reflection (its encoder's trailing newline is trimmed), and simdjson's row is builder calls written by hand, field by field, since simdjson has no type-driven writer without C++26 reflection. What must agree is a 64-bit `h * 31 + v` fold of every byte of every iteration's output, and the last output's length.",
   "",
 ]
 
@@ -568,7 +569,7 @@ const PREAMBLE = [
 const record = (report) => {
   const file = path.join(root, "docs", "BENCHMARKS.md")
   const text = fs.readFileSync(file, "utf8")
-  const section = [BEGIN, ...PREAMBLE, report, END].join("\n")
+  const section = [BEGIN, ...preamble(), report, END].join("\n")
   const from = text.indexOf(BEGIN)
   const to = text.indexOf(END)
   const next =
