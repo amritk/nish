@@ -1,6 +1,7 @@
 // #608's escape matrix: a table call used as the value of another table's `set`, which the analysis
 // does not follow, so the argument's memory stored through the other name lands
-// in the table, and the write through the table counts.
+// in the table, and the write through the table counts. `set` also keeps its
+// value argument (its `ArgEdge`), so this case is refused by both rules.
 import { scope } from "nish/threads";
 
 class Leaf {
