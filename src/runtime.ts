@@ -111,6 +111,9 @@ const STR_NOCAP: string = "i8* noundef nonnull readonly align 8 nocapture"
 /** A `u8[]` header a `nish:net` call reads `len` and `data` from and keeps nothing of. */
 const NET_BUFFER: string = "%struct.nish_array* noundef nonnull align 8 nocapture"
 
+/** An array header an AES kernel reads or writes the elements of and keeps nothing of: `NET_BUFFER`'s shape. */
+const AES_ARRAY: string = "%struct.nish_array* noundef nonnull align 8 nocapture"
+
 const attrs1 = (a: string): string[] => {
   const out: string[] = []
   out.push(a)
@@ -907,6 +910,61 @@ export class RuntimeTable {
     this.addWrites(
       WRITES_NOTHING,
       plain("nish_cpu_count", "declare noundef i64 @nish_cpu_count()", EFFECT_WRITE)
+    )
+    // WP38 S5: AES-GCM on the CPU's AES instructions, runtime-aes.c
+    // (`src/kernels.ts`). `nish_aes_hw` is `nish_str_index_of_any`'s resolver
+    // on its own: the one store it makes is the first call's answer, into a
+    // static of its unit that no Nish code can name, which is what
+    // `inaccessiblemem` says, and the answer is the same on every call, so to
+    // a caller it is a read.
+    this.add(
+      new RuntimeFunction(
+        "nish_aes_hw",
+        "declare i32 @nish_aes_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    // The four kernels read and write only the arrays they are handed, as
+    // their contract in nish.h says, and keep nothing of them: `nocapture`.
+    // Not `memory(argmem: ...)`, though that is what the contract means:
+    // they read and write the elements, which sit behind each header's
+    // `data`, a pointer loaded from the argument rather than based on it, and
+    // LLVM's `argmem` covers only memory reached from the argument itself.
+    // Told `argmem`, it could keep a `dst` element in a register across the
+    // call. `willreturn`: every loop is bounded by `length` or `rounds`, and
+    // no kernel makes a system call.
+    this.add(
+      new RuntimeFunction(
+        "nish_aes_schedule",
+        `declare void @nish_aes_schedule(${AES_ARRAY}, i32 noundef, ${AES_ARRAY})`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_aes_block",
+        `declare void @nish_aes_block(${AES_ARRAY}, i32 noundef, ${AES_ARRAY}, ${AES_ARRAY})`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_aes_ctr",
+        `declare void @nish_aes_ctr(${AES_ARRAY}, i32 noundef, ${AES_ARRAY}, ${AES_ARRAY}, ${AES_ARRAY}, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_aes_ghash",
+        `declare void @nish_aes_ghash(${AES_ARRAY}, i64 noundef, i64 noundef, ${AES_ARRAY}, ${AES_ARRAY}, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
     )
     this.buildIntrinsics()
   }

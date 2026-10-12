@@ -273,11 +273,12 @@ searches text links no AES and one that speaks TLS no byte search.
 `node tests/run.js simd` holds hello, linked at the speed and size profiles
 with and without the unit, to the same bytes.
 
-`scripts/build.sh` does not pair it with `runtime.c` yet. Its `--runtime-from`
-link needs an object for every unit it pairs, and `nish run`'s runtime cache
-holds only the units `src/run-cache.ts` lists, so the pairing and that list
-change in one commit, the one in which the compiler first calls the unit.
-Until then a link that wants it names it, as the checks do.
+`scripts/build.sh` pairs it with `runtime.c`, as it does the other six. Its
+`--runtime-from` link needs an object for every unit it pairs, and `nish run`'s
+runtime cache holds only the units `src/run-cache.ts` lists, so the pairing and
+that list changed in one commit, the one in which the compiler first called the
+unit (WP38 S5's lowering). A program that never reaches a seam of
+`std/crypto/aes.ts` keeps none of it, by section GC.
 
 ### Checked arithmetic
 

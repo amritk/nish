@@ -57,15 +57,30 @@
  * the loops over blocks — is the discipline above and not a verified
  * property.
  *
- * **The seams.** Four private functions are the whole of the cipher's work,
+ * **The seams.** Four private functions do nearly all of the cipher's work,
  * each called from exactly one place: `aesScheduleInto` (the key schedule),
  * `aesBlockInto` (one block), `aesCtrInto` (GCTR over a run of bytes) and
  * `ghashBlocksInto` (GHASH over a run of bytes). Each takes the arrays its
  * caller passes, writes into them and allocates nothing the caller needs
- * back, and its one caller checks every precondition it names first, so the
- * compiler may replace that one call with a runtime kernel that does no
- * bounds checks of its own (WP38 S5, `docs/wp38-simd.md`). The bodies here
- * are the bitsliced code, and keep their own defensive checks.
+ * back, and its one caller checks every precondition it names first. That is
+ * what lets the compiler, natively, put each of those four calls behind a
+ * branch on the runtime's `nish_aes_hw` (`src/kernels.ts`, lowered in
+ * `src/emit.ts`): on a CPU with AES-NI and PCLMULQDQ, or the ARMv8 AES and
+ * PMULL instructions, the call goes to a kernel in `runtime/runtime-aes.c`
+ * that does no bounds checks of its own; on any other CPU, under
+ * `NISH_AES=soft`, on wasm32 and under Node, the body here runs (WP38 S5,
+ * `docs/wp38-simd.md`). The bodies are the bitsliced code, and keep their
+ * own defensive checks. The kernel keeps its own layout in a key's
+ * `roundKeys`, which a process only ever reads under the one answer
+ * `nish_aes_hw` gives it.
+ *
+ * What runs outside the seams, and so on the bitsliced code whichever way
+ * they go: `ghashLengths`, the last GHASH block of every tag, and so the end
+ * of J0's derivation for an IV that is not 12 bytes, multiplies with
+ * `ghashMultiply` on the state a seam left; and `aesGcmTag` folds E(K, J0)
+ * into it. A kernel therefore leaves the GHASH state in this module's own
+ * form, two big-endian words, and `tests/link/crypto_aes_agree` holds the two
+ * paths to the same bytes on the IVs that take that road.
  *
  * **What is refused.** A key of any length but 16 or 32 bytes (AES-192 is out
  * of scope), a block or a sample that is not 16 bytes, an empty IV (SP 800-38D
@@ -103,7 +118,9 @@ export class AesKey {
   rounds: i32 = 0
   /**
    * Round key `i` in the bitsliced layout, replicated into all four block
-   * lanes, as eight words from `8 * i`: `8 * (rounds + 1)` words in all.
+   * lanes, as eight words from `8 * i`: `8 * (rounds + 1)` words in all. In a
+   * native process that runs the runtime's AES kernels (the seams, above),
+   * the same words hold the kernels' layout instead, `runtime/runtime-aes.c`'s.
    */
   roundKeys: u64[]
   /** H as a big-endian 128-bit number, high half. */
