@@ -62,10 +62,17 @@ import {
   N_WHILE,
   Node,
 } from "./nodes"
-import { CheckedProgram, FunctionSig, ParallelCall, StructTemplateInfo, TemplateInfo } from "./program"
+import {
+  CheckedProgram,
+  FunctionSig,
+  ParallelCall,
+  StructTemplateInfo,
+  TemplateInfo,
+  capturedReads,
+} from "./program"
 import { RuntimeTable } from "./runtime"
 import { isSecretModule } from "./std-modules"
-import { Local, Scope, STORAGE_PARAM } from "./symbols"
+import { Local, Scope, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { isInteger, T_ERROR, TypeTable } from "./types"
 
 /** The class `nish:secret` declares. */
@@ -904,8 +911,16 @@ class SecretFlow {
       case N_IDENT:
         this.name(node, role, state)
         return
-      case N_ARROW:
-        return // an arrow captures nothing, and its body is checked as its own
+      case N_ARROW: {
+        // An arrow's body is checked as its own, but one given to a
+        // data-parallel form runs here and reads what it captures (WP29).
+        const reads: Node[] = []
+        capturedReads(program, node, reads)
+        for (const read of reads) {
+          this.name(read, ROLE_READ, state)
+        }
+        return
+      }
       case N_CONDITIONAL: {
         this.expression(node.children[0], ROLE_READ, state)
         const arm = role === ROLE_RETURN || role === ROLE_INIT || role === ROLE_ARM ? ROLE_ARM : ROLE_READ
@@ -953,7 +968,7 @@ class SecretFlow {
   }
 
   name(node: Node, role: i32, state: FlowState): void {
-    const local = this.ctx.program.nodeLocals[node.id]
+    const local = sourceLocal(this.ctx.program.nodeLocals[node.id])
     const moved = this.movableIndex(local)
     if (moved >= 0 && state.moved[moved] && local !== null) {
       this.error(
@@ -1426,5 +1441,5 @@ export const recordExposeCall = (program: CheckedProgram, node: Node, sig: Funct
       return
     }
   }
-  program.exposeCalls.push(new ParallelCall(node, sig))
+  program.exposeCalls.push(new ParallelCall(node, sig, null))
 }

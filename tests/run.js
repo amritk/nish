@@ -40,6 +40,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
+import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import { budgetLabel, RUNTIME_BUDGETS } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
@@ -4065,6 +4066,10 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 //                  needle, so expected.err keeps it)
 //   expected.ir    lines (substring match) that must appear in some emitted module
 //   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
+//   expected.portability  the `--warn-portability --json` portability objects, one per
+//                  line, as a case's `.portability` (WP33): a second compile with the
+//                  flag, which must write the same modules byte for byte. It is here for
+//                  a program a case cannot be, one that imports `nish/threads`
 //   args           extra CLI flags (e.g. --strict-exports)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
 //                  module with a golden is compared, so there is no missing one to write;
@@ -4231,6 +4236,40 @@ for (const name of linkTests) {
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)])
       check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
     }
+  }
+
+  if (fs.existsSync(side("expected.portability"))) {
+    const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+    fs.rmSync(warnedDir, { recursive: true, force: true })
+    const warned = spawnSync(
+      NISH,
+      [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+    const want = read("expected.portability").trim()
+    const got = warned.stdout
+      .split("\n")
+      .filter((l) => l.includes('"severity":"portability"'))
+      .join("\n")
+      .split(`${root}/`)
+      .join("")
+    check(
+      `link/${name}: --warn-portability --json matches expected.portability`,
+      warned.status === 0 && got === want,
+      `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
+    )
+    check(
+      `link/${name}: --warn-portability changes no byte of the IR`,
+      modules.every(
+        (m) =>
+          fs.existsSync(path.join(warnedDir, m.file)) &&
+          fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
+      ),
+      "the modules differ"
+    )
   }
 
   // Cross-module attribute agreement: importer `declare` == exporter `define`.
@@ -4694,10 +4733,23 @@ if (!only || "par_alloc".includes(only)) {
 // own, and `thread_scope_region_read_back` writes through what it reads back
 // out of its own containers, each a fresh object it made.
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
+//
+// And the forms that answer a new array, `par_map_new` and `par_from`, and the
+// two capture programs, whose bodies read their function's `const` locals:
+// Node's arrows close over them, and natively each one travels as a parameter,
+// so the same values print both ways.
+//
+// `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
+// `free`, and its map body `close`: each task stores only its own answer, so
+// spawn order and join order print the same.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
   "par_reduce",
+  "par_map_new",
+  "par_from",
+  "par_capture",
+  "par_capture_large",
   "thread_scope_basic",
   "thread_scope_exit_paths",
   "thread_scope_many_arrays",
@@ -4723,6 +4775,7 @@ for (const name of [
   "thread_scope_region_own_tables",
   "thread_scope_region_read_back",
   "thread_scope_region_param_lookup",
+  "thread_scope_libc_named_tasks",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -5321,11 +5374,86 @@ if (!only || "std_json_typed".includes(only)) {
   } else {
     skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
   }
+  // The same for `round-trip-kinds.txt` decoded into a `Kinds`: `u64`, enums
+  // and maps. `JSON.parse` reads an integer past 2^53 as the nearest double,
+  // which is not the `u64` the line holds, so each of those is kept as its
+  // own digits (`JSON.rawJSON` of its source); every other value is
+  // `JSON.parse`'s. A map's keys are in the input's order, and no line has a
+  // key that looks like an array index, which a JavaScript object would put
+  // first (docs/LANGUAGE.md, "Typed JSON").
+  const kindsInputs = path.join(dir, "round-trip-kinds.txt")
+  const kindsLines = fs
+    .readFileSync(kindsInputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  check(
+    "link/std_json_typed: round-trip-kinds.txt is ASCII",
+    kindsLines.every((l) => /^[\x20-\x7e]*$/.test(l)),
+    kindsLines.join("\n")
+  )
+  const exact = (line) =>
+    JSON.stringify(
+      JSON.parse(line, (_key, value, context) =>
+        typeof value === "number" && /^-?\d+$/.test(context.source) && !Number.isSafeInteger(value)
+          ? JSON.rawJSON(context.source)
+          : value
+      )
+    )
+  const kindsWant = kindsLines.map((l) => `${exact(l)}\n`).join("")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip-kinds", kindsInputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact`,
+      native.status === 0 && native.stdout === kindsWant,
+      `--- JSON.stringify(JSON.parse(line))\n${kindsWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip(
+      "skipped: link/std_json_typed: no native program to hold the kinds against JSON.parse and JSON.stringify"
+    )
+  }
+  // The same for `round-trip-options.txt` decoded into a `Reading`, whose
+  // numbers are `JsonNumber`s: every number comes back as its source text, so
+  // each is kept as `JSON.rawJSON` of its source, wide or long or not. The
+  // fields come back in declaration order and the optional `backup` as `null`
+  // where a line leaves it out; a line that is not a `Reading` is
+  // `JSON_DECODE_TYPE`.
+  const optionsInputs = path.join(dir, "round-trip-options.txt")
+  const optionsLines = fs
+    .readFileSync(optionsInputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  const isNumber = (v) => typeof v === "object" && v !== null && JSON.isRawJSON(v)
+  const reading = (line) => {
+    const o = JSON.parse(line, (_key, value, context) =>
+      typeof value === "number" ? JSON.rawJSON(context.source) : value
+    )
+    const backup = o.backup ?? null
+    const ok =
+      isNumber(o.value) &&
+      (backup === null || isNumber(backup)) &&
+      Array.isArray(o.series) &&
+      o.series.every(isNumber) &&
+      Object.values(o.named).every(isNumber)
+    return ok ? JSON.stringify({ value: o.value, backup, series: o.series, named: o.named }) : "error -20"
+  }
+  const optionsWant = optionsLines.map((l) => `${reading(l)}\n`).join("")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip-options", optionsInputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${optionsLines.length} lines of JsonNumber fields decoded and encoded natively keeps every number's source text`,
+      native.status === 0 && native.stdout === optionsWant,
+      `--- JSON.stringify(JSON.parse(line)), numbers as their source\n${optionsWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no native program to hold JsonNumber fields against JSON.parse")
+  }
   // What `jsonDecode` calls does run under Node: `readers.ts` drives the
   // decoder's readers directly, at both ends of each integer range, and both
   // runs must print these lines: every reader once, and each integer reader
-  // at both ends of its range. An `i64` is a BigInt there, so a reader that
-  // mixed one with a number throws.
+  // at both ends of its range, the key readers the written dispatch and a
+  // map's decoding call, and the `u64` encoders. An `i64` and a `u64` are
+  // BigInts there, so a reader that mixed one with a number throws.
   const readerLines = [
     "i32 2147483647 -2147483648",
     "u32 4294967295 0",
@@ -5356,6 +5484,30 @@ if (!only || "std_json_typed".includes(only)) {
     "unescaped 4 679",
     "raw 5 662",
     "window [edge] 0",
+    "u64 0 18446744073709551615 9223372036854775808",
+    "u64Array 2 1 18446744073709551615",
+    "u64ArrayOrNull null true",
+    "u64ArrayOrNull present 1 0",
+    "u64 [18446744073709551616] -21 at 1",
+    "u64 [-1] -21 at 1",
+    "u64 [-0] -21 at 1",
+    "u64 [1.5] -21 at 1",
+    'u64 ["1"] -20 at 1',
+    "key ab 2 97 98 -1 -1",
+    "key escaped 9 1571 9 -1",
+    "text 9 1571 0",
+    "encoded [0,18446744073709551615,9223372036854775808,[1,18446744073709551615],null,[7]] 0",
+    "mapRoom true true false 2 -25 at 1",
+    "number new 0 true 0 true 0",
+    "number 123456789012345678901234567890 false false true",
+    "number -0 true 0 false",
+    "number 18446744073709551615 false true 18446744073709551615",
+    "number -9223372036854775808 true -9223372036854775808 false 0",
+    "number 2.5e-3 false true",
+    "number a string -20 at 84, keeps 2.5e-3",
+    "number shorter 7 1 0",
+    "setText true:1e5 false:1e5 false:1e5 false:1e5 false:1e5 false:1e5 false:1e5 true:-1.5E-7",
+    "number encoded [-1.5E-7,-123456789012345678901234567890.000000000000000000001e-99999] 0",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")
@@ -14374,6 +14526,83 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 // workload must print the checksum every comparator printed for the same
 // arguments (bench/json-compare/sample.expected). The serialize bytes are also
 // held to Node's own JSON.stringify of the same values.
+// ---- How the twins' table is read ---------------------------------------------------
+// bench/par-reading.mjs decides what docs/BENCHMARKS.md says of Nish against
+// its Rust and Go twins, so its words are pinned here on fixed per-run results,
+// with nothing built or timed: a ratio past its band, inside it, at its edge,
+// runs on both sides of it, and the 1.10x target counted whatever the band says.
+if (!only || "bench: the twins' reading".includes(only)) {
+  // Nish at 120 against Rayon at 100, each 1% from its copy, and Go wide of
+  // its copy: the band is the larger of Nish's gap and Rayon's, never Go's.
+  const stats = new Map([
+    ["nish", { min: 120, median: 120 }],
+    ["nish-copy", { min: 119, median: 119 }],
+    ["rayon", { min: 100, median: 100 }],
+    ["rayon-copy", { min: 101, median: 101 }],
+    ["go", { min: 130, median: 130 }],
+    ["go-copy", { min: 200, median: 200 }],
+  ])
+  const v = judgeTwinRun(stats, ["nish", "rayon", "go"], "min")
+  check(
+    "bench: the twins' reading divides by the fastest column and bands a row by Nish's and that column's copies alone",
+    v.fastest === "rayon" &&
+      v.ratio === 1.2 &&
+      Math.abs(v.band - Math.max(1 / 119, 1 / 101)) < 1e-12 &&
+      v.side === "slower",
+    JSON.stringify(v)
+  )
+  check(
+    "bench: the twins' reading puts a ratio inside, at the edge of and past its band",
+    sideOf(1.04, 0.05) === "within" &&
+      sideOf(1.05 + BAND_EDGE / 2, 0.05) === "edge" &&
+      sideOf(1.06, 0.05) === "slower" &&
+      sideOf(0.94, 0.05) === "faster",
+    `${sideOf(1.04, 0.05)} ${sideOf(1.05 + BAND_EDGE / 2, 0.05)} ${sideOf(1.06, 0.05)} ${sideOf(0.94, 0.05)}`
+  )
+  const runs = (...pairs) => pairs.map(([ratio, band]) => ({ ratio, band, side: sideOf(ratio, band) }))
+  const readings = [
+    [
+      "slower outside the band",
+      runs([1.2, 0.01], [1.25, 0.02], [1.21, 0.01]),
+      "slower outside the band in all 3 runs; **past 1.10x in all 3 runs**",
+    ],
+    [
+      "within the band and past 1.10x",
+      runs([1.15, 0.2], [1.12, 0.2], [1.05, 0.2]),
+      "within the band in all 3 runs; **past 1.10x in 2 of 3 runs**",
+    ],
+    [
+      "at the edge in one run",
+      runs([1.053, 0.05], [1.02, 0.05], [1.01, 0.05]),
+      "within the band in 2 of 3 runs, at its edge in 1 of 3 runs; within 1.10x in all 3 runs",
+    ],
+    [
+      "at the edge in every run",
+      runs([1.053, 0.05], [1.052, 0.05], [1.054, 0.05]),
+      "at the band's edge in all 3 runs; within 1.10x in all 3 runs",
+    ],
+    [
+      "both sides of the band",
+      runs([1.3, 0.05], [0.7, 0.05], [1.0, 0.05]),
+      "noisy, machine-dependent; no claim (slower outside the band in 1 of 3 runs, faster in 1 of 3 runs); Nish ahead in 1 of 3 runs, behind in 1 of 3 runs; **past 1.10x in 1 of 3 runs**",
+    ],
+    [
+      "all within the band, either side of 1.0",
+      runs([1.02, 0.05], [1.01, 0.05], [0.99, 0.05]),
+      "within the band in all 3 runs; Nish ahead in 1 of 3 runs, behind in 2 of 3 runs; within 1.10x in all 3 runs",
+    ],
+    [
+      "slower in one run, ahead in another inside the band",
+      runs([1.237, 0.111], [0.877, 0.304], [1.093, 0.192]),
+      "slower outside the band in 1 of 3 runs, within it or at its edge in the rest; Nish ahead in 1 of 3 runs, behind in 2 of 3 runs; **past 1.10x in 1 of 3 runs**",
+    ],
+  ]
+  for (const [what, verdicts, want] of readings) {
+    const got = readAcross(verdicts)
+    check(`bench: the twins' reading, ${what}`, got === want, `got:  ${got}\nwant: ${want}`)
+  }
+}
+
 if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   // The order a round runs its implementations in, over the rounds run.mjs
   // runs by default: each case's count rounded up to a multiple of 2n, over
@@ -14513,10 +14742,12 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
     )
 
     // `--only par` is the other way to write the report: it replaces the
-    // data-parallel table alone and keeps every other section byte for byte,
-    // the marked one included (bench/README.md). The five kernels run at sizes
-    // that take milliseconds, so what is checked is the splice, not a timing.
-    // A subset of the kernels writes nothing and says so.
+    // data-parallel table, and the table of Nish against its Rust and Go
+    // twins, and keeps every other section byte for byte, the marked one
+    // included (bench/README.md). The six kernels run at sizes that take
+    // milliseconds, so what is checked is the splice, not a timing. A subset
+    // of the kernels writes nothing and says so. Rayon is left out
+    // (`--no-rayon`): its twins need crates.io, and a check needs no network.
     const parOut = path.join(buildDir, "json-compare", "benchmarks-par.md")
     const parHeading = "## Data parallelism (ms, min / median)"
     const parBefore = [
@@ -14531,7 +14762,10 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
+      "--no-rayon",
+      "--twin-runs",
+      "1",
       "--runs",
       "1",
       "--warmup",
@@ -14555,7 +14789,44 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         parSection.includes("`node bench/run.mjs --only par`"),
       parRun.status === 0 ? parText : `${parRun.stdout}${parRun.stderr}`
     )
-    const parSpliced = parText
+    // The report the check builds has no twins' table, so the first run that
+    // measures one puts it under the data-parallel table, once; and a run
+    // that cannot measure it (no rustc, no go) keeps the one there is and says
+    // why. Without either toolchain on this machine there is no twin to run.
+    const twinsHeading = "## Data parallelism against Rust and Go (ms, min / median)"
+    if (parRun.stderr.includes("the table of Nish against Rust and Go is not measured")) {
+      skip(
+        "bench: `--only par` and the Rust and Go twins (no rustc and no go on PATH, in ~/.cargo/bin or in /usr/local/go/bin)"
+      )
+    } else {
+      const twinsAt = parText.indexOf(twinsHeading)
+      const twinsTable = parText.slice(twinsAt, parText.indexOf("## Checksums"))
+      check(
+        "bench: `--only par` puts the table of Nish against its Rust and Go twins under the data-parallel one, once, every twin printing the Nish checksum",
+        parRun.status === 0 &&
+          twinsAt > parText.indexOf(parHeading) &&
+          parText.split(twinsHeading).length === 2 &&
+          ["par-compute", "par-nbody", "par-regions", "par-histogram"].every((k) =>
+            twinsTable.includes(`| ${k} |`)
+          ) &&
+          twinsTable.includes("every binary below printed the Nish `par` run's output"),
+        parRun.status === 0 ? parText : `${parRun.stdout}${parRun.stderr}`
+      )
+      const bare = spawnSync(
+        "node",
+        [...parArgs.slice(0, 3), "--only", "par", "--no-rust", "--no-go", ...parArgs.slice(3)],
+        { cwd: root, encoding: "utf8" }
+      )
+      const bareText = bare.status === 0 ? fs.readFileSync(parOut, "utf8") : ""
+      check(
+        "bench: `--only par` without rustc or go keeps the twins' table it cannot measure, and says so",
+        bare.status === 0 &&
+          bare.stderr.includes("the table of Nish against Rust and Go is not measured") &&
+          bareText.slice(bareText.indexOf(twinsHeading)) === parText.slice(twinsAt),
+        bare.status === 0 ? bareText : `${bare.stdout}${bare.stderr}`
+      )
+    }
+    const parSpliced = fs.readFileSync(parOut, "utf8")
     const subset = spawnSync("node", [...parArgs.slice(0, 3), "--only", "par-short", ...parArgs.slice(3)], {
       cwd: root,
       encoding: "utf8",

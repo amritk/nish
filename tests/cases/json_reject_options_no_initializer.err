@@ -1,0 +1,1 @@
+`User.json` makes `name` optional, and the field has no initializer: a missing optional key sets its field to the field's initializer, so an optional field declares one

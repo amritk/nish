@@ -44,7 +44,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @triple(i32 noundef %n) #0 {
+define hidden noundef i32 @triple$(i32 noundef %n) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %n, i32 3)
   %1 = extractvalue { i32, i1 } %0, 0

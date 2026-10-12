@@ -2628,7 +2628,15 @@ export class Parser {
     const field = this.node(N_FIELD, start, this.end)
     field.children.push(computed === null ? this.parseMemberNameNode() : computed)
     field.flags = modifiers | this.parseMemberMarker()
-    field.children.push(this.parseTypeAnnotation())
+    // Typed JSON's `static readonly json = { ... }` leaves its type to its
+    // literal (`src/json-typed.ts`); every other field still needs one here,
+    // a `static json` that is not `readonly` and an instance `json` included.
+    const options = FLAG_STATIC | FLAG_READONLY
+    if ((field.flags & options) === options && field.children[0].text === "json" && !this.at(TOK_COLON)) {
+      field.children.push(this.empty())
+    } else {
+      field.children.push(this.parseTypeAnnotation())
+    }
     field.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
     this.expectSemicolon()
     field.end = this.previousEnd

@@ -55,6 +55,7 @@ import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
 import { emitProgram } from "./emit"
+import { spellHiddenApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -146,6 +147,7 @@ import {
   allocationWarning,
   arenaMessage,
   escapeMessage,
+  captureReachesDstMessage,
   parallelBodyOf,
   reachesDstMessage,
   reduceMessage,
@@ -1179,6 +1181,13 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // #610: every body is checked, so a hidden function's diagnostics are
+    // reported and its instantiations keyed; it takes its link symbol now.
+    const checked: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      checked.push(unit.checker.program)
+    }
+    spellHiddenApart(checked)
     // WP15 §2.4: what every call site proves for its callee's parameters. It
     // needs every body checked, instantiations included, and the attribute
     // analysis below reads the proofs it adds.
@@ -1664,6 +1673,7 @@ export class Compilation {
         const messages: string[] = []
         messages.push(resultMessage(this.table, sig, fn, result))
         messages.push(reachesDstMessage(this.table, program, sig, fn))
+        messages.push(captureReachesDstMessage(this.table, program, sig, fn, call.dst))
         messages.push(sharedWriteMessage(sig, fn, facts))
         messages.push(bodyLockMessageFor(sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))

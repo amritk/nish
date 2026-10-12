@@ -118,7 +118,7 @@ const arenaObject = (emitter: Emitter, info: StructInfo): string => {
  * to another module (an imported class `new`ed without a constructor), whose
  * type table this emitter does not have.
  */
-const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
+export const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer
   if (init === null) {
     process.exit(internalErrorFor("emitter: a field initializer that is not there", emitter.opts.json))

@@ -2,9 +2,11 @@
  * `std/threads` — data parallelism, a scope for heterogeneous tasks, and a
  * lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
  *
- *     import { Mutex, parallelMapInto, parallelReduce, scope } from "nish/threads";
+ *     import { Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope } from "nish/threads";
  *
  *     parallelMapInto(src, dst, (x) => x * 3);
+ *     const ys = parallelMap(src, (x) => x * k + b); // k, b: `const` locals, read by the body
+ *     const sq = parallelFrom(n, (i) => i * i);
  *     const total = parallelReduce(src, (a, b) => a + b, 0);
  *     {
  *       using s = scope();
@@ -15,12 +17,14 @@
  * **What is written here is the meaning, not the implementation.** Each body
  * below is the sequential program, and it is what runs under Node, what
  * `npm run check` type-checks, and what the compiler checks the call against.
- * The compiler then recognises the two exported templates by module and name
- * and lowers an instance of either onto `nish_parallel_range`
- * (runtime/runtime-parallel.c): it replaces the one call that walks the whole
- * range — `mapRange` for a map, `reduceBlocks` for a reduce — with a region that
- * hands each thread a contiguous piece of it, and emits the rest of the body as
- * written. So the length check, its message and the order a reduce combines in
+ * The compiler then recognises the exported templates by module and name
+ * and lowers an instance of `parallelMapInto`, `parallelFrom` or
+ * `parallelReduce` onto `nish_parallel_range` (runtime/runtime-parallel.c): it
+ * replaces the one call that walks the whole range — `mapRange` for a map,
+ * `fromRange` for a `parallelFrom`, `reduceBlocks` for a reduce — with a region
+ * that hands each thread a contiguous piece of it, and emits the rest of the
+ * body as written. `parallelMap` is `parallelMapInto` into an array it
+ * allocates first. So the length check, its message and the order a reduce combines in
  * are this file's, whichever way the program is compiled.
  *
  * What makes the region safe is checked at the call, not trusted
@@ -28,7 +32,9 @@
  * nothing its caller could observe, may allocate only temporaries it drops
  * before it returns — they are given back after every element — `dst` may not
  * be reachable from an element of `src`, and the result type is a number or a
- * `boolean`. Importing this module compiles the program with `--threads`,
+ * `boolean`. An arrow written at the call may read the `const` locals and
+ * the parameters of the function it is written in: each one is handed to the
+ * body as a parameter of its own, which no body may write through. Importing this module compiles the program with `--threads`,
  * because every worker needs an arena of its own.
  *
  * A reduce is deterministic. `src` is split into `min(64, ceil(n / BLOCK))`
@@ -170,6 +176,42 @@ export const parallelReduce = <T>(src: T[], f: (acc: T, x: T) => T, identity: T)
     acc = f(acc, partials[k])
   }
   return acc
+}
+
+/**
+ * A new array of `f(src[i])` for every index of `src`: `parallelMapInto` into
+ * an array this call allocates, before any element is computed, so nothing
+ * but the map itself can hold it while the region runs.
+ */
+export const parallelMap = <T, U>(src: T[], f: (x: T) => U): U[] => {
+  const dst = new Array<U>(toI32(src.length))
+  parallelMapInto(src, dst, f)
+  return dst
+}
+
+/**
+ * Writes `f(i)` into `dst[i]` for every `i` in `[lo, hi)`: one thread's share
+ * of a `parallelFrom`. The length is read in the loop condition and again
+ * after the call, for the reason `mapRange` gives.
+ */
+const fromRange = <U>(dst: U[], f: (i: i32) => U, lo: i32, hi: i32): void => {
+  for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(dst.length); i++) {
+    const y = f(i)
+    if (i < toI32(dst.length)) {
+      dst[i] = y
+    }
+  }
+}
+
+/**
+ * A new array of `n` elements, `f(i)` at index `i`, computed on as many
+ * threads as the machine has and the length is worth: `Array.from({ length:
+ * n }, (_, i) => f(i))`, with the array allocated before any element is.
+ */
+export const parallelFrom = <U>(n: i32, f: (i: i32) => U): U[] => {
+  const dst = new Array<U>(n)
+  fromRange(dst, f, 0, toI32(dst.length))
+  return dst
 }
 
 /**

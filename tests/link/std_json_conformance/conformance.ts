@@ -8,7 +8,7 @@
 import { JSON_TOK_END, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
-import { JcOutcome, jcNextSpace, jcPack, jcRewrite, jcStringify, jcUnpack } from "./rewrite";
+import { JC_INDENT_TAB, JcOutcome, jcNextSpace, jcPack, jcRewrite, jcStringify, jcUnpack } from "./rewrite";
 
 const JC_TEST262_PATH: string = "tests/json-conformance/test262.txt";
 const JC_V8_PATH: string = "tests/json-conformance/v8.txt";
@@ -55,7 +55,8 @@ class JcCase {
  * One reason of divergences.txt: `reason <key> <answer> <sentence>`. `answer`
  * is what a case listed under it must answer instead of upstream's value:
  * `unindented`, the expected text with the indentation its gap made taken out
- * (an indented stringify, which the writer does not write); `exact`, the whole
+ * (a stringify indented by a gap that is not spaces or one tab, which the
+ * writer does not write); `exact`, the whole
  * text the case's own line in divergences.txt gives; or a comma-separated list
  * of the error names one of which the rewrite must stop at.
  */
@@ -158,13 +159,37 @@ const jcIsNegativeZero = (src: u8[]): boolean => {
   return negative && t.next() === JSON_TOK_END;
 };
 
-/** What the case answers: its text rewritten, or the value its words spell, written. */
+/**
+ * The writer's indent for an `indent:<gap>` case's `gap`, as `jcStringify`
+ * takes it: the gap's length when it is all spaces, `JC_INDENT_TAB` when it
+ * is one tab, and `0`, minified, for any other gap, which the writer cannot
+ * write and the indent-gap reason of divergences.txt lists.
+ */
+const jcIndentOf = (gap: u8[]): i32 => {
+  const tab: i32 = 9;
+  const space: i32 = 32;
+  if (toI32(gap.length) === 1 && toI32(gap[0]) === tab) {
+    return JC_INDENT_TAB;
+  }
+  for (const b of gap) {
+    if (toI32(b) !== space) {
+      return 0;
+    }
+  }
+  return toI32(gap.length);
+};
+
+/** What the case answers: its text rewritten, or the value its words spell, written, indented as its gap says. */
 const jcOutcome = (c: JcCase): JcOutcome => {
   if (c.op === "parse") {
     const src = jcUnpack(c.input);
     return src === null ? new JcOutcome(JC_BAD_DATA, [], 0) : jcRewrite(src);
   }
-  return jcStringify(c.input);
+  if (c.op.startsWith("indent:")) {
+    const gap = jcUnpack(c.op.substring(7));
+    return gap === null ? new JcOutcome(JC_BAD_DATA, [], 0) : jcStringify(c.input, jcIndentOf(gap));
+  }
+  return jcStringify(c.input, 0);
 };
 
 /** Whether `o` is the answer upstream expects of `c`. */
@@ -422,7 +447,7 @@ export const jcPrintCodeUnits = (): number => {
   const digits = "0123456789abcdef";
   for (let unit: i32 = 0; unit < 65536; unit += 1) {
     const hex = `${digits.substring((unit >> 12) & 15, ((unit >> 12) & 15) + 1)}${digits.substring((unit >> 8) & 15, ((unit >> 8) & 15) + 1)}${digits.substring((unit >> 4) & 15, ((unit >> 4) & 15) + 1)}${digits.substring(unit & 15, (unit & 15) + 1)}`;
-    const o = jcStringify(`s:"\\u${hex}"`);
+    const o = jcStringify(`s:"\\u${hex}"`, 0);
     console.log(o.error === "" ? jcPack(o.out, o.len) : `!${o.error}`);
   }
   return 0;
