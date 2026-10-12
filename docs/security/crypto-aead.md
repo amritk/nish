@@ -28,7 +28,13 @@ found, and which test now pins each property.
 - Since the lowering (at `c29cd40`): the branch `src/emit.ts` puts in front of
   each of those four calls (`isAesSeam`, `src/kernels.ts:89`;
   `emitAesKernelArm`, `src/emit.ts:1473`), and its end-to-end test
-  `tests/link/crypto_aes_agree`.
+  `tests/link/crypto_aes_agree`. On the kernel path GHASH reads H and its
+  powers from `AesKey.roundKeys`, where the bitsliced path, `ghashLengths` and
+  a non-12-byte IV's J0 read `hHi:hLo`. `aesKey` and `aesKeyInto` write both
+  from one schedule. A key edited by hand so that they disagree is outside the
+  contract (AEAD-1's hand-built keys), and its output then depends on the path
+  the process runs; the H = 0 guard still holds on both, because
+  `ghashLengths`' last multiply by `hHi:hLo` = 0 makes S zero either way.
 
 Out of scope: the constant-time helpers the modules call (`ctEq`,
 `ctSelect`, `std/crypto/ct.ts`), the disassembly checker itself

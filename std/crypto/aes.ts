@@ -111,7 +111,11 @@ const AES_BATCH: i32 = 64
  * because the language has no private ones, and a key built or edited by hand
  * is not trusted: one whose shape is not what `aesKey` makes answers `null`
  * everywhere (`aesKeyUsable`), and one whose H is zero opens nothing
- * (`aesGcmOpen`).
+ * (`aesGcmOpen`). On the runtime kernels' path GHASH takes H and its powers
+ * from `roundKeys`, while `ghashLengths` and a non-12-byte IV's J0 take it
+ * from `hHi:hLo`; `aesKey` writes both from one schedule, so they agree. A key
+ * edited so that they disagree is outside the contract, and what it seals
+ * then depends on which path the process runs.
  */
 export class AesKey {
   /** Nr: 10 for AES-128, 14 for AES-256. */

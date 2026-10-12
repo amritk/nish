@@ -32,6 +32,7 @@
  *     web/ compiling with the compiler's own wasi build.
  */
 import { execFileSync, spawn, spawnSync } from "node:child_process"
+import crypto from "node:crypto"
 import fs from "node:fs"
 import dgram from "node:dgram"
 import net from "node:net"
@@ -9446,6 +9447,10 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
 
   if (!HAS_CLANG) {
     skip("aes kernel: no clang to link the AES programs against runtime-aes.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `aes kernel: the kernels' calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
   } else {
     // One wrapper per kernel: count the call and make it. Declared over an opaque
     // `struct nish_array`, so this needs nothing from nish.h but the shapes.
@@ -9551,6 +9556,73 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
         )
       }
     }
+  }
+
+  // The freestanding `wasm` profile links IR compiled for the host, which calls the
+  // kernels behind `nish_aes_hw`: the README's and examples/node-host.mjs's route,
+  // `nish x.ts -o x.ll` then `build.sh x.ll runtime/runtime-wasm.c --profile wasm`.
+  // build.sh adds runtime-aes.c for such IR, whose wasm32 build answers 0, so the
+  // walker runs; held here to Node's own AES-128 on blocks the program encrypts.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(kernelDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "block.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { aesEncryptBlock, aesKey, AesKey } from "nish/crypto/aes"',
+        "",
+        "export const firstByte = (last: i32): i32 => {",
+        "  const k: AesKey | null = aesKey([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])",
+        "  if (k === null) {",
+        "    return -1",
+        "  }",
+        "  const b: u8[] | null = aesEncryptBlock(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, toU8(last)])",
+        "  return b === null ? -2 : toI32(b[0])",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const irDir = path.join(freeDir, "ir")
+    const compiled = spawnSync(NISH, [source, "-o", `${irDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+    const lls =
+      compiled.status === 0
+        ? fs
+            .readdirSync(irDir)
+            .filter((f) => f.endsWith(".ll"))
+            .map((f) => path.join(irDir, f))
+        : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_aes_hw("))
+    const wasm = path.join(freeDir, "block.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", ...lls, "runtime/runtime-wasm.c", "-o", wasm, "--profile", "wasm"],
+            {
+              cwd: root,
+              encoding: "utf8",
+            }
+          )
+        : null
+    const key = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    const want = [0, 15, 200].map((last) => {
+      const cipher = crypto.createCipheriv("aes-128-ecb", key, null)
+      cipher.setAutoPadding(false)
+      return cipher.update(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, last]))[0]
+    })
+    let got = []
+    if (linked !== null && linked.status === 0) {
+      const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
+      got = [0, 15, 200].map((last) => instance.exports.firstByte(last))
+    }
+    check(
+      "aes kernel: the freestanding --profile wasm link of an AES module compiled for the host links, and encrypts as Node's AES-128 does",
+      lowered && linked.status === 0 && got.join(",") === want.join(","),
+      `${compiled.stderr}IR calls nish_aes_hw: ${lowered}\n${linked === null ? "(not linked)" : linked.stderr}got ${got.join(",")}, want ${want.join(",")}`
+    )
+  } else {
+    skip("aes kernel: no wasm-ld, so the freestanding wasm link of an AES module is not checked")
   }
 
   if (WASI_SYSROOT && has("wasm-ld")) {

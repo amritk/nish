@@ -21,10 +21,12 @@
 // - every Wycheproof AES-GCM case `tests/link/crypto_aes` runs, sealed and
 //   opened, the ones built for a J0 whose 32-bit counter wraps among them;
 // - a seeded corpus: keys of 16 and 32 bytes, IVs of 12 bytes and of 1, 8, 16,
-//   60 and random lengths, AADs of 0 to 47 bytes, and plaintexts of every
-//   length from 0 to 64 and random lengths up to 4,096, each sealed, opened
-//   and opened again with one bit flipped, plus `aesEncryptBlock` and
-//   `aesHeaderMask` on random blocks. The specification's keys are made with
+//   60 and random lengths, AADs of 0 to 47 bytes and, in one case of five,
+//   of up to 400 (past the GHASH kernel's four-block groups, so the state it
+//   hands from a long AAD to the ciphertext is the aggregated one), and
+//   plaintexts of every length from 0 to 64 and random lengths up to 4,096,
+//   each sealed, opened and opened again with one bit flipped, plus
+//   `aesEncryptBlock` and `aesHeaderMask` on random blocks. The specification's keys are made with
 //   `aesKey`; Wycheproof's and the corpus's are installed into a reused
 //   `AesKey` with `aesKeyInto`.
 //
@@ -273,7 +275,8 @@ class Tally {
 /** One corpus case of `length` plaintext bytes under `key`. */
 const corpusCase = (hash: u64[], state: u64[], tally: Tally, key: AesKey, n: i32, length: i32): void => {
   const iv: u8[] = randomBytes(state, ivLength(state, n))
-  const aad: u8[] = randomBytes(state, n % 3 === 0 ? 0 : below(state, 48))
+  const aadLength: i32 = n % 3 === 0 ? 0 : n % 5 === 1 ? below(state, 401) : below(state, 48)
+  const aad: u8[] = randomBytes(state, aadLength)
   const plaintext: u8[] = randomBytes(state, length)
   const sealed: u8[] | null = aesGcmSeal(key, iv, aad, plaintext)
   fold(hash, sealed)

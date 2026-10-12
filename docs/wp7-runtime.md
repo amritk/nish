@@ -257,7 +257,7 @@ libgcc CPU probe, while a program that calls the kernel keeps every path.
 
 `runtime/runtime-aes.c` (wp38 S5, [wp38-simd.md](wp38-simd.md) §3.1) holds
 AES-128 and AES-256 in counter mode and GHASH on AES-NI and PCLMULQDQ, or on
-the ARMv8 AES and PMULL instructions: four kernels the compiler is to call in
+the ARMv8 AES and PMULL instructions: four kernels the compiler calls in
 place of four private functions of `std/crypto/aes.ts`, behind `nish_aes_hw`.
 It has no portable path of its own; a machine without the instructions, and
 `NISH_AES=soft`, run the bitsliced Nish code. Its 2,532 bytes are the key

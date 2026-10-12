@@ -90,28 +90,26 @@ export const AES_HW: string = "nish_aes_hw"
  * value would be emitted as written rather than lowered.
  */
 export const isAesSeam = (program: CheckedProgram, sig: FunctionSig): i32 => {
-  if (
-    sig.owner !== null ||
-    sig.instance !== null ||
-    sig.returnType !== T_VOID ||
-    !isCryptoAesModule(program.packageName, program.source.path)
-  ) {
+  if (sig.owner !== null || sig.instance !== null || sig.returnType !== T_VOID) {
     return AES_SEAM_NONE
   }
+  // The name first: the module test builds a path, and this runs at every
+  // `void` call the emitter meets.
   const name = sig.sourceName
+  let seam: i32 = AES_SEAM_NONE
   if (name === "aesScheduleInto") {
-    return AES_SEAM_SCHEDULE
+    seam = AES_SEAM_SCHEDULE
+  } else if (name === "aesBlockInto") {
+    seam = AES_SEAM_BLOCK
+  } else if (name === "aesCtrInto") {
+    seam = AES_SEAM_CTR
+  } else if (name === "ghashBlocksInto") {
+    seam = AES_SEAM_GHASH
   }
-  if (name === "aesBlockInto") {
-    return AES_SEAM_BLOCK
+  if (seam === AES_SEAM_NONE || !isCryptoAesModule(program.packageName, program.source.path)) {
+    return AES_SEAM_NONE
   }
-  if (name === "aesCtrInto") {
-    return AES_SEAM_CTR
-  }
-  if (name === "ghashBlocksInto") {
-    return AES_SEAM_GHASH
-  }
-  return AES_SEAM_NONE
+  return seam
 }
 
 /** The runtime kernel a seam's call becomes on the hardware arm. */

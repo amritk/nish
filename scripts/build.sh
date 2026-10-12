@@ -60,7 +60,7 @@
 #
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
-#   --runtime-objects <dir>  compile the runtime.c input and its five siblings,
+#   --runtime-objects <dir>  compile the runtime.c input and its six siblings, 
 #                            one $CC -c each and all at once, into
 #                            <dir>/<unit>.o with the profile's compile flags,
 #                            and link nothing. speed and size store LTO bitcode,
@@ -346,6 +346,19 @@ case "$profile" in
       echo "error: the wasm profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
       exit 2
     fi
+    # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
+    # AES kernels behind `nish_aes_hw` (src/kernels.ts). runtime-aes.c's wasm32 build
+    # answers 0 there, so the bitsliced code runs, and it is added only for such IR:
+    # every other module links the bytes it always did.
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        *.ll)
+          if grep -q '@nish_aes_hw(' "$i"; then
+            inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
+            break
+          fi ;;
+      esac
+    done
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
     "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory \
