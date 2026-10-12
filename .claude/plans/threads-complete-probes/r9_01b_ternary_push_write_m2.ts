@@ -1,0 +1,18 @@
+import { scope } from "nish/threads";
+import { getOrInsert } from "nish/map";
+class Leaf { x: i32 = 0; }
+class Mid { leaf: Leaf; constructor() { this.leaf = new Leaf(); } }
+class Holder { leaf: Leaf; constructor() { this.leaf = new Leaf(); } }
+const read = (h: Holder): i32 => h.leaf.x;
+const bump = (h: Holder): void => {
+  const m1 = new Map<string, Mid>(); const m2 = new Map<string, Mid>(); const parts: Mid[] = [];
+  const c: boolean = parts.length !== 0;
+  parts.push(c ? getOrInsert(m1, "a", new Mid()) : getOrInsert(m2, "a", new Mid()));
+  parts[0].leaf = h.leaf;
+  getOrInsert(m2, "a", new Mid()).leaf.x = 1;
+};
+export const main = (): i32 => {
+  const h = new Holder(); const done: i32[] = [0];
+  { using s = scope(); s.spawn(read, h, done, 0); bump(h); }
+  console.log(`${done[0]} ${h.leaf.x}`); return 0;
+};
