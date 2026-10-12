@@ -4065,6 +4065,10 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 //                  needle, so expected.err keeps it)
 //   expected.ir    lines (substring match) that must appear in some emitted module
 //   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
+//   expected.portability  the `--warn-portability --json` portability objects, one per
+//                  line, as a case's `.portability` (WP33): a second compile with the
+//                  flag, which must write the same modules byte for byte. It is here for
+//                  a program a case cannot be, one that imports `nish/threads`
 //   args           extra CLI flags (e.g. --strict-exports)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
 //                  module with a golden is compared, so there is no missing one to write;
@@ -4231,6 +4235,40 @@ for (const name of linkTests) {
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)])
       check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
     }
+  }
+
+  if (fs.existsSync(side("expected.portability"))) {
+    const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+    fs.rmSync(warnedDir, { recursive: true, force: true })
+    const warned = spawnSync(
+      NISH,
+      [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+    const want = read("expected.portability").trim()
+    const got = warned.stdout
+      .split("\n")
+      .filter((l) => l.includes('"severity":"portability"'))
+      .join("\n")
+      .split(`${root}/`)
+      .join("")
+    check(
+      `link/${name}: --warn-portability --json matches expected.portability`,
+      warned.status === 0 && got === want,
+      `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
+    )
+    check(
+      `link/${name}: --warn-portability changes no byte of the IR`,
+      modules.every(
+        (m) =>
+          fs.existsSync(path.join(warnedDir, m.file)) &&
+          fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
+      ),
+      "the modules differ"
+    )
   }
 
   // Cross-module attribute agreement: importer `declare` == exporter `define`.
@@ -4694,6 +4732,12 @@ if (!only || "par_alloc".includes(only)) {
 // own, and `thread_scope_region_read_back` writes through what it reads back
 // out of its own containers, each a fresh object it made.
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
+//
+// And the forms that answer a new array, `par_map_new` and `par_from`, and the
+// two capture programs, whose bodies read their function's `const` locals:
+// Node's arrows close over them, and natively each one travels as a parameter,
+// so the same values print both ways.
+//
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
 // spawn order and join order print the same.
@@ -4701,6 +4745,10 @@ for (const name of [
   "arena_using_exit_paths",
   "par_map",
   "par_reduce",
+  "par_map_new",
+  "par_from",
+  "par_capture",
+  "par_capture_large",
   "thread_scope_basic",
   "thread_scope_exit_paths",
   "thread_scope_many_arrays",

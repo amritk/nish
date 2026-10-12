@@ -47,8 +47,8 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/threads.ts:151:5", "callee": "dstTooShort", "via": "panic" },
-                { "kind": "call", "at": "std/threads.ts:153:3", "callee": "mapRange<i32, i32, square>", "via": "overflow" }
+                { "kind": "call", "at": "std/threads.ts:157:5", "callee": "dstTooShort", "via": "panic" },
+                { "kind": "call", "at": "std/threads.ts:159:3", "callee": "mapRange<i32, i32, square>", "via": "overflow" }
               ]
             },
             {
@@ -57,7 +57,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/threads.ts:238:41", "allowed": true }
+                { "kind": "oom", "at": "std/threads.ts:280:41", "allowed": true }
               ]
             }
           ]
