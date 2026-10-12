@@ -18,7 +18,6 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare void @nish_exit(i32 noundef) #4
-declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
@@ -274,40 +273,30 @@ for.end:
   %29 = call %struct.nish_array* @bytes(i32 3)
   store %struct.nish_array* %29, %struct.nish_array** %raw.addr, align 8
   %30 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
-  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 0
-  %32 = load i64, i64* %31, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %33 = icmp ult i64 0, %32
-  br i1 %33, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %32)
-  unreachable
-
-bounds.ok:
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
-  %35 = load i8*, i8** %34, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %36 = bitcast i8* %35 to i8*
-  %37 = getelementptr inbounds i8, i8* %36, i64 0
-  store i8 9, i8* %37, align 1, !alias.scope !4, !noalias !3, !tbaa !14
-  %38 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
-  %39 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %38)
-  store %struct.Secret$arr.u8* %39, %struct.Secret$arr.u8** %moved.addr, align 8
+  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
+  %32 = load i8*, i8** %31, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %33 = bitcast i8* %32 to i8*
+  %34 = getelementptr inbounds i8, i8* %33, i64 0
+  store i8 9, i8* %34, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %35 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
+  %36 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %35)
+  store %struct.Secret$arr.u8* %36, %struct.Secret$arr.u8** %moved.addr, align 8
+  %37 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
+  %38 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %37)
+  %39 = call i8* @nish_str_from_i32(i32 %38)
+  call void @nish_print(i8* %39)
   %40 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
-  %41 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %40)
-  %42 = call i8* @nish_str_from_i32(i32 %41)
-  call void @nish_print(i8* %42)
-  %43 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
-  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %43)
-  %44 = call %struct.Pair* @pairOf(i32 2, i32 40)
-  %45 = call %struct.Secret$$Pair* @nish.secret$$Pair(%struct.Pair* %44)
-  store %struct.Secret$$Pair* %45, %struct.Secret$$Pair** %pair.addr, align 8
-  %46 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
-  %47 = call i32 @nish.expose$$Pair$u32$fn.5.total(%struct.Secret$$Pair* %46)
-  %48 = zext i32 %47 to i64
-  %49 = call i8* @nish_str_from_u64(i64 %48)
-  call void @nish_print(i8* %49)
-  %50 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
-  call void @nish.wipe$$Secret$$Pair(%struct.Secret$$Pair* %50)
+  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %40)
+  %41 = call %struct.Pair* @pairOf(i32 2, i32 40)
+  %42 = call %struct.Secret$$Pair* @nish.secret$$Pair(%struct.Pair* %41)
+  store %struct.Secret$$Pair* %42, %struct.Secret$$Pair** %pair.addr, align 8
+  %43 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
+  %44 = call i32 @nish.expose$$Pair$u32$fn.5.total(%struct.Secret$$Pair* %43)
+  %45 = zext i32 %44 to i64
+  %46 = call i8* @nish_str_from_u64(i64 %45)
+  call void @nish_print(i8* %46)
+  %47 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
+  call void @nish.wipe$$Secret$$Pair(%struct.Secret$$Pair* %47)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 
