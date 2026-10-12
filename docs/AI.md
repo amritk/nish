@@ -1513,8 +1513,11 @@ window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),
 `s.substring(start[, end])`, `s.slice(start[, end])`, `s.indexOf(sub)`,
-`s.startsWith(sub)`, `s.endsWith(sub)`, and `String.fromCharCode(c)`. That is
-every string method there is. `substring` **clamps** an out-of-range offset the
+`s.startsWith(sub)`, `s.endsWith(sub)`, `String.fromCharCode(c)`, and
+`String.fromBytes(bytes, start, end)` (a `u8[]` range as one string, one
+allocation; the range panics outside `0 <= start <= end <= bytes.length`; build
+text from bytes with it, never a `fromCharCode` per byte). That is every string
+method there is. `substring` **clamps** an out-of-range offset the
 way JavaScript does; `slice` instead **panics** unless
 `0 <= start <= end <= s.length`, and is the faster of the two when you have
 already established the range. Every offset is a **byte** offset, so cutting a multi-byte character

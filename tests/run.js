@@ -5213,6 +5213,10 @@ if (!only || "std_json_typed".includes(only)) {
     "i32ArrayOrNull null true",
     "i32ArrayOrNull present 1",
     "failed 0",
+    "string escaped 4 65 9",
+    "string empty []",
+    'stringArray escaped 2 p"q r',
+    "failed 0",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")
@@ -5247,6 +5251,38 @@ if (!only || "std_json_typed".includes(only)) {
         "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
       ),
     shown(run)
+  )
+}
+
+// `String.fromBytes` under `runtime/nish.mjs`: each byte is one UTF-16 unit,
+// as `String.fromCharCode` makes it, so ASCII agrees with the native run
+// (`tests/cases/str_from_bytes.out`) and the two bytes of "é" print as the two
+// units "Ã©", the divergence docs/LANGUAGE.md records for both. A range
+// outside the array panics with `s.slice`'s message and exit 1, as natively.
+if (!only || "str_from_bytes".includes(only)) {
+  const run = runUnderPrelude(path.join(casesDir, "str_from_bytes.ts"), [])
+  const want = "hello\nÃ©\n[] 0\n8\nhe\n"
+  check(
+    "str_from_bytes: under Node, one UTF-16 unit per byte, the native output where the bytes are ASCII",
+    run.status === 0 && run.stdout === want,
+    `--- want\n${want}--- node\n${shown(run)}`
+  )
+  const dir = path.join(buildDir, "str_from_bytes_node")
+  fs.mkdirSync(dir, { recursive: true })
+  const entry = path.join(dir, "oob.ts")
+  fs.writeFileSync(
+    entry,
+    "export const main = (): number => {\n" +
+      "  const bytes: u8[] = [97, 98];\n" +
+      "  console.log(String.fromBytes(bytes, 1, 3));\n" +
+      "  return 0;\n" +
+      "};\n"
+  )
+  const oob = runUnderPrelude(entry, [])
+  check(
+    "str_from_bytes: under Node, a range past the end exits 1 with `slice out of range: [1, 3) of length 2`",
+    oob.status === 1 && oob.stdout === "" && oob.stderr === "slice out of range: [1, 3) of length 2\n",
+    shown(oob)
   )
 }
 

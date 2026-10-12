@@ -187,6 +187,10 @@ export const builtinPanicKind = (name: string): i32 => {
   if (isNetExport(name) && netRangeBuffer(name) >= 0) {
     return PANIC_SLICE
   }
+  // `String.fromBytes` checks the range it copies with the same panic.
+  if (name === "String.fromBytes") {
+    return PANIC_SLICE
+  }
   return -1
 }
 

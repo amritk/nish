@@ -22,7 +22,8 @@
  *     `indexOf` answers with one. `slice` cuts on byte offsets too and panics
  *     on a range the string does not contain, where JavaScript would clamp and
  *     read a negative offset from the end. `String.fromCharCode` builds a
- *     one-byte string from the low 8 bits.
+ *     one-byte string from the low 8 bits, and `String.fromBytes` one such
+ *     string per byte of its range.
  *   - `a[i]` is bounds-checked: out of range prints
  *     `index out of range: <i> >= <len>` to stderr and exits 1, and so is
  *     `a.pop()` on an empty array, which has no `undefined` to return.
@@ -345,6 +346,18 @@ export function endsWith(s, sub) {
 /** `String.fromCharCode(c)`: the one-byte string of `c & 0xFF`. */
 export function fromCharCode(code) {
   return Buffer.from([toIndex(code) & 0xff]).toString("latin1");
+}
+
+/**
+ * `String.fromBytes(bytes, start, end)`: the bytes of `[start, end)`, one
+ * code unit each as `fromCharCode` builds them, checked as `s.slice`'s range
+ * is and failing with its panic.
+ */
+export function fromBytes(bytes, start, end) {
+  const from = toIndex(start);
+  const to = toIndex(end);
+  if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
+  return Buffer.from(bytes.slice(from, to)).toString("latin1");
 }
 
 /** `console.log(x)`: `String(x)` (no `n` suffix for i64) plus a newline, written synchronously. */

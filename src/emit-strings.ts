@@ -13,13 +13,14 @@
 // emits exactly, so both live beside the lowering they describe.
 
 import { Emitter } from "./emit"
-import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck } from "./emit-arrays"
+import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadLength } from "./emit-arrays"
 import { templateParts } from "./emit-util"
 import { IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL } from "./kernels"
 import { N_TEMPLATE_TEXT, Node } from "./nodes"
+import { ARRAY_TYPE } from "./runtime"
 import { irEscape } from "./strings"
-import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
+import { ARRAY_STRUCT, isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -388,6 +389,35 @@ export const emitFromCharCode = (emitter: Emitter, expr: Node): string => {
   const slot = emitter.fn.emitAlloca("chr", "i8", 1)
   emitter.fn.emit(`store i8 ${byte}, i8* ${slot}, align 1`)
   return newString(emitter, slot, "1")
+}
+
+/**
+ * `String.fromBytes(bytes, start, end)`: the bytes of `[start, end)` copied
+ * into one arena string by one `nish_str_new`, where a loop of
+ * `String.fromCharCode` and a `join` allocates once per byte.
+ *
+ * The arguments run left to right and the length is read after all three, as
+ * `u8[]`'s `set` reads it. The range is `s.slice`'s question asked of an
+ * array, `0 <= start <= end <= bytes.length`, so it shares that check and that
+ * panic, and `--unchecked-indexing` drops it as it drops theirs. Nothing
+ * validates the bytes as UTF-8, as nothing validates `fromCharCode`'s.
+ */
+export const emitFromBytes = (emitter: Emitter, expr: Node): string => {
+  const args = expr.children[1].children
+  const bytes = emitter.emitExpression(args[0])
+  const from = emitIndex(emitter, args[1])
+  const to = emitIndex(emitter, args[2])
+  if (!emitter.program.uncheckedIndexing) {
+    emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
+  }
+  emitter.declareType(ARRAY_TYPE)
+  const field = emitter.fn.emitValue(
+    `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${bytes}, i64 0, i32 2`
+  )
+  const data = emitter.fn.emitValue(`load i8*, i8** ${field}${emitter.align8()}`)
+  const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${from}`)
+  const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
+  return newString(emitter, at, n)
 }
 
 /**

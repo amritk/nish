@@ -112,6 +112,7 @@ content, and these are its methods, all of them:
 | `s.indexOf(sub, from?)` | the first byte offset of `sub` at or after `from` (default `0`), or `-1` |
 | `s.startsWith(sub)`, `s.endsWith(sub)` | a `boolean` |
 | `String.fromCharCode(c)` | the one-byte string of `c` |
+| `String.fromBytes(bytes, start, end)` | the bytes of a `u8[]` from `start` up to `end` as one string; an out-of-range or reversed pair stops the program, as `slice`'s does |
 
 `toUpperCase`, `split`, `trim`, `replace` and the rest do not exist;
 build them from these, or look in the
@@ -131,6 +132,21 @@ console.log(`${word.startsWith("ca")}`);    // true
 
 Since every offset is a byte offset, `substring` can cut a multi-byte
 character in half; that is the cost of indexing a string in constant time.
+
+Bytes become text the other way with `String.fromBytes`: the range of a
+`u8[]`, from `start` up to `end`, as one string in one allocation. It is the
+way to turn what a file or a socket handed you into a string, where a
+`String.fromCharCode` per byte joined together allocates once per byte:
+
+```ts nish:ok-body
+const bytes: u8[] = [99, 97, 102, 195, 169];
+console.log(String.fromBytes(bytes, 0, 5));   // café
+console.log(String.fromBytes(bytes, 0, 3));   // caf
+```
+
+The bytes are copied as they are, so `é`'s two bytes are `é` again. Under
+Node each byte is one character instead, as with `String.fromCharCode`, so the
+two answers agree only where the bytes are ASCII.
 
 ### Template literals
 

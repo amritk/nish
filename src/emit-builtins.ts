@@ -22,6 +22,7 @@ import { Emitter } from "./emit"
 import {
   emitConsoleError,
   emitConsoleLog,
+  emitFromBytes,
   emitFromCharCode,
   emitSliceCheck,
   stringifyCallee,
@@ -471,6 +472,9 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "String.fromCharCode") {
     return emitFromCharCode(emitter, expr)
   }
+  if (name === "String.fromBytes") {
+    return emitFromBytes(emitter, expr)
+  }
   if (name === "Math.pow") {
     return emitMathPow(emitter, expr)
   }
@@ -567,6 +571,13 @@ export const builtinCalleesNamed = (
   }
   if (name === "String.fromCharCode") {
     out.push("nish_str_new")
+    return out
+  }
+  if (name === "String.fromBytes") {
+    out.push("nish_str_new")
+    if (!program.uncheckedIndexing) {
+      out.push("nish_panic_slice")
+    }
     return out
   }
   if (name === "Math.pow") {

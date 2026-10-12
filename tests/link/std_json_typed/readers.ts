@@ -93,5 +93,18 @@ export const main = (): i32 => {
   const some = r.i32ArrayOrNull(null);
   console.log(`i32ArrayOrNull present ${some !== null ? some.length : -1}`);
   console.log(`failed ${r.failed}`);
+
+  // A string with an escape is unescaped into a buffer first, and one without
+  // is copied straight from the input: both end in one `String.fromBytes`.
+  const esc = opened(`["x\\u0041\\ty","",["p\\"q","r"]]`);
+  const escaped = esc.string("");
+  console.log(`string escaped ${escaped.length} ${escaped.charCodeAt(1)} ${escaped.charCodeAt(2)}`);
+  esc.nextElement();
+  console.log(`string empty [${esc.string("unchanged")}]`);
+  esc.nextElement();
+  const qs: string[] = [];
+  const q2 = esc.stringArray(qs);
+  console.log(`stringArray escaped ${q2.length} ${q2[0]} ${q2[1]}`);
+  console.log(`failed ${esc.failed}`);
   return 0;
 };

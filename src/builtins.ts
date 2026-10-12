@@ -420,8 +420,8 @@ export const checkNamespaceProperty = (
  * `tests/cases/reject_unknown_builtin`).
  */
 const SUPPORTED_BUILTINS: string =
-  "console.log, console.error, String.fromCharCode, Math.sqrt, Math.floor, Math.ceil, Math.trunc, " +
-  "Math.round, Math.sin, Math.cos, Math.exp, Math.log, Math.pow, Math.abs, Math.min, Math.max, " +
+  "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, " +
+  "Math.trunc, Math.round, Math.sin, Math.cos, Math.exp, Math.log, Math.pow, Math.abs, Math.min, Math.max, " +
   "Math.clz32, Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, " +
   "crypto.getRandomValues"
 
@@ -487,7 +487,44 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
     }
     return T_STRING
   }
+  if (member === "fromBytes") {
+    return checkFromBytes(ctx, call, args, scope)
+  }
   return unknownBuiltin(ctx, call.children[0], name)
+}
+
+/**
+ * `String.fromBytes(bytes, start, end)`: the string of `bytes[start..end)`,
+ * one allocation and one copy, where a loop of `String.fromCharCode` and a
+ * `join` would allocate once per byte. The bytes are a `u8[]`, `readonly` or
+ * not, since the call only reads them; the two ends are numbers, converted as
+ * `fromCharCode`'s is, and the range is checked when it runs.
+ */
+const checkFromBytes = (ctx: CheckContext, call: Node, args: Node, scope: Scope): i32 => {
+  const name = "String.fromBytes"
+  if (!checkBuiltinArity(ctx, call, name, args, 3)) {
+    return T_STRING
+  }
+  const want = ctx.table.arrayOf(T_U8)
+  const bytes = args.children[0]
+  const got = checkExpression(ctx, bytes, scope, want)
+  const readonlyBytes = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === T_U8
+  if (got !== T_ERROR && got !== want && !readonlyBytes) {
+    ctx.error(
+      bytes,
+      `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`
+    )
+  }
+  let i = 1
+  while (i < args.children.length) {
+    const end = args.children[i]
+    const type = checkExpression(ctx, end, scope, ctx.numberType())
+    if (type !== T_ERROR && !isNumeric(type)) {
+      ctx.error(end, `\`${name}\` expects a number index, got ${ctx.table.typeName(type)}`)
+    }
+    i = i + 1
+  }
+  return T_STRING
 }
 
 const checkConsole = (

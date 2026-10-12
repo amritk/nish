@@ -1,0 +1,7 @@
+3
+slice out of range: [2, 5) of length 4
+pastEnd exit 1
+slice out of range: [3, 1) of length 4
+reversed exit 1
+slice out of range: [-1, 2) of length 4
+negative exit 1
