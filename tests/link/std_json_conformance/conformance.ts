@@ -18,6 +18,9 @@ const JC_DIVERGENCES_PATH: string = "tests/json-conformance/divergences.txt";
 const JC_TEST262_CASES: i32 = 772;
 const JC_V8_CASES: i32 = 66220;
 
+/** What a case answers when its packed input does not unpack, which no expected value matches. */
+const JC_BAD_DATA: string = "malformed data";
+
 /** How many failing names a check prints before it stops. */
 const JC_SHOWN: i32 = 20;
 
@@ -167,7 +170,7 @@ const jcIsNegativeZero = (src: u8[]): boolean => {
 const jcOutcome = (c: JcCase): JcOutcome => {
   if (c.op === "parse") {
     const src = jcUnpack(c.input);
-    return src === null ? new JcOutcome("unpack", [], 0) : jcRewrite(src);
+    return src === null ? new JcOutcome(JC_BAD_DATA, [], 0) : jcRewrite(src);
   }
   return jcStringify(c.input);
 };
@@ -176,7 +179,7 @@ const jcOutcome = (c: JcCase): JcOutcome => {
 const jcMatches = (c: JcCase, o: JcOutcome): boolean => {
   if (c.expected === "throws") {
     // A refusal is the tokenizer's: a writer's refusal of a text JSON.parse refuses is no answer.
-    return o.error !== "" && !o.error.startsWith("write ");
+    return o.error !== "" && o.error !== JC_BAD_DATA && !o.error.startsWith("write ");
   }
   if (o.error !== "") {
     return false;
