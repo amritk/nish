@@ -45,6 +45,7 @@
 
 import { CheckedProgram, FunctionSig } from "./program"
 import { isCryptoAesModule, isTextModule } from "./std-modules"
+import { T_VOID } from "./types"
 
 /** The runtime symbol the walker's call becomes. */
 export const INDEX_OF_ANY_KERNEL: string = "nish_str_index_of_any"
@@ -84,12 +85,15 @@ export const AES_HW: string = "nish_aes_hw"
  * Which of `nish/crypto/aes`'s four seams a call in `program` to `sig` is, or
  * `AES_SEAM_NONE`. As for `isIndexOfAnyWalk`, the seams are private, so a call
  * to one can only be written in that module, and a root-package file that
- * happens to sit at `std/crypto/aes.ts` is an ordinary module.
+ * happens to sit at `std/crypto/aes.ts` is an ordinary module. Every seam is
+ * `void`, which the emitter's join relies on, so one that came to answer a
+ * value would be emitted as written rather than lowered.
  */
 export const isAesSeam = (program: CheckedProgram, sig: FunctionSig): i32 => {
   if (
     sig.owner !== null ||
     sig.instance !== null ||
+    sig.returnType !== T_VOID ||
     !isCryptoAesModule(program.packageName, program.source.path)
   ) {
     return AES_SEAM_NONE
