@@ -6422,18 +6422,33 @@ export const main = (): i32 => {
   over the input and a sticky error, and the encoder is the
   [`JsonWriter`](../std/json.ts) the call is given. The code written for a
   class is straight-line calls of their methods, one per field: for decoding,
-  a loop over the object's keys that compares each key with the field names
+  a loop over the object's keys that sends each key to the field it names
   and reads the value with the method of the field's type; for encoding,
   `w.key(name)` and the value's method per field, in declaration order. A
-  nested class, an array's element class and a `| null` field's class each
-  get the same code of their own, so it recurses as the data does
-  (`tests/link/std_json_typed`, whose `main.ll` is the golden of the code
-  written for a one-field class;
-  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)). Because the encoding is calls
-  of the writer's methods, it is written in the writer's modes: a writer set
-  with `setIndent(2)` encodes what `JSON.stringify(v, null, 2)` writes, and a
-  `setStrict(true)` writer fails a NaN or infinite `f64` field with
-  `JSON_WRITE_NON_FINITE` (`tests/link/std_json_writer`).
+  nested class, an array's element class, a `| null` field's class and a
+  `Map`'s values each get the same code of their own, so it recurses as the
+  data does (`tests/link/std_json_typed`, whose `main.ll` is the golden of the
+  code written for a one-field class and `tag.ll` of the code for a `u64`, an
+  enum and arrays of each; [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
+  Because the encoding is calls of the writer's methods, it is written in the
+  writer's modes: a writer set with `setIndent(2)` encodes what
+  `JSON.stringify(v, null, 2)` writes, and a `setStrict(true)` writer fails a
+  NaN or infinite `f64` field with `JSON_WRITE_NON_FINITE`
+  (`tests/link/std_json_writer`).
+- **A key is sent to its field by its length, then by one byte.** The code
+  written for a class of three or more fields switches on the key's length in
+  bytes, so a key is compared only with the names of that length. Where three
+  or more names share a length, it switches once more, on the key's byte at
+  the one position where those names differ most, and calls `keyIs` for each
+  name that has that byte there, in declaration order; a byte none of them has
+  is an unknown key at once. One or two names, of a class or of one length,
+  are compared in turn with `keyIs`, which is no more calls. A key with an escape has no byte to switch on there, and is compared
+  with every name of its length, so `"\u0069d"` is the field `id`
+  (`tests/link/std_json_typed`, "wide: every key escaped"). A key is
+  therefore compared with the names of its length that share its byte at that
+  position, usually one, rather than with every name in turn, and a field
+  name that is not ASCII is dispatched by its UTF-8 bytes like any other
+  ("names: escaped field names decode").
 - **What a field may be.** `T` is a declared class, and every field of every
   class the call reaches is one of these; anything else is refused at the
   call's argument, naming the class and the field:
@@ -6441,17 +6456,33 @@ export const main = (): i32 => {
   | Field type | JSON | Decoded with | Encoded with |
   | --- | --- | --- | --- |
   | `i32`, `u32`, `i64` | an integer written without a fraction or an exponent, in the type's range | `d.i32()`, `d.u32()`, `d.i64()` | `w.i32`, `w.u32`, `w.i64` |
+  | `u64` | an integer written in digits alone, with no sign, fraction or exponent, up to 2^64 - 1 | `d.u64()`, through the tokenizer's `numberU64` | `jsonEncodeU64` |
+  | a numeric `enum` `E` | the number of one of `E`'s members | `d.i32()`, then a `switch` over the members' values | `w.i32` |
   | `f64` (and `number` under `--number-mode f64`) | any number; past the double range an infinity, which the writer writes as `null` | `d.f64()` | `w.f64` |
   | `boolean` | `true`, `false` | `d.boolean()` | `w.boolean` |
   | `string`, `string \| null` | a string, and `null` for the second | `d.string(cur)` | `w.string`, `jsonEncodeStringOrNull` |
   | a declared class `C`, `C \| null` | an object, and `null` for the second | `C`'s own decoding, into the object the field holds | `C`'s own encoding |
-  | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s encoding per element |
+  | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s or `E`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s or `E`'s encoding per element |
+  | `Map<string, V>`, `Map<string, V> \| null`, for any `V` in this table, `\| null` or not, a `Map` included | an object whose keys are the map's, each value a `V`, and `null` for the second | the object's keys in order, each value decoded as a `V` and `set` | the map's entries in its order, each value encoded as a `V` |
 
   `` `jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null` ``
   (NL2485, `tests/cases/json_reject_field_type`; two classes down through an
   array's element, `json_reject_nested_field`; in a `| null` field's class,
-  `json_reject_nullable_field`; `i32[][]`, `json_reject_nested_array`; a
-  `Map`, `json_reject_generic_field`). A value that is not a declared class is
+  `json_reject_nullable_field`; in a class a `Map` holds,
+  `json_reject_map_value_class`; `i32[][]`, `json_reject_nested_array`, and
+  `Level[][]`, `json_reject_enum_nested_array`; a generic class of the
+  program's own, `json_reject_generic_field`). The message goes on to name the
+  kinds added since: `` a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
+  A JSON object's keys are strings, so a `Map` keyed by anything else is
+  refused, an enum included (`json_reject_map_key`, `json_reject_map_key_enum`),
+  and so is a map whose values typed JSON cannot write, at any depth
+  (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
+  array of maps are refused as well (`json_reject_set_field`,
+  `json_reject_map_array`). An enum whose members are strings, or a mix of
+  strings and numbers, is not one the language declares at all
+  (NL1043, `json_reject_enum_string`, `json_reject_enum_mixed`), and a
+  `const enum` is refused where it is declared (NL2285,
+  `json_reject_const_enum`). A value that is not a declared class is
   `` `jsonEncode`'s value is `Point`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version ``
   (NL2486, `json_reject_interface`, `json_reject_not_class`). An interface is
   a record stored inline wherever it is held, and decoding into one is left
@@ -6467,11 +6498,12 @@ export const main = (): i32 => {
 
   | Outcome | Code | `errorAt` |
   | --- | --- | --- |
-  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object | `JSON_DECODE_TYPE` (-20) | the value |
-  | a number its field cannot hold: a fraction or an exponent for an integer, or out of range | `JSON_DECODE_RANGE` (-21) | the number |
+  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for an enum | `JSON_DECODE_TYPE` (-20) | the value |
+  | a number its field cannot hold: a fraction or an exponent for an integer, or out of range, a negative number (`-0` included) for a `u64` | `JSON_DECODE_RANGE` (-21) | the number |
   | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
-  | a key given twice | `JSON_DECODE_DUPLICATE` (-23) | the second |
+  | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
   | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
+  | more keys, over every `Map` field of the decoding, than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
@@ -6484,7 +6516,46 @@ export const main = (): i32 => {
   reaches each row at each depth, the limits included). A duplicate of a key
   `ignoreUnknown` steps over is not detected, because its value is never
   read. After an error every field of `out` holds a value of its type, some
-  decoded and some as they were.
+  decoded and some as they were: an enum field or element never holds a
+  number that is no member's, because such a number is not stored.
+- **An enum is its number.** A numeric enum is read with `d.i32()`, so a
+  number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
+  an integer that is not the value of one of its members is
+  `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
+  too. Two members of one value are one number (`tests/link/std_json_typed`,
+  "enum: two members of one value both read 1"). It is written as `w.i32` of
+  its value, as `JSON.stringify` writes a TypeScript numeric enum.
+- **A `u64` is exact to 2^64 - 1.** It is read through the tokenizer's
+  `numberU64`, so `18446744073709551615` decodes and `18446744073709551616`,
+  `-1`, `-0` and `1.5` are `JSON_DECODE_RANGE`. It is written as its digits,
+  which `JSON.stringify` cannot do for a number past 2^53: `tests/run.js`
+  holds `round-trip-kinds.txt` to `JSON.stringify(JSON.parse(line))` with each
+  integer past 2^53 kept as its own digits (`JSON.rawJSON`).
+- **A `Map<string, V>` is an object.** Decoding empties the map the field
+  holds once the object opens, then reads each key as a new string and its
+  value as a `V`, made fresh for the key (a zero, `""`, the enum's first member,
+  `null`, or a new object, array or map, which a `Map`'s value class is made
+  with `new C()` for, so its constructor takes no parameters, NL2488,
+  `json_reject_map_value_constructor`), and `set`s it, so the map's entries
+  are the input's, in the input's order. A key the object gave already is
+  `JSON_DECODE_DUPLICATE` before its value is read, whether it is spelled
+  the same way or through an escape (docs/security/json.md, JSON-3). Encoding
+  writes the entries in the map's own order, which is insertion order. That
+  differs from a JavaScript object in one case: a key that reads as an array
+  index (`"1"`) keeps its place, where `JSON.parse` would move it first
+  ("map: a key like an index keeps the input's order"). Unlike the rest of a
+  decode, a map's entries are made anew each time, so decoding into a map
+  allocates its keys and values. A value whose read fails is not `set`, so a
+  map never holds a value the input did not give ("map: and the map holds
+  only the entry read before it"). The maps of one decoding take at most
+  `d.maxMapKeys` keys between them, 4,096 unless set, the keys of a map inside
+  another map included, and the key past it is `JSON_DECODE_MAP_LIMIT` before
+  it is read ("map limit: one key past it: code", "map limit: 820 small maps,
+  4,100 keys, are refused"); `d.reset` starts the count again. At `0` or below
+  no map may take a key, and `{}` is the one map value accepted. The global
+  `Map` hashes a string with no seed, so a body can choose keys that all
+  collide, and this limit is what bounds the probes all the maps of one
+  decoding cost together (docs/security/json.md, JSON-13).
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps

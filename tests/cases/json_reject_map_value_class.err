@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Gauge.level`, which is `f32`
