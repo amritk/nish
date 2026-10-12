@@ -85,7 +85,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @lookA(%struct.Index* noundef nonnull readonly align 8 dereferenceable(16) nocapture %ix) #0 {
+define hidden noundef i32 @lookA$(%struct.Index* noundef nonnull readonly align 8 dereferenceable(16) nocapture %ix) #0 {
 entry:
   %a.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Index, %struct.Index* %ix, i32 0, i32 0
@@ -139,7 +139,7 @@ ovf.fail:
   unreachable
 }
 
-define hidden noundef i32 @lookB(%struct.Index* noundef nonnull readonly align 8 dereferenceable(16) nocapture %ix) #0 {
+define hidden noundef i32 @lookB$(%struct.Index* noundef nonnull readonly align 8 dereferenceable(16) nocapture %ix) #0 {
 entry:
   %b.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Index, %struct.Index* %ix, i32 0, i32 0

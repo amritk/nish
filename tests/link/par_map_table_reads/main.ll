@@ -89,7 +89,7 @@ entry:
   ret void
 }
 
-define hidden noundef double @price(%struct.Item* noundef nonnull readonly align 8 dereferenceable(16) nocapture %it) #0 {
+define hidden noundef double @price$(%struct.Item* noundef nonnull readonly align 8 dereferenceable(16) nocapture %it) #0 {
 entry:
   %key.addr = alloca i8*, align 8
   %0 = getelementptr inbounds %struct.Item, %struct.Item* %it, i32 0, i32 1

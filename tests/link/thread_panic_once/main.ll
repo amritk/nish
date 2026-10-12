@@ -43,7 +43,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @fail(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define hidden noundef i32 @fail$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10

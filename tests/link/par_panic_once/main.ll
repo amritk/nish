@@ -40,7 +40,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @check(i32 noundef %x) #0 {
+define hidden noundef i32 @check$(i32 noundef %x) #0 {
 entry:
   %0 = srem i32 %x, 50000
   %1 = icmp eq i32 %0, 0
