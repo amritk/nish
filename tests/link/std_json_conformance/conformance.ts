@@ -24,9 +24,11 @@ const JC_V8_FILES: i32 = 9;
 /**
  * The tokenizer's refusals that are about the grammar. A case JSON.parse
  * refuses must be refused for one of these: a refusal by a limit (DEPTH, the
- * byte limits) or of the window is no agreement, and such a case is listed.
+ * byte limits) or of the window is no agreement, and neither is SURROGATE,
+ * since a lone surrogate escape is valid grammar the tokenizer refuses on
+ * purpose. Such a case is listed.
  */
-const JC_GRAMMAR_ERRORS: string = ",SYNTAX,TRUNCATED,TRAILING,UTF8,ESCAPE,SURROGATE,CONTROL,NUMBER,";
+const JC_GRAMMAR_ERRORS: string = ",SYNTAX,TRUNCATED,TRAILING,UTF8,ESCAPE,CONTROL,NUMBER,";
 
 /** What a case answers when its packed input does not unpack, which no expected value matches. */
 const JC_BAD_DATA: string = "malformed data";
@@ -53,9 +55,9 @@ class JcCase {
  * One reason of divergences.txt: `reason <key> <answer> <sentence>`. `answer`
  * is what a case listed under it must answer instead of upstream's value:
  * `unindented`, the expected text with the indentation its gap made taken out
- * (an indented stringify, which the writer does not write); `text`, a whole text
- * other than the expected one; or a comma-separated list of the error names
- * one of which the rewrite must stop at.
+ * (an indented stringify, which the writer does not write); `exact`, the whole
+ * text the case's own line in divergences.txt gives; or a comma-separated list
+ * of the error names one of which the rewrite must stop at.
  */
 class JcReason {
   key: string;

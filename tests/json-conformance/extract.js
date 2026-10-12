@@ -101,6 +101,88 @@ const MAX_CASE_BYTES = 256 * 1024
  * and holds the native writer to Node's JSON.stringify of each.
  */
 const GENERATED = { file: "json.js", call: "var encoded = JSON.stringify(string);", count: 65536 }
+/**
+ * Every upstream file the cases come from, at the commits the headers name.
+ * Extraction writes nothing, and `--verify` fails, unless the data's files are
+ * exactly these, so a file that stops yielding cases, or starts, is a diff here.
+ */
+const SOURCE_FILES = [
+  "test262/parse/15.12.1.1-0-1.js",
+  "test262/parse/15.12.1.1-0-2.js",
+  "test262/parse/15.12.1.1-0-3.js",
+  "test262/parse/15.12.1.1-0-4.js",
+  "test262/parse/15.12.1.1-0-5.js",
+  "test262/parse/15.12.1.1-0-6.js",
+  "test262/parse/15.12.1.1-0-8.js",
+  "test262/parse/15.12.1.1-0-9.js",
+  "test262/parse/15.12.1.1-g1-1.js",
+  "test262/parse/15.12.1.1-g1-2.js",
+  "test262/parse/15.12.1.1-g1-3.js",
+  "test262/parse/15.12.1.1-g1-4.js",
+  "test262/parse/15.12.1.1-g2-1.js",
+  "test262/parse/15.12.1.1-g2-2.js",
+  "test262/parse/15.12.1.1-g2-3.js",
+  "test262/parse/15.12.1.1-g2-4.js",
+  "test262/parse/15.12.1.1-g2-5.js",
+  "test262/parse/15.12.1.1-g4-1.js",
+  "test262/parse/15.12.1.1-g4-2.js",
+  "test262/parse/15.12.1.1-g4-3.js",
+  "test262/parse/15.12.1.1-g4-4.js",
+  "test262/parse/15.12.1.1-g5-1.js",
+  "test262/parse/15.12.1.1-g5-2.js",
+  "test262/parse/15.12.1.1-g5-3.js",
+  "test262/parse/15.12.1.1-g6-1.js",
+  "test262/parse/15.12.1.1-g6-2.js",
+  "test262/parse/15.12.1.1-g6-3.js",
+  "test262/parse/15.12.1.1-g6-4.js",
+  "test262/parse/15.12.1.1-g6-5.js",
+  "test262/parse/15.12.1.1-g6-6.js",
+  "test262/parse/15.12.1.1-g6-7.js",
+  "test262/parse/15.12.2-2-1.js",
+  "test262/parse/15.12.2-2-10.js",
+  "test262/parse/15.12.2-2-2.js",
+  "test262/parse/15.12.2-2-3.js",
+  "test262/parse/15.12.2-2-4.js",
+  "test262/parse/15.12.2-2-5.js",
+  "test262/parse/15.12.2-2-6.js",
+  "test262/parse/15.12.2-2-7.js",
+  "test262/parse/15.12.2-2-8.js",
+  "test262/parse/15.12.2-2-9.js",
+  "test262/parse/S15.12.2_A1.js",
+  "test262/parse/duplicate-proto.js",
+  "test262/parse/invalid-whitespace.js",
+  "test262/parse/reviver-call-args-after-forward-modification.js",
+  "test262/parse/text-negative-zero.js",
+  "test262/stringify/replacer-array-number.js",
+  "test262/stringify/replacer-function-result.js",
+  "test262/stringify/replacer-wrong-type.js",
+  "test262/stringify/space-number-float.js",
+  "test262/stringify/space-number-object.js",
+  "test262/stringify/space-number-range.js",
+  "test262/stringify/space-number.js",
+  "test262/stringify/space-string-object.js",
+  "test262/stringify/space-string-range.js",
+  "test262/stringify/space-string.js",
+  "test262/stringify/space-wrong-type.js",
+  "test262/stringify/value-number-negative-zero.js",
+  "test262/stringify/value-number-non-finite.js",
+  "test262/stringify/value-number.js",
+  "test262/stringify/value-object-proxy.js",
+  "test262/stringify/value-primitive-top-level.js",
+  "test262/stringify/value-string-escape-ascii.js",
+  "test262/stringify/value-string-escape-unicode.js",
+  "v8/json-errors.js",
+  "v8/json-fast-array-objects.js",
+  "v8/json-parse-slice.js",
+  "v8/json-parser-double-arrays.js",
+  "v8/json-parser-recursive.js",
+  "v8/json-simd-strings.js",
+  "v8/json-stringify-recursive.js",
+  "v8/json.js",
+  "v8/json2.js",
+]
+/** The test262 files not run for a `raw`, `module` or `async` flag: none, at this commit. */
+const NOT_RUN_FOR_FLAG = []
 /** The upstream files that do not run to their end under Node; the header says why. */
 const NOT_RUN_UNDER_NODE = [
   "test262/stringify/replacer-array-proxy-revoked-realm.js",
@@ -514,6 +596,8 @@ const verify = () => {
   const problems = []
   const names = new Set()
   const notKept = []
+  const notRun = []
+  const sources = []
   let count = 0
   for (const file of ["test262.txt", "v8.txt"]) {
     // The files the header gives a copyright line for, and the files the cases name: one set.
@@ -523,6 +607,10 @@ const verify = () => {
       const copyright = /^# {3}(\S+): Copyright/.exec(line)
       if (copyright !== null) {
         listed.add(copyright[1])
+      }
+      const flagged = /^# Not run, for its `\w+` flag: (\S+)$/.exec(line)
+      if (flagged !== null) {
+        notRun.push(flagged[1])
       }
       const missing = /^# Not kept, it does not run to its end under Node: (\S+)$/.exec(line)
       if (missing !== null) {
@@ -544,11 +632,22 @@ const verify = () => {
         problems.push(`${name}: the file says ${expected.slice(0, 80)}, Node says ${again.slice(0, 80)}`)
       }
     }
+    sources.push(...listed)
     if ([...listed].sort().join(" ") !== [...named].sort().join(" ")) {
       problems.push(
         `${file}: its header lists ${[...listed].join(", ")}, its cases come from ${[...named].join(", ")}`
       )
     }
+  }
+  if (sources.sort().join(" ") !== [...SOURCE_FILES].sort().join(" ")) {
+    problems.push(
+      `the cases come from ${sources.join(", ")}, not the ${SOURCE_FILES.length} files SOURCE_FILES names`
+    )
+  }
+  if (notRun.sort().join(" ") !== [...NOT_RUN_FOR_FLAG].sort().join(" ")) {
+    problems.push(
+      `the headers say ${notRun.join(", ")} were not run for a flag, not ${NOT_RUN_FOR_FLAG.join(", ") || "none"}`
+    )
   }
   if (notKept.sort().join(" ") !== [...NOT_RUN_UNDER_NODE].sort().join(" ")) {
     problems.push(
@@ -635,7 +734,7 @@ const buildData = (upstream, commit, results, skipped) => {
     "# The copyright line of each upstream file the cases below come from, as its header states it:",
   ]
   const rows = []
-  const totals = { cases: 0, files: 0, dropped: {}, failed: [] }
+  const totals = { cases: 0, files: 0, dropped: {}, failed: [], sources: [] }
   for (const { name, copyright, result } of results) {
     if (result.error !== null && result.error !== undefined) {
       totals.failed.push({ name, error: result.error.split("\n")[0] })
@@ -667,6 +766,7 @@ const buildData = (upstream, commit, results, skipped) => {
       totals.cases++
     }
     if (ordinal > 0) {
+      totals.sources.push(name)
       copyrights.push(...copyright.map((l) => `#   ${name}: ${l}`))
     }
   }
@@ -753,9 +853,16 @@ const main = (argv) => {
   // the header names, and the generated loop was every code unit.
   const failed = [...t262.totals.failed, ...v8Data.totals.failed].map((f) => f.name).sort()
   const generated = v8Data.totals.dropped.generated ?? 0
-  if (failed.join(" ") !== [...NOT_RUN_UNDER_NODE].sort().join(" ") || generated !== GENERATED.count) {
+  const sources = [...t262.totals.sources, ...v8Data.totals.sources].sort()
+  const skipped = t262Skipped.map((f) => f.name).sort()
+  if (
+    failed.join(" ") !== [...NOT_RUN_UNDER_NODE].sort().join(" ") ||
+    generated !== GENERATED.count ||
+    sources.join(" ") !== [...SOURCE_FILES].sort().join(" ") ||
+    skipped.join(" ") !== [...NOT_RUN_FOR_FLAG].sort().join(" ")
+  ) {
     process.stderr.write(
-      `extract.js: wrote nothing: the files that did not run are ${failed.join(", ") || "none"}, not ${NOT_RUN_UNDER_NODE.join(", ")}, or the generated loop made ${generated} calls, not ${GENERATED.count}\n`
+      `extract.js: wrote nothing: the files that did not run are ${failed.join(", ") || "none"} (want ${NOT_RUN_UNDER_NODE.join(", ")}); those not run for a flag are ${skipped.join(", ") || "none"} (want ${NOT_RUN_FOR_FLAG.join(", ") || "none"}); the generated loop made ${generated} calls (want ${GENERATED.count}); the cases come from ${sources.length} files (want the ${SOURCE_FILES.length} SOURCE_FILES names)\n`
     )
     return 1
   }
