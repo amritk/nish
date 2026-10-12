@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1000 programs, 96571 dump lines.
+# 1000 programs, 96573 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -82477,23 +82477,25 @@ function helloBody(w: JsonWriter, out: u8[], message: string): i32 -> @helloBody
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.reset#0 nish.JsonWriter.beginObject#0 nish.JsonWriter.key#0 nish.JsonWriter.string#0 nish.JsonWriter.endObject#0 nish.JsonWriter.complete#0 nish.JsonWriter.written#0
   pointer out: size=0 writesThrough=true captured=true passedTo=nish.JsonWriter.reset#1
   stackSites=0 stackLocals=0
-  callee 12:3 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee 13:3 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee 14:3 JsonWriter.key -> @nish.JsonWriter.key
-  callee 15:3 JsonWriter.string -> @nish.JsonWriter.string
-  callee 16:3 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  callee 17:10 JsonWriter.complete -> @nish.JsonWriter.complete
-  callee 17:25 JsonWriter.written -> @nish.JsonWriter.written
+  callee 14:3 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee 15:3 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee 16:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee 17:3 JsonWriter.string -> @nish.JsonWriter.string
+  callee 18:3 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee 19:10 JsonWriter.complete -> @nish.JsonWriter.complete
+  callee 19:25 JsonWriter.written -> @nish.JsonWriter.written
 function prettyBody(w: JsonWriter, out: u8[], message: string): i32 -> @prettyBody [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.setIndent
   escaping: message
   calls: helloBody nish.JsonWriter.setIndent
-  pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.setIndent#0 helloBody#0
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.setIndent#0 helloBody#0 nish.JsonWriter.setIndent#0
   pointer out: size=0 writesThrough=true captured=true passedTo=helloBody#1
   stackSites=0 stackLocals=0
-  callee 21:3 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
-  callee 22:10 helloBody -> @helloBody
+  callee 23:3 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
+  local 24:9 written: i32 (const)
+  callee 24:19 helloBody -> @helloBody
+  callee 25:3 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
 module std/json.ts [package nish]
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9

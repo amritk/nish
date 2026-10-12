@@ -721,6 +721,26 @@ export const main = (): number => {
   pw.reset(big4, 0);
   pw.raw(fragment, 0, 7);
   t.eqStr("an indented raw top-level value is the fragment alone", pw.text(), '{"x":1}');
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.raw(fragment, 0, 7);
+  pw.endArray();
+  t.eqStr(
+    "an indented raw element after a sibling takes the comma, line break and indent first",
+    pw.text(),
+    '[\n  1,\n  {"x":1}\n]'
+  );
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.raw(fragment, 7, 0);
+  pw.endArray();
+  t.eqStr(
+    "an empty raw window in indent mode still takes its comma, line break and indent, and nothing else",
+    pw.text(),
+    "[\n  1,\n  \n]"
+  );
   // A closer's line break with no room: `[\n  1` fits in 5 bytes, and the
   // `\n` before `]` does not.
   const five = new Array<u8>(5);

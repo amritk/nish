@@ -24,7 +24,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
-| [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
+| [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
@@ -168,14 +168,19 @@ panic: it sets a negative `JSON_WRITE_*` code in `w.failed`, and every later
 call does nothing, so you write the whole value and check once at the end.
 `jsonStringifyString(s)` answers one string as a JSON string literal.
 
-The writer has two modes, both off until you ask for them and both kept by
-`reset`, so you set them once. `w.setIndent(n)` writes what `JSON.stringify(v,
-null, n)` writes — one member or element a line, a space after each colon, an
-empty `{}` or `[]` left on one line, and `n` clamped to 10 — and
-`w.setIndentTab()` indents with a tab; `w.setIndent(0)` goes back to the
-minified text. A `raw` fragment goes in as it is and is not re-indented. `w.setStrict(true)` makes NaN and the infinities an error,
-`JSON_WRITE_NON_FINITE`, with nothing written, where the default writes
-`null` as `JSON.stringify` does:
+The writer has two modes, both off until you ask for them. Each is a
+setting of the writer rather than of one text: `reset` keeps it, so you set
+it once, and it stays until you set it again.
+
+- `w.setIndent(n)` writes what `JSON.stringify(v, null, n)` writes: one
+  member or element a line, a space after each colon, and an empty `{}` or
+  `[]` left on one line. `n` is clamped to 10, and 0 or a negative `n` is the
+  minified text, the default. `w.setIndentTab()` indents with a tab. A `raw`
+  fragment goes in as it is and is not re-indented.
+- `w.setStrict(true)` makes NaN and the infinities an error,
+  `JSON_WRITE_NON_FINITE` (-8), with nothing written, where the default writes
+  `null` as `JSON.stringify` does. A misuse before it, such as a value where a
+  key is due, keeps its own code.
 
 ```ts nish:ok
 import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";

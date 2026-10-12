@@ -134,6 +134,8 @@ PASS  and at three spaces
 PASS  an indented raw element is on its own line and not re-indented
 PASS  an indented raw member value follows its key's colon and space
 PASS  an indented raw top-level value is the fragment alone
+PASS  an indented raw element after a sibling takes the comma, line break and indent first
+PASS  an empty raw window in indent mode still takes its comma, line break and indent, and nothing else
 PASS  an element and its indent fill the buffer
 PASS  a closer whose line break has no room is JSON_WRITE_FULL
 PASS  and writes none of it
@@ -171,4 +173,4 @@ PASS  and keep nothing in the arena
 PASS  an f64 write started at the head of a chunk keeps nothing either
 PASS  10,000 indented writes into a reused buffer all complete
 PASS  and keep nothing in the arena
-json-writer: 173 passed, 0 failed, 0 skipped
+json-writer: 175 passed, 0 failed, 0 skipped

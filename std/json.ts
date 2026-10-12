@@ -918,10 +918,10 @@ export class JsonWriter {
   objectsHigh: i32 = 0
   /**
    * Whether the innermost open container is an object: bit `depth - 1` of
-   * the two words, read when a container opens or closes rather than before
-   * every value. It keeps `jsonWriterValueDue`, which runs before every
-   * value, small enough for LLVM to inline with the indented text's test
-   * added to it.
+   * the two words, kept here as well. It is written when a container opens
+   * or closes, and read by `key`, `jsonWriterValueDue` and `jsonWriterClose`,
+   * so the per-value check is a load rather than the shift and word choice
+   * that read the bit.
    */
   inObject: boolean = false
   /** Whether a comma goes before the next key or element of the innermost container. */
