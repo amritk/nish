@@ -1988,7 +1988,9 @@ class FactCollector {
 
   /** Whether `type` is an instance of the global `Map` or `Set`. */
   isCollectionType(type: i32): boolean {
-    const info: StructInfo | null = this.table.isStruct(type) ? this.unit.program.struct(this.table.nameOf(type)) : null
+    const info: StructInfo | null = this.table.isStruct(type)
+      ? this.unit.program.struct(this.table.nameOf(type))
+      : null
     return info !== null && isCollectionStruct(info)
   }
 
