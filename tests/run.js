@@ -4688,6 +4688,10 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert` and
 // `thread_scope_region_set_add` fill a `Map` or a `Set` of their own there,
 // whose methods write the table and nothing of the task's.
+// `thread_scope_region_own_tables` walks, memoises and indexes tables of its
+// own, and `thread_scope_region_read_back` writes through what it reads back
+// out of its own containers, each a fresh object it made.
+// `thread_scope_region_param_lookup` looks a key up in its argument's table.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4714,6 +4718,9 @@ for (const name of [
   "thread_scope_region_map_set",
   "thread_scope_region_map_get_or_insert",
   "thread_scope_region_set_add",
+  "thread_scope_region_own_tables",
+  "thread_scope_region_read_back",
+  "thread_scope_region_param_lookup",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
