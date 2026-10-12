@@ -157,27 +157,28 @@ the date, the CPU, the cores, the threads, every compiler's version and the
 commit: a run on a branch names the `main` commit the branch grew from,
 because a squash merge does not keep the branch's own commits.
 
-**Where Nish loses**, and what has been measured of why. Neither is tuned here:
+**Where Nish lost or loses**, and what has been measured of why. par-histogram is not tuned here:
 
-- `par-regions`: the loop each chunk runs, not the pool. `mapRange` in
-  `std/threads.ts` stores each element under `if (i < dst.length)`, though
-  `dstTooShort` has already proved `dst` long enough, and that conditional
-  store keeps LLVM's loop vectoriser off: the Nish binary has no `pslld` or
-  `psrad`, and Rust's vectorised `scramble` has both. A probe that clamped the
-  end of the range once and stored unconditionally took Nish from 602.6 to
-  192.2 ms on one thread (Rust's scope twin: 185.5 ms) and from 176.8 to
-  60.9 ms on four (Rayon: 76.4 ms), and its loop gained `pslld` and `psrad`.
-  The fix is [#619](https://github.com/amritk/nish/issues/619); the table is
-  measured without it.
+- `par-regions` lost to Rayon by 1.9x to 2.2x until
+  [#619](https://github.com/amritk/nish/issues/619), and the cause was the loop
+  each chunk runs, not the pool: `mapRange` in `std/threads.ts` stored each
+  element under `if (i < dst.length)`, and that conditional store kept LLVM's
+  loop vectoriser off (no `pslld` or `psrad` in the binary, where Rust's
+  vectorised `scramble` has both). Testing `dst`'s length in the loop condition
+  as well lets LLVM drop the test after the call, and the loop vectorises:
+  par-regions went from 588.9 to 183.3 ms on one thread and from 168.8 to
+  58.0 ms on four (minimums, interleaved beside byte-identical copies), and the
+  table now has it ahead of Rayon outside the band in every run.
+  `tests/run.js` pins the vector loop ("par_map_vector").
 - `par-histogram`: a contended lock, and the most machine- and load-sensitive
   of the four; read its spread before its reading. What is measured: past 64
   spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
   and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
   System time is not the whole story, though: Rust's futex lock spends about
   as much (0.46 s), and in the table's runs it comes out about level with
-  Nish, so parking on a futex is not shown to be the cure. The sign is not even stable across machines: the table's
-  runs put Nish behind Go on every median, while a probe on another VM of the
-  same kind found Nish ahead of Go outside the band in four interleaved runs.
+  Nish, so parking on a futex is not shown to be the cure. The sign is not even stable between runs: the table's
+  latest runs put Nish ahead of Go on the median in two runs and behind in one,
+  where the runs before them put it behind Go on every median.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
