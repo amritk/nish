@@ -297,7 +297,9 @@ unless you set `d.ignoreUnknown = true` before decoding. Nothing panics: the
 first problem sets a negative code in `d.failed` and the byte it was found at
 in `d.errorAt`, and `jsonDecode` returns it. The tokenizer's limits in
 `JsonLimits` — nesting depth, string, number and body size — apply as they
-would to any JSON you read.
+would to any JSON you read. The depth limit is also how deep the decoder
+recurses, so keep it to a few thousand at most; and the writer stops at 64
+levels, so an object decoded from deeper than that cannot be encoded back.
 
 Decoding into the same object again reuses what it already holds: nested
 objects, arrays and any string that has not changed. A server can keep one

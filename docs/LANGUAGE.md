@@ -6085,7 +6085,12 @@ export const main = (): i32 => {
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
-  tokenizer's depth limit bounds it (`tests/link/std_json_typed`, which
+  tokenizer's depth limit bounds it. That bound is the caller's
+  `JsonLimits.maxDepth`, 128 by default: each level is one native frame, so a
+  limit raised into the hundreds of thousands can run off the stack, and one
+  kept to a few thousand cannot. The writer refuses a 65th open container
+  (`JSON_WRITER_MAX_DEPTH`), so a value decoded from deeper than 64 levels
+  encodes as `JSON_WRITE_TOO_DEEP` (`tests/link/std_json_typed`, which
   reaches each row at each depth, the limits included). A duplicate of a key
   `ignoreUnknown` steps over is not detected, because its value is never
   read. After an error every field of `out` holds a value of its type, some

@@ -74,7 +74,7 @@ the record that found it. The notes below the table name each such finding.
    #512 made the server's P-256 signature in scratch, and #515 made the
    listener read the first Initial in place and answer into scratch, so a
    handshake through a reused slot keeps 0 bytes of arena memory.
-10. JSON-1, JSON-4, JSON-5 and JSON-6 (Low) are accepted, with the reason in
+10. JSON-1, JSON-4, JSON-5, JSON-6 and JSON-7 (Low) are accepted, with the reason in
     their record, and are not counted. JSON-2 is open. JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed by
     the typed layer (#573), which refuses a duplicate of a field; it is

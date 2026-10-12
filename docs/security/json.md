@@ -176,7 +176,7 @@ fields of its class: an unknown key, a key given twice and a field not given
 are each refused with their own sticky code, at every depth, and no value is
 taken as a type it is not. The recursion is the data's, so the tokenizer's
 depth limit bounds it, and an encoding of an object that holds itself stops at
-the writer's depth limit. Nothing an input holds panics. Three findings are
+the writer's depth limit. Nothing an input holds panics. Four findings are
 accepted, all Low.
 
 ### Scope
@@ -204,6 +204,7 @@ chooses the class, the limits and `ignoreUnknown`.
 | JSON-4 | Low | `std/json-typed.ts:193` (`unknownField`) | With `ignoreUnknown` set, a key that names no field is stepped over without being remembered, so a duplicate of such a key is not refused. Its value is checked by the tokenizer and never read, so no reading of it can differ between two components of this program. | **Accepted.** Remembering every unknown key would cost an allocation per key; a program that forwards the raw body to another parser leaves `ignoreUnknown` off. |
 | JSON-5 | Low | `src/emit-json.ts:454` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
 | JSON-6 | Low | `std/json-typed.ts:342` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
+| JSON-7 | Low | `src/emit-json.ts:275` (`emitJsonDecodeBody`), `:532` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
 `JSON_DECODE_DUPLICATE` at `std/json-typed.ts:208`, before the second value is
