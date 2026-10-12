@@ -1,6 +1,6 @@
 // WP29 P1: a map long enough to divide. `mix` is estimated at eight units, so
-// its grain is 2^22 / 8 = 524288 elements, and three million elements divide
-// into as many threads as the machine has, up to six, each writing its own
+// its grain is 2^21 / 8 = 262144 elements, and three million elements divide
+// into as many threads as the machine has, up to twelve, each writing its own
 // contiguous slice of `dst`; the checksum is the same however many there were.
 import { parallelMapInto } from "nish/threads";
 
