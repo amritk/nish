@@ -124,6 +124,16 @@ interface Disposable {
   [Symbol.dispose](): void;
 }
 
+/**
+ * `String.fromBytes` is Nish's, not JavaScript's, so it merges into the
+ * `StringConstructor` `lib.es2022` declares. Under `runtime/nish.mjs` each byte
+ * becomes one UTF-16 unit, as `String.fromCharCode`'s does.
+ */
+interface StringConstructor {
+  /** The bytes of `bytes[start..end)` as one string; panics unless `0 <= start <= end <= bytes.length`. */
+  fromBytes(bytes: readonly u8[], start: number, end: number): string;
+}
+
 interface Console {
   /** `x` and a newline to stdout. Statement position; exactly one argument. */
   log(x: string | number | boolean): void;

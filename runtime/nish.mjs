@@ -225,6 +225,14 @@ provide("wrappingMul", (a, b) =>
 provide("Ok", shim.Ok);
 provide("Err", shim.Err);
 
+// `String.fromBytes` is Nish's own static on `String`, so it is added to
+// Node's `String` rather than installed as a global. Each byte is one UTF-16
+// unit, as `String.fromCharCode` makes it: ASCII agrees with a native run,
+// and a byte above 127 is the same divergence `fromCharCode`'s is.
+if (!("fromBytes" in String)) {
+  String.fromBytes = shim.fromBytes;
+}
+
 // The string parsers, whose deviations from JavaScript are documented rules
 // (base-10 `parseInt` that saturates, `parseFloat` that reads a `0x` prefix).
 globalThis.parseInt = shim.parseInt;

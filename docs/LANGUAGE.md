@@ -4354,6 +4354,8 @@ import { write } from "nish:io";
   `console.log` / `console.error`, `String.fromCharCode`, `Arena.*`, `Ok` and
   `Err`. They lower to an LLVM intrinsic or a single instruction and cost no
   runtime at all, so they read as language rather than as library.
+  `String.fromBytes` is global too, beside `String.fromCharCode` on the same
+  `String`, though both make their answer with one `nish_str_new`.
   `Date.now()` and `crypto.getRandomValues` are global too, though each is a
   runtime call, because JavaScript spells them as globals and a program that
   runs under Node unchanged has to find them where Node has them
@@ -5452,6 +5454,7 @@ returns to it.
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
+| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1; `--unchecked-indexing` drops the check. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2). `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`, `str_from_bytes_unchecked`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access. Cutting a multi-byte
@@ -6329,8 +6332,10 @@ export const main = (): i32 => {
   its string when the input's is equal. So decoding one shape into one object
   again and again allocates nothing: `Arena.used()` is flat over 1,000 decodes
   of a three-level object (`tests/link/std_json_typed`). A string that changes
-  is a new string, since strings are immutable, and only that: the bytes it is
-  made from are reclaimed at the call. A class the decoder has to make itself
+  is a new string, since strings are immutable, and only that: it is made by
+  one `String.fromBytes`, straight from the input when the string has no
+  escape and from its unescaped bytes when it has one, and those bytes are
+  reclaimed at the call. A class the decoder has to make itself
   — an array's element past the end, or the object of a `| null` field that
   holds `null` — is made with `new C()`, so its constructor takes no
   parameters:
@@ -7460,7 +7465,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | --- | --- | --- |
 | `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
 | `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
 | `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). Under the deprecated `--wrapping`, and for a `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul`, nothing is checked and nothing is a site (`tests/cases/panics_overflow_wrapping`) |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
@@ -7905,7 +7910,7 @@ messages are exact for the cases cited; other rows quote the checker
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
 | arithmetic compound assignment | `` Operator `+=` requires two operands of the same numeric type, got string and string `` — one rule, naming the token that was written, for a local, a field and an element alike: the target must be numeric (so `+=` never concatenates) and the value must be exactly its type | `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | object literal field of the wrong type | `` Field `code` of `IoError` expects a value of type i32, got f64 `` | `reject_struct_field_f64`, `reject_struct_field_u8` |
-| a dotted call that is not a builtin | `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, Math.sqrt, ...) `` — the callee is named, not its receiver, whether the receiver is a namespace or not | `reject_unknown_builtin`, `reject_arch_call` |
+| a dotted call that is not a builtin | `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, ...) `` — the callee is named, not its receiver, whether the receiver is a namespace or not | `reject_unknown_builtin`, `reject_arch_call` |
 | bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |

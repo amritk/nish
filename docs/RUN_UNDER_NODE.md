@@ -65,6 +65,12 @@ the same commit.
   `slice out of range` panic; `fill` needs nothing, since `Array.prototype.fill`
   already means what the language's does
   ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill))
+- `String.fromBytes` — added to Node's `String`, where JavaScript has no such
+  static: the range of a byte array as one string, one UTF-16 unit per byte as
+  `String.fromCharCode` makes them, with the native `slice out of range` panic
+  for a range outside the array. ASCII agrees with a native run; a byte above
+  127 is the divergence `fromCharCode` already has
+  ([wp33-round-trip.md](wp33-round-trip.md) §3.2)
 - `statMtimeSync` — `fs.statSync(path, { throwIfNoEntry: false })?.mtimeMs`,
   or NaN, which is the native arithmetic exactly, so the digits agree
 - `crypto.getRandomValues` — Node's own takes only a typed array, so the

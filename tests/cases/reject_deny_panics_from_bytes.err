@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: make the call from a module outside the scope
