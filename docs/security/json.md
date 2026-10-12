@@ -10,7 +10,9 @@ decodes into a class (#573) is the last section, [The typed layer](#the-typed-la
 with its own scope, anchors and findings.
 
 **Anchors.** Every `file:line` below is at `4411ea9`, the module's head in this
-change, on top of `main` at `ce9d394`.
+change, on top of `main` at `ce9d394`, except where a paragraph names another
+commit: the bulk scans and `numberU64` (#597's tokenizer-scan stage) are
+anchored at `ec1c565d`.
 
 **Result.** Every one of JSONTestSuite's 95 `y_` files is accepted with the
 token stream `JSON.parse` gives it, numbers bit for bit, and every one of its
@@ -26,7 +28,7 @@ layer, all Low.
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -93,6 +95,14 @@ whose overflow test accumulates negatively and so reaches −2^63 exactly
 significant digits and a decimal exponent within ±22, `strtod` otherwise
 ("numberF64(9007199254740993) rounds to even", "numberF64(5e-324), the
 smallest subnormal", and the Node check's bitwise comparison over the corpus).
+`numberU64` (at `ec1c565d`: `:1102`, and `:1114`, `unsignedScan`) answers
+only when `isU64` holds: digits alone, with no minus sign, `-0` included, and
+at most 20 of them. RFC 8259 allows no leading zero, so up to 19 digits is
+below 10^19 and always fits; one of 20 fits only when it is a `1` and then 19
+digits no greater than 8446744073709551615, which are added up below 10^19
+before 10^19 is added, so the sum never wraps ("isU64(18446744073709551615)",
+"isU64(18446744073709551616)", "isU64(28446744073709551615)",
+"isU64(100000000000000000000)", "isU64(-0)").
 
 **Long strings** (`:769`, `string`): the limit counts raw bytes between the
 quotes and is checked before every byte, so an over-long string is refused
@@ -134,23 +144,42 @@ RFC 8259 blanks may follow; anything else, a second document or a NUL
 included, is `JSON_TOK_ERR_TRAILING` at its byte ("TRAILING: a second
 document", "TRAILING: a NUL after the value").
 
-**Nothing outside the window, nothing that panics** (`:258`,
-`jsonTokByteAt`): every read goes through one function that answers −1 outside
-`[off, end)`, and a window outside the array is refused in `reset`. The fuzz
-pins it: "fuzz: 20,000 mutants were tokenized, none panicked", "fuzz: every run
+**Nothing outside the window, nothing that panics** (at `ec1c565d`: `:269`,
+`jsonTokByteAt`; `:294`, `jsonTokSkipBlank`; `:307`, `jsonTokSkipDigits`;
+`:805`, `string`): a single byte is read through one function that answers −1
+outside `[off, end)` or outside the array, and a window outside the array is
+refused in `reset`. A run — a string's plain bytes, the blanks between
+tokens, a number's digits — is read by a loop whose every pass tests the
+index against the window's end and the array's length, from a floor checked
+once before it, so the run stops at the byte where `jsonTokByteAt` would have
+answered −1. A string's run is bounded by its limit, which is never past the
+window's end, so the byte it stops at is judged exactly as before. The
+readers of a token already scanned (`numberF64`, `integerScan`,
+`unsignedScan`, `stringInto`'s copy of a string with no escape) are bounded
+the same way, and `numberSlow` hands `String.fromBytes` the token's own
+range only after checking it lies in the array. "scan: ..." in
+`expected.out` ends each run on the window's edge with a byte past it that
+would change the answer if it were read: a quote ("scan: a run of plain
+bytes the window cuts short is truncated, not closed by the quote past it"),
+blanks and a closer ("scan: blanks that run on past the window are truncated
+at its end"), a digit ("scan: an integer that ends on the window's last
+byte", "scan: parseFloat reads the token alone, not the digit past the
+window"), and the string limit ("scan: a run stops at the string limit").
+The fuzz pins it: "fuzz: 20,000 mutants were tokenized, none panicked", "fuzz: every run
 stopped within one call per byte", and "fuzz: alone, after a reset and inside a
 padded window, every mutant has one verdict", with the seed's totals pinned
 ("fuzz: the seed's mutants, accepted", "fuzz: the checksum of every verdict
 and where it stopped"). Errors are sticky, and an error leaves the token
 before it readable ("an error in the string after a string token").
 
-**No allocation per body** (`:505`, `reset`; `:1112`, `numberSlow`): "alloc:
-Arena.used() is flat across every one, parseFloat's numbers included" measures
-10,000 bodies through one reused tokenizer, each call measured as
-`tests/link/net_loopback/common.ts`'s `LbMeter` measures a server's wake; the
-one path that allocates, the copy `parseFloat` reads, is made in a function
-that answers a number, whose own arena scope releases it on return (not a
-`using` block, which Node 22 cannot parse). "alloc: the meter sees a call that
+**No allocation per body** (`:505`, `reset`; at `ec1c565d`, `:1239`,
+`numberSlow`): "alloc: Arena.used() is flat across every one, parseFloat's
+numbers included" measures 10,000 bodies through one reused tokenizer, each
+call measured as `tests/link/net_loopback/common.ts`'s `LbMeter` measures a
+server's wake; the one path that allocates, the copy `parseFloat` reads (one
+`String.fromBytes` of the token), is made in a function that answers a
+number, whose own arena scope releases it on return (not a `using` block,
+which Node 22 cannot parse). "alloc: the meter sees a call that
 keeps a string" is the control.
 
 ## Tests
@@ -165,7 +194,7 @@ The checks in `tests/run.js` that hold the above:
   scanners read is proven, with no check left in the hot loops.
 - `link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively`
   and `link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to`:
-  the module runs under `runtime/nish.mjs`, through `parseFloat` and `numberI64`.
+  the module runs under `runtime/nish.mjs`, through `parseFloat`, `numberI64` and `numberU64`.
 - `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
   for the vendored corpus.
 
