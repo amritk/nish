@@ -58,33 +58,52 @@ Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String buildi
 
 ## Data parallelism (ms, min / median)
 
-Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at a92b12e1, the base of the branch it was measured on (branch commit c29b1bd6, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
+Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at 63527136, the base of the branch it was measured on (branch commit bf5b27f5, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par-compute | 64 square roots per element, 2^21 elements (f64) | 815 / 829 | 240 / 251 | 3.40x | 34,032 / 34,596 |
-| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 186 / 212 | 80.7 / 89.7 | 2.31x | 34,020 / 34,588 |
-| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 171 / 181 | 56.3 / 60.2 | 3.04x | 1,652 / 1,964 |
-| par-short | an 8-element map called 2^20 times, each call fed by the last | 59.3 / 60.3 | 59.9 / 62.5 | 0.99x | 1,380 / 1,380 |
-| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 580 / 652 | 235 / 271 | 2.46x | 2,276 / 2,844 |
-| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 23.8 / 25.3 | 245 / 344 | 0.10x | 1,384 / 1,564 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 832 / 850 | 227 / 236 | 3.67x | 34,032 / 34,472 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 195 / 216 | 84.4 / 92.9 | 2.31x | 34,020 / 34,460 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 171 / 174 | 55.8 / 57.7 | 3.06x | 1,524 / 1,832 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 57.9 / 68.2 | 59.8 / 62.0 | 0.97x | 1,252 / 1,252 |
+| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 584 / 614 | 180 / 229 | 3.25x | 2,276 / 2,716 |
+| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 25.0 / 27.2 | 332 / 406 | 0.08x | 1,256 / 1,568 |
 
 ## Data parallelism against Rust and Go (ms, min / median)
 
-Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map kernels cut the array into one contiguous chunk per core, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, since Nish has no atomic counter to compare with.
+Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, since Nish has no atomic counter to compare with.
 
-Process wall time over 11 interleaved rounds after 1 warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round; min / median in ms. The noise band is the widest gap, over a kernel's binaries, between a binary and its copy, on the minimum and on the median. Nish / fastest divides Nish's minimum (median) by the minimum (median) of the fastest other column by minimum, and a ratio reads as faster or slower only outside the band.
+**The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (`nish_panic_overflow` and `nish_panic_index` are reached from par-histogram's `binStream`, for one). The Rust twins build as `--release` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's `--profile speed` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.
 
-Measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, linux 6.18.44-fc-v114, by `node bench/run.mjs --only par` at `main` at a92b12e1, the base of the branch it was measured on (branch commit c29b1bd6, which a squash merge does not keep). nish 0.18.0; rustc 1.97.0 (2d8144b78 2026-07-07); Rayon 1.12.0, built by cargo with the same profile; go version go1.24.7 linux/amd64.
+**How it is timed.** Every binary divides over 4 threads, the count Nish's runtime chooses on this machine: `NISH_NUM_THREADS`, `RAYON_NUM_THREADS`, `GOMAXPROCS` and `PAR_THREADS` (read by the scope twins) are all set to it. The comparison is run 3 time(s), minutes apart, each run 11 interleaved rounds after 1 warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round. The times below are process wall time, min / median in ms over every round of every run. In each run, and separately for the minimum and the median, Nish is divided by the fastest other column on that statistic, and the band is the larger of the gaps between Nish and its copy and between that column and its copy. A ratio reads as faster or slower only outside the band, and within 0.5% of its edge as at the edge. The reading takes every run together: runs that fall on both sides of the band make no claim. The Nish column is the `par` run of the table above, timed again here beside seven other binaries rather than in that table's alternation with its loop, so the two tables' Nish figures differ by about as much as this machine moves between runs: compare within a table, not across.
 
-| Kernel | Nish | Rust `thread::scope` | Rust Rayon | Go | Nish / fastest, min (median) | Band, min (median) | Reading |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| par-compute | 229 / 259 | 223 / 251 | 220 / 241 | 233 / 245 | 1.04x (1.08x) | 4.8% (8.0%) | Nish against Rust Rayon: within the band |
-| par-nbody | 53.3 / 58.2 | 54.9 / 65.4 | 49.7 / 57.4 | 114 / 120 | 1.07x (1.01x) | 7.0% (5.0%) | Nish against Rust Rayon: minimum slower, outside the band, median within the band; within 1.10x |
-| par-regions | 184 / 262 | 172 / 193 | 89.4 / 120 | 421 / 472 | 2.06x (2.18x) | 16.6% (10.6%) | Nish against Rust Rayon: slower, outside the band; **loses by more than 1.10x** |
-| par-histogram | 257 / 409 | 334 / 383 | 312 / 359 | 143 / 267 | 1.80x (1.53x) | 37.0% (8.9%) | Nish against Go: slower, outside the band; **loses by more than 1.10x** |
+Measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 4 threads, linux 6.18.44-fc-v114, by `node bench/run.mjs --only par` at `main` at 63527136, the base of the branch it was measured on (branch commit bf5b27f5, which a squash merge does not keep). nish 0.18.0; rustc 1.97.0 (2d8144b78 2026-07-07); Rayon 1.12.0, built by cargo with the same profile; go version go1.24.7 linux/amd64.
 
-Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021`, without `target-cpu=native`, as Nish's `--profile speed` has no `-march`. Go: `go build -trimpath -ldflags=-s -w`. bench/README.md says what each kernel measures, how to read the table and, where Nish loses, what is known of why.
+| Kernel | Nish | Rust `thread::scope` | Rust Rayon | Go | Nish / fastest, min, over 3 run(s) | Nish / fastest, median | Reading, min | Reading, median |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| par-compute | 226 / 249 | 215 / 249 | 216 / 231 | 222 / 244 | 1.043x to 1.096x | 1.029x to 1.101x | slower in 2 of 3 runs, within the band or at its edge in the rest; within 1.10x | slower in 2 of 3 runs, within the band or at its edge in the rest; **past 1.10x in 1 of 3 runs** |
+| par-nbody | 50.9 / 60.6 | 55.1 / 64.8 | 49.3 / 56.1 | 110 / 124 | 1.009x to 1.107x | 1.015x to 1.112x | slower in 1 of 3 runs, within the band or at its edge in the rest; **past 1.10x in 1 of 3 runs** | slower in 1 of 3 runs, within the band or at its edge in the rest; **past 1.10x in 1 of 3 runs** |
+| par-regions | 186 / 272 | 155 / 193 | 101 / 118 | 310 / 401 | 1.838x to 2.402x | 2.164x to 2.391x | slower in all 3 runs; **loses by more than 1.10x in all 3 runs** | slower in all 3 runs; **loses by more than 1.10x in all 3 runs** |
+| par-histogram | 218 / 384 | 293 / 376 | 308 / 395 | 232 / 277 | 0.877x to 1.237x | 1.267x to 1.440x | slower in 1 of 3 runs, within the band or at its edge in the rest; **past 1.10x in 1 of 3 runs** | slower in all 3 runs; **loses by more than 1.10x in all 3 runs** |
+
+Each run on its own: the fastest other column on each statistic, Nish over it, and that row's band.
+
+| Kernel | Run | Fastest, min | Nish / it | Band | Fastest, median | Nish / it | Band |
+| --- | ---: | --- | ---: | ---: | --- | ---: | ---: |
+| par-compute | 1 | Rust Rayon | 1.043x | 2.7% | Rust Rayon | 1.083x | 1.6% |
+| par-compute | 2 | Rust Rayon | 1.096x | 3.2% | Rust Rayon | 1.101x | 2.2% |
+| par-compute | 3 | Rust `thread::scope` | 1.057x | 6.8% | Rust Rayon | 1.029x | 6.8% |
+| par-nbody | 1 | Rust Rayon | 1.009x | 3.5% | Rust Rayon | 1.015x | 3.7% |
+| par-nbody | 2 | Rust Rayon | 1.107x | 1.1% | Rust Rayon | 1.112x | 10.6% |
+| par-nbody | 3 | Rust Rayon | 1.024x | 3.2% | Rust Rayon | 1.108x | 14.0% |
+| par-regions | 1 | Rust Rayon | 2.196x | 10.4% | Rust Rayon | 2.164x | 6.9% |
+| par-regions | 2 | Rust Rayon | 2.402x | 27.2% | Rust Rayon | 2.391x | 11.5% |
+| par-regions | 3 | Rust Rayon | 1.838x | 15.5% | Rust Rayon | 2.220x | 4.4% |
+| par-histogram | 1 | Go | 1.237x | 11.1% | Go | 1.440x | 5.2% |
+| par-histogram | 2 | Go | 0.877x | 30.4% | Go | 1.429x | 9.0% |
+| par-histogram | 3 | Go | 1.093x | 19.2% | Go | 1.267x | 6.5% |
+
+Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021`, without `target-cpu=native` or LTO; Nish's `--profile speed` has no `-march` either. Go: `go build -trimpath -ldflags=-s -w`. bench/README.md says what each kernel measures and, where Nish loses, what has been measured of why.
 
 ## Map and Set (WP32)
 
