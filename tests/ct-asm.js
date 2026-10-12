@@ -786,12 +786,13 @@ const X86_MERGE_MASK = /\{%k\d\}(?!\s*\{z\})/
 const X86_FLAGS_ASSIGN = /^(cmp|test|add|sub|and|or|xor|neg|adc|sbb)[bwlq]?$|^v?(ptest|u?comis[sd])$/
 /**
  * And these write none. `p...` is every SSE integer instruction (and `push`,
- * `pop`, `pdep`, `pext`), less `ptest` and `popcnt`. Anything in neither list
+ * `pop`, `pdep`, `pext`), less `ptest`, `popcnt` and the string compares
+ * (`pcmpistri` and its kin), which set CF, ZF, SF and OF from their operands. Anything in neither list
  * still only adds its taint. On aarch64 only a compare or an `s`-suffixed
  * instruction writes the flags, all four at once, so there every write sets them.
  */
 const X86_FLAGS_KEEP =
-  /^(v?mov\w*|lea[wlq]?|bswap[lq]?|not[bwlq]?|set\w+|cmov\w+|cltq|cqto|cltd|cwtl|v?p(?!test|opcnt)\w+|v?aes\w+|v?(shuf|unpck[hl]|xor|andn?|or|blend)p[sd]|v?insertps|v?extractps)$/
+  /^(v?mov\w*|lea[wlq]?|bswap[lq]?|not[bwlq]?|set\w+|cmov\w+|cltq|cqto|cltd|cwtl|v?p(?!test|opcnt|cmp[ei]str)\w+|v?aes\w+|v?(shuf|unpck[hl]|xor|andn?|or|blend)p[sd]|v?insertps|v?extractps)$/
 
 /** One x86-64 (AT&T) instruction: the violation it is, if any, and its effect on `t`. */
 const stepX86 = (t, mnemonic, operands) => {
@@ -861,6 +862,21 @@ const stepX86 = (t, mnemonic, operands) => {
   // read as leaving the register as it was.
   if (/^(xchg|xadd|cmpxchg\w*)[bwlq]?$/.test(mnemonic)) {
     return "unmodelled"
+  }
+  // The SSE4.2 string compares write a register they do not name: the `i` forms
+  // an index into %ecx, the `m` forms a mask into %xmm0, each from both operands
+  // (and %eax and %edx, the lengths, for the `e` forms). They write the flags
+  // from the same operands.
+  const stringCompare = mnemonic.match(/^v?pcmp([ei])str([im])$/)
+  if (stringCompare !== null) {
+    const regs = ops.flatMap((op) => (op.memory ? [] : op.registers))
+    const secret =
+      ops.some((op) => op.memory && t.loadFrom(op, 16).secret) ||
+      t.anySecret(regs) ||
+      (stringCompare[1] === "e" && t.anySecret(["a", "d"]))
+    t.set(stringCompare[2] === "i" ? "c" : "v0", secret, false)
+    t.taintFlags(secret)
+    return null
   }
   // `mulx` multiplies by %rdx, which it does not name, and writes both of the
   // registers it does: the high half to the last, the low to the one before.
@@ -1343,6 +1359,42 @@ const AUDIT_CORNERS = [
       "ldr w3, [x4, x2]",
     ],
   ],
+  // The SSE4.2 string compares: each writes the flags and a register it does not
+  // name, %ecx or %xmm0, from its operands. Under `preciseFlags` a flag read after
+  // one on a secret was public, and in either mode so was the index or mask it left.
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "pcmpistri $0, %xmm1, %xmm0",
+      "setb %al",
+      "movzbl %al, %eax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+    { preciseFlags: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm1",
+      "vpcmpestrm $0, %xmm1, %xmm2",
+      "sete %al",
+      "movzbl %al, %eax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+    { preciseFlags: true },
+  ],
+  ["x86-64", "a", "load", ["movq %rdi, %xmm1", "pcmpestri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"]],
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["movq %rdi, %xmm1", "pcmpistrm $0, %xmm1, %xmm2", "movq %xmm0, %rax", "movl (%rsi,%rax,4), %eax"],
+  ],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */
@@ -1479,10 +1531,10 @@ const CALL_CORNERS = [
 
 const cornerMisses = () => {
   const missed = []
-  for (const [name, secret, kind, body] of [...STACK_CORNERS, ...AUDIT_CORNERS]) {
+  for (const [name, secret, kind, body, options = {}] of [...STACK_CORNERS, ...AUDIT_CORNERS]) {
     const target = CT_TARGETS.find((t) => t.name === name)
     const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
-    const found = ctViolations(body, spec, target)
+    const found = ctViolations(body, { ...spec, ...options }, target)
     if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
       missed.push(`${name}, expected ${kind ?? "no violation"}: ${body.join("; ")}`)
     }

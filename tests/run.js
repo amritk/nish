@@ -8943,25 +8943,34 @@ if (!only || "simd".includes(only)) {
       )
     } else {
       // The NEON path of the byte search, and the ARMv8 AES and PMULL path of
-      // runtime-aes.c, which qemu-user runs as a CPU that has them.
-      for (const [label, source, out, what] of [
-        ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path"],
+      // runtime-aes.c. qemu-user takes its CPU from QEMU_CPU, and `max` has AES and
+      // PMULL, so the AES driver's line must name that path: a soft-only run that
+      // agreed would otherwise pass as the hardware one.
+      for (const [label, source, out, what, wantLine] of [
+        ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path", null],
         [
-          "aes-gcm aarch64 through binfmt, the ARMv8 AES path",
+          "aes-gcm aarch64 through binfmt (QEMU_CPU=max), the ARMv8 AES and PMULL path",
           "tests/simd/aes-gcm.c",
           path.join(simdDir, "aes-gcm.aarch64"),
           "the ARMv8 AES path",
+          /cases agree across armv8-aes-pmull;/,
         ],
       ]) {
         const linked = build(cross, out, source)
-        const r = linked.status === 0 ? spawnSync(out, [], { encoding: "utf8" }) : null
+        const r =
+          linked.status === 0
+            ? spawnSync(out, [], { encoding: "utf8", env: { ...process.env, QEMU_CPU: "max" } })
+            : null
         // A binary the kernel cannot execute is not an error to spawnSync: it hands the
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
           r !== null && (r.signal !== null || /^(index-of-any:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
-          judge(label, linked, r)
+          const said = judge(label, linked, r)
+          if (wantLine !== null) {
+            check(`simd: ${label} names armv8-aes-pmull as the path it ran`, wantLine.test(said), said)
+          }
         } else {
           skip(
             `simd: this host cannot run an AArch64 binary (no binfmt_misc entry for qemu-user): ${what} is not run`
@@ -9177,11 +9186,12 @@ if (!only || "ct_asm constant time assembly runtime-aes".includes(only)) {
     skip("ct_asm: no clang to compile runtime-aes.c to assembly")
   } else {
     for (const r of runtimeChecks(root)) {
-      const promise =
-        r.expect === null
-          ? "no branch on a secret, call, secret-indexed access or secret-dependent latency"
-          : `refused for ${r.expect}`
-      check(`ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promise}`, r.ok, r.detail)
+      const promises = {
+        exports: "exports exactly the kernels read here and nish_aes_hw",
+        kernel: "no branch on a secret, call, secret-indexed access or secret-dependent latency",
+        leak: `refused for ${r.expect}`,
+      }
+      check(`ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, r.ok, r.detail)
     }
   }
 }

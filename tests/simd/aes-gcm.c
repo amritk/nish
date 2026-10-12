@@ -17,9 +17,10 @@
  *   - RFC 9001's header-protection samples, A.2's and A.3's (A.5's packet is
  *     ChaCha20's, so it has none for AES).
  *
- * Then a seeded, fuzzed corpus: random keys of 16 and 32 bytes, J0s whose
- * counter sits within a few blocks of 2^32 so the wrap is crossed, and every
- * length 0..4,096 for GCTR (in place and not) and GHASH, then random lengths,
+ * Then a seeded, fuzzed corpus: every length 0..4,096 for GCTR (in place and
+ * not) and GHASH under random keys of both sizes, a third of them with J0's
+ * counter within a few hundred blocks of 2^32; the wrap pinned at counters
+ * that cross it on and inside a four-block batch; then random lengths,
  * starting states and keys besides.
  *
  * The runtime file is included rather than linked, as tests/simd/index-of-any.c
@@ -380,16 +381,21 @@ static void fill(uint8_t *p, size_t n) {
 
 #define MAX_LEN 4096
 
+/* What `fuzz_one` puts in J0's counter: random, within 300 of 2^32, or pinned. */
+#define COUNTER_RANDOM (-1)
+#define COUNTER_NEAR_WRAP (-2)
+
 /* One key, one J0, one length: the schedule's standard part and its zeroed
    tail, GCTR out of place and in place, and GHASH from a random state, each
    against the reference. `src` and `dst` are as long as `len` and no longer,
-   so a kernel that wrote past the length writes past an allocation. */
-static int fuzz_one(uint64_t seed, int klen, size_t len, int near_wrap) {
+   so a kernel that wrote past the length writes past an allocation. `counter`
+   is J0's last four bytes, or one of the two kinds above. */
+static int fuzz_one(uint64_t seed, int klen, size_t len, int64_t counter) {
   uint8_t key[32], w[240], j0[16];
   fill(key, (size_t)klen);
   fill(j0, 16);
-  if (near_wrap) {
-    uint32_t c = 0xffffffffu - (uint32_t)(rnd() % 300);
+  if (counter != COUNTER_RANDOM) {
+    uint32_t c = counter == COUNTER_NEAR_WRAP ? 0xffffffffu - (uint32_t)(rnd() % 300) : (uint32_t)counter;
     j0[12] = (uint8_t)(c >> 24), j0[13] = (uint8_t)(c >> 16), j0[14] = (uint8_t)(c >> 8), j0[15] = (uint8_t)c;
   }
   int rounds = klen / 4 + 6;
@@ -515,9 +521,26 @@ int main(int argc, char **argv) {
     /* Every length up to 4,096 once, with the key size alternating and every
        third J0 near the wrap; then random lengths, keys and states. */
     for (size_t len = 0; len <= MAX_LEN; len++)
-      if (!fuzz_one(seed, len & 1 ? 32 : 16, len, len % 3 == 0)) return 1;
-    for (int trial = 0; trial < 2000; trial++)
-      if (!fuzz_one(seed, rnd() & 1 ? 32 : 16, rnd() % (MAX_LEN + 1), (int)(rnd() & 1))) return 1;
+      for (int klen = 16; klen <= 32; klen += 16)
+        if (!fuzz_one(seed, klen, len, len % 3 == 0 ? COUNTER_NEAR_WRAP : COUNTER_RANDOM)) return 1;
+    /* The wrap pinned rather than left to the draw: GCTR's block n takes the
+       counter J0 + n + 1, so these counters wrap at blocks 0, 1, 2, 4 and 6 --
+       on a four-block batch's first block, inside one, and inside the second --
+       over lengths of one block to many, partial last blocks among them. */
+    static const uint32_t wraps[] = {0xffffffffu, 0xfffffffeu, 0xfffffffdu, 0xfffffffbu, 0xfffffff9u};
+    static const size_t wrap_lengths[] = {16, 33, 64, 100, 128, 200, 1000};
+    for (size_t w = 0; w < sizeof wraps / sizeof wraps[0]; w++)
+      for (size_t l = 0; l < sizeof wrap_lengths / sizeof wrap_lengths[0]; l++)
+        for (int klen = 16; klen <= 32; klen += 16)
+          if (!fuzz_one(seed, klen, wrap_lengths[l], wraps[w])) return 1;
+    /* Each draw in a statement of its own: the order arguments are evaluated
+       in is unspecified, and the corpus must be a function of the seed alone. */
+    for (int trial = 0; trial < 2000; trial++) {
+      int klen = rnd() & 1 ? 32 : 16;
+      size_t len = rnd() % (MAX_LEN + 1);
+      int64_t counter = rnd() & 1 ? COUNTER_NEAR_WRAP : COUNTER_RANDOM;
+      if (!fuzz_one(seed, klen, len, counter)) return 1;
+    }
     for (int trial = 0; trial < 500; trial++)
       if (!fuzz_seal(seed)) return 1;
   }

@@ -225,10 +225,12 @@ const runtimeAsm = (root, file, target) => {
 }
 
 /**
- * Every reading this file makes, as `{ file, fn, target, expect, ok, detail }`:
- * each kernel on each target clean (`expect` null), with at least one loop
- * branch read, and each leaky variant refused for its kind (`expect` the words
- * for it). tests/run.js names the checks, so that a record citing one finds it
+ * Every reading this file makes, as `{ file, fn, target, kind, expect, ok, detail }`:
+ * `kind` `exports` for the unit's exported functions being exactly the kernels
+ * read here and the resolver, so a fifth kernel cannot go unread; `kernel` for
+ * each kernel on each target clean, with at least one loop branch read; and
+ * `leak` for each leaky variant refused for its kind (`expect` the words for
+ * it). tests/run.js names the checks, so that a record citing one finds it
  * there.
  */
 export const runtimeChecks = (root) => {
@@ -250,12 +252,30 @@ export const runtimeChecks = (root) => {
   }
   for (const target of CT_TARGETS) {
     const real = runtimeAsm(root, "runtime/runtime-aes.c", target)
+    const exported = real.ok
+      ? real.lines.map((line) => line.match(/^\s*\.globl\s+(\w+)/)?.[1]).filter((name) => name !== undefined)
+      : []
+    const named = [...RUNTIME_KERNELS.map((spec) => spec.name), "nish_aes_hw"]
+    const unread = exported.filter((name) => !named.includes(name))
+    const missing = named.filter((name) => !exported.includes(name))
+    results.push({
+      file: "runtime-aes.c",
+      fn: "exports",
+      target: target.name,
+      kind: "exports",
+      expect: null,
+      ok: real.ok && unread.length === 0 && missing.length === 0,
+      detail: real.ok
+        ? `exported and unread: ${unread.join(" ") || "none"}; read and not exported: ${missing.join(" ") || "none"}`
+        : real.why,
+    })
     for (const spec of RUNTIME_KERNELS) {
       const { why, found, branches } = read(real, spec.name, spec.secretArgs, target)
       results.push({
         file: "runtime-aes.c",
         fn: spec.name,
         target: target.name,
+        kind: "kernel",
         expect: null,
         ok: why === null && found.length === 0 && branches > 0,
         detail: why ?? (listed(found) || `${branches} conditional branches, all public`),
@@ -268,6 +288,7 @@ export const runtimeChecks = (root) => {
         file: "tests/simd/aes-leaky.c",
         fn,
         target: target.name,
+        kind: "leak",
         expect: what,
         ok: why === null && found.some((v) => v.kind === kind),
         detail: why ?? (listed(found) || "no violation found"),
@@ -433,7 +454,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const root = path.join(import.meta.dirname, "..")
   let failed = 0
   for (const r of runtimeChecks(root)) {
-    console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.file} ${r.fn} on ${r.target}: ${r.expect ?? "clean"}`)
+    console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.file} ${r.fn} on ${r.target}: ${r.expect ?? r.kind}`)
     if (!r.ok) {
       failed++
       console.log(r.detail)
