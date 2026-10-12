@@ -322,15 +322,15 @@ Checksum `tokenize 4649540884092679872 29573 1.053493913223364e+22`, the same fr
 
 | Implementation | ns/doc min | ns/doc median | MB/s (median) | Speed against Nish (median) |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 1,544,953 | 1,604,879 | 393 | 1.00x |
-| Nish (byte-identical copy) | 1,609,501 | 1,634,438 | 386 | 0.98x |
-| simdjson 4.4.2 (On-Demand) | 545,566 | 547,748 | 1153 | 2.93x |
-| yyjson 0.12.0 | 399,604 | 416,569 | 1516 | 3.85x |
-| RapidJSON (Reader, SAX) | 1,379,633 | 1,522,179 | 415 | 1.05x |
-| serde_json 1.0.154 | 1,105,598 | 1,198,006 | 527 | 1.34x |
-| Go encoding/json | 14,424,771 | 16,449,750 | 38 | 0.10x |
+| Nish | 1,602,056 | 1,785,733 | 354 | 1.00x |
+| Nish (byte-identical copy) | 1,582,325 | 1,668,331 | 379 | 1.07x |
+| simdjson 4.4.2 (On-Demand) | 542,531 | 603,703 | 1046 | 2.96x |
+| yyjson 0.12.0 | 395,467 | 458,396 | 1378 | 3.90x |
+| RapidJSON (Reader, SAX) | 1,444,653 | 1,637,738 | 386 | 1.09x |
+| serde_json 1.0.154 | 1,181,786 | 1,214,651 | 520 | 1.47x |
+| Go encoding/json | 16,680,751 | 17,881,162 | 35 | 0.10x |
 
-Noise band, Nish against its byte-identical copy: min 4.0%, median 1.8%.
+Noise band, Nish against its byte-identical copy: min 1.2%, median 7.0%.
 
 ### tokenize, citm_catalog.json (1,727,204 bytes, 39 per run)
 
@@ -338,15 +338,15 @@ Checksum `tokenize 1031327187197209173 85035 13301003790582312`, the same from e
 
 | Implementation | ns/doc min | ns/doc median | MB/s (median) | Speed against Nish (median) |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 2,584,688 | 3,017,977 | 572 | 1.00x |
-| Nish (byte-identical copy) | 2,572,283 | 3,011,593 | 574 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 1,365,822 | 1,438,749 | 1200 | 2.10x |
-| yyjson 0.12.0 | 1,062,852 | 1,091,683 | 1582 | 2.76x |
-| RapidJSON (Reader, SAX) | 2,248,278 | 2,747,489 | 629 | 1.10x |
-| serde_json 1.0.154 | 1,828,408 | 1,874,118 | 922 | 1.61x |
-| Go encoding/json | 24,509,940 | 25,478,598 | 68 | 0.12x |
+| Nish | 2,571,608 | 2,635,834 | 655 | 1.00x |
+| Nish (byte-identical copy) | 2,611,419 | 2,627,345 | 657 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 1,352,519 | 1,396,592 | 1237 | 1.89x |
+| yyjson 0.12.0 | 1,049,332 | 1,304,144 | 1324 | 2.02x |
+| RapidJSON (Reader, SAX) | 2,233,668 | 2,372,634 | 728 | 1.11x |
+| serde_json 1.0.154 | 1,817,547 | 2,180,619 | 792 | 1.21x |
+| Go encoding/json | 26,790,709 | 28,756,643 | 60 | 0.09x |
 
-Noise band, Nish against its byte-identical copy: min 0.5%, median 0.2%.
+Noise band, Nish against its byte-identical copy: min 1.5%, median 0.3%.
 
 ### tokenize, canada.json (2,251,051 bytes, 30 per run)
 
@@ -354,15 +354,15 @@ Checksum `tokenize 7941992186211456544 223236 -37965933.26651807`, the same from
 
 | Implementation | ns/doc min | ns/doc median | MB/s (median) | Speed against Nish (median) |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 35,896,263 | 37,280,040 | 60 | 1.00x |
-| Nish (byte-identical copy) | 35,349,175 | 36,896,771 | 61 | 1.01x |
-| simdjson 4.4.2 (On-Demand) | 5,809,842 | 6,194,435 | 363 | 6.02x |
-| yyjson 0.12.0 | 3,601,309 | 3,757,812 | 599 | 9.92x |
-| RapidJSON (Reader, SAX) | 12,289,830 | 13,382,812 | 168 | 2.79x |
-| serde_json 1.0.154 | 7,107,459 | 7,238,912 | 311 | 5.15x |
-| Go encoding/json | 77,289,189 | 78,798,221 | 29 | 0.47x |
+| Nish | 36,151,037 | 37,620,971 | 60 | 1.00x |
+| Nish (byte-identical copy) | 36,459,936 | 38,224,496 | 59 | 0.98x |
+| simdjson 4.4.2 (On-Demand) | 6,278,704 | 7,132,158 | 316 | 5.27x |
+| yyjson 0.12.0 | 3,736,163 | 3,816,660 | 590 | 9.86x |
+| RapidJSON (Reader, SAX) | 11,769,617 | 12,682,250 | 177 | 2.97x |
+| serde_json 1.0.154 | 6,632,951 | 7,208,552 | 312 | 5.22x |
+| Go encoding/json | 86,693,805 | 91,779,037 | 25 | 0.41x |
 
-Noise band, Nish against its byte-identical copy: min 1.5%, median 1.0%.
+Noise band, Nish against its byte-identical copy: min 0.8%, median 1.6%.
 
 ### typed, citm_catalog.json (1,727,204 bytes, 39 per run)
 
@@ -370,13 +370,13 @@ Checksum `typed 14808610687023215653 243`, the same from every implementation.
 
 | Implementation | ns/doc min | ns/doc median | MB/s (median) | Speed against Nish (median) |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 3,012,217 | 3,119,913 | 554 | 1.00x |
-| Nish (byte-identical copy) | 2,958,587 | 3,004,157 | 575 | 1.04x |
-| simdjson 4.4.2 (On-Demand) | 870,656 | 943,836 | 1830 | 3.31x |
-| serde_json 1.0.154 | 2,115,184 | 2,375,939 | 727 | 1.31x |
-| Go encoding/json | 16,230,584 | 17,264,482 | 100 | 0.18x |
+| Nish | 3,103,862 | 3,178,109 | 543 | 1.00x |
+| Nish (byte-identical copy) | 2,958,943 | 3,786,069 | 456 | 0.84x |
+| simdjson 4.4.2 (On-Demand) | 866,366 | 1,159,082 | 1490 | 2.74x |
+| serde_json 1.0.154 | 2,197,103 | 2,572,497 | 671 | 1.24x |
+| Go encoding/json | 16,933,864 | 19,562,665 | 88 | 0.16x |
 
-Noise band, Nish against its byte-identical copy: min 1.8%, median 3.9%.
+Noise band, Nish against its byte-identical copy: min 4.9%, median 16.1%.
 
 ### serialize, citm_catalog.json (452,530 bytes written, 148 per run)
 
@@ -384,11 +384,11 @@ Checksum `serialize 7607374960262526136 452530 5515252270673923022`, the same fr
 
 | Implementation | ns/doc min | ns/doc median | MB/s (median) | Speed against Nish (median) |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 815,590 | 833,189 | 543 | 1.00x |
-| Nish (byte-identical copy) | 835,309 | 890,856 | 508 | 0.94x |
-| simdjson 4.4.2 (builder::string_builder) | 332,084 | 374,402 | 1209 | 2.23x |
-| serde_json 1.0.154 | 425,938 | 485,308 | 932 | 1.72x |
-| Go encoding/json | 1,031,362 | 1,067,957 | 424 | 0.78x |
+| Nish | 812,055 | 896,845 | 505 | 1.00x |
+| Nish (byte-identical copy) | 818,397 | 868,184 | 521 | 1.03x |
+| simdjson 4.4.2 (builder::string_builder) | 335,902 | 357,635 | 1265 | 2.51x |
+| serde_json 1.0.154 | 426,648 | 513,413 | 881 | 1.75x |
+| Go encoding/json | 1,100,823 | 1,158,725 | 391 | 0.77x |
 
-Noise band, Nish against its byte-identical copy: min 2.4%, median 6.5%.
+Noise band, Nish against its byte-identical copy: min 0.8%, median 3.3%.
 <!-- json-compare:end -->
