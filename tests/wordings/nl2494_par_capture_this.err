@@ -1,1 +1,1 @@
-The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, but not `this` or a field through it; bind what it needs to a `const` before the call (`const k = this.k`)
+The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)

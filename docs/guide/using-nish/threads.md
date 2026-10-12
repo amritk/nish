@@ -127,8 +127,9 @@ export const main = (): i32 => {
   this way, or hand one to a function that does. Each of those is refused at
   the call.
 - **Only a `const` or a parameter.** A `let` could change while the threads
-  read it: bind its value to a `const` first. `this` is not read either; bind
-  the field you need (`const k = this.k`).
+  read it: bind its value to a `const` first. `this` is not read by that name
+  either; bind it, or the field you need, to a `const` (`const self = this`,
+  `const k = this.k`).
 - **Only the arrow written at the call.** An arrow inside that arrow reads
   nothing from outside itself, and an arrow given to any other function, or to
   `spawn`, still reads only its own parameters.

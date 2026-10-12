@@ -743,8 +743,8 @@ export const nestedCaptureMessage = (name: string): string =>
 /** The refusal for `this` in an arrow passed to a data-parallel form. */
 export const thisCaptureMessage = (): string =>
   "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function " +
-  "it is written in, but not `this` or a field through it; bind what it needs to a `const` before the call " +
-  "(`const k = this.k`)"
+  "it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call " +
+  "(`const self = this`, `const k = this.k`)"
 
 /** The refusal for an assignment to a captured name. */
 export const captureWriteMessage = (name: string): string =>
@@ -1788,6 +1788,14 @@ const walkRegion = (
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
+    if (node.kind === N_CALL) {
+      // A refused data-parallel call still reads, there, what its arrow captures.
+      for (const arg of node.children[1].children) {
+        if (arg.kind === N_ARROW) {
+          regionCaptureReads(program, arg, state, out)
+        }
+      }
+    }
     return
   }
   for (const child of node.children) {

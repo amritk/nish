@@ -45,7 +45,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { CheckedProgram, inlineElementStruct } from "./program"
+import { capturedReads, CheckedProgram, inlineElementStruct } from "./program"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -1217,9 +1217,15 @@ const collectAliased = (
   out: StringSet
 ): void => {
   // An arrow argument's body is a function of its own, walked with its own
-  // tables; what it aliases is its business, not the enclosing body's.
+  // tables; what it aliases is its business, not the enclosing body's —
+  // unless it captures this body's locals (WP29), when a second name it puts
+  // a captured array under is read where the call runs it.
   if (node.kind === N_ARROW) {
-    return
+    const reads: Node[] = []
+    capturedReads(program, node, reads)
+    if (reads.length === 0) {
+      return
+    }
   }
   if (node.kind === N_IDENT || node.kind === N_MEMBER) {
     const elem = inlineArrayElement(program, table, node)

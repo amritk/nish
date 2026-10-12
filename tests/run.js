@@ -4064,6 +4064,10 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 //                  needle, so expected.err keeps it)
 //   expected.ir    lines (substring match) that must appear in some emitted module
 //   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
+//   expected.portability  the `--warn-portability --json` portability objects, one per
+//                  line, as a case's `.portability` (WP33): a second compile with the
+//                  flag, which must write the same modules byte for byte. It is here for
+//                  a program a case cannot be, one that imports `nish/threads`
 //   args           extra CLI flags (e.g. --strict-exports)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
 //                  module with a golden is compared, so there is no missing one to write;
@@ -4229,6 +4233,40 @@ for (const name of linkTests) {
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)])
       check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
     }
+  }
+
+  if (fs.existsSync(side("expected.portability"))) {
+    const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+    fs.rmSync(warnedDir, { recursive: true, force: true })
+    const warned = spawnSync(
+      NISH,
+      [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+    const want = read("expected.portability").trim()
+    const got = warned.stdout
+      .split("\n")
+      .filter((l) => l.includes('"severity":"portability"'))
+      .join("\n")
+      .split(`${root}/`)
+      .join("")
+    check(
+      `link/${name}: --warn-portability --json matches expected.portability`,
+      warned.status === 0 && got === want,
+      `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
+    )
+    check(
+      `link/${name}: --warn-portability changes no byte of the IR`,
+      modules.every(
+        (m) =>
+          fs.existsSync(path.join(warnedDir, m.file)) &&
+          fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
+      ),
+      "the modules differ"
+    )
   }
 
   // Cross-module attribute agreement: importer `declare` == exporter `define`.

@@ -1,1 +1,1 @@
-The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, but not `this` or a field through it
+The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, and `this` is neither

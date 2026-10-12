@@ -47,7 +47,7 @@ import {
   Node,
 } from "./nodes"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { Local } from "./symbols"
+import { Local, sourceLocal } from "./symbols"
 import { isFloat, isNumeric, T_BOOL, T_STRING } from "./types"
 
 const NL8001: string = "counts UTF-8 bytes here, and UTF-16 units in TypeScript"
@@ -64,7 +64,8 @@ const CODE_UNIT: i32 = 2
  * `src/portability.ts` calls this once for every node of every checked
  * function body, in source order, after NL8005 and before the next row
  * module; an arrow argument's body is handed over under its own function
- * rather than inside its parent's. `walk` carries the facts
+ * rather than inside its parent's, though a name it captures (WP29) is read
+ * as the parent's local. `walk` carries the facts
  * (`PortabilityWalk`): the module with this body's side tables installed —
  * a generic instantiation's own, so a type read there is concrete — the type
  * table, the options (`--wrapping`, `--number-mode`), the parent links, and
@@ -542,9 +543,13 @@ const followLocal = (trail: Trail, local: Local | null): void => {
   }
 }
 
-/** Whether the checker bound `node` to `local`. */
+/**
+ * Whether the checker bound `node` to `local`. A name an arrow handed to a
+ * data-parallel form captures (WP29) is the local itself, read where the call
+ * runs the arrow, so a read of it is followed like any other.
+ */
 const names = (walk: PortabilityWalk, node: Node, local: Local): boolean => {
-  const bound = walk.program.nodeLocals[node.id]
+  const bound = sourceLocal(walk.program.nodeLocals[node.id])
   return bound !== null && bound === local
 }
 
