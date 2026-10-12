@@ -2,7 +2,8 @@
 // edges `JSON.stringify` decides, every `JSON_WRITE_*` code, a full buffer at
 // every length, the two portability edges, and an arena that stays flat over
 // 10,000 writes into one reused buffer; and the two modes, indented and
-// strict, with the same edges.
+// strict, with the same edges; and `stringBytes` and `keyBytes`, held to
+// `string` and `key` in `bytes.ts`.
 //
 // The expected texts are the ones `JSON.stringify` answers for the same value.
 // `node.ts` beside this file is the ASCII, i64-free half of them, which
@@ -24,6 +25,7 @@ import {
 } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 import { Suite } from "nish/testing";
+import { writerBytesChecks } from "./bytes";
 
 /** A class `jsonEncode` writes, to show that the code it writes goes through the writer's modes. */
 class Pair {
@@ -1181,5 +1183,6 @@ export const main = (): number => {
   t.eqI32("10,000 indented writes into a reused buffer all complete", prettyFinished, 10000);
   t.eqI64("and keep nothing in the arena", pretty.kept, toI64(0));
 
+  writerBytesChecks(t);
   return t.done();
 };
