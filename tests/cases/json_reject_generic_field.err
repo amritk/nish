@@ -1,1 +1,1 @@
-`jsonEncode` cannot handle `Index.byName`, which is `Map<string, i32>`
+`jsonEncode` cannot handle `Shelf.box`, which is `Box<i32>`

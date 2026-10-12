@@ -2,25 +2,25 @@
 // encoding of a class from its fields. This module is kept small on purpose:
 // `main.ll` beside it is the golden of the code written for `Hello`, one
 // string field, so a change to what the compiler writes reads as a diff of a
-// few dozen lines. `checks.ts` is the rest of the suite, `models.ts` the
-// classes, `node.ts` what Node is held to, and `round-trip.txt` the inputs
-// `tests/run.js` holds to Node's `JSON.stringify(JSON.parse(x))`.
+// few dozen lines. `checks.ts` is the rest of the suite, `kinds.ts` its
+// section for `u64`, enums, maps and the key dispatch, `tag.ts` the golden of
+// the code written for those kinds, `models.ts` the classes, `node.ts` and
+// `readers.ts` what Node is held to, and `round-trip.txt` and
+// `round-trip-kinds.txt` the inputs `tests/run.js` holds to Node's
+// `JSON.stringify(JSON.parse(x))`.
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
-import { jtBench, jtChecks, jtRoundTripFile } from "./checks.ts";
+import { jtChecks, jtModes } from "./checks.ts";
 
 class Hello {
   message: string = "";
 }
 
 export const main = (): i32 => {
-  const argv = process.argv;
-  if (argv.length > 2 && argv[1] === "--round-trip") {
-    return jtRoundTripFile(argv[2]);
-  }
-  if (argv.length > 2 && argv[1] === "--bench") {
-    return jtBench(toI32(parseInt(argv[2])));
+  const mode = jtModes(process.argv);
+  if (mode >= 0) {
+    return mode;
   }
   const text = `{"message":"Hello, World!"}`;
   const src = new Array<u8>(toI32(text.length));

@@ -1,0 +1,17 @@
+define internal void @.json.decode.map.Map$str$i32(%struct.JsonDecoder* %r, %struct.Map$str$i32* %v) {
+call void @nish.Map$str$i32.clear(%struct.Map$str$i32* %v)
+= call i8* @nish.JsonDecoder.key(%struct.JsonDecoder* %r)
+= call i1 @nish.Map$str$i32.has(%struct.Map$str$i32* %v, i8*
+= call %struct.Map$str$i32* @nish.Map$str$i32.set(%struct.Map$str$i32* %v, i8*
+define internal void @.json.encode.map.Map$str$i32(%struct.JsonWriter* %r, %struct.Map$str$i32* %v) {
+= call i32 @nish.Map$str$i32.walkNext(%struct.Map$str$i32* %v, i32 0)
+= call i8* @nish.Map$str$i32.keyAt(%struct.Map$str$i32* %v, i32
+= call i32 @nish.Map$str$i32.valueAt(%struct.Map$str$i32* %v, i32
+define internal noundef zeroext i1 @nish.Map$str$i32.has(
+define internal void @nish.Map$str$i32.clear(
+define internal void @.json.decode.map.Map$str$$Map$str$en$Level(%struct.JsonDecoder* %r, %struct.Map$str$$Map$str$en$Level* %v) {
+= call %struct.Map$str$en$Level* @.json.new.Map$str$en$Level()
+define internal void @.json.decode.map.Map$str$$Player(%struct.JsonDecoder* %r, %struct.Map$str$$Player* %v) {
+= call %struct.Player* @.json.new.Player()
+define internal %struct.nish_array* @.json.decode.array.enum.Level(%struct.JsonDecoder* %r, %struct.nish_array* %v) {
+define internal void @.json.encode.array.enum.Level(%struct.JsonWriter* %r, %struct.nish_array* %v) {

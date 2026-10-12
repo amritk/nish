@@ -2,7 +2,7 @@
 
 **Status: accepted; S0 and S1's kernel and surface landed, S1's `bench/json`
 bar missed and S1b proposed, S2's bar met on a re-measurement but its flag not
-built, S4 declined for now, S5's 5x bar met (tracking issues #516 and #577).** The owner took the
+built, S4 declined for now, S5's 5x bar met, S6 proposed (tracking issues #516 and #577).** The owner took the
 decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
@@ -18,7 +18,9 @@ multiply-add, after a portable-vector benchmark's findings were checked
 against LLVM 18 (§3.2.1). S5 put `std/crypto/aes.ts`'s key schedule, block,
 GCTR and GHASH on AES-NI and PCLMULQDQ, and on ARMv8's AES and PMULL, as a
 runtime kernel behind a run-time branch that keeps the bitsliced code as the
-fallback: 38.5x on a 16 KiB AES-128-GCM seal (§2.3, §7). S3 has no flag, type or runtime
+fallback: 38.5x on a 16 KiB AES-128-GCM seal (§2.3, §7). S6 puts `nish/json-tokenizer`'s byte runs on kernels, its numbers on
+Eisel–Lemire and, last, its structure on a block classifier, each on its own
+bar against the json-compare record of the json-parity run (§2.4, §7). S3 has no flag, type or runtime
 symbol yet: it arrives with its stage, and its rule goes into
 [LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
 work as additive. LANGUAGE.md stays normative and this note adds no rule to
@@ -626,6 +628,55 @@ So, against `ce9d394` on a host whose noise stays inside the band, the
 fallback is not slower than S5's baseline at the minimum or the median on any
 of the nine workloads: the pre-registered bar holds as written.
 
+### 2.4 `JsonTokenizer` after json-parity: the gap S6 is aimed at
+
+`std/json`'s reader, which S1 measured, is no longer where the JSON gap is.
+The json-parity run (#597) moved the work to `nish/json-tokenizer`,
+`nish/json-value` and `nish/json-typed`, and measured them against simdjson,
+yyjson, RapidJSON, serde_json and Go with `bench/json-compare`. The figures
+below are the record at `06645ecf` ([BENCHMARKS.md](BENCHMARKS.md), the
+json-compare section, #632). Each is Nish's minimum ns per document; each
+factor is that minimum over the comparator's, so 2.00x means the comparator
+is twice as fast. The noise band is Nish against a byte-identical copy of
+itself in the same rounds.
+
+| Workload | Nish min ns/doc | simdjson | yyjson | serde_json | RapidJSON | band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| tokenize twitter.json (631,514 bytes) | 1,247,246 | 2.35x | 3.14x | 1.08x | 0.94x | 0.9% |
+| tokenize citm_catalog.json (1,727,204 bytes) | 2,397,781 | 1.84x | 2.20x | 1.25x | 1.19x | 2.5% |
+| tokenize canada.json (2,251,051 bytes) | 21,986,700 | 3.83x | 6.25x | 3.29x | 2.22x | 6.9% |
+| typed, citm_catalog.json | 3,164,937 | 3.63x | — | 1.43x | — | 0.1% |
+| serialize, citm_catalog.json | 870,432 | 2.54x | — | 2.12x | — | 1.1% |
+
+None of these paths uses a vector. `JsonTokenizer`'s three run loops,
+`jsonTokSkipBlank`, `jsonTokSkipDigits` and `jsonTokSkipPlain`
+(`std/json-tokenizer.ts`), read one byte at a time; #614 took the
+bounds-checked call out of each byte but kept the loop scalar, and LLVM does
+not vectorise a loop that can stop at any byte. `indexOfAny` cannot stand in
+for them as it is. It searches a `string`, and the tokenizer reads a `u8[]`.
+It finds the first byte *in* a set of at most 16, and the tokenizer wants the
+first byte *outside* a class: a string body runs until `"`, `\`, any of the 32
+control bytes or a byte of 128 or more, 162 bytes in all. And S1 measured its
+call at about 116 instructions, most of it splatting the set on every call
+([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)).
+
+Two more things sit behind the factors, and neither is a vector:
+
+- **canada.json is numbers.** `numberF64` takes Clinger's fast path for at
+  most 15 significant digits and a decimal exponent within ±22, and calls
+  `parseFloat`, which is glibc's `strtod`, for every other number. canada's
+  numbers have 16 to 17 significant digits, so every one takes `strtod`, and
+  #614 measured it at about 56% of canada's tokenize time; the rest alone
+  would run at about 150 MB/s. yyjson and simdjson read such numbers with
+  Eisel–Lemire, which needs a 64×64→128-bit multiply and a table of 128-bit
+  powers of five, and falls back to a slow path only when the product lands
+  too close to a halfway point to round.
+- **The typed row flatters simdjson.** Its On-Demand reader decodes only
+  `performances` and skips the rest of the document (the row says so), while
+  Nish's typed decode reads the whole document through the tokenizer. The
+  fair comparison is serde_json's 1.43x; simdjson's 3.63x bounds what a
+  structural index could buy.
+
 ---
 
 ## 3. The options
@@ -1091,6 +1142,9 @@ a printed checksum.
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 | **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). In those three samples, at the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The bar holds at the minimum too, against `ce9d394` itself, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (worst +0.8%) and every median within 11.1% (worst +2.0%). |
+| **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Proposed.** |
+| **S6b** | Eisel–Lemire in `numberF64`, in Nish: a 128-bit product of the significand and a table of powers of five, with `parseFloat` kept for the ambiguous case. Not a vector; it is here because it is most of canada's gap (§2.4) | Tokenize on canada.json is **at least 1.5x** faster than the `06645ecf` record at the minimum, and twitter and citm are not slower outside their bands. Every `numberF64` answer is bit-for-bit `parseFloat`'s on canada.json, on every JSONTestSuite number, and on at least 10^8 random doubles printed shortest and at 17 digits, and under Node, where `numberF64` stays `parseFloat`. **Proposed.** |
+| **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Proposed; its design is written and decided before anything is built (§8, Q5).** |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
@@ -1201,16 +1255,125 @@ header shows for one; for the front-end figures, build stage2 with `npm run
 build` against each version and time `src/compile.ts` with the two in the same
 alternation. Revert the spike with `git checkout src/lexer.ts`.
 
+**S6: putting the JSON tokenizer on vectors.** §2.4 has the gap and the
+baseline. S6 is three stages, in order. Each one is its own pull request and
+is judged on its own bar against the record the stage before it leaves. Each
+one keeps every rule of [S1](#s1-stdjson-on-indexofany-the-bar-missed)'s
+measurement: interleaved rounds, a byte-identical copy as the noise band, and
+callgrind instruction counts per part of the loop, because S1 showed that a
+kernel's call can cost more than the bytes it skips.
+
+*S6a, the byte-class kernels.* What it needs:
+
+- **Three kernels in `runtime/runtime-simd.c`, one per class.** Each answers
+  the first index in `[from, limit)` whose byte is outside its class, or
+  `limit`. The classes are fixed in each kernel, so nothing is splatted per
+  call:
+  - blank: space, tab, line feed, carriage return;
+  - digit: `0` to `9`;
+  - plain string byte: at least 0x20, below 0x80, and neither `"` nor `\`.
+  
+  A plain-string block is two compares and a range check per 16 or 32 bytes.
+  The kernels take the array's data pointer and length, never a `string`. They
+  use #518's resolver, its `NISH_SIMD` pin and its scalar path, and wasi gets
+  the scalar path (or simd128 under the §5 flag).
+- **A `std` surface the compiler recognises, as `indexOfAny` is.** It is a
+  function over `u8[]` whose body is the plain Nish walker, so Node runs the
+  loop and the construct is class A. It lives in `nish/text` or a new
+  `nish/bytes` (§8, Q6). LANGUAGE.md gets its rule, and the guide, the
+  cookbook and AI.md get it too.
+- **A short-run guard in the caller.** The tokenizer checks the first 8 to 16
+  bytes inline and calls the kernel only past them. Inside citm_catalog's
+  objects a structural byte comes every few bytes, and S1's variant B is the
+  measured reason. The threshold is chosen from callgrind, not guessed.
+- **Callers.**
+  - `jsonTokSkipBlank`, `jsonTokSkipDigits` and `jsonTokSkipPlain` in
+    `std/json-tokenizer.ts`.
+  - `JsonWriter.string`'s and `key`'s search for the first byte that needs an
+    escape, which is the plain-string class's complement plus the bytes of
+    128 or more, which pass through unescaped. The writer has its own kernel
+    or a fourth class if the classes differ.
+  - The window guard, the UTF-8 table and the surrogate rules are untouched.
+    A run stops at the first byte of 128 or more, and the scalar UTF-8 check
+    takes over as today.
+- **What must not change.** JSONTestSuite's verdicts, `tests/json-conformance`,
+  the fuzz checksum, #582's mutation-pinned boundaries (each must still fail
+  its mutant), and the Node run.
+- **Gates.** `node tests/run.js wasi` and `performance` pass with no new
+  NL9007. The runtime unit's ceiling moves only with the measured size and a
+  row in wp7's budget table. The kernels go on `isPureRuntime`'s list with
+  "variable-time" beside them, and `std/crypto` does not call them (§6).
+
+*S6b, the float parser.* What it needs:
+
+- **Eisel–Lemire, after Lemire's fast_float.** It parses at most 19
+  significant digits into a `u64`, multiplies it by a 128-bit power of five
+  from a table that covers decimal exponents −342 to 308 (about 10 KB of
+  `u64` pairs), and rounds. It falls back to `parseFloat` when the product is
+  too close to a halfway point, or when the significand has more than 19
+  digits.
+- **Written in Nish, in `std/json-tokenizer.ts`.** It is not a runtime
+  kernel: it has no vector to gain, and in `std` it keeps its Node reading
+  trivial, since Node's `numberF64` stays `parseFloat`.
+- **A 64×64→128 high product.** Nish has none today. The first version builds
+  it from four 32×32→64 products in `u64`. A `mulHigh` builtin is a separate,
+  measured change, proposed only if callgrind shows the four-product version
+  is a material part of what remains. `std/` may use a new builtin
+  immediately; `src/` may not (the rolling freeze).
+- **Licensing.** fast_float's table and algorithm are a port. The code keeps
+  its upstream notice (fast_float is MIT, Apache-2.0 or BSL-1.0) and gets a
+  row in THIRD_PARTY_NOTICES.md (.claude/licensing.md), and
+  `third-party-licence` passes.
+- **Exactness.**
+  - The result is bit-for-bit `parseFloat`'s, checked as S6b's bar says.
+  - Its edges each get a native check: subnormals, the largest finite value,
+    the first overflow to Infinity, `-0`, 19 and 20 significant digits, and
+    halfway cases on both sides.
+  - The security record notes the run time is bounded per number: the slow
+    path is the existing `parseFloat` call, so nothing new is unbounded.
+
+*S6c, the structural index.* It is S1b, re-aimed. It is built only after S6a
+and S6b, and only on a design the owner accepts (§8, Q5). What the design must
+settle:
+
+- **Where the index lives.** One bit a byte for each mask, or a list of `u32`
+  positions. It is kept in a buffer `JsonTokenizer` owns and reuses across
+  documents, so a server that parses one request after another stops
+  allocating.
+- **How the tokenizer walks it.** Count-trailing-zeros over set bits, with the
+  window, `JsonLimits` (total bytes, depth, string and number lengths) and
+  every error code and `errorAt` offset unchanged.
+- **The in-string mask.**
+  - Prefix XOR over the quote mask, taken by carry-less multiply on PCLMULQDQ
+    or PMULL. S5 already resolves both, and the kernel shares S5's detection,
+    not a second `cpuid` path.
+  - A scalar prefix XOR elsewhere.
+  - Odd-length backslash runs found by simdjson's carry arithmetic.
+- **UTF-8 validation over blocks**, or the scalar check kept for blocks that
+  hold a byte of 128 or more, measured both ways.
+- **A body fed in pieces**, if `JsonTokenizer` takes one, carries its in-string
+  and backslash state across the cut.
+
+This is not the C JSON parser §9 declines. The kernel answers masks; the
+grammar, the limits, the errors and every value stay in `std/json-tokenizer.ts`.
+
+**What S6 does not do.** It does not move the default target (§5), add
+`nish:simd` (S3 stays on its own bar), or touch `std/json`'s older reader,
+which S1 measured. Serialize beyond S6a's escape scan is out of scope: its
+remaining gap is per-value work, not a byte scan.
+
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was
 measured. S2 is independent and can be taken at any point after S0. S3 waits
 for S1, because S1's result says whether the byte half of S3 is needed at all.
+S6a and S6b are independent of each other and of S2 and S3, and either can go
+first; S6c waits for both, because its bar is a ratio against what they leave.
 
 ---
 
 ## 8. Decisions
 
-The owner took all four on 2026-10-09, each as recommended. The reason
+The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6 and are open. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -1221,6 +1384,8 @@ builds anything else.
 | Q2 | The default target | baseline; a newer level (`x86-64-v2`); `native` | **Baseline.** Wider code is chosen at run time in the runtime, or by an opt-in flag. |
 | Q3 | Integer lanes in (b) | wrap, named so; trap, as scalars do | **Wrap, named so.** A trapping lane costs a mask reduction per operation, and wrapping by name keeps the reading class A. |
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |
+| Q5 | S6c's structural index | a bitmask per block kept beside the document; a list of `u32` positions; not built | **Open.** Recommended: not decided until S6a and S6b have landed and their records say how much of §2.4's gap is left; then a written design (S6, *S6c*) the owner accepts before anything is built. |
+| Q6 | Where S6a's functions live | `nish/text`, beside `indexOfAny`; a new `nish/bytes` for `u8[]` scans | **Open.** Recommended: `nish/bytes`, since `nish/text` is about `string`s and these read `u8[]`. |
 
 ---
 
