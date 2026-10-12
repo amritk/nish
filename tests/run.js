@@ -32,6 +32,7 @@
  *     web/ compiling with the compiler's own wasi build.
  */
 import { execFileSync, spawn, spawnSync } from "node:child_process"
+import crypto from "node:crypto"
 import fs from "node:fs"
 import dgram from "node:dgram"
 import net from "node:net"
@@ -101,11 +102,11 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time and `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, split apart so that each carries its own `.text*`
- * budget (the `*_TEXT_BUDGET` constants below). `scripts/build.sh` does not pair
- * `runtime-aes.c` with `runtime.c` yet: its `--runtime-from` link needs an object
- * for every unit it pairs, and `nish run`'s runtime cache (src/run-cache.ts)
- * holds only the six it lists, so the pairing and the cache's list move
- * together, with the compiler's first call into the unit (WP38 S5).
+ * budget (the `*_TEXT_BUDGET` constants below). `scripts/build.sh` pairs every one
+ * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same seven:
+ * the two lists move together, as `runtime-aes.c` joined both with the compiler's
+ * first call into it (WP38 S5).
  *
  * Named here rather than written out at each link so that a third unit is one
  * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
@@ -9322,31 +9323,23 @@ if (!only || "simd".includes(only)) {
   // constructor runs at every start-up, which is why the unit asks `cpuid` itself
   // (runtime/runtime-simd.c, `nish_cpu_has_avx2`).
   //
-  // runtime-aes.c is held to the same, named on the link line since scripts/build.sh
-  // does not pair it with runtime.c yet (RUNTIME_C says why): hello linked with it is
-  // the same binary, byte for byte, as hello linked without it, and its control,
-  // which calls the kernels, runs them where the CPU has them.
+  // runtime-aes.c is held to the same. scripts/build.sh pairs it with runtime.c, so
+  // hello's own link above already carries it and keeps none of it; and hello linked
+  // that way is the same binary, byte for byte, as hello linked against a copy of the
+  // runtime with no runtime-aes.c beside it, which build.sh then has nothing to pair.
+  // Its control, which calls the kernels, runs them where the CPU has them.
   if (process.platform !== "linux") {
     skip(`simd section GC: read from an ELF link map, and this host is ${process.platform}`)
   } else {
     const helloLl = path.join(simdDir, "hello.ll")
     const compiled = spawnSync(NISH, ["examples/hello.ts", "-o", helloLl], { cwd: root, encoding: "utf8" })
     /** Links `inputs` and the runtime through build.sh; the kernels' symbols the map keeps, and the binary. */
-    const kept = (inputs, out, profile) => {
+    const kept = (inputs, out, profile, runtimeC = "runtime/runtime.c") => {
       const map = `${out}.map`
       // build.sh hands an argument it does not know to clang with the inputs.
       const b = spawnSync(
         "bash",
-        [
-          "scripts/build.sh",
-          ...inputs,
-          "runtime/runtime.c",
-          `-Wl,-Map=${map}`,
-          "-o",
-          out,
-          "--profile",
-          profile,
-        ],
+        ["scripts/build.sh", ...inputs, runtimeC, `-Wl,-Map=${map}`, "-o", out, "--profile", profile],
         { cwd: root, encoding: "utf8" }
       )
       if (b.status !== 0) {
@@ -9364,6 +9357,15 @@ if (!only || "simd".includes(only)) {
       return { ok: true, names, bytes: fs.readFileSync(out), why: "" }
     }
     const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
+    // The runtime as it was before build.sh paired runtime-aes.c: every file but that one.
+    const noAesDir = path.join(simdDir, "runtime-without-aes")
+    fs.rmSync(noAesDir, { recursive: true, force: true })
+    fs.mkdirSync(noAesDir, { recursive: true })
+    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+      if (/\.(c|h)$/.test(file) && file !== "runtime-aes.c") {
+        fs.copyFileSync(path.join(root, "runtime", file), path.join(noAesDir, file))
+      }
+    }
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -9389,47 +9391,43 @@ if (!only || "simd".includes(only)) {
           `the control keeps: ${ctrl.names.join(" ")} ${ctrl.why}\nthe control printed: ${ran ? ran.stdout : "(not run)"}`
       )
 
-      const withAes =
+      const withoutAes =
         compiled.status === 0
-          ? kept([helloLl, "runtime/runtime-aes.c"], path.join(simdDir, `hello-aes.${profile}`), profile)
+          ? kept(
+              [helloLl],
+              path.join(simdDir, `hello-no-aes.${profile}`),
+              profile,
+              path.join(noAesDir, "runtime.c")
+            )
           : { ok: false, names: [], bytes: null, why: compiled.stderr }
       const aesExe = path.join(simdDir, `calls-aes.${profile}`)
-      const aesCtrl = kept(["tests/simd/calls-aes.c", "runtime/runtime-aes.c"], aesExe, profile)
+      const aesCtrl = kept(["tests/simd/calls-aes.c"], aesExe, profile)
       const aesRan = aesCtrl.ok ? spawnSync(aesExe, [], { encoding: "utf8" }) : null
       const printed = aesRan === null ? "" : String(aesRan.stdout)
       check(
         `simd: --profile ${profile} links hello with runtime-aes.c to the same bytes as without it, and a program that calls the kernels runs them`,
-        withAes.ok &&
+        withoutAes.ok &&
           quiet.ok &&
-          withAes.names.length === 0 &&
-          withAes.bytes.equals(quiet.bytes) &&
+          quiet.names.length === 0 &&
+          withoutAes.bytes.equals(quiet.bytes) &&
           aesCtrl.ok &&
           !aesCtrl.names.includes("__cpu_model") &&
           aesRan.status === 0 &&
           (aesControl === null ? /^nish_aes_hw: [01]\n/.test(printed) : printed === aesControl),
-        `hello with runtime-aes.c: ${withAes.bytes?.length ?? "(not linked)"} bytes, keeps ${withAes.names.join(" ") || "(none)"} ${withAes.why}\n` +
-          `hello without: ${quiet.bytes?.length ?? "(not linked)"} bytes\n` +
+        `hello with runtime-aes.c: ${quiet.bytes?.length ?? "(not linked)"} bytes, keeps ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
+          `hello without: ${withoutAes.bytes?.length ?? "(not linked)"} bytes ${withoutAes.why}\n` +
           `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
     }
   }
 
   // `--profile wasi`: runtime-aes.c compiles for wasm32 to an answer of 0 and
-  // kernels nothing reaches, so a link that names it links, and the control says 0.
+  // kernels nothing reaches, so a link that pairs it links, and the control says 0.
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasm = path.join(simdDir, "calls-aes.wasm")
     const b = spawnSync(
       "bash",
-      [
-        "scripts/build.sh",
-        "tests/simd/calls-aes.c",
-        "runtime/runtime.c",
-        "runtime/runtime-aes.c",
-        "-o",
-        wasm,
-        "--profile",
-        "wasi",
-      ],
+      ["scripts/build.sh", "tests/simd/calls-aes.c", "runtime/runtime.c", "-o", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
     )
     const ran =
@@ -9527,6 +9525,361 @@ if (!only || "ct_asm constant time assembly runtime-aes".includes(only)) {
       }
       check(`ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, r.ok, r.detail)
     }
+  }
+}
+
+// ---- WP38 S5: the AES kernels against the bitsliced walkers, end to end ---------------
+// The compiler lowers each seam of std/crypto/aes.ts to a branch on `nish_aes_hw`: the
+// runtime kernel on one arm, the walker it replaces on the other (src/kernels.ts). Two
+// programs run both arms here. `tests/link/crypto_aes` holds the module to its
+// specifications and every Wycheproof case it keeps; `tests/link/crypto_aes_agree`
+// adds a seeded corpus and folds every output into a checksum. Each is linked with
+// every kernel wrapped (`-Wl,--wrap`) by a counter that reports its calls on exit,
+// then run with `NISH_AES` unset and with `NISH_AES=soft`, and the two stdouts must be
+// each other's and `expected.out`, byte for byte. The soft run must call no kernel,
+// and where /proc/cpuinfo says the CPU has the instructions the unset run must call
+// all four: an agreement that only ever ran the walker would otherwise pass. The
+// debug profile links them, because a wrap is a linker rewrite of undefined symbols
+// and needs the calls still to be calls to an object's symbol when the linker sees
+// them; the speed profile's run of the same programs is `link/<name>`'s own.
+//
+// Neither runs under Node, which is where an agreement check would normally take its
+// third reading: std/crypto/aes.ts mixes `u64` and `u32` arithmetic that the prelude's
+// BigInt reading refuses (`Cannot mix BigInt and other types`), so its TypeScript
+// reading is not class A, and the bitsliced walker is the reading the soft run gives.
+//
+// A wasm32 build has no kernel to branch to, so the lowering is skipped there, and a
+// `--profile wasi` build of the corpus must name no `nish_aes_` symbol at all: not in
+// its IR, and not in the link, where `--trace-symbol` reports any reference to one.
+// That `nish_aes_hw` answers 0 on wasm32 would not be enough, because runtime-aes.c's
+// wasm32 build still defines the kernels, as traps. The native IR linked the same way
+// is the trace's control, so a trace that never reported anything cannot pass.
+if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
+  const aesKernels = ["nish_aes_schedule", "nish_aes_block", "nish_aes_ctr", "nish_aes_ghash"]
+  const kernelDir = path.join(buildDir, "aes-kernel")
+  fs.rmSync(kernelDir, { recursive: true, force: true })
+  fs.mkdirSync(kernelDir, { recursive: true })
+  const cpuFlags = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
+  const cpuFeatures = new Set((cpuFlags.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
+  const cpuHasAes =
+    (process.arch === "x64" && cpuFeatures.has("aes") && cpuFeatures.has("pclmulqdq")) ||
+    (process.arch === "arm64" && cpuFeatures.has("aes") && cpuFeatures.has("pmull"))
+  /** The modules of tests/link/<program> compiled into a directory of their own, or null with the reason. */
+  const compileAes = (program, dir, flags) => {
+    const r = spawnSync(
+      NISH,
+      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
+      }
+    )
+    const lls =
+      r.status === 0
+        ? fs
+            .readdirSync(dir)
+            .filter((f) => f.endsWith(".ll"))
+            .sort()
+            .map((f) => path.join(dir, f))
+        : []
+    return { lls, why: r.status === 0 ? "" : r.stderr }
+  }
+
+  if (!HAS_CLANG) {
+    skip("aes kernel: no clang to link the AES programs against runtime-aes.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `aes kernel: the kernels' calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    // One wrapper per kernel: count the call and make it. Declared over an opaque
+    // `struct nish_array`, so this needs nothing from nish.h but the shapes.
+    const counter = path.join(kernelDir, "count.c")
+    const arr = "struct nish_array"
+    const wrappers = [
+      ["schedule", `const ${arr} *key, int32_t rounds, ${arr} *rk`, "key, rounds, rk"],
+      ["block", `const ${arr} *rk, int32_t rounds, const ${arr} *src, ${arr} *dst`, "rk, rounds, src, dst"],
+      [
+        "ctr",
+        `const ${arr} *rk, int32_t rounds, const ${arr} *j0, const ${arr} *src, ${arr} *dst, int32_t length`,
+        "rk, rounds, j0, src, dst, length",
+      ],
+      [
+        "ghash",
+        `${arr} *y, uint64_t hHi, uint64_t hLo, const ${arr} *rk, const ${arr} *data, int32_t length`,
+        "y, hHi, hLo, rk, data, length",
+      ],
+    ]
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        `${arr};`,
+        "static unsigned long nish_aes_calls[4];",
+        ...wrappers.flatMap(([name, params, args], i) => [
+          `void __real_nish_aes_${name}(${params});`,
+          `void __wrap_nish_aes_${name}(${params}) { nish_aes_calls[${i}]++; __real_nish_aes_${name}(${args}); }`,
+        ]),
+        "__attribute__((destructor)) static void nish_aes_report(void) {",
+        '  fprintf(stderr, "aes kernel calls: %lu %lu %lu %lu\\n", nish_aes_calls[0], nish_aes_calls[1], nish_aes_calls[2], nish_aes_calls[3]);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_AES
+    for (const program of ["crypto_aes", "crypto_aes_agree"]) {
+      const dir = path.join(kernelDir, program)
+      const compiled = compileAes(program, dir, [])
+      const exe = path.join(kernelDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                `-Wl,${aesKernels.map((k) => `--wrap=${k}`).join(",")}`,
+                "-o",
+                exe,
+                "--profile",
+                "debug",
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(
+          `aes kernel: ${program} links with every kernel counted`,
+          false,
+          linked === null ? compiled.why : linked.stderr
+        )
+        continue
+      }
+      const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+      const code = Number(
+        fs.readFileSync(path.join(root, "tests", "link", program, "expected.code"), "utf8").trim()
+      )
+      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_AES: "soft" } })
+      /** The four counts the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^aes kernel calls: (\d+) (\d+) (\d+) (\d+)$/m.exec(r.stderr)
+        return m === null ? null : m.slice(1).map(Number)
+      }
+      check(
+        `aes kernel: ${program} prints the same bytes with NISH_AES unset and with NISH_AES=soft, and they are its expected.out`,
+        hw.status === code && soft.status === code && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_AES unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_AES=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      const softCalls = calls(soft)
+      check(
+        `aes kernel: ${program} under NISH_AES=soft calls no kernel`,
+        softCalls !== null && softCalls.every((n) => n === 0),
+        soft.stderr
+      )
+      const hwCalls = calls(hw)
+      if (cpuHasAes) {
+        check(
+          `aes kernel: ${program} with NISH_AES unset calls all four kernels, which /proc/cpuinfo says this CPU runs`,
+          hwCalls !== null && hwCalls.every((n) => n > 0),
+          hw.stderr
+        )
+      } else {
+        check(
+          `aes kernel: ${program} with NISH_AES unset calls no kernel on a CPU /proc/cpuinfo names no AES for`,
+          hwCalls !== null && hwCalls.every((n) => n === 0),
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The freestanding `wasm` profile links IR compiled for the host, which calls the
+  // kernels behind `nish_aes_hw`: the README's and examples/node-host.mjs's route,
+  // `nish x.ts -o x.ll` then `build.sh x.ll runtime/runtime-wasm.c --profile wasm`.
+  // build.sh adds runtime-aes.c for such IR, whose wasm32 build answers 0, so the
+  // walker runs; held here to Node's own AES-128, every byte of three blocks. Two
+  // arms beside it: a module that calls no AES links no runtime-aes.c, and an input
+  // list that already names runtime-aes.c is left alone rather than given a second
+  // copy. `--trace-symbol` says which objects define `nish_aes_hw`.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(kernelDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "block.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { aesEncryptBlock, aesKey, AesKey } from "nish/crypto/aes"',
+        "",
+        "export const blockByte = (last: i32, at: i32): i32 => {",
+        "  const k: AesKey | null = aesKey([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])",
+        "  if (k === null) {",
+        "    return -1",
+        "  }",
+        "  const b: u8[] | null = aesEncryptBlock(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, toU8(last)])",
+        "  if (b === null || at < 0 || at >= toI32(b.length)) {",
+        "    return -2",
+        "  }",
+        "  return toI32(b[at])",
+        "}",
+        "",
+      ].join("\n")
+    )
+    /** `file` compiled for the host into `dir`, and its `.ll` files. */
+    const hostIr = (file, dir) => {
+      const r = spawnSync(NISH, [file, "-o", `${dir}${path.sep}`], { cwd: root, encoding: "utf8" })
+      const lls =
+        r.status === 0
+          ? fs
+              .readdirSync(dir)
+              .filter((f) => f.endsWith(".ll"))
+              .map((f) => path.join(dir, f))
+          : []
+      return { lls, why: r.status === 0 ? "" : r.stderr }
+    }
+    /** `inputs` linked freestanding with `nish_aes_hw` traced: the result, and how many objects define it. */
+    const freestanding = (inputs, out) => {
+      const r = spawnSync(
+        "bash",
+        ["scripts/build.sh", ...inputs, "-Wl,--trace-symbol=nish_aes_hw", "-o", out, "--profile", "wasm"],
+        { cwd: root, encoding: "utf8" }
+      )
+      const definitions = `${r.stdout}${r.stderr}`
+        .split("\n")
+        .filter((l) => /definition of nish_aes_hw/.test(l)).length
+      return { r, definitions }
+    }
+    const aesIr = hostIr(source, path.join(freeDir, "ir"))
+    const lowered = aesIr.lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_aes_hw("))
+    const wasm = path.join(freeDir, "block.wasm")
+    const linked = aesIr.lls.length > 0 ? freestanding([...aesIr.lls, "runtime/runtime-wasm.c"], wasm) : null
+    const key = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    const lasts = [0, 15, 200]
+    const want = lasts.map((last) => {
+      const cipher = crypto.createCipheriv("aes-128-ecb", key, null)
+      cipher.setAutoPadding(false)
+      return [...cipher.update(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, last]))].join(
+        ","
+      )
+    })
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.r.status === 0) {
+      try {
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
+        got = lasts.map((last) =>
+          Array.from({ length: 16 }, (_, at) => instance.exports.blockByte(last, at)).join(",")
+        )
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "aes kernel: the freestanding --profile wasm link of an AES module compiled for the host links, and encrypts as Node's AES-128 does",
+      lowered &&
+        linked.r.status === 0 &&
+        linked.definitions === 1 &&
+        trapped === "" &&
+        got.join(";") === want.join(";"),
+      `${aesIr.why}IR calls nish_aes_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.r.stderr}objects defining nish_aes_hw: ${linked.definitions}\n`}${trapped}got  ${got.join(";")}\nwant ${want.join(";")}`
+    )
+
+    // The two arms around it: no AES, no runtime-aes.c; runtime-aes.c named, not added again.
+    const plainIr = hostIr(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"))
+    const plain =
+      plainIr.lls.length > 0
+        ? freestanding([...plainIr.lls, "runtime/runtime-wasm.c"], path.join(freeDir, "plain.wasm"))
+        : null
+    const named =
+      aesIr.lls.length > 0
+        ? freestanding(
+            [...aesIr.lls, "runtime/runtime-wasm.c", "runtime/runtime-aes.c"],
+            path.join(freeDir, "named.wasm")
+          )
+        : null
+    check(
+      "aes kernel: the freestanding --profile wasm link adds runtime-aes.c to no module that calls no AES, and not again when the inputs name it",
+      plain !== null &&
+        plain.r.status === 0 &&
+        plain.definitions === 0 &&
+        named !== null &&
+        named.r.status === 0 &&
+        named.definitions === 1,
+      `${plainIr.why}a module with no AES: ${plain === null ? "(not linked)" : `exit ${plain.r.status}, ${plain.definitions} object(s) define nish_aes_hw\n${plain.r.stderr}`}\n` +
+        `runtime-aes.c named: ${named === null ? "(not linked)" : `exit ${named.r.status}, ${named.definitions} object(s) define nish_aes_hw\n${named.r.stderr}`}`
+    )
+  } else {
+    skip("aes kernel: no wasm-ld, so the freestanding wasm link of an AES module is not checked")
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasiDir = path.join(kernelDir, "wasi")
+    const wasi = compileAes("crypto_aes_agree", wasiDir, ["--profile", "wasi"])
+    const nativeDir = path.join(kernelDir, "native")
+    const native = compileAes("crypto_aes_agree", nativeDir, [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_aes_"))
+    /** The modules linked for wasm32-wasi with every AES symbol traced, and what the linker said. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          `-Wl,${["nish_aes_hw", ...aesKernels].map((k) => `--trace-symbol=${k}`).join(",")}`,
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(kernelDir, "crypto_aes_agree.wasm")
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(kernelDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_aes_/.test(l))
+    const imports =
+      linked !== null && linked.status === 0
+        ? WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(wasm))).map((i) => i.name)
+        : []
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : null
+    const want = fs.readFileSync(path.join(root, "tests", "link", "crypto_aes_agree", "expected.out"), "utf8")
+    check(
+      "aes kernel: --profile wasi compiles crypto_aes_agree to IR and a .wasm that reference no nish_aes_ symbol, and it prints its expected.out",
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        imports.length > 0 &&
+        imports.every((name) => !name.startsWith("nish_aes_")) &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === want,
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `imports: ${imports.join(" ")}\n${linked === null ? "" : linked.stderr}` +
+        `${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(
+      "aes kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of crypto_aes_agree is not checked for kernel references"
+    )
   }
 }
 
@@ -14769,6 +15122,7 @@ if (!only || "runtime-cache".includes(only)) {
       "runtime-host.c",
       "runtime-net.c",
       "runtime-simd.c",
+      "runtime-aes.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -14776,7 +15130,7 @@ if (!only || "runtime-cache".includes(only)) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the six objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the seven objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -14785,7 +15139,7 @@ if (!only || "runtime-cache".includes(only)) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the six runtime units once",
+      "runtime cache: the miss compiled each of the seven runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
