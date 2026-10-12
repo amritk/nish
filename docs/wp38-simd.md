@@ -535,7 +535,9 @@ out.
 nish> --self --binary <this build> --runs 18`, again with `--runs 24`, and a
 third time with `--runs 48` at `493384d` on an otherwise idle machine: the
 baseline is `main`'s build, its byte-identical copy gives the band, and this
-build runs the bitsliced arm of every branch. + is slower than `main`:
+build runs the bitsliced arm of every branch. A fourth sample, against
+`ce9d394` itself on a quieter host, follows these three and meets the bar at
+the minimum too. + is slower than `main`:
 
 | Workload | sample 1: soft, min / median | band | sample 2: soft | band | sample 3: soft | band |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -577,21 +579,22 @@ workload, within the noise this machine shows.
 **Against `ce9d394` itself, a fourth sample.** The three samples above read
 the fallback against `main`'s build, not against the commit the bar names. The
 fourth reads it against `ce9d394`. `bench/aes-gcm.ts` came after `ce9d394`, so
-`main`'s copy of it (byte-identical at `b515c1b`) was put into a `ce9d394`
-worktree and built there, with that commit's own `build/nish` (bootstrapped by
-the 0.18.0 seed its `scripts/fetch-seed.sh --force` fetched) and its own
-`std/`, with `--profile speed` as `bench/aes-gcm.mjs` builds its baseline. It
-printed `--check`'s pinned checksum, 2203470130. Then, on `main`'s build at
+`main`'s copy of it (byte-identical at `b515c1b`) was built in a `ce9d394`
+worktree against that commit's own `std/` and `build/nish`, which the 0.18.0
+seed from its `scripts/fetch-seed.sh --force` bootstrapped. It was built with
+`--profile speed`, as `bench/aes-gcm.mjs` builds its baseline, and printed
+`--check`'s pinned checksum, 2203470130. Then, on `main`'s build at
 `b515c1b`:
 
 `NISH_AES=soft node bench/aes-gcm.mjs --self --binary <ce9d394 build> --runs 48`
 
 That is 48 rounds of three columns after one warm-up. Every run printed the
-same checksum, 1163276789. The host was an `Intel(R) Xeon(R) Processor @
-2.10GHz` (lscpu: family 6, model 207; `nproc` 4 under KVM; AES-NI present,
-which `soft` does not use), Ubuntu clang 18.1.3. Nothing else ran during the
-run. The load average was 0.87, 0.49, 0.20 before it, the tail of `main`'s
-build just finished, and 0.94, 0.56, 0.24 after. + means the fallback was
+same checksum, 1163276789. The host was the same model as the kernel's above
+(family 6, model 207; `nproc` 4 under KVM; Ubuntu clang 18.1.3), with AES-NI
+present, which `soft` does not use. The machine was otherwise idle. The load
+average was 0.87, 0.49, 0.20 before the run (the tail of `main`'s build had
+just finished) and 0.94, 0.56, 0.24 after. The bench prints `ce9d394` against
+the fallback; the table reads it the other way, so + means the fallback was
 slower than `ce9d394`:
 
 | Workload | soft min / median ms | `ce9d394` min / median ms | soft against `ce9d394`, min / median | band (copy), min / median |
@@ -606,8 +609,7 @@ slower than `ce9d394`:
 | ChaCha open, 1,200 B | 11.22 / 14.60 | 11.61 / 15.04 | −3.4% / −2.9% | +0.3% / −0.3% |
 | `aesHeaderMask` | 21.47 / 28.19 | 21.29 / 27.63 | +0.8% / +2.0% | −0.2% / −0.3% |
 
-The bench prints `ce9d394` against the fallback; these columns are the same
-times read the other way. On this run the byte-identical copy stayed within
+On this run the byte-identical copy stayed within
 1.4% of the baseline at the minimum and 3.1% at the median. So the 3.0% band
 measures the change here, not the machine. Against it:
 
@@ -615,15 +617,14 @@ measures the change here, not the machine. Against it:
   workloads. Eight are faster than `ce9d394`. The ChaCha20-Poly1305 rows,
   code the change does not touch, are faster by as much as the AES rows,
   so that gain comes from what else moved between `ce9d394` and `b515c1b`,
-  not from the fallback. `aesHeaderMask` is +0.8%, inside 3.0%. That fits the
-  one `nish_aes_hw` call, compare and branch the arm adds to each
-  single-block encrypt.
-- **At the median it meets it too**, the worst figure `aesHeaderMask`'s +2.0%
-  against 11.1%.
+  not from the fallback. `aesHeaderMask` is +0.8%, inside 3.0%, as the
+  under-2% cost of the arm estimated above predicts.
+- **At the median the bar holds too**: the worst figure is `aesHeaderMask`'s
+  +2.0% against 11.1%.
 
-So, read against `ce9d394` on a host whose noise stays inside the band, the
-fallback is not slower than S5's baseline at the minimum or the median, on
-any of the nine workloads. The pre-registered bar holds as it was written.
+So, against `ce9d394` on a host whose noise stays inside the band, the
+fallback is not slower than S5's baseline at the minimum or the median on any
+of the nine workloads: the pre-registered bar holds as written.
 
 ---
 
@@ -1089,7 +1090,7 @@ a printed checksum.
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
-| **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). At the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and in three samples read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The pre-registered bar holds at the minimum too, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds against `bench/aes-gcm.ts` built at `ce9d394` itself, on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (the worst `aesHeaderMask`, +0.8%; the other eight 3.4% to 5.8% faster) and every median within 11.1% (worst +2.0%). |
+| **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). In those three samples, at the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The bar holds at the minimum too, against `ce9d394` itself, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (worst +0.8%) and every median within 11.1% (worst +2.0%). |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
