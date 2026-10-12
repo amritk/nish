@@ -39,8 +39,8 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 5 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| JSON | [json.md](json.md) | `std/json-tokenizer.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 2 ¹⁰ |
-| **Total** ⁸ | | | **3 / 10 / 12 / 76** | **0 / 1 / 2 / 20** |
+| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ¹⁰ |
+| **Total** ⁸ | | | **3 / 10 / 12 / 77** | **0 / 1 / 2 / 19** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -74,9 +74,13 @@ the record that found it. The notes below the table name each such finding.
    #512 made the server's P-256 signature in scratch, and #515 made the
    listener read the first Initial in place and answer into scratch, so a
    handshake through a reused slot keeps 0 bytes of arena memory.
-10. JSON-1 (Low) is accepted, with the reason in its record, and is not
-    counted. JSON-2 and JSON-3 are open; JSON-3, duplicate keys reported as
-    tokens, is closed by the typed layer (#573).
+10. JSON-1, JSON-4, JSON-5, JSON-6 and JSON-7 (Low) are accepted, with the reason in
+    their record, and are not counted. JSON-2 is open. JSON-3, duplicate keys
+    reported as tokens, was left open by the tokenizer stage and is fixed for
+    `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
+    of a field; it is counted as a fixed Low. The tokenizer is unchanged, a
+    program reading tokens itself still decides, and the duplicates of a key
+    `ignoreUnknown` steps over are the accepted JSON-4.
 
 ## Open findings
 
@@ -107,7 +111,6 @@ only.
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
-| JSON-3 | Low | `std/json-tokenizer.ts` (`next`) | Duplicate keys are reported as two keys, and the reader decides; the typed layer refuses them | #573 |
 | SC-16 | Low | `.github/workflows/release.yml` | Immutable releases are on from v0.16.0 (`immutable: true`), so its assets and `SHA256SUMS` are fixed once published. Build provenance attestations, the stronger answer, are not: they need `id-token` and `attestations: write` on `release.yml` | #389 |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by

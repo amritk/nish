@@ -24,7 +24,7 @@ import { StringMap, StringSet } from "./map"
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
-import { isCollectionsModule, isMapExtrasModule, isSecretModule } from "./std-modules"
+import { isCollectionsModule, isJsonTypedModule, isMapExtrasModule, isSecretModule } from "./std-modules"
 import { Local } from "./symbols"
 import { TypeTable } from "./types"
 
@@ -222,6 +222,17 @@ export const MAP_RESERVE: i32 = 3
 export const MAP_GET_OR_INSERT: i32 = 4
 /** `storedKey<K>` from `std/collections.ts`: every call is the key an entry stores, lowered in place. */
 export const MAP_STORED_KEY: i32 = 5
+
+// Typed JSON: what an instantiation of `nish/json-typed`'s two templates is to
+// the emitter (`jsonRouteRole` in `src/json-typed.ts` decides, and
+// `src/emit-json.ts` lowers every call in place from the class's fields).
+
+/** An ordinary instantiation. */
+export const JSON_NONE: i32 = 0
+/** `jsonDecode<T>`: every call decodes an object into a `T`, with code written from `T`'s fields. */
+export const JSON_DECODE: i32 = 1
+/** `jsonEncode<T>`: every call writes a `T` as an object, with code written from `T`'s fields. */
+export const JSON_ENCODE: i32 = 2
 
 // WP32 S5: what a call is to a fused lookup (docs/wp32-map.md §9.1). The
 // checker decides (`src/fusion.ts`), and the attribute pass and the emitter
@@ -589,6 +600,8 @@ export class Instantiation {
   parallel: i32
   /** WP32: one of the `MAP_*` roles; `MAP_NONE` for everything but `std/collections.ts`'s two intrinsics. */
   mapIntrinsic: i32
+  /** One of the `JSON_*` roles; `JSON_NONE` for everything but `nish/json-typed`'s two templates. */
+  jsonRoute: i32
   /**
    * WP29 P3: on a `spawn` instance, where each channel its task may send on is
    * in the task's argument — `""` for the argument itself, or the name of its
@@ -610,6 +623,7 @@ export class Instantiation {
     this.functionBindings = new FunctionBindings()
     this.parallel = PAR_NONE
     this.mapIntrinsic = MAP_NONE
+    this.jsonRoute = JSON_NONE
     this.channelSenders = []
     this.typeArgs = typeArgs
     this.sig = sig
@@ -1302,6 +1316,8 @@ export class CheckedProgram {
   secretLibrary: boolean
   /** `isMapExtras()`, decided once, as `collectionsLibrary` is. */
   mapExtrasLibrary: boolean
+  /** `isJsonTyped()`, decided once, as `collectionsLibrary` is. */
+  jsonTypedLibrary: boolean
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[]
@@ -1464,6 +1480,7 @@ export class CheckedProgram {
     this.newTypeArguments = []
     this.collectionsLibrary = isCollectionsModule(packageName, source.path)
     this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path)
+    this.jsonTypedLibrary = isJsonTypedModule(packageName, source.path)
     this.secretLibrary = isSecretModule(packageName, source.path)
     this.usesArgv = false
     this.uncheckedIndexing = false
@@ -1514,6 +1531,11 @@ export class CheckedProgram {
   /** Whether this module is the standard library's `std/map.ts`, `nish/map` (WP32 S5). */
   isMapExtras(): boolean {
     return this.mapExtrasLibrary
+  }
+
+  /** Whether this module is the standard library's `std/json-typed.ts`, `nish/json-typed`. */
+  isJsonTyped(): boolean {
+    return this.jsonTypedLibrary
   }
 
   /**

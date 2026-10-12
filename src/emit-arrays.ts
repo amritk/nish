@@ -824,12 +824,18 @@ const loadHeaderField = (emitter: Emitter, arr: string, index: i32, type: string
 }
 
 /** Store `value` into header field `index`, in the header alias domain. */
-const storeHeaderField = (emitter: Emitter, arr: string, index: i32, value: string, type: string): void => {
+export const storeHeaderField = (
+  emitter: Emitter,
+  arr: string,
+  index: i32,
+  value: string,
+  type: string
+): void => {
   const ptr = headerFieldPointer(emitter, arr, index)
   emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${headerAccess(emitter, index)}`)
 }
 
-const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64")
+export const loadLength = (emitter: Emitter, arr: string): string => loadHeaderField(emitter, arr, 0, "i64")
 
 /**
  * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`. For
@@ -956,6 +962,12 @@ const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: N
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
 }
 
+/** A header's 24 bytes from the arena, its fields not yet stored. */
+const arenaHeader = (emitter: Emitter): string => {
+  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
+  return emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`)
+}
+
 /**
  * Allocate a header with `len = cap = n`; `data` is stored by `storeData`.
  * Answers the `%struct.nish_array*`: an alloca when `site` is on the stack.
@@ -966,10 +978,7 @@ const emitHeader = (emitter: Emitter, n: string, site: Node): string => {
   if (emitter.isStackSite(site)) {
     arr = emitter.fn.emitAlloca("arr.hdr", HEADER, 8)
   } else {
-    const raw = emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`
-    )
-    arr = emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`)
+    arr = arenaHeader(emitter)
   }
   storeHeaderField(emitter, arr, 0, n, "i64")
   storeHeaderField(emitter, arr, 1, n, "i64")
@@ -1285,8 +1294,18 @@ const emitElementEquals = (emitter: Emitter, elem: i32, a: string, b: string): s
 
 /** `a.push(v)`: grow when full, store at `len`, and answer the new length. */
 const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
-  const fn = emitter.fn
   const value = emitter.emitExpression(expr.children[1].children[0])
+  return emitNumberFromI64(emitter, emitPushValue(emitter, arr, elem, value), expr)
+}
+
+/**
+ * Append `value` to `arr`, growing it first when it is full, and answer the
+ * new length as an `i64`: the whole of `a.push(v)` once `v` is lowered, for
+ * the code typed JSON writes too (`src/emit-json.ts`).
+ */
+export const emitPushValue = (emitter: Emitter, arr: string, elem: i32, value: string): string => {
+  const fn = emitter.fn
+  emitter.declareType(ARRAY_TYPE)
   const lenPtr = headerFieldPointer(emitter, arr, 0)
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
   const cap = loadHeaderField(emitter, arr, 1, "i64")
@@ -1303,7 +1322,23 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   storeElement(emitter, elementPointer(emitter, new ArrayBase(arr, null), elem, len), elem, value)
   const newLen = fn.emitValue(`add i64 ${len}, 1`)
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
-  return emitNumberFromI64(emitter, newLen, expr)
+  return newLen
+}
+
+// ---- For code with no node behind it (typed JSON) ------------------------------------
+
+/** Element `idx` (an `i64` below the length, which the caller has compared) of `arr`. */
+export const emitElementAt = (emitter: Emitter, arr: string, elem: i32, idx: string): string =>
+  loadElement(emitter, new ArrayBase(arr, null), elem, idx)
+
+/** A new empty array in the arena, as `[]` makes one. */
+export const emitEmptyArray = (emitter: Emitter): string => {
+  emitter.declareType(ARRAY_TYPE)
+  const arr = arenaHeader(emitter)
+  storeHeaderField(emitter, arr, 0, "0", "i64")
+  storeHeaderField(emitter, arr, 1, "0", "i64")
+  storeData(emitter, arr, "null")
+  return arr
 }
 
 /**

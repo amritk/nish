@@ -4118,6 +4118,7 @@ const LINK_READ_LATER = [
   "range_export_unproven",
   ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
   "std_json_tokenizer",
+  "std_json_typed",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -5145,6 +5146,101 @@ if (!only || "std_json_writer".includes(only)) {
   } else {
     skip("skipped: link/std_json_writer: no clang, so node.ts is not built natively")
   }
+}
+
+// Typed JSON (`nish/json-typed`) against Node's own parser and writer: each
+// line of `round-trip.txt` decoded into a `Match` and encoded back by the
+// native program must be `JSON.stringify(JSON.parse(line))`, computed here.
+// The lines are ASCII, hold no integer past 2^53, and list each object's keys
+// in the class's declaration order, the order the encoding writes. Under Node
+// the program cannot run that half at all: the types are erased, so
+// `jsonDecode` and `jsonEncode` panic with the sentence below, the class C
+// divergence docs/LANGUAGE.md ("Typed JSON") records, and that is held too.
+if (!only || "std_json_typed".includes(only)) {
+  const dir = path.join(linkDir, "std_json_typed")
+  const inputs = path.join(dir, "round-trip.txt")
+  const lines = fs
+    .readFileSync(inputs, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0)
+  check(
+    "link/std_json_typed: round-trip.txt is ASCII",
+    lines.every((l) => /^[\x20-\x7e]*$/.test(l)),
+    lines.join("\n")
+  )
+  const want = lines.map((l) => `${JSON.stringify(JSON.parse(l))}\n`).join("")
+  const exe = path.join(buildDir, "link", "std_json_typed", "app")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--round-trip", inputs], { encoding: "utf8" })
+    check(
+      `link/std_json_typed: each of the ${lines.length} lines decoded and encoded natively is JSON.stringify(JSON.parse(line))`,
+      native.status === 0 && native.stdout === want,
+      `--- JSON.stringify(JSON.parse(line))\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no native program to hold against JSON.parse and JSON.stringify")
+  }
+  // What `jsonDecode` calls does run under Node: `readers.ts` drives the
+  // decoder's readers directly, at both ends of each integer range, and both
+  // runs must print these lines: every reader once, and each integer reader
+  // at both ends of its range. An `i64` is a BigInt there, so a reader that
+  // mixed one with a number throws.
+  const readerLines = [
+    "i32 2147483647 -2147483648",
+    "u32 4294967295 0",
+    "i64 9223372036854775807 -9223372036854775808",
+    "string abc",
+    "i32Array 2 1 -2",
+    "i64Array 2 -9223372036854775808 9223372036854775807",
+    "failed 0",
+    "i32 below its range -21 at 1",
+    "i64 below its range -21 at 1",
+    "u32 below its range -21 at 1",
+    "u32 above its range -21 at 1",
+    "u32Array 2 7 4294967295",
+    "f64 2.5",
+    "f64Array 2 1.5 -0.25",
+    "boolean true",
+    "booleanArray 2 true false",
+    "stringArray 2 a bc",
+    "i32ArrayOrNull null true",
+    "i32ArrayOrNull present 1",
+    "failed 0",
+  ]
+  const readersWant = readerLines.map((l) => `${l}\n`).join("")
+  const readers = path.join(dir, "readers.ts")
+  const underNode = runUnderPrelude(readers, [])
+  check(
+    "link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines",
+    underNode.status === 0 && underNode.stdout === readersWant,
+    `--- want\n${readersWant}--- node\n${shown(underNode)}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "link", "std_json_typed_readers")
+    fs.rmSync(outDir, { recursive: true, force: true })
+    const app = path.join(outDir, "app")
+    const built = spawnSync(NISH, [readers, "-o", `${outDir}${path.sep}`, "--link", app], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_json_typed: readers.ts built natively prints the same lines",
+      native.status === 0 && native.stdout === readersWant,
+      `--- want\n${readersWant}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: link/std_json_typed: no clang, so readers.ts is not built natively")
+  }
+  const run = runUnderPrelude(path.join(dir, "node.ts"), [])
+  check(
+    "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
+    run.status === 1 &&
+      run.stderr.includes(
+        "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+      ),
+    shown(run)
+  )
 }
 
 // One file named twice on a command line is one module, whichever way the
