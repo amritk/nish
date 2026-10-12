@@ -1800,25 +1800,28 @@ class FreshJudge {
  * (NL2445) are said once, by that walk.
  */
 const checkSoleReferences = (ctx: CheckContext, body: Node, sites: Node[]): void => {
-  const program = ctx.program
   for (const site of sites) {
     const args = site.children[1].children
-    if (args.length === 0) {
-      continue
+    if (args.length > 0) {
+      checkSoleReference(ctx, body, args[0])
     }
-    const arg = args[0]
-    const named = unwrapSecretNode(arg)
-    const judge = new FreshJudge(program, ctx.table, body, FRESH_SITE, "", arg)
-    judge.copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === N_IDENT ? named.text : "v")
-    judge.subject = `\`${ctx.textOf(arg)}\``
-    if (!judge.judge(arg)) {
-      ctx.error(arg, aliasMessage(judge.failSubject, judge.failure, judge.copy))
-      ctx.errored = false
-      continue
-    }
-    for (const need of judge.needs) {
-      recordSecretNeed(program, need)
-    }
+  }
+}
+
+/** The sole-reference rule at one `secret(arg)` in `body`. */
+const checkSoleReference = (ctx: CheckContext, body: Node, arg: Node): void => {
+  const program = ctx.program
+  const named = unwrapSecretNode(arg)
+  const judge = new FreshJudge(program, ctx.table, body, FRESH_SITE, "", arg)
+  judge.copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === N_IDENT ? named.text : "v")
+  judge.subject = `\`${ctx.textOf(arg)}\``
+  if (!judge.judge(arg)) {
+    ctx.error(arg, aliasMessage(judge.failSubject, judge.failure, judge.copy))
+    ctx.errored = false
+    return
+  }
+  for (const need of judge.needs) {
+    recordSecretNeed(program, need)
   }
 }
 

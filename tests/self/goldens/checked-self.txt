@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 87 programs, 2404184 dump lines live, 87 distinct modules.
+# 87 programs, 2404680 dump lines live, 87 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/builtins.ts src/arrays.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/result.ts src/structs.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arena-report.ts: src/arena-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/emit-util.ts src/symbols.ts src/options.ts src/checker.ts src/expressions.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/builtins.ts src/members.ts src/result.ts src/structs.ts src/fusion.ts src/parents.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
@@ -1666,45 +1666,53 @@ function FreshJudge.judgeSource(this: FreshJudge, source: Node, outer: Node): bo
   callee 1790:12 FreshJudge.judge -> @FreshJudge.judge
 function checkSoleReferences(ctx: CheckContext, body: Node, sites: Node[]): void -> @checkSoleReferences
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1812:5
+  sharedWrite: via checkSoleReference
+  calls: checkSoleReference nish_panic_index
+  pointer ctx: size=192 writesThrough=true captured=false passedTo=checkSoleReference#0
+  pointer body: size=40 writesThrough=true captured=true passedTo=checkSoleReference#1
+  pointer sites: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 1803:14 site: Node (const)
+  local 1804:11 args: Node[] (const)
+  callee 1806:7 checkSoleReference -> @checkSoleReference
+function checkSoleReference(ctx: CheckContext, body: Node, arg: Node): void -> @checkSoleReference
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 1816:3
   calls: CheckContext.error CheckContext.textOf FreshJudge.constructor FreshJudge.judge aliasMessage copyHint nish_alloc_struct nish_panic_index nish_str_concat recordSecretNeed unwrapSecretNode
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.textOf#0 CheckContext.error#0
   pointer body: size=40 writesThrough=true captured=true passedTo=FreshJudge.constructor#3
-  pointer sites: size=0 writesThrough=false captured=false
+  pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapSecretNode#0 FreshJudge.constructor#6 CheckContext.textOf#1 FreshJudge.judge#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 1803:9 program: CheckedProgram (const)
-  local 1804:14 site: Node (const)
-  local 1805:11 args: Node[] (const)
-  local 1809:11 arg: Node (const)
-  local 1810:11 named: Node (const)
-  callee 1810:19 unwrapSecretNode -> @unwrapSecretNode
-  local 1811:11 judge: FreshJudge (const)
-  callee 1811:19 new FreshJudge -> @FreshJudge.constructor
-  callee 1812:18 copyHint -> @copyHint
-  callee 1813:26 CheckContext.textOf -> @CheckContext.textOf
-  callee 1814:10 FreshJudge.judge -> @FreshJudge.judge
-  callee 1815:7 CheckContext.error -> @CheckContext.error
-  callee 1815:22 aliasMessage -> @aliasMessage
-  local 1819:16 need: SecretNeed (const)
-  callee 1820:7 recordSecretNeed -> @recordSecretNeed
+  local 1813:9 program: CheckedProgram (const)
+  local 1814:9 named: Node (const)
+  callee 1814:17 unwrapSecretNode -> @unwrapSecretNode
+  local 1815:9 judge: FreshJudge (const)
+  callee 1815:17 new FreshJudge -> @FreshJudge.constructor
+  callee 1816:16 copyHint -> @copyHint
+  callee 1817:24 CheckContext.textOf -> @CheckContext.textOf
+  callee 1818:8 FreshJudge.judge -> @FreshJudge.judge
+  callee 1819:5 CheckContext.error -> @CheckContext.error
+  callee 1819:20 aliasMessage -> @aliasMessage
+  local 1823:14 need: SecretNeed (const)
+  callee 1824:5 recordSecretNeed -> @recordSecretNeed
 function recordSecretNeed(program: CheckedProgram, need: SecretNeed): void -> @recordSecretNeed
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1832:3
+  sharedWrite: 1835:3
   escaping: need
   calls: nish_array_grow nish_str_eq
   pointer program: size=632 writesThrough=false captured=false
   pointer need: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1827:14 seen: SecretNeed (const)
+  local 1830:14 seen: SecretNeed (const)
 function collectReturnValues(node: Node, out: Node[]): void -> @collectReturnValues
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1841:5
+  sharedWrite: 1844:5
   calls: collectReturnValues nish_array_grow nish_panic_index
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=collectReturnValues#1
   stackSites=0 stackLocals=0
-  local 1843:14 child: Node (const)
-  callee 1844:5 collectReturnValues -> @collectReturnValues
+  local 1846:14 child: Node (const)
+  callee 1847:5 collectReturnValues -> @collectReturnValues
 function FreshResults.constructor(this: FreshResults, programs: CheckedProgram[], table: TypeTable, facts: FactsTable): void -> @FreshResults.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: facts programs table
@@ -1720,81 +1728,81 @@ function FreshResults.refOf(this: FreshResults, need: SecretNeed): string -> @Fr
   pointer this: size=40 writesThrough=true captured=false passedTo=FreshResults.resultRef#0 FreshResults.keepRef#0
   pointer need: size=48 writesThrough=false captured=false passedTo=FreshResults.keepRef#1
   stackSites=0 stackLocals=0
-  callee 1877:38 FreshResults.resultRef -> @FreshResults.resultRef
-  callee 1877:65 FreshResults.keepRef -> @FreshResults.keepRef
+  callee 1880:38 FreshResults.resultRef -> @FreshResults.resultRef
+  callee 1880:65 FreshResults.keepRef -> @FreshResults.keepRef
 function FreshResults.keepRef(this: FreshResults, need: SecretNeed): string -> @FreshResults.keepRef [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionFacts.pointerParam calleeName nish_str_concat nish_str_eq
   pointer this: size=40 writesThrough=false captured=false
   pointer need: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1881:11 sig: FunctionSig (const)
-  local 1882:11 what: string (const)
-  local 1883:11 f: FunctionFacts | null (const)
-  callee 1883:15 FactsTable.get -> @FactsTable.get
-  callee 1885:34 calleeName -> @calleeName
-  local 1887:11 pointer: PointerParamFacts | null (const)
-  callee 1887:21 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  callee 1888:71 calleeName -> @calleeName
+  local 1884:11 sig: FunctionSig (const)
+  local 1885:11 what: string (const)
+  local 1886:11 f: FunctionFacts | null (const)
+  callee 1886:15 FactsTable.get -> @FactsTable.get
+  callee 1888:34 calleeName -> @calleeName
+  local 1890:11 pointer: PointerParamFacts | null (const)
+  callee 1890:21 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee 1891:71 calleeName -> @calleeName
 function FreshResults.resultRef(this: FreshResults, sig: FunctionSig): string -> @FreshResults.resultRef [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1910:13
+  sharedWrite: 1913:13
   calls: FreshResults.summaryOf nish_panic_index
   pointer this: size=40 writesThrough=true captured=false passedTo=FreshResults.summaryOf#0 FreshResults.summaryOf#0 FreshResults.summaryOf#0
   pointer sig: size=120 writesThrough=false captured=false passedTo=FreshResults.summaryOf#1
   stackSites=0 stackLocals=0
-  local 1893:11 start: FreshSummary (const)
-  callee 1893:19 FreshResults.summaryOf -> @FreshResults.summaryOf
-  local 1896:9 next: i32 (let)
-  local 1898:18 callee: FunctionSig (const)
-  callee 1899:9 FreshResults.summaryOf -> @FreshResults.summaryOf
-  local 1903:9 changed: boolean (let)
-  local 1906:18 summary: FreshSummary (const)
-  local 1907:20 callee: FunctionSig (const)
-  local 1908:17 ref: string (const)
-  callee 1908:23 FreshResults.summaryOf -> @FreshResults.summaryOf
+  local 1896:11 start: FreshSummary (const)
+  callee 1896:19 FreshResults.summaryOf -> @FreshResults.summaryOf
+  local 1899:9 next: i32 (let)
+  local 1901:18 callee: FunctionSig (const)
+  callee 1902:9 FreshResults.summaryOf -> @FreshResults.summaryOf
+  local 1906:9 changed: boolean (let)
+  local 1909:18 summary: FreshSummary (const)
+  local 1910:20 callee: FunctionSig (const)
+  local 1911:17 ref: string (const)
+  callee 1911:23 FreshResults.summaryOf -> @FreshResults.summaryOf
 function FreshResults.summaryOf(this: FreshResults, sig: FunctionSig): FreshSummary -> @FreshResults.summaryOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
-  sharedWrite: 1928:5
+  sharedWrite: 1931:5
   calls: FreshResults.summarise nish_array_grow nish_str_eq
   pointer this: size=40 writesThrough=false captured=false passedTo=FreshResults.summarise#0
   pointer sig: size=120 writesThrough=false captured=false passedTo=FreshResults.summarise#1
   stackSites=0 stackLocals=0
-  local 1922:16 summary: FreshSummary (const)
-  local 1927:11 summary: FreshSummary (const)
-  callee 1927:21 FreshResults.summarise -> @FreshResults.summarise
+  local 1925:16 summary: FreshSummary (const)
+  local 1930:11 summary: FreshSummary (const)
+  callee 1930:21 FreshResults.summarise -> @FreshResults.summarise
 function FreshResults.summarise(this: FreshResults, sig: FunctionSig): FreshSummary -> @FreshResults.summarise [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
-  sharedWrite: 1939:9
+  sharedWrite: 1942:9
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FreshJudge.constructor FreshJudge.judge FreshResults.keepRef FreshSummary.constructor FunctionSig.body FunctionSig.definedIn FunctionSig.foreign calleeName collectReturnValues nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat secretRoleOf
   pointer this: size=40 writesThrough=false captured=false passedTo=FreshResults.keepRef#0
   pointer sig: size=120 writesThrough=false captured=false passedTo=secretRoleOf#0 FunctionSig.body#0 FunctionSig.foreign#0 calleeName#0 FunctionSig.definedIn#0 calleeName#0
   stackSites=1 stackLocals=1
-  local 1933:11 out: FreshSummary (const)
-  callee 1933:17 new FreshSummary -> @FreshSummary.constructor
-  local 1934:11 role: i32 (const)
-  callee 1934:18 secretRoleOf -> @secretRoleOf
-  local 1935:11 instance: Instantiation | null (const)
-  local 1945:11 body: Node | null (const)
-  callee 1945:18 FunctionSig.body -> @FunctionSig.body
-  callee 1946:33 FunctionSig.foreign -> @FunctionSig.foreign
-  callee 1947:20 calleeName -> @calleeName
-  local 1950:9 program: CheckedProgram | null (let)
-  local 1951:16 p: CheckedProgram (const)
-  callee 1952:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 1957:20 calleeName -> @calleeName
-  callee 1961:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local 1963:11 judge: FreshJudge (const)
-  callee 1963:19 new FreshJudge -> @FreshJudge.constructor
-  local 1964:9 fresh: boolean (let)
-  local 1966:13 values: Node[] (const)
-  callee 1967:7 collectReturnValues -> @collectReturnValues
-  local 1968:18 value: Node (const)
-  callee 1969:26 FreshJudge.judge -> @FreshJudge.judge
-  callee 1972:15 FreshJudge.judge -> @FreshJudge.judge
-  callee 1977:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local 1985:16 need: SecretNeed (const)
-  callee 1989:19 FreshResults.keepRef -> @FreshResults.keepRef
+  local 1936:11 out: FreshSummary (const)
+  callee 1936:17 new FreshSummary -> @FreshSummary.constructor
+  local 1937:11 role: i32 (const)
+  callee 1937:18 secretRoleOf -> @secretRoleOf
+  local 1938:11 instance: Instantiation | null (const)
+  local 1948:11 body: Node | null (const)
+  callee 1948:18 FunctionSig.body -> @FunctionSig.body
+  callee 1949:33 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 1950:20 calleeName -> @calleeName
+  local 1953:9 program: CheckedProgram | null (let)
+  local 1954:16 p: CheckedProgram (const)
+  callee 1955:11 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 1960:20 calleeName -> @calleeName
+  callee 1964:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local 1966:11 judge: FreshJudge (const)
+  callee 1966:19 new FreshJudge -> @FreshJudge.constructor
+  local 1967:9 fresh: boolean (let)
+  local 1969:13 values: Node[] (const)
+  callee 1970:7 collectReturnValues -> @collectReturnValues
+  local 1971:18 value: Node (const)
+  callee 1972:26 FreshJudge.judge -> @FreshJudge.judge
+  callee 1975:15 FreshJudge.judge -> @FreshJudge.judge
+  callee 1980:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 1988:16 need: SecretNeed (const)
+  callee 1992:19 FreshResults.keepRef -> @FreshResults.keepRef
 function FreshSummary.constructor(this: FreshSummary, name: string): void -> @FreshSummary.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: name
@@ -1805,7 +1813,7 @@ function calleeName(sig: FunctionSig): string -> @calleeName
   calls: nish_str_concat
   pointer sig: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2016:9 owner: StructInfo | null (const)
+  local 2019:9 owner: StructInfo | null (const)
 function secretNeedMessage(results: FreshResults, need: SecretNeed): string -> @secretNeedMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FreshResults.refOf
@@ -1813,9 +1821,9 @@ function secretNeedMessage(results: FreshResults, need: SecretNeed): string -> @
   pointer results: size=40 writesThrough=true captured=false passedTo=FreshResults.refOf#0
   pointer need: size=48 writesThrough=false captured=false passedTo=FreshResults.refOf#1
   stackSites=0 stackLocals=0
-  local 2024:9 ref: string (const)
-  callee 2024:15 FreshResults.refOf -> @FreshResults.refOf
-  callee 2025:34 aliasMessage -> @aliasMessage
+  local 2027:9 ref: string (const)
+  callee 2027:15 FreshResults.refOf -> @FreshResults.refOf
+  callee 2028:34 aliasMessage -> @aliasMessage
 function ioMessage(fn: string, via: string, intrinsic: string): string -> @ioMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -1848,65 +1856,65 @@ function reachedEffect(facts: FactsTable, runtime: RuntimeTable, start: Function
   pointer runtime: size=16 writesThrough=false captured=false passedTo=RuntimeTable.lookup#0
   pointer start: size=384 writesThrough=true captured=true
   stackSites=2 stackLocals=2
-  local 2106:9 seen: string[] (const)
-  local 2107:9 queue: FunctionFacts[] (const)
-  local 2109:7 head: i32 (let)
-  local 2111:11 f: FunctionFacts (const)
-  local 2113:11 through: string (const)
-  local 2117:9 c: i32 (let)
-  callee 2118:16 StringSet.size -> @StringSet.size
-  local 2119:13 callee: string (const)
-  callee 2119:22 StringSet.at -> @StringSet.at
-  local 2125:13 next: FunctionFacts | null (const)
-  callee 2125:20 FactsTable.get -> @FactsTable.get
-  callee 2133:76 RuntimeTable.lookup -> @RuntimeTable.lookup
+  local 2109:9 seen: string[] (const)
+  local 2110:9 queue: FunctionFacts[] (const)
+  local 2112:7 head: i32 (let)
+  local 2114:11 f: FunctionFacts (const)
+  local 2116:11 through: string (const)
+  local 2120:9 c: i32 (let)
+  callee 2121:16 StringSet.size -> @StringSet.size
+  local 2122:13 callee: string (const)
+  callee 2122:22 StringSet.at -> @StringSet.at
+  local 2128:13 next: FunctionFacts | null (const)
+  callee 2128:20 FactsTable.get -> @FactsTable.get
+  callee 2136:76 RuntimeTable.lookup -> @RuntimeTable.lookup
 function paramFacts(facts: FunctionFacts, name: string): PointerParamFacts | null -> @paramFacts
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FunctionFacts.pointerParam
   pointer facts: size=384 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
-  callee 2141:86 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee 2144:86 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
 function exposeMessages(table: TypeTable, facts: FactsTable, runtime: RuntimeTable, sig: FunctionSig): string[] -> @exposeMessages [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2162:5
+  sharedWrite: 2165:5
   calls: FactsTable.get TypeTable.holdsSecret TypeTable.typeName exposeResultMessage ioMessage keepsMessage nish_array_grow nish_panic_index nish_str_eq paramFacts reachedEffect secretRoleOf undeclaredMessage writesArgMessage
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.holdsSecret#0 TypeTable.typeName#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 reachedEffect#0
   pointer runtime: size=16 writesThrough=false captured=false passedTo=reachedEffect#1
   pointer sig: size=120 writesThrough=false captured=false passedTo=secretRoleOf#0
   stackSites=0 stackLocals=0
-  local 2153:9 out: string[] (const)
-  local 2154:9 instance: Instantiation | null (const)
-  local 2158:9 intrinsic: string (const)
-  callee 2158:21 secretRoleOf -> @secretRoleOf
-  local 2159:9 fn: FunctionSig (const)
-  local 2160:9 name: string (const)
-  callee 2161:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee 2162:14 exposeResultMessage -> @exposeResultMessage
-  callee 2162:51 TypeTable.typeName -> @TypeTable.typeName
-  callee 2165:14 undeclaredMessage -> @undeclaredMessage
-  local 2167:9 own: FunctionFacts | null (const)
-  callee 2167:15 FactsTable.get -> @FactsTable.get
-  local 2171:9 effect: string (const)
-  callee 2171:18 reachedEffect -> @reachedEffect
-  callee 2173:14 ioMessage -> @ioMessage
-  local 2176:11 value: PointerParamFacts | null (const)
-  callee 2176:19 paramFacts -> @paramFacts
-  callee 2178:16 keepsMessage -> @keepsMessage
-  local 2182:11 arg: PointerParamFacts | null (const)
-  callee 2182:17 paramFacts -> @paramFacts
-  callee 2184:16 writesArgMessage -> @writesArgMessage
+  local 2156:9 out: string[] (const)
+  local 2157:9 instance: Instantiation | null (const)
+  local 2161:9 intrinsic: string (const)
+  callee 2161:21 secretRoleOf -> @secretRoleOf
+  local 2162:9 fn: FunctionSig (const)
+  local 2163:9 name: string (const)
+  callee 2164:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee 2165:14 exposeResultMessage -> @exposeResultMessage
+  callee 2165:51 TypeTable.typeName -> @TypeTable.typeName
+  callee 2168:14 undeclaredMessage -> @undeclaredMessage
+  local 2170:9 own: FunctionFacts | null (const)
+  callee 2170:15 FactsTable.get -> @FactsTable.get
+  local 2174:9 effect: string (const)
+  callee 2174:18 reachedEffect -> @reachedEffect
+  callee 2176:14 ioMessage -> @ioMessage
+  local 2179:11 value: PointerParamFacts | null (const)
+  callee 2179:19 paramFacts -> @paramFacts
+  callee 2181:16 keepsMessage -> @keepsMessage
+  local 2185:11 arg: PointerParamFacts | null (const)
+  callee 2185:17 paramFacts -> @paramFacts
+  callee 2187:16 writesArgMessage -> @writesArgMessage
 function recordExposeCall(program: CheckedProgram, node: Node, sig: FunctionSig): void -> @recordExposeCall [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2201:3
+  sharedWrite: 2204:3
   calls: ParallelCall.constructor nish_alloc_struct nish_array_grow
   pointer program: size=632 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=ParallelCall.constructor#1
   pointer sig: size=120 writesThrough=true captured=true passedTo=ParallelCall.constructor#2
   stackSites=0 stackLocals=0
-  local 2196:14 call: ParallelCall (const)
-  callee 2201:28 new ParallelCall -> @ParallelCall.constructor
+  local 2199:14 call: ParallelCall (const)
+  callee 2204:28 new ParallelCall -> @ParallelCall.constructor
 module src/attributes.ts
 import WIPE_MEMSET from "./emit-secret" -> const WIPE_MEMSET
 import isPureRuntime from "./secret" -> function @isPureRuntime
