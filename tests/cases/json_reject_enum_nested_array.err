@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Grid.rows`, which is `Level[][]`

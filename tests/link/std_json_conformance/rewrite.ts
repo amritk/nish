@@ -295,12 +295,16 @@ const jcWriteWords = (input: string, w: JsonWriter, scratch: u8[]): string => {
   return "";
 };
 
+/** The `indent` of `jcStringify` that indents by one tab a level, as `setIndentTab` does. */
+export const JC_INDENT_TAB: i32 = -1;
+
 /**
  * Writes `src` back through the tokenizer, or, when `src` is null, the value
  * the stringify words `words` spell, into a buffer grown on
- * `JSON_WRITE_FULL`; minified.
+ * `JSON_WRITE_FULL`; indented by `indent` spaces a level, or by one tab a
+ * level when `indent` is `JC_INDENT_TAB`, and minified when it is `0`.
  */
-const jcWriteAll = (src: u8[] | null, words: string): JcOutcome => {
+const jcWriteAll = (src: u8[] | null, words: string, indent: i32): JcOutcome => {
   const size: i32 = src !== null ? toI32(src.length) : toI32(words.length);
   // A decoded string is never longer than the text it is written with.
   const scratch = new Array<u8>(size);
@@ -308,6 +312,11 @@ const jcWriteAll = (src: u8[] | null, words: string): JcOutcome => {
   while (true) {
     const out = new Array<u8>(cap);
     const w = new JsonWriter(out, 0);
+    if (indent === JC_INDENT_TAB) {
+      w.setIndentTab();
+    } else {
+      w.setIndent(indent);
+    }
     const error: string = src !== null ? jcCopyTokens(src, w, scratch) : jcWriteWords(words, w, scratch);
     if (error !== "") {
       return new JcOutcome(error, out, 0);
@@ -321,10 +330,14 @@ const jcWriteAll = (src: u8[] | null, words: string): JcOutcome => {
 };
 
 /** `src` read by the tokenizer and written back by the writer, minified. */
-export const jcRewrite = (src: u8[]): JcOutcome => jcWriteAll(src, "");
+export const jcRewrite = (src: u8[]): JcOutcome => jcWriteAll(src, "", 0);
 
-/** The value the stringify words `input` spell, written by the writer, minified. */
-export const jcStringify = (input: string): JcOutcome => jcWriteAll(null, input);
+/**
+ * The value the stringify words `input` spell, written by the writer: indented
+ * by `indent` spaces a level, by one tab a level for `JC_INDENT_TAB`, or
+ * minified for `0`.
+ */
+export const jcStringify = (input: string, indent: i32): JcOutcome => jcWriteAll(null, input, indent);
 
 /** One y_ file of JSONTestSuite: its name, and its bytes, or `null` when its line does not unpack. */
 export class JcSuiteFile {

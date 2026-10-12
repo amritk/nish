@@ -400,7 +400,7 @@ What differs between the rows:
 | | |
 | --- | --- |
 | Date | 2026-10-12 |
-| nish | nish 0.18.0 (commit a617c1f6) |
+| nish | nish 0.18.0 (commit 06645ecf) |
 | CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores |
 | OS | linux 6.18.44-fc-v114 (x64) |
 | Toolchains | Nish: nish 0.18.0; C++: `clang++` Ubuntu clang version 18.1.3 (1ubuntu1); C: `clang` Ubuntu clang version 18.1.3 (1ubuntu1); Rust: cargo 1.97.0 (c980f4866 2026-06-30), rustc 1.97.0 (2d8144b78 2026-07-07); Go: `go` go version go1.24.7 linux/amd64 |
@@ -413,15 +413,15 @@ Checksum `tokenize 16249681129112504606 29573 2.1169264482695808e+22 17968486845
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 1,434,351 | 1,629,580 | 440 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 535,055 | 575,947 | 1180 | 2.68x |
-| yyjson 0.12.0 | 393,917 | 429,927 | 1603 | 3.64x |
-| Nish (byte-identical copy) | 1,490,032 | 1,662,533 | 424 | 0.96x, the noise band |
-| RapidJSON (Reader, SAX) | 1,343,348 | 1,451,709 | 470 | 1.07x |
-| serde_json 1.0.154 | 1,146,229 | 1,266,081 | 551 | 1.25x |
-| Go encoding/json | 15,959,622 | 17,189,585 | 40 | 0.09x |
+| Nish | 1,247,246 | 1,377,206 | 506 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 531,608 | 550,903 | 1188 | 2.35x |
+| yyjson 0.12.0 | 397,616 | 428,658 | 1588 | 3.14x |
+| Nish (byte-identical copy) | 1,258,439 | 1,340,282 | 502 | 0.99x, the noise band |
+| RapidJSON (Reader, SAX) | 1,328,199 | 1,397,126 | 475 | 0.94x |
+| serde_json 1.0.154 | 1,157,710 | 1,227,389 | 545 | 1.08x |
+| Go encoding/json | 15,424,203 | 16,330,703 | 41 | 0.08x |
 
-Noise band, Nish against its byte-identical copy: 3.7% on the minimums (2.0% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 0.9% on the minimums (2.8% on the medians). A ratio within it is no difference.
 
 ### tokenize, citm_catalog.json (1,727,204 bytes, 78 per run, 14 rounds)
 
@@ -429,15 +429,15 @@ Checksum `tokenize 5073453772714654304 85035 26602007581164610 71298874593416537
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 2,686,584 | 2,790,401 | 643 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 1,291,123 | 1,394,866 | 1338 | 2.08x |
-| yyjson 0.12.0 | 1,047,871 | 1,201,398 | 1648 | 2.56x |
-| Nish (byte-identical copy) | 2,565,255 | 2,918,989 | 673 | 1.05x, the noise band |
-| RapidJSON (Reader, SAX) | 2,003,278 | 2,207,818 | 862 | 1.34x |
-| serde_json 1.0.154 | 1,890,903 | 2,254,661 | 913 | 1.42x |
-| Go encoding/json | 24,824,599 | 28,141,490 | 70 | 0.11x |
+| Nish | 2,397,781 | 2,611,279 | 720 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 1,304,878 | 1,402,979 | 1324 | 1.84x |
+| yyjson 0.12.0 | 1,092,155 | 1,229,289 | 1581 | 2.20x |
+| Nish (byte-identical copy) | 2,460,441 | 2,672,876 | 702 | 0.97x, the noise band |
+| RapidJSON (Reader, SAX) | 2,021,113 | 2,310,335 | 855 | 1.19x |
+| serde_json 1.0.154 | 1,920,145 | 2,167,800 | 900 | 1.25x |
+| Go encoding/json | 24,692,846 | 27,226,268 | 70 | 0.10x |
 
-Noise band, Nish against its byte-identical copy: 4.7% on the minimums (4.4% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 2.5% on the minimums (2.3% on the medians). A ratio within it is no difference.
 
 ### tokenize, canada.json (2,251,051 bytes, 60 per run, 14 rounds)
 
@@ -445,15 +445,15 @@ Checksum `tokenize 388743233009497152 223236 -75931866.53303604 7819388002301591
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 35,343,950 | 37,054,606 | 64 | 1.00x |
-| simdjson 4.4.2 (On-Demand) | 5,699,896 | 6,251,887 | 395 | 6.20x |
-| yyjson 0.12.0 | 3,599,630 | 4,041,043 | 625 | 9.82x |
-| Nish (byte-identical copy) | 34,716,591 | 37,442,559 | 65 | 1.02x, the noise band |
-| RapidJSON (Reader, SAX) | 10,380,700 | 11,203,451 | 217 | 3.40x |
-| serde_json 1.0.154 | 6,639,525 | 7,782,717 | 339 | 5.32x |
-| Go encoding/json | 82,713,737 | 87,592,574 | 27 | 0.43x |
+| Nish | 21,986,700 | 23,501,141 | 102 | 1.00x |
+| simdjson 4.4.2 (On-Demand) | 5,743,654 | 6,041,012 | 392 | 3.83x |
+| yyjson 0.12.0 | 3,518,113 | 3,972,972 | 640 | 6.25x |
+| Nish (byte-identical copy) | 20,561,996 | 23,088,790 | 109 | 1.07x, the noise band |
+| RapidJSON (Reader, SAX) | 9,882,139 | 11,365,456 | 228 | 2.22x |
+| serde_json 1.0.154 | 6,681,493 | 7,427,639 | 337 | 3.29x |
+| Go encoding/json | 83,624,487 | 88,660,908 | 27 | 0.26x |
 
-Noise band, Nish against its byte-identical copy: 1.8% on the minimums (1.0% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 6.9% on the minimums (1.8% on the medians). A ratio within it is no difference.
 
 ### typed, citm_catalog.json (1,727,204 bytes, 78 per run, 10 rounds)
 
@@ -461,13 +461,13 @@ Checksum `typed 13164840133002388121 243`, the same from every implementation.
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 3,831,809 | 4,552,451 | 451 | 1.00x |
-| simdjson 4.4.2 (On-Demand; reads only `performances`, MB/s over the whole document) | 873,729 | 921,060 | 1977 | 4.39x |
-| Nish (byte-identical copy) | 3,617,558 | 4,002,417 | 477 | 1.06x, the noise band |
-| serde_json 1.0.154 | 2,236,758 | 2,731,574 | 772 | 1.71x |
-| Go encoding/json | 16,867,274 | 17,791,066 | 102 | 0.23x |
+| Nish | 3,164,937 | 3,316,471 | 546 | 1.00x |
+| simdjson 4.4.2 (On-Demand; reads only `performances`, MB/s over the whole document) | 872,251 | 933,168 | 1980 | 3.63x |
+| Nish (byte-identical copy) | 3,168,746 | 3,402,752 | 545 | 1.00x, the noise band |
+| serde_json 1.0.154 | 2,213,359 | 2,431,334 | 780 | 1.43x |
+| Go encoding/json | 16,615,463 | 18,333,601 | 104 | 0.19x |
 
-Noise band, Nish against its byte-identical copy: 5.9% on the minimums (13.7% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 0.1% on the minimums (2.5% on the medians). A ratio within it is no difference.
 
 ### typed-reuse, citm_catalog.json (1,727,204 bytes, 78 per run, 12 rounds)
 
@@ -475,10 +475,10 @@ Checksum `typed 13164840133002388121 243`, the same from every implementation.
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish, decoding into the same objects | 3,177,683 | 3,323,066 | 544 | 1.00x |
-| Nish (byte-identical copy) | 3,072,245 | 3,354,247 | 562 | 1.03x, the noise band |
+| Nish, decoding into the same objects | 2,669,566 | 2,836,620 | 647 | 1.00x |
+| Nish (byte-identical copy) | 2,631,730 | 2,870,934 | 656 | 1.01x, the noise band |
 
-Noise band, Nish against its byte-identical copy: 3.4% on the minimums (0.9% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 1.4% on the minimums (1.2% on the medians). A ratio within it is no difference.
 
 ### serialize, citm_catalog.json (452,530 bytes written, 297 per run, 10 rounds)
 
@@ -486,11 +486,11 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 
 | Implementation | ns/doc min | ns/doc median | MB/s (min) | Nish min / its min |
 | --- | ---: | ---: | ---: | ---: |
-| Nish | 835,861 | 897,689 | 541 | 1.00x |
-| simdjson 4.4.2 (builder::string_builder, written by hand field by field) | 345,151 | 378,303 | 1311 | 2.42x |
-| Nish (byte-identical copy) | 807,750 | 960,672 | 560 | 1.03x, the noise band |
-| serde_json 1.0.154 | 396,808 | 479,965 | 1140 | 2.11x |
-| Go encoding/json | 1,064,827 | 1,220,606 | 425 | 0.78x |
+| Nish | 870,432 | 980,479 | 520 | 1.00x |
+| simdjson 4.4.2 (builder::string_builder, written by hand field by field) | 343,223 | 370,123 | 1318 | 2.54x |
+| Nish (byte-identical copy) | 860,636 | 980,079 | 526 | 1.01x, the noise band |
+| serde_json 1.0.154 | 409,659 | 458,145 | 1105 | 2.12x |
+| Go encoding/json | 1,038,433 | 1,154,041 | 436 | 0.84x |
 
-Noise band, Nish against its byte-identical copy: 3.5% on the minimums (6.6% on the medians). A ratio within it is no difference.
+Noise band, Nish against its byte-identical copy: 1.1% on the minimums (0.0% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->

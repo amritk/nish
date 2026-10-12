@@ -3,11 +3,11 @@ PASS  the data: tests/json-conformance/v8.txt holds 684 cases
 PASS  the data: tests/json-conformance/test262.txt's cases come from 64 upstream files
 PASS  the data: tests/json-conformance/v8.txt's cases come from 9 upstream files
 PASS  test262 JSON.parse: each of the 376 cases divergences.txt does not list answers as upstream
-PASS  test262 JSON.stringify: each of the 375 cases divergences.txt does not list answers as upstream
+PASS  test262 JSON.stringify: each of the 382 cases divergences.txt does not list answers as upstream
 PASS  V8 JSON.parse: each of the 368 cases divergences.txt does not list answers as upstream
-PASS  V8 JSON.stringify: each of the 300 cases divergences.txt does not list answers as upstream
+PASS  V8 JSON.stringify: each of the 306 cases divergences.txt does not list answers as upstream
 PASS  divergence lone-surrogate: each of the 10 cases listed answers SURROGATE, not upstream's value
-PASS  divergence indent: each of the 25 cases listed answers unindented, not upstream's value
+PASS  divergence indent-gap: each of the 12 cases listed answers unindented, not upstream's value
 PASS  divergence depth: each of the 1 cases listed answers DEPTH, not upstream's value
 PASS  divergence duplicate-key: each of the 1 cases listed answers exact, not upstream's value
 PASS  divergences.txt: every line names a case once, under a reason it defines once
