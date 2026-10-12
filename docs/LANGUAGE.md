@@ -6387,7 +6387,11 @@ export const main = (): i32 => {
   get the same code of their own, so it recurses as the data does
   (`tests/link/std_json_typed`, whose `main.ll` is the golden of the code
   written for a one-field class;
-  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)). Because the encoding is calls
+  of the writer's methods, it is written in the writer's modes: a writer set
+  with `setIndent(2)` encodes what `JSON.stringify(v, null, 2)` writes, and a
+  `setStrict(true)` writer fails a NaN or infinite `f64` field with
+  `JSON_WRITE_NON_FINITE` (`tests/link/std_json_writer`).
 - **What a field may be.** `T` is a declared class, and every field of every
   class the call reaches is one of these; anything else is refused at the
   call's argument, naming the class and the field:

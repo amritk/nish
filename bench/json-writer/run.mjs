@@ -1,6 +1,7 @@
 // WP34 N11: what `JsonWriter` costs to write the TechEmpower `/json` body,
-// `{"message":"…"}`, into one reused buffer, and how much of a difference this
-// machine can see at all.
+// `{"message":"…"}`, into one reused buffer, minified and indented by two
+// spaces (`setIndent(2)`), and how much of a difference this machine can see
+// at all.
 //
 //   npm run build && node bench/json-writer/run.mjs [--rounds N] [--count N] [--compiler <nish>]
 //     --rounds N  timed rounds, rounded up to an even count so each binary
@@ -12,9 +13,10 @@
 // and copied byte for byte. The build and its copy run in alternating rounds,
 // each going first in half of them, so a slow stretch of a shared machine
 // falls on both. Each run times its own loop with `monotonicNanos` and prints
-// it with a checksum of every byte written; every run must print the same
-// checksum. The report is ns per write, min and median over the rounds, for
-// the build and the copy. The copy is the noise band: two byte-identical
+// it with a checksum of every byte written; every run of a mode must print the
+// same checksum. The report is ns per write, min and median over the rounds,
+// for the build and the copy in each mode, the two modes interleaved within
+// each round too. The copy is the noise band: two byte-identical
 // binaries differ only by what the machine did to them, so a change to the
 // writer is a gain or a loss only outside that band.
 import { spawnSync } from "node:child_process"
@@ -72,9 +74,11 @@ if (!fs.readFileSync(exe).equals(fs.readFileSync(copy))) {
   fail("the copy is not byte-identical to the build")
 }
 
-/** One run: its checksum line without the time, and its ns per write. */
-const runOnce = (bin) => {
-  const r = spawnSync(bin, [String(count)], { encoding: "utf8" })
+const MODES = ["minified", "pretty"]
+
+/** One run in `mode`: its checksum line without the time, and its ns per write. */
+const runOnce = (bin, mode) => {
+  const r = spawnSync(bin, [String(count), mode], { encoding: "utf8" })
   const m = /^checksum (\d+) failed (-?\d+) count (\d+) ns (\d+)$/.exec(r.stdout.trim())
   if (r.status !== 0 || m === null || m[2] !== "0") {
     fail(`${bin} exited ${r.status} printing ${JSON.stringify(r.stdout)}${r.stderr}`)
@@ -89,30 +93,36 @@ const median = (xs) => {
 }
 
 const bins = [exe, copy]
-const times = [[], []]
-let answer = null
+const times = MODES.map(() => [[], []])
+const answers = MODES.map(() => null)
 // Round 0 warms both and is not counted. An even count of timed rounds, so
 // each binary goes first equally often.
 const timed = rounds + (rounds % 2)
 for (let round = 0; round <= timed; round++) {
-  for (const k of round % 2 === 0 ? [0, 1] : [1, 0]) {
-    const r = runOnce(bins[k])
-    if (answer !== null && r.answer !== answer) {
-      fail(`round ${round}: ${bins[k]} printed ${r.answer}, not ${answer}`)
-    }
-    answer = r.answer
-    if (round > 0) {
-      times[k].push(r.ns)
+  for (let m = 0; m < MODES.length; m++) {
+    for (const k of round % 2 === 0 ? [0, 1] : [1, 0]) {
+      const r = runOnce(bins[k], MODES[m])
+      if (answers[m] !== null && r.answer !== answers[m]) {
+        fail(`round ${round}: ${bins[k]} ${MODES[m]} printed ${r.answer}, not ${answers[m]}`)
+      }
+      answers[m] = r.answer
+      if (round > 0) {
+        times[m][k].push(r.ns)
+      }
     }
   }
 }
 
 const row = (label, ts) =>
-  `${label.padEnd(6)} min ${Math.min(...ts).toFixed(1)} ns/op, median ${median(ts).toFixed(1)} ns/op`
-const band = (f) => (Math.abs(f(times[0]) - f(times[1])) / f(times[0])) * 100
-console.log(`json-writer: ${count} writes a run, ${timed} rounds, ${answer}`)
-console.log(row("build", times[0]))
-console.log(row("copy", times[1]))
-console.log(
-  `noise band (build against its byte-identical copy): min ${band((ts) => Math.min(...ts)).toFixed(1)}%, median ${band(median).toFixed(1)}%`
-)
+  `${label.padEnd(15)} min ${Math.min(...ts).toFixed(1)} ns/op, median ${median(ts).toFixed(1)} ns/op`
+const band = (ts, f) => (Math.abs(f(ts[0]) - f(ts[1])) / f(ts[0])) * 100
+console.log(`json-writer: ${count} writes a run, ${timed} rounds`)
+for (let m = 0; m < MODES.length; m++) {
+  const ts = times[m]
+  console.log(`${MODES[m]}: ${answers[m]}`)
+  console.log(row(`${MODES[m]} build`, ts[0]))
+  console.log(row(`${MODES[m]} copy`, ts[1]))
+  console.log(
+    `${MODES[m]} noise band (build against its byte-identical copy): min ${band(ts, (xs) => Math.min(...xs)).toFixed(1)}%, median ${band(ts, median).toFixed(1)}%`
+  )
+}
