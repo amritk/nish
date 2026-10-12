@@ -1,0 +1,38 @@
+{
+  "areaNames": {"1001": "Stalls", "1002": "Balcony \"upper\"", "1003": "Loge café 🎭"},
+  "events": [
+    {"id": 7, "ok": true, "gone": false, "note": null, "ratio": -0.125, "big": 9007199254740993, "tiny": 1.5e-300, "wide": 2.5E+10, "path": "a\/b\\c\n\t"}
+  ],
+  "coords": [[-65.613616999999977, 43.420273000000009], [0, -0], [123456789012345678, 1e22]],
+  "performances": [
+    {
+      "eventId": 4100001,
+      "id": 5200017,
+      "logo": "/img/\"poster\"\\0042-\u00e9\ud83c\udfad.png",
+      "name": null,
+      "prices": [
+        {"amount": 90250, "audienceSubCategoryId": 610, "seatCategoryId": 7001},
+        {"amount": 66500, "audienceSubCategoryId": 610, "seatCategoryId": 7002}
+      ],
+      "seatCategories": [
+        {"areas": [{"areaId": 801, "blockIds": []}, {"areaId": 802, "blockIds": [17, 18]}], "seatCategoryId": 7001},
+        {"areas": [], "seatCategoryId": 7002}
+      ],
+      "seatMapImage": null,
+      "start": 1700000000000,
+      "venueCode": "HALL_NORTH"
+    },
+    {
+      "eventId": 4100002,
+      "id": 5200018,
+      "logo": "/img/poster-0042.png",
+      "name": "Line\nTab\tCtrl\u0001 caf\u00e9 \u2603 \/ end",
+      "prices": [],
+      "seatCategories": [{"areas": [{"areaId": 803, "blockIds": []}], "seatCategoryId": 7003}],
+      "seatMapImage": null,
+      "start": 1700086400000,
+      "venueCode": "H\u00c5LL_N\u00d8RTH"
+    }
+  ],
+  "venueNames": {"HALL_NORTH": "North Hall"}
+}
