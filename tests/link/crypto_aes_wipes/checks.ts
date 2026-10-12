@@ -64,6 +64,7 @@ export const aesWipeChecks = (): i32 => {
   const t = new Suite("aes wipes");
   // Typed locals rather than bare literals: a literal can be an `f64` under
   // `--number-mode f64`.
+  const l0: i32 = 0;
   const l10: i32 = 10;
   const l14: i32 = 14;
   const l88: i32 = 88;
@@ -73,10 +74,10 @@ export const aesWipeChecks = (): i32 => {
 
   // An `AesKey` whose H is not two words is not one `aesKey` makes.
   const raw: u8[] = fromHex("000102030405060708090a0b0c0d0e0f");
-  const odd: AesKey = new AesKey(toI32(0), new Array<u64>(88));
+  const odd: AesKey = new AesKey(l0, new Array<u64>(88));
   odd.h = new Array<u64>(3);
   t.ok("aesKeyInto refuses an AesKey whose h is three words", !aesKeyInto(raw, odd));
-  t.eqI32("and leaves its schedule as it was", nonZero(odd.roundKeys) + odd.rounds, toI32(0));
+  t.eqI32("and leaves its schedule as it was", nonZero(odd.roundKeys) + odd.rounds, l0);
   const usable: AesKey | null = aesKey(raw);
   if (usable !== null) {
     usable.h = new Array<u64>(1);

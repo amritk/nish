@@ -17,6 +17,7 @@ import {
   hkdfExtractSha384,
 } from "nish/crypto/hkdf";
 import { fromHex } from "../crypto_aes/hex";
+import { copyOf } from "../crypto_x25519/plain";
 
 /** Whether the bytes a `Secret` holds are `want`, for `exposeWith` to run. */
 const holds = (value: u8[], want: u8[]): boolean => timingSafeEqual(value, want);
@@ -25,14 +26,14 @@ const holds = (value: u8[], want: u8[]): boolean => timingSafeEqual(value, want)
 const holdsHex = (s: Secret<u8[]>, hex: string): boolean => exposeWith(s, fromHex(hex), holds);
 
 /**
- * Whether the SHA-256 Secret form of HKDF-Expand-Label on `prkHex` gives `want`,
+ * Whether the SHA-256 Secret form of HKDF-Expand-Label on `prk` gives `want`,
  * and the plain form gives the same bytes.
  */
-const sha256Agrees = (prkHex: string, label: string, context: u8[], length: i32, want: string): boolean => {
-  const prk: Secret<u8[]> = secret(fromHex(prkHex));
-  const okm: Secret<u8[]> = hkdfExpandLabelSha256Secret(prk, label, context, length);
-  wipe(prk);
-  const same: boolean = holdsHex(okm, want) && timingSafeEqual(hkdfExpandLabelSha256(fromHex(prkHex), label, context, length), fromHex(want));
+const sha256Agrees = (prk: u8[], label: string, context: u8[], length: i32, want: string): boolean => {
+  const held: Secret<u8[]> = secret(copyOf(prk));
+  const okm: Secret<u8[]> = hkdfExpandLabelSha256Secret(held, label, context, length);
+  wipe(held);
+  const same: boolean = holdsHex(okm, want) && timingSafeEqual(hkdfExpandLabelSha256(prk, label, context, length), fromHex(want));
   wipe(okm);
   return same;
 };
@@ -45,15 +46,6 @@ const sha384Agrees = (prk: u8[], label: string, context: u8[], length: i32, want
   const same: boolean = holdsHex(okm, want) && timingSafeEqual(hkdfExpandLabelSha384(prk, label, context, length), fromHex(want));
   wipe(okm);
   return same;
-};
-
-/** A fresh copy of `bytes`, for `secret` to move: a parameter cannot be moved. */
-const copyOf = (bytes: u8[]): u8[] => {
-  const out: u8[] = new Array<u8>(toI32(bytes.length));
-  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(bytes.length); i++) {
-    out[i] = bytes[i];
-  }
-  return out;
 };
 
 /** Runs every check and answers the exit code; `crypto_hkdf_expand_label_secret_f64` runs them under `--number-mode f64`. */
@@ -87,17 +79,18 @@ export const expandLabelSecretChecks = (): i32 => {
   wipe(clientKey);
   wipe(clientIv);
   wipe(clientHp);
+  const serverPrk: u8[] = fromHex("3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b");
   t.ok(
     "RFC 9001 A.1 server key, the Secret form and the plain one alike",
-    sha256Agrees("3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b", "quic key", none, l16, "cf3a5331653c364c88f0f379b6067e37")
+    sha256Agrees(serverPrk, "quic key", none, l16, "cf3a5331653c364c88f0f379b6067e37")
   );
   t.ok(
     "RFC 9001 A.1 server iv, the Secret form and the plain one alike",
-    sha256Agrees("3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b", "quic iv", none, l12, "0ac1493ca1905853b0bba03e")
+    sha256Agrees(serverPrk, "quic iv", none, l12, "0ac1493ca1905853b0bba03e")
   );
   t.ok(
     "RFC 9001 A.1 server hp, the Secret form and the plain one alike",
-    sha256Agrees("3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b", "quic hp", none, l16, "c206b8d9b9f0f37644430b490eeaa314")
+    sha256Agrees(serverPrk, "quic hp", none, l16, "c206b8d9b9f0f37644430b490eeaa314")
   );
   wipe(server);
 

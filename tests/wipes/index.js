@@ -4,9 +4,10 @@
 // and each group is one check:
 //
 // - `name`, the check's name, which a record's Tests list cites by its exact
-//   string, so a group keeps its name once it has one. It starts with the area
-//   (`<area>: the wipes survive opt -O2 (…)`), and `node tests/run.js <filter>`
-//   runs the group when its name or its program's path contains the filter.
+//   string, so a group keeps its name once it has one. A new group's name is
+//   `<area>: the wipes survive opt -O2 (…)`; whatever comes before the colon
+//   names the group in its skip line. `node tests/run.js <filter>` runs the
+//   group when its name or its program's path contains the filter.
 // - `program`, the whole program compiled, relative to the repository: every
 //   export of a module it imports is emitted, so it need only import the
 //   modules whose functions the roots name.
@@ -91,12 +92,13 @@ const wipeCounter = (bodies) => {
  * and `has`: `nish` is the compiler under test and `buildDir` the run's scratch.
  */
 export const runWipeChecks = ({ only, has, check, skip, nish, root, buildDir }) => {
+  const hasOpt = has("opt")
   for (const group of GROUPS) {
     if (group.roots.length === 0 || (only && !group.name.includes(only) && !group.program.includes(only))) {
       continue
     }
     const area = group.name.slice(0, group.name.indexOf(":"))
-    if (!has("opt")) {
+    if (!hasOpt) {
       skip(`${area}: no opt to show the wipes survive -O2`)
       continue
     }
