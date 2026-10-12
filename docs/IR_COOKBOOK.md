@@ -11586,9 +11586,12 @@ attributes #2 = { nounwind willreturn readnone }
 returns it, so the call starts `xs` with four elements just as
 `new Array<i32>(4)` written in `span` would, and neither `xs[3]` nor `xs[0]`
 carries a check. The helper's body is read as written, so the rule follows
-the array no further than the body shows it: handing it to a function,
-storing it, or `pop` gives no length, and neither does a method, a generic
-or a body with an arrow in it. A size is a literal, a constant of the same
+the array no further than the bodies show it. Handing it to a function of
+the same module keeps the length when that function's parameter only
+indexes it, reads `.length`, pushes to it or hands it on to another such
+parameter, and never returns it; storing it, `pop`, or a callee that does
+either gives no length, and neither does a method, a generic or a body with
+an arrow in it. A size is a literal, a constant of the same
 module, or a parameter the body never declares again or writes, read from
 the call's argument. A store `this.rows = filled(8)` carries the length into
 the path, which is how AWFY Queens loses every check: the call-site ranges of
