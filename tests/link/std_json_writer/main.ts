@@ -779,6 +779,108 @@ export const main = (): number => {
     '{\n  "name": "a",\n  "values": [\n    1,\n    2\n  ]\n}'
   );
 
+  // Switching the indent in the middle of a text applies from the next
+  // byte: on, the next element takes its comma and a line break and every
+  // closer after it a line of its own; off, the rest is minified.
+  pw.setIndent(0);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.setIndent(2);
+  pw.i32(2);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(3);
+  pw.endObject();
+  pw.endArray();
+  t.eqStr("indenting from the middle of a text", pw.text(), '[1,\n  2,\n  {\n    "a": 3\n  }\n]');
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.setIndent(0);
+  pw.i32(2);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(3);
+  pw.endObject();
+  pw.endArray();
+  t.eqStr("and minifying from the middle of one", pw.text(), '[\n  1,2,{"a":3}]');
+
+  // Every misuse has the code it has in the minified text, with an indent
+  // set, and writes nothing: not its line break, not its indent.
+  pw.setIndent(2);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  let before: i32 = pw.written();
+  pw.endObject();
+  t.eqI32("indented, endObject closing an array is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("and writes nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  before = pw.written();
+  pw.endArray();
+  t.eqI32("indented, endArray straight after the first key is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("and writes nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(1);
+  pw.key("b");
+  before = pw.written();
+  pw.endArray();
+  t.eqI32("and straight after a later key", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("writing nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(1);
+  pw.key("b");
+  before = pw.written();
+  pw.endObject();
+  t.eqI32("indented, endObject straight after a later key is JSON_WRITE_VALUE_EXPECTED", pw.failed, JSON_WRITE_VALUE_EXPECTED);
+  t.eqI32("and writes nothing", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.endArray();
+  t.eqI32("indented, endArray with nothing open is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("and writes nothing", pw.written(), 0);
+  pw.reset(big4, 0);
+  pw.beginArray();
+  pw.i32(1);
+  pw.endArray();
+  before = pw.written();
+  pw.endObject();
+  t.eqI32("and endObject after the value is whole is JSON_WRITE_UNBALANCED", pw.failed, JSON_WRITE_UNBALANCED);
+  t.eqI32("writing nothing", pw.written(), before);
+  pw.reset(widest, 0);
+  for (let d: i32 = 0; d < JSON_WRITER_MAX_DEPTH; d += 1) {
+    pw.beginArray();
+  }
+  before = pw.written();
+  pw.beginObject();
+  t.eqI32("indented, one opener past JSON_WRITER_MAX_DEPTH is JSON_WRITE_TOO_DEEP", pw.failed, JSON_WRITE_TOO_DEEP);
+  t.eqI32("and writes no line break for it", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.key("a");
+  pw.i32(1);
+  before = pw.written();
+  pw.i32(2);
+  t.eqI32("indented, a value where a key is due is JSON_WRITE_KEY_EXPECTED", pw.failed, JSON_WRITE_KEY_EXPECTED);
+  t.eqI32("and writes no comma or line break for it", pw.written(), before);
+  pw.reset(big4, 0);
+  pw.i32(1);
+  pw.i32(2);
+  t.eqI32("indented, a second top-level value is JSON_WRITE_DONE", pw.failed, JSON_WRITE_DONE);
+  t.eqStr("and the first is all that was written", pw.text(), "1");
+  pw.reset(big4, 0);
+  pw.beginObject();
+  pw.endObject();
+  pw.key("a");
+  t.eqI32("and so is a key after the value is whole", pw.failed, JSON_WRITE_DONE);
+  t.eqStr("leaving the empty object", pw.text(), "{}");
+
   // ---- Strict --------------------------------------------------------------------
   const sw = new JsonWriter(out, 0);
   sw.setStrict(true);
