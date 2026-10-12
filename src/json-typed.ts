@@ -40,6 +40,8 @@ import { StringSet } from "./map"
 import { CheckContext } from "./context"
 import {
   FLAG_COMPUTED,
+  FLAG_DEFINITE,
+  FLAG_OPTIONAL,
   FLAG_READONLY,
   N_ARRAY,
   N_EMPTY,
@@ -138,6 +140,59 @@ const jsonStringLiteral = (node: Node): string => {
   return node.children.length > 0 ? node.children[0].text : ""
 }
 
+/**
+ * Whether the bytes of `s` are well-formed UTF-8, as the tokenizer holds every
+ * key to: no stray continuation byte, no overlong form, no surrogate (a lone
+ * `"\ud800"` in the source is stored as its three bytes) and nothing past
+ * U+10FFFF.
+ */
+const jsonIsUtf8 = (s: string): boolean => {
+  const n = s.length
+  let i = 0
+  while (i < n) {
+    const b = toI32(s.charCodeAt(i))
+    let more = 0
+    let lo = 128
+    let hi = 191
+    if (b < 128) {
+      more = 0
+    } else if (b >= 194 && b <= 223) {
+      more = 1
+    } else if (b >= 224 && b <= 239) {
+      more = 2
+      if (b === 224) {
+        lo = 160
+      } else if (b === 237) {
+        hi = 159
+      }
+    } else if (b >= 240 && b <= 244) {
+      more = 3
+      if (b === 240) {
+        lo = 144
+      } else if (b === 244) {
+        hi = 143
+      }
+    } else {
+      return false
+    }
+    i = i + 1
+    while (more > 0) {
+      if (i >= n) {
+        return false
+      }
+      const c = toI32(s.charCodeAt(i))
+      if (c < lo || c > hi) {
+        return false
+      }
+      lo = 128
+      hi = 191
+      more = more - 1
+      i = i + 1
+    }
+  }
+  return true
+}
+
 /** Any other literal: a number, `true`, `false`, `null`, an object or an array. */
 const jsonIsOtherLiteral = (node: Node): boolean =>
   node.kind === N_NUMBER ||
@@ -211,7 +266,14 @@ const jsonReadRename = (ctx: CheckContext, info: StructInfo, value: Node): void 
       jsonDuplicate(ctx, info, prop, `renames \`${field.name}\` twice`)
       return
     }
-    if (jsonIsStringLiteral(to)) {
+    if (jsonIsStringLiteral(to) && !jsonIsUtf8(jsonStringLiteral(to))) {
+      // The words after the field's name are NL2499's.
+      ctx.error(
+        to,
+        `\`${info.name}.${JSON_OPTIONS}\` renames \`${field.name}\` to a key that is not valid UTF-8: ` +
+          "the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it"
+      )
+    } else if (jsonIsStringLiteral(to)) {
       field.wireName = jsonStringLiteral(to)
     } else if (jsonIsOtherLiteral(to)) {
       // The words after the field's name are NL2496's.
@@ -276,7 +338,12 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
   if (decl === null || ctx.errored) {
     return
   }
-  if ((decl.flags & FLAG_READONLY) === 0 || decl.children[1].kind !== N_EMPTY || info.instance !== null) {
+  if (
+    (decl.flags & FLAG_READONLY) === 0 ||
+    (decl.flags & (FLAG_OPTIONAL | FLAG_DEFINITE)) !== 0 ||
+    decl.children[1].kind !== N_EMPTY ||
+    info.instance !== null
+  ) {
     // The words after the class's name are NL2492's.
     ctx.error(
       decl,

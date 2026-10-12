@@ -447,6 +447,13 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
   const what = `Field \`${name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``
+  // Typed JSON's options: the one `static` a class may declare, and not a
+  // member, so an instance field or a method called `json` before it is no
+  // duplicate, as in TypeScript, whose statics have a namespace of their own.
+  if ((decl.flags & FLAG_STATIC) !== 0 && name === JSON_OPTIONS && owner.kind === STRUCT_CLASS) {
+    noteJsonOptions(ctx, owner, decl)
+    return
+  }
   if (owner.hasMember(name)) {
     ctx.error(
       decl.children[0],
@@ -475,11 +482,6 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   }
   if ((decl.flags & FLAG_DEFINITE) !== 0) {
     ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`)
-    return
-  }
-  // Typed JSON's options: the one `static` a class may declare, and not a field.
-  if ((decl.flags & FLAG_STATIC) !== 0 && name === JSON_OPTIONS && owner.kind === STRUCT_CLASS) {
-    noteJsonOptions(ctx, owner, decl)
     return
   }
   if ((decl.flags & FLAG_STATIC) !== 0) {

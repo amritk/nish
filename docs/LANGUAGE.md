@@ -6448,6 +6448,7 @@ export const main = (): i32 => {
   | a rename to a value that is not a string | NL2496 | `json_reject_options_rename_number` |
   | two fields with one key, a rename to another field's own name included, or a field renamed or made optional twice | NL2497 | `json_reject_options_wire_collides`, `json_reject_options_wire_twice`, `json_reject_options_optional_twice` |
   | an optional field with no initializer | NL2498 | `json_reject_options_no_initializer` |
+  | a rename to a key that is not valid UTF-8, a lone surrogate such as `"\ud800"` included, which no input could give | NL2499 | `json_reject_options_surrogate` |
 
   A spread or a computed key in the literal is refused by Phase 0 as it is
   anywhere (NL1061, NL1041; `reject_json_options_spread`,
@@ -6460,7 +6461,10 @@ export const main = (): i32 => {
   `json_reject_options_instance`), and an instance field called `json` with a
   type is an ordinary field, read and written under its own name
   (`tests/link/std_json_typed/options.ts`, "instance json: an ordinary field
-  decodes"). Under Node the literal is a
+  decodes"). The options are not a member, so a field or a method called
+  `json` may come before or after them, as in TypeScript, whose statics have
+  a namespace of their own ("order: a json field before the options
+  decodes", "order: a json method before the options decodes"). Under Node the literal is a
   static property of the class that nothing reads.
 - **A `JsonNumber` is a number's text.** `JsonNumber`, from `nish/json-typed`,
   holds a number as the bytes it was written in, so a field of it decodes and

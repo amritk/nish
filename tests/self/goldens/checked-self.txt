@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 87 programs, 2420152 dump lines live, 87 distinct modules.
+# 87 programs, 2421144 dump lines live, 87 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/builtins.ts src/arrays.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/result.ts src/structs.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arena-report.ts: src/arena-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/emit-util.ts src/symbols.ts src/options.ts src/checker.ts src/expressions.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/builtins.ts src/members.ts src/result.ts src/structs.ts src/fusion.ts src/parents.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
@@ -14084,7 +14084,7 @@ const UNCODED: string = "NL0000"
 const SYNTAX: string = "NL0001"
 const TOOLCHAIN: string = "NL0002" [exported]
 const INTERNAL: string = "NL0003" [exported]
-const RULE_COUNT: i32 = 624 [exported]
+const RULE_COUNT: i32 = 625 [exported]
 function diagnosticRules(): string[] -> @diagnosticRules
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -14102,20 +14102,20 @@ function firstMatch(rules: string[], text: string): string -> @firstMatch
   calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from
   pointer rules: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1339:7 i: i32 (let)
+  local 1341:7 i: i32 (let)
 function codeFor(kind: string, text: string): string -> @codeFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: text
   calls: deprecationRules diagnosticRules firstMatch nish_arena_mark nish_arena_release nish_str_eq performanceRules portabilityRules
   stackSites=0 stackLocals=0
-  callee 1361:12 firstMatch -> @firstMatch
-  callee 1361:23 performanceRules -> @performanceRules
-  callee 1364:12 firstMatch -> @firstMatch
-  callee 1364:23 portabilityRules -> @portabilityRules
-  callee 1367:12 firstMatch -> @firstMatch
-  callee 1367:23 deprecationRules -> @deprecationRules
-  callee 1369:10 firstMatch -> @firstMatch
-  callee 1369:21 diagnosticRules -> @diagnosticRules
+  callee 1363:12 firstMatch -> @firstMatch
+  callee 1363:23 performanceRules -> @performanceRules
+  callee 1366:12 firstMatch -> @firstMatch
+  callee 1366:23 portabilityRules -> @portabilityRules
+  callee 1369:12 firstMatch -> @firstMatch
+  callee 1369:23 deprecationRules -> @deprecationRules
+  callee 1371:10 firstMatch -> @firstMatch
+  callee 1371:21 diagnosticRules -> @diagnosticRules
 module src/strings.ts
 const HEX_LOWER: string = "0123456789abcdef"
 const HEX_UPPER: string = "0123456789ABCDEF"
@@ -22988,6 +22988,8 @@ import TemplateInfo from "./program" -> struct TemplateInfo
 import StringSet from "./map" -> struct StringSet
 import CheckContext from "./context" -> struct CheckContext
 import FLAG_COMPUTED from "./nodes" -> const FLAG_COMPUTED
+import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
+import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_READONLY from "./nodes" -> const FLAG_READONLY
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_EMPTY from "./nodes" -> const N_EMPTY
@@ -23036,14 +23038,14 @@ function JsonField.constructor(this: JsonField, field: FieldInfo | null, type: i
   stackSites=0 stackLocals=0
 function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @noteJsonOptions [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 126:3
+  sharedWrite: 128:3
   escaping: decl
   calls: CheckContext.error nish_panic_index nish_str_concat
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer owner: size=136 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 123:5 CheckContext.error -> @CheckContext.error
+  callee 125:5 CheckContext.error -> @CheckContext.error
 function jsonIsStringLiteral(node: Node): boolean -> @jsonIsStringLiteral
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
@@ -23052,6 +23054,16 @@ function jsonStringLiteral(node: Node): string -> @jsonStringLiteral
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function jsonIsUtf8(s: string): boolean -> @jsonIsUtf8
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 150:9 n: i32 (const)
+  local 151:7 i: i32 (let)
+  local 153:11 b: i32 (const)
+  local 154:9 more: i32 (let)
+  local 155:9 lo: i32 (let)
+  local 156:9 hi: i32 (let)
+  local 183:13 c: i32 (const)
 function jsonIsOtherLiteral(node: Node): boolean -> @jsonIsOtherLiteral
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
@@ -23064,7 +23076,7 @@ function jsonNotLiteral(ctx: CheckContext, info: StructInfo, node: Node, where: 
   pointer info: size=136 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 154:3 CheckContext.error -> @CheckContext.error
+  callee 209:3 CheckContext.error -> @CheckContext.error
 function jsonOptionField(ctx: CheckContext, info: StructInfo, node: Node, option: string, name: string): FieldInfo | null -> @jsonOptionField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -23074,9 +23086,9 @@ function jsonOptionField(ctx: CheckContext, info: StructInfo, node: Node, option
   pointer info: size=136 writesThrough=false captured=false passedTo=StructInfo.field#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 169:9 field: FieldInfo | null (const)
-  callee 169:17 StructInfo.field -> @StructInfo.field
-  callee 172:5 CheckContext.error -> @CheckContext.error
+  local 224:9 field: FieldInfo | null (const)
+  callee 224:17 StructInfo.field -> @StructInfo.field
+  callee 227:5 CheckContext.error -> @CheckContext.error
 function jsonDuplicate(ctx: CheckContext, info: StructInfo, node: Node, detail: string): void -> @jsonDuplicate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -23085,86 +23097,90 @@ function jsonDuplicate(ctx: CheckContext, info: StructInfo, node: Node, detail: 
   pointer info: size=136 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 183:3 CheckContext.error -> @CheckContext.error
+  callee 238:3 CheckContext.error -> @CheckContext.error
 function jsonReadRename(ctx: CheckContext, info: StructInfo, value: Node): void -> @jsonReadRename
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 215:7
-  calls: CheckContext.error StringSet.add StringSet.constructor jsonDuplicate jsonIsOtherLiteral jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonStringLiteral nish_panic_index nish_str_concat
-  pointer ctx: size=192 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 jsonNotLiteral#0
+  sharedWrite: 277:7
+  calls: CheckContext.error StringSet.add StringSet.constructor jsonDuplicate jsonIsOtherLiteral jsonIsStringLiteral jsonIsUtf8 jsonNotLiteral jsonOptionField jsonStringLiteral nish_panic_index nish_str_concat
+  pointer ctx: size=192 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 CheckContext.error#0 jsonNotLiteral#0
   pointer info: size=136 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1 jsonNotLiteral#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=1 stackLocals=1
-  callee 193:5 jsonNotLiteral -> @jsonNotLiteral
-  local 196:9 renamed: StringSet (const)
-  callee 196:19 new StringSet -> @StringSet.constructor
-  local 197:14 prop: Node (const)
-  local 205:11 to: Node (const)
-  local 206:11 field: FieldInfo | null (const)
-  callee 206:19 jsonOptionField -> @jsonOptionField
-  callee 210:10 StringSet.add -> @StringSet.add
-  callee 211:7 jsonDuplicate -> @jsonDuplicate
-  callee 214:9 jsonIsStringLiteral -> @jsonIsStringLiteral
-  callee 215:24 jsonStringLiteral -> @jsonStringLiteral
-  callee 216:16 jsonIsOtherLiteral -> @jsonIsOtherLiteral
-  callee 218:7 CheckContext.error -> @CheckContext.error
-  callee 224:7 jsonNotLiteral -> @jsonNotLiteral
+  callee 248:5 jsonNotLiteral -> @jsonNotLiteral
+  local 251:9 renamed: StringSet (const)
+  callee 251:19 new StringSet -> @StringSet.constructor
+  local 252:14 prop: Node (const)
+  local 260:11 to: Node (const)
+  local 261:11 field: FieldInfo | null (const)
+  callee 261:19 jsonOptionField -> @jsonOptionField
+  callee 265:10 StringSet.add -> @StringSet.add
+  callee 266:7 jsonDuplicate -> @jsonDuplicate
+  callee 269:9 jsonIsStringLiteral -> @jsonIsStringLiteral
+  callee 269:37 jsonIsUtf8 -> @jsonIsUtf8
+  callee 269:48 jsonStringLiteral -> @jsonStringLiteral
+  callee 271:7 CheckContext.error -> @CheckContext.error
+  callee 276:16 jsonIsStringLiteral -> @jsonIsStringLiteral
+  callee 277:24 jsonStringLiteral -> @jsonStringLiteral
+  callee 278:16 jsonIsOtherLiteral -> @jsonIsOtherLiteral
+  callee 280:7 CheckContext.error -> @CheckContext.error
+  callee 286:7 jsonNotLiteral -> @jsonNotLiteral
 function jsonReadOptional(ctx: CheckContext, info: StructInfo, value: Node): void -> @jsonReadOptional
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 260:5
+  sharedWrite: 322:5
   calls: CheckContext.error jsonDuplicate jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonStringLiteral nish_str_concat
   pointer ctx: size=192 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0
   pointer info: size=136 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=0 stackLocals=0
-  callee 232:5 jsonNotLiteral -> @jsonNotLiteral
-  local 235:14 element: Node (const)
-  callee 239:10 jsonIsStringLiteral -> @jsonIsStringLiteral
-  callee 240:7 jsonNotLiteral -> @jsonNotLiteral
-  local 243:11 field: FieldInfo | null (const)
-  callee 243:19 jsonOptionField -> @jsonOptionField
-  callee 243:67 jsonStringLiteral -> @jsonStringLiteral
-  callee 248:7 jsonDuplicate -> @jsonDuplicate
-  callee 253:7 CheckContext.error -> @CheckContext.error
+  callee 294:5 jsonNotLiteral -> @jsonNotLiteral
+  local 297:14 element: Node (const)
+  callee 301:10 jsonIsStringLiteral -> @jsonIsStringLiteral
+  callee 302:7 jsonNotLiteral -> @jsonNotLiteral
+  local 305:11 field: FieldInfo | null (const)
+  callee 305:19 jsonOptionField -> @jsonOptionField
+  callee 305:67 jsonStringLiteral -> @jsonStringLiteral
+  callee 310:7 jsonDuplicate -> @jsonDuplicate
+  callee 315:7 CheckContext.error -> @CheckContext.error
 function checkJsonOptions(ctx: CheckContext, info: StructInfo): void -> @checkJsonOptions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 273:5
+  sharedWrite: 335:5
   calls: CheckContext.error CheckedProgram.isJsonTyped StringSet.add StringSet.constructor TypeTable.typeName jsonDuplicate jsonNotLiteral jsonReadOptional jsonReadRename nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 jsonNotLiteral#0 CheckContext.error#0 jsonDuplicate#0 jsonReadRename#0 jsonReadOptional#0 jsonDuplicate#0
   pointer info: size=136 writesThrough=true captured=false passedTo=jsonNotLiteral#1 jsonDuplicate#1 jsonReadRename#1 jsonReadOptional#1 jsonDuplicate#1
   stackSites=2 stackLocals=2
-  callee 272:67 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
-  local 275:9 decl: Node | null (const)
-  callee 281:5 CheckContext.error -> @CheckContext.error
-  callee 283:59 TypeTable.typeName -> @TypeTable.typeName
-  local 288:9 literal: Node (const)
-  callee 290:5 jsonNotLiteral -> @jsonNotLiteral
-  local 293:9 given: StringSet (const)
-  callee 293:17 new StringSet -> @StringSet.constructor
-  local 294:14 prop: Node (const)
-  local 301:11 option: string (const)
-  callee 304:7 CheckContext.error -> @CheckContext.error
-  callee 310:10 StringSet.add -> @StringSet.add
-  callee 311:7 jsonDuplicate -> @jsonDuplicate
-  callee 315:7 jsonReadRename -> @jsonReadRename
-  callee 317:7 jsonReadOptional -> @jsonReadOptional
-  local 325:9 keys: StringSet (const)
-  callee 325:16 new StringSet -> @StringSet.constructor
-  local 326:14 field: FieldInfo (const)
-  callee 327:10 StringSet.add -> @StringSet.add
-  local 328:11 other: string (let)
-  local 329:18 f: FieldInfo (const)
-  callee 334:7 jsonDuplicate -> @jsonDuplicate
+  callee 334:67 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
+  local 337:9 decl: Node | null (const)
+  callee 348:5 CheckContext.error -> @CheckContext.error
+  callee 350:59 TypeTable.typeName -> @TypeTable.typeName
+  local 355:9 literal: Node (const)
+  callee 357:5 jsonNotLiteral -> @jsonNotLiteral
+  local 360:9 given: StringSet (const)
+  callee 360:17 new StringSet -> @StringSet.constructor
+  local 361:14 prop: Node (const)
+  local 368:11 option: string (const)
+  callee 371:7 CheckContext.error -> @CheckContext.error
+  callee 377:10 StringSet.add -> @StringSet.add
+  callee 378:7 jsonDuplicate -> @jsonDuplicate
+  callee 382:7 jsonReadRename -> @jsonReadRename
+  callee 384:7 jsonReadOptional -> @jsonReadOptional
+  local 392:9 keys: StringSet (const)
+  callee 392:16 new StringSet -> @StringSet.constructor
+  local 393:14 field: FieldInfo (const)
+  callee 394:10 StringSet.add -> @StringSet.add
+  local 395:11 other: string (let)
+  local 396:18 f: FieldInfo (const)
+  callee 401:7 jsonDuplicate -> @jsonDuplicate
 function jsonRouteRole(template: TemplateInfo): i32 -> @jsonRouteRole [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.isJsonTyped nish_str_eq
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 347:35 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
+  callee 414:35 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
 function jsonRouteOf(sig: FunctionSig | null): i32 -> @jsonRouteOf [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer sig: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 361:9 instance: Instantiation | null (const)
+  local 428:9 instance: Instantiation | null (const)
 function jsonScalar(type: i32): i32 -> @jsonScalar
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -23176,10 +23192,10 @@ function jsonClassOf(program: CheckedProgram, table: TypeTable, type: i32): Stru
   pointer program: size=624 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
-  callee 383:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 386:9 info: StructInfo | null (const)
-  callee 386:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 386:31 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 450:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 453:9 info: StructInfo | null (const)
+  callee 453:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 453:31 TypeTable.nameOf -> @TypeTable.nameOf
 function jsonMapOf(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @jsonMapOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -23187,58 +23203,58 @@ function jsonMapOf(program: CheckedProgram, table: TypeTable, type: i32): Struct
   pointer program: size=624 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
-  callee 399:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 402:9 info: StructInfo | null (const)
-  callee 402:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 402:31 TypeTable.nameOf -> @TypeTable.nameOf
-  local 403:9 instance: StructInstantiation | null (const)
-  callee 408:6 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  callee 466:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 469:9 info: StructInfo | null (const)
+  callee 469:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 469:31 TypeTable.nameOf -> @TypeTable.nameOf
+  local 470:9 instance: StructInstantiation | null (const)
+  callee 475:6 CheckedProgram.isCollections -> @CheckedProgram.isCollections
 function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo | null, type: i32): JsonField | null -> @jsonValueOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 430:5
+  sharedWrite: 497:5
   escaping: type
   calls: JsonField.constructor TypeTable.isArray TypeTable.isEnum TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.refOf TypeTable.stripNull jsonClassOf jsonMapOf jsonScalar jsonValueOf nish_alloc_struct nish_panic_index
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonClassOf#0 jsonMapOf#0 jsonValueOf#0 jsonClassOf#0
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isEnum#0 TypeTable.isArray#0 TypeTable.isReadonlyArray#0 TypeTable.refOf#0 TypeTable.isEnum#0 jsonClassOf#1 jsonMapOf#1 jsonValueOf#1 jsonClassOf#1
   pointer field: size=64 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
   stackSites=0 stackLocals=0
-  local 424:9 nullable: boolean (const)
-  callee 424:20 TypeTable.isNullable -> @TypeTable.isNullable
-  local 425:9 base: i32 (const)
-  callee 425:16 TypeTable.stripNull -> @TypeTable.stripNull
-  local 426:9 scalar: i32 (const)
-  callee 426:18 jsonScalar -> @jsonScalar
-  local 429:11 f: JsonField (const)
-  callee 429:15 new JsonField -> @JsonField.constructor
-  callee 433:7 TypeTable.isEnum -> @TypeTable.isEnum
-  local 437:11 f: JsonField (const)
-  callee 437:15 new JsonField -> @JsonField.constructor
-  callee 441:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 442:9 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  local 445:11 elem: i32 (const)
-  callee 445:18 TypeTable.refOf -> @TypeTable.refOf
-  local 446:11 inner: i32 (const)
-  callee 446:19 jsonScalar -> @jsonScalar
-  local 448:13 f: JsonField (const)
-  callee 448:17 new JsonField -> @JsonField.constructor
-  callee 452:9 TypeTable.isEnum -> @TypeTable.isEnum
-  local 453:13 f: JsonField (const)
-  callee 453:17 new JsonField -> @JsonField.constructor
-  local 457:11 cls: StructInfo | null (const)
-  callee 457:17 jsonClassOf -> @jsonClassOf
-  local 461:11 f: JsonField (const)
-  callee 461:15 new JsonField -> @JsonField.constructor
-  local 465:9 map: StructInfo | null (const)
-  callee 465:15 jsonMapOf -> @jsonMapOf
-  local 467:11 instance: StructInstantiation | null (const)
-  local 468:11 held: JsonField | null (const)
-  callee 469:34 jsonValueOf -> @jsonValueOf
-  local 473:11 f: JsonField (const)
-  callee 473:15 new JsonField -> @JsonField.constructor
-  local 478:9 cls: StructInfo | null (const)
-  callee 478:15 jsonClassOf -> @jsonClassOf
-  local 482:9 f: JsonField (const)
-  callee 482:13 new JsonField -> @JsonField.constructor
+  local 491:9 nullable: boolean (const)
+  callee 491:20 TypeTable.isNullable -> @TypeTable.isNullable
+  local 492:9 base: i32 (const)
+  callee 492:16 TypeTable.stripNull -> @TypeTable.stripNull
+  local 493:9 scalar: i32 (const)
+  callee 493:18 jsonScalar -> @jsonScalar
+  local 496:11 f: JsonField (const)
+  callee 496:15 new JsonField -> @JsonField.constructor
+  callee 500:7 TypeTable.isEnum -> @TypeTable.isEnum
+  local 504:11 f: JsonField (const)
+  callee 504:15 new JsonField -> @JsonField.constructor
+  callee 508:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 509:9 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  local 512:11 elem: i32 (const)
+  callee 512:18 TypeTable.refOf -> @TypeTable.refOf
+  local 513:11 inner: i32 (const)
+  callee 513:19 jsonScalar -> @jsonScalar
+  local 515:13 f: JsonField (const)
+  callee 515:17 new JsonField -> @JsonField.constructor
+  callee 519:9 TypeTable.isEnum -> @TypeTable.isEnum
+  local 520:13 f: JsonField (const)
+  callee 520:17 new JsonField -> @JsonField.constructor
+  local 524:11 cls: StructInfo | null (const)
+  callee 524:17 jsonClassOf -> @jsonClassOf
+  local 528:11 f: JsonField (const)
+  callee 528:15 new JsonField -> @JsonField.constructor
+  local 532:9 map: StructInfo | null (const)
+  callee 532:15 jsonMapOf -> @jsonMapOf
+  local 534:11 instance: StructInstantiation | null (const)
+  local 535:11 held: JsonField | null (const)
+  callee 536:34 jsonValueOf -> @jsonValueOf
+  local 540:11 f: JsonField (const)
+  callee 540:15 new JsonField -> @JsonField.constructor
+  local 545:9 cls: StructInfo | null (const)
+  callee 545:15 jsonClassOf -> @jsonClassOf
+  local 549:9 f: JsonField (const)
+  callee 549:13 new JsonField -> @JsonField.constructor
 function jsonFieldOf(program: CheckedProgram, table: TypeTable, field: FieldInfo): JsonField | null -> @jsonFieldOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonValueOf
@@ -23247,39 +23263,39 @@ function jsonFieldOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonValueOf#1
   pointer field: size=64 writesThrough=true captured=true passedTo=jsonValueOf#2
   stackSites=0 stackLocals=0
-  callee 489:3 jsonValueOf -> @jsonValueOf
+  callee 556:3 jsonValueOf -> @jsonValueOf
 function jsonValuesOf(f: JsonField, out: JsonField[]): void -> @jsonValuesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 495:5
+  sharedWrite: 562:5
   escaping: f
   calls: nish_array_grow
   pointer f: size=56 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 493:7 at: JsonField | null (let)
+  local 560:7 at: JsonField | null (let)
 function jsonClasses(program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] -> @jsonClasses [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 509:3
+  sharedWrite: 576:3
   escaping: root
   calls: StringSet.add StringSet.constructor jsonFieldOf jsonValuesOf nish_array_grow
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonFieldOf#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonFieldOf#1
   pointer root: size=136 writesThrough=true captured=true
   stackSites=2 stackLocals=2
-  local 506:9 out: StructInfo[] (const)
-  local 507:9 seen: StringSet (const)
-  callee 507:16 new StringSet -> @StringSet.constructor
-  callee 508:3 StringSet.add -> @StringSet.add
-  local 510:7 at: i32 (let)
-  local 512:11 info: StructInfo (const)
-  local 518:16 field: FieldInfo (const)
-  local 519:13 f: JsonField | null (const)
-  callee 519:17 jsonFieldOf -> @jsonFieldOf
-  local 523:13 values: JsonField[] (const)
-  callee 524:7 jsonValuesOf -> @jsonValuesOf
-  local 525:18 v: JsonField (const)
-  local 526:15 cls: StructInfo | null (const)
-  callee 527:29 StringSet.add -> @StringSet.add
+  local 573:9 out: StructInfo[] (const)
+  local 574:9 seen: StringSet (const)
+  callee 574:16 new StringSet -> @StringSet.constructor
+  callee 575:3 StringSet.add -> @StringSet.add
+  local 577:7 at: i32 (let)
+  local 579:11 info: StructInfo (const)
+  local 585:16 field: FieldInfo (const)
+  local 586:13 f: JsonField | null (const)
+  callee 586:17 jsonFieldOf -> @jsonFieldOf
+  local 590:13 values: JsonField[] (const)
+  callee 591:7 jsonValuesOf -> @jsonValuesOf
+  local 592:18 v: JsonField (const)
+  local 593:15 cls: StructInfo | null (const)
+  callee 594:29 StringSet.add -> @StringSet.add
 function jsonValues(program: CheckedProgram, table: TypeTable, root: StructInfo): JsonField[] -> @jsonValues
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonClasses
@@ -23288,49 +23304,49 @@ function jsonValues(program: CheckedProgram, table: TypeTable, root: StructInfo)
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonClasses#1 jsonFieldOf#1
   pointer root: size=136 writesThrough=true captured=true passedTo=jsonClasses#2
   stackSites=0 stackLocals=0
-  local 538:9 out: JsonField[] (const)
-  local 539:14 info: StructInfo (const)
-  callee 539:22 jsonClasses -> @jsonClasses
-  local 543:16 field: FieldInfo (const)
-  local 544:13 f: JsonField | null (const)
-  callee 544:17 jsonFieldOf -> @jsonFieldOf
-  callee 546:9 jsonValuesOf -> @jsonValuesOf
+  local 605:9 out: JsonField[] (const)
+  local 606:14 info: StructInfo (const)
+  callee 606:22 jsonClasses -> @jsonClasses
+  local 610:16 field: FieldInfo (const)
+  local 611:13 f: JsonField | null (const)
+  callee 611:17 jsonFieldOf -> @jsonFieldOf
+  callee 613:9 jsonValuesOf -> @jsonValuesOf
 function jsonMakes(f: JsonField): boolean -> @jsonMakes
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer f: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function jsonMadeClasses(program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] -> @jsonMadeClasses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 574:7
+  sharedWrite: 641:7
   calls: StringSet.add StringSet.constructor jsonMakes jsonValues nish_array_grow
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonValues#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonValues#1
   pointer root: size=136 writesThrough=true captured=true passedTo=jsonValues#2
   stackSites=1 stackLocals=1
-  local 569:9 out: StructInfo[] (const)
-  local 570:9 made: StringSet (const)
-  callee 570:16 new StringSet -> @StringSet.constructor
-  local 571:14 f: JsonField (const)
-  callee 571:19 jsonValues -> @jsonValues
-  local 572:11 cls: StructInfo | null (const)
-  callee 573:63 jsonMakes -> @jsonMakes
-  callee 573:80 StringSet.add -> @StringSet.add
+  local 636:9 out: StructInfo[] (const)
+  local 637:9 made: StringSet (const)
+  callee 637:16 new StringSet -> @StringSet.constructor
+  local 638:14 f: JsonField (const)
+  callee 638:19 jsonValues -> @jsonValues
+  local 639:11 cls: StructInfo | null (const)
+  callee 640:63 jsonMakes -> @jsonMakes
+  callee 640:80 StringSet.add -> @StringSet.add
 function jsonMaps(program: CheckedProgram, table: TypeTable, root: StructInfo, madeOnly: boolean): StructInfo[] -> @jsonMaps
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 592:7
+  sharedWrite: 659:7
   calls: StringSet.add StringSet.constructor jsonMakes jsonValues nish_array_grow
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonValues#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonValues#1
   pointer root: size=136 writesThrough=true captured=true passedTo=jsonValues#2
   stackSites=1 stackLocals=1
-  local 587:9 out: StructInfo[] (const)
-  local 588:9 seen: StringSet (const)
-  callee 588:16 new StringSet -> @StringSet.constructor
-  local 589:14 f: JsonField (const)
-  callee 589:19 jsonValues -> @jsonValues
-  local 590:11 map: StructInfo | null (const)
-  callee 591:39 jsonMakes -> @jsonMakes
-  callee 591:56 StringSet.add -> @StringSet.add
+  local 654:9 out: StructInfo[] (const)
+  local 655:9 seen: StringSet (const)
+  callee 655:16 new StringSet -> @StringSet.constructor
+  local 656:14 f: JsonField (const)
+  callee 656:19 jsonValues -> @jsonValues
+  local 657:11 map: StructInfo | null (const)
+  callee 658:39 jsonMakes -> @jsonMakes
+  callee 658:56 StringSet.add -> @StringSet.add
 function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, role: i32, type: i32): string -> @jsonRefusal [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonClasses
@@ -23339,18 +23355,18 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonClassOf#0 jsonClasses#0 jsonFieldOf#0 jsonMadeClasses#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonClassOf#1 TypeTable.typeName#0 jsonClasses#1 jsonFieldOf#1 TypeTable.typeName#0 jsonMadeClasses#1
   stackSites=0 stackLocals=0
-  local 611:9 root: StructInfo | null (const)
-  callee 611:16 jsonClassOf -> @jsonClassOf
-  callee 614:35 TypeTable.typeName -> @TypeTable.typeName
-  local 618:9 classes: StructInfo[] (const)
-  callee 618:19 jsonClasses -> @jsonClasses
-  local 619:14 info: StructInfo (const)
-  local 623:16 field: FieldInfo (const)
-  callee 624:11 jsonFieldOf -> @jsonFieldOf
-  callee 628:83 TypeTable.typeName -> @TypeTable.typeName
-  local 641:16 info: StructInfo (const)
-  callee 641:24 jsonMadeClasses -> @jsonMadeClasses
-  local 642:13 ctor: FunctionSig | null (const)
+  local 678:9 root: StructInfo | null (const)
+  callee 678:16 jsonClassOf -> @jsonClassOf
+  callee 681:35 TypeTable.typeName -> @TypeTable.typeName
+  local 685:9 classes: StructInfo[] (const)
+  callee 685:19 jsonClasses -> @jsonClasses
+  local 686:14 info: StructInfo (const)
+  local 690:16 field: FieldInfo (const)
+  callee 691:11 jsonFieldOf -> @jsonFieldOf
+  callee 695:83 TypeTable.typeName -> @TypeTable.typeName
+  local 708:16 info: StructInfo (const)
+  callee 708:24 jsonMadeClasses -> @jsonMadeClasses
+  local 709:13 ctor: FunctionSig | null (const)
 function jsonScalarMethod(type: i32): string -> @jsonScalarMethod [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -23359,8 +23375,8 @@ function jsonDecodeMethod(f: JsonField): string -> @jsonDecodeMethod [exported]
   calls: jsonScalarMethod nish_str_concat
   pointer f: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 679:9 scalar: string (const)
-  callee 679:18 jsonScalarMethod -> @jsonScalarMethod
+  local 746:9 scalar: string (const)
+  callee 746:18 jsonScalarMethod -> @jsonScalarMethod
 function jsonHelperPart(type: i32): string -> @jsonHelperPart
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -23369,8 +23385,8 @@ function jsonEncodeHelper(f: JsonField): string -> @jsonEncodeHelper [exported]
   calls: jsonHelperPart nish_str_concat
   pointer f: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 722:20 jsonHelperPart -> @jsonHelperPart
-  callee 723:20 jsonHelperPart -> @jsonHelperPart
+  callee 789:20 jsonHelperPart -> @jsonHelperPart
+  callee 790:20 jsonHelperPart -> @jsonHelperPart
 function jsonMapMethods(role: i32): string[] -> @jsonMapMethods
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -23382,76 +23398,76 @@ function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, ro
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonValues#1
   pointer root: size=136 writesThrough=true captured=true passedTo=jsonValues#2
   stackSites=2 stackLocals=0
-  local 737:9 names: StringSet (const)
-  callee 737:17 new StringSet -> @StringSet.constructor
-  local 739:16 name: string (const)
-  callee 750:7 StringSet.add -> @StringSet.add
-  local 753:16 name: string (const)
-  callee 754:7 StringSet.add -> @StringSet.add
-  callee 758:5 StringSet.add -> @StringSet.add
-  local 760:14 f: JsonField (const)
-  callee 760:19 jsonValues -> @jsonValues
-  local 761:11 cls: StructInfo | null (const)
-  callee 763:7 StringSet.add -> @StringSet.add
-  local 765:11 holdsObject: boolean (const)
-  local 767:11 isEnum: boolean (const)
-  local 768:11 isArray: boolean (const)
-  callee 771:9 StringSet.add -> @StringSet.add
-  callee 772:9 StringSet.add -> @StringSet.add
-  callee 774:9 StringSet.add -> @StringSet.add
-  callee 774:19 jsonDecodeMethod -> @jsonDecodeMethod
-  callee 777:9 StringSet.add -> @StringSet.add
-  callee 780:9 StringSet.add -> @StringSet.add
-  callee 781:9 StringSet.add -> @StringSet.add
-  callee 784:9 StringSet.add -> @StringSet.add
-  local 788:11 helper: string (const)
-  callee 788:20 jsonEncodeHelper -> @jsonEncodeHelper
-  callee 790:7 StringSet.add -> @StringSet.add
-  callee 792:7 StringSet.add -> @StringSet.add
-  callee 794:7 StringSet.add -> @StringSet.add
-  callee 794:17 jsonScalarMethod -> @jsonScalarMethod
-  callee 797:7 StringSet.add -> @StringSet.add
-  callee 800:7 StringSet.add -> @StringSet.add
-  callee 801:7 StringSet.add -> @StringSet.add
+  local 804:9 names: StringSet (const)
+  callee 804:17 new StringSet -> @StringSet.constructor
+  local 806:16 name: string (const)
+  callee 817:7 StringSet.add -> @StringSet.add
+  local 820:16 name: string (const)
+  callee 821:7 StringSet.add -> @StringSet.add
+  callee 825:5 StringSet.add -> @StringSet.add
+  local 827:14 f: JsonField (const)
+  callee 827:19 jsonValues -> @jsonValues
+  local 828:11 cls: StructInfo | null (const)
+  callee 830:7 StringSet.add -> @StringSet.add
+  local 832:11 holdsObject: boolean (const)
+  local 834:11 isEnum: boolean (const)
+  local 835:11 isArray: boolean (const)
+  callee 838:9 StringSet.add -> @StringSet.add
+  callee 839:9 StringSet.add -> @StringSet.add
+  callee 841:9 StringSet.add -> @StringSet.add
+  callee 841:19 jsonDecodeMethod -> @jsonDecodeMethod
+  callee 844:9 StringSet.add -> @StringSet.add
+  callee 847:9 StringSet.add -> @StringSet.add
+  callee 848:9 StringSet.add -> @StringSet.add
+  callee 851:9 StringSet.add -> @StringSet.add
+  local 855:11 helper: string (const)
+  callee 855:20 jsonEncodeHelper -> @jsonEncodeHelper
+  callee 857:7 StringSet.add -> @StringSet.add
+  callee 859:7 StringSet.add -> @StringSet.add
+  callee 861:7 StringSet.add -> @StringSet.add
+  callee 861:17 jsonScalarMethod -> @jsonScalarMethod
+  callee 864:7 StringSet.add -> @StringSet.add
+  callee 867:7 StringSet.add -> @StringSet.add
+  callee 868:7 StringSet.add -> @StringSet.add
 function jsonRouteCallees(program: CheckedProgram, table: TypeTable, sig: FunctionSig): FunctionSig[] -> @jsonRouteCallees [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 835:7
+  sharedWrite: 902:7
   calls: CheckedProgram.struct FunctionSig.definedIn StringSet.at StringSet.has StringSet.size StructInfo.method TypeTable.nameOf jsonClassOf jsonMadeClasses jsonMapMethods jsonMaps jsonRouteNames nish_array_grow nish_panic_index
   pointer program: size=624 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 jsonClassOf#0 jsonRouteNames#0 jsonMaps#0 jsonMadeClasses#0 jsonMaps#0
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.nameOf#0 jsonClassOf#1 jsonRouteNames#1 jsonMaps#1 jsonMadeClasses#1 jsonMaps#1
   pointer sig: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 820:9 out: FunctionSig[] (const)
-  local 821:9 instance: Instantiation | null (const)
-  local 825:9 receiver: StructInfo | null (const)
-  callee 825:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 825:35 TypeTable.nameOf -> @TypeTable.nameOf
-  local 826:9 root: StructInfo | null (const)
-  callee 826:16 jsonClassOf -> @jsonClassOf
-  local 830:9 names: StringSet (const)
-  callee 830:17 jsonRouteNames -> @jsonRouteNames
-  local 831:7 i: i32 (let)
-  callee 832:14 StringSet.size -> @StringSet.size
-  local 833:11 method: FunctionSig | null (const)
-  callee 833:20 StructInfo.method -> @StructInfo.method
-  callee 833:36 StringSet.at -> @StringSet.at
-  local 839:14 fn: FunctionSig (const)
-  callee 840:33 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 840:65 StringSet.has -> @StringSet.has
-  local 844:9 decode: boolean (const)
-  local 845:9 methods: string[] (const)
-  callee 845:19 jsonMapMethods -> @jsonMapMethods
-  local 846:14 map: StructInfo (const)
-  callee 846:21 jsonMaps -> @jsonMaps
-  local 847:16 name: string (const)
-  local 848:13 method: FunctionSig | null (const)
-  callee 848:22 StructInfo.method -> @StructInfo.method
-  local 855:16 info: StructInfo (const)
-  callee 855:24 jsonMadeClasses -> @jsonMadeClasses
-  local 856:13 ctor: FunctionSig | null (const)
-  local 861:16 map: StructInfo (const)
-  callee 861:23 jsonMaps -> @jsonMaps
-  local 862:13 ctor: FunctionSig | null (const)
+  local 887:9 out: FunctionSig[] (const)
+  local 888:9 instance: Instantiation | null (const)
+  local 892:9 receiver: StructInfo | null (const)
+  callee 892:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 892:35 TypeTable.nameOf -> @TypeTable.nameOf
+  local 893:9 root: StructInfo | null (const)
+  callee 893:16 jsonClassOf -> @jsonClassOf
+  local 897:9 names: StringSet (const)
+  callee 897:17 jsonRouteNames -> @jsonRouteNames
+  local 898:7 i: i32 (let)
+  callee 899:14 StringSet.size -> @StringSet.size
+  local 900:11 method: FunctionSig | null (const)
+  callee 900:20 StructInfo.method -> @StructInfo.method
+  callee 900:36 StringSet.at -> @StringSet.at
+  local 906:14 fn: FunctionSig (const)
+  callee 907:33 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 907:65 StringSet.has -> @StringSet.has
+  local 911:9 decode: boolean (const)
+  local 912:9 methods: string[] (const)
+  callee 912:19 jsonMapMethods -> @jsonMapMethods
+  local 913:14 map: StructInfo (const)
+  callee 913:21 jsonMaps -> @jsonMaps
+  local 914:16 name: string (const)
+  local 915:13 method: FunctionSig | null (const)
+  callee 915:22 StructInfo.method -> @StructInfo.method
+  local 922:16 info: StructInfo (const)
+  callee 922:24 jsonMadeClasses -> @jsonMadeClasses
+  local 923:13 ctor: FunctionSig | null (const)
+  local 928:16 map: StructInfo (const)
+  callee 928:23 jsonMaps -> @jsonMaps
+  local 929:13 ctor: FunctionSig | null (const)
 module src/declarations.ts
 import refuseTopLevelForm from "./checker" -> function @refuseTopLevelForm
 import skipBlanks from "./checker" -> function @skipBlanks
@@ -34427,47 +34443,47 @@ function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 -
   callee 438:14 TypeTable.isNullable -> @TypeTable.isNullable
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 506:3
+  sharedWrite: 508:3
   calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.assignable TypeTable.holdsSecret TypeTable.isRanged TypeTable.typeName annotationSpelling checkRangedLiteral kindWord literalInitializerType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer resolveType secretFieldMessage spelled
-  pointer ctx: size=192 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0 CheckContext.error#0 annotationSpelling#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 checkRangedLiteral#0
-  pointer owner: size=136 writesThrough=true captured=false passedTo=kindWord#0 spelled#1 StructInfo.hasMember#0 kindWord#0 spelled#1 noteJsonOptions#1
-  pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 noteJsonOptions#2 CheckContext.error#1 FieldInfo.constructor#3
+  pointer ctx: size=192 writesThrough=true captured=true passedTo=spelled#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0 CheckContext.error#0 annotationSpelling#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 checkRangedLiteral#0
+  pointer owner: size=136 writesThrough=true captured=false passedTo=kindWord#0 spelled#1 noteJsonOptions#1 StructInfo.hasMember#0 kindWord#0 spelled#1
+  pointer decl: size=40 writesThrough=true captured=true passedTo=noteJsonOptions#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
   local 448:9 name: string (const)
   local 449:9 what: string (const)
   callee 449:40 kindWord -> @kindWord
   callee 449:61 spelled -> @spelled
-  callee 450:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee 451:5 CheckContext.error -> @CheckContext.error
-  callee 453:42 kindWord -> @kindWord
-  callee 453:63 spelled -> @spelled
-  callee 473:5 CheckContext.error -> @CheckContext.error
-  callee 477:5 CheckContext.error -> @CheckContext.error
-  callee 482:5 noteJsonOptions -> @noteJsonOptions
-  callee 486:5 CheckContext.error -> @CheckContext.error
-  local 489:9 type: i32 (const)
-  callee 489:16 resolveType -> @resolveType
-  callee 491:5 CheckContext.error -> @CheckContext.error
-  callee 496:7 rejectForeignPointer -> @rejectForeignPointer
-  callee 500:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee 501:5 CheckContext.error -> @CheckContext.error
-  callee 501:33 secretFieldMessage -> @secretFieldMessage
-  local 505:9 field: FieldInfo (const)
-  callee 505:17 new FieldInfo -> @FieldInfo.constructor
-  callee 508:20 annotationSpelling -> @annotationSpelling
-  local 509:9 initializer: Node (const)
-  local 511:11 initType: i32 (const)
-  callee 511:22 literalInitializerType -> @literalInitializerType
-  callee 513:7 CheckContext.error -> @CheckContext.error
-  callee 517:17 TypeTable.assignable -> @TypeTable.assignable
-  local 518:13 got: string (const)
-  callee 518:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 519:7 CheckContext.error -> @CheckContext.error
-  callee 519:44 TypeTable.typeName -> @TypeTable.typeName
-  callee 520:16 TypeTable.isRanged -> @TypeTable.isRanged
-  local 522:13 negated: boolean (const)
-  callee 523:7 checkRangedLiteral -> @checkRangedLiteral
-  callee 534:3 StringMap.set -> @StringMap.set
+  callee 454:5 noteJsonOptions -> @noteJsonOptions
+  callee 457:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee 458:5 CheckContext.error -> @CheckContext.error
+  callee 460:42 kindWord -> @kindWord
+  callee 460:63 spelled -> @spelled
+  callee 480:5 CheckContext.error -> @CheckContext.error
+  callee 484:5 CheckContext.error -> @CheckContext.error
+  callee 488:5 CheckContext.error -> @CheckContext.error
+  local 491:9 type: i32 (const)
+  callee 491:16 resolveType -> @resolveType
+  callee 493:5 CheckContext.error -> @CheckContext.error
+  callee 498:7 rejectForeignPointer -> @rejectForeignPointer
+  callee 502:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee 503:5 CheckContext.error -> @CheckContext.error
+  callee 503:33 secretFieldMessage -> @secretFieldMessage
+  local 507:9 field: FieldInfo (const)
+  callee 507:17 new FieldInfo -> @FieldInfo.constructor
+  callee 510:20 annotationSpelling -> @annotationSpelling
+  local 511:9 initializer: Node (const)
+  local 513:11 initType: i32 (const)
+  callee 513:22 literalInitializerType -> @literalInitializerType
+  callee 515:7 CheckContext.error -> @CheckContext.error
+  callee 519:17 TypeTable.assignable -> @TypeTable.assignable
+  local 520:13 got: string (const)
+  callee 520:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 521:7 CheckContext.error -> @CheckContext.error
+  callee 521:44 TypeTable.typeName -> @TypeTable.typeName
+  callee 522:16 TypeTable.isRanged -> @TypeTable.isRanged
+  local 524:13 negated: boolean (const)
+  callee 525:7 checkRangedLiteral -> @checkRangedLiteral
+  callee 536:3 StringMap.set -> @StringMap.set
 function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boolean -> @rejectMemberModifiers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -34475,151 +34491,151 @@ function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boo
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 552:9 isStatic: boolean (const)
-  local 553:9 isReadonly: boolean (const)
-  local 554:9 staticFirst: boolean (const)
-  callee 556:5 CheckContext.error -> @CheckContext.error
-  callee 560:5 CheckContext.error -> @CheckContext.error
+  local 554:9 isStatic: boolean (const)
+  local 555:9 isReadonly: boolean (const)
+  local 556:9 staticFirst: boolean (const)
+  callee 558:5 CheckContext.error -> @CheckContext.error
+  callee 562:5 CheckContext.error -> @CheckContext.error
 function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 609:3
+  sharedWrite: 611:3
   calls: CheckContext.error StringMap.set StructInfo.hasMember collectMethodSignature declareMethodTemplate disposeElsewhereMessage isGenericFunction isIteratorMethod isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq rejectMemberModifiers spelled
   pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.error#0 spelled#0 spelled#0 CheckContext.error#0 rejectMemberModifiers#0 CheckContext.error#0 declareMethodTemplate#0 collectMethodSignature#0
   pointer owner: size=136 writesThrough=true captured=true passedTo=spelled#1 spelled#1 StructInfo.hasMember#0 declareMethodTemplate#1 collectMethodSignature#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=isIteratorMethod#0 rejectMemberModifiers#1 CheckContext.error#1 isGenericFunction#0 declareMethodTemplate#2 collectMethodSignature#2
   stackSites=0 stackLocals=0
-  local 567:9 name: string (const)
-  callee 572:10 isThreadsSource -> @isThreadsSource
-  callee 573:7 CheckContext.error -> @CheckContext.error
-  callee 573:35 disposeElsewhereMessage -> @disposeElsewhereMessage
-  callee 573:59 spelled -> @spelled
-  callee 580:7 isIteratorMethod -> @isIteratorMethod
-  local 583:9 what: string (const)
-  local 584:9 shown: string (const)
-  callee 584:17 spelled -> @spelled
-  callee 585:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee 586:5 CheckContext.error -> @CheckContext.error
-  callee 593:7 rejectMemberModifiers -> @rejectMemberModifiers
-  callee 597:5 CheckContext.error -> @CheckContext.error
-  callee 603:7 isGenericFunction -> @isGenericFunction
-  callee 604:5 declareMethodTemplate -> @declareMethodTemplate
-  local 607:9 sig: FunctionSig (const)
-  callee 607:15 collectMethodSignature -> @collectMethodSignature
-  callee 608:3 StringMap.set -> @StringMap.set
+  local 569:9 name: string (const)
+  callee 574:10 isThreadsSource -> @isThreadsSource
+  callee 575:7 CheckContext.error -> @CheckContext.error
+  callee 575:35 disposeElsewhereMessage -> @disposeElsewhereMessage
+  callee 575:59 spelled -> @spelled
+  callee 582:7 isIteratorMethod -> @isIteratorMethod
+  local 585:9 what: string (const)
+  local 586:9 shown: string (const)
+  callee 586:17 spelled -> @spelled
+  callee 587:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee 588:5 CheckContext.error -> @CheckContext.error
+  callee 595:7 rejectMemberModifiers -> @rejectMemberModifiers
+  callee 599:5 CheckContext.error -> @CheckContext.error
+  callee 605:7 isGenericFunction -> @isGenericFunction
+  callee 606:5 declareMethodTemplate -> @declareMethodTemplate
+  local 609:9 sig: FunctionSig (const)
+  callee 609:15 collectMethodSignature -> @collectMethodSignature
+  callee 610:3 StringMap.set -> @StringMap.set
 function collectMethodSignature(ctx: CheckContext, owner: StructInfo, decl: Node, symbol: string, shownName: string): FunctionSig -> @collectMethodSignature [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=120
-  sharedWrite: 627:3
+  sharedWrite: 629:3
   escaping: owner shownName symbol
   calls: FunctionSig.constructor annotationSpelling collectParams nish_alloc_struct nish_panic_index rejectForeignPointer resolveType
   pointer ctx: size=192 writesThrough=true captured=true passedTo=collectParams#0 resolveType#1 annotationSpelling#0 rejectForeignPointer#0
   pointer owner: size=136 writesThrough=true captured=true
   pointer decl: size=40 writesThrough=true captured=true passedTo=FunctionSig.constructor#3
   stackSites=0 stackLocals=0
-  local 626:9 sig: FunctionSig (const)
-  callee 626:15 new FunctionSig -> @FunctionSig.constructor
-  callee 631:3 collectParams -> @collectParams
-  local 632:9 returnAnnotation: Node (const)
-  callee 637:22 resolveType -> @resolveType
-  callee 638:26 annotationSpelling -> @annotationSpelling
-  callee 639:5 rejectForeignPointer -> @rejectForeignPointer
+  local 628:9 sig: FunctionSig (const)
+  callee 628:15 new FunctionSig -> @FunctionSig.constructor
+  callee 633:3 collectParams -> @collectParams
+  local 634:9 returnAnnotation: Node (const)
+  callee 639:22 resolveType -> @resolveType
+  callee 640:26 annotationSpelling -> @annotationSpelling
+  callee 641:5 rejectForeignPointer -> @rejectForeignPointer
 function declareMethodTemplate(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @declareMethodTemplate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 661:3
+  sharedWrite: 663:3
   escaping: owner
   calls: CheckedProgram.methodConstraintList StringMap.set TemplateInfo.constructor collectTypeParamNames nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat spelled
   pointer ctx: size=192 writesThrough=true captured=true passedTo=spelled#0 TemplateInfo.constructor#4
   pointer owner: size=136 writesThrough=true captured=true passedTo=spelled#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=TemplateInfo.constructor#2 collectTypeParamNames#0 CheckedProgram.methodConstraintList#1
   stackSites=0 stackLocals=0
-  local 659:9 name: string (const)
-  local 660:9 template: TemplateInfo (const)
-  callee 660:20 new TemplateInfo -> @TemplateInfo.constructor
-  callee 660:40 spelled -> @spelled
-  callee 663:25 collectTypeParamNames -> @collectTypeParamNames
-  callee 664:26 CheckedProgram.methodConstraintList -> @CheckedProgram.methodConstraintList
-  callee 665:3 StringMap.set -> @StringMap.set
+  local 661:9 name: string (const)
+  local 662:9 template: TemplateInfo (const)
+  callee 662:20 new TemplateInfo -> @TemplateInfo.constructor
+  callee 662:40 spelled -> @spelled
+  callee 665:25 collectTypeParamNames -> @collectTypeParamNames
+  callee 666:26 CheckedProgram.methodConstraintList -> @CheckedProgram.methodConstraintList
+  callee 667:3 StringMap.set -> @StringMap.set
 function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectConstructor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 694:3
+  sharedWrite: 696:3
   escaping: owner
   calls: CheckContext.error FunctionSig.constructor collectParams nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat rejectMemberModifiers spelled
   pointer ctx: size=192 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 rejectMemberModifiers#0 collectParams#0
   pointer owner: size=136 writesThrough=true captured=true passedTo=spelled#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 rejectMemberModifiers#1 FunctionSig.constructor#3
   stackSites=0 stackLocals=0
-  local 671:9 shown: string (const)
-  callee 671:17 spelled -> @spelled
-  callee 673:5 CheckContext.error -> @CheckContext.error
-  local 690:9 modifiers: string (const)
-  callee 691:3 rejectMemberModifiers -> @rejectMemberModifiers
-  local 692:9 symbol: string (const)
-  local 693:9 sig: FunctionSig (const)
-  callee 693:15 new FunctionSig -> @FunctionSig.constructor
-  callee 699:3 collectParams -> @collectParams
+  local 673:9 shown: string (const)
+  callee 673:17 spelled -> @spelled
+  callee 675:5 CheckContext.error -> @CheckContext.error
+  local 692:9 modifiers: string (const)
+  callee 693:3 rejectMemberModifiers -> @rejectMemberModifiers
+  local 694:9 symbol: string (const)
+  local 695:9 sig: FunctionSig (const)
+  callee 695:15 new FunctionSig -> @FunctionSig.constructor
+  callee 701:3 collectParams -> @collectParams
 function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @collectStructMembers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 751:7
+  sharedWrite: 753:7
   calls: CheckContext.error CheckedProgram.struct CheckedProgram.structTemplate checkJsonOptions collectConstructor collectField collectMethod computeLayout declaredFieldCount instantiateWritten nish_array_grow nish_panic_index nish_str_concat reportWastefulPadding spelled
   pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.error#0 spelled#0 CheckContext.error#0 instantiateWritten#0 CheckContext.error#0 CheckContext.error#0 collectField#0 collectMethod#0 collectConstructor#0 collectField#0 checkJsonOptions#0 computeLayout#0 reportWastefulPadding#0
   pointer info: size=136 writesThrough=true captured=true passedTo=spelled#1 collectField#1 collectMethod#1 collectConstructor#1 collectField#1 checkJsonOptions#1 computeLayout#1 reportWastefulPadding#1
   stackSites=0 stackLocals=0
-  local 734:9 decl: Node (const)
-  local 737:7 prefix: StructInfo | null (let)
-  local 739:11 extendsName: Node (const)
-  callee 745:7 CheckContext.error -> @CheckContext.error
-  callee 747:118 spelled -> @spelled
-  local 754:16 iface: Node (const)
-  callee 765:9 CheckContext.error -> @CheckContext.error
-  local 768:13 template: StructTemplateInfo | null (const)
-  callee 768:24 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local 769:11 target: StructInfo | null (let)
-  callee 771:18 instantiateWritten -> @instantiateWritten
-  callee 776:9 CheckContext.error -> @CheckContext.error
-  callee 779:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 782:9 CheckContext.error -> @CheckContext.error
-  callee 786:30 declaredFieldCount -> @declaredFieldCount
-  callee 786:59 declaredFieldCount -> @declaredFieldCount
-  local 790:16 member: Node (const)
-  callee 792:9 collectField -> @collectField
-  callee 794:9 collectMethod -> @collectMethod
-  callee 796:9 collectConstructor -> @collectConstructor
-  local 800:16 member: Node (const)
-  callee 802:9 collectField -> @collectField
-  callee 806:3 checkJsonOptions -> @checkJsonOptions
-  local 807:9 floor: i32 (const)
-  callee 807:17 computeLayout -> @computeLayout
-  callee 809:3 reportWastefulPadding -> @reportWastefulPadding
+  local 736:9 decl: Node (const)
+  local 739:7 prefix: StructInfo | null (let)
+  local 741:11 extendsName: Node (const)
+  callee 747:7 CheckContext.error -> @CheckContext.error
+  callee 749:118 spelled -> @spelled
+  local 756:16 iface: Node (const)
+  callee 767:9 CheckContext.error -> @CheckContext.error
+  local 770:13 template: StructTemplateInfo | null (const)
+  callee 770:24 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local 771:11 target: StructInfo | null (let)
+  callee 773:18 instantiateWritten -> @instantiateWritten
+  callee 778:9 CheckContext.error -> @CheckContext.error
+  callee 781:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 784:9 CheckContext.error -> @CheckContext.error
+  callee 788:30 declaredFieldCount -> @declaredFieldCount
+  callee 788:59 declaredFieldCount -> @declaredFieldCount
+  local 792:16 member: Node (const)
+  callee 794:9 collectField -> @collectField
+  callee 796:9 collectMethod -> @collectMethod
+  callee 798:9 collectConstructor -> @collectConstructor
+  local 802:16 member: Node (const)
+  callee 804:9 collectField -> @collectField
+  callee 808:3 checkJsonOptions -> @checkJsonOptions
+  local 809:9 floor: i32 (const)
+  callee 809:17 computeLayout -> @computeLayout
+  callee 811:3 reportWastefulPadding -> @reportWastefulPadding
 function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 835:5
+  sharedWrite: 837:5
   calls: CheckContext.error CheckedProgram.struct describeField nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 spelled
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 spelled#0 spelled#0 describeField#0 spelled#0 describeField#0 spelled#0 CheckContext.error#0 spelled#0 spelled#0 describeField#0
   pointer cls: size=136 writesThrough=false captured=false passedTo=spelled#1 spelled#1 spelled#1
   stackSites=0 stackLocals=0
-  local 820:14 name: string (const)
-  local 825:11 iface: StructInfo | null (const)
-  callee 825:19 CheckedProgram.struct -> @CheckedProgram.struct
-  local 836:9 i: i32 (let)
-  local 838:13 want: FieldInfo (const)
-  local 840:15 got: FieldInfo (const)
-  callee 845:9 CheckContext.error -> @CheckContext.error
-  callee 847:22 spelled -> @spelled
-  callee 847:66 spelled -> @spelled
-  callee 847:110 describeField -> @describeField
-  callee 847:143 spelled -> @spelled
-  callee 847:172 describeField -> @describeField
-  callee 847:204 spelled -> @spelled
-  callee 851:7 CheckContext.error -> @CheckContext.error
-  callee 853:20 spelled -> @spelled
-  callee 853:64 spelled -> @spelled
-  callee 853:105 describeField -> @describeField
+  local 822:14 name: string (const)
+  local 827:11 iface: StructInfo | null (const)
+  callee 827:19 CheckedProgram.struct -> @CheckedProgram.struct
+  local 838:9 i: i32 (let)
+  local 840:13 want: FieldInfo (const)
+  local 842:15 got: FieldInfo (const)
+  callee 847:9 CheckContext.error -> @CheckContext.error
+  callee 849:22 spelled -> @spelled
+  callee 849:66 spelled -> @spelled
+  callee 849:110 describeField -> @describeField
+  callee 849:143 spelled -> @spelled
+  callee 849:172 describeField -> @describeField
+  callee 849:204 spelled -> @spelled
+  callee 853:7 CheckContext.error -> @CheckContext.error
+  callee 855:20 spelled -> @spelled
+  callee 855:64 spelled -> @spelled
+  callee 855:105 describeField -> @describeField
 function describeField(ctx: CheckContext, field: FieldInfo): string -> @describeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
   pointer ctx: size=192 writesThrough=false captured=false
   pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 861:23 TypeTable.typeName -> @TypeTable.typeName
+  callee 863:23 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
@@ -34628,17 +34644,17 @@ function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.isResult#0 noteStructNames#0 TypeTable.okOf#0 noteStructNames#0 TypeTable.errOf#0 TypeTable.refOf#0 noteStructNames#0
   pointer out: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 noteStructNames#2 noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
-  callee 869:7 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 870:5 StringSet.add -> @StringSet.add
-  callee 870:13 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 875:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 876:5 noteStructNames -> @noteStructNames
-  callee 876:28 TypeTable.okOf -> @TypeTable.okOf
-  callee 877:5 noteStructNames -> @noteStructNames
-  callee 877:28 TypeTable.errOf -> @TypeTable.errOf
-  local 880:9 inner: i32 (const)
-  callee 880:17 TypeTable.refOf -> @TypeTable.refOf
-  callee 882:5 noteStructNames -> @noteStructNames
+  callee 871:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 872:5 StringSet.add -> @StringSet.add
+  callee 872:13 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 877:7 TypeTable.isResult -> @TypeTable.isResult
+  callee 878:5 noteStructNames -> @noteStructNames
+  callee 878:28 TypeTable.okOf -> @TypeTable.okOf
+  callee 879:5 noteStructNames -> @noteStructNames
+  callee 879:28 TypeTable.errOf -> @TypeTable.errOf
+  local 882:9 inner: i32 (const)
+  callee 882:17 TypeTable.refOf -> @TypeTable.refOf
+  callee 884:5 noteStructNames -> @noteStructNames
 function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet): void -> @signatureStructNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteStructNames
@@ -34647,9 +34663,9 @@ function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet
   pointer sig: size=120 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
-  local 893:7 i: i32 (let)
-  callee 895:5 noteStructNames -> @noteStructNames
-  callee 898:3 noteStructNames -> @noteStructNames
+  local 895:7 i: i32 (let)
+  callee 897:5 noteStructNames -> @noteStructNames
+  callee 900:3 noteStructNames -> @noteStructNames
 function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSet): void -> @referencedStructNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteStructNames
@@ -34658,29 +34674,29 @@ function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSe
   pointer info: size=136 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 signatureStructNames#2 signatureStructNames#2
   stackSites=0 stackLocals=0
-  local 906:14 field: FieldInfo (const)
-  callee 907:5 noteStructNames -> @noteStructNames
-  local 909:14 method: FunctionSig (const)
-  callee 910:5 signatureStructNames -> @signatureStructNames
-  local 912:9 ctor: FunctionSig | null (const)
-  callee 914:5 signatureStructNames -> @signatureStructNames
+  local 908:14 field: FieldInfo (const)
+  callee 909:5 noteStructNames -> @noteStructNames
+  local 911:14 method: FunctionSig (const)
+  callee 912:5 signatureStructNames -> @signatureStructNames
+  local 914:9 ctor: FunctionSig | null (const)
+  callee 916:5 signatureStructNames -> @signatureStructNames
 function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean -> @coercesTo [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from want
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull implementsDeclaration
   pointer ctx: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 931:20 TypeTable.isStruct -> @TypeTable.isStruct
-  local 934:9 target: i32 (const)
-  callee 934:18 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 935:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 938:9 source: StructInfo | null (const)
-  callee 938:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 938:37 TypeTable.nameOf -> @TypeTable.nameOf
-  local 939:9 wanted: StructInfo | null (const)
-  callee 939:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 939:37 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 943:46 implementsDeclaration -> @implementsDeclaration
+  callee 933:20 TypeTable.isStruct -> @TypeTable.isStruct
+  local 936:9 target: i32 (const)
+  callee 936:18 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 937:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 940:9 source: StructInfo | null (const)
+  callee 940:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 940:37 TypeTable.nameOf -> @TypeTable.nameOf
+  local 941:9 wanted: StructInfo | null (const)
+  callee 941:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 941:37 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 945:46 implementsDeclaration -> @implementsDeclaration
 module src/members.ts
 import ARRAY_LEVEL from "./arrays" -> const ARRAY_LEVEL
 import checkArrayMethod from "./arrays" -> function @checkArrayMethod

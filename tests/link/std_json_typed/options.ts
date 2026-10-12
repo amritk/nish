@@ -77,6 +77,28 @@ export class Envelope {
   n: i32 = 0;
 }
 
+/** An instance field called `json` declared before the options: no duplicate, as in TypeScript. */
+export class FieldFirst {
+  json: string = "kept";
+  static readonly json = { rename: { n: "m" } };
+  n: i32 = 0;
+}
+
+/** A method called `json` declared before the options. */
+export class MethodFirst {
+  json(): i32 {
+    return this.n + 1;
+  }
+  static readonly json = { optional: ["n"] };
+  n: i32 = 4;
+}
+
+/** The options before an instance field called `json`. */
+export class OptionsFirst {
+  static readonly json = { rename: { json: "body" } };
+  json: string = "";
+}
+
 /** Two fields swap keys: each name is the other's key, and neither is its own. */
 export class Swapped {
   static readonly json = { rename: { a: "b", b: "a" } };
@@ -134,6 +156,18 @@ const jtRenames = (t: Suite): void => {
   t.eqI32("rename: swapped keys decode", jtDecode(`{"b":1,"a":"x"}`, s, new JsonLimits(), false).failed, 0);
   t.eqStr("rename: swapped keys reach the other field", `${s.a} ${s.b}`, "1 x");
   t.eqStr("rename: and encode back swapped", jtEncode(s, 64), `{"b":1,"a":"x"}`);
+};
+
+const jtOrder = (t: Suite): void => {
+  const f = new FieldFirst();
+  t.eqI32("order: a json field before the options decodes", jtDecode(`{"json":"x","m":2}`, f, new JsonLimits(), false).failed, 0);
+  t.eqStr("order: under the options' keys", jtEncode(f, 64), `{"json":"x","m":2}`);
+  const m = new MethodFirst();
+  t.eqI32("order: a json method before the options decodes", jtDecode(`{}`, m, new JsonLimits(), false).failed, 0);
+  t.eqI32("order: and the method is still the class's", m.json(), 5);
+  const o = new OptionsFirst();
+  t.eqI32("order: a json field after the options, renamed", jtDecode(`{"body":"b"}`, o, new JsonLimits(), false).failed, 0);
+  t.eqStr("order: holds its value", o.json, "b");
 };
 
 const jtInstanceJson = (t: Suite): void => {
@@ -290,6 +324,7 @@ const jtRenamed = (t: Suite): void => {
 export const jtOptionsChecks = (t: Suite): void => {
   jtRenames(t);
   jtInstanceJson(t);
+  jtOrder(t);
   jtReached(t);
   jtOptional(t);
   jtNumbers(t);

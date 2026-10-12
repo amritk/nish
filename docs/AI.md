@@ -1759,7 +1759,8 @@ the wire, and a missing `optional` key sets its field to the initializer, so
 an optional field has one (NL2498). Each misuse is its own code where the class
 is declared: not `static readonly` or on a generic class (NL2492), not a
 literal (NL2493), an unknown option (NL2494), a name that is no field (NL2495),
-a rename to a non-string (NL2496), two fields with one key (NL2497). A
+a rename to a non-string (NL2496) or to a key that is not valid UTF-8
+(NL2499), two fields with one key (NL2497). A
 `JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
 `f64`, `setText`).
 

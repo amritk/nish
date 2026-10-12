@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 624
+export const RULE_COUNT: i32 = 625
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -267,6 +267,8 @@ const diagnosticRules = (): string[] => [
   "NL2426",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
+  "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
+  "NL2499",
   "` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: ",
   "NL2457",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",

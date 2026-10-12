@@ -241,6 +241,12 @@ PASS  rename: and encode back swapped
 PASS  instance json: an ordinary field decodes
 PASS  instance json: and encodes under its own name
 PASS  instance json: and is required
+PASS  order: a json field before the options decodes
+PASS  order: under the options' keys
+PASS  order: a json method before the options decodes
+PASS  order: and the method is still the class's
+PASS  order: a json field after the options, renamed
+PASS  order: holds its value
 PASS  reached: renames hold nested, | null, in an array and in a map
 PASS  reached: and encode back under the same keys
 PASS  reached: an element's own field names are its keys swapped: code
@@ -288,4 +294,4 @@ PASS  number: 1,000 decodes into one Reading succeed
 PASS  number: Arena.used() is flat over them
 PASS  renamed: decodes
 PASS  renamed: encodes, tries at its initializer
-std_json_typed: 289 passed, 0 failed, 0 skipped
+std_json_typed: 295 passed, 0 failed, 0 skipped
