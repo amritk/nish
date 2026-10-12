@@ -39,7 +39,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 5 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ¹⁰ |
+| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ¹⁰ |
 | **Total** ⁸ | | | **3 / 10 / 12 / 79** | **0 / 1 / 2 / 20** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -74,13 +74,15 @@ the record that found it. The notes below the table name each such finding.
    #512 made the server's P-256 signature in scratch, and #515 made the
    listener read the first Initial in place and answer into scratch, so a
    handshake through a reused slot keeps 0 bytes of arena memory.
-10. JSON-1, JSON-4, JSON-5, JSON-6 and JSON-7 (Low) are accepted, with the reason in
+10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8 and JSON-9 (Low) are accepted, with the reason in
     their record, and are not counted. JSON-2 is open. JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed for
     `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
     of a field; it is counted as a fixed Low. The tokenizer is unchanged, a
     program reading tokens itself still decides, and the duplicates of a key
-    `ignoreUnknown` steps over are the accepted JSON-4.
+    `ignoreUnknown` steps over are the accepted JSON-4. `JsonDocument` (#597)
+    closes it for its own callers too, refusing a repeated key unless the
+    program asks for `JSON.parse`'s reading.
 
 ## Open findings
 
