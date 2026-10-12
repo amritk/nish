@@ -350,15 +350,19 @@ case "$profile" in
     # AES kernels behind `nish_aes_hw` (src/kernels.ts). runtime-aes.c's wasm32 build
     # answers 0 there, so the bitsliced code runs, and it is added only for such IR:
     # every other module links the bytes it always did.
+    # A caller that names runtime-aes.c itself is left alone, as `halves` leaves it:
+    # one object named twice is a duplicate-symbol error.
+    aes_named=0
+    aes_wanted=0
     for i in ${inputs[@]+"${inputs[@]}"}; do
       case "$i" in
-        *.ll)
-          if grep -q '@nish_aes_hw(' "$i"; then
-            inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
-            break
-          fi ;;
+        */runtime-aes.c|runtime-aes.c) aes_named=1 ;;
+        *.ll) if grep -q '@nish_aes_hw(' "$i"; then aes_wanted=1; fi ;;
       esac
     done
+    if [ "$aes_wanted" = 1 ] && [ "$aes_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
+    fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
     "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory \

@@ -9562,7 +9562,10 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   // kernels behind `nish_aes_hw`: the README's and examples/node-host.mjs's route,
   // `nish x.ts -o x.ll` then `build.sh x.ll runtime/runtime-wasm.c --profile wasm`.
   // build.sh adds runtime-aes.c for such IR, whose wasm32 build answers 0, so the
-  // walker runs; held here to Node's own AES-128 on blocks the program encrypts.
+  // walker runs; held here to Node's own AES-128, every byte of three blocks. Two
+  // arms beside it: a module that calls no AES links no runtime-aes.c, and an input
+  // list that already names runtime-aes.c is left alone rather than given a second
+  // copy. `--trace-symbol` says which objects define `nish_aes_hw`.
   if (has("wasm-ld")) {
     const freeDir = path.join(kernelDir, "freestanding")
     fs.mkdirSync(freeDir, { recursive: true })
@@ -9572,54 +9575,102 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
       [
         'import { aesEncryptBlock, aesKey, AesKey } from "nish/crypto/aes"',
         "",
-        "export const firstByte = (last: i32): i32 => {",
+        "export const blockByte = (last: i32, at: i32): i32 => {",
         "  const k: AesKey | null = aesKey([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])",
         "  if (k === null) {",
         "    return -1",
         "  }",
         "  const b: u8[] | null = aesEncryptBlock(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, toU8(last)])",
-        "  return b === null ? -2 : toI32(b[0])",
+        "  if (b === null || at < 0 || at >= toI32(b.length)) {",
+        "    return -2",
+        "  }",
+        "  return toI32(b[at])",
         "}",
         "",
       ].join("\n")
     )
-    const irDir = path.join(freeDir, "ir")
-    const compiled = spawnSync(NISH, [source, "-o", `${irDir}${path.sep}`], { cwd: root, encoding: "utf8" })
-    const lls =
-      compiled.status === 0
-        ? fs
-            .readdirSync(irDir)
-            .filter((f) => f.endsWith(".ll"))
-            .map((f) => path.join(irDir, f))
-        : []
-    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_aes_hw("))
+    /** `file` compiled for the host into `dir`, and its `.ll` files. */
+    const hostIr = (file, dir) => {
+      const r = spawnSync(NISH, [file, "-o", `${dir}${path.sep}`], { cwd: root, encoding: "utf8" })
+      const lls =
+        r.status === 0
+          ? fs
+              .readdirSync(dir)
+              .filter((f) => f.endsWith(".ll"))
+              .map((f) => path.join(dir, f))
+          : []
+      return { lls, why: r.status === 0 ? "" : r.stderr }
+    }
+    /** `inputs` linked freestanding with `nish_aes_hw` traced: the result, and how many objects define it. */
+    const freestanding = (inputs, out) => {
+      const r = spawnSync(
+        "bash",
+        ["scripts/build.sh", ...inputs, "-Wl,--trace-symbol=nish_aes_hw", "-o", out, "--profile", "wasm"],
+        { cwd: root, encoding: "utf8" }
+      )
+      const definitions = `${r.stdout}${r.stderr}`
+        .split("\n")
+        .filter((l) => /definition of nish_aes_hw/.test(l)).length
+      return { r, definitions }
+    }
+    const aesIr = hostIr(source, path.join(freeDir, "ir"))
+    const lowered = aesIr.lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_aes_hw("))
     const wasm = path.join(freeDir, "block.wasm")
-    const linked =
-      lls.length > 0
-        ? spawnSync(
-            "bash",
-            ["scripts/build.sh", ...lls, "runtime/runtime-wasm.c", "-o", wasm, "--profile", "wasm"],
-            {
-              cwd: root,
-              encoding: "utf8",
-            }
-          )
-        : null
+    const linked = aesIr.lls.length > 0 ? freestanding([...aesIr.lls, "runtime/runtime-wasm.c"], wasm) : null
     const key = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
-    const want = [0, 15, 200].map((last) => {
+    const lasts = [0, 15, 200]
+    const want = lasts.map((last) => {
       const cipher = crypto.createCipheriv("aes-128-ecb", key, null)
       cipher.setAutoPadding(false)
-      return cipher.update(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, last]))[0]
+      return [...cipher.update(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, last]))].join(
+        ","
+      )
     })
     let got = []
-    if (linked !== null && linked.status === 0) {
-      const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
-      got = [0, 15, 200].map((last) => instance.exports.firstByte(last))
+    let trapped = ""
+    if (linked !== null && linked.r.status === 0) {
+      try {
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
+        got = lasts.map((last) =>
+          Array.from({ length: 16 }, (_, at) => instance.exports.blockByte(last, at)).join(",")
+        )
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
     }
     check(
       "aes kernel: the freestanding --profile wasm link of an AES module compiled for the host links, and encrypts as Node's AES-128 does",
-      lowered && linked.status === 0 && got.join(",") === want.join(","),
-      `${compiled.stderr}IR calls nish_aes_hw: ${lowered}\n${linked === null ? "(not linked)" : linked.stderr}got ${got.join(",")}, want ${want.join(",")}`
+      lowered &&
+        linked.r.status === 0 &&
+        linked.definitions === 1 &&
+        trapped === "" &&
+        got.join(";") === want.join(";"),
+      `${aesIr.why}IR calls nish_aes_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.r.stderr}objects defining nish_aes_hw: ${linked.definitions}\n`}${trapped}got  ${got.join(";")}\nwant ${want.join(";")}`
+    )
+
+    // The two arms around it: no AES, no runtime-aes.c; runtime-aes.c named, not added again.
+    const plainIr = hostIr(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"))
+    const plain =
+      plainIr.lls.length > 0
+        ? freestanding([...plainIr.lls, "runtime/runtime-wasm.c"], path.join(freeDir, "plain.wasm"))
+        : null
+    const named =
+      aesIr.lls.length > 0
+        ? freestanding(
+            [...aesIr.lls, "runtime/runtime-wasm.c", "runtime/runtime-aes.c"],
+            path.join(freeDir, "named.wasm")
+          )
+        : null
+    check(
+      "aes kernel: the freestanding --profile wasm link adds runtime-aes.c to no module that calls no AES, and not again when the inputs name it",
+      plain !== null &&
+        plain.r.status === 0 &&
+        plain.definitions === 0 &&
+        named !== null &&
+        named.r.status === 0 &&
+        named.definitions === 1,
+      `${plainIr.why}a module with no AES: ${plain === null ? "(not linked)" : `exit ${plain.r.status}, ${plain.definitions} object(s) define nish_aes_hw\n${plain.r.stderr}`}\n` +
+        `runtime-aes.c named: ${named === null ? "(not linked)" : `exit ${named.r.status}, ${named.definitions} object(s) define nish_aes_hw\n${named.r.stderr}`}`
     )
   } else {
     skip("aes kernel: no wasm-ld, so the freestanding wasm link of an AES module is not checked")
