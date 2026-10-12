@@ -29,7 +29,7 @@ import { checkResultMethod, checkResultProperty } from "./result"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
 import { internalErrorFor } from "./ice"
-import { unwrapParens } from "./emit-util"
+import { isOptionalChain, unwrapParens } from "./emit-util"
 import {
   checkGenericCall,
   instantiateWritten,
@@ -41,6 +41,7 @@ import {
 import { assignInto, checkExpression, linkedParent, templateFix } from "./expressions"
 import { recordUpdateFusion } from "./fusion"
 import {
+  FLAG_OPTIONAL,
   N_ARRAY,
   N_ARROW,
   N_BINARY,
@@ -95,7 +96,12 @@ export const isValueReceiver = (ctx: CheckContext, receiver: Node, scope: Scope)
  * the field to a local, which is provably safe and one load instead of two,
  * so the message names that idiom with the reader's own expression.
  */
-const nullableHint = (ctx: CheckContext, receiver: i32, receiverExpr: Node): string => {
+const nullableHint = (ctx: CheckContext, receiver: i32, receiverExpr: Node, name: string): string => {
+  // In a `?.` chain the fix is another link, not a local: a local bound to
+  // part of a chain would be a chain without its `??`.
+  if (isOptionalChain(receiverExpr)) {
+    return `a link of a \`?.\` chain that may be \`null\` needs a \`?.\` of its own: \`${ctx.textOf(receiverExpr)}?.${name}\``
+  }
   const spelled = ctx.table.typeName(receiver)
   const narrows = `\`${spelled}\` to \`${ctx.table.typeName(ctx.table.stripNull(receiver))}\``
   if (receiverExpr.kind === N_MEMBER || receiverExpr.kind === N_INDEX) {
@@ -106,10 +112,45 @@ const nullableHint = (ctx: CheckContext, receiver: i32, receiverExpr: Node): str
   return `check for null first: \`if (p !== null) { ... }\` narrows ${narrows}`
 }
 
+/**
+ * `?.` on a receiver that cannot be `null`, which has nothing to skip, so the
+ * `.` it means is what to write: refused as `??` on a value that cannot be
+ * `null` is, rather than read as a no-op the reader would take for a test.
+ */
+export const neverNullMessage = (ctx: CheckContext, receiverExpr: Node): string =>
+  `\`${ctx.textOf(receiverExpr)}\` is never \`null\` here, so \`?.\` has nothing to skip: write \`.\``
+
+/**
+ * The type a link reads `access` from, given its receiver's. A `?.` link's
+ * receiver is a `T | null` read as its `T`, because Phase 0 admitted the link
+ * only in a chain on the left of a `??`, and the emitter has branched to that
+ * default by the time the link runs where the receiver is `null`
+ * (`nodeNullTests`). Any other link reads the type as it is.
+ */
+const linkReceiver = (ctx: CheckContext, access: Node, receiverExpr: Node, receiver: i32): i32 => {
+  if ((access.flags & FLAG_OPTIONAL) === 0) {
+    return receiver
+  }
+  if (!ctx.table.isNullable(receiver)) {
+    ctx.errorAtProperty(access, neverNullMessage(ctx, receiverExpr))
+    return T_ERROR
+  }
+  // Recorded as the `T` the link reads, which is what the receiver is by the
+  // time the link runs: the emitter finds a field or a method by it, and
+  // tests the value for `null` before using it as one.
+  const inner = ctx.table.stripNull(receiver)
+  ctx.program.nodeTypes[receiverExpr.id] = inner
+  return inner
+}
+
 /** `receiver.name` where `receiver` is a value, or a dotted builtin otherwise. */
 export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const receiverExpr = expr.children[0]
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
+    if ((expr.flags & FLAG_OPTIONAL) !== 0) {
+      ctx.errorAtProperty(expr, neverNullMessage(ctx, receiverExpr))
+      return T_ERROR
+    }
     // `Kind.If` (WP23). An enum name is not a value, so it arrives here the
     // way `Math` does, and the member is folded to its integer on the spot:
     // the emitter reads `nodeEnumValues` and an enum emits no symbol at all.
@@ -119,7 +160,7 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     }
     return checkNamespaceProperty(ctx, expr, receiverExpr.text, expr.text)
   }
-  const receiver = checkExpression(ctx, receiverExpr, scope, -1)
+  const receiver = linkReceiver(ctx, expr, receiverExpr, checkExpression(ctx, receiverExpr, scope, -1))
   if (receiver === T_ERROR) {
     return T_ERROR
   }
@@ -130,7 +171,7 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     // Against the property name, where stage0 puts it (`expr.name`).
     ctx.errorAtProperty(
       expr,
-      `Cannot read property \`${expr.text}\` of \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr)}`
+      `Cannot read property \`${expr.text}\` of \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr, expr.text)}`
     )
     return T_ERROR
   }
@@ -248,7 +289,7 @@ const exposeMethod = (ctx: CheckContext, method: FunctionSig): void => {
 export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const access = expr.children[0]
   const receiverExpr = access.children[0]
-  const receiver = checkExpression(ctx, receiverExpr, scope, -1)
+  const receiver = linkReceiver(ctx, access, receiverExpr, checkExpression(ctx, receiverExpr, scope, -1))
   if (receiver === T_ERROR) {
     return T_ERROR
   }
@@ -260,7 +301,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     // Against the method name, where stage0 puts it (`access.name`).
     ctx.errorAtProperty(
       access,
-      `Cannot call \`${access.text}\` on \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr)}`
+      `Cannot call \`${access.text}\` on \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr, `${access.text}()`)}`
     )
     return T_ERROR
   }

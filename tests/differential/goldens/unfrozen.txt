@@ -279,6 +279,10 @@ cases/obj_lit_nullable_field added after R6: no rewriter to freeze it with
 cases/obj_lit_nullable_local added after R6: no rewriter to freeze it with
 cases/obj_lit_nullable_return added after R6: no rewriter to freeze it with
 cases/obj_lit_nullable_ternary added after R6: no rewriter to freeze it with
+cases/optional_chain_bounds added after R6: no rewriter to freeze it with
+cases/optional_chain_field added after R6: no rewriter to freeze it with
+cases/optional_chain_generic added after R6: no rewriter to freeze it with
+cases/optional_chain_order added after R6: no rewriter to freeze it with
 cases/os_mtime added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with

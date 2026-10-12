@@ -89,6 +89,7 @@ import {
 } from "./emit-result"
 import {
   emitFusedCall,
+  emitChainTest,
   emitLibraryCopies,
   emitMapIntrinsic,
   emitMaybeLocal,
@@ -268,6 +269,14 @@ export class Emitter {
    */
   maybeLocals: Local[]
   maybeParts: MaybeParts[]
+  /**
+   * The `nullish.default` block of each `?.` chain being emitted, innermost
+   * last, where a link's receiver branches when it is `null`
+   * (`nodeNullTests`), and how many of those tests each chain has emitted,
+   * which it checks against its own links (`src/emit-map.ts`).
+   */
+  chainDefaults: string[]
+  chainTests: i32[]
   /** WP32 S5: each fused probe of the function being emitted, by the id of its call, for the write that reuses it. */
   fusedProbes: FusedProbe[]
   /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
@@ -322,6 +331,8 @@ export class Emitter {
     this.slotNames = []
     this.maybeLocals = []
     this.maybeParts = []
+    this.chainDefaults = []
+    this.chainTests = []
     this.fusedProbes = []
     this.paramObjectNames = []
     this.paramObjectValues = []
@@ -477,6 +488,8 @@ export class Emitter {
     this.slotNames = []
     this.maybeLocals = []
     this.maybeParts = []
+    this.chainDefaults = []
+    this.chainTests = []
     this.fusedProbes = []
     this.loops = []
     this.openScopes = []
@@ -1210,6 +1223,9 @@ export class Emitter {
       }
     } else if (from >= 0) {
       result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`)
+    }
+    if (this.program.nodeNullTests[expr.id]) {
+      emitChainTest(this, expr, result)
     }
     this.fn.setLocation(saved)
     return result

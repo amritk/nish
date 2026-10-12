@@ -272,18 +272,52 @@ export const validate = (ctx: CheckContext, node: Node): void => {
   visit(ctx, node, false)
 }
 
+/**
+ * A `?.` whose chain is not the left operand of a `??`. `a?.b` answers
+ * `undefined` where `a` is `null`, and `undefined` is not a value here, so a
+ * chain has to say what it stands for then, and the only way to say it is a
+ * default.
+ */
+const chainWithoutDefault = (): string =>
+  "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`"
+
+/**
+ * Admit the `?.` links of `chain`, the left operand of a `??`: record each
+ * one's receiver as a value the emitter tests for `null`, branching to the
+ * default. A parenthesis ends a chain, as it does in TypeScript, so
+ * `(a?.b).c` is refused at `?.b`, and a call's arguments are expressions of
+ * their own, so a `?.` in one needs a `??` of its own.
+ */
+const admitChain = (ctx: CheckContext, chain: Node): void => {
+  let node = chain
+  while (node.kind === N_MEMBER || node.kind === N_CALL || node.kind === N_INDEX) {
+    if (node.kind === N_MEMBER && (node.flags & FLAG_OPTIONAL) !== 0) {
+      ctx.program.nodeNullTests[node.children[0].id] = true
+    }
+    node = node.children[0]
+  }
+}
+
 const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => {
   rejectFunctionModifiers(ctx, node)
   // `a?.b`, `a?.[i]` and `f?.()` are the member, element and call they
-  // resemble, with a flag (`src/nodes.ts`).
-  if (
-    (node.flags & FLAG_OPTIONAL) !== 0 &&
-    (node.kind === N_MEMBER || node.kind === N_INDEX || node.kind === N_CALL)
-  ) {
+  // resemble, with a flag (`src/nodes.ts`). A `?.b` is admitted in a chain
+  // whose value is the left operand of a `??`, which `admitChain` marked on
+  // the way down; the other two are always refused.
+  if ((node.flags & FLAG_OPTIONAL) !== 0 && (node.kind === N_INDEX || node.kind === N_CALL)) {
     ctx.error(
       node,
       "Optional chaining `?.` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
     )
+  } else if (
+    (node.flags & FLAG_OPTIONAL) !== 0 &&
+    node.kind === N_MEMBER &&
+    !ctx.program.nodeNullTests[node.children[0].id]
+  ) {
+    ctx.error(node, chainWithoutDefault())
+  }
+  if (node.kind === N_BINARY && node.text === "??") {
+    admitChain(ctx, unwrapParens(node.children[0]))
   }
   switch (node.kind) {
     case N_IDENT: {

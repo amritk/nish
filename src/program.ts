@@ -1374,6 +1374,14 @@ export class CheckedProgram {
    */
   nodeProvenIndex: boolean[]
   /**
+   * Node id -> the receiver of a `?.` link in a chain that is the left
+   * operand of a `??`, which the emitter tests for `null` as soon as it has
+   * the receiver's value, branching to the `??`'s default. Phase 0 writes it,
+   * because which `?.` is admitted is a fact of the syntax alone, so it is
+   * the module's and not an instantiation's.
+   */
+  nodeNullTests: boolean[]
+  /**
    * A `substring` bound node id -> the same analysis placed it in
    * `[0, s.length]`. Keyed by the bound rather than by the call, because one
    * end of an `s.substring(0, n)` is usually proven and the other is not.
@@ -1506,6 +1514,7 @@ export class CheckedProgram {
     this.nodeCaseValues = new Array<i64>(nodeCount)
     this.nodeEnumValues = new Array<i32>(nodeCount)
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
+    this.nodeNullTests = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
