@@ -13507,6 +13507,62 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   }
 }
 
+// ---- bench/json-compare -------------------------------------------------------------
+// The JSON comparison against simdjson, yyjson, RapidJSON, serde_json and Go
+// needs a network and four toolchains, so it never runs here. Its Nish program
+// does: built by the compiler under test and run on the committed sample, each
+// workload must print the checksum every comparator printed for the same
+// arguments (bench/json-compare/sample.expected). The serialize bytes are also
+// held to Node's own JSON.stringify of the same values.
+if (!only || "json-compare".includes(only) || "bench".includes(only)) {
+  const dir = path.join(root, "bench", "json-compare")
+  const exe = path.join(buildDir, "json-compare", "main")
+  if (HAS_CLANG) {
+    const built = spawnSync(
+      NISH,
+      [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe],
+      { cwd: root, encoding: "utf8" }
+    )
+    const sample = path.join(dir, "sample.json")
+    const expected = fs
+      .readFileSync(path.join(dir, "sample.expected"), "utf8")
+      .split("\n")
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => {
+        const [args, want] = l.split(": ")
+        return { args: args.split(" "), want }
+      })
+    for (const { args, want } of expected) {
+      const run =
+        built.status === 0 ? spawnSync(exe, [args[0], sample, args[1], args[2]], { encoding: "utf8" }) : null
+      check(
+        `json-compare: bench/json-compare/main.ts ${args[0]} on sample.json prints the checksum every comparator printed`,
+        run !== null && run.status === 0 && run.stdout.split("\n")[0] === want,
+        run === null ? `${built.stdout}${built.stderr}` : `${run.stdout}${run.stderr}\nexpected ${want}`
+      )
+    }
+    // The fold run.mjs's header gives, over what JSON.stringify writes for the
+    // performances after the serialize workload's 7 iterations.
+    const catalog = { performances: JSON.parse(fs.readFileSync(sample, "utf8")).performances }
+    for (let r = 0; r < 7; r++) {
+      catalog.performances[r % catalog.performances.length].start += 1
+    }
+    const text = Buffer.from(JSON.stringify(catalog))
+    let bytes = 0n
+    for (const b of text) {
+      bytes = (bytes * 31n + BigInt(b)) & 0xffffffffffffffffn
+    }
+    const serialize = expected.find((e) => e.args[0] === "serialize")
+    check(
+      "json-compare: the serialize checksum in sample.expected is the fold of JSON.stringify's bytes",
+      serialize !== undefined && serialize.want.endsWith(` ${text.length} ${bytes}`),
+      `${serialize?.want}\nJSON.stringify: ${text.length} bytes, fold ${bytes}`
+    )
+  } else {
+    skip("json-compare: bench/json-compare/main.ts native run (no clang)")
+  }
+}
+
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so the twenty-one
