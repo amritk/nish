@@ -1562,6 +1562,7 @@ declare void @nish.Mutex$$Tally.constructor(%struct.Mutex$$Tally* noundef nonnul
 declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #0
 declare void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare void @nish_mutex_wake(i32* noundef nonnull) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @bump(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %m, i32 noundef %k) #0 {
@@ -1592,7 +1593,15 @@ ovf.ok:
   %17 = load %struct.Tally*, %struct.Tally** %16, align 8, !tbaa !5
   %18 = getelementptr inbounds %struct.Tally, %struct.Tally* %17, i32 0, i32 0
   %19 = load i32, i32* %18, align 4, !tbaa !7
-  store atomic i32 0, i32* %2 release, align 4
+  %20 = atomicrmw xchg i32* %2, i32 0 release
+  %21 = icmp eq i32 %20, 2
+  br i1 %21, label %unlock.wake, label %unlock.done
+
+unlock.wake:
+  call void @nish_mutex_wake(i32* %2)
+  br label %unlock.done
+
+unlock.done:
   ret i32 %19
 
 ovf.fail:
@@ -18891,6 +18900,7 @@ declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* nou
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
 declare void @nish_mutex_wait(i32* noundef nonnull) #3
+declare void @nish_mutex_wake(i32* noundef nonnull) #3
 declare void @nish_channel_send(i64* noundef nonnull, i64 noundef) #3
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #3
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #3

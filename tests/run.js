@@ -4743,7 +4743,7 @@ if (!only || "thread_mutex".includes(only)) {
       const label = lines[i - 1] ?? ""
       let at = i - 1
       while (at >= 0 && !/^%\d+ = atomicrmw xchg i32\* %\d+, i32 0 release$/.test(lines[at])) {
-        at = at - 1
+        at -= 1
       }
       const computed = lines.slice(0, Math.max(at, 0)).some((l) => l.startsWith(`${ret[1]} = `))
       if (!/^unlock\.done(\.\d+)?:$/.test(label) || at < 0 || !computed) {

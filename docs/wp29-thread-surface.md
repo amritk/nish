@@ -498,10 +498,34 @@ The spin has no `pause`. A first version paused between looks, as the pool's
 spin does, and the contended histogram below took 3.2 s against 1.8 s for the
 lock it replaced: a pause is about 140 cycles here, and 64 of them made a
 waiter late for a word that is free for nanoseconds at a time. Longer spins
-were slower still (256 paused looks 4.6 s, 1,024 6.0 s), and so were yields
-between the looks and the sleep.
+were slower still (256 paused looks 4.6 s, 1,024 6.0 s). Two yields between
+the looks and the sleep measured within the noise band of none, so the
+simpler loop was kept.
 
-LOCK_TABLE
+`tests/link/thread_mutex_contended` is the measurement: eight tasks on the four
+cores of wp20 §8e, each binning 20,000 values of a generator into one guarded
+`i32[]`, taking the lock once per value, 200 rounds (`contended 200`), each
+round's values drawn from seeds the round moves and the bins folded into a
+printed checksum. The old lock was timed as two byte-identical binaries in the
+same 21 interleaved rounds, which gives the noise band; minimum / median in ms,
+wall time and the processor time of the whole process (user plus system):
+
+| | wall | processor |
+| --- | ---: | ---: |
+| spin, then yield (the old lock) | 1,666 / 2,460 | 6,288 / 9,286 |
+| the same binary, a copy | 1,633 / 2,149 | 6,117 / 8,164 |
+| spin, then sleep (the futex) | 1,826 / 1,893 | 5,332 / 5,667 |
+
+The band is 2% (wall) and 3% (processor) on the minimum and 14% on both
+medians. Processor time falls outside it on both figures: 13% on the minimum
+and 31% or more on the median. Wall time is the honest mixed answer. The
+futex's best run is 10% slower than the old lock's, since a waiter woken from
+the kernel is later for the word than one that never slept, while its median
+is 12% below the better of the two old medians and its spread, 4% between
+minimum and median against 30–48%, has all but gone: the yielding lock is fast
+when its waiters happen to be on the right core and slow when they are not.
+The checksum, `424081`, and the total, 32,000,000 values binned, are the same
+from every binary in every round.
 
 ---
 

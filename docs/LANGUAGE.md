@@ -2407,7 +2407,8 @@ export const main = (): i32 => {
   calling thread, in spawn order, and anything that is not a positive number
   is ignored. It is read once, by the first region or join that asks, and it
   decides only how the work is divided: a map's answer and a reduce's bits are
-  the same at any count.
+  the same at any count (`tests/run.js` runs every `tests/link/thread_*` and `par_*` program under
+  `NISH_NUM_THREADS=1` and `=2` and requires the output it gave without).
 - **`parallelReduce(src, f, identity)` is deterministic.** `src` is split into
   `min(64, ceil(n / 2^20))` blocks, each block is folded from `identity`, and
   the block results are combined left to right. `std/threads.ts` does the same
@@ -2689,10 +2690,10 @@ export const main = (): i32 => {
   (`futex` on Linux, `__ulock_wait` on macOS); a release whose exchange finds
   that mark calls `nish_mutex_wake`, which wakes one sleeper. A contended lock
   therefore sleeps rather than spins: eight tasks binning into one guarded
-  histogram on four cores take the same time as with the spinning lock it
-  replaced and about a fifth less processor time
-  (`tests/link/thread_mutex_contended`; the measurement is in
-  [wp29-thread-surface.md](wp29-thread-surface.md) §8f). See
+  histogram on four cores use 13–31% less processor time than with the
+  spinning lock it replaced, and take a steadier time, their median run 12%
+  faster and their best 10% slower (`tests/link/thread_mutex_contended`; the
+  measurement is in [wp29-thread-surface.md](wp29-thread-surface.md) §8f). See
   `tests/link/thread_mutex_counter`, whose `threads.ll` is the lowering of
   `lock()` and whose `main.ll` the release, and
   `tests/link/thread_mutex_histogram`.
