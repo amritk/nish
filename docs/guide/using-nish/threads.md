@@ -49,8 +49,8 @@ export const main = (): i32 => {
 ```
 
 - **A short array is just a loop.** The work is split only when every thread's
-  share is big enough to pay for starting it, judged from what `f` costs, so
-  there is no reason to guard a call by size.
+  share is big enough to pay for handing it to another thread, judged from
+  what `f` costs, so there is no reason to guard a call by size.
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
@@ -144,9 +144,13 @@ export const main = (): i32 => {
   bound without `using`.
 
 The first task runs on the thread that opened the scope, which would otherwise
-wait, and each other task on a thread of its own, so `N` tasks start `N - 1`
-threads. A scope with more tasks than cores leaves the operating system to
-share them out.
+wait, and the others go to a pool of worker threads, one per core, started the
+first time a program divides work and parked between uses. A scope with more
+tasks than cores queues the rest, and a thread that finishes one takes the
+next. The core count follows what the process may actually use (its affinity
+mask, a container's CPU quota), and `NISH_NUM_THREADS=2` lowers it to two,
+which is handy on a shared machine; `NISH_NUM_THREADS=1` runs everything on
+the calling thread. It never raises the count, and it never changes an answer.
 
 ## Sharing a value: `Mutex<T>`
 
@@ -199,6 +203,11 @@ export const main = (): i32 => {
   the tasks take the lock in whatever order the scheduler picks, and under
   Node they take it in spawn order; only an order-independent update prints
   the same both ways.
+- **A lock nobody holds is cheap, and a busy one sleeps.** Taking a free lock
+  is one atomic instruction. A task that finds the lock held looks again a few
+  times and then sleeps in the kernel until it is released, so tasks waiting
+  on a busy lock leave their cores to the task holding it rather than
+  spinning. Keeping the block short is still what makes a lock fast.
 
 ```ts nish:err NL2465
 import { Mutex } from "nish/threads";
