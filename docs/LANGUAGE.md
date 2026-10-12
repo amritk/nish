@@ -643,7 +643,7 @@ value, so nothing is boxed; `null` takes its type from context.
   `reject_optional_chain_template`). A link reads a field, a string's or an
   array's `length`, or calls a method, and its receiver is read as `T`
   (`optional_chain_field`, `optional_chain_order`,
-  `optional_chain_generic`). The chain's value is its last link's, typed with
+  `optional_chain_generic`, `tests/link/optional_chain_modules`). The chain's value is its last link's, typed with
   the default as a `T | null` is above, so a number at the end works:
   `o?.next?.id ?? -1` is an `i32`. Only a `?.` link skips a `null`: a plain
   link after one reads what it is given, so `a?.next.value` with a nullable
