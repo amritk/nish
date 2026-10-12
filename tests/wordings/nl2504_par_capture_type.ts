@@ -1,4 +1,4 @@
-// NL2496: an arrow passed to a data-parallel form reads a local whose type a
+// NL2504: an arrow passed to a data-parallel form reads a local whose type a
 // body cannot capture: here a `Result`.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 

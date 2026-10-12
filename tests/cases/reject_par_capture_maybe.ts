@@ -1,5 +1,5 @@
 // A value that may be absent is read through the test that found it, which
-// the body cannot repeat, so it is not captured (NL2496).
+// the body cannot repeat, so it is not captured (NL2504).
 import { parallelFrom } from "nish/threads";
 
 export const main = (): i32 => {

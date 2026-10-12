@@ -1,4 +1,4 @@
-// A lock is shared only by the rules of its own block (NL2496), so an arrow
+// A lock is shared only by the rules of its own block (NL2504), so an arrow
 // passed to a data-parallel form cannot capture a class object that holds
 // one, even to read another of its fields.
 import { Mutex, parallelFrom } from "nish/threads";

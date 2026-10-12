@@ -1,4 +1,4 @@
-// NL2494: an arrow passed to a data-parallel form reads `this`.
+// NL2502: an arrow passed to a data-parallel form reads `this`.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 
 class Scaler {

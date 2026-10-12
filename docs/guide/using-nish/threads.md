@@ -138,7 +138,7 @@ export const main = (): i32 => {
   beside a `dst` that is a `const` bound to its own array, as in
   `const table = [1, 2]` and `const dst = new Array<i32>(n)`.
 
-```ts nish:err NL2495
+```ts nish:err NL2503
 import { parallelMap } from "nish/threads";
 
 export const main = (): i32 => {

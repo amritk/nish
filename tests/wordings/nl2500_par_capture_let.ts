@@ -1,4 +1,4 @@
-// NL2492: an arrow passed to a data-parallel form reads a `let` of the function
+// NL2500: an arrow passed to a data-parallel form reads a `let` of the function
 // it is written in, which could change while the threads read it.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 

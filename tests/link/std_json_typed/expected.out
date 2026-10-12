@@ -258,4 +258,74 @@ PASS  wide: a key of a length no field has
 PASS  wide: an empty key
 PASS  wide: a duplicate
 PASS  wide: a missing field
-std_json_typed: 259 passed, 0 failed, 0 skipped
+PASS  rename: decodes under the wire names
+PASS  rename: and encodes under them, in declaration order
+PASS  rename: each field holds its own key's value
+PASS  rename: escaped wire names decode
+PASS  rename: to the same fields
+PASS  rename: the field's own name is unknown: code
+PASS  rename: the field's own name is unknown: errorAt
+PASS  rename: a wire name twice, once escaped: code
+PASS  rename: a wire name twice, once escaped: errorAt
+PASS  rename: a missing required wire name: code
+PASS  rename: swapped keys decode
+PASS  rename: swapped keys reach the other field
+PASS  rename: and encode back swapped
+PASS  instance json: an ordinary field decodes
+PASS  instance json: and encodes under its own name
+PASS  instance json: and is required
+PASS  order: a json field before the options decodes
+PASS  order: under the options' keys
+PASS  order: a json method before the options decodes
+PASS  order: and the method is still the class's
+PASS  order: a json field after the options, renamed
+PASS  order: holds its value
+PASS  reached: renames hold nested, | null, in an array and in a map
+PASS  reached: and encode back under the same keys
+PASS  reached: an element's own field names are its keys swapped: code
+PASS  reached: an element's own field names are its keys swapped: errorAt
+PASS  reached: optional keys left out nested, in an array and in a map
+PASS  reached: each set to its initializer
+PASS  optional: missing keys are no error
+PASS  optional: a fresh object keeps every initializer
+PASS  optional: the full input into the same object
+PASS  optional: then the bare input
+PASS  optional: sets the missing fields back to their initializers
+PASS  optional: given as null
+PASS  optional: is null
+PASS  optional: given twice: code
+PASS  optional: given twice: errorAt
+PASS  optional: of the wrong type: code
+PASS  optional: of the wrong type: errorAt
+PASS  optional: a required field missing: code
+PASS  optional: a required field missing: errorAt
+PASS  optional: 1,000 bare decodes succeed
+PASS  optional: Arena.used() is flat over them
+PASS  number: decodes
+PASS  number: encodes every number byte for byte
+PASS  number: text
+PASS  number: wider than u64 is not an i64
+PASS  number: nor a u64
+PASS  number: but an f64
+PASS  number: | null holds the number
+PASS  number: an array of five
+PASS  number: 2^64 is not a u64
+PASS  number: an exponent is kept as written
+PASS  number: -0 is kept
+PASS  number: -0 is an i64
+PASS  number: 0 is a u64
+PASS  number: a map's value
+PASS  number: decoded again without backup
+PASS  number: backup is its initializer
+PASS  number: and encodes as null
+PASS  number: a string: code
+PASS  number: a string: errorAt
+PASS  number: null for a JsonNumber that is not | null
+PASS  number: an object
+PASS  number: past maxNumberBytes is the tokenizer's error
+PASS  number: a count past its bytes is the writer's bad window
+PASS  number: 1,000 decodes into one Reading succeed
+PASS  number: Arena.used() is flat over them
+PASS  renamed: decodes
+PASS  renamed: encodes, tries at its initializer
+std_json_typed: 329 passed, 0 failed, 0 skipped

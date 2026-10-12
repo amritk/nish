@@ -1,4 +1,4 @@
-// NL2495: an arrow passed to a data-parallel form assigns to a name of the
+// NL2503: an arrow passed to a data-parallel form assigns to a name of the
 // function it is written in.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 

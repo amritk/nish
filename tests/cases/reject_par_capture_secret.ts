@@ -1,4 +1,4 @@
-// A `Secret` is never captured (NL2496): it is read only inside `expose`.
+// A `Secret` is never captured (NL2504): it is read only inside `expose`.
 import { parallelFrom } from "nish/threads";
 import { secret, wipe } from "nish:secret";
 

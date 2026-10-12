@@ -1,4 +1,4 @@
-// A captured array that is the destination itself is refused (NL2497) in every
+// A captured array that is the destination itself is refused (NL2505) in every
 // instantiation of a generic function: `into<i32>` and `into<f64>` each read
 // `dst` through the capture, and each instantiation is refused on its own.
 import { parallelMapInto } from "nish/threads";

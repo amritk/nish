@@ -1,4 +1,4 @@
-// NL2497: a body reads `dst` itself through a capture, while other threads
+// NL2505: a body reads `dst` itself through a capture, while other threads
 // write it.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 

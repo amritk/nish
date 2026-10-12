@@ -1,4 +1,4 @@
-// A captured array that could be the destination is refused (NL2497), and a
+// A captured array that could be the destination is refused (NL2505), and a
 // field read through `const self = this` is the field `this.out` names: the
 // body would read `self.out` while `parallelMapInto` writes `this.out`, the
 // same array, from every thread. Every array `self` reaches could be `dst`,

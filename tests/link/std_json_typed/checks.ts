@@ -31,6 +31,7 @@ import {
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
 import { jtBenchWide, jtBenchXy, jtKindsChecks, jtKindsRoundTripFile } from "./kinds.ts";
+import { jtOptionsChecks, jtOptionsRoundTripFile } from "./options.ts";
 import { Chain, Lists, Match, Player, Scalars, Team } from "./models.ts";
 import { jtBytes, jtDecode, jtEncode } from "./support.ts";
 
@@ -346,6 +347,7 @@ export const jtChecks = (): i32 => {
   jtEncodeInArena(t);
   jtNestedPaths(t);
   jtKindsChecks(t);
+  jtOptionsChecks(t);
   return t.done();
 };
 
@@ -383,6 +385,9 @@ export const jtModes = (argv: string[]): i32 => {
   }
   if (mode === "--round-trip-kinds") {
     return jtKindsRoundTripFile(arg);
+  }
+  if (mode === "--round-trip-options") {
+    return jtOptionsRoundTripFile(arg);
   }
   if (mode === "--bench") {
     return jtBench(toI32(parseInt(arg)));
