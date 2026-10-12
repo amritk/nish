@@ -106,5 +106,33 @@ export const main = (): i32 => {
   const q2 = esc.stringArray(qs);
   console.log(`stringArray escaped ${q2.length} ${q2[0]} ${q2[1]}`);
   console.log(`failed ${esc.failed}`);
+
+  // Bytes outside ASCII: escapes that decode to two, three and four bytes
+  // (é, €, 😀), and raw UTF-8 copied on the fast path. Each byte is one unit
+  // under Node, so the length and the sum of the codes agree with a native run.
+  const wide = opened(`["\\u00e9","\\u20ac","\\ud83d\\ude00"]`);
+  for (let k: i32 = 0; k < 3; k += 1) {
+    console.log(`unescaped ${codes(wide.string(""))}`);
+    wide.nextElement();
+  }
+  const raw: u8[] = [91, 34, 99, 97, 102, 195, 169, 34, 93];
+  const r8 = new JsonDecoder(raw, 0, toI32(raw.length), new JsonLimits());
+  r8.beginArray();
+  r8.nextElement();
+  console.log(`raw ${codes(r8.string(""))}`);
+  // A string whose closing quote is the window's last byte, with bytes the
+  // window leaves out on both sides.
+  const framed = bytesOf(`xx"edge"yy`);
+  const w = new JsonDecoder(framed, 2, 6, new JsonLimits());
+  console.log(`window [${w.string("")}] ${w.failed}`);
   return 0;
+};
+
+/** A string's byte length and the sum of its codes: the same native and under Node. */
+const codes = (s: string): string => {
+  let sum: i32 = 0;
+  for (let i: i32 = 0; i < toI32(s.length); i += 1) {
+    sum += toI32(s.charCodeAt(i));
+  }
+  return `${s.length} ${sum}`;
 };

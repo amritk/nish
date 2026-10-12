@@ -1,0 +1,4 @@
+`String.fromBytes(bytes, 0, 1)` may be allocated inside the `using arena()` block at 12:5 and is assigned to `last`, which is declared outside the block
+`String.fromBytes(bytes, 0, 1)` may be allocated inside the `using arena()` block at 19:3 and is stored into an element of `names`
+`String.fromBytes(bytes, 0, 1)` may be allocated inside the `using arena()` block at 24:3 and is stored into a field of `b`
+`names.push(String.fromBytes(bytes, 0, 1))` grows `names` inside the `using arena()` block at 30:5, and the array is older than the block

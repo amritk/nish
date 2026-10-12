@@ -10771,13 +10771,12 @@ attributes #2 = { nounwind noreturn cold }
 range test, `0 <= start <= end <= bytes.length`, two `icmp ule` against a cold
 `nish_panic_slice` block, and then one `nish_str_new` that copies the range out
 of the array's data. That is the whole lowering, with no runtime function of
-its own: the length is the header's first field, read after all three
-arguments, and the data pointer its third. It replaces a loop of
+its own: the length is the header's first field and the data pointer its
+third, both read after all three arguments and both in the header alias
+domain. It replaces a loop of
 `String.fromCharCode` and a `join`, which allocated a one-byte string per byte
-and then the whole string again, and measured 1.86x on the typed JSON decode
-that builds every string this way (`bench/json-typed/measure.mjs`). `head`'s
-ends are constants, so `opt -O2` folds its first compare away and keeps only
-the one against the length it cannot know.
+and then copied every byte again into the joined string: here a string of `n`
+bytes costs one allocation and one copy of `n` bytes, whatever `n` is.
 
 <!-- cookbook:begin str-from-bytes -->
 ```ts
@@ -10809,7 +10808,7 @@ bytes.fail:
 
 bytes.ok:
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
-  %8 = load i8*, i8** %7, align 8
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %9 = getelementptr inbounds i8, i8* %8, i64 %0
   %10 = sub i64 %1, %0
   %11 = call i8* @nish_str_new(i8* %9, i64 %10)
@@ -10831,7 +10830,7 @@ bytes.fail:
 
 bytes.ok:
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
-  %6 = load i8*, i8** %5, align 8
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %7 = getelementptr inbounds i8, i8* %6, i64 0
   %8 = sub i64 2, 0
   %9 = call i8* @nish_str_new(i8* %7, i64 %8)
@@ -10853,6 +10852,7 @@ attributes #2 = { nounwind noreturn cold }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
 ```
 <!-- cookbook:end str-from-bytes -->
 

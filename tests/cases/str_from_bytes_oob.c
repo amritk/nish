@@ -10,6 +10,9 @@ int32_t test(void);
 int32_t pastEnd(void);
 int32_t reversed(void);
 int32_t negative(void);
+int32_t negativeEnd(void);
+int32_t wideEnd(void);
+int32_t wideStart(void);
 
 static void expectPanic(const char *name, int32_t (*run)(void)) {
   fflush(stdout);
@@ -30,5 +33,8 @@ int main(void) {
   expectPanic("pastEnd", pastEnd);
   expectPanic("reversed", reversed);
   expectPanic("negative", negative);
+  expectPanic("negativeEnd", negativeEnd);
+  expectPanic("wideEnd", wideEnd);
+  expectPanic("wideStart", wideStart);
   return 0;
 }

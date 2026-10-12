@@ -1,0 +1,2 @@
+`String.fromBytes` expects a number index, got string
+`String.fromBytes` expects a number index, got boolean

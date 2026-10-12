@@ -30,7 +30,7 @@ bytes.fail:
 
 bytes.ok:
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
-  %8 = load i8*, i8** %7, align 8
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %9 = getelementptr inbounds i8, i8* %8, i64 %0
   %10 = sub i64 %1, %0
   %11 = call i8* @nish_str_new(i8* %9, i64 %10)
@@ -52,7 +52,7 @@ bytes.fail:
 
 bytes.ok:
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 2
-  %6 = load i8*, i8** %5, align 8
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %7 = getelementptr inbounds i8, i8* %6, i64 0
   %8 = sub i64 2, 0
   %9 = call i8* @nish_str_new(i8* %7, i64 %8)
@@ -69,10 +69,10 @@ entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 8, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 8, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  store i64 8, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %2 = bitcast [8 x i8]* %arr.data to i8*
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %4 = bitcast i8* %2 to i8*
   %5 = getelementptr inbounds i8, i8* %4, i64 0
   store i8 104, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
@@ -160,7 +160,7 @@ attributes #2 = { nounwind noreturn cold }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
-!11 = !{!9, !7, i64 8}
-!12 = !{!9, !8, i64 16}
+!11 = !{!9, !8, i64 16}
+!12 = !{!9, !7, i64 8}
 !13 = !{!"element i8", !6, i64 0}
 !14 = !{!13, !13, i64 0}
