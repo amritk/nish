@@ -49,8 +49,8 @@ export const main = (): i32 => {
 ```
 
 - **A short array is just a loop.** The work is split only when every thread's
-  share is big enough to pay for starting it, judged from what `f` costs, so
-  there is no reason to guard a call by size.
+  share is big enough to pay for handing it to another thread, judged from
+  what `f` costs, so there is no reason to guard a call by size.
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
@@ -152,9 +152,16 @@ export const main = (): i32 => {
   bound without `using`.
 
 The first task runs on the thread that opened the scope, which would otherwise
-wait, and each other task on a thread of its own, so `N` tasks start `N - 1`
-threads. A scope with more tasks than cores leaves the operating system to
-share them out.
+wait, and the others go to a pool of worker threads, one per core besides the
+calling thread's (at most 63), started the first time a program divides work
+and parked between uses. A Node addon starts threads for each call instead,
+and on WASI everything runs on the one thread. A scope with more tasks than
+cores queues the rest, and a thread that finishes one takes the next. The core count follows what the process may actually use (its affinity
+mask, a container's CPU quota), and `NISH_NUM_THREADS=2` lowers it to two,
+which is handy on a shared machine; `NISH_NUM_THREADS=1` runs everything on
+the calling thread. It never raises the count. A map's or a reduce's answer
+is the same at any count; what a scope's tasks do under a lock can come out
+in a different order, as the lock section below says.
 
 ## Sharing a value: `Mutex<T>`
 
@@ -207,6 +214,11 @@ export const main = (): i32 => {
   the tasks take the lock in whatever order the scheduler picks, and under
   Node they take it in spawn order; only an order-independent update prints
   the same both ways.
+- **A lock nobody holds is cheap; keep the block short.** Taking a free lock
+  is one atomic instruction. A task that finds the lock held checks again 64
+  times in a tight loop and then keeps checking, giving its core up to
+  another thread before each check, so a long block makes every waiter spend
+  processor time waiting for it.
 
 ```ts nish:err NL2465
 import { Mutex } from "nish/threads";

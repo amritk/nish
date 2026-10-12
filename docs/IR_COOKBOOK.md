@@ -1159,7 +1159,7 @@ test against the grain, a direct call when the range is within it, and
 otherwise a context block on the stack and a call to the partitioner,
 
 ```llvm
-  %13 = icmp sle i32 %12, 1398101
+  %13 = icmp sle i32 %12, 699050
   br i1 %13, label %par.seq, label %par.region
 
 par.seq:
@@ -1168,13 +1168,13 @@ par.seq:
 
 par.region:
   ; ... src and dst stored into %par.ctx ...
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 1398101)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$f64$f64$fn.6.square$chunk, i8* %16, i64 %17, i64 699050)
   br label %par.done
 ```
 
 and `@...$chunk(lo, hi, ctx)` loads them back and calls the chunk loop,
-`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 1,398,101,
-is 2^22 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
+`@nish.mapRange$f64$f64$fn.6.square`, over `[lo, hi)`. The grain, 699,050,
+is 2^21 over `square`'s estimated cost of 3 (docs/LANGUAGE.md, "Data
 parallelism"). A reduce divides its blocks rather than its elements, with a
 grain of one block. The whole of both
 modules is `tests/link/par_map`'s golden (docs/LANGUAGE.md, "Data
