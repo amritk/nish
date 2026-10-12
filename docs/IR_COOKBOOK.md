@@ -10501,7 +10501,7 @@ of the array's data. That is the whole lowering, with no runtime function of
 its own: the length is the header's first field, read after all three
 arguments, and the data pointer its third. It replaces a loop of
 `String.fromCharCode` and a `join`, which allocated a one-byte string per byte
-and then the whole string again, and measured 2.3x on the typed JSON decode
+and then the whole string again, and measured 1.86x on the typed JSON decode
 that builds every string this way (`bench/json-typed/measure.mjs`). `head`'s
 ends are constants, so `opt -O2` folds its first compare away and keeps only
 the one against the length it cannot know.
