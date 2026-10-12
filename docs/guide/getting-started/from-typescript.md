@@ -148,7 +148,7 @@ class, an interface, an array or a string; the next section covers it.
 appears is in checking the result of `Map.get`, as in
 `m.get(key) === undefined`.
 
-## No `?.` or `??`
+## No `?.`; `??` for a nullable
 
 ```ts nish:err NL1049
 class Node {
@@ -181,8 +181,12 @@ const nextValue = (n: Node): i32 => {
 
 Narrowing works only on a local or a parameter, never on a property path such
 as `n.next`; hence the copy.
-`??` is refused on its own as well (`NL1048`), with one exception: the result
-of `Map.get`, as in `counts.get(key) ?? 0`. See the reference's
+
+`??` works on a `T | null`, and on the result of `Map.get`, as in
+`counts.get(key) ?? 0`. `n.next ?? fallback` is a `Node`, with no narrowing
+needed. Anywhere else, such as on a number, it is refused (`NL1048`), and so
+is a default for an array element, `xs[i] ?? d` (`NL2489`): past the end of
+the array, Node answers `d` where Nish stops the program. See the reference's
 [Nullable types](../../LANGUAGE.md#nullable-types).
 
 ## No exceptions
