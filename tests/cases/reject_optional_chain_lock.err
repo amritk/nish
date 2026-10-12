@@ -1,0 +1,1 @@
+`Adder.add`, which takes a lock or waits for threads, is reached while `g` holds its lock

@@ -1152,7 +1152,7 @@ const runCaseUnderPrelude = (name, args) =>
   runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
 
 /** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
-const runUnderPrelude = (entry, args) =>
+const runUnderPrelude = (entry, args, exported = "main") =>
   spawnSync(
     "node",
     [
@@ -1161,7 +1161,7 @@ const runUnderPrelude = (entry, args) =>
       "--import",
       path.join(root, "runtime", "nish.mjs"),
       "-e",
-      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.${exported}());`,
       ...args,
     ],
     { cwd: root, encoding: "utf8" }
@@ -4125,6 +4125,7 @@ const LINK_READ_LATER = [
   "range_export_napi_async",
   "range_export_unproven",
   ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  "std_json_conformance",
   "std_json_tokenizer",
   "std_json_typed",
   "unsafe_flag_scope",
@@ -5248,6 +5249,146 @@ if (!only || "std_json_typed".includes(only)) {
         "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
       ),
     shown(run)
+  )
+}
+
+// The JSON conformance stage: nish/json-tokenizer and JsonWriter together.
+// `tests/link/std_json_conformance` (the link loop holds its expected.out) runs
+// test262's and V8's cases, whose expected values the extractor works out again
+// here with this Node's own JSON, so a hand-edited row fails. And every y_ file
+// of JSONTestSuite, tokenized and written back (`jcPrintRewrites`, natively and
+// under the Node prelude), must be JSON.stringify(JSON.parse(x)) byte for byte,
+// non-ASCII files included: strings travel one byte per character both ways,
+// so the packed answer is the same bytes. The two files below repeat a key,
+// which JSON.parse collapses and the tokenizer hands on (docs/security/json.md,
+// JSON-3; the `duplicate-key` reason of tests/json-conformance/divergences.txt):
+// each must still differ, and must parse back to the same value.
+/** Bytes in the packed spelling of tests/json-suite/pack.js: every byte outside `!` to `~`, and `%`, as `%XX`. */
+const jsonSuitePack = (bytes) =>
+  [...bytes]
+    .map((b) =>
+      b > 0x20 && b < 0x7f && b !== 0x25
+        ? String.fromCharCode(b)
+        : `%${b.toString(16).toUpperCase().padStart(2, "0")}`
+    )
+    .join("")
+const JSON_SUITE_DUPLICATE_KEYS = ["y_object_duplicated_key.json", "y_object_duplicated_key_and_value.json"]
+if (!only || "std_json_conformance".includes(only)) {
+  // The stack the extractor asks for, so that it does not start a second Node to get it.
+  const verify = spawnSync(
+    "node",
+    ["--stack-size=4000", path.join(root, "tests", "json-conformance", "extract.js"), "--verify"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "link/std_json_conformance: every expected value in tests/json-conformance/ is what Node's JSON answers",
+    verify.status === 0,
+    shown(verify)
+  )
+  const unpack = (p) =>
+    Buffer.from(
+      p.replace(/%([0-9A-F]{2})/g, (_, h) => String.fromCharCode(Number.parseInt(h, 16))),
+      "latin1"
+    )
+  const viaNode = (bytes) =>
+    Buffer.from(JSON.stringify(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))), "utf8")
+  // Each y_ file's JSON.stringify(JSON.parse(x)), by name.
+  const files = new Map()
+  for (const line of fs
+    .readFileSync(path.join(root, "tests", "json-suite", "test-parsing.txt"), "utf8")
+    .split("\n")) {
+    if (line.startsWith("y_")) {
+      const space = line.indexOf(" ")
+      files.set(line.slice(0, space), viaNode(unpack(line.slice(space + 1))))
+    }
+  }
+  // The problems with one run's `<name> <packed rewrite>` lines, or `!<error>` for a refusal.
+  const judge = (run) => {
+    const problems = []
+    const seen = new Set()
+    for (const line of String(run.stdout ?? "")
+      .split("\n")
+      .filter((l) => l.length > 0)) {
+      const space = line.indexOf(" ")
+      const name = line.slice(0, space)
+      const answer = line.slice(space + 1)
+      const want = files.get(name) ?? null
+      seen.add(name)
+      if (want === null || answer.startsWith("!")) {
+        problems.push(`${name}: ${want === null ? "not in the corpus" : answer}`)
+        continue
+      }
+      const got = unpack(answer)
+      if (JSON_SUITE_DUPLICATE_KEYS.includes(name)) {
+        if (got.equals(want) || !viaNode(got).equals(want)) {
+          problems.push(`${name}: a listed duplicate key, rewritten as ${got}, against ${want}`)
+        }
+      } else if (!got.equals(want)) {
+        problems.push(`${name}\n  rewrite ${got}\n  node    ${want}`)
+      }
+    }
+    for (const name of files.keys()) {
+      if (!seen.has(name)) {
+        problems.push(`${name}: no rewrite`)
+      }
+    }
+    return run.status === 0 && files.size > 0 && problems.length === 0
+      ? ""
+      : problems.join("\n") || shown(run)
+  }
+  const exe = path.join(buildDir, "link", "std_json_conformance", "app")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const native = spawnSync(exe, ["--rewrite"], { cwd: root, encoding: "utf8" })
+    const problems = judge(native)
+    check(
+      `link/std_json_conformance: each of the ${files.size} y_ files of JSONTestSuite, tokenized and written back natively, is JSON.stringify(JSON.parse(x)), but the ${JSON_SUITE_DUPLICATE_KEYS.length} that repeat a key`,
+      problems === "",
+      problems
+    )
+  } else {
+    skip("skipped: link/std_json_conformance: no native program to rewrite JSONTestSuite with")
+  }
+  // V8's json.js stringifies every UTF-16 code unit; extract.js leaves those
+  // 65,536 cases to be generated here (its GENERATED). The native program
+  // writes each unit's string, read from its `\uXXXX` literal; each must be
+  // Node's JSON.stringify of that unit, but U+D800 to U+DFFF, the
+  // lone-surrogate reason of tests/json-conformance/divergences.txt as a
+  // range, which the tokenizer must refuse with SURROGATE.
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const units = spawnSync(exe, ["--code-units"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 })
+    const lines = String(units.stdout ?? "").split("\n")
+    const unitProblems = []
+    for (let unit = 0; unit < 65536; unit++) {
+      const surrogate = unit >= 0xd800 && unit <= 0xdfff
+      const want = surrogate
+        ? "!SURROGATE"
+        : jsonSuitePack(Buffer.from(JSON.stringify(String.fromCharCode(unit)), "utf8"))
+      if (lines[unit] !== want && unitProblems.length < 20) {
+        unitProblems.push(`U+${unit.toString(16).padStart(4, "0")}: native ${lines[unit]}, want ${want}`)
+      }
+    }
+    check(
+      "link/std_json_conformance: JSON.stringify of each of the 65,536 UTF-16 code units, generated from V8's loop, is Node's, but the 2,048 surrogates, which are refused",
+      units.status === 0 && lines.length === 65537 && unitProblems.length === 0,
+      unitProblems.join("\n") || shown(units)
+    )
+  } else {
+    skip("skipped: link/std_json_conformance: no native program to write the code units with")
+  }
+  // rewrite.ts declares no `main`, which only an entry module may.
+  const underNode = runUnderPrelude(
+    path.join(linkDir, "std_json_conformance", "rewrite.ts"),
+    [],
+    "jcPrintRewrites"
+  )
+  const nodeProblems = judge(underNode)
+  check(
+    `link/std_json_conformance: under the Node prelude, the same rewrite of each of the ${files.size} y_ files is JSON.stringify(JSON.parse(x)), but the ${JSON_SUITE_DUPLICATE_KEYS.length} that repeat a key`,
+    nodeProblems === "",
+    nodeProblems
   )
 }
 
