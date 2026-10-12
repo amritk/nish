@@ -3748,6 +3748,30 @@ and both come from the program as written:
     each keeps its check and panics; `arr_bounds_range_kept` and
     `arr_bounds_range_wrap` keep theirs).
 
+  - **A helper's fresh array has the length it was built with.** A length
+    `w` is known to have comes from an array literal or `new Array(n)`
+    written in place, and also from a call of a function that builds one and
+    returns it: `const xs = filled(8)`, or `this.rows = filled(8)`, starts
+    `xs` or `this.rows` with 8 elements when `filled` declares
+    `const arr = new Array<T>(n)` (a typed-array `new` or an array literal
+    too), touches it only by indexing it, reading `arr.length` and
+    `arr.push(...)`, and returns it. Every `return` hands back that local or
+    a fresh array written in place, and the call gives the shortest of them.
+    A size is a literal, a constant of the helper's module (read where the
+    call is in that module), or a parameter, whose argument gives the length
+    by its declared floor: a literal, a constant or a ranged type's `Lo`. The
+    helper's body is read as written, so the rule takes only what it can see
+    there: a plain function, not a method, a generic or an arrow; a body
+    with no arrow, nested function, class or `try`; a size whose name the
+    body never declares again or writes. Handing the array to a function,
+    storing it, `pop` or any other use gives no length, because each is a way
+    another holder could shrink it. A store `recv.f = filled(8)` gives one
+    only when `recv` is `this` or a `const` local, which the call cannot
+    point elsewhere (`tests/cases/arr_bounds_returned`;
+    `arr_bounds_returned_pop`, `_passed`, `_stored`, `_least`, `_rebind`,
+    `_shadow` and `_shadow_param` each keep their check and panic;
+    `arr_bounds_returned_kept` keeps its seven).
+
 A fact ends where it stops being true: at any assignment to `i` that is not
 `i = i + <non-negative literal>` (`i++` and `i += n` included) or
 `i = i - <non-negative literal>` (`i--` and `i -= n` included), at any
