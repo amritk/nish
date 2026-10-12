@@ -630,7 +630,42 @@ value, so nothing is boxed; `null` takes its type from context.
   (`reject_nullish_element`). A left operand that cannot be `null` (a scalar,
   or a nullable already narrowed to `T`) keeps Phase 0's refusal,
   `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-  (`reject_nullish`, `reject_nullish_nullable`). `?.` stays forbidden.
+  (`reject_nullish`, `reject_nullish_nullable`).
+- **An optional chain**: `a?.b?.c ?? d` reads each link only where the
+  receiver before its `?.` is not `null`, and answers `d` where one is, as
+  TypeScript does. A `?.` is allowed only in a chain whose value is the left
+  operand of a `??`, so `undefined`, which `a?.b` answers on its own, is never
+  a value: anywhere else, a `const`, an argument, a template hole, an
+  assignment target or behind a parenthesis that ends the chain, it is
+  `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` ``
+  (`reject_optional_chain`, `reject_optional_chain_paren`,
+  `reject_optional_chain_argument`, `reject_optional_chain_assign`,
+  `reject_optional_chain_template`). A link reads a field, a string's or an
+  array's `length`, or calls a method, and its receiver is read as `T`
+  (`optional_chain_field`, `optional_chain_order`,
+  `optional_chain_generic`, `tests/link/optional_chain_modules`). The chain's value is its last link's, typed with
+  the default as a `T | null` is above, so a number at the end works:
+  `o?.next?.id ?? -1` is an `i32`. Only a `?.` link skips a `null`: a plain
+  link after one reads what it is given, so `a?.next.value` with a nullable
+  `next` is `` Cannot read property `value` of `Node | null`; a link of a `?.` chain that may be `null` needs a `?.` of its own: `a?.next?.value` ``
+  (`reject_optional_chain_link_nullable`). `?.` on a receiver that cannot
+  be `null`, `this`, a narrowed local or a builtin namespace, is
+  `` `a` is never `null` here, so `?.` has nothing to skip: write `.` ``
+  (`reject_optional_chain_never_null`, `reject_optional_chain_narrowed`,
+  `reject_optional_chain_this`, `reject_optional_chain_namespace`). `?.[i]`
+  and `f?.()` stay refused (`reject_optional_chain_element`,
+  `reject_optional_call`), a chain that ends in an element read is the
+  element-read refusal above (`reject_optional_chain_element_last`), and one
+  that ends in `get` is
+  `` `h?.counts.get("a")` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers ``
+  (`reject_optional_chain_map_get`). Each `?.` lowers to an `icmp eq` against
+  `null` and a branch to `nullish.default`, which every link shares, and runs
+  nothing after a `null` link, an argument included. What a chain proves about
+  an index holds only where its links ran, so a read after the `??` keeps its
+  check (`optional_chain_bounds`). A call in a chain is held to every rule a
+  call is (`reject_optional_chain_lock`, `reject_optional_chain_channel`), and
+  a `Secret` either operand of the `??` makes is refused as one nobody owns
+  (`reject_optional_chain_secret`).
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
   rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
@@ -3520,7 +3555,8 @@ under [Semantics decisions](#semantics-decisions).
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
-| `== != ?. in instanceof typeof delete void await yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_await`, `reject_yield` |
+| `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](#nullable-types)) |
+| `== != ?.[ ?.() in instanceof typeof delete void await yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_await`, `reject_yield` |
 | `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
 | `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
 
@@ -3626,9 +3662,9 @@ divide with overflow` is simply unreachable on an unsigned type.
   `process.platform`, `process.arch` (see [`process`](#process));
   `Arena.*` (see [`Arena`](#arena)). Any other bare
   identifier before a dot is `` Unknown identifier `os` `` *(CLI only)*.
-- Member access on a `T | null` value requires narrowing first
-  ([Nullable types](#nullable-types)); `?.` is forbidden
-  (`tests/cases/reject_optional_chain`).
+- Member access on a `T | null` value requires narrowing first, or a `?.`
+  in a chain that ends in `??` ([Nullable types](#nullable-types);
+  `tests/cases/reject_optional_chain`).
 
 ### Element access
 
@@ -7595,7 +7631,8 @@ fragment `tests/run.js` matches and the case that proves it.
 | `void expr` | `` `void` expressions are forbidden in Nish (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
-| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain`, `reject_optional_call` |
+| `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain_element`, `reject_optional_call` |
+| `a?.b` outside a chain that is the left operand of `??` ([Nullable types](#nullable-types)) | `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` `` | `reject_optional_chain`, `reject_optional_chain_paren`, `reject_optional_chain_argument` |
 | `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
