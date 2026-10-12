@@ -6,7 +6,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -85,7 +85,7 @@ entry:
   %11 = bitcast %struct.ThreadScope* %10 to i8*
   %12 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %13 = load %struct.nish_array*, %struct.nish_array** %res.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* %12, i32 %k, %struct.nish_array* %13, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %12, i32 %k, %struct.nish_array* %13, i32 0)
   %14 = icmp sgt i32 %k, 1
   br i1 %14, label %if.then, label %if.end
 
@@ -114,7 +114,7 @@ if.end:
   %24 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %25 = add nsw i32 %k, 1
   %26 = load %struct.nish_array*, %struct.nish_array** %res.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* %24, i32 %25, %struct.nish_array* %26, i32 1)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %24, i32 %25, %struct.nish_array* %26, i32 1)
   call void @nish_scope_join(i8* %11)
   %27 = load %struct.nish_array*, %struct.nish_array** %res.addr, align 8
   %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
@@ -214,7 +214,7 @@ for.body:
   %17 = add nsw i32 10, %16
   %18 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %19 = load i32, i32* %i.addr, align 4
-  call void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* %15, i32 %17, %struct.nish_array* %18, i32 %19)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %15, i32 %17, %struct.nish_array* %18, i32 %19)
   %20 = load i32, i32* %i.addr, align 4
   %21 = icmp eq i32 %20, 0
   br i1 %21, label %if.then, label %if.end
@@ -345,7 +345,7 @@ for.body.1:
 ovf.ok:
   %80 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
   %81 = load i32, i32* %j.addr, align 4
-  call void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* %74, i32 %78, %struct.nish_array* %80, i32 %81)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %74, i32 %78, %struct.nish_array* %80, i32 %81)
   %82 = load i32, i32* %j.addr, align 4
   %83 = icmp eq i32 %82, 0
   br i1 %83, label %if.then.2, label %if.end.2

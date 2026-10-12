@@ -5,7 +5,7 @@
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
-declare void @nish.parallelMapInto$i32$i32$fn.7.square$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare void @nish.parallelMapInto$i32$i32$fn.6.square(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -99,7 +99,7 @@ entry:
   store %struct.nish_array* %12, %struct.nish_array** %dst.addr, align 8
   %22 = load %struct.nish_array*, %struct.nish_array** %src.addr, align 8
   %23 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
-  call void @nish.parallelMapInto$i32$i32$fn.7.square$(%struct.nish_array* %22, %struct.nish_array* %23)
+  call void @nish.parallelMapInto$i32$i32$fn.6.square(%struct.nish_array* %22, %struct.nish_array* %23)
   %24 = call i64 @nish_monotonic_nanos()
   store i64 %24, i64* %start.addr, align 8
   %25 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8

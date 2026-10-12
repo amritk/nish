@@ -10,7 +10,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -218,11 +218,11 @@ entry:
   %32 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %33 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
   %34 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* %32, %struct.nish_array* %33, %struct.nish_array* %34, i32 0)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* %32, %struct.nish_array* %33, %struct.nish_array* %34, i32 0)
   %35 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %36 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
   %37 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* %35, %struct.nish_array* %36, %struct.nish_array* %37, i32 1)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* %35, %struct.nish_array* %36, %struct.nish_array* %37, i32 1)
   call void @nish_scope_join(i8* %31)
   %38 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 0
@@ -349,7 +349,7 @@ bounds.ok:
   %40 = load %struct.nish_array*, %struct.nish_array** %39, align 8, !alias.scope !4, !noalias !3, !tbaa !16
   %41 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %42 = load i32, i32* %k.addr, align 4
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* %34, %struct.nish_array* %40, %struct.nish_array* %41, i32 %42)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* %34, %struct.nish_array* %40, %struct.nish_array* %41, i32 %42)
   br label %for.inc
 
 for.inc:
@@ -484,7 +484,7 @@ for.body:
   %19 = call %struct.nish_array* @row(i32 %18)
   %20 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %21 = load i32, i32* %k.addr, align 4
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* %16, %struct.nish_array* %19, %struct.nish_array* %20, i32 %21)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* %16, %struct.nish_array* %19, %struct.nish_array* %20, i32 %21)
   br label %for.inc
 
 for.inc:
@@ -621,7 +621,7 @@ entry:
   %22 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %23 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
   %24 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* %22, %struct.nish_array* %23, %struct.nish_array* %24, i32 0)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* %22, %struct.nish_array* %23, %struct.nish_array* %24, i32 0)
   %25 = call i8* @nish_alloc_struct(i64 24)
   %26 = bitcast i8* %25 to %struct.nish_array*
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0
@@ -642,7 +642,7 @@ entry:
   %35 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %36 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
   %37 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.6.total$(%struct.ThreadScope* %35, %struct.nish_array* %36, %struct.nish_array* %37, i32 1)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.total(%struct.ThreadScope* %35, %struct.nish_array* %36, %struct.nish_array* %37, i32 1)
   call void @nish_scope_join(i8* %11)
   %38 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 0

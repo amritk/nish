@@ -50655,18 +50655,18 @@ function branch(n: i32): i32 -> @branch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via make
   escaping: n
-  calls: make nish.expose$arr.u8$i32$fn.7.length$ nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release
+  calls: make nish.expose$arr.u8$i32$fn.6.length nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release
   stackSites=0 stackLocals=0
   local 37:9 k: Secret<u8[]> (const)
   callee 37:27 make -> @make
   local 39:11 big: i32 (const)
-  callee 39:22 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.7.length$
+  callee 39:22 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.6.length
   callee 40:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   callee 43:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: 68:3
-  calls: branch bytes make maybe nish.expose$$Pair$u32$fn.6.total$ nish.expose$arr.u8$i32$fn.7.length$ nish.secret$$Pair nish.secret$arr.u8 nish.wipe$$Secret$$Pair nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 nish_str_from_u64 pairOf
+  calls: branch bytes make maybe nish.expose$$Pair$u32$fn.5.total nish.expose$arr.u8$i32$fn.6.length nish.secret$$Pair nish.secret$arr.u8 nish.wipe$$Secret$$Pair nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 nish_str_from_u64 pairOf
   stackSites=0 stackLocals=0
   callee 48:15 branch -> @branch
   callee 49:15 branch -> @branch
@@ -50677,23 +50677,23 @@ function main(): i32 -> @nish_main [exported entry]
   local 57:12 i: i32 (let)
   local 58:11 k: Secret<u8[]> (const)
   callee 58:29 make -> @make
-  callee 59:19 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.7.length$
+  callee 59:19 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.6.length
   callee 60:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   local 63:9 k: Secret<u8[]> (const)
   callee 63:27 make -> @make
   local 64:9 j: Secret<u8[]> (const)
-  callee 65:15 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.7.length$
+  callee 65:15 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.6.length
   callee 66:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   local 67:9 raw: u8[] (const)
   callee 67:21 bytes -> @bytes
   local 69:9 moved: Secret<u8[]> (const)
   callee 69:31 secret<u8[]> -> @nish.secret$arr.u8
-  callee 70:15 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.7.length$
+  callee 70:15 expose<u8[], i32, length> -> @nish.expose$arr.u8$i32$fn.6.length
   callee 71:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   local 72:9 pair: Secret<Pair> (const)
   callee 72:30 secret<Pair> -> @nish.secret$$Pair
   callee 72:37 pairOf -> @pairOf
-  callee 73:15 expose<Pair, u32, total> -> @nish.expose$$Pair$u32$fn.6.total$
+  callee 73:15 expose<Pair, u32, total> -> @nish.expose$$Pair$u32$fn.5.total
   callee 74:3 wipe<Secret<Pair>> -> @nish.wipe$$Secret$$Pair
 module std/secret.ts [package nish]
 struct Secret<u8[]> (class) size=8 align=8 exported
@@ -50720,7 +50720,7 @@ function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exporte
   pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
   stackSites=0 stackLocals=0
   callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
-function expose<u8[], i32, length>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.7.length$ [exported instance]
+function expose<u8[], i32, length>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.6.length [exported instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: length$
   pointer s: size=8 writesThrough=false captured=false
@@ -50738,7 +50738,7 @@ function secret<Pair>(value: Pair): Secret<Pair> -> @nish.secret$$Pair [exported
   pointer value: size=8 writesThrough=true captured=true passedTo=nish.Secret$$Pair.constructor#1
   stackSites=0 stackLocals=0
   callee 46:51 new Secret<Pair> -> @nish.Secret$$Pair.constructor
-function expose<Pair, u32, total>(s: Secret<Pair>, f: void): u32 -> @nish.expose$$Pair$u32$fn.6.total$ [exported instance]
+function expose<Pair, u32, total>(s: Secret<Pair>, f: void): u32 -> @nish.expose$$Pair$u32$fn.5.total [exported instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: total$
   pointer s: size=8 writesThrough=false captured=false
@@ -50779,14 +50779,14 @@ function wipedSum(k: u8[]): i32 -> @wipedSum$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: key nish.expose$arr.u8$i32$fn.4.sum$ nish.expose$arr.u8$i32$fn.9.wipedSum$ nish.exposeWith$arr.u8$i32$i32$fn.16.nish_main$arrow0 nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  calls: key nish.expose$arr.u8$i32$fn.3.sum nish.expose$arr.u8$i32$fn.8.wipedSum nish.exposeWith$arr.u8$i32$i32$fn.16.nish_main$arrow0 nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
   local 30:9 k: Secret<u8[]> (const)
   callee 30:27 secret<u8[]> -> @nish.secret$arr.u8
   callee 30:34 key -> @key
-  callee 31:15 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.4.sum$
+  callee 31:15 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.3.sum
   callee 32:15 exposeWith<u8[], i32, i32, (v, scale) => ...> -> @nish.exposeWith$arr.u8$i32$i32$fn.16.nish_main$arrow0
-  callee 33:15 expose<u8[], i32, wipedSum> -> @nish.expose$arr.u8$i32$fn.9.wipedSum$
+  callee 33:15 expose<u8[], i32, wipedSum> -> @nish.expose$arr.u8$i32$fn.8.wipedSum
   callee 34:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function (v, scale) => ...(v: u8[], scale: i32): i32 -> @nish_main$arrow0
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -50815,7 +50815,7 @@ function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exporte
   pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
   stackSites=0 stackLocals=0
   callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
-function expose<u8[], i32, sum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.4.sum$ [exported instance]
+function expose<u8[], i32, sum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.3.sum [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: sum$
   pointer s: size=8 writesThrough=false captured=false
@@ -50828,7 +50828,7 @@ function exposeWith<u8[], i32, i32, (v, scale) => ...>(s: Secret<u8[]>, arg: i32
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 52:93 (v, scale) => ... -> @nish_main$arrow0
-function expose<u8[], i32, wipedSum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.9.wipedSum$ [exported instance]
+function expose<u8[], i32, wipedSum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.8.wipedSum [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wipedSum$
   calls: wipedSum$
@@ -53691,8 +53691,8 @@ function binShard(s: Shard): i32 -> @binShard$
   local 59:12 b: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.ThreadScope.spawn$$Shard$i32$fn.9.binShard$
-  calls: Hist.constructor Shard.constructor binShard$ nish.Mutex$$Hist.constructor nish.Mutex$$Hist.lock nish.ThreadScope.spawn$$Shard$i32$fn.9.binShard$ nish.scope nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32
+  sharedWrite: via nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
+  calls: Hist.constructor Shard.constructor binShard$ nish.Mutex$$Hist.constructor nish.Mutex$$Hist.lock nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard nish.scope nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32
   stackSites=1 stackLocals=0
   local 70:9 args: string[] (const)
   local 71:9 sequential: boolean (const)
@@ -53710,7 +53710,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 86:15 s: ThreadScope (const)
   callee 86:19 scope -> @nish.scope
   local 87:18 t: i32 (let)
-  callee 88:11 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.9.binShard$
+  callee 88:11 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
   callee 88:29 new Shard -> @Shard.constructor
   local 93:11 g: MutexGuard<Hist> (const)
   callee 93:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
@@ -53769,18 +53769,18 @@ function Mutex<Hist>.lock(this: Mutex<Hist>): MutexGuard<Hist> -> @nish.Mutex$$H
   calls: nish_mutex_wait
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function ThreadScope.spawn<Shard, i32, binShard>(this: ThreadScope, entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Shard$i32$fn.9.binShard$ [exported method instance]
+function ThreadScope.spawn<Shard, i32, binShard>(this: ThreadScope, entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$$Shard$i32$fn.9.binShard$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$$Shard$i32$fn.8.binShard nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer arg: size=16 writesThrough=true captured=true passedTo=nish.runTask$$Shard$i32$fn.9.binShard$#1
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$$Shard$i32$fn.9.binShard$#2
+  pointer arg: size=16 writesThrough=true captured=true passedTo=nish.runTask$$Shard$i32$fn.8.binShard#1
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$$Shard$i32$fn.8.binShard#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<Shard, i32, binShard> -> @nish.runTask$$Shard$i32$fn.9.binShard$
-function runTask<Shard, i32, binShard>(entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.runTask$$Shard$i32$fn.9.binShard$ [instance]
+  callee 224:5 runTask<Shard, i32, binShard> -> @nish.runTask$$Shard$i32$fn.8.binShard
+function runTask<Shard, i32, binShard>(entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.runTask$$Shard$i32$fn.8.binShard [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: at
@@ -54207,7 +54207,7 @@ function exposeWith<u8[], u8[], u8[] | null, x25519Exposed>(s: Secret<u8[]>, arg
   pointer arg: size=0 writesThrough=false captured=false passedTo=nish.x25519Exposed#1
   stackSites=0 stackLocals=0
   callee 52:93 x25519Exposed -> @nish.x25519Exposed
-function exposeWith<u8[], u8[], boolean, grantTagHolds>(s: Secret<u8[]>, arg: u8[], f: void): boolean -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.14.grantTagHolds$ [exported instance]
+function exposeWith<u8[], u8[], boolean, grantTagHolds>(s: Secret<u8[]>, arg: u8[], f: void): boolean -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via grantTagHolds$
   calls: grantTagHolds$
@@ -70749,10 +70749,10 @@ function GrantVerifier.verify(this: GrantVerifier, buf: u8[], off: i32, len: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: 320:5
   escaping: len off
-  calls: RelayJson.find RelayJson.read grantReject nish.base64urlDecode nish.exposeWith$arr.u8$arr.u8$bool$fn.14.grantTagHolds$ nish.h3CheckWindow nish.quicPacketCopy nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_write
+  calls: RelayJson.find RelayJson.read grantReject nish.base64urlDecode nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds nish.h3CheckWindow nish.quicPacketCopy nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_write
   pointer this: size=16 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicPacketCopy#2
-  pointer secret: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$bool$fn.14.grantTagHolds$#0
+  pointer secret: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds#0
   pointer out: size=40 writesThrough=true captured=false passedTo=grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0 grantReject#0
   stackSites=2 stackLocals=2
   callee 246:5 h3CheckWindow -> @nish.h3CheckWindow
@@ -70774,7 +70774,7 @@ function GrantVerifier.verify(this: GrantVerifier, buf: u8[], off: i32, len: i32
   local 284:11 signed: u8[] (const)
   callee 285:5 quicPacketCopy -> @nish.quicPacketCopy
   callee 286:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee 287:10 exposeWith<u8[], u8[], boolean, grantTagHolds> -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.14.grantTagHolds$
+  callee 287:10 exposeWith<u8[], u8[], boolean, grantTagHolds> -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds
   callee 288:14 grantReject -> @grantReject
   local 292:11 payload: u8[] | null (const)
   callee 292:34 base64urlDecode -> @nish.base64urlDecode
@@ -78128,7 +78128,7 @@ function checksum(n: i32): i32 -> @checksum$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: 88:5
-  calls: checksum$ digitSum$ longestCollatz$ nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$ nish.ThreadScope.spawn$i32$i32$fn.15.longestCollatz$ nish.ThreadScope.spawn$i32$i32$fn.9.checksum$ nish.ThreadScope.spawn$i32$i32$fn.9.digitSum$ nish.scope nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 primesBelow$
+  calls: checksum$ digitSum$ longestCollatz$ nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz nish.ThreadScope.spawn$i32$i32$fn.8.checksum nish.ThreadScope.spawn$i32$i32$fn.8.digitSum nish.scope nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 primesBelow$
   stackSites=0 stackLocals=0
   local 85:9 answers: i32[] (const)
   local 86:9 args: string[] (const)
@@ -78138,10 +78138,10 @@ function main(): i32 -> @nish_main [exported entry]
   callee 91:18 checksum -> @checksum$
   local 93:11 s: ThreadScope (const)
   callee 93:15 scope -> @nish.scope
-  callee 94:5 ThreadScope.spawn<i32, i32, primesBelow> -> @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$
-  callee 95:5 ThreadScope.spawn<i32, i32, longestCollatz> -> @nish.ThreadScope.spawn$i32$i32$fn.15.longestCollatz$
-  callee 96:5 ThreadScope.spawn<i32, i32, digitSum> -> @nish.ThreadScope.spawn$i32$i32$fn.9.digitSum$
-  callee 97:5 ThreadScope.spawn<i32, i32, checksum> -> @nish.ThreadScope.spawn$i32$i32$fn.9.checksum$
+  callee 94:5 ThreadScope.spawn<i32, i32, primesBelow> -> @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow
+  callee 95:5 ThreadScope.spawn<i32, i32, longestCollatz> -> @nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz
+  callee 96:5 ThreadScope.spawn<i32, i32, digitSum> -> @nish.ThreadScope.spawn$i32$i32$fn.8.digitSum
+  callee 97:5 ThreadScope.spawn<i32, i32, checksum> -> @nish.ThreadScope.spawn$i32$i32$fn.8.checksum
 module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
@@ -78170,47 +78170,47 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function ThreadScope.spawn<i32, i32, primesBelow>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$ [exported method instance]
+function ThreadScope.spawn<i32, i32, primesBelow>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.12.primesBelow$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$i32$i32$fn.11.primesBelow nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.12.primesBelow$#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.11.primesBelow#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<i32, i32, primesBelow> -> @nish.runTask$i32$i32$fn.12.primesBelow$
-function ThreadScope.spawn<i32, i32, longestCollatz>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.15.longestCollatz$ [exported method instance]
+  callee 224:5 runTask<i32, i32, primesBelow> -> @nish.runTask$i32$i32$fn.11.primesBelow
+function ThreadScope.spawn<i32, i32, longestCollatz>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.15.longestCollatz$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$i32$i32$fn.14.longestCollatz nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.15.longestCollatz$#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.14.longestCollatz#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<i32, i32, longestCollatz> -> @nish.runTask$i32$i32$fn.15.longestCollatz$
-function ThreadScope.spawn<i32, i32, digitSum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.9.digitSum$ [exported method instance]
+  callee 224:5 runTask<i32, i32, longestCollatz> -> @nish.runTask$i32$i32$fn.14.longestCollatz
+function ThreadScope.spawn<i32, i32, digitSum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.8.digitSum [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.9.digitSum$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$i32$i32$fn.8.digitSum nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.9.digitSum$#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.8.digitSum#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<i32, i32, digitSum> -> @nish.runTask$i32$i32$fn.9.digitSum$
-function ThreadScope.spawn<i32, i32, checksum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.9.checksum$ [exported method instance]
+  callee 224:5 runTask<i32, i32, digitSum> -> @nish.runTask$i32$i32$fn.8.digitSum
+function ThreadScope.spawn<i32, i32, checksum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.8.checksum [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.9.checksum$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$i32$i32$fn.8.checksum nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.9.checksum$#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.8.checksum#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<i32, i32, checksum> -> @nish.runTask$i32$i32$fn.9.checksum$
-function runTask<i32, i32, primesBelow>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.12.primesBelow$ [instance]
+  callee 224:5 runTask<i32, i32, checksum> -> @nish.runTask$i32$i32$fn.8.checksum
+function runTask<i32, i32, primesBelow>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.11.primesBelow [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: arg at
@@ -78219,7 +78219,7 @@ function runTask<i32, i32, primesBelow>(entry: void, arg: i32, dst: i32[], at: i
   stackSites=0 stackLocals=0
   callee 200:3 storeResult<i32> -> @nish.storeResult$i32
   callee 200:24 primesBelow -> @primesBelow$
-function runTask<i32, i32, longestCollatz>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.15.longestCollatz$ [instance]
+function runTask<i32, i32, longestCollatz>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.14.longestCollatz [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: arg at
@@ -78228,7 +78228,7 @@ function runTask<i32, i32, longestCollatz>(entry: void, arg: i32, dst: i32[], at
   stackSites=0 stackLocals=0
   callee 200:3 storeResult<i32> -> @nish.storeResult$i32
   callee 200:24 longestCollatz -> @longestCollatz$
-function runTask<i32, i32, digitSum>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.9.digitSum$ [instance]
+function runTask<i32, i32, digitSum>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.8.digitSum [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: arg at
@@ -78237,7 +78237,7 @@ function runTask<i32, i32, digitSum>(entry: void, arg: i32, dst: i32[], at: i32)
   stackSites=0 stackLocals=0
   callee 200:3 storeResult<i32> -> @nish.storeResult$i32
   callee 200:24 digitSum -> @digitSum$
-function runTask<i32, i32, checksum>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.9.checksum$ [instance]
+function runTask<i32, i32, checksum>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.8.checksum [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: arg at
@@ -79186,12 +79186,12 @@ function useKey(n: i32): i32 -> @useKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$$Secret$arr.u8
   escaping: n
-  calls: nish.expose$arr.u8$i32$fn.6.width$ nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release nish_exit nish_write
+  calls: nish.expose$arr.u8$i32$fn.5.width nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_arena_mark nish_arena_release nish_exit nish_write
   stackSites=0 stackLocals=0
   local 10:9 k: Secret<u8[]> (const)
   callee 10:27 secret<u8[]> -> @nish.secret$arr.u8
   local 11:9 w: i32 (const)
-  callee 11:18 expose<u8[], i32, width> -> @nish.expose$arr.u8$i32$fn.6.width$
+  callee 11:18 expose<u8[], i32, width> -> @nish.expose$arr.u8$i32$fn.5.width
   callee 12:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 module std/secret.ts [package nish]
 struct Secret<u8[]> (class) size=8 align=8 exported
@@ -79209,7 +79209,7 @@ function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exporte
   pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
   stackSites=0 stackLocals=0
   callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
-function expose<u8[], i32, width>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.6.width$ [exported instance]
+function expose<u8[], i32, width>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.5.width [exported instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: width$
   pointer s: size=8 writesThrough=false captured=false
@@ -85815,12 +85815,12 @@ function label(x: i32): i32 -> @label$
   local 4:7 s: string (let)
 function labelAll(xs: i32[], out: i32[]): void -> @labelAll [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.parallelMapInto$i32$i32$fn.6.label$
-  calls: nish.parallelMapInto$i32$i32$fn.6.label$
-  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.6.label$#0
-  pointer out: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.6.label$#1
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.5.label
+  calls: nish.parallelMapInto$i32$i32$fn.5.label
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.5.label#0
+  pointer out: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.5.label#1
   stackSites=0 stackLocals=0
-  callee 12:3 parallelMapInto<i32, i32, label> -> @nish.parallelMapInto$i32$i32$fn.6.label$
+  callee 12:3 parallelMapInto<i32, i32, label> -> @nish.parallelMapInto$i32$i32$fn.5.label
 module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
@@ -85849,18 +85849,18 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<i32, i32, label>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.6.label$ [exported instance]
+function parallelMapInto<i32, i32, label>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.5.label [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.6.label$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.6.label$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.6.label$#1
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.5.label nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.5.label#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.5.label#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<i32, i32, label> -> @nish.mapRange$i32$i32$fn.6.label$
-function mapRange<i32, i32, label>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.6.label$ [instance]
+  callee 153:3 mapRange<i32, i32, label> -> @nish.mapRange$i32$i32$fn.5.label
+function mapRange<i32, i32, label>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.5.label [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo
@@ -85880,12 +85880,12 @@ function square(x: f64): f64 -> @square$
   stackSites=0 stackLocals=0
 function sumOfSquares(xs: f64[], scratch: f64[]): f64 -> @sumOfSquares [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.parallelMapInto$f64$f64$fn.7.square$
-  calls: nish.parallelMapInto$f64$f64$fn.7.square$ nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0
-  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$f64$f64$fn.7.square$#0
-  pointer scratch: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$f64$f64$fn.7.square$#1 nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0#0
+  sharedWrite: via nish.parallelMapInto$f64$f64$fn.6.square
+  calls: nish.parallelMapInto$f64$f64$fn.6.square nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$f64$f64$fn.6.square#0
+  pointer scratch: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$f64$f64$fn.6.square#1 nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0#0
   stackSites=0 stackLocals=0
-  callee 6:3 parallelMapInto<f64, f64, square> -> @nish.parallelMapInto$f64$f64$fn.7.square$
+  callee 6:3 parallelMapInto<f64, f64, square> -> @nish.parallelMapInto$f64$f64$fn.6.square
   callee 7:10 parallelReduce<f64, (a, b) => ...> -> @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0
 function (a, b) => ...(a: f64, b: f64): f64 -> @sumOfSquares$arrow0
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -85918,17 +85918,17 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<f64, f64, square>(src: f64[], dst: f64[], f: void): void -> @nish.parallelMapInto$f64$f64$fn.7.square$ [exported instance]
+function parallelMapInto<f64, f64, square>(src: f64[], dst: f64[], f: void): void -> @nish.parallelMapInto$f64$f64$fn.6.square [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$f64$f64$fn.7.square$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.7.square$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.7.square$#1
+  calls: nish.dstTooShort nish.mapRange$f64$f64$fn.6.square nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.6.square#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.6.square#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<f64, f64, square> -> @nish.mapRange$f64$f64$fn.7.square$
+  callee 153:3 mapRange<f64, f64, square> -> @nish.mapRange$f64$f64$fn.6.square
 function parallelReduce<f64, (a, b) => ...>(src: f64[], f: void, identity: f64): f64 -> @nish.parallelReduce$f64$fn.19.sumOfSquares$arrow0 [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.reduceBlocks$f64$fn.19.sumOfSquares$arrow0
@@ -85943,7 +85943,7 @@ function parallelReduce<f64, (a, b) => ...>(src: f64[], f: void, identity: f64):
   local 168:7 acc: f64 (let)
   local 169:12 k: i32 (let)
   callee 170:11 (a, b) => ... -> @sumOfSquares$arrow0
-function mapRange<f64, f64, square>(src: f64[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$f64$f64$fn.7.square$ [instance]
+function mapRange<f64, f64, square>(src: f64[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$f64$f64$fn.6.square [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo
@@ -86203,15 +86203,15 @@ function produce(ch: Channel<i32>): i32 -> @produce$
   callee 5:3 Channel<i32>.send -> @nish.Channel$i32.send
 function total(): i32 -> @total [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.ThreadScope.spawn$$Channel$i32$i32$fn.8.produce$
-  calls: nish.Channel$i32.constructor nish.ThreadScope.spawn$$Channel$i32$i32$fn.8.produce$ nish.scope nish_alloc_struct nish_arena_mark nish_arena_release nish_channel_receive nish_panic_index nish_panic_overflow
+  sharedWrite: via nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce
+  calls: nish.Channel$i32.constructor nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce nish.scope nish_alloc_struct nish_arena_mark nish_arena_release nish_channel_receive nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
   local 10:9 sent: i32[] (const)
   local 11:9 ch: Channel<i32> (const)
   callee 11:14 new Channel<i32> -> @nish.Channel$i32.constructor
   local 13:11 s: ThreadScope (const)
   callee 13:15 scope -> @nish.scope
-  callee 14:5 ThreadScope.spawn<Channel<i32>, i32, produce> -> @nish.ThreadScope.spawn$$Channel$i32$i32$fn.8.produce$
+  callee 14:5 ThreadScope.spawn<Channel<i32>, i32, produce> -> @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce
   local 16:7 sum: i32 (let)
   local 17:14 x: i32 (const)
 module std/threads.ts [package nish]
@@ -86270,18 +86270,18 @@ function Channel<i32>.ready(this: Channel<i32>): boolean -> @nish.Channel$i32.re
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function ThreadScope.spawn<Channel<i32>, i32, produce>(this: ThreadScope, entry: void, arg: Channel<i32>, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Channel$i32$i32$fn.8.produce$ [exported method instance]
+function ThreadScope.spawn<Channel<i32>, i32, produce>(this: ThreadScope, entry: void, arg: Channel<i32>, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Channel$i32$i32$fn.7.produce [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$$Channel$i32$i32$fn.8.produce$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$$Channel$i32$i32$fn.7.produce nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer arg: size=24 writesThrough=true captured=true passedTo=nish.runTask$$Channel$i32$i32$fn.8.produce$#1
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$$Channel$i32$i32$fn.8.produce$#2
+  pointer arg: size=24 writesThrough=true captured=true passedTo=nish.runTask$$Channel$i32$i32$fn.7.produce#1
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$$Channel$i32$i32$fn.7.produce#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<Channel<i32>, i32, produce> -> @nish.runTask$$Channel$i32$i32$fn.8.produce$
-function runTask<Channel<i32>, i32, produce>(entry: void, arg: Channel<i32>, dst: i32[], at: i32): void -> @nish.runTask$$Channel$i32$i32$fn.8.produce$ [instance]
+  callee 224:5 runTask<Channel<i32>, i32, produce> -> @nish.runTask$$Channel$i32$i32$fn.7.produce
+function runTask<Channel<i32>, i32, produce>(entry: void, arg: Channel<i32>, dst: i32[], at: i32): void -> @nish.runTask$$Channel$i32$i32$fn.7.produce [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: at
@@ -86378,15 +86378,15 @@ function cube(n: i32): i32 -> @cube$
   stackSites=0 stackLocals=0
 function powers(n: i32): i32 -> @powers [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.ThreadScope.spawn$i32$i32$fn.7.square$
+  sharedWrite: via nish.ThreadScope.spawn$i32$i32$fn.6.square
   escaping: n
-  calls: nish.ThreadScope.spawn$i32$i32$fn.5.cube$ nish.ThreadScope.spawn$i32$i32$fn.7.square$ nish.scope nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
+  calls: nish.ThreadScope.spawn$i32$i32$fn.4.cube nish.ThreadScope.spawn$i32$i32$fn.6.square nish.scope nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
   local 8:9 out: i32[] (const)
   local 10:11 s: ThreadScope (const)
   callee 10:15 scope -> @nish.scope
-  callee 11:5 ThreadScope.spawn<i32, i32, square> -> @nish.ThreadScope.spawn$i32$i32$fn.7.square$
-  callee 12:5 ThreadScope.spawn<i32, i32, cube> -> @nish.ThreadScope.spawn$i32$i32$fn.5.cube$
+  callee 11:5 ThreadScope.spawn<i32, i32, square> -> @nish.ThreadScope.spawn$i32$i32$fn.6.square
+  callee 12:5 ThreadScope.spawn<i32, i32, cube> -> @nish.ThreadScope.spawn$i32$i32$fn.4.cube
 module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
@@ -86415,27 +86415,27 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function ThreadScope.spawn<i32, i32, square>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.7.square$ [exported method instance]
+function ThreadScope.spawn<i32, i32, square>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.6.square [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.7.square$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$i32$i32$fn.6.square nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.7.square$#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.6.square#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<i32, i32, square> -> @nish.runTask$i32$i32$fn.7.square$
-function ThreadScope.spawn<i32, i32, cube>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.5.cube$ [exported method instance]
+  callee 224:5 runTask<i32, i32, square> -> @nish.runTask$i32$i32$fn.6.square
+function ThreadScope.spawn<i32, i32, cube>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.4.cube [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
   escaping: arg at dst entry this
-  calls: nish.runTask$i32$i32$fn.5.cube$ nish.slotOutOfRange nish_scope_spawn
+  calls: nish.runTask$i32$i32$fn.4.cube nish.slotOutOfRange nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.5.cube$#2
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.4.cube#2
   stackSites=0 stackLocals=0
   callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 224:5 runTask<i32, i32, cube> -> @nish.runTask$i32$i32$fn.5.cube$
-function runTask<i32, i32, square>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.7.square$ [instance]
+  callee 224:5 runTask<i32, i32, cube> -> @nish.runTask$i32$i32$fn.4.cube
+function runTask<i32, i32, square>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.6.square [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: arg at
@@ -86444,7 +86444,7 @@ function runTask<i32, i32, square>(entry: void, arg: i32, dst: i32[], at: i32): 
   stackSites=0 stackLocals=0
   callee 200:3 storeResult<i32> -> @nish.storeResult$i32
   callee 200:24 square -> @square$
-function runTask<i32, i32, cube>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.5.cube$ [instance]
+function runTask<i32, i32, cube>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.4.cube [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
   escaping: arg at
@@ -97087,14 +97087,14 @@ function label(x: i32): i32 -> @label$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 30:5
-  calls: label$ nish.parallelMapInto$i32$i32$fn.6.label$ nish_exit nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i64 nish_write
+  calls: label$ nish.parallelMapInto$i32$i32$fn.5.label nish_exit nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i64 nish_write
   stackSites=0 stackLocals=0
   local 25:9 n: i32 (const)
   local 26:9 par: boolean (const)
   local 27:9 src: i32[] (const)
   local 28:9 dst: i32[] (const)
   local 29:12 i: i32 (let)
-  callee 33:5 parallelMapInto<i32, i32, label> -> @nish.parallelMapInto$i32$i32$fn.6.label$
+  callee 33:5 parallelMapInto<i32, i32, label> -> @nish.parallelMapInto$i32$i32$fn.5.label
   local 35:14 i: i32 (let)
   local 36:13 y: i32 (const)
   callee 36:17 label -> @label$
@@ -97128,18 +97128,18 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<i32, i32, label>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.6.label$ [exported instance]
+function parallelMapInto<i32, i32, label>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.5.label [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.6.label$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.6.label$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.6.label$#1
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.5.label nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.5.label#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.5.label#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<i32, i32, label> -> @nish.mapRange$i32$i32$fn.6.label$
-function mapRange<i32, i32, label>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.6.label$ [instance]
+  callee 153:3 mapRange<i32, i32, label> -> @nish.mapRange$i32$i32$fn.5.label
+function mapRange<i32, i32, label>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.5.label [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo
@@ -97163,7 +97163,7 @@ function settle(x: f64): f64 -> @settle$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 24:5
-  calls: nish.parallelMapInto$f64$f64$fn.7.settle$ nish_exit nish_panic_index nish_print nish_str_eq nish_str_from_f64 nish_write settle$
+  calls: nish.parallelMapInto$f64$f64$fn.6.settle nish_exit nish_panic_index nish_print nish_str_eq nish_str_from_f64 nish_write settle$
   stackSites=0 stackLocals=0
   local 18:9 n: i32 (const)
   local 19:9 par: boolean (const)
@@ -97171,7 +97171,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 21:9 dst: f64[] (const)
   local 22:7 x: f64 (let)
   local 23:12 i: i32 (let)
-  callee 28:5 parallelMapInto<f64, f64, settle> -> @nish.parallelMapInto$f64$f64$fn.7.settle$
+  callee 28:5 parallelMapInto<f64, f64, settle> -> @nish.parallelMapInto$f64$f64$fn.6.settle
   local 30:14 i: i32 (let)
   local 31:13 y: f64 (const)
   callee 31:17 settle -> @settle$
@@ -97205,18 +97205,18 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<f64, f64, settle>(src: f64[], dst: f64[], f: void): void -> @nish.parallelMapInto$f64$f64$fn.7.settle$ [exported instance]
+function parallelMapInto<f64, f64, settle>(src: f64[], dst: f64[], f: void): void -> @nish.parallelMapInto$f64$f64$fn.6.settle [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$f64$f64$fn.7.settle$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.7.settle$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.7.settle$#1
+  calls: nish.dstTooShort nish.mapRange$f64$f64$fn.6.settle nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.6.settle#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$f64$f64$fn.6.settle#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<f64, f64, settle> -> @nish.mapRange$f64$f64$fn.7.settle$
-function mapRange<f64, f64, settle>(src: f64[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$f64$f64$fn.7.settle$ [instance]
+  callee 153:3 mapRange<f64, f64, settle> -> @nish.mapRange$f64$f64$fn.6.settle
+function mapRange<f64, f64, settle>(src: f64[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$f64$f64$fn.6.settle [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo
@@ -97289,7 +97289,7 @@ function energy(bodies: Body[]): f64 -> @energy
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 128:9
-  calls: Body.constructor Probe.constructor accel$ energy nish.parallelMapInto$$Probe$f64$fn.6.accel$ nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_f64 nish_write
+  calls: Body.constructor Probe.constructor accel$ energy nish.parallelMapInto$$Probe$f64$fn.5.accel nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_f64 nish_write
   stackSites=0 stackLocals=0
   local 89:9 n: i32 (const)
   local 90:9 steps: i32 (const)
@@ -97310,7 +97310,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 111:9 acc: f64[] (const)
   callee 112:18 energy -> @energy
   local 113:12 s: i32 (let)
-  callee 115:7 parallelMapInto<Probe, f64, accel> -> @nish.parallelMapInto$$Probe$f64$fn.6.accel$
+  callee 115:7 parallelMapInto<Probe, f64, accel> -> @nish.parallelMapInto$$Probe$f64$fn.5.accel
   local 117:16 k: i32 (let)
   local 118:15 a: f64 (const)
   callee 118:19 accel -> @accel$
@@ -97348,18 +97348,18 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<Probe, f64, accel>(src: Probe[], dst: f64[], f: void): void -> @nish.parallelMapInto$$Probe$f64$fn.6.accel$ [exported instance]
+function parallelMapInto<Probe, f64, accel>(src: Probe[], dst: f64[], f: void): void -> @nish.parallelMapInto$$Probe$f64$fn.5.accel [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$$Probe$f64$fn.6.accel$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$$Probe$f64$fn.6.accel$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$$Probe$f64$fn.6.accel$#1
+  calls: nish.dstTooShort nish.mapRange$$Probe$f64$fn.5.accel nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$$Probe$f64$fn.5.accel#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$$Probe$f64$fn.5.accel#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<Probe, f64, accel> -> @nish.mapRange$$Probe$f64$fn.6.accel$
-function mapRange<Probe, f64, accel>(src: Probe[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$$Probe$f64$fn.6.accel$ [instance]
+  callee 153:3 mapRange<Probe, f64, accel> -> @nish.mapRange$$Probe$f64$fn.5.accel
+function mapRange<Probe, f64, accel>(src: Probe[], dst: f64[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$$Probe$f64$fn.5.accel [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo
@@ -97382,7 +97382,7 @@ function scramble(x: i32): i32 -> @scramble$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 29:5
-  calls: nish.parallelMapInto$i32$i32$fn.9.scramble$ nish_exit nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_write scramble$
+  calls: nish.parallelMapInto$i32$i32$fn.8.scramble nish_exit nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_write scramble$
   stackSites=0 stackLocals=0
   local 23:9 rounds: i32 (const)
   local 24:9 n: i32 (const)
@@ -97392,7 +97392,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 28:12 i: i32 (let)
   local 31:7 check: i32 (let)
   local 32:12 r: i32 (let)
-  callee 34:7 parallelMapInto<i32, i32, scramble> -> @nish.parallelMapInto$i32$i32$fn.9.scramble$
+  callee 34:7 parallelMapInto<i32, i32, scramble> -> @nish.parallelMapInto$i32$i32$fn.8.scramble
   local 36:16 i: i32 (let)
   local 37:15 y: i32 (const)
   callee 37:19 scramble -> @scramble$
@@ -97427,18 +97427,18 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<i32, i32, scramble>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.9.scramble$ [exported instance]
+function parallelMapInto<i32, i32, scramble>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.8.scramble [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.9.scramble$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.9.scramble$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.9.scramble$#1
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.8.scramble nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.8.scramble#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.8.scramble#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<i32, i32, scramble> -> @nish.mapRange$i32$i32$fn.9.scramble$
-function mapRange<i32, i32, scramble>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.9.scramble$ [instance]
+  callee 153:3 mapRange<i32, i32, scramble> -> @nish.mapRange$i32$i32$fn.8.scramble
+function mapRange<i32, i32, scramble>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.8.scramble [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo
@@ -97462,14 +97462,14 @@ function bump(x: i32): i32 -> @bump$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 31:11
-  calls: bump$ nish.parallelMapInto$i32$i32$fn.5.bump$ nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32
+  calls: bump$ nish.parallelMapInto$i32$i32$fn.4.bump nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32
   stackSites=0 stackLocals=0
   local 20:9 rounds: i32 (const)
   local 21:9 par: boolean (const)
   local 22:9 src: i32[] (const)
   local 23:9 dst: i32[] (const)
   local 24:12 r: i32 (let)
-  callee 26:7 parallelMapInto<i32, i32, bump> -> @nish.parallelMapInto$i32$i32$fn.5.bump$
+  callee 26:7 parallelMapInto<i32, i32, bump> -> @nish.parallelMapInto$i32$i32$fn.4.bump
   local 28:16 i: i32 (let)
   local 29:15 y: i32 (const)
   callee 29:19 bump -> @bump$
@@ -97505,18 +97505,18 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-function parallelMapInto<i32, i32, bump>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.5.bump$ [exported instance]
+function parallelMapInto<i32, i32, bump>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.4.bump [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.dstTooShort
   escaping: dst f src
-  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.5.bump$ nish_parallel_range
-  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.5.bump$#0
-  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.5.bump$#1
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.4.bump nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.4.bump#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.4.bump#1
   stackSites=0 stackLocals=0
   local 149:9 n: i32 (const)
   callee 151:5 dstTooShort -> @nish.dstTooShort
-  callee 153:3 mapRange<i32, i32, bump> -> @nish.mapRange$i32$i32$fn.5.bump$
-function mapRange<i32, i32, bump>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.5.bump$ [instance]
+  callee 153:3 mapRange<i32, i32, bump> -> @nish.mapRange$i32$i32$fn.4.bump
+function mapRange<i32, i32, bump>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.4.bump [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 68:7
   escaping: lo

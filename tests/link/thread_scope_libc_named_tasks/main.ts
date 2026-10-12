@@ -9,9 +9,11 @@
 // which C cannot spell.
 //
 // Each scope below joins two tasks: the same object twice, two objects, two
-// entry functions, and an object beside an array. The map body is `close`,
-// the other template that takes a private function.
-import { parallelMapInto, scope } from "nish/threads";
+// entry functions, and an object beside an array. The other templates that
+// take a private function are here too: the map body is `close`, the reduce
+// body `exit` and the `expose` callback `strlen`.
+import { Secret, expose, secret, wipe } from "nish:secret";
+import { parallelMapInto, parallelReduce, scope } from "nish/threads";
 
 class Leaf {
   x: i32 = 0;
@@ -30,6 +32,10 @@ const free = (xs: i32[]): i32 => {
 };
 
 const close = (n: i32): i32 => n * n;
+
+const exit = (acc: i32, x: i32): i32 => acc + x;
+
+const strlen = (k: u8[]): i32 => toI32(k.length);
 
 export const main = (): i32 => {
   const a = new Leaf();
@@ -74,5 +80,12 @@ export const main = (): i32 => {
   const squares: i32[] = [0, 0, 0, 0];
   parallelMapInto(ns, squares, close);
   console.log(`map: ${squares[0]} ${squares[1]} ${squares[2]} ${squares[3]}`);
+
+  console.log(`reduce: ${parallelReduce(ns, exit, 0)}`);
+
+  const key: Secret<u8[]> = secret([toU8(1), toU8(2), toU8(3)]);
+  const length: i32 = expose(key, strlen);
+  wipe(key);
+  console.log(`expose: ${length}`);
   return 0;
 };

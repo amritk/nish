@@ -13,7 +13,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #0
-declare void @nish.ThreadScope.spawn$$Job$i32$fn.5.work$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Job* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Job$i32$fn.4.work(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Job* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.Mutex$i32.constructor(%struct.Mutex$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture, i32 noundef) #0
 declare noundef nonnull align 8 dereferenceable(8) %struct.MutexGuard$i32* @nish.Mutex$i32.lock(%struct.Mutex$i32* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #1
 declare void @nish.MutexGuard$i32.constructor(%struct.MutexGuard$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture, i32 noundef) #0
@@ -220,7 +220,7 @@ for.body:
   call void @Job.constructor(%struct.Job* %24, i32 50000, %struct.Mutex$i32* %25, %struct.Mutex$$Label* %26)
   %27 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
   %28 = load i32, i32* %t.addr, align 4
-  call void @nish.ThreadScope.spawn$$Job$i32$fn.5.work$(%struct.ThreadScope* %22, %struct.Job* %24, %struct.nish_array* %27, i32 %28)
+  call void @nish.ThreadScope.spawn$$Job$i32$fn.4.work(%struct.ThreadScope* %22, %struct.Job* %24, %struct.nish_array* %27, i32 %28)
   br label %for.inc
 
 for.inc:

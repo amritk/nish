@@ -119,7 +119,7 @@ entry:
   ret %struct.ThreadScope* %1
 }
 
-define internal void @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$$run(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf$run(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { %struct.nish_array*, %struct.nish_array*, i32, double }*
   %1 = getelementptr inbounds { %struct.nish_array*, %struct.nish_array*, i32, double }, { %struct.nish_array*, %struct.nish_array*, i32, double }* %0, i32 0, i32 0
@@ -130,7 +130,7 @@ entry:
   ret void
 }
 
-define internal void @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$$finish(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf$finish(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { %struct.nish_array*, %struct.nish_array*, i32, double }*
   %1 = getelementptr inbounds { %struct.nish_array*, %struct.nish_array*, i32, double }, { %struct.nish_array*, %struct.nish_array*, i32, double }* %0, i32 0, i32 1
@@ -143,7 +143,7 @@ entry:
   ret void
 }
 
-define void @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
+define void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
 entry:
   %task.payload = alloca { %struct.nish_array*, %struct.nish_array*, i32, double }, align 8
   %0 = icmp slt i32 %at, 0
@@ -176,11 +176,11 @@ if.end:
   store i32 %at, i32* %11
   %12 = bitcast { %struct.nish_array*, %struct.nish_array*, i32, double }* %task.payload to i8*
   %13 = bitcast %struct.ThreadScope* %this to i8*
-  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$$run, void (i8*)* @nish.ThreadScope.spawn$arr.f64$f64$fn.6.sumOf$$finish, i8* %12, i64 ptrtoint ({ %struct.nish_array*, %struct.nish_array*, i32, double }* getelementptr ({ %struct.nish_array*, %struct.nish_array*, i32, double }, { %struct.nish_array*, %struct.nish_array*, i32, double }* null, i32 1) to i64))
+  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf$run, void (i8*)* @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf$finish, i8* %12, i64 ptrtoint ({ %struct.nish_array*, %struct.nish_array*, i32, double }* getelementptr ({ %struct.nish_array*, %struct.nish_array*, i32, double }, { %struct.nish_array*, %struct.nish_array*, i32, double }* null, i32 1) to i64))
   ret void
 }
 
-define internal void @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$$run(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow$run(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { i32, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
@@ -191,7 +191,7 @@ entry:
   ret void
 }
 
-define internal void @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$$finish(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow$finish(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { i32, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 1
@@ -204,7 +204,7 @@ entry:
   ret void
 }
 
-define void @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, i32 noundef %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
+define void @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, i32 noundef %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
 entry:
   %task.payload = alloca { i32, %struct.nish_array*, i32, i32 }, align 8
   %0 = icmp slt i32 %at, 0
@@ -237,18 +237,18 @@ if.end:
   store i32 %at, i32* %11
   %12 = bitcast { i32, %struct.nish_array*, i32, i32 }* %task.payload to i8*
   %13 = bitcast %struct.ThreadScope* %this to i8*
-  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$$run, void (i8*)* @nish.ThreadScope.spawn$i32$i32$fn.12.primesBelow$$finish, i8* %12, i64 ptrtoint ({ i32, %struct.nish_array*, i32, i32 }* getelementptr ({ i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
+  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow$run, void (i8*)* @nish.ThreadScope.spawn$i32$i32$fn.11.primesBelow$finish, i8* %12, i64 ptrtoint ({ i32, %struct.nish_array*, i32, i32 }* getelementptr ({ i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
   ret void
 }
 
-define internal void @nish.runTask$arr.f64$f64$fn.6.sumOf$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
+define internal void @nish.runTask$arr.f64$f64$fn.5.sumOf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
   %0 = call double @sumOf$(%struct.nish_array* %arg)
   call void @nish.storeResult$f64(%struct.nish_array* %dst, i32 %at, double %0)
   ret void
 }
 
-define internal void @nish.runTask$i32$i32$fn.12.primesBelow$(i32 noundef %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
+define internal void @nish.runTask$i32$i32$fn.11.primesBelow(i32 noundef %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
   %0 = call i32 @primesBelow$(i32 %arg)
   call void @nish.storeResult$i32(%struct.nish_array* %dst, i32 %at, i32 %0)

@@ -10,7 +10,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.5.work$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Mutex$$Tally* noundef nonnull align 8 dereferenceable(8), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.4.work(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Mutex$$Tally* noundef nonnull align 8 dereferenceable(8), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare void @nish.Mutex$$Tally.constructor(%struct.Mutex$$Tally* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
 declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #0
 declare void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
@@ -390,15 +390,15 @@ entry:
   %51 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %52 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %shared.addr, align 8
   %53 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.5.work$(%struct.ThreadScope* %51, %struct.Mutex$$Tally* %52, %struct.nish_array* %53, i32 0)
+  call void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.4.work(%struct.ThreadScope* %51, %struct.Mutex$$Tally* %52, %struct.nish_array* %53, i32 0)
   %54 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %55 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %shared.addr, align 8
   %56 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.5.work$(%struct.ThreadScope* %54, %struct.Mutex$$Tally* %55, %struct.nish_array* %56, i32 1)
+  call void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.4.work(%struct.ThreadScope* %54, %struct.Mutex$$Tally* %55, %struct.nish_array* %56, i32 1)
   %57 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %58 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %shared.addr, align 8
   %59 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  call void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.5.work$(%struct.ThreadScope* %57, %struct.Mutex$$Tally* %58, %struct.nish_array* %59, i32 2)
+  call void @nish.ThreadScope.spawn$$Mutex$$Tally$i32$fn.4.work(%struct.ThreadScope* %57, %struct.Mutex$$Tally* %58, %struct.nish_array* %59, i32 2)
   call void @nish_scope_join(i8* %50)
   %60 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %shared.addr, align 8
   %61 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %60)

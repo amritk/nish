@@ -188,7 +188,7 @@ entry:
   %1 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %0)
   store %struct.Secret$arr.u8* %1, %struct.Secret$arr.u8** %k.addr, align 8
   %2 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
-  %3 = call i32 @nish.expose$arr.u8$i32$fn.4.sum$(%struct.Secret$arr.u8* %2)
+  %3 = call i32 @nish.expose$arr.u8$i32$fn.3.sum(%struct.Secret$arr.u8* %2)
   %4 = call i8* @nish_str_from_i32(i32 %3)
   call void @nish_print(i8* %4)
   %5 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
@@ -196,7 +196,7 @@ entry:
   %7 = call i8* @nish_str_from_i32(i32 %6)
   call void @nish_print(i8* %7)
   %8 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
-  %9 = call i32 @nish.expose$arr.u8$i32$fn.9.wipedSum$(%struct.Secret$arr.u8* %8)
+  %9 = call i32 @nish.expose$arr.u8$i32$fn.8.wipedSum(%struct.Secret$arr.u8* %8)
   %10 = call i8* @nish_str_from_i32(i32 %9)
   call void @nish_print(i8* %10)
   %11 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
@@ -255,7 +255,7 @@ entry:
   ret %struct.Secret$arr.u8* %1
 }
 
-define internal noundef i32 @nish.expose$arr.u8$i32$fn.4.sum$(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
+define internal noundef i32 @nish.expose$arr.u8$i32$fn.3.sum(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
@@ -271,7 +271,7 @@ entry:
   ret i32 %2
 }
 
-define internal noundef i32 @nish.expose$arr.u8$i32$fn.9.wipedSum$(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
+define internal noundef i32 @nish.expose$arr.u8$i32$fn.8.wipedSum(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17

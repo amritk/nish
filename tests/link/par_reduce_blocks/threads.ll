@@ -122,7 +122,7 @@ entry:
   ret %struct.ThreadScope* %1
 }
 
-define internal void @nish.parallelReduce$u8$fn.5.step$$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
+define internal void @nish.parallelReduce$u8$fn.4.step$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, i8, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, i8, %struct.nish_array* }, { %struct.nish_array*, i8, %struct.nish_array* }* %0, i32 0, i32 0
@@ -133,11 +133,11 @@ entry:
   %6 = load %struct.nish_array*, %struct.nish_array** %5
   %7 = trunc i64 %lo to i32
   %8 = trunc i64 %hi to i32
-  call void @nish.reduceBlocks$u8$fn.5.step$(%struct.nish_array* %2, i8 %4, %struct.nish_array* %6, i32 %7, i32 %8)
+  call void @nish.reduceBlocks$u8$fn.4.step(%struct.nish_array* %2, i8 %4, %struct.nish_array* %6, i32 %7, i32 %8)
   ret void
 }
 
-define noundef i8 @nish.parallelReduce$u8$fn.5.step$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i8 noundef %identity) #1 {
+define noundef i8 @nish.parallelReduce$u8$fn.4.step(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i8 noundef %identity) #1 {
 entry:
   %blocks.addr = alloca i32, align 4
   %partials.addr = alloca %struct.nish_array*, align 8
@@ -187,7 +187,7 @@ len.ok:
   br i1 %17, label %par.seq, label %par.region
 
 par.seq:
-  call void @nish.reduceBlocks$u8$fn.5.step$(%struct.nish_array* %src, i8 %identity, %struct.nish_array* %15, i32 0, i32 %16)
+  call void @nish.reduceBlocks$u8$fn.4.step(%struct.nish_array* %src, i8 %identity, %struct.nish_array* %15, i32 0, i32 %16)
   br label %par.done
 
 par.region:
@@ -199,7 +199,7 @@ par.region:
   store %struct.nish_array* %15, %struct.nish_array** %20
   %21 = bitcast { %struct.nish_array*, i8, %struct.nish_array* }* %par.ctx to i8*
   %22 = sext i32 %16 to i64
-  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelReduce$u8$fn.5.step$$chunk, i8* %21, i64 %22, i64 1)
+  call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelReduce$u8$fn.4.step$chunk, i8* %21, i64 %22, i64 1)
   br label %par.done
 
 par.done:
@@ -257,7 +257,7 @@ for.end:
   ret i8 %49
 }
 
-define internal void @nish.reduceBlocks$u8$fn.5.step$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i8 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal void @nish.reduceBlocks$u8$fn.4.step(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i8 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %blocks.addr = alloca i32, align 4
@@ -312,7 +312,7 @@ for.body:
   %25 = load i32, i32* %k.addr, align 4
   %26 = add nsw i32 %25, 1
   %27 = call i32 @nish.reduceBlockStart(i32 %23, i32 %24, i32 %26)
-  %28 = call i8 @nish.reduceRange$u8$fn.5.step$(%struct.nish_array* %src, i8 %identity, i32 %22, i32 %27)
+  %28 = call i8 @nish.reduceRange$u8$fn.4.step(%struct.nish_array* %src, i8 %identity, i32 %22, i32 %27)
   store i8 %28, i8* %partial.addr, align 1
   %29 = load i32, i32* %k.addr, align 4
   %30 = trunc i64 %7 to i32
@@ -341,7 +341,7 @@ for.end:
   ret void
 }
 
-define internal noundef i8 @nish.reduceRange$u8$fn.5.step$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i8 noundef %identity, i32 noundef %lo, i32 noundef %hi) #3 {
+define internal noundef i8 @nish.reduceRange$u8$fn.4.step(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i8 noundef %identity, i32 noundef %lo, i32 noundef %hi) #3 {
 entry:
   %acc.addr = alloca i8, align 1
   %i.addr = alloca i32, align 4

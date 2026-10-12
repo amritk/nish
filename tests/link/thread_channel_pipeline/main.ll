@@ -8,8 +8,8 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #0
-declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.produce$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.consume$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.produce(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.consume(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Pipe* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.Channel$i32.constructor(%struct.Channel$i32* noundef nonnull noalias align 8 dereferenceable(24) nocapture) #0
 declare void @nish.Channel$i32.send(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #1
 declare noundef i32 @nish.Channel$i32.take(%struct.Channel$i32* noundef nonnull align 8 dereferenceable(24) nocapture) #1
@@ -191,14 +191,14 @@ entry:
   %26 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
   call void @Pipe.constructor(%struct.Pipe* %25, %struct.Channel$i32* %26, i32 50000)
   %27 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8
-  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.produce$(%struct.ThreadScope* %23, %struct.Pipe* %25, %struct.nish_array* %27, i32 0)
+  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.produce(%struct.ThreadScope* %23, %struct.Pipe* %25, %struct.nish_array* %27, i32 0)
   %28 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %29 = call i8* @nish_alloc_struct(i64 16)
   %30 = bitcast i8* %29 to %struct.Pipe*
   %31 = load %struct.Channel$i32*, %struct.Channel$i32** %ch.addr, align 8
   call void @Pipe.constructor(%struct.Pipe* %30, %struct.Channel$i32* %31, i32 0)
   %32 = load %struct.nish_array*, %struct.nish_array** %sums.addr, align 8
-  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.8.consume$(%struct.ThreadScope* %28, %struct.Pipe* %30, %struct.nish_array* %32, i32 0)
+  call void @nish.ThreadScope.spawn$$Pipe$i32$fn.7.consume(%struct.ThreadScope* %28, %struct.Pipe* %30, %struct.nish_array* %32, i32 0)
   call void @nish_channel_count(i64* %22, i64 -1)
   call void @nish_scope_join(i8* %20)
   %33 = load %struct.nish_array*, %struct.nish_array** %sent.addr, align 8

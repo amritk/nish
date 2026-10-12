@@ -3,7 +3,7 @@
 
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
-declare void @nish.parallelMapInto$i32$i32$fn.7.double$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
+declare void @nish.parallelMapInto$i32$i32$fn.6.double(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -54,7 +54,7 @@ ovf.fail:
 
 define internal void @doubleAll(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst) #0 {
 entry:
-  call void @nish.parallelMapInto$i32$i32$fn.7.double$(%struct.nish_array* %src, %struct.nish_array* %dst)
+  call void @nish.parallelMapInto$i32$i32$fn.6.double(%struct.nish_array* %src, %struct.nish_array* %dst)
   ret void
 }
 

@@ -11,7 +11,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #0
-declare void @nish.ThreadScope.spawn$$Job$i32$fn.10.binStream$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Job* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Job$i32$fn.9.binStream(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Job* noundef nonnull align 8 dereferenceable(16), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.Mutex$$Hist.constructor(%struct.Mutex$$Hist* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Hist* noundef nonnull align 8 dereferenceable(56)) #0
 declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Hist* @nish.Mutex$$Hist.lock(%struct.Mutex$$Hist* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #1
 declare void @nish.MutexGuard$$Hist.constructor(%struct.MutexGuard$$Hist* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Hist* noundef nonnull align 8 dereferenceable(56)) #0
@@ -352,7 +352,7 @@ ovf.ok.2:
   call void @Job.constructor(%struct.Job* %58, i32 %69, i32 %71, %struct.Mutex$$Hist* %72)
   %73 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
   %74 = load i32, i32* %t.addr, align 4
-  call void @nish.ThreadScope.spawn$$Job$i32$fn.10.binStream$(%struct.ThreadScope* %56, %struct.Job* %58, %struct.nish_array* %73, i32 %74)
+  call void @nish.ThreadScope.spawn$$Job$i32$fn.9.binStream(%struct.ThreadScope* %56, %struct.Job* %58, %struct.nish_array* %73, i32 %74)
   br label %for.inc.1
 
 for.inc.1:

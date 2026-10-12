@@ -16,7 +16,7 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #3
-declare void @nish.ThreadScope.spawn$$Holder$i32$fn.5.read$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Holder* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Holder$i32$fn.4.read(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Holder* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare void @nish_free_arena() #3
 declare noundef i64 @nish_arena_mark() #3
@@ -173,7 +173,7 @@ entry:
   %14 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %15 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
   %16 = load %struct.nish_array*, %struct.nish_array** %done.addr, align 8
-  call void @nish.ThreadScope.spawn$$Holder$i32$fn.5.read$(%struct.ThreadScope* %14, %struct.Holder* %15, %struct.nish_array* %16, i32 0)
+  call void @nish.ThreadScope.spawn$$Holder$i32$fn.4.read(%struct.ThreadScope* %14, %struct.Holder* %15, %struct.nish_array* %16, i32 0)
   %17 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
   %18 = call i32 @tally(%struct.Holder* %17)
   store i32 %18, i32* %r.addr, align 4

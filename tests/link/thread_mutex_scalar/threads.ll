@@ -197,7 +197,7 @@ lock.held:
   ret %struct.MutexGuard$$Label* %1
 }
 
-define internal void @nish.ThreadScope.spawn$$Job$i32$fn.5.work$$run(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$$Job$i32$fn.4.work$run(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { %struct.Job*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Job*, %struct.nish_array*, i32, i32 }, { %struct.Job*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
@@ -208,7 +208,7 @@ entry:
   ret void
 }
 
-define internal void @nish.ThreadScope.spawn$$Job$i32$fn.5.work$$finish(i8* noundef %p) #1 {
+define internal void @nish.ThreadScope.spawn$$Job$i32$fn.4.work$finish(i8* noundef %p) #1 {
 entry:
   %0 = bitcast i8* %p to { %struct.Job*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Job*, %struct.nish_array*, i32, i32 }, { %struct.Job*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 1
@@ -221,7 +221,7 @@ entry:
   ret void
 }
 
-define void @nish.ThreadScope.spawn$$Job$i32$fn.5.work$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, %struct.Job* noundef nonnull align 8 dereferenceable(24) %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
+define void @nish.ThreadScope.spawn$$Job$i32$fn.4.work(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, %struct.Job* noundef nonnull align 8 dereferenceable(24) %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
 entry:
   %task.payload = alloca { %struct.Job*, %struct.nish_array*, i32, i32 }, align 8
   %0 = icmp slt i32 %at, 0
@@ -254,11 +254,11 @@ if.end:
   store i32 %at, i32* %11
   %12 = bitcast { %struct.Job*, %struct.nish_array*, i32, i32 }* %task.payload to i8*
   %13 = bitcast %struct.ThreadScope* %this to i8*
-  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$$Job$i32$fn.5.work$$run, void (i8*)* @nish.ThreadScope.spawn$$Job$i32$fn.5.work$$finish, i8* %12, i64 ptrtoint ({ %struct.Job*, %struct.nish_array*, i32, i32 }* getelementptr ({ %struct.Job*, %struct.nish_array*, i32, i32 }, { %struct.Job*, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
+  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$$Job$i32$fn.4.work$run, void (i8*)* @nish.ThreadScope.spawn$$Job$i32$fn.4.work$finish, i8* %12, i64 ptrtoint ({ %struct.Job*, %struct.nish_array*, i32, i32 }* getelementptr ({ %struct.Job*, %struct.nish_array*, i32, i32 }, { %struct.Job*, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
   ret void
 }
 
-define internal void @nish.runTask$$Job$i32$fn.5.work$(%struct.Job* noundef nonnull readonly align 8 dereferenceable(24) nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
+define internal void @nish.runTask$$Job$i32$fn.4.work(%struct.Job* noundef nonnull readonly align 8 dereferenceable(24) nocapture %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #1 {
 entry:
   %0 = call i32 @work$(%struct.Job* %arg)
   call void @nish.storeResult$i32(%struct.nish_array* %dst, i32 %at, i32 %0)

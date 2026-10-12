@@ -10,7 +10,7 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
-declare void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -741,7 +741,7 @@ for.body:
   %16 = add nsw i32 %k, %15
   %17 = load %struct.nish_array*, %struct.nish_array** %res.addr, align 8
   %18 = load i32, i32* %i.addr, align 4
-  call void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* %14, i32 %16, %struct.nish_array* %17, i32 %18)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %14, i32 %16, %struct.nish_array* %17, i32 %18)
   %19 = call i64 @nish_arena_mark()
   store i64 %19, i64* %a.addr, align 8
   %20 = load i64, i64* %a.addr, align 8
@@ -895,7 +895,7 @@ entry:
   %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %19 = trunc i64 %18 to i32
   %20 = load %struct.nish_array*, %struct.nish_array** %res.addr, align 8
-  call void @nish.ThreadScope.spawn$i32$i32$fn.7.triple$(%struct.ThreadScope* %15, i32 %19, %struct.nish_array* %20, i32 0)
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %15, i32 %19, %struct.nish_array* %20, i32 0)
   call void @nish_scope_join(i8* %14)
   call void @nish_arena_release(i64 %10)
   store i32 0, i32* %i.addr, align 4

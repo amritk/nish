@@ -1,5 +1,6 @@
 %struct.Leaf = type { i32 }
 %struct.ThreadScope = type { i32 }
+%struct.Secret$arr.u8 = type { %struct.nish_array* }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -9,13 +10,17 @@
 @.str.3 = private unnamed_addr constant { i64, [14 x i8] } { i64 13, [14 x i8] c"two entries: \00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"object and array: \00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"map: \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"reduce: \00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"expose: \00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #2
-declare void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.read$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Leaf* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare void @nish.ThreadScope.spawn$$Leaf$i32$fn.6.write$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Leaf* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.free$(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
-declare void @nish.parallelMapInto$i32$i32$fn.6.close$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
+declare void @nish.ThreadScope.spawn$$Leaf$i32$fn.4.read(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Leaf* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.write(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Leaf* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$arr.i32$i32$fn.4.free(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.parallelMapInto$i32$i32$fn.5.close(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
+declare noundef i32 @nish.parallelReduce$i32$fn.4.exit(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
@@ -141,6 +146,29 @@ ovf.fail:
   unreachable
 }
 
+define hidden noundef i32 @exit$(i32 noundef %acc, i32 noundef %x) #1 {
+entry:
+  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %acc, i32 %x)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define hidden noundef i32 @strlen$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %k, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %2 = trunc i64 %1 to i32
+  ret i32 %2
+}
+
 define noundef i32 @nish_main() #1 {
 entry:
   %a.addr = alloca %struct.Leaf*, align 8
@@ -156,6 +184,8 @@ entry:
   %s.addr.3 = alloca %struct.ThreadScope*, align 8
   %ns.addr = alloca %struct.nish_array*, align 8
   %squares.addr = alloca %struct.nish_array*, align 8
+  %key.addr = alloca %struct.Secret$arr.u8*, align 8
+  %length.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_alloc_struct(i64 4)
   %1 = bitcast i8* %0 to %struct.Leaf*
@@ -212,11 +242,11 @@ entry:
   %32 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %33 = load %struct.Leaf*, %struct.Leaf** %a.addr, align 8
   %34 = load %struct.nish_array*, %struct.nish_array** %same.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.read$(%struct.ThreadScope* %32, %struct.Leaf* %33, %struct.nish_array* %34, i32 0)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.4.read(%struct.ThreadScope* %32, %struct.Leaf* %33, %struct.nish_array* %34, i32 0)
   %35 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %36 = load %struct.Leaf*, %struct.Leaf** %a.addr, align 8
   %37 = load %struct.nish_array*, %struct.nish_array** %same.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.read$(%struct.ThreadScope* %35, %struct.Leaf* %36, %struct.nish_array* %37, i32 1)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.4.read(%struct.ThreadScope* %35, %struct.Leaf* %36, %struct.nish_array* %37, i32 1)
   call void @nish_scope_join(i8* %31)
   %38 = load %struct.nish_array*, %struct.nish_array** %same.addr, align 8
   %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %38, i64 0, i32 0
@@ -278,11 +308,11 @@ bounds.ok.1:
   %73 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.1, align 8
   %74 = load %struct.Leaf*, %struct.Leaf** %a.addr, align 8
   %75 = load %struct.nish_array*, %struct.nish_array** %two.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.read$(%struct.ThreadScope* %73, %struct.Leaf* %74, %struct.nish_array* %75, i32 0)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.4.read(%struct.ThreadScope* %73, %struct.Leaf* %74, %struct.nish_array* %75, i32 0)
   %76 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.1, align 8
   %77 = load %struct.Leaf*, %struct.Leaf** %b.addr, align 8
   %78 = load %struct.nish_array*, %struct.nish_array** %two.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.read$(%struct.ThreadScope* %76, %struct.Leaf* %77, %struct.nish_array* %78, i32 1)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.4.read(%struct.ThreadScope* %76, %struct.Leaf* %77, %struct.nish_array* %78, i32 1)
   call void @nish_scope_join(i8* %72)
   %79 = load %struct.nish_array*, %struct.nish_array** %two.addr, align 8
   %80 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %79, i64 0, i32 0
@@ -344,11 +374,11 @@ bounds.ok.3:
   %114 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.2, align 8
   %115 = load %struct.Leaf*, %struct.Leaf** %a.addr, align 8
   %116 = load %struct.nish_array*, %struct.nish_array** %entries.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.read$(%struct.ThreadScope* %114, %struct.Leaf* %115, %struct.nish_array* %116, i32 0)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.4.read(%struct.ThreadScope* %114, %struct.Leaf* %115, %struct.nish_array* %116, i32 0)
   %117 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.2, align 8
   %118 = load %struct.Leaf*, %struct.Leaf** %b.addr, align 8
   %119 = load %struct.nish_array*, %struct.nish_array** %entries.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.6.write$(%struct.ThreadScope* %117, %struct.Leaf* %118, %struct.nish_array* %119, i32 1)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.write(%struct.ThreadScope* %117, %struct.Leaf* %118, %struct.nish_array* %119, i32 1)
   call void @nish_scope_join(i8* %113)
   %120 = load %struct.nish_array*, %struct.nish_array** %entries.addr, align 8
   %121 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %120, i64 0, i32 0
@@ -410,11 +440,11 @@ bounds.ok.5:
   %155 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.3, align 8
   %156 = load %struct.Leaf*, %struct.Leaf** %a.addr, align 8
   %157 = load %struct.nish_array*, %struct.nish_array** %mixed.addr, align 8
-  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.6.write$(%struct.ThreadScope* %155, %struct.Leaf* %156, %struct.nish_array* %157, i32 0)
+  call void @nish.ThreadScope.spawn$$Leaf$i32$fn.5.write(%struct.ThreadScope* %155, %struct.Leaf* %156, %struct.nish_array* %157, i32 0)
   %158 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.3, align 8
   %159 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %160 = load %struct.nish_array*, %struct.nish_array** %mixed.addr, align 8
-  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.5.free$(%struct.ThreadScope* %158, %struct.nish_array* %159, %struct.nish_array* %160, i32 1)
+  call void @nish.ThreadScope.spawn$arr.i32$i32$fn.4.free(%struct.ThreadScope* %158, %struct.nish_array* %159, %struct.nish_array* %160, i32 1)
   call void @nish_scope_join(i8* %154)
   %161 = load %struct.nish_array*, %struct.nish_array** %mixed.addr, align 8
   %162 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %161, i64 0, i32 0
@@ -494,7 +524,7 @@ bounds.ok.7:
   store %struct.nish_array* %196, %struct.nish_array** %squares.addr, align 8
   %206 = load %struct.nish_array*, %struct.nish_array** %ns.addr, align 8
   %207 = load %struct.nish_array*, %struct.nish_array** %squares.addr, align 8
-  call void @nish.parallelMapInto$i32$i32$fn.6.close$(%struct.nish_array* %206, %struct.nish_array* %207)
+  call void @nish.parallelMapInto$i32$i32$fn.5.close(%struct.nish_array* %206, %struct.nish_array* %207)
   %208 = load %struct.nish_array*, %struct.nish_array** %squares.addr, align 8
   %209 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %208, i64 0, i32 0
   %210 = load i64, i64* %209, align 8, !alias.scope !8, !noalias !9, !tbaa !13
@@ -571,6 +601,41 @@ bounds.ok.11:
   %253 = call i8* @nish_str_from_i32(i32 %252)
   %254 = call i8* @nish_str_concat(i8* %243, i8* %253)
   call void @nish_print(i8* %254)
+  %255 = load %struct.nish_array*, %struct.nish_array** %ns.addr, align 8
+  %256 = call i32 @nish.parallelReduce$i32$fn.4.exit(%struct.nish_array* %255, i32 0)
+  %257 = call i8* @nish_str_from_i32(i32 %256)
+  %258 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.6 to i8*), i8* %257)
+  call void @nish_print(i8* %258)
+  %259 = trunc i32 1 to i8
+  %260 = trunc i32 2 to i8
+  %261 = trunc i32 3 to i8
+  %262 = call i8* @nish_alloc_struct(i64 24)
+  %263 = bitcast i8* %262 to %struct.nish_array*
+  %264 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %263, i64 0, i32 0
+  store i64 3, i64* %264, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %265 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %263, i64 0, i32 1
+  store i64 3, i64* %265, align 8, !alias.scope !8, !noalias !9, !tbaa !17
+  %266 = call i8* @nish_alloc_struct(i64 3)
+  %267 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %263, i64 0, i32 2
+  store i8* %266, i8** %267, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %268 = bitcast i8* %266 to i8*
+  %269 = getelementptr inbounds i8, i8* %268, i64 0
+  store i8 %259, i8* %269, align 1, !alias.scope !9, !noalias !8, !tbaa !19
+  %270 = getelementptr inbounds i8, i8* %268, i64 1
+  store i8 %260, i8* %270, align 1, !alias.scope !9, !noalias !8, !tbaa !19
+  %271 = getelementptr inbounds i8, i8* %268, i64 2
+  store i8 %261, i8* %271, align 1, !alias.scope !9, !noalias !8, !tbaa !19
+  %272 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %263)
+  store %struct.Secret$arr.u8* %272, %struct.Secret$arr.u8** %key.addr, align 8
+  %273 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %key.addr, align 8
+  %274 = call i32 @nish.expose$arr.u8$i32$fn.6.strlen(%struct.Secret$arr.u8* %273)
+  store i32 %274, i32* %length.addr, align 4
+  %275 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %key.addr, align 8
+  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %275)
+  %276 = load i32, i32* %length.addr, align 4
+  %277 = call i8* @nish_str_from_i32(i32 %276)
+  %278 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.7 to i8*), i8* %277)
+  call void @nish_print(i8* %278)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -580,6 +645,41 @@ entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
+}
+
+define internal void @nish.Secret$arr.u8.constructor(%struct.Secret$arr.u8* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %this, i32 0, i32 0
+  store %struct.nish_array* %value, %struct.nish_array** %0, align 8, !tbaa !22
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %value) #2 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Secret$arr.u8*
+  call void @nish.Secret$arr.u8.constructor(%struct.Secret$arr.u8* %1, %struct.nish_array* %value)
+  ret %struct.Secret$arr.u8* %1
+}
+
+define internal noundef i32 @nish.expose$arr.u8$i32$fn.6.strlen(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !22
+  %2 = call i32 @strlen$(%struct.nish_array* %1)
+  ret i32 %2
+}
+
+define internal void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* noundef nonnull align 8 dereferenceable(8) nocapture %_target) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %_target, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i32 0, i32 1
+  %3 = load i64, i64* %2, align 8
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i32 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  call void @llvm.memset.p0i8.i64(i8* %5, i8 0, i64 %3, i1 true)
+  ret void
 }
 
 attributes #0 = { nounwind willreturn readonly }
@@ -608,3 +708,8 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!"element i32", !1, i64 0}
 !16 = !{!15, !15, i64 0}
 !17 = !{!12, !10, i64 8}
+!18 = !{!"element i8", !1, i64 0}
+!19 = !{!18, !18, i64 0}
+!20 = !{!"ptr", !1, i64 0}
+!21 = !{!"Secret$arr.u8", !20, i64 0}
+!22 = !{!21, !20, i64 0}

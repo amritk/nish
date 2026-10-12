@@ -104,6 +104,7 @@ import {
   Node,
 } from "./nodes"
 import {
+  CheckedProgram,
   ConstraintList,
   DeferredConstraint,
   DeferredInstance,
@@ -1618,27 +1619,46 @@ const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionB
  * spell. The module that calls it gets a `declare`, the way an instantiation it
  * calls and another module defines does.
  *
- * Unique across the program is not unique across the link, though. A hidden
- * symbol is global in the executable, so one C could spell -- a function of
- * the program's own package, which carries no prefix -- is the definition the
- * runtime's calls into the C library bind to: a task called `read` was called
- * in place of `read(2)` by the pool's first start, and crashed (#610). Such a
- * symbol takes a `$` at its end, which C cannot spell, no declared name holds,
- * and no instantiation or lifted arrow ends with. A package's prefix and a
- * method's owner already put a `.` in the others.
+ * Unique across the program is not unique across the link, though: see
+ * `spellHiddenApart`, which renames such a function once every body is checked.
  */
 const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
   if (fn.definedIn(home.source)) {
     return
   }
   // A `declare function` is C's symbol, and has no linkage of this program's.
-  if (!fn.exported && !fn.foreign() && !fn.hidden) {
+  if (!fn.exported && !fn.foreign()) {
     fn.hidden = true
-    if (fn.name.indexOf("$") < 0 && fn.name.indexOf(".") < 0) {
-      fn.name = `${fn.name}$`
-    }
   }
   useExternalInstance(home, fn)
+}
+
+/**
+ * Give every `hidden` symbol C could spell one it cannot (#610).
+ *
+ * A hidden symbol is global in the executable, so one C could spell -- a
+ * function of the program's own package, which carries no prefix -- is the
+ * definition the runtime's calls into the C library bind to: a task called
+ * `read` was called in place of `read(2)` by the pool's first start, and
+ * crashed. Such a symbol takes a `$` at its end, which C cannot spell, no
+ * declared name holds, and no instantiation or lifted arrow ends with. A
+ * package's prefix and a method's owner already put a `.` in the others.
+ *
+ * It runs once pass 3 has drained, not in `exposeTo`: a diagnostic about the
+ * function, reported while bodies are still checked, names it as it was
+ * written, and every instantiation it was given to is keyed on the one
+ * spelling, whichever side of the exposure it was minted on. Nothing reads a
+ * function's symbol between here and the end of checking but that key, and
+ * everything after reads the new one.
+ */
+export const spellHiddenApart = (programs: CheckedProgram[]): void => {
+  for (const program of programs) {
+    for (const sig of program.functions) {
+      if (sig.hidden && sig.name.indexOf("$") < 0 && sig.name.indexOf(".") < 0) {
+        sig.name = `${sig.name}$`
+      }
+    }
+  }
 }
 
 /**
