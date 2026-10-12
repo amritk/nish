@@ -1,0 +1,12 @@
+interface P { v: i32; }
+const add = (xs: P[], r: P): void => {
+  xs.push(r);
+};
+export const main = (): i32 => {
+  const ps: P[] = [];
+  const p: P = { v: 1 };
+  add(ps, p);
+  ps[0].v = 5;
+  console.log(`${p.v}`);
+  return 0;
+};

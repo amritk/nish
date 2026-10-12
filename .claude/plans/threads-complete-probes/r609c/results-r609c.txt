@@ -1,0 +1,427 @@
+# PR #609 round 3 probe, head 990737b (build/nish, stage2) vs main 6352713; native default / NISH_NUM_THREADS=1 / =2 vs Node
+# runner: ../probe609.sh; warnings: warn.sh (--warn-portability --json); comparator: cmp3.py; raw outputs in out/
+#
+# == 1. --warn-portability, round-2 pairs (head) ==
+r609b_s1a_portab_capture [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 7) is not seen through `p`
+r609b_s1b_portab_direct [head exit 0] NL8003 5:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 6) is not seen through `p`
+r609b_s1c_portab_mirror_capture [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `p.v = 5` (line 7) is not seen through `ps`
+r609b_s1d_portab_mirror_direct [head exit 0] NL8003 5:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `p.v = 5` (line 6) is not seen through `ps`
+r609b_s10a_utf8_offset_direct [head exit 0] (no diagnostics)
+r609b_s10b_utf8_offset_capture [head exit 0] (no diagnostics)
+r609b_s10c_utf8_offset_literal_direct [head exit 0] NL8001 4:15 `at`, which holds `word.indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `2`, which was not counted in 
+r609b_s10d_utf8_offset_literal_capture [head exit 0] NL8001 5:38 `at`, which holds `word.indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `2`, which was not counted in 
+r609b_s10e_record_copy_forof_capture [head exit 0] NL8003 5:20 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 6) is not seen through `p`
+r609b_s10f_record_copy_literal_direct [head exit 0] NL8003 4:20 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 5) is not seen through `p`
+#
+# == 1b. --warn-portability, round-3 pairs (head); main gives the same on every direct form ==
+r609c_01c_alias_capture [head exit 0] (no diagnostics)
+r609c_01d_alias_direct [head exit 0] (no diagnostics)
+r609c_02c_array_alias_capture [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `p.v = 5` (line 8) is not seen through `ps`
+r609c_02d_array_alias_direct [head exit 0] NL8003 5:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `p.v = 5` (line 7) is not seen through `ps`
+r609c_03c_helper_write_capture [head exit 0] (no diagnostics)
+r609c_03d_helper_write_direct [head exit 0] (no diagnostics)
+r609c_04c_helper_copy_capture [head exit 0] (no diagnostics)
+r609c_04d_helper_copy_direct [head exit 0] (no diagnostics)
+r609c_05c_parallelmap_capture [head exit 0] NL8003 7:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 8) is not seen through `p`
+r609c_05d_parallelmap_direct [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 7) is not seen through `p`
+r609c_06c_mapinto_mirror_capture [head exit 0] NL8003 8:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `p.v = 5` (line 9) is not seen through `ps`
+r609c_06d_mapinto_mirror_direct [head exit 0] NL9007 9:49 `i` is not proven to be in range for `dst` here, so this access keeps its bounds check and compares against the length on every iteration: guard it wi ;; NL8003 7:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `p.v = 5` (line 8) is not seen through `ps`
+r609c_07c_reduce_capture [head exit 0] NL8003 7:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 8) is not seen through `p`
+r609c_07d_reduce_direct [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 7) is not seen through `p`
+r609c_08c_offset_two_consts_capture [head exit 0] NL8001 8:38 `b`, which holds `word.indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `4`, which was not counted in t
+r609c_08d_offset_two_consts_direct [head exit 0] NL8001 7:15 `b`, which holds `word.indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `4`, which was not counted in t
+r609c_09c_offset_as_result_capture [head exit 0] (no diagnostics)
+r609c_09d_offset_as_result_direct [head exit 0] NL8001 5:44 `at`, which holds `word.indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is stored in an array
+r609c_10c_codeunit_capture [head exit 0] NL8001 5:38 `c`, which holds `word.charCodeAt(1)`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `233`, which was not counted i
+r609c_10d_codeunit_direct [head exit 0] NL8001 4:15 `c`, which holds `word.charCodeAt(1)`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is compared with `233`, which was not counted i
+r609c_11c_two_arrows_capture [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 7) is not seen through `p`
+r609c_11d_two_arrows_direct [head exit 0] NL8003 5:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 6) is not seen through `p`
+r609c_12c_two_arrows_split_capture [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 8) is not seen through `p`
+r609c_12d_two_arrows_split_direct [head exit 0] NL8003 5:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 7) is not seen through `p`
+r609c_13c_elem_assign_copy_capture [head exit 0] NL8003 6:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 7) is not seen through `p`
+r609c_13d_elem_assign_copy_direct [head exit 0] NL8003 5:11 `p` is copied into the array here, and TypeScript stores the same object, so the later write `ps[0].v = 5` (line 6) is not seen through `p`
+r609c_q1c_copy_nowrite_capture [head exit 0] (no diagnostics)
+r609c_q1d_copy_nowrite_direct [head exit 0] (no diagnostics)
+r609c_q2c_write_read_same_copy_capture [head exit 0] (no diagnostics)
+r609c_q2d_write_read_same_copy_direct [head exit 0] (no diagnostics)
+r609c_q3c_ascii_offset_capture [head exit 0] (no diagnostics)
+r609c_q3d_ascii_offset_direct [head exit 0] (no diagnostics)
+r609c_q4c_offset_same_string_capture [head exit 0] (no diagnostics)
+r609c_q4d_offset_same_string_direct [head exit 0] (no diagnostics)
+r609c_20a0_nl8009_i32src_nocap [head exit 0] NL8009 4:9 `big` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+r609c_20a_nl8009_i32src_i64cap [head exit 0] NL8009 4:9 `big` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53 ;; NL8009 5:33 `x` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+r609c_20b0_nl8009_i64src_nocap [head exit 0] NL8009 5:33 `x` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+r609c_20b_nl8009_i64src_i32cap [head exit 0] (no diagnostics)
+r609c_20c0_nl8009_reduce_i64_nocap [head exit 0] NL8009 5:9 `m` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53 ;; NL8009 5:35 `a` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53 ;; NL8009 5:38 `x` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+r609c_20c_nl8009_reduce_i64_cap [head exit 0] NL8009 5:9 `m` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53 ;; NL8009 5:35 `a` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+r609c_20d_nl8009_i32src_i64cap_twocap [head exit 0] NL8009 4:9 `big` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+r609c_21c_nl8001_arrow_return [head exit 0] NL8001 6:12 `at`, which holds `"héllo".indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and `main` returns it as the exit code
+r609c_21d_nl8001_return_direct [head exit 0] NL8001 5:44 `at`, which holds `"héllo".indexOf("l")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is stored in an array
+r609c_21e_nl8001_arrow_return_helper [head exit 0] (no diagnostics)
+r609c_20b2_nl8009_i64src_i32cap_noconv [head exit 0] (no diagnostics)
+r609c_20b1_toi64_direct [head exit 0] NL8009 5:14 `x` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53
+#
+# == 1c. round-3 programs, native vs Node (head) ==
+r609c_01c_alias_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_01d_alias_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_02c_array_alias_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_02d_array_alias_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_03c_helper_write_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_03d_helper_write_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_04c_helper_copy_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_04d_helper_copy_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_05c_parallelmap_capture | ACCEPTED | native: 11 31 exit=0  | t1: 11 31 exit=0  | t2: 11 31 exit=0  | node: 15 35 exit=0  | DIFFER
+r609c_05d_parallelmap_direct | ACCEPTED | native: 11 31 exit=0  | t1: 11 31 exit=0  | t2: 11 31 exit=0  | node: 15 35 exit=0  | DIFFER
+r609c_06c_mapinto_mirror_capture | ACCEPTED | native: 11 31 exit=0  | t1: 11 31 exit=0  | t2: 11 31 exit=0  | node: 15 35 exit=0  | DIFFER
+r609c_06d_mapinto_mirror_direct | ACCEPTED | native: 11 31 exit=0  | t1: 11 31 exit=0  | t2: 11 31 exit=0  | node: 15 35 exit=0  | DIFFER
+r609c_07c_reduce_capture | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 5 exit=0  | DIFFER
+r609c_07d_reduce_direct | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 5 exit=0  | DIFFER
+r609c_08c_offset_two_consts_capture | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+r609c_08d_offset_two_consts_direct | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+r609c_09c_offset_as_result_capture | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 3 exit=0  | DIFFER
+r609c_09d_offset_as_result_direct | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 3 exit=0  | DIFFER
+r609c_10c_codeunit_capture | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+r609c_10d_codeunit_direct | ACCEPTED | native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+r609c_11c_two_arrows_capture | ACCEPTED | native: 1 2 exit=0  | t1: 1 2 exit=0  | t2: 1 2 exit=0  | node: 5 10 exit=0  | DIFFER
+r609c_11d_two_arrows_direct | ACCEPTED | native: 1 2 exit=0  | t1: 1 2 exit=0  | t2: 1 2 exit=0  | node: 5 10 exit=0  | DIFFER
+r609c_12c_two_arrows_split_capture | ACCEPTED | native: 1 2 exit=0  | t1: 1 2 exit=0  | t2: 1 2 exit=0  | node: 1 10 exit=0  | DIFFER
+r609c_12d_two_arrows_split_direct | ACCEPTED | native: 1 2 exit=0  | t1: 1 2 exit=0  | t2: 1 2 exit=0  | node: 1 10 exit=0  | DIFFER
+r609c_13c_elem_assign_copy_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_13d_elem_assign_copy_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 5 exit=0  | DIFFER
+r609c_20a0_nl8009_i32src_nocap | ACCEPTED | native: 41 43 40 exit=0  | t1: 41 43 40 exit=0  | t2: 41 43 40 exit=0  | node: 41 43 40 exit=0  | same
+r609c_20a_nl8009_i32src_i64cap | ACCEPTED | native: 41 43 exit=0  | t1: 41 43 exit=0  | t2: 41 43 exit=0  | node: 41 43 exit=0  | same
+r609c_20b0_nl8009_i64src_nocap | ACCEPTED | native: 2 6 2 exit=0  | t1: 2 6 2 exit=0  | t2: 2 6 2 exit=0  | node: 2 6 2 exit=0  | same
+r609c_20b_nl8009_i64src_i32cap | ACCEPTED | native: 2 6 exit=0  | t1: 2 6 exit=0  | t2: 2 6 exit=0  | node: file:///tmp/claude-0/-home-user/495d7503-79d7-5bad-b184-656df3811dd4/scratchpad/r609/r3/p/r609c_20b_nl8009_i64src_i32cap.ts:5   const ys = parallelMap(xs64, (x) => x * toI64(k));              
+r609c_20c0_nl8009_reduce_i64_nocap | ACCEPTED | native: 4 3 exit=0  | t1: 4 3 exit=0  | t2: 4 3 exit=0  | node: 4 3 exit=0  | same
+r609c_20c_nl8009_reduce_i64_cap | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 4 exit=0  | same
+r609c_20d_nl8009_i32src_i64cap_twocap | ACCEPTED | native: 42 44 exit=0  | t1: 42 44 exit=0  | t2: 42 44 exit=0  | node: 42 44 exit=0  | same
+r609c_21c_nl8001_arrow_return | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 3 exit=0  | DIFFER
+r609c_21d_nl8001_return_direct | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 3 exit=0  | DIFFER
+r609c_21e_nl8001_arrow_return_helper | ACCEPTED | native: 4 exit=0  | t1: 4 exit=0  | t2: 4 exit=0  | node: 3 exit=0  | DIFFER
+r609c_q1c_copy_nowrite_capture | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 3 exit=0  | same
+r609c_q1d_copy_nowrite_direct | ACCEPTED | native: 3 exit=0  | t1: 3 exit=0  | t2: 3 exit=0  | node: 3 exit=0  | same
+r609c_q2c_write_read_same_copy_capture | ACCEPTED | native: 5 exit=0  | t1: 5 exit=0  | t2: 5 exit=0  | node: 5 exit=0  | same
+r609c_q2d_write_read_same_copy_direct | ACCEPTED | native: 5 exit=0  | t1: 5 exit=0  | t2: 5 exit=0  | node: 5 exit=0  | same
+r609c_q3c_ascii_offset_capture | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 1 exit=0  | same
+r609c_q3d_ascii_offset_direct | ACCEPTED | native: 1 exit=0  | t1: 1 exit=0  | t2: 1 exit=0  | node: 1 exit=0  | same
+r609c_q4c_offset_same_string_capture | ACCEPTED | native: 2 exit=0  | t1: 2 exit=0  | t2: 2 exit=0  | node: 2 exit=0  | same
+r609c_q4d_offset_same_string_direct | ACCEPTED | native: 2 exit=0  | t1: 2 exit=0  | t2: 2 exit=0  | node: 2 exit=0  | same
+r609c_20b2_nl8009_i64src_i32cap_noconv | ACCEPTED | native: 2 6 exit=0  | t1: 2 6 exit=0  | t2: 2 6 exit=0  | node: 2 6 exit=0  | same
+#
+# == 2. 161 round-1 + 142 round-2 programs rerun (r2head = round-2 head verdict) ==
+r609_a01_holder_dst                           r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609_a02_helper_same                          r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_a03_cond_alias                           r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_a04_param_both                           r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_a05_dst_field                            r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609_a06_fresh_then_field                     r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_a07_module_const_dst                     r2head=REFUSED NL2026             head=REFUSED NL2026             main=REFUSED NL2026             
+r609_a08_module_const_direct                  r2head=REFUSED NL2026             head=REFUSED NL2026             main=REFUSED NL2026             
+r609_a09_typed_copy_ctor                      r2head=REFUSED NL2171             head=REFUSED NL2171             main=REFUSED NL2171,NL2335      
+r609_a10_two_fresh_ok                         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_a11_src_is_capture_dst_same              r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_a12_shadow_dst                           r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_a13_map_reaches_dst                      r2head=REFUSED NL2345,NL2497      head=REFUSED NL2345,NL2497      main=REFUSED NL2244             
+r609_a14_loop_const_fresh                     r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_c01_mixed_large                          r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c02_many_captures                        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c03_generic_helper                       r2head=REFUSED NL2071             head=REFUSED NL2071             main=REFUSED NL2376             
+r609_c04_forward_arrow                        r2head=REFUSED NL2335             head=REFUSED NL2335             main=REFUSED NL2376             
+r609_c05_same_arrow_twice                     r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c06_nested_forms                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_c07_reduce_capture                       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c08_recursion                            r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c09_costly_body_split                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c10_nullable_narrowed_large              r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c11_result_escape_churn                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c12_method_param_capture                 r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c13_inplace_capture                      r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_c14_cttime_fn_param                      r2head=REFUSED NL2335             head=REFUSED NL2335             main=REFUSED NL2376             
+r609_c15_capture_used_as_index_and_src        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c16_bool_result_capture                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c17_oob_capture                          r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609_c18_oob_capture_proved_outer             r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609_c19_inline_array_const_index             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c20_inline_array_large                   r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c21_field_narrowing                      r2head=REFUSED NL2187             head=REFUSED NL2187             main=REFUSED NL2376             
+r609_c22_tdz_capture                          r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609_c23_tdz_direct                           r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609_c24_ctor_capture                         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c25_generic_capture_fixed                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c26_capture_named_like_module_fn         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_c27_capture_in_template_and_cond         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e01_empty_map_capture                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e02_from_small_n                         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e03_from_negative                        r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609_e04_string_result                        r2head=REFUSED NL2348             head=REFUSED NL2348             main=REFUSED NL2376             
+r609_e05_class_result                         r2head=REFUSED NL2348             head=REFUSED NL2348             main=REFUSED NL2376             
+r609_e06_result_is_fresh                      r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e07_grain_boundary                       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e08_class_src_capture                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e09_map_src_captured                     r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e10_from_n_capture                       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_e11_mapinto_dst_short                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_e12_u8_result                            r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q01_scope_dst_map                        r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_q01b_scope_dst_indexof                   r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_q01c_scope_dst_forof                     r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_q01d_scope_dst_from_index                r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_q01e_scope_dst_mapinto                   r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609_q01f_scope_dst_reduce                    r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609_q01g_scope_task_writes_param             r2head=REFUSED NL2471             head=REFUSED NL2471             main=REFUSED NL2376             
+r609_q01h_scope_dst_from_param_fn             r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_q02_stale_elem_capture                   r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q02b_stale_elem_direct                   r2head=ACCEPTED same              head=ACCEPTED same              main=ACCEPTED same              
+r609_q02c_stale_elem_capture_churn            r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q02d_stale_record_capture                r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609_q02e_stale_record_direct                 r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2290             
+r609_q02f_stale_record_churn                  r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609_q02g_stale_pop_capture                   r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609_q02h_stale_forof_capture                 r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609_q02i_stale_record_mapinto_main           r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2248             
+r609_q02j_stale_record_helper_push            r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609_q03_arena_capture                        r2head=REFUSED NL2417,NL2424      head=REFUSED NL2417,NL2424      main=REFUSED NL2376             
+r609_q03b_arena_capture_plain                 r2head=REFUSED NL2039             head=REFUSED NL2039             main=REFUSED NL2039             
+r609_q04_generic_fresh_dst                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_q04b_nongeneric_fresh_dst                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_q05_divided_reduce_types                 r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q05b_reduce_capture_in_combiner          r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q05c_i64_reduce_identity                 r2head=REFUSED NL2350             head=REFUSED NL2350             main=REFUSED NL2376             
+r609_q06_from_zero_capture                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q06b_from_neg_capture                    r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609_q07_nested_nocapture                     r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_q08a_capture_map                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_q08b_capture_set                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_q08c_capture_secret                      r2head=REFUSED NL2185,NL2496      head=REFUSED NL2185,NL2496      main=REFUSED NL2376             
+r609_q08d_capture_maybe                       r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_q08e_capture_map_size                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q09_param_array_fresh_dst                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_q10_generic_two_types                    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_q11_secret_moved_capture                 r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2376             
+r609_q11b_secret_moved_direct                 r2head=REFUSED NL2440,NL2445      head=REFUSED NL2440,NL2445      main=REFUSED NL2440,NL2445      
+r609_q11c_secret_moved_after_wipe             r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2376             
+r609_q11d_secret_nothreads                    r2head=REFUSED NL0002             head=REFUSED NL0002             main=REFUSED NL0002             
+r609_q11e_secret_threads_nocapture            r2head=REFUSED NL0002             head=REFUSED NL0002             main=REFUSED NL0002             
+r609_r01_let_nested_block                     r2head=REFUSED NL2492             head=REFUSED NL2492             main=REFUSED NL2376             
+r609_r02_shadow_let_inner                     r2head=REFUSED NL2492             head=REFUSED NL2492             main=REFUSED NL2376             
+r609_r03_shadow_const_inner                   r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_r04_for_let                              r2head=REFUSED NL2492             head=REFUSED NL2492             main=REFUSED NL2376             
+r609_r05_for_of_const                         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_r06_outer_arrow_param                    r2head=REFUSED NL2493             head=REFUSED NL2493             main=REFUSED NL2376             
+r609_r07_arrow_in_nonparallel                 r2head=REFUSED NL2335             head=REFUSED NL2335             main=REFUSED NL2376             
+r609_r08_this_field_indirect                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_r09_this_method_call                     r2head=REFUSED NL2494             head=REFUSED NL2494             main=REFUSED NL2376             
+r609_r10_write_param_capture                  r2head=REFUSED NL2495             head=REFUSED NL2495             main=REFUSED NL2376             
+r609_r11_write_capture_ref_rebind             r2head=REFUSED NL2495             head=REFUSED NL2495             main=REFUSED NL2376             
+r609_r12_mutex_in_object                      r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r13_mutex_in_array                       r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r14_mutex_in_map                         r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r15_guard_direct                         r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r16_guard_value_const                    r2head=REFUSED NL2467,NL2470      head=REFUSED NL2467,NL2470      main=REFUSED NL2376             
+r609_r17_channel_in_map                       r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r18_scope_captured                       r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r19_result_in_array                      r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609_r20_result_narrowed                      r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_r21_dst_capture_nullable                 r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_r22_dst_param_reach                      r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609_r23_let_via_closure_helper               r2head=REFUSED NL2492             head=REFUSED NL2492             main=REFUSED NL2376             
+r609_r24_tdz_shadow_in_body                   r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_r25_tdz_same_name                        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_r26_tdz_same_block                       r2head=REFUSED NL2195,NL2495      head=REFUSED NL2195,NL2495      main=REFUSED NL2376             
+r609_s01_scope_dst_read                       r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_s02_scope_dst_read_map                   r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_s03_scope_dst_read_return                r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609_s04_scope_arg_read                       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_s05_task_arg_captured                    r2head=REFUSED NL2471             head=REFUSED NL2471             main=REFUSED NL2376             
+r609_s06_scope_dst_direct_read                r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2394             
+r609_s07_scope_dst_from_large                 r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_s08_scope_parallelmap_nocapture          r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609_s09_scope_reduce_nocapture               r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2394             
+r609_s10_scope_mapinto_nocapture              r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2394             
+r609_u01_scale_k                              r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u02_lookup_table                         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u03_config_object                        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u04_string_read                          r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u05_squares                              r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u06_threshold_mask                       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u07_poly                                 r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u08_grid_index                           r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u09_names_length                         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u10_narrowed_config                      r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609_u11_mapinto_into_own_buffer              r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_u12_map_lookup                           r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_u13_param_table_mapinto                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609_w01_method_field                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w02_helper_elem                          r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w03_nested_field                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w04_push_helper                          r2head=REFUSED NL2345,NL2352      head=REFUSED NL2345,NL2352      main=REFUSED NL2376             
+r609_w05_map_set_helper                       r2head=REFUSED NL2345,NL2352      head=REFUSED NL2345,NL2352      main=REFUSED NL2376             
+r609_w06_items_field                          r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w07_param_alias                          r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w08_local_alias_in_body                  r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w09_compound_scalar                      r2head=REFUSED NL2495             head=REFUSED NL2495             main=REFUSED NL2376             
+r609_w10_incr_scalar                          r2head=REFUSED NL2495             head=REFUSED NL2495             main=REFUSED NL2376             
+r609_w11_field_compound                       r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w12_elem_incr                            r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w13_sort_captured                        r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w14_reduce_write                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2335             
+r609_w15_method_on_param_obj                  r2head=REFUSED NL2345,NL2497      head=REFUSED NL2345,NL2497      main=REFUSED NL2244             
+r609_w16_pop_captured                         r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w17_ctor_writes_capture                  r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609_w18_typed_capture_write                  r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609b_a01_param_reassign                      r2head=REFUSED NL2179             head=REFUSED NL2179             main=REFUSED NL2179,NL2335      
+r609b_a02_param_field_holds_dst               r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_a03_param_field_const                   r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_a04_helper_returns_dst                  r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_a05_push_into_param_arrays              r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_a06_push_into_param_arrays_elem         r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_a07_ternary_param_or_dst                r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_a08_param_obj_built_earlier             r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_a09_param_holder_fresh_dst_inside       r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_a10_param_lut_legit_large               r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_a11_param_is_dst_param                  r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_a12_fresh_capture_param_dst             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_a13_generic_param_fresh_dst             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_a14_generic_dst_T                       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_a15_recursive_param_is_outer_dst        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_b01_self_out_dst                        r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_b02_self_method_writes_this             r2head=REFUSED NL2345             head=REFUSED NL2345             main=REFUSED NL2376             
+r609b_b03_self_has_mutex                      r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_b04_self_has_channel                    r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_b05_self_alias_s2                       r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_b06_self_method_reads_out               r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2244             
+r609b_b07_self_out_alias_const                r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_b08_self_dst_via_const_read_self        r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_b09_self_fresh_dst_legit                r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_b10_self_map_field                      r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_b11_self_in_ctor                        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_b12_self_reduce_dst_field               r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_b13_this_field_const_fresh_dst          r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_b14_this_field_stored_dst               r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_c01_splice_capture                      r2head=REFUSED NL2249             head=REFUSED NL2249             main=REFUSED NL2376             
+r609b_c01d_splice_direct                      r2head=REFUSED NL2249             head=REFUSED NL2249             main=REFUSED NL2249             
+r609b_c02_length_assign_capture               r2head=REFUSED NL2002             head=REFUSED NL2002             main=REFUSED NL2376             
+r609b_c02d_length_assign_direct               r2head=REFUSED NL2002             head=REFUSED NL2002             main=REFUSED NL2002             
+r609b_c03_shift_capture                       r2head=REFUSED NL2249             head=REFUSED NL2249             main=REFUSED NL2376             
+r609b_c03d_shift_direct                       r2head=REFUSED NL2249             head=REFUSED NL2249             main=REFUSED NL2249             
+r609b_c04_pop_in_helper_capture               r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609b_c04d_pop_in_helper_direct               r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2290             
+r609b_c05_loop_push_capture                   r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c05b_loop_ref_outside_capture           r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609b_c05bd_loop_ref_outside_direct           r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2290             
+r609b_c06_arena_result_escapes                r2head=REFUSED NL2418             head=REFUSED NL2418             main=REFUSED NL2376             
+r609b_c06d_arena_result_escapes_direct        r2head=REFUSED NL2418             head=REFUSED NL2418             main=REFUSED NL2418             
+r609b_c07_arena_captured_legit                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c08_narrow_and_capture                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c08b_narrow_wrong_arm                   r2head=REFUSED NL2187             head=REFUSED NL2187             main=REFUSED NL2376             
+r609b_c08c_narrow_or                          r2head=REFUSED NL2187             head=REFUSED NL2187             main=REFUSED NL2376             
+r609b_c08d_narrow_after_return                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c08e_narrow_in_else                     r2head=REFUSED NL2187             head=REFUSED NL2187             main=REFUSED NL2376             
+r609b_c09_return_capture_churn                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c10_loop_pass_fresh_capture             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c11_index_proven_other_array            r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_c11d_index_proven_other_array_direct    r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_c12_const_index_proven_loop             r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_c13_mapinto_index_from_other            r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2335             MISMATCH-head
+r609b_c14_inline_mutated_then_captured        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c15_inline_record_capture               r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c16_secret_alias_before_move_capture    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c16d_secret_alias_before_move_direct    r2head=ACCEPTED same              head=ACCEPTED same              main=ACCEPTED same              
+r609b_c16e_secret_alias_after_wipe_direct     r2head=ACCEPTED same              head=ACCEPTED same              main=ACCEPTED same              
+r609b_c16f_secret_alias_after_wipe_capture    r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c17_secret_moved_in_branch_capture      r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2376             
+r609b_c17d_secret_moved_in_branch_direct      r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2445             
+r609b_c18_secret_moved_loop_capture           r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2376             
+r609b_c18d_secret_moved_loop_direct           r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2445             
+r609b_c19_guard_out_of_scope                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c20_forof_elem_capture_push_after       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_c21_guard_captured_after_block          r2head=REFUSED NL2470             head=REFUSED NL2470             main=REFUSED NL2376             
+r609b_d01_parallel_before_first_spawn         r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_d02_loop_later_spawn_capture            r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d02b_loop_spawn_at_k1_capture           r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d02d_loop_later_spawn_direct            r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2394             
+r609b_d03_alias_before_scope_capture          r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d03d_alias_before_scope_direct          r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2394             
+r609b_d04_field_of_captured_object            r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d04b_field_object_literal               r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d05_loop_parallelmap                    r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d06_loop_parallelmapinto                r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609b_d07_loop_parallelreduce                 r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609b_d08_spawn_in_if_then_parallel           r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d09_parallel_in_nested_block            r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d10_while_loop_spawn_capture            r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d11_spawn_inner_loop_scope_outer        r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d12_scope_in_loop_parallel_before_spawn_legit r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_d13_return_in_scope_block               r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_d14_spawn_arg_reads_capture             r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d15_if_condition_capture                r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d16_nested_scope_capture                r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d17_after_inner_scope_legit             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_d18_ternary_arm_capture                 r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d19_switch_case_capture                 r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d20_loop_continue                       r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_d21_parallel_then_break_spawn           r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_e01_generic_scope_dst_capture           r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_e02_generic_stale_record_capture        r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2376             
+r609b_e03_generic_secret_moved_capture        r2head=REFUSED NL2445             head=REFUSED NL2445             main=REFUSED NL2376             
+r609b_e04_tailcall_from_capture               r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_e05_tailcall_from_capture_string        r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_e06_arrow_concise_tail_body             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_e07_generic_two_fresh_dst               r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_e08_generic_dst_is_capture              r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_e09_generic_dst_self_capture            r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_e10_generic_fresh_T_both                r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_e11_generic_param_T_is_dst_caller       r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2335             
+r609b_o01_chain_parallel_result_fresh_dst     r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2376             
+r609b_o02_config_object_lut_fresh_dst         r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_o03_mapped_then_mapinto_fresh           r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2376             
+r609b_o04_capture_channel_direct              r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_s10a_utf8_offset_direct                 r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_s10b_utf8_offset_capture                r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_s10c_utf8_offset_literal_direct         r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_s10d_utf8_offset_literal_capture        r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_s10e_record_copy_forof_capture          r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_s10f_record_copy_literal_direct         r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_s1a_portab_capture                      r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_s1b_portab_direct                       r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_s1c_portab_mirror_capture               r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=REFUSED NL2376             MISMATCH-head
+r609b_s1d_portab_mirror_direct                r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_s2_acc_self_out                         r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2248             
+r609b_s3_class_field_mutex                    r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_s3b_class_field_mutex_locks             r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_s4_forof_const_capture                  r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_s5_map_of_mutex                         r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_s5b_map_of_mutex_class                  r2head=REFUSED NL2496             head=REFUSED NL2496             main=REFUSED NL2376             
+r609b_s6_map_loop                             r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_s6_map_straight                         r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2376             
+r609b_s6_mapinto_loop                         r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609b_s6_mapinto_straight                     r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609b_s6_reduce_loop                          r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609b_s6_reduce_straight                      r2head=REFUSED NL2394             head=REFUSED NL2394             main=REFUSED NL2335             
+r609b_s7_generic_same_dst_capture             r2head=REFUSED NL2022             head=REFUSED NL2022             main=REFUSED NL2022,NL2335      
+r609b_s7b_generic_same_dst_capture_f64_only   r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_s7c_generic_same_dst_capture_f64_string r2head=REFUSED NL2348,NL2497      head=REFUSED NL2348,NL2497      main=REFUSED NL2335             
+r609b_s7d_generic_same_dst_capture_f64_single r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_s8a_alias_e_of_d                        r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_s8b_alias_dst_is_alias                  r2head=REFUSED NL2497             head=REFUSED NL2497             main=REFUSED NL2335             
+r609b_s9_captured_string_charcode             r2head=ACCEPTED same              head=ACCEPTED same              main=REFUSED NL2376             
+r609b_s9b_string_charcode_direct              r2head=ACCEPTED same              head=ACCEPTED same              main=ACCEPTED same              
+r609b_z01_oob_direct                          r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_z02_oob_direct_param                    r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_z03_newarray_negative                   r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+r609b_z04_param_assign                        r2head=REFUSED NL2179             head=REFUSED NL2179             main=REFUSED NL2179             
+r609b_z05_generic_dup_diag_main               r2head=REFUSED NL2290             head=REFUSED NL2290             main=REFUSED NL2290             
+zz_newarray                                   r2head=ACCEPTED DIFFER            head=ACCEPTED DIFFER            main=ACCEPTED DIFFER            MISMATCH-head
+# raw-output changes vs round 2 (verdicts unchanged): extra NL2394 'This reads <dst>, a destination of a task of s' on q01, q01e, q01f, s02, s03, d05, d06, d07, s6_* (x6); NL2494 text reworded on r09
+#
+# == 3. PR link tests ==
+port_rec_capture_copy | expected: 1 1 15 1 exit=0 |  native: 1 1 15 1 exit=0  | t1: 1 1 15 1 exit=0  | t2: 1 1 15 1 exit=0  | node: 5 5 55 5 exit=0  | DIFFER
+port_str_capture_offset | expected: 0 exit=0 |  native: 0 exit=0  | t1: 0 exit=0  | t2: 0 exit=0  | node: 1 exit=0  | DIFFER
+port_rec_capture_quiet | expected: 2 5 exit=0 |  native: 2 5 exit=0  | t1: 2 5 exit=0  | t2: 2 5 exit=0  | node: 2 5 exit=0  | same
+par_capture | expected: 13 60 30 111 105 6 15 12 6 40 10 exit=0 |  native: 13 60 30 111 105 6 15 12 6 40 10 exit=0  | t1: 13 60 30 111 105 6 15 12 6 40 10 exit=0  | t2: 13 60 30 111 105 6 15 12 6 40 10 exit=0  | node: 13 60 30 111 105 6 15 12 6 40 10 exit=0  | same
+par_capture_large | expected: 993 21 53 1053250000 948 exit=0 |  native: 993 21 53 1053250000 948 exit=0  | t1: 993 21 53 1053250000 948 exit=0  | t2: 993 21 53 1053250000 948 exit=0  | node: 993 21 53 1053250000 948 exit=0  | same
+par_map_new | expected: 4 16 1.5 0 exit=0 |  native: 4 16 1.5 0 exit=0  | t1: 4 16 1.5 0 exit=0  | t2: 4 16 1.5 0 exit=0  | node: 4 16 1.5 0 exit=0  | same
+par_from | expected: 6 25 27 0 exit=0 |  native: 6 25 27 0 exit=0  | t1: 6 25 27 0 exit=0  | t2: 6 25 27 0 exit=0  | node: 6 25 27 0 exit=0  | same
+# expected.portability matches for the three port_* tests
+# node tests/run.js port_: 1670 passed, 0 failed (exit 0); par_capture: 94 passed, 0 failed; reject_par_capture: 69 passed, 0 failed; no skips
+# q06c_from_max native (default,t1,t2): 2147483647 1 exit=0 2147483647 1 exit=0 2147483647 1 exit=0 
